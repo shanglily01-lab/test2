@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from loguru import logger
 import pandas as pd
+from sqlalchemy import text
 
 from app.database.db_service import DatabaseService
 from app.database.hyperliquid_db import HyperliquidDB
@@ -632,56 +633,57 @@ class CacheUpdateService:
 
     def _get_cached_technical_data(self, symbol: str) -> Optional[dict]:
         """从缓存表读取技术指标数据"""
+        session = None
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute(
-                "SELECT * FROM technical_indicators_cache WHERE symbol = %s",
-                (symbol,)
-            )
-            result = cursor.fetchone()
-            cursor.close()
+            session = self.db_service.get_session()
+            sql = text("SELECT * FROM technical_indicators_cache WHERE symbol = :symbol")
+            result = session.execute(sql, {"symbol": symbol}).fetchone()
 
             if not result:
                 return None
 
+            # Convert result to dict
+            result_dict = dict(result._mapping) if hasattr(result, '_mapping') else dict(result)
+
             return {
-                'price': self._get_cached_price_stats(symbol).get('current_price', 0),
+                'price': self._get_cached_price_stats(symbol).get('current_price', 0) if self._get_cached_price_stats(symbol) else 0,
                 'rsi': {
-                    'value': float(result['rsi_value']) if result['rsi_value'] else 50,
-                    'signal': result['rsi_signal']
+                    'value': float(result_dict['rsi_value']) if result_dict.get('rsi_value') else 50,
+                    'signal': result_dict.get('rsi_signal')
                 },
                 'macd': {
-                    'value': float(result['macd_value']) if result['macd_value'] else 0,
-                    'signal': float(result['macd_signal_line']) if result['macd_signal_line'] else 0,
-                    'histogram': float(result['macd_histogram']) if result['macd_histogram'] else 0,
-                    'bullish_cross': result['macd_trend'] == 'bullish_cross',
-                    'bearish_cross': result['macd_trend'] == 'bearish_cross'
+                    'value': float(result_dict['macd_value']) if result_dict.get('macd_value') else 0,
+                    'signal': float(result_dict['macd_signal_line']) if result_dict.get('macd_signal_line') else 0,
+                    'histogram': float(result_dict['macd_histogram']) if result_dict.get('macd_histogram') else 0,
+                    'bullish_cross': result_dict.get('macd_trend') == 'bullish_cross',
+                    'bearish_cross': result_dict.get('macd_trend') == 'bearish_cross'
                 },
                 'ema': {
-                    'trend': result['ema_trend']
+                    'trend': result_dict.get('ema_trend')
                 },
                 'volume': {
-                    'above_average': result['volume_signal'] == 'high'
+                    'above_average': result_dict.get('volume_signal') == 'high'
                 }
             }
         except Exception as e:
             logger.warning(f"读取{symbol}技术指标缓存失败: {e}")
             return None
+        finally:
+            if session:
+                session.close()
 
     def _get_cached_news_data(self, symbol: str) -> Optional[dict]:
         """从缓存表读取新闻情绪数据"""
         try:
             coin = symbol.split('/')[0]
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor(dictionary=True)
+            session = self.db_service.get_session()
+            
             cursor.execute(
                 "SELECT * FROM news_sentiment_aggregation WHERE symbol = %s AND period = '24h'",
                 (coin,)
             )
-            result = cursor.fetchone()
-            cursor.close()
-
+            result = result_proxy.fetchone() if result_proxy else None
+            
             if not result:
                 return None
 
@@ -699,15 +701,14 @@ class CacheUpdateService:
     def _get_cached_funding_data(self, symbol: str) -> Optional[dict]:
         """从缓存表读取资金费率数据"""
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor(dictionary=True)
+            session = self.db_service.get_session()
+            
             cursor.execute(
                 "SELECT * FROM funding_rate_stats WHERE symbol = %s",
                 (symbol,)
             )
-            result = cursor.fetchone()
-            cursor.close()
-
+            result = result_proxy.fetchone() if result_proxy else None
+            
             if not result:
                 return None
 
@@ -725,15 +726,14 @@ class CacheUpdateService:
         """从缓存表读取Hyperliquid数据"""
         try:
             coin = symbol.split('/')[0]
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor(dictionary=True)
+            session = self.db_service.get_session()
+            
             cursor.execute(
                 "SELECT * FROM hyperliquid_symbol_aggregation WHERE symbol = %s AND period = '24h'",
                 (coin,)
             )
-            result = cursor.fetchone()
-            cursor.close()
-
+            result = result_proxy.fetchone() if result_proxy else None
+            
             if not result:
                 return None
 
@@ -751,15 +751,14 @@ class CacheUpdateService:
     def _get_cached_price_stats(self, symbol: str) -> Optional[dict]:
         """从缓存表读取价格统计数据"""
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor(dictionary=True)
+            session = self.db_service.get_session()
+            
             cursor.execute(
                 "SELECT * FROM price_stats_24h WHERE symbol = %s",
                 (symbol,)
             )
-            result = cursor.fetchone()
-            cursor.close()
-
+            result = result_proxy.fetchone() if result_proxy else None
+            
             if not result:
                 return None
 
@@ -776,19 +775,19 @@ class CacheUpdateService:
 
     def _upsert_price_stats(self, **kwargs):
         """插入或更新价格统计"""
+        session = None
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
+            session = self.db_service.get_session()
 
-            sql = """
+            sql = text("""
                 INSERT INTO price_stats_24h (
                     symbol, current_price, price_24h_ago, change_24h, change_24h_abs,
                     high_24h, low_24h, volume_24h, quote_volume_24h,
                     price_range_24h, price_range_pct, trend, updated_at
                 ) VALUES (
-                    %(symbol)s, %(current_price)s, %(price_24h_ago)s, %(change_24h)s, %(change_24h_abs)s,
-                    %(high_24h)s, %(low_24h)s, %(volume_24h)s, %(quote_volume_24h)s,
-                    %(price_range_24h)s, %(price_range_pct)s, %(trend)s, NOW()
+                    :symbol, :current_price, :price_24h_ago, :change_24h, :change_24h_abs,
+                    :high_24h, :low_24h, :volume_24h, :quote_volume_24h,
+                    :price_range_24h, :price_range_pct, :trend, NOW()
                 )
                 ON DUPLICATE KEY UPDATE
                     current_price = VALUES(current_price),
@@ -803,22 +802,26 @@ class CacheUpdateService:
                     price_range_pct = VALUES(price_range_pct),
                     trend = VALUES(trend),
                     updated_at = NOW()
-            """
+            """)
 
-            cursor.execute(sql, kwargs)
-            conn.commit()
-            cursor.close()
+            session.execute(sql, kwargs)
+            session.commit()
 
         except Exception as e:
+            if session:
+                session.rollback()
             logger.error(f"写入价格统计失败: {e}")
+        finally:
+            if session:
+                session.close()
 
     def _upsert_technical_indicators(self, **kwargs):
         """插入或更新技术指标"""
+        session = None
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
+            session = self.db_service.get_session()
 
-            sql = """
+            sql = text("""
                 INSERT INTO technical_indicators_cache (
                     symbol, timeframe, rsi_value, rsi_signal,
                     macd_value, macd_signal_line, macd_histogram, macd_trend,
@@ -828,13 +831,13 @@ class CacheUpdateService:
                     volume_24h, volume_avg, volume_ratio, volume_signal,
                     technical_score, technical_signal, data_points, updated_at
                 ) VALUES (
-                    %(symbol)s, %(timeframe)s, %(rsi_value)s, %(rsi_signal)s,
-                    %(macd_value)s, %(macd_signal_line)s, %(macd_histogram)s, %(macd_trend)s,
-                    %(bb_upper)s, %(bb_middle)s, %(bb_lower)s, %(bb_position)s, %(bb_width)s,
-                    %(ema_short)s, %(ema_long)s, %(ema_trend)s,
-                    %(kdj_k)s, %(kdj_d)s, %(kdj_j)s, %(kdj_signal)s,
-                    %(volume_24h)s, %(volume_avg)s, %(volume_ratio)s, %(volume_signal)s,
-                    %(technical_score)s, %(technical_signal)s, %(data_points)s, NOW()
+                    :symbol, :timeframe, :rsi_value, :rsi_signal,
+                    :macd_value, :macd_signal_line, :macd_histogram, :macd_trend,
+                    :bb_upper, :bb_middle, :bb_lower, :bb_position, :bb_width,
+                    :ema_short, :ema_long, :ema_trend,
+                    :kdj_k, :kdj_d, :kdj_j, :kdj_signal,
+                    :volume_24h, :volume_avg, :volume_ratio, :volume_signal,
+                    :technical_score, :technical_signal, :data_points, NOW()
                 )
                 ON DUPLICATE KEY UPDATE
                     rsi_value = VALUES(rsi_value),
@@ -863,22 +866,26 @@ class CacheUpdateService:
                     technical_signal = VALUES(technical_signal),
                     data_points = VALUES(data_points),
                     updated_at = NOW()
-            """
+            """)
 
-            cursor.execute(sql, kwargs)
-            conn.commit()
-            cursor.close()
+            session.execute(sql, kwargs)
+            session.commit()
 
         except Exception as e:
+            if session:
+                session.rollback()
             logger.error(f"写入技术指标失败: {e}")
+        finally:
+            if session:
+                session.close()
 
     def _upsert_hyperliquid_aggregation(self, **kwargs):
         """插入或更新Hyperliquid聚合数据"""
+        session = None
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
+            session = self.db_service.get_session()
 
-            sql = """
+            sql = text("""
                 INSERT INTO hyperliquid_symbol_aggregation (
                     symbol, period, net_flow, inflow, outflow,
                     long_trades, short_trades, total_trades, long_short_ratio,
@@ -886,11 +893,11 @@ class CacheUpdateService:
                     active_wallets, unique_wallets, total_pnl, avg_pnl,
                     hyperliquid_score, hyperliquid_signal, sentiment, updated_at
                 ) VALUES (
-                    %(symbol)s, %(period)s, %(net_flow)s, %(inflow)s, %(outflow)s,
-                    %(long_trades)s, %(short_trades)s, %(total_trades)s, %(long_short_ratio)s,
-                    %(total_volume)s, %(avg_trade_size)s, %(max_trade_size)s,
-                    %(active_wallets)s, %(unique_wallets)s, %(total_pnl)s, %(avg_pnl)s,
-                    %(hyperliquid_score)s, %(hyperliquid_signal)s, %(sentiment)s, NOW()
+                    :symbol, :period, :net_flow, :inflow, :outflow,
+                    :long_trades, :short_trades, :total_trades, :long_short_ratio,
+                    :total_volume, :avg_trade_size, :max_trade_size,
+                    :active_wallets, :unique_wallets, :total_pnl, :avg_pnl,
+                    :hyperliquid_score, :hyperliquid_signal, :sentiment, NOW()
                 )
                 ON DUPLICATE KEY UPDATE
                     net_flow = VALUES(net_flow),
@@ -911,28 +918,32 @@ class CacheUpdateService:
                     hyperliquid_signal = VALUES(hyperliquid_signal),
                     sentiment = VALUES(sentiment),
                     updated_at = NOW()
-            """
+            """)
 
-            cursor.execute(sql, kwargs)
-            conn.commit()
-            cursor.close()
+            session.execute(sql, kwargs)
+            session.commit()
 
         except Exception as e:
+            if session:
+                session.rollback()
             logger.error(f"写入Hyperliquid聚合数据失败: {e}")
+        finally:
+            if session:
+                session.close()
 
     def _upsert_news_sentiment(self, **kwargs):
         """插入或更新新闻情绪"""
+        session = None
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
+            session = self.db_service.get_session()
 
-            sql = """
+            sql = text("""
                 INSERT INTO news_sentiment_aggregation (
                     symbol, period, total_news, positive_news, negative_news, neutral_news,
                     sentiment_index, avg_sentiment_score, major_events_count, news_score, updated_at
                 ) VALUES (
-                    %(symbol)s, %(period)s, %(total_news)s, %(positive_news)s, %(negative_news)s, %(neutral_news)s,
-                    %(sentiment_index)s, %(avg_sentiment_score)s, %(major_events_count)s, %(news_score)s, NOW()
+                    :symbol, :period, :total_news, :positive_news, :negative_news, :neutral_news,
+                    :sentiment_index, :avg_sentiment_score, :major_events_count, :news_score, NOW()
                 )
                 ON DUPLICATE KEY UPDATE
                     total_news = VALUES(total_news),
@@ -944,28 +955,32 @@ class CacheUpdateService:
                     major_events_count = VALUES(major_events_count),
                     news_score = VALUES(news_score),
                     updated_at = NOW()
-            """
+            """)
 
-            cursor.execute(sql, kwargs)
-            conn.commit()
-            cursor.close()
+            session.execute(sql, kwargs)
+            session.commit()
 
         except Exception as e:
+            if session:
+                session.rollback()
             logger.error(f"写入新闻情绪失败: {e}")
+        finally:
+            if session:
+                session.close()
 
     def _upsert_funding_rate_stats(self, **kwargs):
         """插入或更新资金费率统计"""
+        session = None
         try:
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
+            session = self.db_service.get_session()
 
-            sql = """
+            sql = text("""
                 INSERT INTO funding_rate_stats (
                     symbol, current_rate, current_rate_pct, trend,
                     market_sentiment, funding_score, exchange, updated_at
                 ) VALUES (
-                    %(symbol)s, %(current_rate)s, %(current_rate_pct)s, %(trend)s,
-                    %(market_sentiment)s, %(funding_score)s, %(exchange)s, NOW()
+                    :symbol, :current_rate, :current_rate_pct, :trend,
+                    :market_sentiment, :funding_score, :exchange, NOW()
                 )
                 ON DUPLICATE KEY UPDATE
                     current_rate = VALUES(current_rate),
@@ -975,24 +990,30 @@ class CacheUpdateService:
                     funding_score = VALUES(funding_score),
                     exchange = VALUES(exchange),
                     updated_at = NOW()
-            """
+            """)
 
-            cursor.execute(sql, kwargs)
-            conn.commit()
-            cursor.close()
+            session.execute(sql, kwargs)
+            session.commit()
 
         except Exception as e:
+            if session:
+                session.rollback()
             logger.error(f"写入资金费率统计失败: {e}")
+        finally:
+            if session:
+                session.close()
 
     def _upsert_recommendation(self, symbol: str, analysis: dict):
         """插入或更新投资建议"""
+        import json
+        session = None
         try:
-            import json
+            session = self.db_service.get_session()
 
-            conn = self.db_service.get_connection()
-            cursor = conn.cursor()
+            scores = analysis['score']
+            data_sources = analysis['data_sources']
 
-            sql = """
+            sql = text("""
                 INSERT INTO investment_recommendations_cache (
                     symbol, total_score, technical_score, news_score, funding_score,
                     hyperliquid_score, ethereum_score, signal, confidence,
@@ -1001,8 +1022,12 @@ class CacheUpdateService:
                     has_technical, has_news, has_funding, has_hyperliquid, has_ethereum,
                     data_completeness, updated_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, NOW()
+                    :symbol, :total_score, :technical_score, :news_score, :funding_score,
+                    :hyperliquid_score, :ethereum_score, :signal, :confidence,
+                    :current_price, :entry_price, :stop_loss, :take_profit,
+                    :risk_level, :risk_factors, :reasons,
+                    :has_technical, :has_news, :has_funding, :has_hyperliquid, :has_ethereum,
+                    :data_completeness, NOW()
                 )
                 ON DUPLICATE KEY UPDATE
                     total_score = VALUES(total_score),
@@ -1027,40 +1052,42 @@ class CacheUpdateService:
                     has_ethereum = VALUES(has_ethereum),
                     data_completeness = VALUES(data_completeness),
                     updated_at = NOW()
-            """
+            """)
 
-            scores = analysis['score']
-            data_sources = analysis['data_sources']
+            params = {
+                'symbol': symbol,
+                'total_score': scores['total'],
+                'technical_score': scores['technical'],
+                'news_score': scores['news'],
+                'funding_score': scores['funding'],
+                'hyperliquid_score': scores['hyperliquid'],
+                'ethereum_score': scores['ethereum'],
+                'signal': analysis['signal'],
+                'confidence': analysis['confidence'],
+                'current_price': analysis['price']['current'],
+                'entry_price': analysis['price']['entry'],
+                'stop_loss': analysis['price']['stop_loss'],
+                'take_profit': analysis['price']['take_profit'],
+                'risk_level': analysis['risk']['level'],
+                'risk_factors': json.dumps(analysis['risk']['factors'], ensure_ascii=False),
+                'reasons': json.dumps(analysis['reasons'], ensure_ascii=False),
+                'has_technical': data_sources.get('technical', False),
+                'has_news': data_sources.get('news', False),
+                'has_funding': data_sources.get('funding', False),
+                'has_hyperliquid': data_sources.get('hyperliquid', False),
+                'has_ethereum': data_sources.get('ethereum', False),
+                'data_completeness': sum(1 for v in data_sources.values() if v) / len(data_sources) * 100
+            }
 
-            cursor.execute(sql, (
-                symbol,
-                scores['total'],
-                scores['technical'],
-                scores['news'],
-                scores['funding'],
-                scores['hyperliquid'],
-                scores['ethereum'],
-                analysis['signal'],
-                analysis['confidence'],
-                analysis['price']['current'],
-                analysis['price']['entry'],
-                analysis['price']['stop_loss'],
-                analysis['price']['take_profit'],
-                analysis['risk']['level'],
-                json.dumps(analysis['risk']['factors'], ensure_ascii=False),
-                json.dumps(analysis['reasons'], ensure_ascii=False),
-                data_sources.get('technical', False),
-                data_sources.get('news', False),
-                data_sources.get('funding', False),
-                data_sources.get('hyperliquid', False),
-                data_sources.get('ethereum', False),
-                sum(1 for v in data_sources.values() if v) / len(data_sources) * 100
-            ))
-
-            conn.commit()
-            cursor.close()
+            session.execute(sql, params)
+            session.commit()
 
         except Exception as e:
+            if session:
+                session.rollback()
             logger.error(f"写入投资建议失败: {e}")
             import traceback
             traceback.print_exc()
+        finally:
+            if session:
+                session.close()
