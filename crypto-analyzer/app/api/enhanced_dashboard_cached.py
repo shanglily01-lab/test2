@@ -180,7 +180,7 @@ class EnhancedDashboardCached:
                     funding_score,
                     hyperliquid_score,
                     ethereum_score,
-                    signal,
+                    `signal`,
                     confidence,
                     current_price,
                     entry_price,
