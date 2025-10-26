@@ -1016,7 +1016,7 @@ class CacheUpdateService:
             sql = text("""
                 INSERT INTO investment_recommendations_cache (
                     symbol, total_score, technical_score, news_score, funding_score,
-                    hyperliquid_score, ethereum_score, signal, confidence,
+                    hyperliquid_score, ethereum_score, `signal`, confidence,
                     current_price, entry_price, stop_loss, take_profit,
                     risk_level, risk_factors, reasons,
                     has_technical, has_news, has_funding, has_hyperliquid, has_ethereum,
@@ -1036,7 +1036,7 @@ class CacheUpdateService:
                     funding_score = VALUES(funding_score),
                     hyperliquid_score = VALUES(hyperliquid_score),
                     ethereum_score = VALUES(ethereum_score),
-                    signal = VALUES(signal),
+                    `signal` = VALUES(`signal`),
                     confidence = VALUES(confidence),
                     current_price = VALUES(current_price),
                     entry_price = VALUES(entry_price),
