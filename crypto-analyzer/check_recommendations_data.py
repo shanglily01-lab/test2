@@ -13,12 +13,31 @@ import json
 import yaml
 
 def check_recommendations():
-    # 加载配置
-    config_path = os.path.join(os.path.dirname(__file__), 'config', 'config.yaml')
+    # 加载配置 - config.yaml在项目根目录
+    config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
+
+    if not os.path.exists(config_path):
+        print(f"❌ 配置文件不存在: {config_path}")
+        print(f"当前目录: {os.getcwd()}")
+        print(f"脚本目录: {os.path.dirname(__file__)}")
+        return
+
+    print(f"✅ 读取配置文件: {config_path}")
     with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
-    db_service = DatabaseService(config.get('database', {}))
+    # 提取数据库配置
+    db_config = config.get('database', {})
+    mysql_config = db_config.get('mysql', {})
+
+    print(f"数据库配置:")
+    print(f"  Host: {mysql_config.get('host')}")
+    print(f"  Port: {mysql_config.get('port')}")
+    print(f"  Database: {mysql_config.get('database')}")
+    print(f"  User: {mysql_config.get('user')}")
+    print("")
+
+    db_service = DatabaseService(db_config)
     session = None
 
     try:
