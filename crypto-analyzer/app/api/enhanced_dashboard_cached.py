@@ -50,11 +50,12 @@ class EnhancedDashboardCached:
             self._get_news_from_db(limit=20),
             self._get_hyperliquid_from_cache(),
             self._get_system_stats(),
+            self._get_futures_from_cache(symbols),  # 新增：获取合约数据
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        prices, recommendations, news, hyperliquid, stats = results
+        prices, recommendations, news, hyperliquid, stats, futures = results
 
         # 处理异常
         if isinstance(prices, Exception):
@@ -72,6 +73,9 @@ class EnhancedDashboardCached:
         if isinstance(stats, Exception):
             logger.error(f"获取统计失败: {stats}")
             stats = {}
+        if isinstance(futures, Exception):
+            logger.error(f"获取合约数据失败: {futures}")
+            futures = []
 
         # 统计信号
         signal_stats = self._calculate_signal_stats(recommendations)
@@ -86,6 +90,7 @@ class EnhancedDashboardCached:
                 'recommendations': recommendations,
                 'news': news,
                 'hyperliquid': hyperliquid,
+                'futures': futures,  # 新增：合约数据
                 'stats': {
                     **stats,
                     **signal_stats
@@ -499,6 +504,62 @@ class EnhancedDashboardCached:
             'bearish_count': bearish_count,
             'hold_count': hold_count
         }
+
+    async def _get_futures_from_cache(self, symbols: List[str]) -> List[Dict]:
+        """
+        从资金费率缓存表读取合约数据（持仓量、多空比、资金费率）
+
+        Returns:
+            合约数据列表
+        """
+        futures_data = []
+        session = None
+
+        try:
+            session = self.db_service.get_session()
+
+            # 从 funding_rate_stats 缓存表批量读取
+            placeholders = ','.join([f':symbol{i}' for i in range(len(symbols))])
+            sql = text(f"""
+                SELECT
+                    symbol,
+                    current_rate,
+                    current_rate_pct,
+                    trend,
+                    market_sentiment
+                FROM funding_rate_stats
+                WHERE symbol IN ({placeholders})
+            """)
+
+            params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
+            results = session.execute(sql, params).fetchall()
+
+            for row in results:
+                row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                symbol = row_dict['symbol']
+
+                futures_data.append({
+                    'symbol': symbol.replace('/USDT', ''),
+                    'full_symbol': symbol,
+                    'open_interest': 0,  # 缓存表中没有持仓量，设为0
+                    'long_short_ratio': 0,  # 缓存表中没有多空比，设为0
+                    'funding_rate': float(row_dict['current_rate']) if row_dict.get('current_rate') else 0,
+                    'funding_rate_pct': float(row_dict['current_rate_pct']) if row_dict.get('current_rate_pct') else 0,
+                    'trend': row_dict.get('trend', 'neutral'),
+                    'market_sentiment': row_dict.get('market_sentiment', 'normal')
+                })
+
+            logger.debug(f"✅ 从缓存读取 {len(futures_data)} 个合约数据")
+
+        except Exception as e:
+            logger.error(f"从缓存读取合约数据失败: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            if session:
+                session.close()
+
+        return futures_data
 
 
 # 导入timedelta
