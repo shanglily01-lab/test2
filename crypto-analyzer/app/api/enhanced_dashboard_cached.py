@@ -549,16 +549,35 @@ class EnhancedDashboardCached:
                     'market_sentiment': row_dict.get('market_sentiment', 'normal')
                 })
 
-            logger.debug(f"✅ 从缓存读取 {len(futures_data)} 个合约数据")
+            logger.debug(f"✅ 从缓存读取 {len(futures_data)} 个资金费率数据")
 
         except Exception as e:
-            logger.error(f"从缓存读取合约数据失败: {e}")
+            logger.error(f"从缓存读取资金费率数据失败: {e}")
             import traceback
             traceback.print_exc()
         finally:
             if session:
                 session.close()
 
+        # 补充持仓量和多空比数据（从原始表读取）
+        for item in futures_data:
+            try:
+                symbol = item['full_symbol']
+                data = self.db_service.get_latest_futures_data(symbol)
+
+                if data:
+                    item['open_interest'] = float(data.get('open_interest', 0)) if data.get('open_interest') else 0
+                    if data.get('long_short_ratio'):
+                        item['long_short_ratio'] = data['long_short_ratio'].get('ratio', 0)
+                        item['long_account'] = data['long_short_ratio'].get('long_account', 0)
+                        item['short_account'] = data['long_short_ratio'].get('short_account', 0)
+                    else:
+                        item['long_short_ratio'] = 0
+            except Exception as e:
+                logger.warning(f"获取{symbol}持仓量和多空比失败: {e}")
+                continue
+
+        logger.debug(f"✅ 完整合约数据获取完成: {len(futures_data)} 个币种（含持仓量和多空比）")
         return futures_data
 
 
