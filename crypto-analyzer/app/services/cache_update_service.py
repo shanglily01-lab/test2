@@ -674,102 +674,121 @@ class CacheUpdateService:
 
     def _get_cached_news_data(self, symbol: str) -> Optional[dict]:
         """从缓存表读取新闻情绪数据"""
+        session = None
         try:
             coin = symbol.split('/')[0]
             session = self.db_service.get_session()
-            
-            cursor.execute(
-                "SELECT * FROM news_sentiment_aggregation WHERE symbol = %s AND period = '24h'",
-                (coin,)
-            )
-            result = result_proxy.fetchone() if result_proxy else None
-            
+
+            sql = text("SELECT * FROM news_sentiment_aggregation WHERE symbol = :symbol AND period = '24h'")
+            result = session.execute(sql, {"symbol": coin}).fetchone()
+
             if not result:
                 return None
 
+            # Convert to dict
+            result_dict = dict(result._mapping) if hasattr(result, '_mapping') else dict(result)
+
             return {
-                'sentiment_index': float(result['sentiment_index']),
-                'total_news': result['total_news'],
-                'positive': result['positive_news'],
-                'negative': result['negative_news'],
-                'major_events_count': result['major_events_count']
+                'sentiment_index': float(result_dict['sentiment_index']) if result_dict.get('sentiment_index') else 0.5,
+                'total_news': result_dict['total_news'] if result_dict.get('total_news') else 0,
+                'positive': result_dict['positive_news'] if result_dict.get('positive_news') else 0,
+                'negative': result_dict['negative_news'] if result_dict.get('negative_news') else 0,
+                'major_events_count': result_dict['major_events_count'] if result_dict.get('major_events_count') else 0,
+                'news_score': float(result_dict['news_score']) if result_dict.get('news_score') else 50
             }
         except Exception as e:
             logger.warning(f"读取{symbol}新闻缓存失败: {e}")
             return None
+        finally:
+            if session:
+                session.close()
 
     def _get_cached_funding_data(self, symbol: str) -> Optional[dict]:
         """从缓存表读取资金费率数据"""
+        session = None
         try:
             session = self.db_service.get_session()
-            
-            cursor.execute(
-                "SELECT * FROM funding_rate_stats WHERE symbol = %s",
-                (symbol,)
-            )
-            result = result_proxy.fetchone() if result_proxy else None
-            
+
+            sql = text("SELECT * FROM funding_rate_stats WHERE symbol = :symbol")
+            result = session.execute(sql, {"symbol": symbol}).fetchone()
+
             if not result:
                 return None
 
+            # Convert to dict
+            result_dict = dict(result._mapping) if hasattr(result, '_mapping') else dict(result)
+
             return {
-                'funding_rate': float(result['current_rate']),
-                'funding_rate_pct': float(result['current_rate_pct']),
-                'trend': result['trend'],
-                'market_sentiment': result['market_sentiment']
+                'funding_rate': float(result_dict['current_rate']) if result_dict.get('current_rate') else 0,
+                'funding_rate_pct': float(result_dict['current_rate_pct']) if result_dict.get('current_rate_pct') else 0,
+                'trend': result_dict['trend'] if result_dict.get('trend') else 'neutral',
+                'market_sentiment': result_dict['market_sentiment'] if result_dict.get('market_sentiment') else 'normal',
+                'funding_score': float(result_dict['funding_score']) if result_dict.get('funding_score') else 50
             }
         except Exception as e:
             logger.warning(f"读取{symbol}资金费率缓存失败: {e}")
             return None
+        finally:
+            if session:
+                session.close()
 
     def _get_cached_hyperliquid_data(self, symbol: str) -> Optional[dict]:
         """从缓存表读取Hyperliquid数据"""
+        session = None
         try:
             coin = symbol.split('/')[0]
             session = self.db_service.get_session()
-            
-            cursor.execute(
-                "SELECT * FROM hyperliquid_symbol_aggregation WHERE symbol = %s AND period = '24h'",
-                (coin,)
-            )
-            result = result_proxy.fetchone() if result_proxy else None
-            
+
+            sql = text("SELECT * FROM hyperliquid_symbol_aggregation WHERE symbol = :symbol AND period = '24h'")
+            result = session.execute(sql, {"symbol": coin}).fetchone()
+
             if not result:
                 return None
 
+            # Convert to dict
+            result_dict = dict(result._mapping) if hasattr(result, '_mapping') else dict(result)
+
             return {
-                'net_flow': float(result['net_flow']),
-                'long_trades': result['long_trades'],
-                'short_trades': result['short_trades'],
-                'active_wallets': result['active_wallets'],
-                'avg_pnl': float(result['avg_pnl']) if result['avg_pnl'] else 0
+                'net_flow': float(result_dict['net_flow']) if result_dict.get('net_flow') else 0,
+                'long_trades': result_dict['long_trades'] if result_dict.get('long_trades') else 0,
+                'short_trades': result_dict['short_trades'] if result_dict.get('short_trades') else 0,
+                'active_wallets': result_dict['active_wallets'] if result_dict.get('active_wallets') else 0,
+                'avg_pnl': float(result_dict['avg_pnl']) if result_dict.get('avg_pnl') else 0,
+                'hyperliquid_score': float(result_dict['hyperliquid_score']) if result_dict.get('hyperliquid_score') else 50
             }
         except Exception as e:
             logger.warning(f"读取{symbol} Hyperliquid缓存失败: {e}")
             return None
+        finally:
+            if session:
+                session.close()
 
     def _get_cached_price_stats(self, symbol: str) -> Optional[dict]:
         """从缓存表读取价格统计数据"""
+        session = None
         try:
             session = self.db_service.get_session()
-            
-            cursor.execute(
-                "SELECT * FROM price_stats_24h WHERE symbol = %s",
-                (symbol,)
-            )
-            result = result_proxy.fetchone() if result_proxy else None
-            
+
+            sql = text("SELECT * FROM price_stats_24h WHERE symbol = :symbol")
+            result = session.execute(sql, {"symbol": symbol}).fetchone()
+
             if not result:
                 return None
 
+            # Convert to dict
+            result_dict = dict(result._mapping) if hasattr(result, '_mapping') else dict(result)
+
             return {
-                'current_price': float(result['current_price']),
-                'change_24h': float(result['change_24h']) if result['change_24h'] else 0,
-                'volume_24h': float(result['volume_24h']) if result['volume_24h'] else 0
+                'current_price': float(result_dict['current_price']) if result_dict.get('current_price') else 0,
+                'change_24h': float(result_dict['change_24h']) if result_dict.get('change_24h') else 0,
+                'volume_24h': float(result_dict['volume_24h']) if result_dict.get('volume_24h') else 0
             }
         except Exception as e:
             logger.warning(f"读取{symbol}价格统计缓存失败: {e}")
             return None
+        finally:
+            if session:
+                session.close()
 
     # ========== 辅助方法：写入数据库 ==========
 

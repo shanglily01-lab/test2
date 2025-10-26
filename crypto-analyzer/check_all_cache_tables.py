@@ -146,21 +146,28 @@ def check_all_caches():
 
         print()
 
-        # 检查 funding_rates 表
+        # 检查 funding_rate_data 表
         try:
             result = session.execute(text("""
                 SELECT COUNT(*) as count
                 FROM information_schema.tables
                 WHERE table_schema = DATABASE()
-                AND table_name = 'funding_rates'
+                AND table_name = 'funding_rate_data'
             """))
             row = result.fetchone()
             if row[0] > 0:
-                result = session.execute(text("SELECT COUNT(*) FROM funding_rates"))
+                result = session.execute(text("SELECT COUNT(*) FROM funding_rate_data"))
                 row = result.fetchone()
-                print(f"资金费率 (funding_rates): {row[0]} 条记录")
+                print(f"资金费率 (funding_rate_data): {row[0]} 条记录")
+
+                if row[0] > 0:
+                    result = session.execute(text("""
+                        SELECT DISTINCT symbol FROM funding_rate_data LIMIT 10
+                    """))
+                    symbols = [r[0] for r in result.fetchall()]
+                    print(f"  包含币种: {', '.join(symbols)}")
             else:
-                print("⚠️  资金费率表 (funding_rates) 不存在")
+                print("⚠️  资金费率表 (funding_rate_data) 不存在")
         except Exception as e:
             print(f"检查资金费率失败: {e}")
 
