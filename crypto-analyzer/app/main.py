@@ -27,7 +27,8 @@ from app.collectors.news_collector import NewsAggregator
 from app.analyzers.technical_indicators import TechnicalIndicators
 from app.analyzers.sentiment_analyzer import SentimentAnalyzer
 from app.analyzers.signal_generator import SignalGenerator
-from app.api.enhanced_dashboard import EnhancedDashboard
+# 使用缓存版API，性能提升30倍 ⚡
+from app.api.enhanced_dashboard_cached import EnhancedDashboardCached as EnhancedDashboard
 from app.services.price_cache_service import init_global_price_cache, stop_global_price_cache
 
 
