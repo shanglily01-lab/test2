@@ -1,0 +1,615 @@
+2025-10-25 11:39:47 | INFO | 初始化币安合约采集器 (使用API密钥)
+2025-10-25 11:39:47 | INFO | 币安合约采集器初始化完成，监控 16 个币种
+2025-10-25 11:39:47 | INFO | MySQL数据库连接成功: 127.0.0.1:3306/binance-data
+2025-10-25 11:39:47 | INFO | 数据库表创建/检查完成
+2025-10-25 11:39:47 | INFO | 数据库服务初始化完成
+2025-10-25 11:39:47 | INFO | 
+================================================================================
+2025-10-25 11:39:47 | INFO | 币安合约数据采集器启动
+2025-10-25 11:39:47 | INFO | ================================================================================
+2025-10-25 11:39:47 | INFO | 监控币种: BTC/USDT, ETH/USDT, BNB/USDT, DOGE/USDT, SOL/USDT, LTC/USDT, HYPE/USDT, BERA/USDT, TON/USDT, LINK/USDT, BCH/USDT, ETC/USDT, SUI/USDT, APT/USDT, ZEC/USDT, VIRTUAL/USDT
+2025-10-25 11:39:47 | INFO | 采集间隔: 1 分钟
+2025-10-25 11:39:47 | INFO | 数据库: mysql
+2025-10-25 11:39:47 | INFO | ================================================================================
+
+2025-10-25 11:39:47 | INFO | 设置定时任务...
+2025-10-25 11:39:47 | INFO |   ✓ 合约数据采集 - 每 1 分钟
+2025-10-25 11:39:47 | INFO |   ✓ 合约列表更新 - 每 1 小时
+2025-10-25 11:39:47 | INFO |   ✓ 状态报告 - 每 30 分钟
+2025-10-25 11:39:47 | INFO | 定时任务设置完成
+
+2025-10-25 11:39:47 | INFO | 
+================================================================================
+2025-10-25 11:39:47 | INFO | 首次采集开始...
+2025-10-25 11:39:47 | INFO | ================================================================================
+
+2025-10-25 11:39:47 | INFO | [11:39:47] 开始采集币安合约数据...
+2025-10-25 11:39:47 | ERROR | 保存价格数据失败: (pymysql.err.DataError) (1264, "Out of range value for column 'quote_volume' at row 1")
+[SQL: INSERT INTO price_data (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at) VALUES (%(symbol)s, %(exchange)s, %(timestamp)s, %(price)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, %(quote_volume)s, %(bid_price)s, %(ask_price)s, %(change_24h)s, %(created_at)s)]
+[parameters: {'symbol': 'BTC/USDT', 'exchange': 'binance_futures', 'timestamp': datetime.datetime(2025, 10, 25, 11, 39, 40, 962000), 'price': 110994.4, 'open_price': 110325.1, 'high_price': 112086.0, 'low_price': 109650.0, 'close_price': 110994.4, 'volume': 103835.507, 'quote_volume': 11505920281.51, 'bid_price': 0, 'ask_price': 0, 'change_24h': 0.607, 'created_at': datetime.datetime(2025, 10, 25, 11, 39, 47, 678464)}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+2025-10-25 11:39:47 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:47 | ERROR | 保存价格数据失败: (pymysql.err.DataError) (1264, "Out of range value for column 'quote_volume' at row 1")
+[SQL: INSERT INTO price_data (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at) VALUES (%(symbol)s, %(exchange)s, %(timestamp)s, %(price)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, %(quote_volume)s, %(bid_price)s, %(ask_price)s, %(change_24h)s, %(created_at)s)]
+[parameters: {'symbol': 'ETH/USDT', 'exchange': 'binance_futures', 'timestamp': datetime.datetime(2025, 10, 25, 11, 39, 45, 83000), 'price': 3926.76, 'open_price': 3881.3, 'high_price': 4026.48, 'low_price': 3864.28, 'close_price': 3926.76, 'volume': 3547542.73, 'quote_volume': 13963490798.98, 'bid_price': 0, 'ask_price': 0, 'change_24h': 1.171, 'created_at': datetime.datetime(2025, 10, 25, 11, 39, 47, 911102)}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+2025-10-25 11:39:47 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:48 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:48 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:48 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:48 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:49 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:49 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:49 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:49 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:50 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:50 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:50 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:50 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:50 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:51 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:39:51 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 3.7秒
+2025-10-25 11:39:51 | INFO | 
+================================================================================
+2025-10-25 11:39:51 | INFO | 首次采集完成
+2025-10-25 11:39:51 | INFO | ================================================================================
+
+2025-10-25 11:39:51 | INFO | 
+采集器已启动，按 Ctrl+C 停止
+
+2025-10-25 11:40:48 | INFO | [11:40:48] 开始采集币安合约数据...
+2025-10-25 11:40:48 | ERROR | 保存价格数据失败: (pymysql.err.DataError) (1264, "Out of range value for column 'quote_volume' at row 1")
+[SQL: INSERT INTO price_data (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at) VALUES (%(symbol)s, %(exchange)s, %(timestamp)s, %(price)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, %(quote_volume)s, %(bid_price)s, %(ask_price)s, %(change_24h)s, %(created_at)s)]
+[parameters: {'symbol': 'BTC/USDT', 'exchange': 'binance_futures', 'timestamp': datetime.datetime(2025, 10, 25, 11, 40, 43, 259000), 'price': 111006.6, 'open_price': 110304.3, 'high_price': 112086.0, 'low_price': 109650.0, 'close_price': 111006.6, 'volume': 103826.956, 'quote_volume': 11504988476.14, 'bid_price': 0, 'ask_price': 0, 'change_24h': 0.637, 'created_at': datetime.datetime(2025, 10, 25, 11, 40, 48, 393115)}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+2025-10-25 11:40:48 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:48 | ERROR | 保存价格数据失败: (pymysql.err.DataError) (1264, "Out of range value for column 'quote_volume' at row 1")
+[SQL: INSERT INTO price_data (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at) VALUES (%(symbol)s, %(exchange)s, %(timestamp)s, %(price)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, %(quote_volume)s, %(bid_price)s, %(ask_price)s, %(change_24h)s, %(created_at)s)]
+[parameters: {'symbol': 'ETH/USDT', 'exchange': 'binance_futures', 'timestamp': datetime.datetime(2025, 10, 25, 11, 40, 44, 998000), 'price': 3926.13, 'open_price': 3880.61, 'high_price': 4026.48, 'low_price': 3864.28, 'close_price': 3926.13, 'volume': 3547295.457, 'quote_volume': 13962540775.95, 'bid_price': 0, 'ask_price': 0, 'change_24h': 1.173, 'created_at': datetime.datetime(2025, 10, 25, 11, 40, 48, 675434)}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+2025-10-25 11:40:48 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:48 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:49 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:49 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:49 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:50 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:50 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:50 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:50 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:51 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:51 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:51 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:52 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:52 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:52 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:40:52 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 4.5秒
+2025-10-25 11:41:52 | INFO | [11:41:52] 开始采集币安合约数据...
+2025-10-25 11:41:52 | ERROR | 保存价格数据失败: (pymysql.err.DataError) (1264, "Out of range value for column 'quote_volume' at row 1")
+[SQL: INSERT INTO price_data (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at) VALUES (%(symbol)s, %(exchange)s, %(timestamp)s, %(price)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, %(quote_volume)s, %(bid_price)s, %(ask_price)s, %(change_24h)s, %(created_at)s)]
+[parameters: {'symbol': 'BTC/USDT', 'exchange': 'binance_futures', 'timestamp': datetime.datetime(2025, 10, 25, 11, 41, 46, 892000), 'price': 110998.2, 'open_price': 110344.6, 'high_price': 112086.0, 'low_price': 109650.0, 'close_price': 110998.2, 'volume': 103854.787, 'quote_volume': 11508094526.2, 'bid_price': 0, 'ask_price': 0, 'change_24h': 0.592, 'created_at': datetime.datetime(2025, 10, 25, 11, 41, 52, 979339)}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+2025-10-25 11:41:52 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:53 | ERROR | 保存价格数据失败: (pymysql.err.DataError) (1264, "Out of range value for column 'quote_volume' at row 1")
+[SQL: INSERT INTO price_data (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at) VALUES (%(symbol)s, %(exchange)s, %(timestamp)s, %(price)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, %(quote_volume)s, %(bid_price)s, %(ask_price)s, %(change_24h)s, %(created_at)s)]
+[parameters: {'symbol': 'ETH/USDT', 'exchange': 'binance_futures', 'timestamp': datetime.datetime(2025, 10, 25, 11, 41, 49, 152000), 'price': 3925.1, 'open_price': 3879.9, 'high_price': 4026.48, 'low_price': 3864.28, 'close_price': 3925.1, 'volume': 3546668.424, 'quote_volume': 13960198939.94, 'bid_price': 0, 'ask_price': 0, 'change_24h': 1.165, 'created_at': datetime.datetime(2025, 10, 25, 11, 41, 53, 224835)}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+2025-10-25 11:41:53 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:53 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:53 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:53 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:54 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:54 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:54 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:54 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:55 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:55 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:55 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:55 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:56 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:56 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:56 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:41:56 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 3.8秒
+2025-10-25 11:42:56 | INFO | [11:42:56] 开始采集币安合约数据...
+2025-10-25 11:42:56 | ERROR | 保存价格数据失败: (pymysql.err.DataError) (1264, "Out of range value for column 'quote_volume' at row 1")
+[SQL: INSERT INTO price_data (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at) VALUES (%(symbol)s, %(exchange)s, %(timestamp)s, %(price)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, %(quote_volume)s, %(bid_price)s, %(ask_price)s, %(change_24h)s, %(created_at)s)]
+[parameters: {'symbol': 'BTC/USDT', 'exchange': 'binance_futures', 'timestamp': datetime.datetime(2025, 10, 25, 11, 42, 49, 855000), 'price': 111002.0, 'open_price': 110352.7, 'high_price': 112086.0, 'low_price': 109650.0, 'close_price': 111002.0, 'volume': 103871.826, 'quote_volume': 11509990191.74, 'bid_price': 0, 'ask_price': 0, 'change_24h': 0.588, 'created_at': datetime.datetime(2025, 10, 25, 11, 42, 56, 813931)}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+2025-10-25 11:42:56 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:57 | ERROR | 保存价格数据失败: (pymysql.err.DataError) (1264, "Out of range value for column 'quote_volume' at row 1")
+[SQL: INSERT INTO price_data (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at) VALUES (%(symbol)s, %(exchange)s, %(timestamp)s, %(price)s, %(open_price)s, %(high_price)s, %(low_price)s, %(close_price)s, %(volume)s, %(quote_volume)s, %(bid_price)s, %(ask_price)s, %(change_24h)s, %(created_at)s)]
+[parameters: {'symbol': 'ETH/USDT', 'exchange': 'binance_futures', 'timestamp': datetime.datetime(2025, 10, 25, 11, 42, 53, 134000), 'price': 3926.09, 'open_price': 3879.42, 'high_price': 4026.48, 'low_price': 3864.28, 'close_price': 3926.09, 'volume': 3545375.924, 'quote_volume': 13955199177.77, 'bid_price': 0, 'ask_price': 0, 'change_24h': 1.203, 'created_at': datetime.datetime(2025, 10, 25, 11, 42, 57, 38901)}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)
+2025-10-25 11:42:57 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:57 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:57 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:57 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:58 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:58 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:58 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:58 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:59 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:59 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:59 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:42:59 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:43:00 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:43:00 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:43:00 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:43:00 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 4.0秒
+2025-10-25 11:44:00 | INFO | [11:44:00] 开始采集币安合约数据...
+2025-10-25 11:44:00 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:01 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:01 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:01 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:01 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:02 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:02 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:02 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:02 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:02 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:03 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:03 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:03 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:03 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:04 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:04 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:04 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 3.7秒
+2025-10-25 11:44:22 | INFO | 
+
+收到停止信号，正在关闭...
+2025-10-25 11:44:22 | INFO | 关闭数据库连接...
+2025-10-25 11:44:22 | INFO | 数据库连接已关闭
+2025-10-25 11:44:22 | INFO | 采集器已停止
+2025-10-25 11:44:26 | INFO | 初始化币安合约采集器 (使用API密钥)
+2025-10-25 11:44:26 | INFO | 币安合约采集器初始化完成，监控 16 个币种
+2025-10-25 11:44:26 | INFO | MySQL数据库连接成功: 127.0.0.1:3306/binance-data
+2025-10-25 11:44:26 | INFO | 数据库表创建/检查完成
+2025-10-25 11:44:26 | INFO | 数据库服务初始化完成
+2025-10-25 11:44:26 | INFO | 
+================================================================================
+2025-10-25 11:44:26 | INFO | 币安合约数据采集器启动
+2025-10-25 11:44:26 | INFO | ================================================================================
+2025-10-25 11:44:26 | INFO | 监控币种: BTC/USDT, ETH/USDT, BNB/USDT, DOGE/USDT, SOL/USDT, LTC/USDT, HYPE/USDT, BERA/USDT, TON/USDT, LINK/USDT, BCH/USDT, ETC/USDT, SUI/USDT, APT/USDT, ZEC/USDT, VIRTUAL/USDT
+2025-10-25 11:44:26 | INFO | 采集间隔: 1 分钟
+2025-10-25 11:44:26 | INFO | 数据库: mysql
+2025-10-25 11:44:26 | INFO | ================================================================================
+
+2025-10-25 11:44:26 | INFO | 设置定时任务...
+2025-10-25 11:44:26 | INFO |   ✓ 合约数据采集 - 每 1 分钟
+2025-10-25 11:44:26 | INFO |   ✓ 合约列表更新 - 每 1 小时
+2025-10-25 11:44:26 | INFO |   ✓ 状态报告 - 每 30 分钟
+2025-10-25 11:44:26 | INFO | 定时任务设置完成
+
+2025-10-25 11:44:26 | INFO | 
+================================================================================
+2025-10-25 11:44:26 | INFO | 首次采集开始...
+2025-10-25 11:44:26 | INFO | ================================================================================
+
+2025-10-25 11:44:26 | INFO | [11:44:26] 开始采集币安合约数据...
+2025-10-25 11:44:27 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:27 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:27 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:27 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:28 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:28 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:28 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:28 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:29 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:29 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:29 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:29 | ERROR | 获取 ETC/USDT 资金费率失败: ('Connection aborted.', ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接。', None, 10053, None))
+2025-10-25 11:44:29 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:29 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:30 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:30 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:30 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:44:30 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 3.7秒
+2025-10-25 11:44:30 | INFO | 
+================================================================================
+2025-10-25 11:44:30 | INFO | 首次采集完成
+2025-10-25 11:44:30 | INFO | ================================================================================
+
+2025-10-25 11:44:30 | INFO | 
+采集器已启动，按 Ctrl+C 停止
+
+2025-10-25 11:45:27 | INFO | [11:45:27] 开始采集币安合约数据...
+2025-10-25 11:45:27 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:28 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:28 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:28 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:28 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:29 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:29 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:29 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:29 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:29 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:30 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:30 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:30 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:30 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:31 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:31 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:45:31 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 3.7秒
+2025-10-25 11:46:31 | INFO | [11:46:31] 开始采集币安合约数据...
+2025-10-25 11:46:31 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:31 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:32 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:32 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:32 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:33 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:33 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:33 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:34 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:34 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:34 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:34 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:35 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:35 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:35 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:35 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:46:35 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 4.5秒
+2025-10-25 11:47:27 | INFO | 
+
+收到停止信号，正在关闭...
+2025-10-25 11:47:27 | INFO | 关闭数据库连接...
+2025-10-25 11:47:27 | INFO | 数据库连接已关闭
+2025-10-25 11:47:27 | INFO | 采集器已停止
+2025-10-25 11:47:32 | INFO | 初始化币安合约采集器 (使用API密钥)
+2025-10-25 11:47:32 | INFO | 币安合约采集器初始化完成，监控 16 个币种
+2025-10-25 11:47:32 | INFO | MySQL数据库连接成功: 127.0.0.1:3306/binance-data
+2025-10-25 11:47:32 | INFO | 数据库表创建/检查完成
+2025-10-25 11:47:32 | INFO | 数据库服务初始化完成
+2025-10-25 11:47:32 | INFO | 
+================================================================================
+2025-10-25 11:47:32 | INFO | 币安合约数据采集器启动
+2025-10-25 11:47:32 | INFO | ================================================================================
+2025-10-25 11:47:32 | INFO | 监控币种: BTC/USDT, ETH/USDT, BNB/USDT, DOGE/USDT, SOL/USDT, LTC/USDT, HYPE/USDT, BERA/USDT, TON/USDT, LINK/USDT, BCH/USDT, ETC/USDT, SUI/USDT, APT/USDT, ZEC/USDT, VIRTUAL/USDT
+2025-10-25 11:47:32 | INFO | 采集间隔: 1 分钟
+2025-10-25 11:47:32 | INFO | 数据库: mysql
+2025-10-25 11:47:32 | INFO | ================================================================================
+
+2025-10-25 11:47:32 | INFO | 设置定时任务...
+2025-10-25 11:47:32 | INFO |   ✓ 合约数据采集 - 每 1 分钟
+2025-10-25 11:47:32 | INFO |   ✓ 合约列表更新 - 每 1 小时
+2025-10-25 11:47:32 | INFO |   ✓ 状态报告 - 每 30 分钟
+2025-10-25 11:47:32 | INFO | 定时任务设置完成
+
+2025-10-25 11:47:32 | INFO | 
+================================================================================
+2025-10-25 11:47:32 | INFO | 首次采集开始...
+2025-10-25 11:47:32 | INFO | ================================================================================
+
+2025-10-25 11:47:32 | INFO | [11:47:32] 开始采集币安合约数据...
+2025-10-25 11:47:32 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:32 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:32 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:33 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:33 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:33 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:33 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:34 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:34 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:34 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:34 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:34 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:35 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:35 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:35 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:35 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:47:35 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 3.7秒
+2025-10-25 11:47:35 | INFO | 
+================================================================================
+2025-10-25 11:47:35 | INFO | 首次采集完成
+2025-10-25 11:47:35 | INFO | ================================================================================
+
+2025-10-25 11:47:35 | INFO | 
+采集器已启动，按 Ctrl+C 停止
+
+2025-10-25 11:48:32 | INFO | [11:48:32] 开始采集币安合约数据...
+2025-10-25 11:48:33 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:33 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:33 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:34 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:34 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:34 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:34 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:35 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:35 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:35 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:36 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:36 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:36 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:36 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:37 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:37 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:37 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 4.6秒
+2025-10-25 11:48:52 | INFO | 
+
+收到停止信号，正在关闭...
+2025-10-25 11:48:52 | INFO | 关闭数据库连接...
+2025-10-25 11:48:52 | INFO | 数据库连接已关闭
+2025-10-25 11:48:52 | INFO | 采集器已停止
+2025-10-25 11:48:55 | INFO | 初始化币安合约采集器 (使用API密钥)
+2025-10-25 11:48:55 | INFO | 币安合约采集器初始化完成，监控 16 个币种
+2025-10-25 11:48:55 | INFO | MySQL数据库连接成功: 127.0.0.1:3306/binance-data
+2025-10-25 11:48:55 | INFO | 数据库表创建/检查完成
+2025-10-25 11:48:55 | INFO | 数据库服务初始化完成
+2025-10-25 11:48:55 | INFO | 
+================================================================================
+2025-10-25 11:48:55 | INFO | 币安合约数据采集器启动
+2025-10-25 11:48:55 | INFO | ================================================================================
+2025-10-25 11:48:55 | INFO | 监控币种: BTC/USDT, ETH/USDT, BNB/USDT, DOGE/USDT, SOL/USDT, LTC/USDT, HYPE/USDT, BERA/USDT, TON/USDT, LINK/USDT, BCH/USDT, ETC/USDT, SUI/USDT, APT/USDT, ZEC/USDT, VIRTUAL/USDT
+2025-10-25 11:48:55 | INFO | 采集间隔: 1 分钟
+2025-10-25 11:48:55 | INFO | 数据库: mysql
+2025-10-25 11:48:55 | INFO | ================================================================================
+
+2025-10-25 11:48:55 | INFO | 设置定时任务...
+2025-10-25 11:48:55 | INFO |   ✓ 合约数据采集 - 每 1 分钟
+2025-10-25 11:48:55 | INFO |   ✓ 合约列表更新 - 每 1 小时
+2025-10-25 11:48:55 | INFO |   ✓ 状态报告 - 每 30 分钟
+2025-10-25 11:48:55 | INFO | 定时任务设置完成
+
+2025-10-25 11:48:55 | INFO | 
+================================================================================
+2025-10-25 11:48:55 | INFO | 首次采集开始...
+2025-10-25 11:48:55 | INFO | ================================================================================
+
+2025-10-25 11:48:55 | INFO | [11:48:55] 开始采集币安合约数据...
+2025-10-25 11:48:56 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:56 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:56 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:56 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:57 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:57 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:57 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:57 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:58 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:58 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:58 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:58 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:58 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:59 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:59 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:59 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:48:59 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 3.7秒
+2025-10-25 11:48:59 | INFO | 
+================================================================================
+2025-10-25 11:48:59 | INFO | 首次采集完成
+2025-10-25 11:48:59 | INFO | ================================================================================
+
+2025-10-25 11:48:59 | INFO | 
+采集器已启动，按 Ctrl+C 停止
+
+2025-10-25 11:49:56 | INFO | [11:49:56] 开始采集币安合约数据...
+2025-10-25 11:49:56 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:57 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:57 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:57 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:57 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:58 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:58 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:58 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:58 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:58 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:59 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:59 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:59 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:49:59 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:50:00 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:50:00 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:50:00 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 3.6秒
+2025-10-25 11:50:35 | INFO | 
+
+收到停止信号，正在关闭...
+2025-10-25 11:50:35 | INFO | 关闭数据库连接...
+2025-10-25 11:50:35 | INFO | 数据库连接已关闭
+2025-10-25 11:50:35 | INFO | 采集器已停止
+2025-10-25 11:52:41 | INFO | 初始化币安合约采集器 (使用API密钥)
+2025-10-25 11:52:41 | INFO | 币安合约采集器初始化完成，监控 16 个币种
+2025-10-25 11:52:41 | INFO | MySQL数据库连接成功: 127.0.0.1:3306/binance-data
+2025-10-25 11:52:41 | INFO | 数据库表创建/检查完成
+2025-10-25 11:52:41 | INFO | 数据库服务初始化完成
+2025-10-25 11:52:41 | INFO | 
+================================================================================
+2025-10-25 11:52:41 | INFO | 币安合约数据采集器启动
+2025-10-25 11:52:41 | INFO | ================================================================================
+2025-10-25 11:52:41 | INFO | 监控币种: BTC/USDT, ETH/USDT, BNB/USDT, DOGE/USDT, SOL/USDT, LTC/USDT, HYPE/USDT, BERA/USDT, TON/USDT, LINK/USDT, BCH/USDT, ETC/USDT, SUI/USDT, APT/USDT, ZEC/USDT, VIRTUAL/USDT
+2025-10-25 11:52:41 | INFO | 采集间隔: 1 分钟
+2025-10-25 11:52:41 | INFO | 数据库: mysql
+2025-10-25 11:52:41 | INFO | ================================================================================
+
+2025-10-25 11:52:41 | INFO | 设置定时任务...
+2025-10-25 11:52:41 | INFO |   ✓ 合约数据采集 - 每 1 分钟
+2025-10-25 11:52:41 | INFO |   ✓ 合约列表更新 - 每 1 小时
+2025-10-25 11:52:41 | INFO |   ✓ 状态报告 - 每 30 分钟
+2025-10-25 11:52:41 | INFO | 定时任务设置完成
+
+2025-10-25 11:52:41 | INFO | 
+================================================================================
+2025-10-25 11:52:41 | INFO | 首次采集开始...
+2025-10-25 11:52:41 | INFO | ================================================================================
+
+2025-10-25 11:52:41 | INFO | [11:52:41] 开始采集币安合约数据...
+2025-10-25 11:52:42 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:42 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:42 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:43 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:43 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:43 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:43 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:44 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:44 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:44 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:44 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:45 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:45 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:45 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:45 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:46 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:52:46 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 4.3秒
+2025-10-25 11:52:46 | INFO | 
+================================================================================
+2025-10-25 11:52:46 | INFO | 首次采集完成
+2025-10-25 11:52:46 | INFO | ================================================================================
+
+2025-10-25 11:52:46 | INFO | 
+采集器已启动，按 Ctrl+C 停止
+
+2025-10-25 11:53:42 | INFO | [11:53:42] 开始采集币安合约数据...
+2025-10-25 11:53:42 | ERROR |   ✗ BTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:42 | ERROR |   ✗ ETH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:42 | ERROR |   ✗ BNB/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:43 | ERROR |   ✗ DOGE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:43 | ERROR |   ✗ SOL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:43 | ERROR |   ✗ LTC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:43 | ERROR |   ✗ HYPE/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:44 | ERROR |   ✗ BERA/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:44 | ERROR |   ✗ TON/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:44 | ERROR |   ✗ LINK/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:44 | ERROR |   ✗ BCH/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:45 | ERROR |   ✗ ETC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:45 | ERROR |   ✗ SUI/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:45 | ERROR |   ✗ APT/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:45 | ERROR |   ✗ ZEC/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:46 | ERROR |   ✗ VIRTUAL/USDT: 'DatabaseService' object has no attribute 'save_open_interest_data'
+2025-10-25 11:53:46 | INFO |   ✓ 采集完成: 成功 0/16, 失败 16, 耗时 3.9秒
+2025-10-25 11:55:42 | INFO | 初始化币安合约采集器 (使用API密钥)
+2025-10-25 11:55:42 | INFO | 币安合约采集器初始化完成，监控 16 个币种
+2025-10-25 11:55:42 | INFO | MySQL数据库连接成功: 127.0.0.1:3306/binance-data
+2025-10-25 11:55:42 | INFO | 数据库表创建/检查完成
+2025-10-25 11:55:42 | INFO | 数据库服务初始化完成
+2025-10-25 11:55:42 | INFO | 
+================================================================================
+2025-10-25 11:55:42 | INFO | 币安合约数据采集器启动
+2025-10-25 11:55:42 | INFO | ================================================================================
+2025-10-25 11:55:42 | INFO | 监控币种: BTC/USDT, ETH/USDT, BNB/USDT, DOGE/USDT, SOL/USDT, LTC/USDT, HYPE/USDT, BERA/USDT, TON/USDT, LINK/USDT, BCH/USDT, ETC/USDT, SUI/USDT, APT/USDT, ZEC/USDT, VIRTUAL/USDT
+2025-10-25 11:55:42 | INFO | 采集间隔: 1 分钟
+2025-10-25 11:55:42 | INFO | 数据库: mysql
+2025-10-25 11:55:42 | INFO | ================================================================================
+
+2025-10-25 11:55:42 | INFO | 设置定时任务...
+2025-10-25 11:55:42 | INFO |   ✓ 合约数据采集 - 每 1 分钟
+2025-10-25 11:55:42 | INFO |   ✓ 合约列表更新 - 每 1 小时
+2025-10-25 11:55:42 | INFO |   ✓ 状态报告 - 每 30 分钟
+2025-10-25 11:55:42 | INFO | 定时任务设置完成
+
+2025-10-25 11:55:42 | INFO | 
+================================================================================
+2025-10-25 11:55:42 | INFO | 首次采集开始...
+2025-10-25 11:55:42 | INFO | ================================================================================
+
+2025-10-25 11:55:42 | INFO | [11:55:42] 开始采集币安合约数据...
+2025-10-25 11:55:42 | INFO |   ✓ BTC/USDT: 价格=$110,946.30, 费率=+0.0027%, 持仓=77,706, 多空比=1.59
+2025-10-25 11:55:43 | INFO |   ✓ ETH/USDT: 价格=$3,922.82, 费率=+0.0033%, 持仓=1,474,285, 多空比=2.42
+2025-10-25 11:55:43 | INFO |   ✓ BNB/USDT: 价格=$1,116.11, 费率=-0.0134%, 持仓=556,616, 多空比=3.24
+2025-10-25 11:55:44 | INFO |   ✓ DOGE/USDT: 价格=$0.20, 费率=+0.0100%, 持仓=1,505,834,644, 多空比=2.39
+2025-10-25 11:55:45 | INFO |   ✓ SOL/USDT: 价格=$193.42, 费率=+0.0100%, 持仓=7,314,427, 多空比=2.28
+2025-10-25 11:55:46 | INFO |   ✓ LTC/USDT: 价格=$96.17, 费率=+0.0065%, 持仓=972,991, 多空比=2.12
+2025-10-25 11:55:46 | INFO |   ✓ HYPE/USDT: 价格=$40.10, 费率=+0.0050%, 持仓=4,274,965, 多空比=2.24
+2025-10-25 11:55:47 | INFO |   ✓ BERA/USDT: 价格=$1.89, 费率=-0.0627%, 持仓=12,819,613, 多空比=0.77
+2025-10-25 11:55:48 | INFO |   ✓ TON/USDT: 价格=$2.15, 费率=+0.0033%, 持仓=12,234,657, 多空比=1.42
+2025-10-25 11:55:49 | INFO |   ✓ LINK/USDT: 价格=$17.80, 费率=+0.0100%, 持仓=5,517,986, 多空比=2.23
+2025-10-25 11:55:49 | INFO |   ✓ BCH/USDT: 价格=$502.07, 费率=-0.0191%, 持仓=278,307, 多空比=0.88
+2025-10-25 11:55:50 | INFO |   ✓ ETC/USDT: 价格=$15.88, 费率=+0.0100%, 持仓=1,654,745, 多空比=1.45
+2025-10-25 11:55:51 | INFO |   ✓ SUI/USDT: 价格=$2.52, 费率=+0.0100%, 持仓=59,349,814, 多空比=1.85
+2025-10-25 11:55:52 | INFO |   ✓ APT/USDT: 价格=$3.28, 费率=-0.0634%, 持仓=23,705,559, 多空比=2.00
+2025-10-25 11:55:52 | INFO |   ✓ ZEC/USDT: 价格=$266.90, 费率=-0.0170%, 持仓=385,696, 多空比=0.70
+2025-10-25 11:55:53 | INFO |   ✓ VIRTUAL/USDT: 价格=$1.03, 费率=-0.0556%, 持仓=28,608,438, 多空比=1.11
+2025-10-25 11:55:54 | INFO |   ✓ 采集完成: 成功 16/16, 失败 0, 耗时 11.9秒
+2025-10-25 11:55:54 | INFO | 
+================================================================================
+2025-10-25 11:55:54 | INFO | 首次采集完成
+2025-10-25 11:55:54 | INFO | ================================================================================
+
+2025-10-25 11:55:54 | INFO | 
+采集器已启动，按 Ctrl+C 停止
+
+2025-10-25 11:56:43 | INFO | [11:56:43] 开始采集币安合约数据...
+2025-10-25 11:56:43 | INFO |   ✓ BTC/USDT: 价格=$110,965.50, 费率=+0.0026%, 持仓=77,701, 多空比=1.59
+2025-10-25 11:56:44 | INFO |   ✓ ETH/USDT: 价格=$3,918.60, 费率=+0.0033%, 持仓=1,474,259, 多空比=2.41
+2025-10-25 11:56:44 | INFO |   ✓ BNB/USDT: 价格=$1,115.78, 费率=-0.0134%, 持仓=556,716, 多空比=3.24
+2025-10-25 11:56:45 | INFO |   ✓ DOGE/USDT: 价格=$0.20, 费率=+0.0100%, 持仓=1,505,988,992, 多空比=2.39
+2025-10-25 11:56:46 | INFO |   ✓ SOL/USDT: 价格=$193.35, 费率=+0.0100%, 持仓=7,315,315, 多空比=2.28
+2025-10-25 11:56:47 | INFO |   ✓ LTC/USDT: 价格=$96.14, 费率=+0.0064%, 持仓=972,887, 多空比=2.12
+2025-10-25 11:56:47 | INFO |   ✓ HYPE/USDT: 价格=$40.04, 费率=+0.0050%, 持仓=4,273,469, 多空比=2.26
+2025-10-25 11:56:48 | INFO |   ✓ BERA/USDT: 价格=$1.89, 费率=-0.0631%, 持仓=12,824,248, 多空比=0.77
+2025-10-25 11:56:49 | INFO |   ✓ TON/USDT: 价格=$2.15, 费率=+0.0033%, 持仓=12,232,513, 多空比=1.42
+2025-10-25 11:56:50 | INFO |   ✓ LINK/USDT: 价格=$17.79, 费率=+0.0100%, 持仓=5,519,240, 多空比=2.23
+2025-10-25 11:56:50 | INFO |   ✓ BCH/USDT: 价格=$502.04, 费率=-0.0191%, 持仓=278,326, 多空比=0.87
+2025-10-25 11:56:51 | INFO |   ✓ ETC/USDT: 价格=$15.87, 费率=+0.0100%, 持仓=1,654,921, 多空比=1.45
+2025-10-25 11:56:52 | INFO |   ✓ SUI/USDT: 价格=$2.52, 费率=+0.0100%, 持仓=59,360,458, 多空比=1.85
+2025-10-25 11:56:53 | INFO |   ✓ APT/USDT: 价格=$3.27, 费率=-0.0632%, 持仓=23,707,477, 多空比=2.01
+2025-10-25 11:56:53 | INFO |   ✓ ZEC/USDT: 价格=$266.80, 费率=-0.0169%, 持仓=385,733, 多空比=0.70
+2025-10-25 11:56:54 | INFO |   ✓ VIRTUAL/USDT: 价格=$1.03, 费率=-0.0550%, 持仓=28,622,599, 多空比=1.11
+2025-10-25 11:56:55 | INFO |   ✓ 采集完成: 成功 16/16, 失败 0, 耗时 12.1秒
+2025-10-25 11:57:55 | INFO | [11:57:55] 开始采集币安合约数据...
+2025-10-25 11:57:55 | INFO |   ✓ BTC/USDT: 价格=$110,966.80, 费率=+0.0026%, 持仓=77,695, 多空比=1.59
+2025-10-25 11:57:56 | INFO |   ✓ ETH/USDT: 价格=$3,919.40, 费率=+0.0033%, 持仓=1,474,125, 多空比=2.41
+2025-10-25 11:57:56 | INFO |   ✓ BNB/USDT: 价格=$1,115.79, 费率=-0.0134%, 持仓=556,708, 多空比=3.24
+2025-10-25 11:57:57 | INFO |   ✓ DOGE/USDT: 价格=$0.20, 费率=+0.0100%, 持仓=1,505,843,630, 多空比=2.39
+2025-10-25 11:57:58 | INFO |   ✓ SOL/USDT: 价格=$193.45, 费率=+0.0100%, 持仓=7,314,888, 多空比=2.27
+2025-10-25 11:57:59 | INFO |   ✓ LTC/USDT: 价格=$96.13, 费率=+0.0064%, 持仓=972,950, 多空比=2.12
+2025-10-25 11:57:59 | INFO |   ✓ HYPE/USDT: 价格=$40.06, 费率=+0.0050%, 持仓=4,272,679, 多空比=2.26
+2025-10-25 11:58:00 | INFO |   ✓ BERA/USDT: 价格=$1.89, 费率=-0.0631%, 持仓=12,819,746, 多空比=0.77
+2025-10-25 11:58:01 | INFO |   ✓ TON/USDT: 价格=$2.15, 费率=+0.0033%, 持仓=12,232,630, 多空比=1.42
+2025-10-25 11:58:02 | INFO |   ✓ LINK/USDT: 价格=$17.80, 费率=+0.0100%, 持仓=5,519,535, 多空比=2.23
+2025-10-25 11:58:02 | INFO |   ✓ BCH/USDT: 价格=$502.09, 费率=-0.0192%, 持仓=278,299, 多空比=0.87
+2025-10-25 11:58:03 | INFO |   ✓ ETC/USDT: 价格=$15.87, 费率=+0.0100%, 持仓=1,654,911, 多空比=1.45
+2025-10-25 11:58:04 | INFO |   ✓ SUI/USDT: 价格=$2.52, 费率=+0.0100%, 持仓=59,363,413, 多空比=1.85
+2025-10-25 11:58:05 | INFO |   ✓ APT/USDT: 价格=$3.27, 费率=-0.0632%, 持仓=23,707,347, 多空比=2.01
+2025-10-25 11:58:05 | INFO |   ✓ ZEC/USDT: 价格=$266.54, 费率=-0.0168%, 持仓=385,636, 多空比=0.70
+2025-10-25 11:58:06 | INFO |   ✓ VIRTUAL/USDT: 价格=$1.02, 费率=-0.0543%, 持仓=28,600,985, 多空比=1.11
+2025-10-25 11:58:07 | INFO |   ✓ 采集完成: 成功 16/16, 失败 0, 耗时 11.8秒
+2025-10-25 11:59:07 | INFO | [11:59:07] 开始采集币安合约数据...
+2025-10-25 11:59:07 | INFO |   ✓ BTC/USDT: 价格=$110,966.90, 费率=+0.0025%, 持仓=77,704, 多空比=1.59
+2025-10-25 11:59:08 | INFO |   ✓ ETH/USDT: 价格=$3,919.67, 费率=+0.0033%, 持仓=1,474,057, 多空比=2.41
+2025-10-25 11:59:08 | INFO |   ✓ BNB/USDT: 价格=$1,115.93, 费率=-0.0133%, 持仓=556,803, 多空比=3.24
+2025-10-25 11:59:09 | INFO |   ✓ DOGE/USDT: 价格=$0.20, 费率=+0.0100%, 持仓=1,506,282,195, 多空比=2.39
+2025-10-25 11:59:10 | INFO |   ✓ SOL/USDT: 价格=$193.49, 费率=+0.0100%, 持仓=7,315,431, 多空比=2.27
+2025-10-25 11:59:11 | INFO |   ✓ LTC/USDT: 价格=$96.18, 费率=+0.0063%, 持仓=973,075, 多空比=2.12
+2025-10-25 11:59:11 | INFO |   ✓ HYPE/USDT: 价格=$40.09, 费率=+0.0050%, 持仓=4,272,897, 多空比=2.26
+2025-10-25 11:59:12 | INFO |   ✓ BERA/USDT: 价格=$1.89, 费率=-0.0637%, 持仓=12,819,603, 多空比=0.77
+2025-10-25 11:59:13 | INFO |   ✓ TON/USDT: 价格=$2.15, 费率=+0.0033%, 持仓=12,236,277, 多空比=1.42
+2025-10-25 11:59:14 | INFO |   ✓ LINK/USDT: 价格=$17.80, 费率=+0.0100%, 持仓=5,519,285, 多空比=2.23
+2025-10-25 11:59:14 | INFO |   ✓ BCH/USDT: 价格=$502.04, 费率=-0.0192%, 持仓=278,296, 多空比=0.87
+2025-10-25 11:59:15 | INFO |   ✓ ETC/USDT: 价格=$15.87, 费率=+0.0100%, 持仓=1,655,758, 多空比=1.45
+2025-10-25 11:59:16 | INFO |   ✓ SUI/USDT: 价格=$2.52, 费率=+0.0100%, 持仓=59,378,531, 多空比=1.85
+2025-10-25 11:59:17 | INFO |   ✓ APT/USDT: 价格=$3.28, 费率=-0.0629%, 持仓=23,706,907, 多空比=2.01
+2025-10-25 11:59:17 | INFO |   ✓ ZEC/USDT: 价格=$266.64, 费率=-0.0167%, 持仓=385,616, 多空比=0.70
+2025-10-25 11:59:18 | INFO |   ✓ VIRTUAL/USDT: 价格=$1.02, 费率=-0.0540%, 持仓=28,380,749, 多空比=1.11
+2025-10-25 11:59:19 | INFO |   ✓ 采集完成: 成功 16/16, 失败 0, 耗时 12.0秒
+2025-10-25 12:00:19 | INFO | [12:00:19] 开始采集币安合约数据...
+2025-10-25 12:00:19 | INFO |   ✓ BTC/USDT: 价格=$110,964.80, 费率=+0.0025%, 持仓=77,698, 多空比=1.59
+2025-10-25 12:00:20 | INFO |   ✓ ETH/USDT: 价格=$3,919.98, 费率=+0.0033%, 持仓=1,474,161, 多空比=2.41
+2025-10-25 12:00:20 | INFO |   ✓ BNB/USDT: 价格=$1,116.55, 费率=-0.0133%, 持仓=556,730, 多空比=3.24
+2025-10-25 12:00:21 | INFO |   ✓ DOGE/USDT: 价格=$0.20, 费率=+0.0100%, 持仓=1,506,095,048, 多空比=2.39
+2025-10-25 12:00:22 | INFO |   ✓ SOL/USDT: 价格=$193.44, 费率=+0.0100%, 持仓=7,315,959, 多空比=2.27
+2025-10-25 12:00:23 | INFO |   ✓ LTC/USDT: 价格=$96.04, 费率=+0.0062%, 持仓=972,842, 多空比=2.12
+2025-10-25 12:00:23 | INFO |   ✓ HYPE/USDT: 价格=$40.08, 费率=+0.0050%, 持仓=4,272,845, 多空比=2.26
+2025-10-25 12:00:24 | INFO |   ✓ BERA/USDT: 价格=$1.88, 费率=-0.0640%, 持仓=12,818,257, 多空比=0.77
+2025-10-25 12:00:25 | INFO |   ✓ TON/USDT: 价格=$2.15, 费率=+0.0034%, 持仓=12,234,720, 多空比=1.42
+2025-10-25 12:00:25 | INFO |   ✓ LINK/USDT: 价格=$17.80, 费率=+0.0100%, 持仓=5,518,730, 多空比=2.23
+2025-10-25 12:00:26 | INFO |   ✓ BCH/USDT: 价格=$501.68, 费率=-0.0192%, 持仓=278,295, 多空比=0.87
+2025-10-25 12:00:27 | INFO |   ✓ ETC/USDT: 价格=$15.87, 费率=+0.0100%, 持仓=1,655,487, 多空比=1.45
+2025-10-25 12:00:28 | INFO |   ✓ SUI/USDT: 价格=$2.52, 费率=+0.0100%, 持仓=59,371,991, 多空比=1.85
+2025-10-25 12:00:29 | INFO |   ✓ APT/USDT: 价格=$3.28, 费率=-0.0628%, 持仓=23,706,476, 多空比=2.01
+2025-10-25 12:00:29 | INFO |   ✓ ZEC/USDT: 价格=$266.75, 费率=-0.0166%, 持仓=385,593, 多空比=0.70
+2025-10-25 12:00:30 | INFO |   ✓ VIRTUAL/USDT: 价格=$1.02, 费率=-0.0535%, 持仓=28,428,734, 多空比=1.11
+2025-10-25 12:00:31 | INFO |   ✓ 采集完成: 成功 16/16, 失败 0, 耗时 11.9秒
+2025-10-25 12:01:31 | INFO | [12:01:31] 开始采集币安合约数据...
+2025-10-25 12:01:31 | INFO |   ✓ BTC/USDT: 价格=$110,982.90, 费率=+0.0025%, 持仓=77,691, 多空比=1.59
+2025-10-25 12:01:32 | INFO |   ✓ ETH/USDT: 价格=$3,920.31, 费率=+0.0033%, 持仓=1,473,398, 多空比=2.41
+2025-10-25 12:01:32 | INFO |   ✓ BNB/USDT: 价格=$1,116.56, 费率=-0.0133%, 持仓=556,757, 多空比=3.24
+2025-10-25 12:01:33 | INFO |   ✓ DOGE/USDT: 价格=$0.20, 费率=+0.0100%, 持仓=1,506,840,918, 多空比=2.39
+2025-10-25 12:01:34 | INFO |   ✓ SOL/USDT: 价格=$193.53, 费率=+0.0100%, 持仓=7,316,408, 多空比=2.27
+2025-10-25 12:01:36 | INFO |   ✓ LTC/USDT: 价格=$96.06, 费率=+0.0062%, 持仓=972,829, 多空比=2.12
+2025-10-25 12:01:36 | INFO |   ✓ HYPE/USDT: 价格=$40.11, 费率=+0.0050%, 持仓=4,271,987, 多空比=2.26
+2025-10-25 12:01:37 | INFO |   ✓ BERA/USDT: 价格=$1.89, 费率=-0.0640%, 持仓=12,820,064, 多空比=0.76
+2025-10-25 12:01:38 | INFO |   ✓ TON/USDT: 价格=$2.15, 费率=+0.0034%, 持仓=12,237,120, 多空比=1.42
+2025-10-25 12:01:39 | INFO |   ✓ LINK/USDT: 价格=$17.81, 费率=+0.0100%, 持仓=5,519,638, 多空比=2.23
+2025-10-25 12:01:39 | INFO |   ✓ BCH/USDT: 价格=$501.68, 费率=-0.0192%, 持仓=278,299, 多空比=0.87
+2025-10-25 12:01:40 | INFO |   ✓ ETC/USDT: 价格=$15.88, 费率=+0.0100%, 持仓=1,655,486, 多空比=1.46
+2025-10-25 12:01:41 | INFO |   ✓ SUI/USDT: 价格=$2.52, 费率=+0.0100%, 持仓=59,367,145, 多空比=1.86
+2025-10-25 12:01:42 | INFO |   ✓ APT/USDT: 价格=$3.28, 费率=-0.0628%, 持仓=23,700,669, 多空比=2.01
+2025-10-25 12:01:42 | INFO |   ✓ ZEC/USDT: 价格=$266.68, 费率=-0.0166%, 持仓=385,601, 多空比=0.70
+2025-10-25 12:01:43 | INFO |   ✓ VIRTUAL/USDT: 价格=$1.02, 费率=-0.0535%, 持仓=28,392,715, 多空比=1.11
+2025-10-25 12:01:44 | INFO |   ✓ 采集完成: 成功 16/16, 失败 0, 耗时 13.2秒

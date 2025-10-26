@@ -1,0 +1,53 @@
+{
+  "name": "balanced",
+  "description": "平衡型投资策略，风险收益均衡，适合大多数投资者",
+  "created_at": "2025-10-20T12:44:23.121536",
+  "updated_at": "2025-10-20T12:44:23.121550",
+  "dimension_weights": {
+    "technical": 40.0,
+    "hyperliquid": 20.0,
+    "news": 15.0,
+    "funding_rate": 15.0,
+    "ethereum": 10.0
+  },
+  "risk_profile": {
+    "level": "balanced",
+    "max_position_size": 20.0,
+    "stop_loss": 5.0,
+    "take_profit": 15.0,
+    "min_signal_strength": 60.0,
+    "allow_short": false,
+    "max_leverage": 2.0
+  },
+  "trading_rules": {
+    "hyperliquid_min_wallets": 3,
+    "hyperliquid_min_amount": 50000.0,
+    "hyperliquid_min_net_flow": 100000.0,
+    "rsi_oversold": 30.0,
+    "rsi_overbought": 70.0,
+    "news_sentiment_threshold": 0.6,
+    "news_min_count": 3,
+    "funding_rate_extreme": 0.01,
+    "min_dimensions_agree": 3
+  },
+  "technical_config": {
+    "rsi_weight": 25.0,
+    "macd_weight": 25.0,
+    "bollinger_weight": 20.0,
+    "ema_weight": 15.0,
+    "volume_weight": 15.0,
+    "rsi_period": 14,
+    "macd_fast": 12,
+    "macd_slow": 26,
+    "macd_signal": 9,
+    "ema_short": 20,
+    "ema_long": 50,
+    "bb_period": 20,
+    "bb_std": 2.0
+  },
+  "tags": [
+    "平衡",
+    "中等风险",
+    "推荐"
+  ]
+}

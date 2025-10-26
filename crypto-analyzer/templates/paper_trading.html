@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模拟现货交易系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: bold;
+            border-radius: 15px 15px 0 0 !important;
+        }
+        .stat-card {
+            text-align: center;
+            padding: 20px;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .profit { color: #28a745; }
+        .loss { color: #dc3545; }
+        .btn-buy { background: #28a745; color: white; }
+        .btn-sell { background: #dc3545; color: white; }
+        .btn-buy:hover { background: #218838; color: white; }
+        .btn-sell:hover { background: #c82333; color: white; }
+        .position-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .position-item:last-child {
+            border-bottom: none;
+        }
+        .trade-item {
+            padding: 10px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 0.9rem;
+        }
+        #position-refresh-indicator {
+            animation: pulse 2s infinite;
+            font-size: 0.6rem;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .price-updated {
+            animation: priceFlash 0.5s ease;
+        }
+        @keyframes priceFlash {
+            0% { background-color: #ffc107; }
+            100% { background-color: transparent; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="text-white mb-0">📊 模拟现货交易系统</h1>
+            <div class="text-white">
+                <small>
+                    <span id="refresh-status" class="badge bg-warning text-dark">
+                        ⏸ 手动刷新模式（点击刷新按钮更新价格）
+                    </span>
+                </small>
+            </div>
+        </div>
+
+        <!-- 账户概览 -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <div class="stat-label">总权益 (USDT)</div>
+                    <div class="stat-value" id="total-equity">0.00</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <div class="stat-label">可用余额 (USDT)</div>
+                    <div class="stat-value" id="current-balance">0.00</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <div class="stat-label">总盈亏 (USDT)</div>
+                    <div class="stat-value" id="total-pnl">0.00</div>
+                    <div class="stat-label mt-1" id="total-pnl-pct">(0.00%)</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card">
+                    <div class="stat-label">胜率</div>
+                    <div class="stat-value" id="win-rate">0.00%</div>
+                    <div class="stat-label mt-1">
+                        <span id="winning-trades">0</span> 赢 / <span id="losing-trades">0</span> 亏
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 左侧：交易面板 -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">交易面板</div>
+                    <div class="card-body">
+                        <form id="trade-form">
+                            <div class="mb-3">
+                                <label class="form-label">交易对</label>
+                                <select class="form-select" id="symbol" required>
+                                    <option value="">加载中...</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">当前价格</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="current-price" readonly>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="refreshPrice(true)" title="强制刷新最新价格">
+                                        <span id="refresh-btn-text">刷新</span>
+                                    </button>
+                                </div>
+                                <small class="form-text text-muted">价格每2秒自动更新</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">数量</label>
+                                <input type="number" class="form-control" id="quantity" step="0.00000001" required>
+                                <small class="form-text text-muted">预计金额: <span id="estimated-amount">0.00</span> USDT</small>
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-buy w-100" onclick="placeTrade('BUY')">买入</button>
+                                </div>
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-sell w-100" onclick="placeTrade('SELL')">卖出</button>
+                                </div>
+                            </div>
+                        </form>
+                        <div id="trade-result" class="mt-3"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 中间：持仓列表 -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        当前持仓 <span class="badge bg-light text-dark" id="position-refresh-indicator">●</span>
+                        <button class="btn btn-sm btn-light float-end" onclick="refreshData()">手动刷新</button>
+                    </div>
+                    <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                        <div id="positions-list">
+                            <div class="text-center text-muted">暂无持仓</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：交易历史 -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">交易历史</div>
+                    <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                        <div id="trades-list">
+                            <div class="text-center text-muted">暂无交易记录</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentSymbol = 'BTC/USDT';
+        let currentPrice = 0;
+        let priceRefreshInterval = null;
+        let dataRefreshInterval = null;
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSymbols();  // 先加载交易对列表
+            refreshData();
+
+            // 监听交易对变化
+            document.getElementById('symbol').addEventListener('change', function() {
+                currentSymbol = this.value;
+                console.log(`切换交易对: ${currentSymbol}`);
+                // 切换交易对时强制刷新价格（跳过缓存）
+                refreshPrice(true);
+            });
+
+            // 监听数量变化，计算预计金额
+            document.getElementById('quantity').addEventListener('input', function() {
+                const quantity = parseFloat(this.value) || 0;
+                const amount = quantity * currentPrice;
+                document.getElementById('estimated-amount').textContent = amount.toFixed(2);
+            });
+
+            // 启动自动刷新
+            startAutoRefresh();
+        });
+
+        // 启动自动刷新（已禁用，避免请求阻塞）
+        function startAutoRefresh() {
+            // 自动刷新已禁用
+            // 用户需要手动点击刷新按钮或切换交易对来更新价格
+            console.log('自动刷新已禁用，请手动刷新价格');
+
+            // 如果需要启用自动刷新，取消下面的注释：
+            // priceRefreshInterval = setInterval(() => {
+            //     refreshPrice();
+            // }, 2000);
+            // dataRefreshInterval = setInterval(() => {
+            //     refreshData();
+            // }, 5000);
+        }
+
+        // 停止自动刷新（页面卸载时调用）
+        function stopAutoRefresh() {
+            if (priceRefreshInterval) {
+                clearInterval(priceRefreshInterval);
+                priceRefreshInterval = null;
+            }
+            if (dataRefreshInterval) {
+                clearInterval(dataRefreshInterval);
+                dataRefreshInterval = null;
+            }
+        }
+
+        // 页面卸载时停止自动刷新
+        window.addEventListener('beforeunload', stopAutoRefresh);
+
+        // 加载交易对列表
+        async function loadSymbols() {
+            try {
+                const response = await fetch('/api/paper-trading/symbols');
+                const data = await response.json();
+
+                const symbolSelect = document.getElementById('symbol');
+                symbolSelect.innerHTML = '';
+
+                if (data.symbols && data.symbols.length > 0) {
+                    data.symbols.forEach(symbol => {
+                        const option = document.createElement('option');
+                        option.value = symbol;
+                        option.textContent = symbol;
+                        symbolSelect.appendChild(option);
+                    });
+
+                    // 设置默认选中第一个
+                    currentSymbol = data.symbols[0];
+                    console.log(`默认交易对: ${currentSymbol}`);
+                    // 首次加载时强制刷新价格
+                    refreshPrice(true);
+                } else {
+                    symbolSelect.innerHTML = '<option value="">暂无可用交易对</option>';
+                }
+            } catch (error) {
+                console.error('加载交易对失败:', error);
+                document.getElementById('symbol').innerHTML = '<option value="">加载失败</option>';
+            }
+        }
+
+        // 刷新数据
+        async function refreshData() {
+            await Promise.all([
+                loadAccountInfo(),
+                loadPositions(),
+                loadTrades()
+            ]);
+        }
+
+        // 加载账户信息
+        async function loadAccountInfo() {
+            try {
+                const response = await fetch('/api/paper-trading/account');
+                const data = await response.json();
+
+                if (data.account) {
+                    const acc = data.account;
+                    document.getElementById('total-equity').textContent = acc.total_equity.toFixed(2);
+                    document.getElementById('current-balance').textContent = acc.current_balance.toFixed(2);
+
+                    const pnl = acc.total_profit_loss;
+                    const pnlPct = acc.total_profit_loss_pct;
+                    const pnlElement = document.getElementById('total-pnl');
+                    pnlElement.textContent = pnl.toFixed(2);
+                    pnlElement.className = 'stat-value ' + (pnl >= 0 ? 'profit' : 'loss');
+
+                    const pnlPctElement = document.getElementById('total-pnl-pct');
+                    pnlPctElement.textContent = `(${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)`;
+                    pnlPctElement.className = 'stat-label mt-1 ' + (pnl >= 0 ? 'profit' : 'loss');
+
+                    document.getElementById('win-rate').textContent = acc.win_rate.toFixed(2) + '%';
+                    document.getElementById('winning-trades').textContent = acc.winning_trades;
+                    document.getElementById('losing-trades').textContent = acc.losing_trades;
+                }
+            } catch (error) {
+                console.error('加载账户信息失败:', error);
+            }
+        }
+
+        // 加载持仓列表
+        async function loadPositions() {
+            try {
+                const response = await fetch('/api/paper-trading/positions');
+                const data = await response.json();
+
+                const container = document.getElementById('positions-list');
+                if (data.positions && data.positions.length > 0) {
+                    container.innerHTML = data.positions.map(pos => {
+                        const pnlClass = pos.unrealized_pnl >= 0 ? 'profit' : 'loss';
+                        return `
+                            <div class="position-item">
+                                <div class="d-flex justify-content-between">
+                                    <strong>${pos.symbol}</strong>
+                                    <span class="${pnlClass}">${pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(2)} USDT</span>
+                                </div>
+                                <div class="text-muted small">
+                                    数量: ${pos.quantity} | 成本: ${pos.avg_entry_price.toFixed(2)} | 现价: ${pos.current_price.toFixed(2)}
+                                </div>
+                                <div class="text-muted small">
+                                    市值: ${pos.market_value.toFixed(2)} USDT | 收益率: <span class="${pnlClass}">${pos.unrealized_pnl_pct >= 0 ? '+' : ''}${pos.unrealized_pnl_pct.toFixed(2)}%</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    container.innerHTML = '<div class="text-center text-muted">暂无持仓</div>';
+                }
+            } catch (error) {
+                console.error('加载持仓失败:', error);
+            }
+        }
+
+        // 加载交易历史
+        async function loadTrades() {
+            try {
+                const response = await fetch('/api/paper-trading/trades');
+                const data = await response.json();
+
+                const container = document.getElementById('trades-list');
+                if (data.trades && data.trades.length > 0) {
+                    container.innerHTML = data.trades.map(trade => {
+                        const sideClass = trade.side === 'BUY' ? 'text-success' : 'text-danger';
+                        const pnlHtml = trade.realized_pnl !== null
+                            ? `<div class="small ${trade.realized_pnl >= 0 ? 'profit' : 'loss'}">盈亏: ${trade.realized_pnl >= 0 ? '+' : ''}${trade.realized_pnl.toFixed(2)} USDT (${trade.pnl_pct >= 0 ? '+' : ''}${trade.pnl_pct.toFixed(2)}%)</div>`
+                            : '';
+                        return `
+                            <div class="trade-item">
+                                <div class="d-flex justify-content-between">
+                                    <span><strong class="${sideClass}">${trade.side}</strong> ${trade.symbol}</span>
+                                    <span>${trade.trade_time}</span>
+                                </div>
+                                <div class="small text-muted">
+                                    ${trade.quantity} @ ${trade.price.toFixed(2)} = ${trade.total_amount.toFixed(2)} USDT
+                                </div>
+                                ${pnlHtml}
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    container.innerHTML = '<div class="text-center text-muted">暂无交易记录</div>';
+                }
+            } catch (error) {
+                console.error('加载交易历史失败:', error);
+            }
+        }
+
+        // 刷新价格
+        async function refreshPrice(forceRefresh = false) {
+            // 验证交易对
+            if (!currentSymbol || currentSymbol === '') {
+                console.error('未选择交易对');
+                return;
+            }
+
+            // 如果是手动刷新，显示加载状态
+            const refreshBtn = document.getElementById('refresh-btn-text');
+            const priceInput = document.getElementById('current-price');
+
+            if (forceRefresh && refreshBtn) {
+                refreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            }
+
+            // 显示加载中
+            priceInput.value = '加载中...';
+
+            try {
+                // 如果是强制刷新（手动点击或切换交易对），添加 force_refresh=true 参数
+                const url = `/api/paper-trading/price?symbol=${encodeURIComponent(currentSymbol)}${forceRefresh ? '&force_refresh=true' : ''}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // 检查返回的价格
+                if (!data.price || data.price === 0) {
+                    throw new Error(`${currentSymbol} 暂无价格数据，请确保数据采集器正在运行`);
+                }
+
+                const oldPrice = currentPrice;
+                currentPrice = data.price;
+
+                priceInput.value = currentPrice.toFixed(2);
+
+                // 如果价格变化，添加闪烁效果
+                if (oldPrice !== 0 && oldPrice !== currentPrice) {
+                    priceInput.classList.add('price-updated');
+                    setTimeout(() => {
+                        priceInput.classList.remove('price-updated');
+                    }, 500);
+                }
+
+                // 更新预计金额
+                const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+                const amount = quantity * currentPrice;
+                document.getElementById('estimated-amount').textContent = amount.toFixed(2);
+
+                // 显示是否从缓存获取（仅调试用）
+                if (data.from_cache && !forceRefresh) {
+                    console.log(`✓ ${currentSymbol} 价格: ${currentPrice} (来自缓存)`);
+                } else if (forceRefresh) {
+                    console.log(`✓ ${currentSymbol} 价格: ${currentPrice} (强制刷新)`);
+                }
+            } catch (error) {
+                console.error(`✗ 刷新 ${currentSymbol} 价格失败:`, error.message);
+                priceInput.value = '加载失败';
+
+                // 显示错误提示
+                const resultDiv = document.getElementById('trade-result');
+                if (resultDiv) {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                            <strong>${currentSymbol}</strong> 价格加载失败: ${error.message}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    `;
+                    // 3秒后自动隐藏
+                    setTimeout(() => {
+                        resultDiv.innerHTML = '';
+                    }, 3000);
+                }
+            } finally {
+                // 恢复按钮文本
+                if (forceRefresh && refreshBtn) {
+                    refreshBtn.textContent = '刷新';
+                }
+            }
+        }
+
+        // 下单
+        async function placeTrade(side) {
+            const symbol = document.getElementById('symbol').value;
+            const quantity = parseFloat(document.getElementById('quantity').value);
+
+            if (!quantity || quantity <= 0) {
+                showResult('请输入有效的数量', 'danger');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/paper-trading/order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        side: side,
+                        quantity: quantity,
+                        order_type: 'MARKET'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showResult(data.message, 'success');
+                    document.getElementById('quantity').value = '';
+                    document.getElementById('estimated-amount').textContent = '0.00';
+                    setTimeout(refreshData, 500);
+                } else {
+                    showResult(data.detail || '下单失败', 'danger');
+                }
+            } catch (error) {
+                showResult('下单失败: ' + error.message, 'danger');
+            }
+        }
+
+        // 显示结果消息
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('trade-result');
+            resultDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>`;
+        }
+    </script>
+</body>
+</html>

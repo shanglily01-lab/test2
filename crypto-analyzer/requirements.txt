@@ -1,0 +1,90 @@
+# ==================== Web Framework ====================
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+jinja2==3.1.2            # Template engine for web UI
+aiofiles==23.2.1         # Async file operations
+
+# ==================== Data Collection ====================
+python-binance==1.0.19    # Binance API client (replaces ccxt for better compatibility)
+# ccxt==4.1.70            # Exchange unified API (optional, not used by default)
+aiohttp==3.9.1            # Async HTTP client
+feedparser==6.0.10        # RSS parser
+httpx==0.25.2             # HTTP client
+requests==2.31.0          # HTTP library for funding rate API calls
+
+# ==================== Data Processing and Analysis ====================
+pandas>=2.0.0             # Compatible with Python 3.11+
+numpy>=1.24.0
+# pandas-ta - OPTIONAL (not required, system has built-in fallback methods)
+# Not available for Python 3.11 via pip. To install on Python 3.11:
+# pip install git+https://github.com/twopirllc/pandas-ta.git
+# Or upgrade to Python 3.12+ and use: pip install pandas-ta
+# See PANDAS_TA_OPTIONAL.md for details
+
+# Note: TA-Lib requires additional system dependencies
+# Ubuntu/Debian: sudo apt-get install ta-lib
+# MacOS: brew install ta-lib
+# Windows: Download precompiled package https://github.com/cgohlke/talib-build/releases
+# TA-Lib==0.4.28
+
+# ==================== Database ====================
+sqlalchemy==2.0.23
+aiosqlite==0.19.0
+
+# MySQL support
+pymysql==1.1.0
+
+# If using PostgreSQL, uncomment:
+# asyncpg==0.29.0
+# psycopg2-binary==2.9.9
+
+# ==================== Task Scheduling ====================
+apscheduler==3.10.4
+schedule==1.2.0  # Simple job scheduler for automated tasks
+
+# ==================== Configuration Management ====================
+pyyaml==6.0.1
+python-dotenv==1.0.0
+
+# ==================== Logging ====================
+loguru==0.7.2
+
+# ==================== Time Processing ====================
+python-dateutil==2.8.2
+
+# ==================== Notifications (Optional) ====================
+# Telegram notifications
+# python-telegram-bot==20.7
+
+# Email notifications
+# aiosmtplib==3.0.1
+
+# ==================== Reddit API (Optional) ====================
+# asyncpraw==7.7.1
+
+# ==================== Sentiment Analysis (Advanced, Optional) ====================
+# NLP sentiment analysis, requires additional model downloads
+# transformers==4.35.2
+# torch==2.1.1
+
+# ==================== Testing ====================
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+
+# ==================== Development Tools (Optional) ====================
+# Code formatting
+# black==23.11.0
+# isort==5.12.0
+
+# Code linting
+# flake8==6.1.0
+# pylint==3.0.2
+
+# Type checking
+# mypy==1.7.1
+
+# ==================== Web Frontend (If needed) ====================
+# Already included above in Web Framework section

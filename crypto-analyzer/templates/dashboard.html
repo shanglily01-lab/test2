@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>加密货币智能分析系统 - 增强版</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.css">
+    <style>
+        :root {
+            --primary: #667eea;
+            --success: #38ef7d;
+            --danger: #ff6a00;
+            --warning: #ffc107;
+            --info: #00f2fe;
+            --dark: #1a1a2e;
+            --light: #f8f9fa;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+        }
+
+        /* 导航栏 */
+        .navbar {
+            background: rgba(26, 26, 46, 0.95) !important;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--primary), var(--success));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* 统计卡片 */
+        .stat-card {
+            border-radius: 20px;
+            border: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.2);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+        }
+
+        .stat-card.primary::before { background: var(--primary); }
+        .stat-card.success::before { background: var(--success); }
+        .stat-card.danger::before { background: var(--danger); }
+        .stat-card.info::before { background: var(--info); }
+
+        .stat-icon {
+            font-size: 3rem;
+            opacity: 0.2;
+            position: absolute;
+            right: 20px;
+            bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* 主卡片 */
+        .main-card {
+            background: white;
+            border-radius: 20px;
+            border: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .card-header-custom {
+            background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border: none;
+        }
+
+        .card-header-custom h5 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        /* 投资建议卡片 */
+        .recommendation-card {
+            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border-left: 5px solid var(--primary);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .recommendation-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .signal-badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+        }
+
+        .signal-STRONG_BUY {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(56, 239, 125, 0.4);
+        }
+
+        .signal-BUY {
+            background: #d1f4e0;
+            color: #198754;
+        }
+
+        .signal-HOLD {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .signal-SELL {
+            background: #f8d7da;
+            color: #dc3545;
+        }
+
+        .signal-STRONG_SELL {
+            background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 106, 0, 0.4);
+        }
+
+        /* 评分雷达图容器 */
+        .score-radar {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto;
+        }
+
+        /* 价格表格 */
+        .price-table {
+            font-size: 0.95rem;
+        }
+
+        .price-table tbody tr {
+            transition: background-color 0.2s ease;
+        }
+
+        .price-table tbody tr:hover {
+            background-color: rgba(102, 126, 234, 0.1);
+        }
+
+        .price-up {
+            color: #38ef7d;
+            font-weight: 600;
+        }
+
+        .price-down {
+            color: #ff6a00;
+            font-weight: 600;
+        }
+
+        /* 新闻卡片 */
+        .news-card {
+            padding: 1rem;
+            border-bottom: 1px solid #e0e0e0;
+            transition: all 0.2s ease;
+        }
+
+        .news-card:hover {
+            background-color: rgba(102, 126, 234, 0.05);
+        }
+
+        .news-card:last-child {
+            border-bottom: none;
+        }
+
+        .sentiment-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .sentiment-positive { background: #d1f4e0; color: #198754; }
+        .sentiment-negative { background: #f8d7da; color: #dc3545; }
+        .sentiment-neutral { background: #e2e3e5; color: #6c757d; }
+
+        /* Hyperliquid聪明钱 */
+        .smart-money-card {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .smart-money-stat {
+            text-align: center;
+            padding: 1rem;
+        }
+
+        .smart-money-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--success);
+        }
+
+        .smart-money-label {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            text-transform: uppercase;
+        }
+
+        /* 交易列表 */
+        .trade-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.75rem;
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .trade-long { border-left: 4px solid var(--success); }
+        .trade-short { border-left: 4px solid var(--danger); }
+
+        /* 进度条 */
+        .custom-progress {
+            height: 10px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .custom-progress-bar {
+            border-radius: 10px;
+            transition: width 0.6s ease;
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 价格更新动画 */
+        @keyframes priceFlash {
+            0% { background-color: rgba(56, 239, 125, 0.3); }
+            100% { background-color: transparent; }
+        }
+
+        .price-updated {
+            animation: priceFlash 0.8s ease;
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 10px;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .stat-value { font-size: 2rem; }
+            .recommendation-card { padding: 1rem; }
+        }
+
+        /* 标签样式 */
+        .badge-custom {
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* 详细信息展开 */
+        details summary {
+            cursor: pointer;
+            user-select: none;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        details summary:hover {
+            color: var(--danger);
+        }
+
+        /* 工具提示 */
+        .tooltip-custom {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip-custom .tooltip-text {
+            visibility: hidden;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px 10px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -60px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip-custom:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-dark sticky-top">
+        <div class="container-fluid">
+            <a class="navbar-brand">
+                <i class="bi bi-graph-up-arrow"></i>
+                加密货币智能分析系统 - 增强版
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="text-white me-3">
+                    <i class="bi bi-clock"></i>
+                    <span id="current-time"></span>
+                </span>
+                <button class="btn btn-sm btn-outline-light" onclick="loadDashboard()">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid p-4">
+        <!-- 顶部统计卡片 -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="stat-card primary bg-white p-3">
+                    <div class="stat-label">监控币种</div>
+                    <div class="stat-value" id="total-symbols">-</div>
+                    <i class="bi bi-coin stat-icon"></i>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card success bg-white p-3">
+                    <div class="stat-label">看涨信号</div>
+                    <div class="stat-value text-success" id="bullish-count">-</div>
+                    <i class="bi bi-arrow-up-circle stat-icon"></i>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card danger bg-white p-3">
+                    <div class="stat-label">看跌信号</div>
+                    <div class="stat-value text-danger" id="bearish-count">-</div>
+                    <i class="bi bi-arrow-down-circle stat-icon"></i>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card info bg-white p-3">
+                    <div class="stat-label">聪明钱钱包</div>
+                    <div class="stat-value text-info" id="smart-money-count">-</div>
+                    <i class="bi bi-wallet2 stat-icon"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主要内容区 -->
+        <div class="row g-3">
+            <!-- 左侧: 投资建议 -->
+            <div class="col-lg-6">
+                <div class="main-card" style="height: 800px; display: flex; flex-direction: column;">
+                    <div class="card-header-custom d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-lightbulb-fill"></i> 智能投资建议</h5>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#investmentHelpModal">
+                            <i class="bi bi-question-circle"></i> 分析说明
+                        </button>
+                    </div>
+                    <div class="card-body" style="flex: 1; overflow-y: auto;" id="recommendations">
+                        <div class="text-center p-5 text-muted">
+                            <div class="loading mb-2"></div>
+                            <div>正在分析...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧: 实时价格 + 合约数据 -->
+            <div class="col-lg-6" style="height: 800px; display: flex; flex-direction: column;">
+                <!-- 实时价格 -->
+                <div class="main-card mb-3" style="height: 400px; flex-shrink: 0; display: flex; flex-direction: column;">
+                    <div class="card-header-custom">
+                        <h5><i class="bi bi-currency-bitcoin"></i> 实时价格</h5>
+                    </div>
+                    <div class="card-body p-0" style="flex: 1; overflow-y: auto;">
+                        <table class="table price-table mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>币种</th>
+                                    <th class="text-end">价格 (USDT)</th>
+                                    <th class="text-end">24h涨跌</th>
+                                    <th class="text-end">24h成交量</th>
+                                </tr>
+                            </thead>
+                            <tbody id="price-table">
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted p-4">
+                                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                                        加载中...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 合约数据 -->
+                <div class="main-card" style="flex: 1; display: flex; flex-direction: column;">
+                    <div class="card-header-custom" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <h5><i class="bi bi-bar-chart-line"></i> 合约数据</h5>
+                    </div>
+                    <div class="card-body p-0" style="flex: 1; overflow-y: auto;">
+                        <table class="table price-table mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>币种</th>
+                                    <th class="text-end">持仓量</th>
+                                    <th class="text-end">多空比</th>
+                                    <th class="text-end">资金费率</th>
+                                </tr>
+                            </thead>
+                            <tbody id="futures-table">
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted p-4">
+                                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                                        加载中...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 最新新闻 -->
+        <div class="row g-3 mt-3">
+            <div class="col-12">
+                <div class="main-card" style="height: 500px; display: flex; flex-direction: column;">
+                    <div class="card-header-custom">
+                        <h5><i class="bi bi-newspaper"></i> 最新新闻</h5>
+                    </div>
+                    <div class="card-body p-0" style="flex: 1; overflow-y: auto;" id="news-list">
+                        <div class="text-center p-4 text-muted">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            加载中...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hyperliquid聪明钱 -->
+        <div class="row g-3 mt-3">
+            <div class="col-12">
+                <div class="main-card">
+                    <div class="card-header-custom d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-wallet2"></i> Hyperliquid 聪明钱活动</h5>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#hyperliquidHelpModal">
+                            <i class="bi bi-question-circle"></i> 指标说明
+                        </button>
+                    </div>
+                    <div class="card-body" id="hyperliquid-section">
+                        <div class="text-center p-4 text-muted">
+                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                            加载中...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="main-card">
+                    <div class="card-body text-center text-muted small">
+                        <i class="bi bi-info-circle"></i>
+                        前端每5秒自动刷新 |
+                        5维度智能分析: 技术指标 + 新闻情绪 + 资金费率 + Hyperliquid + 链上数据 |
+                        最后更新: <span id="last-update">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hyperliquid指标说明模态框 -->
+    <div class="modal fade" id="hyperliquidHelpModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-wallet2"></i> Hyperliquid 聪明钱指标说明
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>什么是聪明钱？</strong><br>
+                        聪明钱是指在 Hyperliquid 平台上持续盈利、ROI 高的专业交易者。追踪他们的交易行为可以为投资决策提供重要参考。
+                    </div>
+
+                    <h6 class="mt-4"><i class="bi bi-hash"></i> 核心指标</h6>
+                    <hr>
+
+                    <div class="mb-4">
+                        <h6 class="text-primary">1. 监控钱包数</h6>
+                        <p class="mb-2"><strong>定义：</strong>系统当前监控的聪明钱钱包总数</p>
+                        <p class="mb-2"><strong>筛选标准：</strong></p>
+                        <ul class="small">
+                            <li>累计盈亏 (PnL) &gt; $10,000</li>
+                            <li>投资回报率 (ROI) &gt; 20%</li>
+                            <li>账户价值 &gt; $5,000</li>
+                        </ul>
+                        <p class="mb-0"><strong>💡 意义：</strong>数量越多，统计越可靠。建议 1000+ 个钱包。</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6 class="text-primary">2. 24h交易量</h6>
+                        <p class="mb-2"><strong>定义：</strong>所有监控钱包在最近24小时的总交易金额（USD）</p>
+                        <p class="mb-2"><strong>参考标准：</strong></p>
+                        <ul class="small">
+                            <li>&lt; $5M：市场较为平静</li>
+                            <li>$5M - $20M：正常交易活跃度</li>
+                            <li>$20M - $50M：市场活跃，有重要行情</li>
+                            <li>&gt; $50M：极度活跃，重大行情或事件</li>
+                        </ul>
+                        <p class="mb-0"><strong>💡 意义：</strong>交易量增加表示市场活跃度上升，聪明钱正在积极布局。</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6 class="text-primary">3. Top活跃币种</h6>
+                        <p class="mb-2"><strong>定义：</strong>显示交易最活跃的前5个币种及其净流入/流出</p>
+                        <p class="mb-2"><strong>计算公式：</strong></p>
+                        <div class="bg-light p-2 rounded small mb-2">
+                            净流入 = LONG交易总额 - SHORT交易总额
+                        </div>
+                        <p class="mb-2"><strong>颜色含义：</strong></p>
+                        <ul class="small">
+                            <li>🟢 <span class="text-success">绿色 ▲</span>：净流入为正，聪明钱偏向做多（看涨）</li>
+                            <li>🔴 <span class="text-danger">红色 ▼</span>：净流入为负，聪明钱偏向做空（看跌）</li>
+                        </ul>
+                        <p class="mb-2"><strong>示例：</strong></p>
+                        <ul class="small">
+                            <li><span class="text-success">BTC ▲ $2.5M</span> → 聪明钱在做多BTC，做多比做空多250万美元</li>
+                            <li><span class="text-danger">ETH ▼ $1.8M</span> → 聪明钱在做空ETH，做空比做多多180万美元</li>
+                        </ul>
+                        <p class="mb-0"><strong>💡 强烈信号：</strong>净流入 &gt; $2M 或 &lt; -$2M 时，方向较为明确。</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6 class="text-primary">4. 最近大额交易</h6>
+                        <p class="mb-2"><strong>显示内容：</strong>按交易金额从大到小排序的前20笔交易</p>
+                        <p class="mb-2"><strong>交易卡片信息：</strong></p>
+                        <ul class="small">
+                            <li><strong>币种 + 方向：</strong>
+                                <span class="badge bg-success">LONG</span> 做多/看涨，
+                                <span class="badge bg-danger">SHORT</span> 做空/看跌
+                            </li>
+                            <li><strong>交易金额：</strong>该笔交易的名义价值（USD）</li>
+                            <li><strong>钱包标签：</strong>交易者的标识，可追踪特定高手</li>
+                            <li><strong>交易时间：</strong>成交时间</li>
+                            <li><strong>PnL (已实现盈亏)：</strong>
+                                <span class="text-success">绿色 = 盈利</span>，
+                                <span class="text-danger">红色 = 亏损</span>
+                            </li>
+                        </ul>
+                        <p class="mb-0"><strong>💡 关键：</strong>连续盈利的交易方向值得重点关注。</p>
+                    </div>
+
+                    <h6 class="mt-4"><i class="bi bi-lightbulb"></i> 如何使用</h6>
+                    <hr>
+
+                    <div class="mb-3">
+                        <h6 class="text-success">📈 看涨信号组合</h6>
+                        <ul class="small">
+                            <li>24h交易量显著增加 (&gt; $20M)</li>
+                            <li>Top币种大多显示绿色 ▲（净流入为正）</li>
+                            <li>最近大额交易以 LONG 为主</li>
+                            <li>高盈利的 LONG 交易占比高</li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="text-danger">📉 看跌信号组合</h6>
+                        <ul class="small">
+                            <li>Top币种大多显示红色 ▼（净流出为负）</li>
+                            <li>最近大额交易以 SHORT 为主</li>
+                            <li>LONG 交易出现大额亏损</li>
+                        </ul>
+                    </div>
+
+                    <div class="alert alert-warning mb-0">
+                        <h6><i class="bi bi-exclamation-triangle"></i> 重要提示</h6>
+                        <ul class="small mb-0">
+                            <li><strong>不是绝对信号：</strong>聪明钱也会犯错，需结合技术分析、基本面等多维度判断</li>
+                            <li><strong>数据延迟：</strong>数据每30分钟更新一次，不适合极短线交易</li>
+                            <li><strong>风险管理：</strong>即使跟随聪明钱，也要设置止损</li>
+                            <li><strong>样本大小：</strong>监控钱包越多（建议 &gt; 1000），数据越可靠</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="/HYPERLIQUID_INDICATORS_GUIDE.md" target="_blank" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-file-text"></i> 查看完整文档
+                    </a>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 智能投资分析说明模态框 -->
+    <div class="modal fade" id="investmentHelpModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="bi bi-lightbulb-fill"></i> 智能投资分析说明
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <h6><i class="bi bi-info-circle"></i> 概述</h6>
+                        <p class="mb-0">
+                            本系统采用 <strong>5维度智能分析模型</strong>，综合评估每个币种的投资价值，
+                            为您提供数据驱动的投资建议。所有指标实时更新（每5秒刷新），确保您获得最新的市场洞察。
+                        </p>
+                    </div>
+
+                    <h5 class="mt-4 mb-3"><i class="bi bi-graph-up"></i> 五大核心指标详解</h5>
+
+                    <!-- 1. 技术指标 -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">📊 技术指标 (Technical Indicators)</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>分析内容：</strong></p>
+                            <ul>
+                                <li><strong>RSI (相对强弱指数):</strong> 判断超买/超卖状态
+                                    <ul>
+                                        <li>RSI &gt; 70 → 超买（可能回调）</li>
+                                        <li>RSI &lt; 30 → 超卖（可能反弹）</li>
+                                    </ul>
+                                </li>
+                                <li><strong>MACD (平滑异同移动平均线):</strong> 捕捉趋势变化
+                                    <ul>
+                                        <li>金叉 (MACD线上穿信号线) → 看涨</li>
+                                        <li>死叉 (MACD线下穿信号线) → 看跌</li>
+                                    </ul>
+                                </li>
+                                <li><strong>布林带 (Bollinger Bands):</strong> 识别价格区间
+                                    <ul>
+                                        <li>价格触及下轨 → 超卖，可能反弹</li>
+                                        <li>价格触及上轨 → 超买，可能回调</li>
+                                    </ul>
+                                </li>
+                                <li><strong>EMA (指数移动平均线):</strong> 判断趋势方向
+                                    <ul>
+                                        <li>短期EMA &gt; 长期EMA → 上升趋势</li>
+                                        <li>短期EMA &lt; 长期EMA → 下降趋势</li>
+                                    </ul>
+                                </li>
+                            </ul>
+                            <p><strong>评分规则：</strong></p>
+                            <ul class="mb-0">
+                                <li><span class="badge bg-success">80-100分</span>：多个指标强烈看涨/看跌，信号明确</li>
+                                <li><span class="badge bg-warning">60-80分</span>：部分指标支持，信号中等</li>
+                                <li><span class="badge bg-secondary">0-60分</span>：指标冲突或信号弱，建议观望</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 2. 新闻情绪 -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">📰 新闻情绪 (News Sentiment)</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>分析来源：</strong></p>
+                            <ul>
+                                <li><strong>新闻标题和内容：</strong> 来自 CoinDesk、Cointelegraph 等权威媒体</li>
+                                <li><strong>Reddit社区讨论：</strong> r/CryptoCurrency、r/Bitcoin 等热门社区</li>
+                                <li><strong>Twitter大V动态：</strong> 行业KOL的推文和观点</li>
+                                <li><strong>SEC监管公告：</strong> 美国证券交易委员会的官方消息</li>
+                            </ul>
+                            <p><strong>情绪分析方法：</strong></p>
+                            <ul>
+                                <li><strong>NLP自然语言处理：</strong> 识别文本中的情绪倾向（积极/消极/中性）</li>
+                                <li><strong>关键词权重：</strong> "突破"、"上涨" → 正面；"崩盘"、"下跌" → 负面</li>
+                                <li><strong>时效性加权：</strong> 最近1小时的新闻权重最高，24小时前的权重递减</li>
+                            </ul>
+                            <p><strong>评分规则：</strong></p>
+                            <ul class="mb-0">
+                                <li><span class="badge bg-success">80-100分</span>：大量正面新闻，市场情绪积极</li>
+                                <li><span class="badge bg-warning">40-60分</span>：新闻中性，市场情绪平稳</li>
+                                <li><span class="badge bg-danger">0-40分</span>：负面新闻较多，市场情绪消极</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 3. 资金费率 -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">💰 资金费率 (Funding Rate)</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>什么是资金费率？</strong></p>
+                            <p>
+                                资金费率是永续合约市场中，多头和空头之间定期支付的费用。
+                                当资金费率为正时，多头支付给空头；为负时，空头支付给多头。
+                            </p>
+                            <p><strong>如何解读？</strong></p>
+                            <ul>
+                                <li><strong>资金费率 &gt; 0.05%：</strong> 市场极度乐观，多头过热（可能回调风险）</li>
+                                <li><strong>资金费率 0.01% ~ 0.05%：</strong> 市场看涨，多头占优</li>
+                                <li><strong>资金费率 -0.01% ~ 0.01%：</strong> 市场中性，多空平衡</li>
+                                <li><strong>资金费率 -0.05% ~ -0.01%：</strong> 市场看跌，空头占优</li>
+                                <li><strong>资金费率 &lt; -0.05%：</strong> 市场极度悲观，空头过热（可能反弹）</li>
+                            </ul>
+                            <p><strong>评分规则：</strong></p>
+                            <ul class="mb-0">
+                                <li><span class="badge bg-success">80-100分</span>：资金费率支持当前方向，趋势可靠</li>
+                                <li><span class="badge bg-warning">60-80分</span>：资金费率中性，无明确信号</li>
+                                <li><span class="badge bg-danger">0-60分</span>：资金费率与趋势背离，警惕反转</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 4. Hyperliquid聪明钱 -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">🧠 Hyperliquid聪明钱 (Smart Money on Hyperliquid)</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>什么是聪明钱？</strong></p>
+                            <p>
+                                聪明钱是指在Hyperliquid DEX上交易表现优异的钱包地址，
+                                这些地址通过精准的交易决策积累了可观的利润（PnL）和高ROI。
+                            </p>
+                            <p><strong>监控标准：</strong></p>
+                            <ul>
+                                <li><strong>PnL (已实现盈亏) &gt; $10,000：</strong> 盈利能力强</li>
+                                <li><strong>ROI (投资回报率) &gt; 20%：</strong> 回报率高</li>
+                                <li><strong>账户价值 &gt; $50,000：</strong> 资金量大，影响力强</li>
+                            </ul>
+                            <p><strong>分析维度：</strong></p>
+                            <ul>
+                                <li><strong>交易方向：</strong> 聪明钱正在做多(LONG)还是做空(SHORT)？</li>
+                                <li><strong>交易金额：</strong> 单笔交易超过$50,000视为大额交易</li>
+                                <li><strong>净流入/流出：</strong> 做多金额 - 做空金额 = 净流入</li>
+                                <li><strong>交易时间：</strong> 最近24小时的活动最具参考价值</li>
+                            </ul>
+                            <p><strong>评分规则：</strong></p>
+                            <ul class="mb-0">
+                                <li><span class="badge bg-success">80-100分</span>：聪明钱大量买入/卖出，方向明确</li>
+                                <li><span class="badge bg-warning">60-80分</span>：聪明钱中等活跃，信号中等</li>
+                                <li><span class="badge bg-secondary">0-60分</span>：聪明钱无明显动作或方向分散</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 5. 链上数据 -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">⛓️ 链上数据 (On-Chain Data)</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>分析内容：</strong></p>
+                            <ul>
+                                <li><strong>大额转账监控：</strong> 追踪交易所和巨鲸地址的资金流动
+                                    <ul>
+                                        <li>转入交易所 → 可能卖出（看跌）</li>
+                                        <li>转出交易所 → 可能囤币（看涨）</li>
+                                    </ul>
+                                </li>
+                                <li><strong>活跃地址数：</strong> 反映网络活跃度和用户兴趣</li>
+                                <li><strong>交易量：</strong> 链上交易量增加表明市场热度提升</li>
+                                <li><strong>Gas费用：</strong> Ethereum网络Gas费飙升通常预示大量交易</li>
+                            </ul>
+                            <p><strong>监控地址：</strong></p>
+                            <ul>
+                                <li><strong>Binance钱包：</strong> 最大的交易所，资金流动风向标</li>
+                                <li><strong>巨鲸地址：</strong> 持币量巨大的个人或机构</li>
+                                <li><strong>DeFi协议：</strong> Uniswap、Aave等DeFi项目的智能合约</li>
+                            </ul>
+                            <p><strong>评分规则：</strong></p>
+                            <ul class="mb-0">
+                                <li><span class="badge bg-success">80-100分</span>：链上活动活跃，资金流向支持趋势</li>
+                                <li><span class="badge bg-warning">60-80分</span>：链上活动正常，无明确信号</li>
+                                <li><span class="badge bg-secondary">0-60分</span>：链上活动低迷或资金异常流动</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- 综合评分说明 -->
+                    <h5 class="mt-4 mb-3"><i class="bi bi-calculator"></i> 综合评分与信号生成</h5>
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <p><strong>置信度计算公式：</strong></p>
+                            <div class="bg-light p-3 rounded mb-3">
+                                <code>
+                                置信度 = (技术指标 × 60% + 新闻情绪 × 30% + 资金费率 × 10% + Hyperliquid × 5% + 链上数据 × 5%) / 5
+                                </code>
+                            </div>
+                            <p><strong>信号判定规则：</strong></p>
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>置信度</th>
+                                        <th>信号</th>
+                                        <th>建议操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="table-success">
+                                        <td><strong>≥ 75%</strong></td>
+                                        <td><span class="badge bg-success">强烈看涨</span></td>
+                                        <td>可考虑建仓做多，设置止损</td>
+                                    </tr>
+                                    <tr class="table-success">
+                                        <td><strong>60% ~ 75%</strong></td>
+                                        <td><span class="badge bg-success">看涨</span></td>
+                                        <td>轻仓试探，观察趋势</td>
+                                    </tr>
+                                    <tr class="table-warning">
+                                        <td><strong>40% ~ 60%</strong></td>
+                                        <td><span class="badge bg-warning">观望</span></td>
+                                        <td>信号不明确，建议等待</td>
+                                    </tr>
+                                    <tr class="table-danger">
+                                        <td><strong>25% ~ 40%</strong></td>
+                                        <td><span class="badge bg-danger">看跌</span></td>
+                                        <td>考虑减仓或做空</td>
+                                    </tr>
+                                    <tr class="table-danger">
+                                        <td><strong>&lt; 25%</strong></td>
+                                        <td><span class="badge bg-danger">强烈看跌</span></td>
+                                        <td>及时止损，避免风险</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 使用建议 -->
+                    <h5 class="mt-4 mb-3"><i class="bi bi-lightbulb"></i> 使用建议</h5>
+                    <div class="alert alert-success">
+                        <h6><i class="bi bi-check-circle"></i> 最佳实践</h6>
+                        <ul class="mb-0">
+                            <li><strong>关注多维度协同：</strong> 5个指标同时看涨/看跌时，信号最可靠</li>
+                            <li><strong>结合价格行为：</strong> 技术指标 + 实际价格走势双重确认</li>
+                            <li><strong>设置止损止盈：</strong> 系统提供的建仓价、止损价、止盈价仅供参考</li>
+                            <li><strong>分批建仓：</strong> 不要一次性全仓，分批买入降低风险</li>
+                            <li><strong>定期复盘：</strong> 记录交易决策，总结哪些信号最有效</li>
+                        </ul>
+                    </div>
+
+                    <div class="alert alert-danger">
+                        <h6><i class="bi bi-exclamation-triangle"></i> 风险提示</h6>
+                        <ul class="mb-0">
+                            <li><strong>非绝对准确：</strong> 任何分析系统都无法保证100%准确</li>
+                            <li><strong>市场变化快：</strong> 加密货币市场波动极大，行情瞬息万变</li>
+                            <li><strong>仅供参考：</strong> 本系统提供的建议仅供参考，不构成投资建议</li>
+                            <li><strong>自行判断：</strong> 请结合自身风险承受能力和投资经验做决策</li>
+                            <li><strong>风险自担：</strong> 投资有风险，入市需谨慎</li>
+                        </ul>
+                    </div>
+
+                    <div class="alert alert-info mb-0">
+                        <h6><i class="bi bi-clock"></i> 更新频率说明</h6>
+                        <p class="mb-0">
+                            <strong>实时价格：</strong>每5秒刷新 |
+                            <strong>技术指标：</strong>每5分钟更新 |
+                            <strong>新闻情绪：</strong>每15分钟更新 |
+                            <strong>资金费率：</strong>每5分钟更新 |
+                            <strong>Hyperliquid：</strong>每30分钟更新 |
+                            <strong>链上数据：</strong>每5分钟更新
+                        </p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">知道了</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

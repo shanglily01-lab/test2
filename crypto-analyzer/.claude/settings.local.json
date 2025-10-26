@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(python -c:*)",
+      "Read(//e/**)",
+      "Bash(python app/main.py:*)",
+      "Bash(taskkill /F /PID 22036)",
+      "Bash(taskkill //F //PID 22036)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>合约交易 - Crypto Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header .status {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: #666;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 12px;
+            background: #10b981;
+            color: white;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .nav {
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            padding: 10px 20px;
+            background: #f3f4f6;
+            color: #666;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+
+        .nav-link:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .nav-link.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .account-overview {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        }
+
+        .account-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-card {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            color: white;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .stat-change {
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .refresh-btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #5568d3;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: #f9fafb;
+        }
+
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #666;
+            font-size: 14px;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-long {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .badge-short {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .badge-open {
+            background: #dbeafe;
+            color: #2563eb;
+        }
+
+        .badge-closed {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        .pnl-positive {
+            color: #16a34a;
+            font-weight: 600;
+        }
+
+        .pnl-negative {
+            color: #dc2626;
+            font-weight: 600;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #9ca3af;
+        }
+
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #9ca3af;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f4f6;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+
+        .btn-close {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-close:hover {
+            background: #dc2626;
+        }
+
+        .price-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .price-main {
+            font-weight: 600;
+        }
+
+        .price-sub {
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .leverage-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #fbbf24;
+            color: white;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚀 合约交易系统</h1>
+            <div class="status">
+                <div class="status-badge">
+                    <span class="status-dot"></span>
+                    <span>自动交易运行中</span>
+                </div>
+                <span id="lastUpdate">最后更新: --</span>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="nav">
+            <div class="nav-links">
+                <a href="/dashboard" class="nav-link">📊 Dashboard</a>
+                <a href="/futures_trading" class="nav-link active">🚀 合约交易</a>
+                <a href="/paper_trading" class="nav-link">📈 模拟交易</a>
+                <a href="/strategy_manager" class="nav-link">⚙️ 策略管理</a>
+            </div>
+        </div>
+
+        <!-- Account Overview -->
+        <div class="account-overview">
+            <div class="section-header">
+                <h2 class="section-title">💰 账户总览</h2>
+                <button class="refresh-btn" onclick="loadData()">🔄 刷新</button>
+            </div>
+            <div id="accountLoading" class="loading">
+                <div class="spinner"></div>
+                <p>加载中...</p>
+            </div>
+            <div id="accountStats" class="account-stats" style="display: none;">
+                <!-- 动态加载 -->
+            </div>
+        </div>
+
+        <!-- Open Positions -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">📊 持仓中 (BTC, ETH, SOL, BNB)</h2>
+                <span id="positionCount">0 个持仓</span>
+            </div>
+            <div id="positionsLoading" class="loading">
+                <div class="spinner"></div>
+                <p>加载中...</p>
+            </div>
+            <div id="positionsTable" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>交易对</th>
+                            <th>方向</th>
+                            <th>杠杆</th>
+                            <th>开仓价</th>
+                            <th>当前价</th>
+                            <th>数量</th>
+                            <th>保证金</th>
+                            <th>未实现盈亏</th>
+                            <th>ROI</th>
+                            <th>止损价</th>
+                            <th>止盈价</th>
+                            <th>开仓时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positionsBody">
+                        <!-- 动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="positionsEmpty" class="empty-state" style="display: none;">
+                <div class="empty-state-icon">📭</div>
+                <p>暂无持仓</p>
+                <p style="font-size: 14px; margin-top: 10px;">系统会每30分钟自动检查投资建议并开仓</p>
+            </div>
+        </div>
+
+        <!-- Recent Trades -->
+        <div class="section">
+            <div class="section-header">
+                <h2 class="section-title">📜 最近交易记录</h2>
+            </div>
+            <div id="tradesLoading" class="loading">
+                <div class="spinner"></div>
+                <p>加载中...</p>
+            </div>
+            <div id="tradesTable" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>交易对</th>
+                            <th>方向</th>
+                            <th>杠杆</th>
+                            <th>价格</th>
+                            <th>数量</th>
+                            <th>已实现盈亏</th>
+                            <th>ROI</th>
+                            <th>手续费</th>
+                            <th>时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tradesBody">
+                        <!-- 动态加载 -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="tradesEmpty" class="empty-state" style="display: none;">
+                <div class="empty-state-icon">📭</div>
+                <p>暂无交易记录</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/futures';
+
+        // 加载所有数据
+        async function loadData() {
+            await Promise.all([
+                loadAccount(),
+                loadPositions(),
+                loadTrades()
+            ]);
+            updateLastUpdateTime();
+        }
+
+        // 加载账户信息
+        async function loadAccount() {
+            try {
+                const response = await fetch(`${API_BASE}/account/2`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const account = data.data;
+                    const accountStats = document.getElementById('accountStats');
+
+                    accountStats.innerHTML = `
+                        <div class="stat-card">
+                            <div class="stat-label">账户余额</div>
+                            <div class="stat-value">$${account.current_balance.toFixed(2)}</div>
+                            <div class="stat-change">可用: $${account.available_balance.toFixed(2)}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">冻结保证金</div>
+                            <div class="stat-value">$${account.frozen_balance.toFixed(2)}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">未实现盈亏</div>
+                            <div class="stat-value ${account.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                ${account.unrealized_pnl >= 0 ? '+' : ''}$${account.unrealized_pnl.toFixed(2)}
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">总权益</div>
+                            <div class="stat-value">$${account.total_equity.toFixed(2)}</div>
+                            <div class="stat-change">收益率: ${account.total_profit_loss_pct >= 0 ? '+' : ''}${account.total_profit_loss_pct.toFixed(2)}%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">已实现盈亏</div>
+                            <div class="stat-value ${account.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                ${account.realized_pnl >= 0 ? '+' : ''}$${account.realized_pnl.toFixed(2)}
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">交易统计</div>
+                            <div class="stat-value">${account.total_trades}</div>
+                            <div class="stat-change">胜率: ${account.win_rate.toFixed(1)}%</div>
+                        </div>
+                    `;
+
+                    document.getElementById('accountLoading').style.display = 'none';
+                    accountStats.style.display = 'grid';
+                }
+            } catch (error) {
+                console.error('Failed to load account:', error);
+            }
+        }
+
+        // 加载持仓
+        async function loadPositions() {
+            try {
+                const response = await fetch(`${API_BASE}/positions?account_id=2&status=open`);
+                const data = await response.json();
+
+                const positionsBody = document.getElementById('positionsBody');
+                const positionsTable = document.getElementById('positionsTable');
+                const positionsEmpty = document.getElementById('positionsEmpty');
+                const positionCount = document.getElementById('positionCount');
+
+                if (data.success && data.data.length > 0) {
+                    positionsBody.innerHTML = data.data.map(pos => `
+                        <tr>
+                            <td><strong>${pos.symbol}</strong></td>
+                            <td><span class="badge badge-${pos.position_side.toLowerCase()}">${pos.position_side === 'LONG' ? '做多' : '做空'}</span></td>
+                            <td><span class="leverage-badge">${pos.leverage}x</span></td>
+                            <td>$${pos.entry_price.toFixed(2)}</td>
+                            <td>$${pos.current_price ? pos.current_price.toFixed(2) : '--'}</td>
+                            <td>${pos.quantity}</td>
+                            <td>$${pos.margin.toFixed(2)}</td>
+                            <td class="${pos.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                ${pos.unrealized_pnl >= 0 ? '+' : ''}$${pos.unrealized_pnl.toFixed(2)}
+                            </td>
+                            <td class="${pos.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                ${pos.unrealized_pnl_pct >= 0 ? '+' : ''}${pos.unrealized_pnl_pct.toFixed(2)}%
+                            </td>
+                            <td class="price-info">
+                                <span class="price-main">$${pos.stop_loss_price ? pos.stop_loss_price.toFixed(2) : '--'}</span>
+                            </td>
+                            <td class="price-info">
+                                <span class="price-main">$${pos.take_profit_price ? pos.take_profit_price.toFixed(2) : '--'}</span>
+                            </td>
+                            <td>${new Date(pos.open_time).toLocaleString('zh-CN')}</td>
+                            <td>
+                                <button class="action-btn btn-close" onclick="closePosition(${pos.position_id})">平仓</button>
+                            </td>
+                        </tr>
+                    `).join('');
+
+                    positionCount.textContent = `${data.data.length} 个持仓`;
+                    positionsTable.style.display = 'block';
+                    positionsEmpty.style.display = 'none';
+                } else {
+                    positionCount.textContent = '0 个持仓';
+                    positionsTable.style.display = 'none';
+                    positionsEmpty.style.display = 'block';
+                }
+
+                document.getElementById('positionsLoading').style.display = 'none';
+            } catch (error) {
+                console.error('Failed to load positions:', error);
+            }
+        }
+
+        // 加载交易记录
+        async function loadTrades() {
+            try {
+                // 直接查询数据库获取最近20条交易
+                const response = await fetch(`${API_BASE}/positions?account_id=2&status=closed`);
+                const data = await response.json();
+
+                const tradesBody = document.getElementById('tradesBody');
+                const tradesTable = document.getElementById('tradesTable');
+                const tradesEmpty = document.getElementById('tradesEmpty');
+
+                if (data.success && data.data.length > 0) {
+                    // 只显示最近20条
+                    const recentTrades = data.data.slice(0, 20);
+
+                    tradesBody.innerHTML = recentTrades.map(trade => `
+                        <tr>
+                            <td><strong>${trade.symbol}</strong></td>
+                            <td><span class="badge badge-${trade.position_side.toLowerCase()}">${trade.position_side === 'LONG' ? '做多' : '做空'}</span></td>
+                            <td><span class="leverage-badge">${trade.leverage}x</span></td>
+                            <td>
+                                <div class="price-info">
+                                    <span class="price-main">开: $${trade.entry_price.toFixed(2)}</span>
+                                    <span class="price-sub">平: $${trade.current_price ? trade.current_price.toFixed(2) : '--'}</span>
+                                </div>
+                            </td>
+                            <td>${trade.quantity}</td>
+                            <td class="${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                ${trade.realized_pnl >= 0 ? '+' : ''}$${trade.realized_pnl ? trade.realized_pnl.toFixed(2) : '0.00'}
+                            </td>
+                            <td class="${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                ${trade.unrealized_pnl_pct >= 0 ? '+' : ''}${trade.unrealized_pnl_pct ? trade.unrealized_pnl_pct.toFixed(2) : '0.00'}%
+                            </td>
+                            <td>$${(trade.margin * 0.0004).toFixed(2)}</td>
+                            <td>${trade.close_time ? new Date(trade.close_time).toLocaleString('zh-CN') : '--'}</td>
+                        </tr>
+                    `).join('');
+
+                    tradesTable.style.display = 'block';
+                    tradesEmpty.style.display = 'none';
+                } else {
+                    tradesTable.style.display = 'none';
+                    tradesEmpty.style.display = 'block';
+                }
+
+                document.getElementById('tradesLoading').style.display = 'none';
+            } catch (error) {
+                console.error('Failed to load trades:', error);
+            }
+        }
+
+        // 平仓
+        async function closePosition(positionId) {
+            if (!confirm('确定要平仓吗？')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/close/${positionId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ reason: 'manual' })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`平仓成功！\n已实现盈亏: $${data.data.realized_pnl.toFixed(2)}\nROI: ${data.data.roi.toFixed(2)}%`);
+                    loadData();
+                } else {
+                    alert('平仓失败: ' + data.message);
+                }
+            } catch (error) {
+                alert('平仓失败: ' + error.message);
+            }
+        }
+
+        // 更新最后更新时间
+        function updateLastUpdateTime() {
+            document.getElementById('lastUpdate').textContent =
+                '最后更新: ' + new Date().toLocaleString('zh-CN');
+        }
+
+        // 初始加载
+        loadData();
+
+        // 每30秒自动刷新
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
