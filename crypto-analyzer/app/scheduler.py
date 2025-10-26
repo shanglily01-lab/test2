@@ -10,6 +10,11 @@
 - Hyperliquid 排行榜: 每天一次
 - 资金费率 (Binance + Gate.io): 每5分钟
 - 新闻数据: 每15分钟
+
+缓存更新频率（性能优化）：
+- 价格统计缓存: 每1分钟
+- 分析缓存 (技术指标、新闻情绪、资金费率、投资建议): 每5分钟
+- Hyperliquid聚合缓存: 每10分钟
 """
 
 import sys
@@ -37,6 +42,7 @@ from app.collectors.hyperliquid_collector import HyperliquidCollector
 from app.database.db_service import DatabaseService
 from app.trading.futures_monitor_service import FuturesMonitorService
 from app.trading.auto_futures_trader import AutoFuturesTrader
+from app.services.cache_update_service import CacheUpdateService
 
 
 class UnifiedDataScheduler:
@@ -65,6 +71,10 @@ class UnifiedDataScheduler:
         db_config = self.config.get('database', {})
         self.db_service = DatabaseService(db_config)
 
+        # 初始化缓存更新服务
+        logger.info("初始化缓存更新服务...")
+        self.cache_service = CacheUpdateService(self.config)
+
         # 任务统计
         self.task_stats = {
             'binance_spot_1m': {'count': 0, 'last_run': None, 'last_error': None},
@@ -80,7 +90,10 @@ class UnifiedDataScheduler:
             'funding_rate': {'count': 0, 'last_run': None, 'last_error': None},
             'news': {'count': 0, 'last_run': None, 'last_error': None},
             'futures_monitor': {'count': 0, 'last_run': None, 'last_error': None},
-            'auto_trading': {'count': 0, 'last_run': None, 'last_error': None}
+            'auto_trading': {'count': 0, 'last_run': None, 'last_error': None},
+            'cache_price': {'count': 0, 'last_run': None, 'last_error': None},
+            'cache_analysis': {'count': 0, 'last_run': None, 'last_error': None},
+            'cache_hyperliquid': {'count': 0, 'last_run': None, 'last_error': None}
         }
 
         logger.info(f"调度器初始化完成 - 监控币种: {len(self.symbols)} 个")
@@ -937,6 +950,28 @@ class UnifiedDataScheduler:
             )
             logger.info("  ✓ Hyperliquid 钱包监控 - 每 30 分钟")
 
+        # 7. 缓存更新任务
+        logger.info("\n  🚀 性能优化: 缓存自动更新")
+
+        # 价格缓存 - 每1分钟
+        schedule.every(1).minutes.do(
+            lambda: asyncio.run(self.update_price_cache())
+        )
+        logger.info("  ✓ 价格统计缓存 - 每 1 分钟")
+
+        # 分析缓存 - 每5分钟
+        schedule.every(5).minutes.do(
+            lambda: asyncio.run(self.update_analysis_cache())
+        )
+        logger.info("  ✓ 分析缓存 (技术指标+新闻+资金费率+投资建议) - 每 5 分钟")
+
+        # Hyperliquid缓存 - 每10分钟
+        if self.hyperliquid_collector:
+            schedule.every(10).minutes.do(
+                lambda: asyncio.run(self.update_hyperliquid_cache())
+            )
+            logger.info("  ✓ Hyperliquid聚合缓存 - 每 10 分钟")
+
         logger.info("所有定时任务设置完成")
 
     async def run_initial_collection(self):
@@ -973,6 +1008,17 @@ class UnifiedDataScheduler:
         # 5. Hyperliquid 数据
         if self.hyperliquid_collector:
             await self.collect_hyperliquid_leaderboard()
+
+        # 6. 首次缓存更新
+        logger.info("\n🚀 性能优化：首次缓存更新...")
+        await self.update_price_cache()
+        await asyncio.sleep(2)
+
+        await self.update_analysis_cache()
+        await asyncio.sleep(2)
+
+        if self.hyperliquid_collector:
+            await self.update_hyperliquid_cache()
 
         logger.info("\n" + "=" * 80)
         logger.info("首次数据采集完成")
@@ -1023,6 +1069,65 @@ class UnifiedDataScheduler:
         except KeyboardInterrupt:
             logger.info("\n\n收到停止信号，正在关闭...")
             self.stop()
+
+    # ==================== 缓存更新任务 ====================
+
+    async def update_price_cache(self):
+        """更新价格统计缓存 (每1分钟)"""
+        task_name = 'cache_price'
+        try:
+            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始更新价格缓存...")
+
+            await self.cache_service.update_price_stats_cache(self.symbols)
+
+            self.task_stats[task_name]['count'] += 1
+            self.task_stats[task_name]['last_run'] = datetime.now()
+            logger.info(f"  ✓ 价格缓存更新完成 - {len(self.symbols)} 个币种")
+
+        except Exception as e:
+            logger.error(f"更新价格缓存失败: {e}")
+            self.task_stats[task_name]['last_error'] = str(e)
+
+    async def update_analysis_cache(self):
+        """更新分析类缓存 (每5分钟) - 技术指标、新闻情绪、资金费率、投资建议"""
+        task_name = 'cache_analysis'
+        try:
+            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始更新分析缓存...")
+
+            # 并发更新4个分析缓存
+            await asyncio.gather(
+                self.cache_service.update_technical_indicators_cache(self.symbols),
+                self.cache_service.update_news_sentiment_aggregation(self.symbols),
+                self.cache_service.update_funding_rate_stats(self.symbols),
+                self.cache_service.update_recommendations_cache(self.symbols),
+                return_exceptions=True
+            )
+
+            self.task_stats[task_name]['count'] += 1
+            self.task_stats[task_name]['last_run'] = datetime.now()
+            logger.info(f"  ✓ 分析缓存更新完成 (技术指标、新闻情绪、资金费率、投资建议)")
+
+        except Exception as e:
+            logger.error(f"更新分析缓存失败: {e}")
+            self.task_stats[task_name]['last_error'] = str(e)
+
+    async def update_hyperliquid_cache(self):
+        """更新Hyperliquid聚合缓存 (每10分钟)"""
+        task_name = 'cache_hyperliquid'
+        try:
+            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始更新Hyperliquid缓存...")
+
+            await self.cache_service.update_hyperliquid_aggregation(self.symbols)
+
+            self.task_stats[task_name]['count'] += 1
+            self.task_stats[task_name]['last_run'] = datetime.now()
+            logger.info(f"  ✓ Hyperliquid缓存更新完成 - {len(self.symbols)} 个币种")
+
+        except Exception as e:
+            logger.error(f"更新Hyperliquid缓存失败: {e}")
+            self.task_stats[task_name]['last_error'] = str(e)
+
+    # ==================== 调度器控制 ====================
 
     def stop(self):
         """停止调度器"""
