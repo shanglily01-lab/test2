@@ -1316,19 +1316,27 @@ class DatabaseService:
         获取最新的合约数据（包括持仓量和多空比）
 
         Args:
-            symbol: 交易对符号
+            symbol: 交易对符号 (支持 BTC/USDT 或 BTCUSDT 格式)
 
         Returns:
             dict: 包含持仓量和多空比的字典
         """
         session = self.get_session()
         try:
-            from sqlalchemy import desc
+            from sqlalchemy import desc, or_
+
+            # 尝试两种格式: BTC/USDT 和 BTCUSDT
+            symbol_no_slash = symbol.replace('/', '')
 
             # 获取最新的持仓量数据
             open_interest = (
                 session.query(FuturesOpenInterest)
-                .filter(FuturesOpenInterest.symbol == symbol)
+                .filter(
+                    or_(
+                        FuturesOpenInterest.symbol == symbol,
+                        FuturesOpenInterest.symbol == symbol_no_slash
+                    )
+                )
                 .filter(FuturesOpenInterest.exchange == 'binance_futures')
                 .order_by(desc(FuturesOpenInterest.timestamp))
                 .first()
@@ -1337,7 +1345,12 @@ class DatabaseService:
             # 获取最新的多空比数据
             long_short_ratio = (
                 session.query(FuturesLongShortRatio)
-                .filter(FuturesLongShortRatio.symbol == symbol)
+                .filter(
+                    or_(
+                        FuturesLongShortRatio.symbol == symbol,
+                        FuturesLongShortRatio.symbol == symbol_no_slash
+                    )
+                )
                 .order_by(desc(FuturesLongShortRatio.timestamp))
                 .first()
             )
