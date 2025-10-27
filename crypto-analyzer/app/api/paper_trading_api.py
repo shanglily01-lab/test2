@@ -371,3 +371,86 @@ async def get_symbols():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ema-signals")
+async def get_ema_signals(limit: int = 10):
+    """
+    获取最新的 EMA 买入信号
+
+    Args:
+        limit: 返回信号数量限制
+
+    Returns:
+        最新的 EMA 信号列表
+    """
+    try:
+        from app.database.db_service import DatabaseService
+        from sqlalchemy import text
+        from datetime import datetime, timedelta
+
+        db_config = get_db_config()
+        db_service = DatabaseService({'database': {'mysql': db_config}})
+        session = db_service.get_session()
+
+        try:
+            # 读取信号文件（如果存在）
+            import os
+            signal_file = 'signals/ema_alerts.txt'
+            signals = []
+
+            if os.path.exists(signal_file):
+                # 读取最近的信号
+                with open(signal_file, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    # 倒序读取最近的信号
+                    for line in reversed(lines[-limit*10:]):  # 读取更多行以确保有足够的唯一信号
+                        if '买入信号' in line and '时间:' in line:
+                            try:
+                                # 解析信号信息
+                                parts = line.split()
+                                if len(parts) >= 3:
+                                    symbol = parts[1]
+                                    strength = '未知'
+
+                                    if 'STRONG' in line or '强' in line:
+                                        strength = 'strong'
+                                    elif 'MEDIUM' in line or '中' in line:
+                                        strength = 'medium'
+                                    elif 'WEAK' in line or '弱' in line:
+                                        strength = 'weak'
+
+                                    # 检查是否已存在相同交易对的信号
+                                    if not any(s['symbol'] == symbol for s in signals):
+                                        signals.append({
+                                            'symbol': symbol,
+                                            'signal_strength': strength,
+                                            'signal_type': 'BUY',
+                                            'timeframe': '15m',
+                                            'message': line.strip(),
+                                            'timestamp': datetime.now().isoformat()
+                                        })
+
+                                        if len(signals) >= limit:
+                                            break
+                            except Exception as e:
+                                continue
+
+            # 如果文件中没有信号，返回空列表
+            return {
+                "success": True,
+                "signals": signals,
+                "count": len(signals),
+                "message": "从信号文件读取成功" if signals else "暂无信号"
+            }
+
+        finally:
+            session.close()
+
+    except Exception as e:
+        return {
+            "success": False,
+            "signals": [],
+            "count": 0,
+            "message": f"读取信号失败: {str(e)}"
+        }
