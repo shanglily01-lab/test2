@@ -40,7 +40,7 @@ try:
         SELECT
             t1.symbol,
             t1.timeframe,
-            t1.close as price,
+            t1.close_price as price,
             t1.volume,
             t1.quote_volume,
             t1.timestamp
