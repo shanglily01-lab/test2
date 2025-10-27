@@ -5,13 +5,18 @@
 
 import mysql.connector
 from datetime import datetime, timedelta
+import yaml
 
-# 数据库配置
+# 从配置文件读取数据库配置
+with open('config.yaml', 'r', encoding='utf-8') as f:
+    config = yaml.safe_load(f)
+
 db_config = {
-    'host': '192.168.1.101',
-    'user': 'root',
-    'password': '123456',
-    'database': 'binance-data'
+    'host': config['database']['mysql']['host'],
+    'port': config['database']['mysql']['port'],
+    'user': config['database']['mysql']['user'],
+    'password': config['database']['mysql']['password'],
+    'database': config['database']['mysql']['database']
 }
 
 try:
