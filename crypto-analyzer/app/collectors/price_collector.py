@@ -135,14 +135,15 @@ class PriceCollector:
                 'taker_buy_quote', 'ignore'
             ])
 
-            # 选择需要的列并转换类型
-            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].copy()
+            # 选择需要的列并转换类型（包含 quote_volume）
+            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'quote_volume']].copy()
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df['open'] = df['open'].astype(float)
             df['high'] = df['high'].astype(float)
             df['low'] = df['low'].astype(float)
             df['close'] = df['close'].astype(float)
             df['volume'] = df['volume'].astype(float)
+            df['quote_volume'] = df['quote_volume'].astype(float)  # 添加 quote_volume 转换
 
             # 添加元数据
             df['symbol'] = symbol

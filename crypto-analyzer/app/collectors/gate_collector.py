@@ -153,8 +153,8 @@ class GateCollector:
                             'timestamp', 'quote_volume', 'close', 'high', 'low', 'open', 'volume', 'is_complete'
                         ])
 
-                        # 重新排列列顺序 (只保留需要的列)
-                        df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].copy()
+                        # 重新排列列顺序 (保留 quote_volume)
+                        df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'quote_volume']].copy()
 
                         # 转换类型
                         df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='s')
@@ -163,6 +163,7 @@ class GateCollector:
                         df['low'] = df['low'].astype(float)
                         df['close'] = df['close'].astype(float)
                         df['volume'] = df['volume'].astype(float)
+                        df['quote_volume'] = df['quote_volume'].astype(float)  # 添加 quote_volume 转换
 
                         # 添加元数据
                         df['symbol'] = symbol
