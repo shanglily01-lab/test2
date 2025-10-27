@@ -75,6 +75,10 @@ class UnifiedDataScheduler:
         logger.info("初始化缓存更新服务...")
         self.cache_service = CacheUpdateService(self.config)
 
+        # 初始化 EMA 信号监控和通知服务
+        logger.info("初始化 EMA 信号监控服务...")
+        self._init_ema_monitor()
+
         # 任务统计
         self.task_stats = {
             'binance_spot_1m': {'count': 0, 'last_run': None, 'last_error': None},
@@ -93,7 +97,8 @@ class UnifiedDataScheduler:
             'auto_trading': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_price': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_analysis': {'count': 0, 'last_run': None, 'last_error': None},
-            'cache_hyperliquid': {'count': 0, 'last_run': None, 'last_error': None}
+            'cache_hyperliquid': {'count': 0, 'last_run': None, 'last_error': None},
+            'ema_signal': {'count': 0, 'last_run': None, 'last_error': None}
         }
 
         logger.info(f"调度器初始化完成 - 监控币种: {len(self.symbols)} 个")
@@ -152,6 +157,32 @@ class UnifiedDataScheduler:
         except Exception as e:
             self.auto_trader = None
             logger.warning(f"  ⊗ 自动合约交易服务初始化失败: {e}")
+
+    def _init_ema_monitor(self):
+        """初始化 EMA 信号监控服务"""
+        try:
+            from app.trading.ema_signal_monitor import EMASignalMonitor
+            from app.services.notification_service import NotificationService
+
+            # 检查是否启用 EMA 监控
+            ema_config = self.config.get('ema_signal', {})
+            if not ema_config.get('enabled', True):
+                self.ema_monitor = None
+                self.notification_service = None
+                logger.info("  ⊗ EMA 信号监控未启用")
+                return
+
+            # 初始化通知服务
+            self.notification_service = NotificationService(self.config)
+
+            # 初始化 EMA 监控器
+            self.ema_monitor = EMASignalMonitor(self.config, self.db_service)
+            logger.info(f"  ✓ EMA 信号监控服务 (EMA{self.ema_monitor.short_period}/EMA{self.ema_monitor.long_period})")
+
+        except Exception as e:
+            self.ema_monitor = None
+            self.notification_service = None
+            logger.warning(f"  ⊗ EMA 信号监控服务初始化失败: {e}")
 
     # ==================== 多交易所数据采集任务 ====================
 
@@ -603,6 +634,46 @@ class UnifiedDataScheduler:
             logger.error(f"自动交易任务失败: {e}")
             self.task_stats[task_name]['last_error'] = str(e)
 
+    # ==================== EMA 信号监控任务 ====================
+
+    async def monitor_ema_signals(self):
+        """监控 15分钟 EMA 买入信号 (每15分钟)"""
+        if not self.ema_monitor or not self.notification_service:
+            return
+
+        task_name = 'ema_signal'
+        try:
+            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始扫描 EMA 买入信号...")
+
+            # 扫描所有交易对
+            signals = await self.ema_monitor.scan_all_symbols()
+
+            if signals:
+                logger.info(f"  ✓ 发现 {len(signals)} 个 EMA 买入信号")
+
+                # 发送通知
+                self.notification_service.send_batch_signals(
+                    signals,
+                    self.ema_monitor.format_alert_message
+                )
+
+                # 统计
+                strong = len([s for s in signals if s['signal_strength'] == 'strong'])
+                medium = len([s for s in signals if s['signal_strength'] == 'medium'])
+                weak = len([s for s in signals if s['signal_strength'] == 'weak'])
+
+                logger.info(f"  信号强度分布: 强 {strong}, 中 {medium}, 弱 {weak}")
+            else:
+                logger.debug(f"  未发现 EMA 买入信号")
+
+            # 更新统计
+            self.task_stats[task_name]['count'] += 1
+            self.task_stats[task_name]['last_run'] = datetime.now()
+
+        except Exception as e:
+            logger.error(f"EMA 信号监控任务失败: {e}")
+            self.task_stats[task_name]['last_error'] = str(e)
+
     # ==================== 合约监控任务 ====================
 
     async def monitor_futures_positions(self):
@@ -912,6 +983,14 @@ class UnifiedDataScheduler:
                 lambda: asyncio.run(self.monitor_futures_positions())
             )
             logger.info("  ✓ 合约持仓监控 (止盈止损) - 每 1 分钟")
+
+        # 3.7 EMA 买入信号监控
+        if self.ema_monitor:
+            schedule.every(15).minutes.do(
+                lambda: asyncio.run(self.monitor_ema_signals())
+            )
+            ema_config = f"EMA{self.ema_monitor.short_period}/EMA{self.ema_monitor.long_period}"
+            logger.info(f"  ✓ EMA 买入信号监控 ({ema_config}, {self.ema_monitor.timeframe}) - 每 15 分钟")
 
         # 4. Ethereum 链上数据
         if self.smart_money_collector:
