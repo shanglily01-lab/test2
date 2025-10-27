@@ -23,7 +23,7 @@ print("检查合约数据详细情况")
 print("=" * 120 + "\n")
 
 # 1. 检查持仓量数据表
-print("1. 检查 binance_futures_open_interest 表:\n")
+print("1. 检查 futures_open_interest 表:\n")
 try:
     sql = text("""
         SELECT
@@ -31,7 +31,7 @@ try:
             timestamp,
             open_interest,
             open_interest_value
-        FROM binance_futures_open_interest
+        FROM futures_open_interest
         ORDER BY timestamp DESC
         LIMIT 10
     """)
@@ -51,7 +51,7 @@ except Exception as e:
 
 # 2. 检查多空比数据表
 print("\n" + "=" * 120)
-print("\n2. 检查 binance_futures_long_short_ratio 表:\n")
+print("\n2. 检查 futures_long_short_ratio 表:\n")
 try:
     sql = text("""
         SELECT
@@ -60,7 +60,7 @@ try:
             long_short_ratio,
             long_account,
             short_account
-        FROM binance_futures_long_short_ratio
+        FROM futures_long_short_ratio
         ORDER BY timestamp DESC
         LIMIT 10
     """)
@@ -80,14 +80,14 @@ except Exception as e:
 
 # 3. 检查资金费率数据表
 print("\n" + "=" * 120)
-print("\n3. 检查 binance_futures_funding_rate 表:\n")
+print("\n3. 检查 futures_funding_rate 表:\n")
 try:
     sql = text("""
         SELECT
             symbol,
             funding_time,
             funding_rate
-        FROM binance_futures_funding_rate
+        FROM futures_funding_rate
         ORDER BY funding_time DESC
         LIMIT 10
     """)
@@ -116,7 +116,7 @@ try:
         SELECT
             COUNT(*) as total,
             MAX(timestamp) as latest_time
-        FROM binance_futures_open_interest
+        FROM futures_open_interest
         WHERE timestamp >= :start_time
     """)
     result = session.execute(sql, {"start_time": start_time}).fetchone()
@@ -126,7 +126,7 @@ try:
         SELECT
             COUNT(*) as total,
             MAX(timestamp) as latest_time
-        FROM binance_futures_long_short_ratio
+        FROM futures_long_short_ratio
         WHERE timestamp >= :start_time
     """)
     result = session.execute(sql, {"start_time": start_time}).fetchone()
@@ -145,7 +145,7 @@ try:
             symbol,
             COUNT(*) as count,
             MAX(timestamp) as latest_time
-        FROM binance_futures_open_interest
+        FROM futures_open_interest
         GROUP BY symbol
         ORDER BY symbol
     """)
