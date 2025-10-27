@@ -556,23 +556,38 @@ class EnhancedInvestmentAnalyzer:
         if etf and scores['etf'] != 50:
             details = etf.get('details', {})
             total_inflow = details.get('total_net_inflow', 0)
+            avg_3day = details.get('avg_3day_inflow', 0)
+            weekly_total = details.get('weekly_total_inflow', 0)
             etf_count = details.get('etf_count', 0)
-            signal_text = details.get('signal_text', '')
+            asset_type = details.get('asset_type', '')
 
             if scores['etf'] > 60:
-                reasons.append(f"🏦 ETF 机构资金看涨 ({signal_text}, 净流入: ${abs(total_inflow):,.0f}, {etf_count}个ETF)")
-                # 显示流入最多的 ETF
-                top_inflows = details.get('top_inflows', [])
-                if top_inflows:
-                    top_etf = top_inflows[0]
-                    reasons.append(f"  • {top_etf['ticker']} 流入最多: ${top_etf['net_inflow']:,.0f}")
+                # 看涨情况
+                inflow_text = f"最新${abs(total_inflow)/1e8:.2f}亿" if abs(total_inflow) > 1e8 else f"${abs(total_inflow)/1e6:.1f}M"
+                avg_text = f"3日均${abs(avg_3day)/1e8:.2f}亿" if abs(avg_3day) > 1e8 else f"${abs(avg_3day)/1e6:.1f}M"
+                reasons.append(f"🏦 {asset_type} ETF机构资金看涨 (评分: {scores['etf']:.0f}/100)")
+                reasons.append(f"  • 净流入: {inflow_text}, {avg_text}, {etf_count}个ETF")
+
+                # 显示最大流入的ETF
+                top_ticker = details.get('top_inflow_ticker')
+                top_amount = details.get('top_inflow_amount', 0)
+                if top_ticker and top_amount > 0:
+                    amount_text = f"${abs(top_amount)/1e6:.1f}M" if abs(top_amount) > 1e6 else f"${abs(top_amount)/1e3:.0f}K"
+                    reasons.append(f"  • {top_ticker}流入最多: {amount_text}")
+
             elif scores['etf'] < 40:
-                reasons.append(f"🏦 ETF 机构资金看跌 ({signal_text}, 净流出: ${abs(total_inflow):,.0f}, {etf_count}个ETF)")
-                # 显示流出最多的 ETF
-                top_outflows = details.get('top_outflows', [])
-                if top_outflows:
-                    top_etf = top_outflows[0]
-                    reasons.append(f"  • {top_etf['ticker']} 流出最多: ${abs(top_etf['net_inflow']):,.0f}")
+                # 看跌情况
+                outflow_text = f"最新${abs(total_inflow)/1e8:.2f}亿" if abs(total_inflow) > 1e8 else f"${abs(total_inflow)/1e6:.1f}M"
+                avg_text = f"3日均${abs(avg_3day)/1e8:.2f}亿" if abs(avg_3day) > 1e8 else f"${abs(avg_3day)/1e6:.1f}M"
+                reasons.append(f"🏦 {asset_type} ETF机构资金看跌 (评分: {scores['etf']:.0f}/100)")
+                reasons.append(f"  • 净流出: {outflow_text}, {avg_text}, {etf_count}个ETF")
+
+                # 显示最大流出的ETF
+                top_ticker = details.get('top_outflow_ticker')
+                top_amount = details.get('top_outflow_amount', 0)
+                if top_ticker and top_amount < 0:
+                    amount_text = f"${abs(top_amount)/1e6:.1f}M" if abs(top_amount) > 1e6 else f"${abs(top_amount)/1e3:.0f}K"
+                    reasons.append(f"  • {top_ticker}流出最多: {amount_text}")
 
         return reasons
 

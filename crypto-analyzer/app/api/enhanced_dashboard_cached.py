@@ -51,12 +51,11 @@ class EnhancedDashboardCached:
             self._get_hyperliquid_from_cache(),
             self._get_system_stats(),
             self._get_futures_from_cache(symbols),  # 合约数据
-            self._get_etf_summary(),  # ETF数据
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        prices, recommendations, news, hyperliquid, stats, futures, etf = results
+        prices, recommendations, news, hyperliquid, stats, futures = results
 
         # 处理异常
         if isinstance(prices, Exception):
@@ -77,9 +76,6 @@ class EnhancedDashboardCached:
         if isinstance(futures, Exception):
             logger.error(f"获取合约数据失败: {futures}")
             futures = []
-        if isinstance(etf, Exception):
-            logger.error(f"获取ETF数据失败: {etf}")
-            etf = {}
 
         # 统计信号
         signal_stats = self._calculate_signal_stats(recommendations)
@@ -95,7 +91,6 @@ class EnhancedDashboardCached:
                 'news': news,
                 'hyperliquid': hyperliquid,
                 'futures': futures,  # 合约数据
-                'etf': etf,  # ETF数据
                 'stats': {
                     **stats,
                     **signal_stats
@@ -585,31 +580,6 @@ class EnhancedDashboardCached:
         logger.debug(f"✅ 完整合约数据获取完成: {len(futures_data)} 个币种（含持仓量和多空比）")
         return futures_data
 
-    async def _get_etf_summary(self) -> Dict:
-        """
-        获取ETF资金流向汇总（BTC和ETH）
-
-        Returns:
-            ETF汇总数据字典
-        """
-        try:
-            btc_etf = self.db_service.get_etf_summary('BTC', days=7)
-            eth_etf = self.db_service.get_etf_summary('ETH', days=7)
-
-            result = {
-                'btc': btc_etf if btc_etf else {},
-                'eth': eth_etf if eth_etf else {},
-                'has_data': bool(btc_etf or eth_etf)
-            }
-
-            logger.debug(f"✅ ETF数据获取完成: BTC={'有数据' if btc_etf else '无数据'}, ETH={'有数据' if eth_etf else '无数据'}")
-            return result
-
-        except Exception as e:
-            logger.error(f"获取ETF数据失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return {'btc': {}, 'eth': {}, 'has_data': False}
 
 
 # 导入timedelta
