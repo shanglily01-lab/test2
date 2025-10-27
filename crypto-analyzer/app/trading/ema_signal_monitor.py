@@ -85,25 +85,22 @@ class EMASignalMonitor:
             # 转换交易对格式 (BTC/USDT -> BTCUSDT)
             binance_symbol = symbol.replace('/', '')
 
-            # 根据时间周期选择表
-            if self.timeframe == '15m':
-                table = 'binance_klines_15m'
-            elif self.timeframe == '5m':
-                table = 'binance_klines_5m'
-            elif self.timeframe == '1h':
-                table = 'binance_klines_1h'
-            else:
-                table = 'binance_klines_15m'
-
-            query = text(f"""
-                SELECT open_time, open, high, low, close, volume, close_time
-                FROM {table}
+            # 使用统一的 kline_data 表
+            query = text("""
+                SELECT open_time, open_price, high_price, low_price, close_price, volume, close_time
+                FROM kline_data
                 WHERE symbol = :symbol
+                AND timeframe = :timeframe
+                AND exchange = 'binance'
                 ORDER BY open_time DESC
                 LIMIT :limit
             """)
 
-            result = session.execute(query, {'symbol': binance_symbol, 'limit': limit})
+            result = session.execute(query, {
+                'symbol': binance_symbol,
+                'timeframe': self.timeframe,
+                'limit': limit
+            })
             klines = result.fetchall()
 
             # 转换为字典列表（从旧到新）
@@ -111,10 +108,10 @@ class EMASignalMonitor:
             for k in reversed(klines):
                 klines_list.append({
                     'open_time': k.open_time,
-                    'open': float(k.open),
-                    'high': float(k.high),
-                    'low': float(k.low),
-                    'close': float(k.close),
+                    'open': float(k.open_price),
+                    'high': float(k.high_price),
+                    'low': float(k.low_price),
+                    'close': float(k.close_price),
                     'volume': float(k.volume),
                     'close_time': k.close_time
                 })
