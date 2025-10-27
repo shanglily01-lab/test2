@@ -44,7 +44,8 @@ class HyperliquidCollector:
         # 最小交易金额阈值(USD)
         self.min_trade_usd = self.hyperliquid_config.get('min_trade_usd', 50000)
 
-        logger.info(f"Hyperliquid 采集器初始化完成 - 监控地址数: {len(self.monitored_addresses)}")
+        logger.info(f"Hyperliquid 采集器初始化完成 - 配置地址数: {len(self.monitored_addresses)}")
+        logger.info(f"将从数据库动态加载更多监控地址")
         if self.proxy:
             logger.info(f"使用代理: {self.proxy}")
 
@@ -332,21 +333,88 @@ class HyperliquidCollector:
                 'statistics': {}
             }
 
-    async def monitor_all_addresses(self, hours: int = 24) -> Dict[str, Dict]:
+    async def monitor_all_addresses(
+        self,
+        hours: int = 24,
+        priority: str = 'all',
+        hyperliquid_db=None
+    ) -> Dict[str, Dict]:
         """
-        监控所有配置的地址
+        监控 Hyperliquid 聪明钱地址 (支持从数据库加载)
 
         Args:
             hours: 时间范围（小时）
+            priority: 优先级过滤
+                - 'high': 高优先级 (PnL>10K, ROI>50%, 7天内活跃, 限200个)
+                - 'medium': 中优先级 (PnL>5K, ROI>30%, 30天内活跃, 限500个)
+                - 'low': 低优先级 (全部活跃钱包)
+                - 'all': 所有钱包 (等同于low)
+                - 'config': 只监控配置文件中的地址
+            hyperliquid_db: Hyperliquid数据库实例 (如果不提供则从配置文件读取地址)
 
         Returns:
             {address: result}
         """
         results = {}
+        addresses_to_monitor = []
 
-        for addr_config in self.monitored_addresses:
-            address = addr_config.get('address')
+        # 根据优先级获取地址列表
+        if priority == 'config' or hyperliquid_db is None:
+            # 只使用配置文件中的地址 (向后兼容)
+            addresses_to_monitor = [
+                addr.get('address')
+                for addr in self.monitored_addresses
+                if addr.get('address')
+            ]
+            logger.info(f"从配置文件加载 {len(addresses_to_monitor)} 个地址")
 
+        else:
+            # 从数据库获取地址
+            try:
+                if priority == 'high':
+                    # 高优先级: PnL>10K, ROI>50%, 7天内活跃, 限200个
+                    db_wallets = hyperliquid_db.get_monitored_wallets_by_priority(
+                        min_pnl=10000,
+                        min_roi=50,
+                        days_active=7,
+                        limit=200
+                    )
+                    logger.info(f"从数据库加载 {len(db_wallets)} 个高优先级地址 (PnL>10K, ROI>50%, 7天内活跃)")
+
+                elif priority == 'medium':
+                    # 中优先级: PnL>5K, ROI>30%, 30天内活跃, 限500个
+                    db_wallets = hyperliquid_db.get_monitored_wallets_by_priority(
+                        min_pnl=5000,
+                        min_roi=30,
+                        days_active=30,
+                        limit=500
+                    )
+                    logger.info(f"从数据库加载 {len(db_wallets)} 个中优先级地址 (PnL>5K, ROI>30%, 30天内活跃)")
+
+                else:
+                    # 低优先级/全部: 所有活跃钱包
+                    db_wallets = hyperliquid_db.get_monitored_wallets(active_only=True)
+                    logger.info(f"从数据库加载 {len(db_wallets)} 个活跃钱包 (全量)")
+
+                # 提取地址
+                addresses_to_monitor = [wallet['address'] for wallet in db_wallets]
+
+            except Exception as e:
+                logger.error(f"从数据库加载地址失败: {e}, 回退到配置文件")
+                addresses_to_monitor = [
+                    addr.get('address')
+                    for addr in self.monitored_addresses
+                    if addr.get('address')
+                ]
+
+        if not addresses_to_monitor:
+            logger.warning("没有找到需要监控的地址")
+            return results
+
+        # 监控所有地址
+        logger.info(f"开始监控 {len(addresses_to_monitor)} 个地址, 回溯 {hours} 小时")
+
+        for i, address in enumerate(addresses_to_monitor, 1):
             if not address:
                 continue
 
@@ -354,11 +422,14 @@ class HyperliquidCollector:
                 result = await self.monitor_address(address, hours)
                 results[address] = result
 
+                if i % 50 == 0:
+                    logger.info(f"  进度: {i}/{len(addresses_to_monitor)} 个地址已监控")
+
                 # 延迟避免API限流
                 await asyncio.sleep(1)
 
             except Exception as e:
-                logger.error(f"监控地址 {address} 失败: {e}")
+                logger.error(f"监控地址 {address[:10]}... 失败: {e}")
                 results[address] = {
                     'address': address,
                     'error': str(e),
@@ -366,6 +437,7 @@ class HyperliquidCollector:
                     'recent_trades': []
                 }
 
+        logger.info(f"监控完成: {len(results)} 个地址")
         return results
 
     def generate_signal(self, address_data: Dict, coin: str) -> Optional[Dict]:

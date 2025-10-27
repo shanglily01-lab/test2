@@ -732,50 +732,42 @@ class UnifiedDataScheduler:
             logger.error(f"Hyperliquid 数据采集任务失败: {e}")
             self.task_stats[task_name]['last_error'] = str(e)
 
-    async def monitor_hyperliquid_wallets(self):
-        """监控 Hyperliquid 聪明钱包的资金动态 (每30分钟)"""
+    async def monitor_hyperliquid_wallets(self, priority: str = 'all'):
+        """
+        监控 Hyperliquid 聪明钱包的资金动态
+
+        Args:
+            priority: 监控优先级 (high, medium, low, all, config)
+        """
         if not self.hyperliquid_collector:
             return
 
         task_name = 'hyperliquid_monitor'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始监控 Hyperliquid 聪明钱包...")
+            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始监控 Hyperliquid 聪明钱包 (优先级: {priority})...")
 
             from app.database.hyperliquid_db import HyperliquidDB
 
             with HyperliquidDB() as db:
-                # 获取活跃监控钱包列表
-                all_wallets = db.get_monitored_wallets(active_only=True)
+                # 使用新的分级监控逻辑
+                results = await self.hyperliquid_collector.monitor_all_addresses(
+                    hours=1,  # 回溯1小时
+                    priority=priority,
+                    hyperliquid_db=db
+                )
 
-                if not all_wallets:
-                    logger.info("  ⊗ 暂无监控钱包")
+                if not results:
+                    logger.info("  ⊗ 暂无监控钱包或未发现交易")
                     return
 
-                # ⚠️ 性能优化：每次只监控50个钱包（按最后检查时间排序，优先监控最久未检查的）
-                # 这样可以避免任务超时，并确保所有钱包都能被轮流监控
-                MAX_WALLETS_PER_RUN = 50
+                monitored_wallets = list(results.keys())
+                logger.info(f"  本次监控: {len(monitored_wallets)} 个地址")
 
-                # 按 last_check_at 排序（None 排在最前面）
-                all_wallets.sort(key=lambda w: w.get('last_check_at') or datetime.min)
-                monitored_wallets = all_wallets[:MAX_WALLETS_PER_RUN]
-
-                logger.info(f"  总钱包数: {len(all_wallets)}, 本次监控: {len(monitored_wallets)} 个 (最久未检查)")
-
-                wallet_updates = []
                 total_trades = 0
                 total_positions = 0
 
-                for wallet in monitored_wallets:
-                    address = wallet['address']
-                    label = wallet.get('label') or wallet.get('display_name') or address[:10]
-
+                for address, result in results.items():
                     try:
-                        # 监控钱包活动 (最近1小时)
-                        result = await self.hyperliquid_collector.monitor_address(
-                            address=address,
-                            hours=1
-                        )
-
                         # 保存交易记录
                         recent_trades = result.get('recent_trades', [])
                         for trade in recent_trades:
@@ -945,11 +937,24 @@ class UnifiedDataScheduler:
             )
             logger.info("  ✓ Hyperliquid 排行榜 - 每天 02:00")
 
-            # 6. Hyperliquid 钱包监控
-            schedule.every(30).minutes.do(
-                lambda: asyncio.run(self.monitor_hyperliquid_wallets())
+            # 6. Hyperliquid 钱包监控 - 分级监控策略
+            # 高优先级钱包: 每5分钟监控 (PnL>10K, ROI>50%, 7天内活跃, 限200个)
+            schedule.every(5).minutes.do(
+                lambda: asyncio.run(self.monitor_hyperliquid_wallets(priority='high'))
             )
-            logger.info("  ✓ Hyperliquid 钱包监控 - 每 30 分钟")
+            logger.info("  ✓ Hyperliquid 高优先级钱包 (200个) - 每 5 分钟")
+
+            # 中优先级钱包: 每1小时监控 (PnL>5K, ROI>30%, 30天内活跃, 限500个)
+            schedule.every(1).hours.do(
+                lambda: asyncio.run(self.monitor_hyperliquid_wallets(priority='medium'))
+            )
+            logger.info("  ✓ Hyperliquid 中优先级钱包 (500个) - 每 1 小时")
+
+            # 全量扫描: 每6小时监控所有活跃钱包
+            schedule.every(6).hours.do(
+                lambda: asyncio.run(self.monitor_hyperliquid_wallets(priority='all'))
+            )
+            logger.info("  ✓ Hyperliquid 全量扫描 (8000+个) - 每 6 小时")
 
         # 7. 缓存更新任务
         logger.info("\n  🚀 性能优化: 缓存自动更新")

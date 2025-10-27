@@ -437,6 +437,54 @@ class HyperliquidDB:
         self.cursor.execute(query)
         return self.cursor.fetchall()
 
+    def get_monitored_wallets_by_priority(
+        self,
+        min_pnl: float = 0,
+        min_roi: float = 0,
+        days_active: int = 30,
+        limit: int = 200
+    ) -> List[Dict]:
+        """
+        按优先级获取监控钱包
+
+        排序规则:
+        1. 最近交易时间 (越近越好)
+        2. PnL (越高越好)
+        3. ROI (越高越好)
+        4. 账户价值 (越大越好)
+
+        Args:
+            min_pnl: 最低PnL阈值 (USD)
+            min_roi: 最低ROI阈值 (百分比)
+            days_active: 最近N天内有交易
+            limit: 返回数量限制
+
+        Returns:
+            钱包列表
+        """
+        # 计算截止日期
+        from datetime import timedelta
+        cutoff_date = datetime.now() - timedelta(days=days_active)
+
+        query = """
+            SELECT mw.*, t.display_name
+            FROM hyperliquid_monitored_wallets mw
+            JOIN hyperliquid_traders t ON mw.trader_id = t.id
+            WHERE mw.is_monitoring = TRUE
+              AND mw.discovered_pnl >= %s
+              AND mw.discovered_roi >= %s
+              AND (mw.last_trade_at >= %s OR mw.last_trade_at IS NULL)
+            ORDER BY
+              mw.last_trade_at DESC,
+              mw.discovered_pnl DESC,
+              mw.discovered_roi DESC,
+              mw.discovered_account_value DESC
+            LIMIT %s
+        """
+
+        self.cursor.execute(query, (min_pnl, min_roi, cutoff_date, limit))
+        return self.cursor.fetchall()
+
     def update_wallet_check_time(self, trader_id: int, last_trade_time: datetime = None):
         """
         更新钱包检查时间
