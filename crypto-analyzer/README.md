@@ -2,6 +2,12 @@
 
 一个基于Python的多维度加密货币投资分析系统,整合技术指标、新闻情绪、资金费率和Hyperliquid聪明钱监控,提供全方位的投资决策支持。
 
+## 📚 相关文档
+
+- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - 详细项目结构和组件说明
+- **[QUICK_START_OPTIMIZATION.md](QUICK_START_OPTIMIZATION.md)** - 性能优化快速开始（5分钟部署）
+- **[GIT_COMMIT_GUIDE.md](GIT_COMMIT_GUIDE.md)** - Git提交规范和最新修复说明
+
 ## ⚠️ 免责声明
 
 **本系统仅供学习和研究使用,不构成任何投资建议。加密货币交易具有极高风险,可能导致重大财务损失。使用本系统产生的任何交易决策和后果由用户自行承担。**
