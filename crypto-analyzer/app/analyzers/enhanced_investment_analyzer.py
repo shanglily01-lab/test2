@@ -553,7 +553,7 @@ class EnhancedInvestmentAnalyzer:
                 reasons.append(f"⛓️  链上聪明钱看跌 ({unique_wallets}个钱包活跃)")
 
         # ETF 资金流向
-        if etf and scores['etf'] != 50:
+        if etf:
             details = etf.get('details', {})
             total_inflow = details.get('total_net_inflow', 0)
             avg_3day = details.get('avg_3day_inflow', 0)
@@ -561,6 +561,7 @@ class EnhancedInvestmentAnalyzer:
             etf_count = details.get('etf_count', 0)
             asset_type = details.get('asset_type', '')
 
+            # 只要有ETF数据就显示，不管评分是多少
             if scores['etf'] > 60:
                 # 看涨情况
                 inflow_text = f"最新${abs(total_inflow)/1e8:.2f}亿" if abs(total_inflow) > 1e8 else f"${abs(total_inflow)/1e6:.1f}M"
@@ -588,6 +589,22 @@ class EnhancedInvestmentAnalyzer:
                 if top_ticker and top_amount < 0:
                     amount_text = f"${abs(top_amount)/1e6:.1f}M" if abs(top_amount) > 1e6 else f"${abs(top_amount)/1e3:.0f}K"
                     reasons.append(f"  • {top_ticker}流出最多: {amount_text}")
+
+            else:
+                # 中性情况（评分40-60之间），也要显示
+                inflow_text = f"最新${abs(total_inflow)/1e8:.2f}亿" if abs(total_inflow) > 1e8 else f"${abs(total_inflow)/1e6:.1f}M"
+                avg_text = f"3日均${abs(avg_3day)/1e8:.2f}亿" if abs(avg_3day) > 1e8 else f"${abs(avg_3day)/1e6:.1f}M"
+
+                # 根据实际流入流出情况显示
+                if total_inflow > 0:
+                    reasons.append(f"🏦 {asset_type} ETF机构资金中性偏多 (评分: {scores['etf']:.0f}/100)")
+                    reasons.append(f"  • 小额流入: {inflow_text}, {avg_text}, {etf_count}个ETF")
+                elif total_inflow < 0:
+                    reasons.append(f"🏦 {asset_type} ETF机构资金中性偏空 (评分: {scores['etf']:.0f}/100)")
+                    reasons.append(f"  • 小额流出: {inflow_text}, {avg_text}, {etf_count}个ETF")
+                else:
+                    reasons.append(f"🏦 {asset_type} ETF机构资金中性 (评分: {scores['etf']:.0f}/100)")
+                    reasons.append(f"  • 持平, {etf_count}个ETF")
 
         return reasons
 
