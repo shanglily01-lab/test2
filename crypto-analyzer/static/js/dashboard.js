@@ -87,6 +87,7 @@ async function loadDashboard() {
             updateRecommendations(data.recommendations || []);
             updateNews(data.news || []);
             updateHyperliquid(data.hyperliquid || {});
+            updateETF(data.etf || {});  // 新增：ETF数据
             updateStats(data.stats || {}, data.hyperliquid || {});
             document.getElementById('last-update').textContent = data.last_updated || '-';
         }
@@ -624,6 +625,110 @@ function initTooltips() {
     tooltipTriggerList.forEach(el => {
         new bootstrap.Tooltip(el);
     });
+}
+
+// 更新ETF数据
+function updateETF(etfData) {
+    updateETFSummary('btc', etfData.btc || {});
+    updateETFSummary('eth', etfData.eth || {});
+}
+
+// 更新单个ETF汇总
+function updateETFSummary(assetType, data) {
+    const containerId = `${assetType}-etf-summary`;
+    const container = document.getElementById(containerId);
+
+    if (!container) return;
+
+    // 如果没有数据
+    if (!data || !data.latest_date) {
+        container.innerHTML = `
+            <div class="text-center p-4 text-muted">
+                <i class="bi bi-info-circle fs-1"></i>
+                <p class="mt-2">暂无${assetType.toUpperCase()} ETF数据</p>
+                <small>周一至周五交易日更新</small>
+            </div>
+        `;
+        return;
+    }
+
+    // 格式化金额
+    const formatMoney = (amount) => {
+        if (!amount) return '$0';
+        const absAmount = Math.abs(amount);
+        if (absAmount >= 1e9) {
+            return `$${(amount / 1e9).toFixed(2)}B`;
+        } else if (absAmount >= 1e6) {
+            return `$${(amount / 1e6).toFixed(2)}M`;
+        } else {
+            return `$${(amount / 1e3).toFixed(0)}K`;
+        }
+    };
+
+    // 趋势图标和颜色
+    const getTrendBadge = (trend) => {
+        const trendMap = {
+            'strong_inflow': { icon: '⬆️', text: '强流入', class: 'bg-success' },
+            'inflow': { icon: '↗️', text: '流入', class: 'bg-success' },
+            'neutral': { icon: '➡️', text: '中性', class: 'bg-secondary' },
+            'outflow': { icon: '↘️', text: '流出', class: 'bg-danger' },
+            'strong_outflow': { icon: '⬇️', text: '强流出', class: 'bg-danger' }
+        };
+        return trendMap[trend] || trendMap['neutral'];
+    };
+
+    const trend = getTrendBadge(data.trend);
+    const inflowClass = data.latest_net_inflow >= 0 ? 'text-success' : 'text-danger';
+    const inflowIcon = data.latest_net_inflow >= 0 ? '↑' : '↓';
+
+    container.innerHTML = `
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted">最新净流入</span>
+                    <span class="badge ${trend.class}">${trend.icon} ${trend.text}</span>
+                </div>
+                <h3 class="${inflowClass} mb-0">
+                    ${inflowIcon} ${formatMoney(data.latest_net_inflow)}
+                </h3>
+                <small class="text-muted">${data.latest_date || ''}</small>
+            </div>
+
+            <div class="col-md-6">
+                <div class="text-muted mb-2">7日累计流入</div>
+                <h4 class="mb-0 ${data.weekly_total_inflow >= 0 ? 'text-success' : 'text-danger'}">
+                    ${formatMoney(data.weekly_total_inflow)}
+                </h4>
+                <small class="text-muted">3日均: ${formatMoney(data.avg_3day_inflow)}</small>
+            </div>
+
+            <div class="col-12">
+                <div class="row g-2 mt-1">
+                    <div class="col-4 text-center">
+                        <div class="text-muted small">总AUM</div>
+                        <strong>${formatMoney(data.total_aum)}</strong>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="text-muted small">流入/流出</div>
+                        <strong class="text-success">${data.inflow_count || 0}</strong> /
+                        <strong class="text-danger">${data.outflow_count || 0}</strong>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="text-muted small">ETF数量</div>
+                        <strong>${data.etf_count || 0}</strong>
+                    </div>
+                </div>
+            </div>
+
+            ${data.top_inflow_ticker ? `
+            <div class="col-12">
+                <div class="alert alert-success py-2 px-3 mb-0 small">
+                    <strong>${data.top_inflow_ticker}</strong> 最大流入: ${formatMoney(data.top_inflow_amount)}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+    `;
 }
 
 // 初始化

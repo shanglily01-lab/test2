@@ -1382,3 +1382,106 @@ class DatabaseService:
             return None
         finally:
             session.close()
+
+    def get_etf_summary(self, asset_type: str, days: int = 7):
+        """
+        获取ETF资金流向汇总数据
+
+        Args:
+            asset_type: 资产类型 ('BTC' 或 'ETH')
+            days: 获取天数
+
+        Returns:
+            dict: ETF汇总数据
+        """
+        session = self.get_session()
+        try:
+            from sqlalchemy import text, desc
+            from datetime import datetime, timedelta
+
+            # 获取最近N天的每日汇总数据
+            start_date = datetime.now() - timedelta(days=days)
+
+            sql = text("""
+                SELECT
+                    trade_date,
+                    total_net_inflow,
+                    total_gross_inflow,
+                    total_gross_outflow,
+                    total_aum,
+                    total_holdings,
+                    etf_count,
+                    inflow_count,
+                    outflow_count,
+                    top_inflow_ticker,
+                    top_inflow_amount,
+                    top_outflow_ticker,
+                    top_outflow_amount
+                FROM crypto_etf_daily_summary
+                WHERE asset_type = :asset_type
+                AND trade_date >= :start_date
+                ORDER BY trade_date DESC
+                LIMIT :days
+            """)
+
+            results = session.execute(sql, {
+                "asset_type": asset_type,
+                "start_date": start_date.date(),
+                "days": days
+            }).fetchall()
+
+            if not results:
+                return None
+
+            # 最新一天的数据
+            latest = results[0]
+
+            # 计算趋势（最近3天平均流入）
+            recent_inflows = [float(r[1]) if r[1] else 0 for r in results[:3]]
+            avg_3day_inflow = sum(recent_inflows) / len(recent_inflows) if recent_inflows else 0
+
+            # 计算周累计
+            weekly_total = sum(float(r[1]) if r[1] else 0 for r in results)
+
+            # 判断趋势
+            if avg_3day_inflow > 100000000:  # 1亿美元
+                trend = 'strong_inflow'
+            elif avg_3day_inflow > 0:
+                trend = 'inflow'
+            elif avg_3day_inflow < -100000000:
+                trend = 'strong_outflow'
+            elif avg_3day_inflow < 0:
+                trend = 'outflow'
+            else:
+                trend = 'neutral'
+
+            result = {
+                'asset_type': asset_type,
+                'latest_date': latest[0],
+                'latest_net_inflow': float(latest[1]) if latest[1] else 0,
+                'latest_gross_inflow': float(latest[2]) if latest[2] else 0,
+                'latest_gross_outflow': float(latest[3]) if latest[3] else 0,
+                'total_aum': float(latest[4]) if latest[4] else 0,
+                'total_holdings': float(latest[5]) if latest[5] else 0,
+                'etf_count': int(latest[6]) if latest[6] else 0,
+                'inflow_count': int(latest[7]) if latest[7] else 0,
+                'outflow_count': int(latest[8]) if latest[8] else 0,
+                'top_inflow_ticker': latest[9],
+                'top_inflow_amount': float(latest[10]) if latest[10] else 0,
+                'top_outflow_ticker': latest[11],
+                'top_outflow_amount': float(latest[12]) if latest[12] else 0,
+                'avg_3day_inflow': avg_3day_inflow,
+                'weekly_total_inflow': weekly_total,
+                'trend': trend,
+                'days_data': len(results)
+            }
+
+            return result
+
+        except Exception as e:
+            logger.error(f"获取ETF汇总数据失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+        finally:
+            session.close()
