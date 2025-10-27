@@ -496,6 +496,7 @@ class CacheUpdateService:
                 funding_data = self._get_cached_funding_data(symbol)
                 hyperliquid_data = self._get_cached_hyperliquid_data(symbol)
                 price_stats = self._get_cached_price_stats(symbol)
+                etf_data = self._get_cached_etf_data(symbol)  # 新增：获取ETF数据
 
                 # 获取当前价格
                 current_price = price_stats.get('current_price', 0) if price_stats else 0
@@ -511,6 +512,7 @@ class CacheUpdateService:
                     funding_data=funding_data,
                     hyperliquid_data=hyperliquid_data,
                     ethereum_data=None,
+                    etf_data=etf_data,  # 新增：传入ETF数据
                     current_price=current_price
                 )
 
@@ -791,6 +793,178 @@ class CacheUpdateService:
         finally:
             if session:
                 session.close()
+
+    def _get_cached_etf_data(self, symbol: str) -> Optional[dict]:
+        """
+        从缓存表读取ETF资金流向数据
+
+        Args:
+            symbol: 交易对，如 'BTC/USDT' 或 'ETH/USDT'
+
+        Returns:
+            ETF数据字典，包含评分和详细信息
+        """
+        session = None
+        try:
+            # 从symbol提取资产类型 (BTC/USDT -> BTC, ETH/USDT -> ETH)
+            asset_type = symbol.split('/')[0].upper()
+
+            # 只处理BTC和ETH
+            if asset_type not in ['BTC', 'ETH']:
+                return None
+
+            session = self.db_service.get_session()
+
+            # 获取最近7天的ETF汇总数据
+            sql = text("""
+                SELECT
+                    trade_date,
+                    total_net_inflow,
+                    total_gross_inflow,
+                    total_gross_outflow,
+                    total_aum,
+                    etf_count,
+                    inflow_count,
+                    outflow_count,
+                    top_inflow_ticker,
+                    top_inflow_amount
+                FROM crypto_etf_daily_summary
+                WHERE asset_type = :asset_type
+                ORDER BY trade_date DESC
+                LIMIT 7
+            """)
+
+            results = session.execute(sql, {"asset_type": asset_type}).fetchall()
+
+            if not results or len(results) == 0:
+                return None
+
+            # 将结果转换为字典列表
+            etf_records = []
+            for row in results:
+                record = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                etf_records.append(record)
+
+            # 计算ETF评分和信号
+            latest = etf_records[0]
+            latest_inflow = float(latest['total_net_inflow']) if latest.get('total_net_inflow') else 0
+
+            # 计算3日平均流入
+            recent_3 = etf_records[:min(3, len(etf_records))]
+            avg_3day_inflow = sum(float(r['total_net_inflow'] or 0) for r in recent_3) / len(recent_3)
+
+            # 计算7日总流入
+            weekly_total = sum(float(r['total_net_inflow'] or 0) for r in etf_records)
+
+            # 计算ETF评分 (0-100)
+            etf_score = self._calculate_etf_score(latest_inflow, avg_3day_inflow, weekly_total)
+
+            # 确定信号
+            if avg_3day_inflow > 100000000:  # 1亿美元
+                signal = 'STRONG_BUY'
+                confidence = 0.9
+            elif avg_3day_inflow > 50000000:  # 5千万美元
+                signal = 'BUY'
+                confidence = 0.75
+            elif avg_3day_inflow < -100000000:
+                signal = 'STRONG_SELL'
+                confidence = 0.9
+            elif avg_3day_inflow < -50000000:
+                signal = 'SELL'
+                confidence = 0.75
+            else:
+                signal = 'NEUTRAL'
+                confidence = 0.5
+
+            return {
+                'score': etf_score,
+                'signal': signal,
+                'confidence': confidence,
+                'details': {
+                    'asset_type': asset_type,
+                    'latest_date': str(latest['trade_date']),
+                    'total_net_inflow': latest_inflow,
+                    'avg_3day_inflow': avg_3day_inflow,
+                    'weekly_total_inflow': weekly_total,
+                    'total_aum': float(latest['total_aum']) if latest.get('total_aum') else 0,
+                    'etf_count': latest['etf_count'] if latest.get('etf_count') else 0,
+                    'inflow_count': latest['inflow_count'] if latest.get('inflow_count') else 0,
+                    'outflow_count': latest['outflow_count'] if latest.get('outflow_count') else 0,
+                    'top_inflow_ticker': latest.get('top_inflow_ticker'),
+                    'top_inflow_amount': float(latest['top_inflow_amount']) if latest.get('top_inflow_amount') else 0
+                }
+            }
+
+        except Exception as e:
+            logger.warning(f"读取{symbol} ETF缓存失败: {e}")
+            return None
+        finally:
+            if session:
+                session.close()
+
+    def _calculate_etf_score(self, latest_inflow: float, avg_3day: float, weekly_total: float) -> float:
+        """
+        计算ETF评分 (0-100)
+
+        机构资金流入是非常强的看涨信号，流出是看跌信号
+        """
+        score = 50.0  # 基础分
+
+        # 最新日流入评分 (权重40%)
+        if latest_inflow > 500000000:  # 5亿+
+            score += 20
+        elif latest_inflow > 200000000:  # 2亿+
+            score += 15
+        elif latest_inflow > 100000000:  # 1亿+
+            score += 10
+        elif latest_inflow > 0:
+            score += 5
+        elif latest_inflow < -500000000:
+            score -= 20
+        elif latest_inflow < -200000000:
+            score -= 15
+        elif latest_inflow < -100000000:
+            score -= 10
+        elif latest_inflow < 0:
+            score -= 5
+
+        # 3日平均流入评分 (权重35%)
+        if avg_3day > 300000000:  # 3亿+
+            score += 18
+        elif avg_3day > 150000000:  # 1.5亿+
+            score += 12
+        elif avg_3day > 50000000:  # 5千万+
+            score += 8
+        elif avg_3day > 0:
+            score += 4
+        elif avg_3day < -300000000:
+            score -= 18
+        elif avg_3day < -150000000:
+            score -= 12
+        elif avg_3day < -50000000:
+            score -= 8
+        elif avg_3day < 0:
+            score -= 4
+
+        # 7日总流入评分 (权重25%)
+        if weekly_total > 1000000000:  # 10亿+
+            score += 12
+        elif weekly_total > 500000000:  # 5亿+
+            score += 8
+        elif weekly_total > 200000000:  # 2亿+
+            score += 5
+        elif weekly_total > 0:
+            score += 2
+        elif weekly_total < -1000000000:
+            score -= 12
+        elif weekly_total < -500000000:
+            score -= 8
+        elif weekly_total < -200000000:
+            score -= 5
+        elif weekly_total < 0:
+            score -= 2
+
+        return max(0, min(100, score))
 
     # ========== 辅助方法：写入数据库 ==========
 
