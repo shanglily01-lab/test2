@@ -256,7 +256,8 @@ class UnifiedDataScheduler:
                     'high': latest_kline['high'],
                     'low': latest_kline['low'],
                     'close': latest_kline['close'],
-                    'volume': latest_kline['volume']
+                    'volume': latest_kline['volume'],
+                    'quote_volume': latest_kline.get('quote_volume')  # 添加成交额字段
                 }
 
                 self.db_service.save_kline_data(kline_data)
