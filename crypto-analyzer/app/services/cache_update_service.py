@@ -99,7 +99,7 @@ class CacheUpdateService:
                 # TODO: 等数据积累24小时后改回 hours=24, limit=24
                 klines_24h = self.db_service.get_klines(
                     symbol, '5m',  # 改用5分钟K线
-                    start_time=datetime.now() - timedelta(hours=1),  # 临时改为1小时
+                    start_time=datetime.utcnow() - timedelta(hours=1),  # 使用UTC时间！数据库timestamp是UTC
                     limit=12  # 5分钟 * 12 = 1小时
                 )
 
