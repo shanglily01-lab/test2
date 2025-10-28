@@ -83,6 +83,7 @@ class UnifiedDataScheduler:
         self.task_stats = {
             'binance_spot_1m': {'count': 0, 'last_run': None, 'last_error': None},
             'binance_spot_5m': {'count': 0, 'last_run': None, 'last_error': None},
+            'binance_spot_15m': {'count': 0, 'last_run': None, 'last_error': None},
             'binance_spot_1h': {'count': 0, 'last_run': None, 'last_error': None},
             'binance_spot_1d': {'count': 0, 'last_run': None, 'last_error': None},
             'binance_futures_1m': {'count': 0, 'last_run': None, 'last_error': None},
