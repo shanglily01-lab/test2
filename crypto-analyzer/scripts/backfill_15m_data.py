@@ -21,7 +21,6 @@ if str(project_root) not in sys.path:
 import yaml
 import pandas as pd
 from loguru import logger
-from app.collectors.price_collector import MultiExchangeCollector
 from app.collectors.gate_collector import GateCollector
 from app.database.db_service import DatabaseService
 from sqlalchemy import text
@@ -56,7 +55,8 @@ async def backfill_15m_data():
     logger.info("✅ 数据库服务初始化成功\n")
 
     # 初始化采集器
-    binance_collector = MultiExchangeCollector(config)
+    from app.collectors.price_collector import BinanceCollector
+    binance_collector = BinanceCollector(config)
     gate_collector = GateCollector(config)
 
     logger.info("=" * 80)
