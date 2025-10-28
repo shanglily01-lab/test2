@@ -620,9 +620,6 @@ async def get_dashboard():
     global _dashboard_cache, _dashboard_cache_time
 
     try:
-        if not enhanced_dashboard:
-            raise HTTPException(status_code=503, detail="仪表盘服务未初始化")
-
         # 检查缓存
         from datetime import datetime, timedelta
         now = datetime.now()
@@ -632,6 +629,27 @@ async def get_dashboard():
             if cache_age < _dashboard_cache_ttl_seconds:
                 logger.debug(f"✅ 返回缓存的 Dashboard 数据（缓存年龄: {cache_age:.1f}秒）")
                 return _dashboard_cache
+
+        # 如果 enhanced_dashboard 未初始化，返回降级数据
+        if not enhanced_dashboard:
+            logger.warning("⚠️  enhanced_dashboard 未初始化，返回基础数据")
+            return {
+                "success": True,
+                "data": {
+                    "prices": [],
+                    "futures": [],
+                    "recommendations": [],
+                    "news": [],
+                    "hyperliquid": {},
+                    "stats": {
+                        "total_symbols": 0,
+                        "bullish_count": 0,
+                        "bearish_count": 0
+                    },
+                    "last_updated": now.strftime('%Y-%m-%d %H:%M:%S')
+                },
+                "message": "仪表盘服务正在初始化中，请稍后刷新"
+            }
 
         # 缓存未命中或过期，重新获取
         logger.info("🔄 重新获取 Dashboard 数据...")
@@ -660,7 +678,28 @@ async def get_dashboard():
 
     except Exception as e:
         logger.error(f"❌ 获取仪表盘数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        traceback.print_exc()
+
+        # 返回降级数据而不是抛出异常
+        return {
+            "success": False,
+            "data": {
+                "prices": [],
+                "futures": [],
+                "recommendations": [],
+                "news": [],
+                "hyperliquid": {},
+                "stats": {
+                    "total_symbols": 0,
+                    "bullish_count": 0,
+                    "bearish_count": 0
+                },
+                "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            },
+            "error": str(e),
+            "message": "数据加载失败，请稍后重试"
+        }
 
 
 @app.get("/api/futures")
