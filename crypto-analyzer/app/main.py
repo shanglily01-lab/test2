@@ -253,6 +253,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册主API路由（包含价格、分析等通用接口）
+try:
+    from app.api.routes import router as main_router
+    app.include_router(main_router)
+    logger.info("✅ 主API路由已注册（/api/prices, /api/analysis等）")
+except Exception as e:
+    logger.warning(f"⚠️  主API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 
 # ==================== API路由 ====================
 
