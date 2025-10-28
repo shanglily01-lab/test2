@@ -243,6 +243,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册模拟合约交易API路由
+try:
+    from app.api.contract_trading_api import router as contract_trading_router
+    app.include_router(contract_trading_router)
+    logger.info("✅ 模拟合约交易API路由已注册")
+except Exception as e:
+    logger.warning(f"⚠️  模拟合约交易API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 
 # ==================== API路由 ====================
 
@@ -298,6 +308,14 @@ async def corporate_treasury_page():
     treasury_path = Path("templates/corporate_treasury.html")
     if treasury_path.exists():
         return FileResponse(treasury_path)
+    return {"error": "Page not found"}
+
+@app.get("/contract-trading")
+async def contract_trading_page():
+    """模拟合约交易页面"""
+    contract_trading_path = Path("templates/contract_trading.html")
+    if contract_trading_path.exists():
+        return FileResponse(contract_trading_path)
     else:
         raise HTTPException(status_code=404, detail="企业金库监控页面未找到")
 

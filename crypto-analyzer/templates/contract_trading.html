@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模拟合约交易 | Contract Trading Simulator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --dark-bg: #1e293b;
+            --card-bg: #ffffff;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .main-container {
+            padding: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .main-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .card-header-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px 10px 0 0;
+            margin: -25px -25px 20px -25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            height: 100%;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .btn-long {
+            background: var(--success-color);
+            color: white;
+            border: none;
+        }
+
+        .btn-long:hover {
+            background: #059669;
+            color: white;
+        }
+
+        .btn-short {
+            background: var(--danger-color);
+            color: white;
+            border: none;
+        }
+
+        .btn-short:hover {
+            background: #dc2626;
+            color: white;
+        }
+
+        .position-card {
+            border-left: 4px solid var(--primary-color);
+            background: #f8fafc;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+
+        .position-card.long {
+            border-left-color: var(--success-color);
+        }
+
+        .position-card.short {
+            border-left-color: var(--danger-color);
+        }
+
+        .profit {
+            color: var(--success-color);
+            font-weight: bold;
+        }
+
+        .loss {
+            color: var(--danger-color);
+            font-weight: bold;
+        }
+
+        .leverage-badge {
+            background: var(--warning-color);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
+        }
+
+        .trade-history-item {
+            padding: 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .trade-history-item:last-child {
+            border-bottom: none;
+        }
+
+        .badge-side-long {
+            background: var(--success-color);
+        }
+
+        .badge-side-short {
+            background: var(--danger-color);
+        }
+
+        .loader {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .price-input-group {
+            position: relative;
+        }
+
+        .price-prefix {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6b7280;
+            font-weight: bold;
+        }
+
+        .price-input-group input {
+            padding-left: 25px;
+        }
+
+        .nav-pills .nav-link {
+            color: #6b7280;
+        }
+
+        .nav-pills .nav-link.active {
+            background: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- 顶部导航 -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="text-white">
+                <i class="bi bi-graph-up-arrow"></i> 模拟合约交易
+            </h2>
+            <div>
+                <a href="/" class="btn btn-light me-2">
+                    <i class="bi bi-house"></i> 返回首页
+                </a>
+                <button class="btn btn-danger" onclick="resetSimulator()">
+                    <i class="bi bi-arrow-clockwise"></i> 重置
+                </button>
+            </div>
+        </div>
+
+        <!-- 账户统计 -->
+        <div class="row g-3 mb-3">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">账户余额</div>
+                    <div class="stat-value" id="accountBalance">-</div>
+                    <small>USDT</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">账户权益</div>
+                    <div class="stat-value" id="accountEquity">-</div>
+                    <small>USDT</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">可用保证金</div>
+                    <div class="stat-value" id="marginAvailable">-</div>
+                    <small>USDT</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-label">总盈亏</div>
+                    <div class="stat-value" id="totalPnl">-</div>
+                    <small>USDT</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 左侧：开仓面板 -->
+            <div class="col-lg-5">
+                <div class="main-card">
+                    <div class="card-header-custom">
+                        <h5 class="mb-0"><i class="bi bi-plus-circle"></i> 开仓交易</h5>
+                    </div>
+
+                    <!-- 方向选择 -->
+                    <div class="btn-group w-100 mb-3" role="group">
+                        <button type="button" class="btn btn-long" id="btnLong" onclick="selectSide('LONG')">
+                            <i class="bi bi-arrow-up-circle"></i> 做多 LONG
+                        </button>
+                        <button type="button" class="btn btn-short" id="btnShort" onclick="selectSide('SHORT')">
+                            <i class="bi bi-arrow-down-circle"></i> 做空 SHORT
+                        </button>
+                    </div>
+
+                    <!-- 交易对 -->
+                    <div class="mb-3">
+                        <label class="form-label">交易对</label>
+                        <input type="text" class="form-control" id="orderSymbol" value="BTC/USDT">
+                    </div>
+
+                    <!-- 数量 -->
+                    <div class="mb-3">
+                        <label class="form-label">数量（张数）</label>
+                        <input type="number" class="form-control" id="orderQuantity" value="1" step="0.01" min="0.01">
+                    </div>
+
+                    <!-- 杠杆 -->
+                    <div class="mb-3">
+                        <label class="form-label">
+                            杠杆倍数: <span id="leverageValue" class="leverage-badge">10x</span>
+                        </label>
+                        <input type="range" class="form-range" id="orderLeverage" min="1" max="125" value="10"
+                               oninput="document.getElementById('leverageValue').textContent = this.value + 'x'">
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">1x</small>
+                            <small class="text-muted">25x</small>
+                            <small class="text-muted">50x</small>
+                            <small class="text-muted">100x</small>
+                            <small class="text-muted">125x</small>
+                        </div>
+                    </div>
+
+                    <!-- 价格 -->
+                    <div class="mb-3">
+                        <label class="form-label">成交价格</label>
+                        <div class="price-input-group">
+                            <span class="price-prefix">$</span>
+                            <input type="number" class="form-control" id="orderPrice" value="100000" step="0.01">
+                        </div>
+                    </div>
+
+                    <!-- 止盈止损 -->
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">止损价</label>
+                            <div class="price-input-group">
+                                <span class="price-prefix">$</span>
+                                <input type="number" class="form-control" id="orderStopLoss" placeholder="可选">
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">止盈价</label>
+                            <div class="price-input-group">
+                                <span class="price-prefix">$</span>
+                                <input type="number" class="form-control" id="orderTakeProfit" placeholder="可选">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 提交按钮 -->
+                    <button class="btn btn-primary w-100 btn-lg" onclick="createAndExecuteOrder()">
+                        <i class="bi bi-lightning-charge"></i> 立即开仓
+                    </button>
+                </div>
+
+                <!-- 交易统计 -->
+                <div class="main-card">
+                    <div class="card-header-custom">
+                        <h5 class="mb-0"><i class="bi bi-bar-chart"></i> 交易统计</h5>
+                    </div>
+                    <div class="row text-center">
+                        <div class="col-6 mb-3">
+                            <small class="text-muted">总交易数</small>
+                            <div class="h5" id="statTotalTrades">0</div>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <small class="text-muted">胜率</small>
+                            <div class="h5" id="statWinRate">0%</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">ROI</small>
+                            <div class="h5" id="statROI">0%</div>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">手续费</small>
+                            <div class="h5" id="statTotalFee">$0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：持仓和历史 -->
+            <div class="col-lg-7">
+                <!-- Tabs -->
+                <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="pills-positions-tab" data-bs-toggle="pill"
+                                data-bs-target="#pills-positions" type="button">
+                            <i class="bi bi-briefcase"></i> 当前持仓
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="pills-history-tab" data-bs-toggle="pill"
+                                data-bs-target="#pills-history" type="button">
+                            <i class="bi bi-clock-history"></i> 交易历史
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="pills-tabContent">
+                    <!-- 持仓列表 -->
+                    <div class="tab-pane fade show active" id="pills-positions">
+                        <div class="main-card" style="min-height: 500px;">
+                            <div id="positionsList">
+                                <div class="text-center text-muted py-5">
+                                    <i class="bi bi-inbox" style="font-size: 48px;"></i>
+                                    <p class="mt-3">暂无持仓</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 交易历史 -->
+                    <div class="tab-pane fade" id="pills-history">
+                        <div class="main-card" style="min-height: 500px; max-height: 600px; overflow-y: auto;">
+                            <div id="tradeHistory">
+                                <div class="text-center text-muted py-5">
+                                    <i class="bi bi-clock-history" style="font-size: 48px;"></i>
+                                    <p class="mt-3">暂无交易记录</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+        <div id="liveToast" class="toast hide" role="alert">
+            <div class="toast-header">
+                <i class="bi bi-bell-fill me-2"></i>
+                <strong class="me-auto">通知</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toastBody">
+                消息内容
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let selectedSide = 'LONG';
+        let initialized = false;
+
+        // 初始化
+        async function initialize() {
+            if (initialized) return;
+
+            try {
+                const response = await fetch('/api/contract-trading/init?initial_balance=10000', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    initialized = true;
+                    showToast('系统初始化成功', 'success');
+                    await refreshAll();
+                }
+            } catch (error) {
+                console.error('初始化失败:', error);
+            }
+        }
+
+        // 选择方向
+        function selectSide(side) {
+            selectedSide = side;
+            const btnLong = document.getElementById('btnLong');
+            const btnShort = document.getElementById('btnShort');
+
+            if (side === 'LONG') {
+                btnLong.classList.add('active');
+                btnShort.classList.remove('active');
+            } else {
+                btnShort.classList.add('active');
+                btnLong.classList.remove('active');
+            }
+        }
+
+        // 创建并执行订单
+        async function createAndExecuteOrder() {
+            if (!initialized) {
+                await initialize();
+            }
+
+            const symbol = document.getElementById('orderSymbol').value;
+            const quantity = parseFloat(document.getElementById('orderQuantity').value);
+            const leverage = parseInt(document.getElementById('orderLeverage').value);
+            const price = parseFloat(document.getElementById('orderPrice').value);
+            const stopLoss = document.getElementById('orderStopLoss').value;
+            const takeProfit = document.getElementById('orderTakeProfit').value;
+
+            if (!symbol || !quantity || !price) {
+                showToast('请填写完整信息', 'danger');
+                return;
+            }
+
+            try {
+                // 创建订单
+                const orderData = {
+                    symbol: symbol,
+                    side: selectedSide,
+                    quantity: quantity,
+                    order_type: 'MARKET',
+                    leverage: leverage,
+                    stop_loss: stopLoss ? parseFloat(stopLoss) : null,
+                    take_profit: takeProfit ? parseFloat(takeProfit) : null
+                };
+
+                const createResponse = await fetch('/api/contract-trading/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(orderData)
+                });
+
+                const createResult = await createResponse.json();
+
+                if (!createResult.success) {
+                    showToast(createResult.detail || '创建订单失败', 'danger');
+                    return;
+                }
+
+                // 执行订单
+                const executeResponse = await fetch('/api/contract-trading/order/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: createResult.data.order_id,
+                        current_price: price
+                    })
+                });
+
+                const executeResult = await executeResponse.json();
+
+                if (executeResult.success) {
+                    showToast(`${selectedSide === 'LONG' ? '做多' : '做空'}开仓成功！`, 'success');
+                    await refreshAll();
+                } else {
+                    showToast(executeResult.detail || '执行订单失败', 'danger');
+                }
+
+            } catch (error) {
+                console.error('交易失败:', error);
+                showToast('交易失败', 'danger');
+            }
+        }
+
+        // 平仓
+        async function closePosition(symbol) {
+            const price = prompt(`请输入平仓价格 (${symbol}):`);
+            if (!price) return;
+
+            try {
+                const response = await fetch('/api/contract-trading/position/close', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        current_price: parseFloat(price)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast('平仓成功', 'success');
+                    await refreshAll();
+                } else {
+                    showToast(data.detail || '平仓失败', 'danger');
+                }
+            } catch (error) {
+                console.error('平仓失败:', error);
+                showToast('平仓失败', 'danger');
+            }
+        }
+
+        // 刷新所有数据
+        async function refreshAll() {
+            await Promise.all([
+                refreshAccount(),
+                refreshPositions(),
+                refreshHistory(),
+                refreshStatistics()
+            ]);
+        }
+
+        // 刷新账户信息
+        async function refreshAccount() {
+            try {
+                const response = await fetch('/api/contract-trading/account');
+                const data = await response.json();
+
+                if (data.success) {
+                    const account = data.data;
+                    document.getElementById('accountBalance').textContent = formatNumber(account.balance);
+                    document.getElementById('accountEquity').textContent = formatNumber(account.equity);
+                    document.getElementById('marginAvailable').textContent = formatNumber(account.margin_available);
+
+                    const pnlElement = document.getElementById('totalPnl');
+                    pnlElement.textContent = formatNumber(account.total_pnl, true);
+                    pnlElement.className = 'stat-value ' + (account.total_pnl >= 0 ? 'profit' : 'loss');
+                }
+            } catch (error) {
+                console.error('刷新账户失败:', error);
+            }
+        }
+
+        // 刷新持仓
+        async function refreshPositions() {
+            try {
+                const response = await fetch('/api/contract-trading/positions');
+                const data = await response.json();
+
+                if (data.success) {
+                    const positions = data.data.positions;
+                    const container = document.getElementById('positionsList');
+
+                    if (positions.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center text-muted py-5">
+                                <i class="bi bi-inbox" style="font-size: 48px;"></i>
+                                <p class="mt-3">暂无持仓</p>
+                            </div>
+                        `;
+                    } else {
+                        container.innerHTML = positions.map(pos => `
+                            <div class="position-card ${pos.side.toLowerCase()}">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <h5 class="mb-1">
+                                            ${pos.symbol}
+                                            <span class="badge ${pos.side === 'LONG' ? 'badge-side-long' : 'badge-side-short'} ms-2">
+                                                ${pos.side === 'LONG' ? '做多' : '做空'}
+                                            </span>
+                                            <span class="leverage-badge ms-2">${pos.leverage}x</span>
+                                        </h5>
+                                        <small class="text-muted">数量: ${pos.quantity} 张</small>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="closePosition('${pos.symbol}')">
+                                        <i class="bi bi-x-circle"></i> 平仓
+                                    </button>
+                                </div>
+                                <div class="row">
+                                    <div class="col-6 col-md-3">
+                                        <small class="text-muted">开仓价</small>
+                                        <div>$${formatNumber(pos.entry_price)}</div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <small class="text-muted">强平价</small>
+                                        <div>$${formatNumber(pos.liquidation_price)}</div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <small class="text-muted">保证金</small>
+                                        <div>$${formatNumber(pos.margin)}</div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <small class="text-muted">未实现盈亏</small>
+                                        <div class="${pos.unrealized_pnl >= 0 ? 'profit' : 'loss'}">
+                                            ${formatNumber(pos.unrealized_pnl, true)}
+                                            (${pos.pnl_percentage >= 0 ? '+' : ''}${pos.pnl_percentage.toFixed(2)}%)
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('刷新持仓失败:', error);
+            }
+        }
+
+        // 刷新交易历史
+        async function refreshHistory() {
+            try {
+                const response = await fetch('/api/contract-trading/trades?limit=50');
+                const data = await response.json();
+
+                if (data.success) {
+                    const trades = data.data.trades;
+                    const container = document.getElementById('tradeHistory');
+
+                    if (trades.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center text-muted py-5">
+                                <i class="bi bi-clock-history" style="font-size: 48px;"></i>
+                                <p class="mt-3">暂无交易记录</p>
+                            </div>
+                        `;
+                    } else {
+                        container.innerHTML = trades.reverse().map(trade => `
+                            <div class="trade-history-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>${trade.symbol}</strong>
+                                        <span class="badge ${trade.side === 'LONG' ? 'badge-side-long' : 'badge-side-short'} ms-2">
+                                            ${trade.side === 'LONG' ? '做多' : '做空'}
+                                        </span>
+                                        <div class="small text-muted mt-1">
+                                            ${new Date(trade.timestamp).toLocaleString('zh-CN')}
+                                        </div>
+                                    </div>
+                                    <div class="text-end">
+                                        <div>${trade.quantity} 张 @ $${formatNumber(trade.price)}</div>
+                                        ${trade.pnl !== 0 ? `
+                                            <div class="${trade.pnl >= 0 ? 'profit' : 'loss'}">
+                                                ${formatNumber(trade.pnl, true)}
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('刷新历史失败:', error);
+            }
+        }
+
+        // 刷新统计
+        async function refreshStatistics() {
+            try {
+                const response = await fetch('/api/contract-trading/statistics');
+                const data = await response.json();
+
+                if (data.success) {
+                    const stats = data.data;
+                    document.getElementById('statTotalTrades').textContent = stats.total_trades;
+                    document.getElementById('statWinRate').textContent = stats.win_rate.toFixed(1) + '%';
+                    document.getElementById('statROI').textContent = (stats.roi >= 0 ? '+' : '') + stats.roi.toFixed(2) + '%';
+                    document.getElementById('statTotalFee').textContent = '$' + formatNumber(stats.total_fee);
+                }
+            } catch (error) {
+                console.error('刷新统计失败:', error);
+            }
+        }
+
+        // 重置模拟器
+        async function resetSimulator() {
+            if (!confirm('确定要重置所有数据吗？')) return;
+
+            try {
+                const response = await fetch('/api/contract-trading/reset', {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    initialized = false;
+                    showToast('系统已重置', 'info');
+                    await initialize();
+                }
+            } catch (error) {
+                console.error('重置失败:', error);
+            }
+        }
+
+        // 格式化数字
+        function formatNumber(num, withSign = false) {
+            if (num === null || num === undefined) return '-';
+            const formatted = num.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            return withSign && num >= 0 ? '+' + formatted : formatted;
+        }
+
+        // 显示Toast
+        function showToast(message, type = 'info') {
+            const toastEl = document.getElementById('liveToast');
+            const toastBody = document.getElementById('toastBody');
+            toastBody.textContent = message;
+
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', async () => {
+            await initialize();
+            // 每5秒自动刷新
+            setInterval(refreshAll, 5000);
+        });
+    </script>
+</body>
+</html>
