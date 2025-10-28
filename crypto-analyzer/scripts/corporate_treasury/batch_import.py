@@ -200,41 +200,76 @@ def import_companies(companies_data, purchase_date, asset_type='BTC', data_sourc
 
 def main():
     """主函数"""
+    import argparse
+
+    parser = argparse.ArgumentParser(description='企业金库批量导入工具')
+    parser.add_argument('-f', '--file', help='从文件导入（如：import_template.txt）')
+    parser.add_argument('-d', '--date', help='数据日期 (YYYY-MM-DD，默认=今天)')
+    parser.add_argument('-a', '--asset', choices=['BTC', 'ETH'], default='BTC', help='资产类型')
+
+    args = parser.parse_args()
+
     print("\n" + "="*80)
     print("📦 企业金库批量导入工具")
     print("="*80)
     print("\n支持的格式：")
     print("  1. Bitcoin Treasuries 网站复制格式")
-    print("  2. CSV格式：公司名,股票代码,持仓量")
+    print("  2. 从文件导入（使用 -f 参数）")
     print("\n操作步骤：")
     print("  1. 访问 https://bitcointreasuries.net/")
     print("  2. 复制公司列表（包含排名、公司名、国旗、代码、持仓）")
-    print("  3. 粘贴到下方")
+    print("  3. 粘贴到下方，或保存到文件后使用 -f 参数")
+    print("\n使用示例：")
+    print("  python batch_import.py                           # 交互式输入")
+    print("  python batch_import.py -f import_template.txt    # 从文件导入")
+    print("  python batch_import.py -f data.txt -d 2025-10-28 # 指定日期")
     print("="*80)
 
-    # 输入数据日期
-    purchase_date = input("\n请输入数据日期 (YYYY-MM-DD，回车=今天): ").strip()
-    if not purchase_date:
-        purchase_date = datetime.now().strftime('%Y-%m-%d')
+    # 获取数据日期
+    if args.date:
+        purchase_date = args.date
+    else:
+        purchase_date = input("\n请输入数据日期 (YYYY-MM-DD，回车=今天): ").strip()
+        if not purchase_date:
+            purchase_date = datetime.now().strftime('%Y-%m-%d')
 
     print(f"数据日期: {purchase_date}")
 
-    # 输入资产类型
-    asset_type = input("资产类型 (BTC/ETH, 默认=BTC): ").strip().upper() or 'BTC'
+    # 获取资产类型
+    if args.asset:
+        asset_type = args.asset
+    else:
+        asset_type = input("资产类型 (BTC/ETH, 默认=BTC): ").strip().upper() or 'BTC'
 
-    print(f"\n请粘贴数据（粘贴完成后按 Ctrl+D (Linux/Mac) 或 Ctrl+Z (Windows) 然后回车）:")
-    print("-" * 80)
+    # 读取数据
+    if args.file:
+        # 从文件读取
+        print(f"\n从文件读取: {args.file}")
+        try:
+            with open(args.file, 'r', encoding='utf-8') as f:
+                text = f.read()
+            print(f"✅ 成功读取文件")
+        except FileNotFoundError:
+            print(f"❌ 文件不存在: {args.file}")
+            return
+        except Exception as e:
+            print(f"❌ 读取文件失败: {e}")
+            return
+    else:
+        # 交互式输入
+        print(f"\n请粘贴数据（粘贴完成后按 Ctrl+D (Linux/Mac) 或 Ctrl+Z (Windows) 然后回车）:")
+        print("-" * 80)
 
-    # 读取多行输入
-    lines = []
-    try:
-        while True:
-            line = input()
-            lines.append(line)
-    except EOFError:
-        pass
+        # 读取多行输入
+        lines = []
+        try:
+            while True:
+                line = input()
+                lines.append(line)
+        except EOFError:
+            pass
 
-    text = '\n'.join(lines)
+        text = '\n'.join(lines)
 
     if not text.strip():
         print("❌ 没有输入数据")
