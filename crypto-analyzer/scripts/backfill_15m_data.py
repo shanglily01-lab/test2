@@ -19,6 +19,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 import yaml
+import pandas as pd
 from loguru import logger
 from app.collectors.price_collector import MultiExchangeCollector
 from app.collectors.gate_collector import GateCollector
@@ -109,6 +110,12 @@ async def backfill_15m_data():
                     saved_count = 0
 
                     for _, row in klines_data.iterrows():
+                        # 将 pandas Timestamp 转换为毫秒时间戳
+                        if isinstance(row['timestamp'], pd.Timestamp):
+                            timestamp_ms = int(row['timestamp'].timestamp() * 1000)
+                        else:
+                            timestamp_ms = int(row['timestamp'])
+
                         # 检查是否已存在
                         check_query = text("""
                             SELECT id FROM kline_data
@@ -122,7 +129,7 @@ async def backfill_15m_data():
                             'symbol': symbol,
                             'exchange': used_exchange,
                             'timeframe': '15m',
-                            'open_time': int(row['timestamp'])
+                            'open_time': timestamp_ms
                         }).fetchone()
 
                         if existing:
@@ -151,15 +158,15 @@ async def backfill_15m_data():
                             'symbol': symbol,
                             'exchange': used_exchange,
                             'timeframe': '15m',
-                            'open_time': int(row['timestamp']),
-                            'close_time': int(row['timestamp']) + 15 * 60 * 1000,  # +15分钟
-                            'timestamp': datetime.fromtimestamp(row['timestamp'] / 1000),
+                            'open_time': timestamp_ms,
+                            'close_time': timestamp_ms + 15 * 60 * 1000,  # +15分钟
+                            'timestamp': datetime.fromtimestamp(timestamp_ms / 1000),
                             'open_price': float(row['open']),
                             'high_price': float(row['high']),
                             'low_price': float(row['low']),
                             'close_price': float(row['close']),
                             'volume': float(row['volume']),
-                            'quote_volume': 0,
+                            'quote_volume': float(row.get('quote_volume', 0)),
                             'number_of_trades': 0,
                             'taker_buy_base_volume': 0,
                             'taker_buy_quote_volume': 0
