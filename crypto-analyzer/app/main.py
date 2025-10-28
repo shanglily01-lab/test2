@@ -327,7 +327,27 @@ async def contract_trading_page():
     if contract_trading_path.exists():
         return FileResponse(contract_trading_path)
     else:
-        raise HTTPException(status_code=404, detail="企业金库监控页面未找到")
+        raise HTTPException(status_code=404, detail="模拟合约交易页面未找到")
+
+
+@app.get("/strategies")
+async def strategies_page():
+    """投资策略管理页面"""
+    strategies_path = Path("templates/strategies.html")
+    if strategies_path.exists():
+        return FileResponse(strategies_path)
+    else:
+        raise HTTPException(status_code=404, detail="投资策略页面未找到")
+
+
+@app.get("/auto-trading")
+async def auto_trading_page():
+    """自动合约交易页面"""
+    auto_trading_path = Path("templates/auto_trading.html")
+    if auto_trading_path.exists():
+        return FileResponse(auto_trading_path)
+    else:
+        raise HTTPException(status_code=404, detail="自动交易页面未找到")
 
 
 @app.get("/health")

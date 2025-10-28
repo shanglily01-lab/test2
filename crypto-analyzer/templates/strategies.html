@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投资策略管理 - Crypto Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 28px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+
+        .sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            height: fit-content;
+        }
+
+        .sidebar h2 {
+            font-size: 18px;
+            color: #2d3748;
+            margin-bottom: 16px;
+        }
+
+        .strategy-list {
+            list-style: none;
+        }
+
+        .strategy-item {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid #e2e8f0;
+        }
+
+        .strategy-item:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .strategy-item.active {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+
+        .strategy-item.selected {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .strategy-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .strategy-badge {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .badge-active {
+            background: #48bb78;
+            color: white;
+        }
+
+        .badge-conservative {
+            background: #4299e1;
+            color: white;
+        }
+
+        .badge-balanced {
+            background: #ed8936;
+            color: white;
+        }
+
+        .badge-aggressive {
+            background: #f56565;
+            color: white;
+        }
+
+        .strategy-desc {
+            font-size: 13px;
+            color: #718096;
+            margin-top: 4px;
+        }
+
+        .main-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 24px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #718096;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .weight-slider {
+            margin-bottom: 16px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .slider-value {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #e2e8f0;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+        }
+
+        .weight-total {
+            text-align: right;
+            font-size: 14px;
+            color: #718096;
+            margin-top: 8px;
+            padding: 8px;
+            background: #f7fafc;
+            border-radius: 6px;
+        }
+
+        .weight-total.valid {
+            color: #48bb78;
+        }
+
+        .weight-total.invalid {
+            color: #f56565;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .comparison-table th {
+            font-weight: 600;
+            color: #2d3748;
+            background: #f7fafc;
+        }
+
+        .comparison-table td {
+            color: #4a5568;
+        }
+
+        .test-panel {
+            background: #f7fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .test-result {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-score {
+            font-size: 32px;
+            font-weight: 700;
+            color: #667eea;
+            margin: 12px 0;
+        }
+
+        .result-recommendation {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .rec-strong-buy {
+            background: #48bb78;
+            color: white;
+        }
+
+        .rec-buy {
+            background: #68d391;
+            color: white;
+        }
+
+        .rec-hold {
+            background: #ed8936;
+            color: white;
+        }
+
+        .rec-sell {
+            background: #fc8181;
+            color: white;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            font-size: 24px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 20px;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 24px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border-left: 4px solid #48bb78;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border-left: 4px solid #f56565;
+        }
+
+        .alert-info {
+            background: #bee3f8;
+            color: #2c5282;
+            border-left: 4px solid #4299e1;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 968px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 投资策略管理</h1>
+            <p>根据你的风险偏好和交易风格，自定义分析系统的行为</p>
+            <div class="controls">
+                <button class="btn btn-primary" onclick="showCreateModal()">
+                    ➕ 创建新策略
+                </button>
+                <button class="btn btn-secondary" onclick="copyStrategy()">
+                    📋 复制策略
+                </button>
+                <button class="btn btn-secondary" onclick="compareStrategies()">
+                    📊 对比策略
+                </button>
+                <button class="btn" onclick="refreshData()" style="background: #4a5568; color: white;">
+                    🔄 刷新
+                </button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="sidebar">
+                <h2>我的策略</h2>
+                <ul class="strategy-list" id="strategyList">
+                    <!-- 动态加载 -->
+                </ul>
+            </div>
+
+            <div class="main-content">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('edit')">📝 编辑策略</button>
+                    <button class="tab" onclick="switchTab('test')">🧪 测试策略</button>
+                    <button class="tab" onclick="switchTab('info')">ℹ️ 策略信息</button>
+                </div>
+
+                <div id="editTab" class="tab-content active">
+                    <div id="editContent">
+                        <p style="color: #718096; text-align: center; padding: 40px;">
+                            请从左侧选择一个策略进行编辑
+                        </p>
+                    </div>
+                </div>
+
+                <div id="testTab" class="tab-content">
+                    <h3 style="margin-bottom: 16px;">策略测试</h3>
+                    <p style="color: #718096; margin-bottom: 20px;">
+                        输入模拟的各维度得分，查看策略会给出什么建议
+                    </p>
+
+                    <div class="test-panel">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">技术指标得分 (0-100)</label>
+                                <input type="number" class="form-input" id="testTechnical"
+                                       value="75" min="0" max="100">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Hyperliquid得分 (0-100)</label>
+                                <input type="number" class="form-input" id="testHyperliquid"
+                                       value="85" min="0" max="100">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">新闻情绪得分 (0-100)</label>
+                                <input type="number" class="form-input" id="testNews"
+                                       value="60" min="0" max="100">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">资金费率得分 (0-100)</label>
+                                <input type="number" class="form-input" id="testFundingRate"
+                                       value="70" min="0" max="100">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">以太坊链上得分 (0-100)</label>
+                                <input type="number" class="form-input" id="testEthereum"
+                                       value="65" min="0" max="100">
+                            </div>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="testStrategy()" style="width: 100%; margin-top: 16px;">
+                            🧪 运行测试
+                        </button>
+
+                        <div id="testResult"></div>
+                    </div>
+                </div>
+
+                <div id="infoTab" class="tab-content">
+                    <div id="infoContent">
+                        <p style="color: #718096; text-align: center; padding: 40px;">
+                            请从左侧选择一个策略查看详情
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建策略模态框 -->
+    <div id="createModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">创建新策略</div>
+            <div class="form-group">
+                <label class="form-label">策略名称*</label>
+                <input type="text" class="form-input" id="newStrategyName" placeholder="my_strategy">
+            </div>
+            <div class="form-group">
+                <label class="form-label">策略描述</label>
+                <input type="text" class="form-input" id="newStrategyDesc" placeholder="我的自定义策略">
+            </div>
+            <div class="form-group">
+                <label class="form-label">基于模板</label>
+                <select class="form-input" id="newStrategyTemplate">
+                    <option value="">从头创建</option>
+                    <option value="balanced" selected>平衡策略 (推荐)</option>
+                    <option value="conservative">保守策略</option>
+                    <option value="aggressive">激进策略</option>
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="hideCreateModal()">取消</button>
+                <button class="btn btn-primary" onclick="createStrategy()">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStrategy = null;
+        let allStrategies = [];
+
+        // 页面加载时初始化
+        window.onload = function() {
+            loadStrategies();
+        };
+
+        // 加载策略列表
+        async function loadStrategies() {
+            try {
+                const response = await fetch('/api/strategies/list');
+                const data = await response.json();
+
+                if (data.success) {
+                    allStrategies = data.strategies;
+                    renderStrategyList(data.strategies);
+                }
+            } catch (error) {
+                console.error('加载策略失败:', error);
+                showAlert('加载策略失败', 'error');
+            }
+        }
+
+        // 渲染策略列表
+        function renderStrategyList(strategies) {
+            const list = document.getElementById('strategyList');
+            list.innerHTML = '';
+
+            strategies.forEach(strategy => {
+                const item = document.createElement('li');
+                item.className = 'strategy-item';
+                if (strategy.is_active) {
+                    item.classList.add('active');
+                }
+
+                let badgeClass = 'badge-balanced';
+                if (strategy.risk_level === 'conservative') badgeClass = 'badge-conservative';
+                if (strategy.risk_level === 'aggressive') badgeClass = 'badge-aggressive';
+
+                item.innerHTML = `
+                    <div class="strategy-name">
+                        ${strategy.name}
+                        ${strategy.is_active ? '<span class="strategy-badge badge-active">✓ 激活</span>' : ''}
+                        <span class="strategy-badge ${badgeClass}">${strategy.risk_level}</span>
+                    </div>
+                    <div class="strategy-desc">${strategy.description || '无描述'}</div>
+                `;
+
+                item.onclick = () => selectStrategy(strategy.name);
+                list.appendChild(item);
+            });
+        }
+
+        // 选择策略
+        async function selectStrategy(name) {
+            try {
+                const response = await fetch(`/api/strategies/detail/${name}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    currentStrategy = data.strategy;
+                    renderStrategyEditor(data.strategy);
+                    renderStrategyInfo(data.strategy);
+
+                    // 更新UI
+                    document.querySelectorAll('.strategy-item').forEach(item => {
+                        item.classList.remove('selected');
+                        if (item.textContent.includes(name)) {
+                            item.classList.add('selected');
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('加载策略详情失败:', error);
+                showAlert('加载策略详情失败', 'error');
+            }
+        }
+
+        // 渲染策略编辑器
+        function renderStrategyEditor(strategy) {
+            const isDefault = ['conservative', 'balanced', 'aggressive'].includes(strategy.name);
+            const content = document.getElementById('editContent');
+
+            let html = '';
+
+            if (isDefault) {
+                html += '<div class="alert alert-info">⚠️ 默认策略不可编辑，请先复制后修改</div>';
+            }
+
+            html += `
+                <div class="form-group">
+                    <label class="form-label">策略描述</label>
+                    <input type="text" class="form-input" id="editDesc"
+                           value="${strategy.description}" ${isDefault ? 'disabled' : ''}>
+                </div>
+
+                <h3 style="margin: 32px 0 16px 0;">维度权重配置</h3>
+                <p style="color: #718096; margin-bottom: 20px; font-size: 14px;">
+                    调整各数据源在最终决策中的重要性（总和应为100%）
+                </p>
+
+                <div class="weight-slider">
+                    <div class="slider-header">
+                        <label class="form-label">技术指标</label>
+                        <span class="slider-value" id="techValue">${strategy.dimension_weights.technical}%</span>
+                    </div>
+                    <input type="range" id="techSlider" min="0" max="100"
+                           value="${strategy.dimension_weights.technical}"
+                           oninput="updateWeight('tech')" ${isDefault ? 'disabled' : ''}>
+                </div>
+
+                <div class="weight-slider">
+                    <div class="slider-header">
+                        <label class="form-label">Hyperliquid聪明钱</label>
+                        <span class="slider-value" id="hyperValue">${strategy.dimension_weights.hyperliquid}%</span>
+                    </div>
+                    <input type="range" id="hyperSlider" min="0" max="100"
+                           value="${strategy.dimension_weights.hyperliquid}"
+                           oninput="updateWeight('hyper')" ${isDefault ? 'disabled' : ''}>
+                </div>
+
+                <div class="weight-slider">
+                    <div class="slider-header">
+                        <label class="form-label">新闻情绪</label>
+                        <span class="slider-value" id="newsValue">${strategy.dimension_weights.news}%</span>
+                    </div>
+                    <input type="range" id="newsSlider" min="0" max="100"
+                           value="${strategy.dimension_weights.news}"
+                           oninput="updateWeight('news')" ${isDefault ? 'disabled' : ''}>
+                </div>
+
+                <div class="weight-slider">
+                    <div class="slider-header">
+                        <label class="form-label">资金费率</label>
+                        <span class="slider-value" id="fundingValue">${strategy.dimension_weights.funding_rate}%</span>
+                    </div>
+                    <input type="range" id="fundingSlider" min="0" max="100"
+                           value="${strategy.dimension_weights.funding_rate}"
+                           oninput="updateWeight('funding')" ${isDefault ? 'disabled' : ''}>
+                </div>
+
+                <div class="weight-slider">
+                    <div class="slider-header">
+                        <label class="form-label">以太坊链上数据</label>
+                        <span class="slider-value" id="ethValue">${strategy.dimension_weights.ethereum}%</span>
+                    </div>
+                    <input type="range" id="ethSlider" min="0" max="100"
+                           value="${strategy.dimension_weights.ethereum}"
+                           oninput="updateWeight('eth')" ${isDefault ? 'disabled' : ''}>
+                </div>
+
+                <div class="weight-total" id="weightTotal">
+                    权重总和: <strong>100%</strong>
+                </div>
+
+                <h3 style="margin: 32px 0 16px 0;">风险控制</h3>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">风险等级</label>
+                        <select class="form-input" id="editRiskLevel" ${isDefault ? 'disabled' : ''}>
+                            <option value="conservative" ${strategy.risk_profile.level === 'conservative' ? 'selected' : ''}>保守</option>
+                            <option value="balanced" ${strategy.risk_profile.level === 'balanced' ? 'selected' : ''}>平衡</option>
+                            <option value="aggressive" ${strategy.risk_profile.level === 'aggressive' ? 'selected' : ''}>激进</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">最大仓位 (%)</label>
+                        <input type="number" class="form-input" id="editPosition"
+                               value="${strategy.risk_profile.max_position_size}"
+                               min="1" max="100" ${isDefault ? 'disabled' : ''}>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">止损 (%)</label>
+                        <input type="number" class="form-input" id="editStopLoss"
+                               value="${strategy.risk_profile.stop_loss}"
+                               min="0" max="50" ${isDefault ? 'disabled' : ''}>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">止盈 (%)</label>
+                        <input type="number" class="form-input" id="editTakeProfit"
+                               value="${strategy.risk_profile.take_profit}"
+                               min="0" max="100" ${isDefault ? 'disabled' : ''}>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">最小信号强度</label>
+                        <input type="number" class="form-input" id="editMinSignal"
+                               value="${strategy.risk_profile.min_signal_strength}"
+                               min="0" max="100" ${isDefault ? 'disabled' : ''}>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">最大杠杆</label>
+                        <input type="number" class="form-input" id="editMaxLeverage"
+                               value="${strategy.risk_profile.max_leverage}"
+                               min="1" max="10" ${isDefault ? 'disabled' : ''}>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="editAllowShort"
+                               ${strategy.risk_profile.allow_short ? 'checked' : ''}
+                               ${isDefault ? 'disabled' : ''}>
+                        <label>允许做空</label>
+                    </div>
+                </div>
+
+                ${!isDefault ? `
+                    <div style="display: flex; gap: 12px; margin-top: 32px;">
+                        <button class="btn btn-primary" onclick="saveStrategy()">💾 保存策略</button>
+                        <button class="btn btn-secondary" onclick="activateCurrentStrategy()">✓ 激活此策略</button>
+                        <button class="btn btn-danger" onclick="deleteCurrentStrategy()">🗑️ 删除策略</button>
+                    </div>
+                ` : `
+                    <div style="margin-top: 32px;">
+                        <button class="btn btn-secondary" onclick="copyStrategy()">📋 复制此策略</button>
+                    </div>
+                `}
+            `;
+
+            content.innerHTML = html;
+        }
+
+        // 更新权重显示
+        function updateWeight(type) {
+            const sliders = {
+                tech: document.getElementById('techSlider'),
+                hyper: document.getElementById('hyperSlider'),
+                news: document.getElementById('newsSlider'),
+                funding: document.getElementById('fundingSlider'),
+                eth: document.getElementById('ethSlider')
+            };
+
+            const values = {
+                tech: document.getElementById('techValue'),
+                hyper: document.getElementById('hyperValue'),
+                news: document.getElementById('newsValue'),
+                funding: document.getElementById('fundingValue'),
+                eth: document.getElementById('ethValue')
+            };
+
+            // 更新当前值显示
+            values[type].textContent = sliders[type].value + '%';
+
+            // 计算总和
+            let total = 0;
+            Object.keys(sliders).forEach(key => {
+                total += parseFloat(sliders[key].value);
+            });
+
+            const totalEl = document.getElementById('weightTotal');
+            totalEl.innerHTML = `权重总和: <strong>${total.toFixed(1)}%</strong>`;
+
+            if (Math.abs(total - 100) < 0.1) {
+                totalEl.className = 'weight-total valid';
+            } else {
+                totalEl.className = 'weight-total invalid';
+            }
+        }
+
+        // 渲染策略信息
+        function renderStrategyInfo(strategy) {
+            const content = document.getElementById('infoContent');
+            const createdAt = new Date(strategy.created_at).toLocaleString('zh-CN');
+            const updatedAt = new Date(strategy.updated_at).toLocaleString('zh-CN');
+
+            content.innerHTML = `
+                <h3>基本信息</h3>
+                <table class="comparison-table">
+                    <tr>
+                        <th>策略名称</th>
+                        <td>${strategy.name}</td>
+                    </tr>
+                    <tr>
+                        <th>描述</th>
+                        <td>${strategy.description || '无'}</td>
+                    </tr>
+                    <tr>
+                        <th>风险等级</th>
+                        <td>${strategy.risk_profile.level}</td>
+                    </tr>
+                    <tr>
+                        <th>创建时间</th>
+                        <td>${createdAt}</td>
+                    </tr>
+                    <tr>
+                        <th>更新时间</th>
+                        <td>${updatedAt}</td>
+                    </tr>
+                </table>
+
+                <h3 style="margin-top: 32px;">维度权重</h3>
+                <table class="comparison-table">
+                    <tr>
+                        <th>维度</th>
+                        <th>权重</th>
+                    </tr>
+                    <tr>
+                        <td>技术指标</td>
+                        <td>${strategy.dimension_weights.technical}%</td>
+                    </tr>
+                    <tr>
+                        <td>Hyperliquid聪明钱</td>
+                        <td>${strategy.dimension_weights.hyperliquid}%</td>
+                    </tr>
+                    <tr>
+                        <td>新闻情绪</td>
+                        <td>${strategy.dimension_weights.news}%</td>
+                    </tr>
+                    <tr>
+                        <td>资金费率</td>
+                        <td>${strategy.dimension_weights.funding_rate}%</td>
+                    </tr>
+                    <tr>
+                        <td>以太坊链上数据</td>
+                        <td>${strategy.dimension_weights.ethereum}%</td>
+                    </tr>
+                </table>
+
+                <h3 style="margin-top: 32px;">风险控制</h3>
+                <table class="comparison-table">
+                    <tr>
+                        <th>参数</th>
+                        <th>值</th>
+                    </tr>
+                    <tr>
+                        <td>最大仓位</td>
+                        <td>${strategy.risk_profile.max_position_size}%</td>
+                    </tr>
+                    <tr>
+                        <td>止损</td>
+                        <td>${strategy.risk_profile.stop_loss}%</td>
+                    </tr>
+                    <tr>
+                        <td>止盈</td>
+                        <td>${strategy.risk_profile.take_profit}%</td>
+                    </tr>
+                    <tr>
+                        <td>最小信号强度</td>
+                        <td>${strategy.risk_profile.min_signal_strength}</td>
+                    </tr>
+                    <tr>
+                        <td>最大杠杆</td>
+                        <td>${strategy.risk_profile.max_leverage}x</td>
+                    </tr>
+                    <tr>
+                        <td>允许做空</td>
+                        <td>${strategy.risk_profile.allow_short ? '是' : '否'}</td>
+                    </tr>
+                </table>
+            `;
+        }
+
+        // 切换标签页
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+            document.querySelector(`button[onclick="switchTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+
+        // 保存策略
+        async function saveStrategy() {
+            if (!currentStrategy) return;
+
+            const data = {
+                description: document.getElementById('editDesc').value,
+                dimension_weights: {
+                    technical: parseFloat(document.getElementById('techSlider').value),
+                    hyperliquid: parseFloat(document.getElementById('hyperSlider').value),
+                    news: parseFloat(document.getElementById('newsSlider').value),
+                    funding_rate: parseFloat(document.getElementById('fundingSlider').value),
+                    ethereum: parseFloat(document.getElementById('ethSlider').value)
+                },
+                risk_profile: {
+                    level: document.getElementById('editRiskLevel').value,
+                    max_position_size: parseFloat(document.getElementById('editPosition').value),
+                    stop_loss: parseFloat(document.getElementById('editStopLoss').value),
+                    take_profit: parseFloat(document.getElementById('editTakeProfit').value),
+                    min_signal_strength: parseFloat(document.getElementById('editMinSignal').value),
+                    max_leverage: parseFloat(document.getElementById('editMaxLeverage').value),
+                    allow_short: document.getElementById('editAllowShort').checked
+                }
+            };
+
+            try {
+                const response = await fetch(`/api/strategies/update/${currentStrategy.name}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('策略保存成功!', 'success');
+                    await loadStrategies();
+                    await selectStrategy(currentStrategy.name);
+                } else {
+                    showAlert('保存失败: ' + (result.detail || '未知错误'), 'error');
+                }
+            } catch (error) {
+                console.error('保存策略失败:', error);
+                showAlert('保存策略失败', 'error');
+            }
+        }
+
+        // 激活当前策略
+        async function activateCurrentStrategy() {
+            if (!currentStrategy) return;
+
+            try {
+                const response = await fetch(`/api/strategies/activate/${currentStrategy.name}`, {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('策略已激活!', 'success');
+                    await loadStrategies();
+                } else {
+                    showAlert('激活失败', 'error');
+                }
+            } catch (error) {
+                console.error('激活策略失败:', error);
+                showAlert('激活策略失败', 'error');
+            }
+        }
+
+        // 删除当前策略
+        async function deleteCurrentStrategy() {
+            if (!currentStrategy) return;
+
+            if (!confirm(`确定要删除策略 "${currentStrategy.name}" 吗？此操作不可撤销。`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/strategies/delete/${currentStrategy.name}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('策略已删除', 'success');
+                    currentStrategy = null;
+                    await loadStrategies();
+                    document.getElementById('editContent').innerHTML =
+                        '<p style="color: #718096; text-align: center; padding: 40px;">请从左侧选择一个策略进行编辑</p>';
+                } else {
+                    showAlert('删除失败: ' + (result.detail || '未知错误'), 'error');
+                }
+            } catch (error) {
+                console.error('删除策略失败:', error);
+                showAlert('删除策略失败', 'error');
+            }
+        }
+
+        // 测试策略
+        async function testStrategy() {
+            if (!currentStrategy) {
+                showAlert('请先选择一个策略', 'error');
+                return;
+            }
+
+            const scores = {
+                technical: parseFloat(document.getElementById('testTechnical').value),
+                hyperliquid: parseFloat(document.getElementById('testHyperliquid').value),
+                news: parseFloat(document.getElementById('testNews').value),
+                funding_rate: parseFloat(document.getElementById('testFundingRate').value),
+                ethereum: parseFloat(document.getElementById('testEthereum').value)
+            };
+
+            try {
+                const response = await fetch(`/api/strategies/test/${currentStrategy.name}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(scores)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    renderTestResult(result.result);
+                } else {
+                    showAlert('测试失败', 'error');
+                }
+            } catch (error) {
+                console.error('测试策略失败:', error);
+                showAlert('测试策略失败', 'error');
+            }
+        }
+
+        // 渲染测试结果
+        function renderTestResult(result) {
+            const rec = result.recommendation;
+            let recClass = 'rec-hold';
+            if (rec.action.includes('强烈买入')) recClass = 'rec-strong-buy';
+            else if (rec.action.includes('买入')) recClass = 'rec-buy';
+            else if (rec.action.includes('卖出')) recClass = 'rec-sell';
+
+            const html = `
+                <div class="test-result">
+                    <h3>测试结果</h3>
+                    <div class="result-score">${result.total_score} / 100</div>
+                    <p><strong>信号强度:</strong> ${result.signal_strength}</p>
+                    <p><strong>操作建议:</strong>
+                        <span class="result-recommendation ${recClass}">${rec.action}</span>
+                    </p>
+                    <p><strong>建议仓位:</strong> ${rec.position_size_pct}%</p>
+                    <p><strong>止损/止盈:</strong> ${rec.stop_loss_pct}% / ${rec.take_profit_pct}%</p>
+                    <p><strong>风险收益比:</strong> ${result.risk_reward_ratio}</p>
+                    <p><strong>入场策略:</strong> ${rec.entry_strategy}</p>
+
+                    <h4 style="margin-top: 20px;">决策原因:</h4>
+                    <ul style="margin-left: 20px;">
+                        ${result.reasons.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+
+            document.getElementById('testResult').innerHTML = html;
+        }
+
+        // 创建策略相关
+        function showCreateModal() {
+            document.getElementById('createModal').classList.add('active');
+        }
+
+        function hideCreateModal() {
+            document.getElementById('createModal').classList.remove('active');
+        }
+
+        async function createStrategy() {
+            const name = document.getElementById('newStrategyName').value.trim();
+            const description = document.getElementById('newStrategyDesc').value.trim();
+            const template = document.getElementById('newStrategyTemplate').value;
+
+            if (!name) {
+                showAlert('请输入策略名称', 'error');
+                return;
+            }
+
+            try {
+                if (template) {
+                    // 从模板复制
+                    const response = await fetch('/api/strategies/copy', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            source: template,
+                            dest: name,
+                            description: description || `基于 ${template} 的策略`
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showAlert('策略创建成功!', 'success');
+                        hideCreateModal();
+                        await loadStrategies();
+                        await selectStrategy(name);
+                    } else {
+                        showAlert('创建失败: ' + (result.detail || '未知错误'), 'error');
+                    }
+                } else {
+                    // TODO: 从头创建
+                    showAlert('从头创建功能开发中', 'info');
+                }
+            } catch (error) {
+                console.error('创建策略失败:', error);
+                showAlert('创建策略失败', 'error');
+            }
+        }
+
+        // 复制策略
+        async function copyStrategy() {
+            if (!currentStrategy) {
+                showAlert('请先选择一个策略', 'error');
+                return;
+            }
+
+            const newName = prompt('输入新策略名称:', currentStrategy.name + '_copy');
+            if (!newName) return;
+
+            try {
+                const response = await fetch('/api/strategies/copy', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        source: currentStrategy.name,
+                        dest: newName,
+                        description: `从 ${currentStrategy.name} 复制`
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('策略复制成功!', 'success');
+                    await loadStrategies();
+                    await selectStrategy(newName);
+                } else {
+                    showAlert('复制失败: ' + (result.detail || '未知错误'), 'error');
+                }
+            } catch (error) {
+                console.error('复制策略失败:', error);
+                showAlert('复制策略失败', 'error');
+            }
+        }
+
+        // 对比策略
+        async function compareStrategies() {
+            const selected = ['conservative', 'balanced', 'aggressive'];
+            if (currentStrategy && !selected.includes(currentStrategy.name)) {
+                selected.push(currentStrategy.name);
+            }
+
+            try {
+                const response = await fetch('/api/strategies/compare', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(selected)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    renderComparison(result.comparison);
+                } else {
+                    showAlert('对比失败', 'error');
+                }
+            } catch (error) {
+                console.error('对比策略失败:', error);
+                showAlert('对比策略失败', 'error');
+            }
+        }
+
+        // 渲染对比结果
+        function renderComparison(comparison) {
+            const names = Object.keys(comparison);
+
+            let html = '<h3>策略对比</h3>';
+            html += '<table class="comparison-table"><tr><th>项目</th>';
+            names.forEach(name => {
+                html += `<th>${name}</th>`;
+            });
+            html += '</tr>';
+
+            // 维度权重
+            const dimensions = ['technical', 'hyperliquid', 'news', 'funding_rate', 'ethereum'];
+            const dimNames = ['技术指标', 'Hyperliquid', '新闻情绪', '资金费率', '以太坊链上'];
+
+            dimensions.forEach((dim, i) => {
+                html += `<tr><td>${dimNames[i]}</td>`;
+                names.forEach(name => {
+                    html += `<td>${comparison[name].dimension_weights[dim]}%</td>`;
+                });
+                html += '</tr>';
+            });
+
+            // 风险控制
+            html += '<tr style="background: #f7fafc;"><td colspan="' + (names.length + 1) + '"><strong>风险控制</strong></td></tr>';
+
+            const risks = {
+                'max_position_size': '最大仓位',
+                'stop_loss': '止损',
+                'take_profit': '止盈',
+                'max_leverage': '最大杠杆',
+                'min_signal_strength': '最小信号强度'
+            };
+
+            Object.keys(risks).forEach(key => {
+                html += `<tr><td>${risks[key]}</td>`;
+                names.forEach(name => {
+                    let value = comparison[name].risk_profile[key];
+                    if (key === 'max_leverage') value += 'x';
+                    else if (key !== 'min_signal_strength') value += '%';
+                    html += `<td>${value}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</table>';
+
+            // 显示在模态框中
+            const modal = document.getElementById('createModal');
+            const modalContent = modal.querySelector('.modal-content');
+            modalContent.innerHTML = `
+                <div class="modal-header">策略对比</div>
+                ${html}
+                <div class="modal-footer">
+                    <button class="btn" onclick="hideCreateModal()">关闭</button>
+                </div>
+            `;
+            modal.classList.add('active');
+        }
+
+        // 刷新数据
+        function refreshData() {
+            loadStrategies();
+            if (currentStrategy) {
+                selectStrategy(currentStrategy.name);
+            }
+        }
+
+        // 显示提示
+        function showAlert(message, type = 'info') {
+            const alertClass = type === 'success' ? 'alert-success' :
+                             type === 'error' ? 'alert-error' : 'alert-info';
+
+            const alert = document.createElement('div');
+            alert.className = `alert ${alertClass}`;
+            alert.textContent = message;
+            alert.style.position = 'fixed';
+            alert.style.top = '20px';
+            alert.style.right = '20px';
+            alert.style.zIndex = '2000';
+            alert.style.minWidth = '300px';
+
+            document.body.appendChild(alert);
+
+            setTimeout(() => {
+                alert.style.opacity = '0';
+                alert.style.transition = 'opacity 0.5s';
+                setTimeout(() => alert.remove(), 500);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
