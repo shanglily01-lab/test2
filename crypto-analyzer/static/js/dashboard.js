@@ -743,20 +743,39 @@ function updateCorporateTreasury(data) {
 // 加载EMA信号
 async function loadEMASignals() {
     try {
+        console.log('正在加载EMA信号...');
         const response = await fetch(`${API_BASE}/api/ema-signals?limit=10`);
-        const result = await response.json();
+        console.log('EMA信号API响应状态:', response.status);
 
-        if (result.success && result.data) {
-            updateEMASignals(result.data);
+        if (!response.ok) {
+            throw new Error(`HTTP错误: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('EMA信号数据:', result);
+
+        if (result.success) {
+            const signals = result.data || [];
+            console.log(`成功加载${signals.length}个EMA信号`);
+            updateEMASignals(signals);
+        } else {
+            throw new Error(result.detail || '未知错误');
         }
     } catch (error) {
         console.error('加载EMA信号失败:', error);
         document.getElementById('ema-signals-container').innerHTML = `
             <div class="text-center p-3 text-muted">
-                <i class="bi bi-exclamation-triangle"></i>
-                <div>加载EMA信号失败</div>
+                <i class="bi bi-exclamation-triangle text-warning"></i>
+                <div class="mt-2">加载EMA信号失败</div>
+                <small class="text-danger">${error.message}</small>
+                <div class="mt-2">
+                    <small>可能原因：数据库表尚未创建或API服务异常</small>
+                </div>
             </div>
         `;
+        // 设置徽章为0
+        document.getElementById('ema-buy-count').textContent = '0';
+        document.getElementById('ema-sell-count').textContent = '0';
     }
 }
 
