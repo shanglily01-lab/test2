@@ -553,10 +553,10 @@ function updateHyperliquid(data) {
             <div>
                 <h6 class="mb-3">
                     <i class="bi bi-clock-history"></i>
-                    最近大额交易 (Top ${Math.min(10, data.recent_trades.length)})
+                    最近大额交易 (Top ${Math.min(50, data.recent_trades.length)})
                 </h6>
                 <div class="row">
-                    ${data.recent_trades.slice(0, 10).map(trade => `
+                    ${data.recent_trades.slice(0, 50).map(trade => `
                         <div class="col-md-6">
                             <div class="trade-item trade-${trade.side.toLowerCase()}">
                                 <div class="d-flex justify-content-between align-items-center">
