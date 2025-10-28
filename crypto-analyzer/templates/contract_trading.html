@@ -276,7 +276,8 @@
                     <!-- 数量 -->
                     <div class="mb-3">
                         <label class="form-label">数量（张数）</label>
-                        <input type="number" class="form-control" id="orderQuantity" value="1" step="0.01" min="0.01">
+                        <input type="number" class="form-control" id="orderQuantity" value="0.1" step="0.01" min="0.01">
+                        <small class="text-muted">建议从小数量开始测试</small>
                     </div>
 
                     <!-- 杠杆 -->
@@ -305,7 +306,7 @@
                         </label>
                         <div class="price-input-group">
                             <span class="price-prefix">$</span>
-                            <input type="number" class="form-control" id="orderPrice" value="100000" step="0.01">
+                            <input type="number" class="form-control" id="orderPrice" value="50000" step="0.01">
                         </div>
                         <small class="text-muted">
                             实时价: <span id="currentPrice" class="text-primary">-</span>
@@ -434,7 +435,7 @@
             if (initialized) return;
 
             try {
-                const response = await fetch('/api/contract-trading/init?initial_balance=10000', {
+                const response = await fetch('/api/contract-trading/init?initial_balance=100000', {
                     method: 'POST'
                 });
 
