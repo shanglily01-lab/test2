@@ -390,7 +390,7 @@ async def get_ema_signals(limit: int = 10):
         from datetime import datetime, timedelta
 
         db_config = get_db_config()
-        db_service = DatabaseService({'database': {'mysql': db_config}})
+        db_service = DatabaseService({'type': 'mysql', 'mysql': db_config})
         session = db_service.get_session()
 
         try:
