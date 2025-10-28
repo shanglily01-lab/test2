@@ -257,7 +257,20 @@
                     <!-- 交易对 -->
                     <div class="mb-3">
                         <label class="form-label">交易对</label>
-                        <input type="text" class="form-control" id="orderSymbol" value="BTC/USDT">
+                        <select class="form-select" id="orderSymbol" onchange="updatePriceForSymbol()">
+                            <option value="BTC/USDT">BTC/USDT</option>
+                            <option value="ETH/USDT">ETH/USDT</option>
+                            <option value="BNB/USDT">BNB/USDT</option>
+                            <option value="SOL/USDT">SOL/USDT</option>
+                            <option value="XRP/USDT">XRP/USDT</option>
+                            <option value="DOGE/USDT">DOGE/USDT</option>
+                            <option value="ADA/USDT">ADA/USDT</option>
+                            <option value="AVAX/USDT">AVAX/USDT</option>
+                            <option value="DOT/USDT">DOT/USDT</option>
+                            <option value="MATIC/USDT">MATIC/USDT</option>
+                            <option value="LINK/USDT">LINK/USDT</option>
+                            <option value="UNI/USDT">UNI/USDT</option>
+                        </select>
                     </div>
 
                     <!-- 数量 -->
@@ -284,11 +297,20 @@
 
                     <!-- 价格 -->
                     <div class="mb-3">
-                        <label class="form-label">成交价格</label>
+                        <label class="form-label">
+                            成交价格
+                            <button class="btn btn-sm btn-outline-primary ms-2" onclick="fetchCurrentPrice()">
+                                <i class="bi bi-arrow-clockwise"></i> 获取实时价
+                            </button>
+                        </label>
                         <div class="price-input-group">
                             <span class="price-prefix">$</span>
                             <input type="number" class="form-control" id="orderPrice" value="100000" step="0.01">
                         </div>
+                        <small class="text-muted">
+                            实时价: <span id="currentPrice" class="text-primary">-</span>
+                            <span id="priceChange" class="ms-2">-</span>
+                        </small>
                     </div>
 
                     <!-- 止盈止损 -->
@@ -439,6 +461,92 @@
             } else {
                 btnShort.classList.add('active');
                 btnLong.classList.remove('active');
+            }
+        }
+
+        // 获取实时价格
+        async function fetchCurrentPrice() {
+            const symbol = document.getElementById('orderSymbol').value;
+            const btn = event.target.closest('button');
+
+            // 显示加载状态
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-arrow-clockwise spinner-border spinner-border-sm"></i> 加载中...';
+
+            try {
+                // 从价格API获取最新价格
+                const response = await fetch('/api/prices?limit=100');
+                const data = await response.json();
+
+                if (data.success && data.data) {
+                    // 查找匹配的交易对
+                    const symbolData = data.data.find(item => item.symbol === symbol);
+
+                    if (symbolData && symbolData.price) {
+                        const price = symbolData.price;
+                        const change24h = symbolData.change_24h || 0;
+
+                        // 更新价格输入框
+                        document.getElementById('orderPrice').value = price.toFixed(2);
+
+                        // 更新显示的实时价格
+                        document.getElementById('currentPrice').textContent = `$${price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+                        // 更新涨跌幅显示
+                        const changeElement = document.getElementById('priceChange');
+                        const changeClass = change24h >= 0 ? 'text-success' : 'text-danger';
+                        const changeSign = change24h >= 0 ? '+' : '';
+                        changeElement.textContent = `${changeSign}${change24h.toFixed(2)}%`;
+                        changeElement.className = changeClass;
+
+                        showToast(`已获取 ${symbol} 最新价格`, 'success');
+                    } else {
+                        showToast(`未找到 ${symbol} 的价格数据`, 'warning');
+                    }
+                } else {
+                    showToast('获取价格失败', 'danger');
+                }
+            } catch (error) {
+                console.error('获取价格失败:', error);
+                showToast('获取价格失败', 'danger');
+            } finally {
+                // 恢复按钮状态
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 获取实时价';
+            }
+        }
+
+        // 当交易对改变时自动更新价格
+        async function updatePriceForSymbol() {
+            const symbol = document.getElementById('orderSymbol').value;
+
+            try {
+                const response = await fetch('/api/prices?limit=100');
+                const data = await response.json();
+
+                if (data.success && data.data) {
+                    const symbolData = data.data.find(item => item.symbol === symbol);
+
+                    if (symbolData && symbolData.price) {
+                        const price = symbolData.price;
+                        const change24h = symbolData.change_24h || 0;
+
+                        // 更新显示的实时价格
+                        document.getElementById('currentPrice').textContent = `$${price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+                        // 更新涨跌幅显示
+                        const changeElement = document.getElementById('priceChange');
+                        const changeClass = change24h >= 0 ? 'text-success' : 'text-danger';
+                        const changeSign = change24h >= 0 ? '+' : '';
+                        changeElement.textContent = `${changeSign}${change24h.toFixed(2)}%`;
+                        changeElement.className = changeClass;
+                    } else {
+                        document.getElementById('currentPrice').textContent = '-';
+                        document.getElementById('priceChange').textContent = '-';
+                    }
+                }
+            } catch (error) {
+                console.error('获取价格失败:', error);
             }
         }
 
@@ -744,6 +852,8 @@
         // 页面加载时初始化
         window.addEventListener('load', async () => {
             await initialize();
+            // 加载初始价格
+            await updatePriceForSymbol();
             // 每5秒自动刷新
             setInterval(refreshAll, 5000);
         });
