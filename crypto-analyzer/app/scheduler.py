@@ -942,6 +942,11 @@ class UnifiedDataScheduler:
         )
         logger.info(f"  ✓ 现货({exchanges_str}) 5分钟数据 - 每 5 分钟")
 
+        schedule.every(15).minutes.do(
+            lambda: asyncio.run(self.collect_binance_data('15m'))
+        )
+        logger.info(f"  ✓ 现货({exchanges_str}) 15分钟数据 - 每 15 分钟")
+
         schedule.every(1).hours.do(
             lambda: asyncio.run(self.collect_binance_data('1h'))
         )
@@ -1071,6 +1076,9 @@ class UnifiedDataScheduler:
         await asyncio.sleep(2)
 
         await self.collect_binance_data('5m')
+        await asyncio.sleep(2)
+
+        await self.collect_binance_data('15m')
         await asyncio.sleep(2)
 
         # 1.5 Binance 合约数据
