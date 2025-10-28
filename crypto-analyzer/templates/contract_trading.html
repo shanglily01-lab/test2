@@ -437,15 +437,23 @@
                 const response = await fetch('/api/contract-trading/init?initial_balance=10000', {
                     method: 'POST'
                 });
+
+                if (!response.ok) {
+                    throw new Error(`初始化请求失败: ${response.status}`);
+                }
+
                 const data = await response.json();
 
                 if (data.success) {
                     initialized = true;
                     showToast('系统初始化成功', 'success');
                     await refreshAll();
+                } else {
+                    throw new Error(data.detail || '初始化失败');
                 }
             } catch (error) {
                 console.error('初始化失败:', error);
+                showToast('系统初始化失败: ' + error.message, 'danger');
             }
         }
 
@@ -649,6 +657,11 @@
 
         // 刷新所有数据
         async function refreshAll() {
+            if (!initialized) {
+                console.log('系统未初始化，跳过刷新');
+                return;
+            }
+
             await Promise.all([
                 refreshAccount(),
                 refreshPositions(),
