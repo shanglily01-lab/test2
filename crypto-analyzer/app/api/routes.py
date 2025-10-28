@@ -4,7 +4,8 @@ API路由定义
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Dict
+from sqlalchemy import text
+from typing import List, Dict, Optional
 from loguru import logger
 
 from app.database.db_service import DatabaseService
@@ -404,4 +405,71 @@ async def get_smart_money_dashboard():
         }
     except Exception as e:
         logger.error(f"获取聪明钱仪表盘失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/ema-signals")
+async def get_ema_signals(
+    limit: int = 20,
+    signal_type: Optional[str] = None,
+    session: Session = Depends(get_db_session)
+):
+    """
+    获取EMA信号列表
+
+    Args:
+        limit: 返回数量限制
+        signal_type: 信号类型过滤 (BUY或SELL)
+
+    Returns:
+        EMA信号列表
+    """
+    try:
+        # 构建查询
+        query = """
+            SELECT
+                symbol, timeframe, signal_type, signal_strength,
+                timestamp, price, short_ema, long_ema,
+                ema_config, volume_ratio, price_change_pct, ema_distance_pct,
+                created_at
+            FROM ema_signals
+        """
+
+        if signal_type:
+            query += " WHERE signal_type = :signal_type"
+
+        query += " ORDER BY timestamp DESC LIMIT :limit"
+
+        params = {'limit': limit}
+        if signal_type:
+            params['signal_type'] = signal_type.upper()
+
+        result = session.execute(text(query), params)
+        signals = []
+
+        for row in result:
+            signals.append({
+                'symbol': row.symbol,
+                'timeframe': row.timeframe,
+                'signal_type': row.signal_type,
+                'signal_strength': row.signal_strength,
+                'timestamp': row.timestamp.isoformat() if row.timestamp else None,
+                'price': float(row.price),
+                'short_ema': float(row.short_ema),
+                'long_ema': float(row.long_ema),
+                'ema_config': row.ema_config,
+                'volume_ratio': float(row.volume_ratio),
+                'price_change_pct': float(row.price_change_pct),
+                'ema_distance_pct': float(row.ema_distance_pct),
+                'created_at': row.created_at.isoformat() if row.created_at else None
+            })
+
+        return {
+            "success": True,
+            "data": signals,
+            "count": len(signals)
+        }
+
+    except Exception as e:
+        logger.error(f"获取EMA信号失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

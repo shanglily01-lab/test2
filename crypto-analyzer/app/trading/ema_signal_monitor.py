@@ -200,6 +200,53 @@ class EMASignalMonitor:
 
         return is_death_cross
 
+    async def save_signal_to_db(self, signal: Dict) -> bool:
+        """
+        保存EMA信号到数据库
+
+        Args:
+            signal: 信号字典
+
+        Returns:
+            是否保存成功
+        """
+        try:
+            insert_sql = text("""
+                INSERT INTO ema_signals (
+                    symbol, timeframe, signal_type, signal_strength,
+                    timestamp, price, short_ema, long_ema,
+                    ema_config, volume_ratio, price_change_pct, ema_distance_pct
+                ) VALUES (
+                    :symbol, :timeframe, :signal_type, :signal_strength,
+                    :timestamp, :price, :short_ema, :long_ema,
+                    :ema_config, :volume_ratio, :price_change_pct, :ema_distance_pct
+                )
+            """)
+
+            async with self.db_service.get_async_session() as session:
+                await session.execute(insert_sql, {
+                    'symbol': signal['symbol'],
+                    'timeframe': signal['timeframe'],
+                    'signal_type': signal['signal_type'],
+                    'signal_strength': signal['signal_strength'],
+                    'timestamp': signal['timestamp'],
+                    'price': float(signal['price']),
+                    'short_ema': float(signal['short_ema']),
+                    'long_ema': float(signal['long_ema']),
+                    'ema_config': signal['ema_config'],
+                    'volume_ratio': float(signal['volume_ratio']),
+                    'price_change_pct': float(signal['price_change_pct']),
+                    'ema_distance_pct': float(signal['ema_distance_pct'])
+                })
+                await session.commit()
+
+            logger.debug(f"✓ 已保存 {signal['symbol']} {signal['signal_type']} 信号到数据库")
+            return True
+
+        except Exception as e:
+            logger.error(f"保存EMA信号到数据库失败: {e}")
+            return False
+
     def calculate_signal_strength(
         self,
         price_change_pct: float,
@@ -367,6 +414,9 @@ class EMASignalMonitor:
             logger.info(f"   价格: ${current_price:.2f} | 变动: {price_change_pct:+.2f}%")
             logger.info(f"   短期EMA{self.short_period}: {short_ema_values[-1]:.2f} | 长期EMA{self.long_period}: {long_ema_values[-1]:.2f}")
             logger.info(f"   成交量放大: {volume_ratio:.2f}x")
+
+            # 保存信号到数据库
+            await self.save_signal_to_db(signal)
 
             return signal
 
