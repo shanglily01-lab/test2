@@ -489,7 +489,7 @@ smart_money:
 
 # ==================== Hyperliquid 监控配置 ====================
 hyperliquid:
-  enabled: true
+  enabled: false  # 临时禁用以避免网络连接问题
 
   # 最小交易金额阈值(USD)
   min_trade_usd: 50000  # $50K
