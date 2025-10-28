@@ -93,6 +93,28 @@ def input_purchase():
         print("❌ 资产类型只能是 BTC 或 ETH")
         return
 
+    # 显示上一次的持仓量（帮助判断增持/减持）
+    conn_temp = get_db_connection()
+    cursor_temp = conn_temp.cursor(dictionary=True)
+    cursor_temp.execute("""
+        SELECT purchase_date, cumulative_holdings, quantity
+        FROM corporate_treasury_purchases
+        WHERE company_id = %s AND asset_type = %s
+        ORDER BY purchase_date DESC
+        LIMIT 1
+    """, (company_id, asset_type))
+    last_record = cursor_temp.fetchone()
+    cursor_temp.close()
+    conn_temp.close()
+
+    if last_record:
+        print(f"\n📊 上一次记录（{last_record['purchase_date']}）:")
+        print(f"   持仓量: {last_record['cumulative_holdings']:,.2f} {asset_type}")
+        print(f"   购买量: {last_record['quantity']:,.2f} {asset_type}")
+        print(f"💡 提示: 如果新的累计持仓 > {last_record['cumulative_holdings']:,.2f} 则为增持，< 则为减持")
+    else:
+        print(f"\n💡 这是 {company['company_name']} 的第一条 {asset_type} 记录")
+
     quantity = input("购买数量: ")
     average_price = input("平均价格(USD, 可选): ") or None
     total_amount = input("总金额(USD, 可选): ") or None
