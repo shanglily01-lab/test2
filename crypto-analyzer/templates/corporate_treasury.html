@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>企业金库监控 - Corporate Treasury Monitoring</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #ffffff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            color: #b8d4ff;
+        }
+
+        .nav-links {
+            margin-top: 15px;
+        }
+
+        .nav-links a {
+            color: #ffd700;
+            text-decoration: none;
+            margin: 0 15px;
+            font-size: 1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #ffffff;
+        }
+
+        /* 总览卡片 */
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .summary-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .summary-card h3 {
+            font-size: 0.9em;
+            color: #b8d4ff;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .summary-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .summary-card .unit {
+            font-size: 0.9em;
+            color: #b8d4ff;
+            margin-left: 5px;
+        }
+
+        /* 筛选区域 */
+        .filters {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .filters label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+
+        .filters select, .filters button {
+            padding: 8px 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            font-size: 1em;
+            cursor: pointer;
+            margin-right: 15px;
+        }
+
+        .filters select:hover, .filters button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* 主要内容区 */
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .section h2 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #ffd700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        thead {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            color: #ffd700;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        tbody tr {
+            transition: background 0.2s;
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+        }
+
+        /* 操作标签 */
+        .action-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .action-buy {
+            background: #4caf50;
+            color: white;
+        }
+
+        .action-sell {
+            background: #f44336;
+            color: white;
+        }
+
+        .action-hold {
+            background: #9e9e9e;
+            color: white;
+        }
+
+        /* 类别标签 */
+        .category-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.8em;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* 加载状态 */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+            color: #b8d4ff;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+
+        /* 错误消息 */
+        .error-message {
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid #f44336;
+            color: #ffffff;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .filters {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            table {
+                font-size: 0.85em;
+            }
+
+            th, td {
+                padding: 8px;
+            }
+        }
+
+        /* 排名徽章 */
+        .rank-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+
+        .rank-1 { background: linear-gradient(135deg, #ffd700, #ffed4e); color: #000; }
+        .rank-2 { background: linear-gradient(135deg, #c0c0c0, #e8e8e8); color: #000; }
+        .rank-3 { background: linear-gradient(135deg, #cd7f32, #daa520); color: #fff; }
+        .rank-other { background: rgba(255, 255, 255, 0.2); color: #fff; }
+
+        /* 详情模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            margin: 50px auto;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 900px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .modal-close {
+            float: right;
+            font-size: 2em;
+            cursor: pointer;
+            color: #ffffff;
+            transition: color 0.3s;
+        }
+
+        .modal-close:hover {
+            color: #f44336;
+        }
+
+        .history-section {
+            margin-top: 20px;
+        }
+
+        .history-section h3 {
+            color: #ffd700;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏦 企业金库监控</h1>
+            <p class="subtitle">Corporate Treasury Monitoring - BTC Holdings Tracker</p>
+            <div class="nav-links">
+                <a href="/">← 返回主页</a>
+                <a href="/enhanced_dashboard">📊 增强看板</a>
+            </div>
+        </header>
+
+        <!-- 总览统计 -->
+        <div class="summary-cards" id="summaryCards">
+            <div class="summary-card">
+                <h3>📈 监控公司总数</h3>
+                <div class="value" id="totalCompanies">-</div>
+            </div>
+            <div class="summary-card">
+                <h3>💰 BTC 总持仓</h3>
+                <div>
+                    <span class="value" id="totalBTC">-</span>
+                    <span class="unit">BTC</span>
+                </div>
+            </div>
+            <div class="summary-card">
+                <h3>💵 总市值 (USD)</h3>
+                <div>
+                    <span class="value" id="totalValueUSD">-</span>
+                    <span class="unit">USD</span>
+                </div>
+            </div>
+            <div class="summary-card">
+                <h3>⚡ 当前 BTC 价格</h3>
+                <div>
+                    <span class="value" id="currentBTCPrice">-</span>
+                    <span class="unit">USD</span>
+                </div>
+            </div>
+            <div class="summary-card">
+                <h3>🔥 30天活跃公司</h3>
+                <div class="value" id="activeCompanies30d">-</div>
+            </div>
+        </div>
+
+        <!-- 筛选器 -->
+        <div class="filters">
+            <label for="categoryFilter">类别筛选:</label>
+            <select id="categoryFilter">
+                <option value="">全部</option>
+                <option value="mining">Mining (矿企)</option>
+                <option value="holding">Holding (持股公司)</option>
+                <option value="payment">Payment (支付公司)</option>
+            </select>
+
+            <label for="activityDays">最近活动:</label>
+            <select id="activityDays">
+                <option value="7">7 天</option>
+                <option value="14">14 天</option>
+                <option value="30" selected>30 天</option>
+            </select>
+
+            <button onclick="refreshData()">🔄 刷新数据</button>
+        </div>
+
+        <!-- Top 10 持仓公司 -->
+        <div class="section">
+            <h2>🏆 Top 10 BTC 持仓公司</h2>
+            <div id="topHoldersTable">
+                <div class="loading">加载中</div>
+            </div>
+        </div>
+
+        <!-- 最近购买活动 -->
+        <div class="section">
+            <h2>📰 最近购买活动</h2>
+            <div id="recentActivitiesTable">
+                <div class="loading">加载中</div>
+            </div>
+        </div>
+
+        <!-- 公司列表 -->
+        <div class="section">
+            <h2>📋 所有监控公司</h2>
+            <div id="companiesTable">
+                <div class="loading">加载中</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 公司详情模态框 -->
+    <div id="companyModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div id="modalContent">
+                <div class="loading">加载中</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局数据
+        let companiesData = [];
+        let summaryData = {};
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSummaryData();
+            loadTopHolders();
+            loadRecentActivities();
+            loadCompaniesList();
+
+            // 筛选器事件
+            document.getElementById('categoryFilter').addEventListener('change', loadCompaniesList);
+            document.getElementById('activityDays').addEventListener('change', loadRecentActivities);
+        });
+
+        // 加载总览数据
+        async function loadSummaryData() {
+            try {
+                const response = await fetch('/api/corporate-treasury/summary');
+                const data = await response.json();
+
+                if (data.success) {
+                    summaryData = data.data.summary;
+
+                    document.getElementById('totalCompanies').textContent = summaryData.total_companies;
+                    document.getElementById('totalBTC').textContent = formatNumber(summaryData.total_btc_holdings, 2);
+                    document.getElementById('totalValueUSD').textContent = '$' + formatNumber(summaryData.total_value_usd, 0);
+                    document.getElementById('currentBTCPrice').textContent = '$' + formatNumber(summaryData.current_btc_price, 0);
+                    document.getElementById('activeCompanies30d').textContent = summaryData.active_companies_30d;
+                }
+            } catch (error) {
+                console.error('加载总览数据失败:', error);
+            }
+        }
+
+        // 加载 Top 10 持仓公司
+        async function loadTopHolders() {
+            try {
+                const response = await fetch('/api/corporate-treasury/summary');
+                const data = await response.json();
+
+                if (data.success) {
+                    const topHolders = data.data.top_holders;
+                    renderTopHoldersTable(topHolders);
+                }
+            } catch (error) {
+                console.error('加载 Top 10 失败:', error);
+                document.getElementById('topHoldersTable').innerHTML = '<div class="error-message">加载失败</div>';
+            }
+        }
+
+        // 渲染 Top 10 表格
+        function renderTopHoldersTable(holders) {
+            if (!holders || holders.length === 0) {
+                document.getElementById('topHoldersTable').innerHTML = '<p>暂无数据</p>';
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">排名</th>
+                            <th>公司名称</th>
+                            <th>代码</th>
+                            <th>类别</th>
+                            <th style="text-align: right;">BTC 持仓</th>
+                            <th style="text-align: right;">市值 (USD)</th>
+                            <th>最近更新</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            holders.forEach((holder, index) => {
+                const rank = index + 1;
+                const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : 'rank-other';
+
+                html += `
+                    <tr onclick="showCompanyDetails(${holder.id || 0})">
+                        <td><span class="rank-badge ${rankClass}">${rank}</span></td>
+                        <td><strong>${holder.company_name}</strong></td>
+                        <td>${holder.ticker_symbol || '-'}</td>
+                        <td><span class="category-badge">${holder.category || 'N/A'}</span></td>
+                        <td style="text-align: right;"><strong>${formatNumber(holder.btc_holdings, 2)}</strong> BTC</td>
+                        <td style="text-align: right;">$${formatNumber(holder.value_usd, 0)}</td>
+                        <td>${holder.last_update || '-'}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('topHoldersTable').innerHTML = html;
+        }
+
+        // 加载最近活动
+        async function loadRecentActivities() {
+            try {
+                const days = document.getElementById('activityDays').value;
+                const response = await fetch(`/api/corporate-treasury/recent-activities?days=${days}&limit=20`);
+                const data = await response.json();
+
+                if (data.success) {
+                    renderRecentActivitiesTable(data.data);
+                }
+            } catch (error) {
+                console.error('加载最近活动失败:', error);
+                document.getElementById('recentActivitiesTable').innerHTML = '<div class="error-message">加载失败</div>';
+            }
+        }
+
+        // 渲染最近活动表格
+        function renderRecentActivitiesTable(activities) {
+            if (!activities || activities.length === 0) {
+                document.getElementById('recentActivitiesTable').innerHTML = '<p>暂无数据</p>';
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>公司名称</th>
+                            <th>代码</th>
+                            <th>操作</th>
+                            <th style="text-align: right;">变化量</th>
+                            <th style="text-align: right;">累计持仓</th>
+                            <th style="text-align: right;">平均价格</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            activities.forEach(activity => {
+                const actionIcon = activity.action === 'buy' ? '🟢' : activity.action === 'sell' ? '🔴' : '⚪';
+                const actionClass = activity.action === 'buy' ? 'action-buy' : activity.action === 'sell' ? 'action-sell' : 'action-hold';
+                const actionText = activity.action === 'buy' ? '增持' : activity.action === 'sell' ? '减持' : '持平';
+
+                html += `
+                    <tr>
+                        <td>${activity.purchase_date}</td>
+                        <td><strong>${activity.company_name}</strong></td>
+                        <td>${activity.ticker_symbol || '-'}</td>
+                        <td><span class="action-badge ${actionClass}">${actionIcon} ${actionText}</span></td>
+                        <td style="text-align: right;">${activity.quantity > 0 ? '+' : ''}${formatNumber(activity.quantity, 2)} BTC</td>
+                        <td style="text-align: right;">${formatNumber(activity.cumulative_holdings, 2)} BTC</td>
+                        <td style="text-align: right;">$${formatNumber(activity.average_price, 0)}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('recentActivitiesTable').innerHTML = html;
+        }
+
+        // 加载公司列表
+        async function loadCompaniesList() {
+            try {
+                const category = document.getElementById('categoryFilter').value;
+                let url = '/api/corporate-treasury/companies?limit=50';
+                if (category) {
+                    url += `&category=${category}`;
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.success) {
+                    companiesData = data.data;
+                    renderCompaniesTable(companiesData);
+                }
+            } catch (error) {
+                console.error('加载公司列表失败:', error);
+                document.getElementById('companiesTable').innerHTML = '<div class="error-message">加载失败</div>';
+            }
+        }
+
+        // 渲染公司列表表格
+        function renderCompaniesTable(companies) {
+            if (!companies || companies.length === 0) {
+                document.getElementById('companiesTable').innerHTML = '<p>暂无数据</p>';
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>公司名称</th>
+                            <th>代码</th>
+                            <th>类别</th>
+                            <th style="text-align: right;">当前持仓</th>
+                            <th>最近操作</th>
+                            <th style="text-align: right;">变化量</th>
+                            <th>最近更新</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            companies.forEach(company => {
+                const actionIcon = company.last_action === 'buy' ? '🟢' : company.last_action === 'sell' ? '🔴' : '⚪';
+                const actionClass = company.last_action === 'buy' ? 'action-buy' : company.last_action === 'sell' ? 'action-sell' : 'action-hold';
+                const actionText = company.last_action === 'buy' ? '增持' : company.last_action === 'sell' ? '减持' : '持平';
+
+                html += `
+                    <tr onclick="showCompanyDetails(${company.id})">
+                        <td><strong>${company.company_name}</strong></td>
+                        <td>${company.ticker_symbol || '-'}</td>
+                        <td><span class="category-badge">${company.category || 'N/A'}</span></td>
+                        <td style="text-align: right;"><strong>${formatNumber(company.current_btc_holdings, 2)}</strong> BTC</td>
+                        <td><span class="action-badge ${actionClass}">${actionIcon} ${actionText}</span></td>
+                        <td style="text-align: right;">${company.last_change > 0 ? '+' : ''}${formatNumber(company.last_change, 2)} BTC</td>
+                        <td>${company.last_update || '-'}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            document.getElementById('companiesTable').innerHTML = html;
+        }
+
+        // 显示公司详情
+        async function showCompanyDetails(companyId) {
+            if (!companyId) return;
+
+            document.getElementById('companyModal').style.display = 'block';
+            document.getElementById('modalContent').innerHTML = '<div class="loading">加载中</div>';
+
+            try {
+                const response = await fetch(`/api/corporate-treasury/company/${companyId}/history?days=90`);
+                const data = await response.json();
+
+                if (data.success) {
+                    renderCompanyDetails(data.data);
+                }
+            } catch (error) {
+                console.error('加载公司详情失败:', error);
+                document.getElementById('modalContent').innerHTML = '<div class="error-message">加载失败</div>';
+            }
+        }
+
+        // 渲染公司详情
+        function renderCompanyDetails(data) {
+            const company = data.company;
+            let html = `
+                <h2>${company.company_name} (${company.ticker_symbol || 'N/A'})</h2>
+                <p style="color: #b8d4ff;">类别: ${company.category || 'N/A'}</p>
+            `;
+
+            // 持仓历史
+            if (data.purchases && data.purchases.length > 0) {
+                html += `
+                    <div class="history-section">
+                        <h3>📊 持仓历史</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>操作</th>
+                                    <th style="text-align: right;">变化量</th>
+                                    <th style="text-align: right;">累计持仓</th>
+                                    <th style="text-align: right;">平均价格</th>
+                                    <th style="text-align: right;">总成本</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                data.purchases.forEach(p => {
+                    const actionIcon = p.action === 'buy' ? '🟢' : p.action === 'sell' ? '🔴' : '⚪';
+                    const actionClass = p.action === 'buy' ? 'action-buy' : p.action === 'sell' ? 'action-sell' : 'action-hold';
+                    const actionText = p.action === 'buy' ? '增持' : p.action === 'sell' ? '减持' : '持平';
+
+                    html += `
+                        <tr>
+                            <td>${p.purchase_date}</td>
+                            <td><span class="action-badge ${actionClass}">${actionIcon} ${actionText}</span></td>
+                            <td style="text-align: right;">${p.quantity > 0 ? '+' : ''}${formatNumber(p.quantity, 2)} BTC</td>
+                            <td style="text-align: right;">${formatNumber(p.cumulative_holdings, 2)} BTC</td>
+                            <td style="text-align: right;">$${formatNumber(p.average_price, 0)}</td>
+                            <td style="text-align: right;">$${formatNumber(p.total_cost, 0)}</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+            }
+
+            // 融资历史
+            if (data.financing && data.financing.length > 0) {
+                html += `
+                    <div class="history-section">
+                        <h3>💸 融资历史</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>类型</th>
+                                    <th style="text-align: right;">金额</th>
+                                    <th>用途</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                data.financing.forEach(f => {
+                    html += `
+                        <tr>
+                            <td>${f.financing_date}</td>
+                            <td>${f.financing_type}</td>
+                            <td style="text-align: right;">$${formatNumber(f.amount, 0)}</td>
+                            <td>${f.purpose || '-'}</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+            }
+
+            // 股价历史
+            if (data.stock_prices && data.stock_prices.length > 0) {
+                html += `
+                    <div class="history-section">
+                        <h3>📈 股价历史</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th style="text-align: right;">开盘</th>
+                                    <th style="text-align: right;">收盘</th>
+                                    <th style="text-align: right;">涨跌</th>
+                                    <th style="text-align: right;">市值</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+
+                data.stock_prices.forEach(s => {
+                    const changeColor = s.change_pct > 0 ? '#4caf50' : s.change_pct < 0 ? '#f44336' : '#9e9e9e';
+
+                    html += `
+                        <tr>
+                            <td>${s.trade_date}</td>
+                            <td style="text-align: right;">$${formatNumber(s.open_price, 2)}</td>
+                            <td style="text-align: right;">$${formatNumber(s.close_price, 2)}</td>
+                            <td style="text-align: right; color: ${changeColor};">
+                                ${s.change_pct > 0 ? '+' : ''}${formatNumber(s.change_pct, 2)}%
+                            </td>
+                            <td style="text-align: right;">$${formatNumber(s.market_cap, 0)}</td>
+                        </tr>
+                    `;
+                });
+
+                html += '</tbody></table></div>';
+            }
+
+            document.getElementById('modalContent').innerHTML = html;
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('companyModal').style.display = 'none';
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('companyModal');
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // 刷新所有数据
+        function refreshData() {
+            loadSummaryData();
+            loadTopHolders();
+            loadRecentActivities();
+            loadCompaniesList();
+        }
+
+        // 格式化数字
+        function formatNumber(num, decimals = 2) {
+            if (num === null || num === undefined) return '-';
+            return parseFloat(num).toLocaleString('en-US', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+    </script>
+</body>
+</html>

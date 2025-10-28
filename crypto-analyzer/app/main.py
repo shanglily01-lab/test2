@@ -233,6 +233,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册企业金库监控API路由
+try:
+    from app.api.corporate_treasury import router as corporate_treasury_router
+    app.include_router(corporate_treasury_router)
+    logger.info("✅ 企业金库监控API路由已注册")
+except Exception as e:
+    logger.warning(f"⚠️  企业金库监控API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 
 # ==================== API路由 ====================
 
@@ -280,6 +290,16 @@ async def hyperliquid_guide():
 async def test_futures():
     """合约数据测试页面"""
     return FileResponse("templates/test_futures.html")
+
+
+@app.get("/corporate-treasury")
+async def corporate_treasury_page():
+    """企业金库监控页面"""
+    treasury_path = Path("templates/corporate_treasury.html")
+    if treasury_path.exists():
+        return FileResponse(treasury_path)
+    else:
+        raise HTTPException(status_code=404, detail="企业金库监控页面未找到")
 
 
 @app.get("/health")
