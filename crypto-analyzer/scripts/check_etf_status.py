@@ -93,12 +93,15 @@ def main():
                 results = conn.execute(text('''
                     SELECT
                         symbol,
-                        recommendation,
-                        score,
-                        etf_factor,
+                        signal,
+                        total_score,
                         technical_score,
                         news_score,
                         funding_score,
+                        hyperliquid_score,
+                        ethereum_score,
+                        current_price,
+                        confidence,
                         updated_at
                     FROM investment_recommendations_cache
                     ORDER BY updated_at DESC
@@ -107,21 +110,27 @@ def main():
 
                 for row in results:
                     symbol = row[0] or 'N/A'
-                    recommendation = row[1] or 'N/A'
-                    score = f"{row[2]:.1f}" if row[2] is not None else 'N/A'
-                    etf_factor = f"{row[3]:.1f}" if row[3] is not None else 'N/A'
-                    technical = f"{row[4]:.1f}" if row[4] is not None else 'N/A'
-                    news = f"{row[5]:.1f}" if row[5] is not None else 'N/A'
-                    funding = f"{row[6]:.1f}" if row[6] is not None else 'N/A'
+                    signal = row[1] or 'N/A'
+                    total_score = f"{row[2]:.1f}" if row[2] is not None else 'N/A'
+                    technical = f"{row[3]:.1f}" if row[3] is not None else 'N/A'
+                    news = f"{row[4]:.1f}" if row[4] is not None else 'N/A'
+                    funding = f"{row[5]:.1f}" if row[5] is not None else 'N/A'
+                    hyperliquid = f"{row[6]:.1f}" if row[6] is not None else 'N/A'
+                    ethereum = f"{row[7]:.1f}" if row[7] is not None else 'N/A'
+                    price = f"${row[8]:,.2f}" if row[8] is not None else 'N/A'
+                    confidence = f"{row[9]:.1f}%" if row[9] is not None else 'N/A'
 
                     print(f"\n  {symbol}:")
-                    print(f"    建议: {recommendation} | 综合评分: {score}")
-                    print(f"    ETF 因素: {etf_factor} | 技术: {technical} | 新闻: {news} | 资金费率: {funding}")
-                    print(f"    更新时间: {row[7] or 'N/A'}")
+                    print(f"    信号: {signal} | 综合评分: {total_score} | 置信度: {confidence}")
+                    print(f"    当前价格: {price}")
+                    print(f"    各维度评分:")
+                    print(f"      技术: {technical} | 新闻: {news} | 资金费率: {funding}")
+                    print(f"      Hyperliquid: {hyperliquid} | 以太坊链上: {ethereum}")
+                    print(f"    更新时间: {row[10] or 'N/A'}")
 
                     # 检查更新时间是否过期
-                    if row[7]:
-                        age = (datetime.now() - row[7]).total_seconds() / 60
+                    if row[10]:
+                        age = (datetime.now() - row[10]).total_seconds() / 60
                         if age > 10:
                             print(f"    ⚠️  数据已过期 {age:.0f} 分钟（应每5分钟更新）")
                         else:
