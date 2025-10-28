@@ -202,10 +202,9 @@ def main():
     """主函数"""
     import argparse
 
-    parser = argparse.ArgumentParser(description='企业金库批量导入工具')
+    parser = argparse.ArgumentParser(description='企业金库批量导入工具 - BTC持仓追踪')
     parser.add_argument('-f', '--file', help='从文件导入（如：import_template.txt）')
     parser.add_argument('-d', '--date', help='数据日期 (YYYY-MM-DD，默认=今天)')
-    parser.add_argument('-a', '--asset', choices=['BTC', 'ETH'], default='BTC', help='资产类型')
 
     args = parser.parse_args()
 
@@ -235,11 +234,9 @@ def main():
 
     print(f"数据日期: {purchase_date}")
 
-    # 获取资产类型
-    if args.asset:
-        asset_type = args.asset
-    else:
-        asset_type = input("资产类型 (BTC/ETH, 默认=BTC): ").strip().upper() or 'BTC'
+    # 固定为 BTC
+    asset_type = 'BTC'
+    print(f"资产类型: {asset_type}")
 
     # 读取数据
     if args.file:
