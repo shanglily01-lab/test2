@@ -278,8 +278,7 @@ class PaperTradingEngine:
         # 1. 扣除账户余额
         cursor.execute(
             """UPDATE paper_trading_accounts
-            SET current_balance = current_balance - %s,
-                total_trades = total_trades + 1
+            SET current_balance = current_balance - %s
             WHERE id = %s""",
             (total_cost, account_id)
         )
