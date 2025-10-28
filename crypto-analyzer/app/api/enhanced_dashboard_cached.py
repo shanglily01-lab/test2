@@ -382,7 +382,7 @@ class EnhancedDashboardCached:
                 FROM hyperliquid_symbol_aggregation
                 WHERE period = '24h'
                 ORDER BY ABS(net_flow) DESC
-                LIMIT 5
+                LIMIT 20
             """))
             top_coins_data = result.fetchall()
 
@@ -398,7 +398,7 @@ class EnhancedDashboardCached:
                 WHERE t.trade_time >= :cutoff_time
                     AND w.is_monitoring = 1
                 ORDER BY t.notional_usd DESC
-                LIMIT 20
+                LIMIT 50
             """), {"cutoff_time": cutoff_time})
 
             trades_data = result.fetchall()
@@ -442,7 +442,7 @@ class EnhancedDashboardCached:
             result = {
                 'monitored_wallets': monitored_count,
                 'total_volume_24h': total_volume,
-                'recent_trades': recent_trades[:20],
+                'recent_trades': recent_trades[:50],
                 'top_coins': top_coins
             }
 
