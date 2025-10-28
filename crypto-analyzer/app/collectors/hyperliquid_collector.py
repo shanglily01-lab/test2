@@ -49,68 +49,102 @@ class HyperliquidCollector:
         if self.proxy:
             logger.info(f"使用代理: {self.proxy}")
 
-    async def fetch_user_state(self, address: str) -> Optional[Dict]:
+    async def fetch_user_state(self, address: str, max_retries: int = 3) -> Optional[Dict]:
         """
-        获取用户当前状态（持仓、余额等）
+        获取用户当前状态（持仓、余额等）- 带重试机制
 
         Args:
             address: 用户地址
+            max_retries: 最大重试次数
 
         Returns:
             用户状态数据
         """
-        try:
-            payload = {
-                "type": "clearinghouseState",
-                "user": address
-            }
+        payload = {
+            "type": "clearinghouseState",
+            "user": address
+        }
 
-            timeout = aiohttp.ClientTimeout(total=30, connect=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(self.api_url, json=payload, proxy=self.proxy, ssl=False) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        logger.debug(f"获取用户 {address[:10]}... 状态成功")
-                        return data
-                    else:
-                        logger.error(f"获取用户状态失败: HTTP {response.status}")
-                        return None
+        for attempt in range(max_retries):
+            try:
+                timeout = aiohttp.ClientTimeout(total=20, connect=8)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(self.api_url, json=payload, proxy=self.proxy, ssl=False) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            logger.debug(f"获取用户 {address[:10]}... 状态成功")
+                            return data
+                        else:
+                            logger.warning(f"获取用户状态失败: HTTP {response.status} (尝试 {attempt + 1}/{max_retries})")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(2 ** attempt)  # 指数退避
+                            continue
 
-        except Exception as e:
-            logger.error(f"获取用户状态异常: {e}")
-            return None
+            except asyncio.TimeoutError:
+                logger.warning(f"获取用户状态超时 (尝试 {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                continue
+            except asyncio.CancelledError:
+                logger.warning(f"请求被取消，跳过地址 {address[:10]}...")
+                return None
+            except Exception as e:
+                logger.warning(f"获取用户状态异常: {e} (尝试 {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                continue
 
-    async def fetch_user_fills(self, address: str, limit: int = 100) -> List[Dict]:
+        logger.error(f"获取用户 {address[:10]}... 状态失败，已重试 {max_retries} 次")
+        return None
+
+    async def fetch_user_fills(self, address: str, limit: int = 100, max_retries: int = 3) -> List[Dict]:
         """
-        获取用户的成交记录（最近的交易）
+        获取用户的成交记录（最近的交易）- 带重试机制
 
         Args:
             address: 用户地址
             limit: 返回数量
+            max_retries: 最大重试次数
 
         Returns:
             成交记录列表
         """
-        try:
-            payload = {
-                "type": "userFills",
-                "user": address
-            }
+        payload = {
+            "type": "userFills",
+            "user": address
+        }
 
-            timeout = aiohttp.ClientTimeout(total=30, connect=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(self.api_url, json=payload, proxy=self.proxy, ssl=False) as response:
-                    if response.status == 200:
-                        fills = await response.json()
-                        logger.info(f"获取 {address[:10]}... 成交记录: {len(fills)} 笔")
-                        return fills[:limit] if fills else []
-                    else:
-                        logger.error(f"获取成交记录失败: HTTP {response.status}")
-                        return []
+        for attempt in range(max_retries):
+            try:
+                timeout = aiohttp.ClientTimeout(total=20, connect=8)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(self.api_url, json=payload, proxy=self.proxy, ssl=False) as response:
+                        if response.status == 200:
+                            fills = await response.json()
+                            logger.info(f"获取 {address[:10]}... 成交记录: {len(fills)} 笔")
+                            return fills[:limit] if fills else []
+                        else:
+                            logger.warning(f"获取成交记录失败: HTTP {response.status} (尝试 {attempt + 1}/{max_retries})")
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(2 ** attempt)
+                            continue
 
-        except Exception as e:
-            logger.error(f"获取成交记录异常: {e}")
-            return []
+            except asyncio.TimeoutError:
+                logger.warning(f"获取成交记录超时 (尝试 {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                continue
+            except asyncio.CancelledError:
+                logger.warning(f"请求被取消，跳过地址 {address[:10]}... 的成交记录")
+                return []
+            except Exception as e:
+                logger.warning(f"获取成交记录异常: {e} (尝试 {attempt + 1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                continue
+
+        logger.error(f"获取 {address[:10]}... 成交记录失败，已重试 {max_retries} 次")
+        return []
 
     async def fetch_user_funding_history(self, address: str) -> List[Dict]:
         """
