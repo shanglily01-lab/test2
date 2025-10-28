@@ -144,13 +144,13 @@ async def diagnose_ema_signals():
             else:
                 logger.info(f"      EMA状态: 🔴 空头排列 (EMA{short_period} < EMA{long_period})")
 
-            # 检查是否有金叉
+            # 检查是否有金叉（买入信号）
             is_golden_cross = (
                 prev_short_ema <= prev_long_ema and
                 current_short_ema > current_long_ema
             )
 
-            # 检查是否有死叉
+            # 检查是否有死叉（卖出信号）
             is_death_cross = (
                 prev_short_ema >= prev_long_ema and
                 current_short_ema < current_long_ema
@@ -179,10 +179,14 @@ async def diagnose_ema_signals():
                     logger.info(f"      ⚠️  成交量不足 - 信号未触发 (需要 >= {volume_threshold}x)")
 
             elif is_death_cross:
-                logger.info(f"      🔵 检测到 EMA 死叉")
+                logger.info(f"      ⚠️  检测到 EMA 死叉（卖出信号）!")
                 logger.info(f"         前一根: EMA{short_period}={prev_short_ema:.4f} >= EMA{long_period}={prev_long_ema:.4f}")
                 logger.info(f"         当前根: EMA{short_period}={current_short_ema:.4f} < EMA{long_period}={current_long_ema:.4f}")
-                logger.info(f"      ℹ️  死叉不产生信号（系统仅监控金叉买入信号）")
+
+                if volume_ratio >= volume_threshold:
+                    logger.info(f"      ✅ 成交量确认 - 这是一个有效的卖出信号!")
+                else:
+                    logger.info(f"      ⚠️  成交量不足 - 信号未触发 (需要 >= {volume_threshold}x)")
 
             else:
                 logger.info(f"      ⭕ 无交叉信号")
@@ -221,15 +225,18 @@ async def diagnose_ema_signals():
     logger.info("\n" + "=" * 80)
     logger.info("🎯 诊断总结")
     logger.info("=" * 80)
+    logger.info("\n系统支持两种信号:")
+    logger.info("📊 买入信号（金叉）: EMA{short_period} 上穿 EMA{long_period}")
+    logger.info("📊 卖出信号（死叉）: EMA{short_period} 下穿 EMA{long_period}")
     logger.info("\n如果没有信号，可能的原因:")
-    logger.info("1. ⭕ 当前没有发生 EMA 金叉（最常见）")
-    logger.info("2. ❌ 发生了金叉但成交量不足（< 1.5x 平均成交量）")
-    logger.info("3. 🔴 当前处于空头排列，等待价格上涨")
-    logger.info("4. 🟢 已经在多头排列中，需要等待回调后的下一次金叉")
+    logger.info("1. ⭕ 当前没有发生 EMA 交叉（最常见）")
+    logger.info("2. ❌ 发生了交叉但成交量不足（< 1.5x 平均成交量）")
+    logger.info("3. 🔴 当前处于空头排列，等待价格变化")
+    logger.info("4. 🟢 当前处于多头排列，等待价格变化")
     logger.info("\n💡 建议:")
     logger.info("- 如果想测试信号，可以降低 volume_threshold 到 1.0")
-    logger.info("- 或者等待市场出现真实的 EMA 金叉信号")
-    logger.info("- 持续运行 scheduler 会自动捕捉新的交叉信号")
+    logger.info("- 或者等待市场出现真实的 EMA 交叉信号")
+    logger.info("- 持续运行 scheduler 会自动捕捉买入和卖出信号")
     logger.info("")
 
 

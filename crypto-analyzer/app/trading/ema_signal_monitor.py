@@ -162,6 +162,44 @@ class EMASignalMonitor:
 
         return is_golden_cross
 
+    def detect_death_cross(
+        self,
+        short_ema_history: list,
+        long_ema_history: list,
+        volume_ratio: float
+    ) -> bool:
+        """
+        检测 EMA 死叉（卖出信号）
+
+        Args:
+            short_ema_history: 短期 EMA 历史（最近3个值）
+            long_ema_history: 长期 EMA 历史（最近3个值）
+            volume_ratio: 当前成交量与平均成交量的比值
+
+        Returns:
+            是否出现死叉
+        """
+        if len(short_ema_history) < 2 or len(long_ema_history) < 2:
+            return False
+
+        # 当前值和前一个值
+        short_current = short_ema_history[-1]
+        short_prev = short_ema_history[-2]
+        long_current = long_ema_history[-1]
+        long_prev = long_ema_history[-2]
+
+        # 检测死叉：
+        # 1. 前一根K线：短期EMA >= 长期EMA
+        # 2. 当前K线：短期EMA < 长期EMA
+        # 3. 成交量放大
+        is_death_cross = (
+            short_prev >= long_prev and
+            short_current < long_current and
+            volume_ratio >= self.volume_threshold
+        )
+
+        return is_death_cross
+
     def calculate_signal_strength(
         self,
         price_change_pct: float,
@@ -254,26 +292,38 @@ class EMASignalMonitor:
             current_volume = volumes[-1]
             volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
 
-            # 检测金叉
+            # 检测金叉（买入信号）
             is_golden_cross = self.detect_golden_cross(
                 short_ema_values,
                 long_ema_values,
                 volume_ratio
             )
 
-            if not is_golden_cross:
+            # 检测死叉（卖出信号）
+            is_death_cross = self.detect_death_cross(
+                short_ema_values,
+                long_ema_values,
+                volume_ratio
+            )
+
+            # 如果没有任何信号，返回 None
+            if not is_golden_cross and not is_death_cross:
                 return None
 
+            # 确定信号类型
+            signal_type = 'BUY' if is_golden_cross else 'SELL'
+            signal_key = f"{symbol}_{signal_type}"
+
             # 检查是否已经提醒过（避免重复提醒）
-            last_signal_time = self.signal_history.get(symbol)
+            last_signal_time = self.signal_history.get(signal_key)
             if last_signal_time:
                 time_since_last = datetime.now() - last_signal_time
                 if time_since_last < timedelta(hours=1):  # 1小时内不重复提醒
-                    logger.debug(f"{symbol}: 金叉信号已在 {time_since_last.seconds//60} 分钟前提醒过")
+                    logger.debug(f"{symbol}: {signal_type}信号已在 {time_since_last.seconds//60} 分钟前提醒过")
                     return None
 
             # 记录信号时间
-            self.signal_history[symbol] = datetime.now()
+            self.signal_history[signal_key] = datetime.now()
 
             # 计算信号详细信息
             current_price = closes[-1]
@@ -281,7 +331,7 @@ class EMASignalMonitor:
             ema_distance_pct = abs((short_ema_values[-1] - long_ema_values[-1]) / long_ema_values[-1]) * 100
 
             signal_strength = self.calculate_signal_strength(
-                price_change_pct,
+                abs(price_change_pct),  # 使用绝对值，卖出信号可能是负数
                 volume_ratio,
                 ema_distance_pct
             )
@@ -290,7 +340,7 @@ class EMASignalMonitor:
             signal = {
                 'symbol': symbol,
                 'timeframe': self.timeframe,
-                'signal_type': 'BUY',
+                'signal_type': signal_type,
                 'signal_strength': signal_strength,
                 'timestamp': datetime.now(),
                 'price': current_price,
@@ -308,9 +358,14 @@ class EMASignalMonitor:
                 }
             }
 
-            logger.info(f"🚀 {symbol} 出现 {signal_strength.upper()} 买入信号！")
-            logger.info(f"   价格: ${current_price:.2f} | 涨幅: {price_change_pct:+.2f}%")
-            logger.info(f"   短期EMA: {short_ema_values[-1]:.2f} | 长期EMA: {long_ema_values[-1]:.2f}")
+            # 根据信号类型显示不同的emoji和文字
+            if signal_type == 'BUY':
+                logger.info(f"🚀 {symbol} 出现 {signal_strength.upper()} 买入信号（金叉）！")
+            else:
+                logger.info(f"⚠️  {symbol} 出现 {signal_strength.upper()} 卖出信号（死叉）！")
+
+            logger.info(f"   价格: ${current_price:.2f} | 变动: {price_change_pct:+.2f}%")
+            logger.info(f"   短期EMA{self.short_period}: {short_ema_values[-1]:.2f} | 长期EMA{self.long_period}: {long_ema_values[-1]:.2f}")
             logger.info(f"   成交量放大: {volume_ratio:.2f}x")
 
             return signal
