@@ -332,22 +332,27 @@ async def contract_trading_page():
 
 @app.get("/strategies")
 async def strategies_page():
-    """投资策略管理页面"""
-    strategies_path = Path("templates/strategies.html")
+    """投资策略管理页面 - strategy_manager.html"""
+    # 优先使用app/web/templates下的页面
+    strategies_path = Path("app/web/templates/strategy_manager.html")
     if strategies_path.exists():
         return FileResponse(strategies_path)
+    # 备用：templates目录
+    strategies_path_backup = Path("templates/strategy_manager.html")
+    if strategies_path_backup.exists():
+        return FileResponse(strategies_path_backup)
     else:
         raise HTTPException(status_code=404, detail="投资策略页面未找到")
 
 
 @app.get("/auto-trading")
 async def auto_trading_page():
-    """自动合约交易页面"""
-    auto_trading_path = Path("templates/auto_trading.html")
+    """自动合约交易页面 - futures_trading.html"""
+    auto_trading_path = Path("templates/futures_trading.html")
     if auto_trading_path.exists():
         return FileResponse(auto_trading_path)
     else:
-        raise HTTPException(status_code=404, detail="自动交易页面未找到")
+        raise HTTPException(status_code=404, detail="自动合约交易页面未找到")
 
 
 @app.get("/health")
