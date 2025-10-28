@@ -655,31 +655,31 @@ function updateCorporateTreasury(data) {
     let html = `
         <!-- 汇总统计 -->
         <div class="row g-3 mb-3">
-            <div class="col-md-2">
+            <div class="col-md-2 col-6">
                 <div class="text-center p-3" style="background: rgba(102, 126, 234, 0.1); border-radius: 10px;">
                     <div class="small text-muted mb-1">监控公司</div>
                     <div class="h4 mb-0 fw-bold text-primary">${summary.total_companies || 0}</div>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2 col-6">
                 <div class="text-center p-3" style="background: rgba(255, 215, 0, 0.1); border-radius: 10px;">
                     <div class="small text-muted mb-1">BTC 总持仓</div>
-                    <div class="h4 mb-0 fw-bold" style="color: #f5a623;">${formatNumber(summary.total_btc_holdings, 2)} BTC</div>
+                    <div class="h5 mb-0 fw-bold" style="color: #f5a623;">${formatNumber(summary.total_btc_holdings, 0)} BTC</div>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-3 col-6">
                 <div class="text-center p-3" style="background: rgba(56, 239, 125, 0.1); border-radius: 10px;">
                     <div class="small text-muted mb-1">总市值 (USD)</div>
-                    <div class="h4 mb-0 fw-bold text-success">$${formatLargeNumber(summary.total_value_usd)}</div>
+                    <div class="h5 mb-0 fw-bold text-success" style="font-size: 1.1rem;">$${formatLargeNumber(summary.total_value_usd)}</div>
                 </div>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3 col-6">
                 <div class="text-center p-3" style="background: rgba(0, 242, 254, 0.1); border-radius: 10px;">
                     <div class="small text-muted mb-1">BTC 价格</div>
                     <div class="h5 mb-0 fw-bold text-info">$${formatNumber(summary.current_btc_price, 0)}</div>
                 </div>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 col-6">
                 <div class="text-center p-3" style="background: rgba(255, 106, 0, 0.1); border-radius: 10px;">
                     <div class="small text-muted mb-1">30天活跃</div>
                     <div class="h4 mb-0 fw-bold" style="color: #ff6a00;">${summary.active_companies_30d || 0}</div>

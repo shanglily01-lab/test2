@@ -463,7 +463,7 @@
 
                     document.getElementById('totalCompanies').textContent = summaryData.total_companies;
                     document.getElementById('totalBTC').textContent = formatNumber(summaryData.total_btc_holdings, 2);
-                    document.getElementById('totalValueUSD').textContent = '$' + formatNumber(summaryData.total_value_usd, 0);
+                    document.getElementById('totalValueUSD').textContent = '$' + formatLargeNumber(summaryData.total_value_usd);
                     document.getElementById('currentBTCPrice').textContent = '$' + formatNumber(summaryData.current_btc_price, 0);
                     document.getElementById('activeCompanies30d').textContent = summaryData.active_companies_30d;
                 }
@@ -826,6 +826,17 @@
                 minimumFractionDigits: decimals,
                 maximumFractionDigits: decimals
             });
+        }
+
+        // 格式化大数字 (K, M, B, T)
+        function formatLargeNumber(num) {
+            if (!num) return '-';
+            const absNum = Math.abs(num);
+            if (absNum >= 1000000000000) return (absNum / 1000000000000).toFixed(2) + 'T';
+            if (absNum >= 1000000000) return (absNum / 1000000000).toFixed(2) + 'B';
+            if (absNum >= 1000000) return (absNum / 1000000).toFixed(2) + 'M';
+            if (absNum >= 1000) return (absNum / 1000).toFixed(2) + 'K';
+            return absNum.toFixed(2);
         }
     </script>
 </body>
