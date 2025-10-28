@@ -70,7 +70,12 @@ def main():
             ''')).fetchall()
 
             for row in results:
-                print(f"  {row[0]}: {row[1]} | 净流入: ${row[2]:,.0f} | AUM: ${row[3]:,.0f} | 来源: {row[4]}")
+                ticker = row[0] or 'N/A'
+                trade_date = row[1] or 'N/A'
+                net_inflow = f"${row[2]:,.0f}" if row[2] is not None else 'N/A'
+                aum = f"${row[3]:,.0f}" if row[3] is not None else 'N/A'
+                source = row[4] or 'N/A'
+                print(f"  {ticker}: {trade_date} | 净流入: {net_inflow} | AUM: {aum} | 来源: {source}")
 
             # 2. 检查投资建议缓存
             print(f"\n2️⃣  投资建议缓存 (investment_recommendations_cache)")
@@ -101,10 +106,18 @@ def main():
                 ''')).fetchall()
 
                 for row in results:
-                    print(f"\n  {row[0]}:")
-                    print(f"    建议: {row[1]} | 综合评分: {row[2]:.1f}")
-                    print(f"    ETF 因素: {row[3]:.1f} | 技术: {row[4]:.1f} | 新闻: {row[5]:.1f} | 资金费率: {row[6]:.1f}")
-                    print(f"    更新时间: {row[7]}")
+                    symbol = row[0] or 'N/A'
+                    recommendation = row[1] or 'N/A'
+                    score = f"{row[2]:.1f}" if row[2] is not None else 'N/A'
+                    etf_factor = f"{row[3]:.1f}" if row[3] is not None else 'N/A'
+                    technical = f"{row[4]:.1f}" if row[4] is not None else 'N/A'
+                    news = f"{row[5]:.1f}" if row[5] is not None else 'N/A'
+                    funding = f"{row[6]:.1f}" if row[6] is not None else 'N/A'
+
+                    print(f"\n  {symbol}:")
+                    print(f"    建议: {recommendation} | 综合评分: {score}")
+                    print(f"    ETF 因素: {etf_factor} | 技术: {technical} | 新闻: {news} | 资金费率: {funding}")
+                    print(f"    更新时间: {row[7] or 'N/A'}")
 
                     # 检查更新时间是否过期
                     if row[7]:
