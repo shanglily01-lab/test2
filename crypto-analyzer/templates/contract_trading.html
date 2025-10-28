@@ -618,13 +618,22 @@
                     take_profit: takeProfit ? parseFloat(takeProfit) : null
                 };
 
+                console.log('创建订单:', orderData);
+
                 const createResponse = await fetch('/api/contract-trading/order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(orderData)
                 });
 
+                if (!createResponse.ok) {
+                    const errorText = await createResponse.text();
+                    console.error('创建订单HTTP错误:', createResponse.status, errorText);
+                    throw new Error(`创建订单失败 (${createResponse.status}): ${errorText}`);
+                }
+
                 const createResult = await createResponse.json();
+                console.log('订单创建结果:', createResult);
 
                 if (!createResult.success) {
                     showToast(createResult.detail || '创建订单失败', 'danger');
@@ -632,16 +641,34 @@
                 }
 
                 // 执行订单
+                const executeData = {
+                    order_id: createResult.data.order_id,
+                    current_price: price
+                };
+
+                console.log('执行订单:', executeData);
+
                 const executeResponse = await fetch('/api/contract-trading/order/execute', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        order_id: createResult.data.order_id,
-                        current_price: price
-                    })
+                    body: JSON.stringify(executeData)
                 });
 
+                if (!executeResponse.ok) {
+                    const errorText = await executeResponse.text();
+                    console.error('执行订单HTTP错误:', executeResponse.status, errorText);
+
+                    // 尝试解析JSON错误
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        throw new Error(errorJson.detail || `执行订单失败 (${executeResponse.status})`);
+                    } catch (e) {
+                        throw new Error(`执行订单失败 (${executeResponse.status}): ${errorText}`);
+                    }
+                }
+
                 const executeResult = await executeResponse.json();
+                console.log('订单执行结果:', executeResult);
 
                 if (executeResult.success) {
                     showToast(`${selectedSide === 'LONG' ? '做多' : '做空'}开仓成功！`, 'success');
@@ -652,7 +679,7 @@
 
             } catch (error) {
                 console.error('交易失败:', error);
-                showToast('交易失败', 'danger');
+                showToast(`交易失败: ${error.message}`, 'danger');
             }
         }
 

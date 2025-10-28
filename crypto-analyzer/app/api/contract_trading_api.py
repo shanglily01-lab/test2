@@ -163,13 +163,33 @@ async def execute_order(request: ExecuteOrderRequest):
         raise HTTPException(status_code=400, detail="交易模拟器未初始化")
 
     try:
+        print(f"[DEBUG] 执行订单请求: order_id={request.order_id}, price={request.current_price}")
+
+        # 检查订单是否存在
+        if request.order_id not in simulator.orders:
+            error_msg = f"订单不存在: {request.order_id}"
+            print(f"[ERROR] {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        order = simulator.orders[request.order_id]
+        print(f"[DEBUG] 找到订单: {order.symbol} {order.side.value} {order.quantity}张 杠杆{order.leverage}x")
+
         success = await simulator.execute_order(
             order_id=request.order_id,
             current_price=request.current_price
         )
 
         if not success:
-            raise HTTPException(status_code=400, detail="执行订单失败")
+            error_msg = "执行订单失败 - 可能是保证金不足或订单状态不正确"
+            print(f"[ERROR] {error_msg}")
+
+            # 获取更详细的失败原因
+            if order.status.value == "REJECTED":
+                error_msg = "订单被拒绝 - 保证金不足或余额不足支付手续费"
+
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        print(f"[SUCCESS] 订单执行成功: {request.order_id}")
 
         return {
             "success": True,
@@ -181,8 +201,14 @@ async def execute_order(request: ExecuteOrderRequest):
             }
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"执行订单失败: {str(e)}")
+        error_msg = f"执行订单失败: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/api/contract-trading/positions")
