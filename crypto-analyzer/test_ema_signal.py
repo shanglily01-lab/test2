@@ -38,7 +38,7 @@ async def test_ema_signal():
             'enabled': True,
             'short_period': 9,
             'long_period': 21,
-            'timeframe': '15m',
+            'timeframe': '1h',  # 使用 1小时周期（数据库中有数据）
             'volume_threshold': 1.5
         }
 
