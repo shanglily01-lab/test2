@@ -82,8 +82,8 @@ class EMASignalMonitor:
         """
         session = self.db_service.get_session()
         try:
-            # 转换交易对格式 (BTC/USDT -> BTCUSDT)
-            binance_symbol = symbol.replace('/', '')
+            # 数据库中的 symbol 格式是 BTC/USDT（带斜杠），保持原样
+            db_symbol = symbol
 
             # 使用统一的 kline_data 表
             query = text("""
@@ -97,7 +97,7 @@ class EMASignalMonitor:
             """)
 
             result = session.execute(query, {
-                'symbol': binance_symbol,
+                'symbol': db_symbol,
                 'timeframe': self.timeframe,
                 'limit': limit
             })
