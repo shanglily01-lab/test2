@@ -62,19 +62,20 @@ async def api_info():
     }
 
 
-@router.get("/api/dashboard")
-async def get_dashboard(session: Session = Depends(get_db_session)):
-    """
-    获取仪表盘数据
-    包含: 最新价格、投资建议、新闻
-    """
-    try:
-        analysis_service = AnalysisService(session)
-        data = analysis_service.get_dashboard_data()
-        return {"success": True, "data": data}
-    except Exception as e:
-        logger.error(f"获取仪表盘数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# 注释掉这个端点，因为 main.py 中有更完整的实现（带缓存和enhanced_dashboard）
+# @router.get("/api/dashboard")
+# async def get_dashboard(session: Session = Depends(get_db_session)):
+#     """
+#     获取仪表盘数据
+#     包含: 最新价格、投资建议、新闻
+#     """
+#     try:
+#         analysis_service = AnalysisService(session)
+#         data = analysis_service.get_dashboard_data()
+#         return {"success": True, "data": data}
+#     except Exception as e:
+#         logger.error(f"获取仪表盘数据失败: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/api/prices")
