@@ -40,6 +40,27 @@ def check_klines_data():
         print(f"   主机: {mysql_config.get('host', 'localhost')}")
         print(f"   数据库: {mysql_config.get('database', 'binance-data')}\n")
 
+        # 列出所有表
+        print("=" * 80)
+        print("📋 数据库中的所有表")
+        print("=" * 80 + "\n")
+
+        cursor.execute("SHOW TABLES")
+        tables = cursor.fetchall()
+
+        if tables:
+            print(f"找到 {len(tables)} 个表:\n")
+            for table in tables:
+                table_name = list(table.values())[0]
+
+                # 获取表的记录数
+                cursor.execute(f"SELECT COUNT(*) as count FROM `{table_name}`")
+                count = cursor.fetchone()['count']
+
+                print(f"   📊 {table_name:<40} {count:>10,} 条记录")
+        else:
+            print("⚠️  数据库中没有任何表\n")
+
     except mysql.connector.Error as e:
         print(f"\n❌ 数据库连接失败: {e}")
         print(f"\n💡 提示: 如果数据库在 Windows 本地，请确保:")
