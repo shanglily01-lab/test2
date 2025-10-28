@@ -40,7 +40,7 @@ class DatabaseService:
                 port = mysql_config.get('port', 3306)
                 user = mysql_config.get('user', 'root')
                 password = mysql_config.get('password', '')
-                database = mysql_config.get('database', 'crypto_data')
+                database = mysql_config.get('database', 'binance-data')
 
                 # URL编码密码以处理特殊字符
                 password_encoded = quote_plus(password)
