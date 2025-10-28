@@ -32,15 +32,14 @@ async def test_ema_signal():
     with open('config.yaml', 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
-    # 添加测试配置（如果不存在）
-    if 'ema_signal' not in config:
-        config['ema_signal'] = {
-            'enabled': True,
-            'short_period': 9,
-            'long_period': 21,
-            'timeframe': '1h',  # 使用 1小时周期（数据库中有数据）
-            'volume_threshold': 1.5
-        }
+    # 强制使用 1h 周期进行测试（数据库中有数据）
+    config['ema_signal'] = {
+        'enabled': True,
+        'short_period': 9,
+        'long_period': 21,
+        'timeframe': '1h',  # 使用 1小时周期（数据库中有 3,991 条记录）
+        'volume_threshold': 1.5
+    }
 
     if 'notification' not in config:
         config['notification'] = {
