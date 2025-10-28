@@ -10,28 +10,40 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import mysql.connector
 from mysql.connector import pooling
-import os
-from dotenv import load_dotenv
-
-# 加载环境变量
-load_dotenv()
+import yaml
+from pathlib import Path
 
 router = APIRouter()
 
-# 数据库连接池
-db_config = {
-    "host": os.getenv("MYSQL_HOST", "localhost"),
-    "user": os.getenv("MYSQL_USER", "root"),
-    "password": os.getenv("MYSQL_PASSWORD", ""),
-    "database": os.getenv("MYSQL_DATABASE", "binance_data"),
-    "pool_name": "corporate_treasury_pool",
-    "pool_size": 5
-}
+# 从 config.yaml 加载数据库配置
+config_path = Path("config.yaml")
+connection_pool = None
 
 try:
-    connection_pool = pooling.MySQLConnectionPool(**db_config)
-except mysql.connector.Error as e:
+    if config_path.exists():
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+
+        mysql_config = config.get('database', {}).get('mysql', {})
+
+        db_config = {
+            "host": mysql_config.get('host', 'localhost'),
+            "port": mysql_config.get('port', 3306),
+            "user": mysql_config.get('user', 'root'),
+            "password": mysql_config.get('password', ''),
+            "database": mysql_config.get('database', 'binance-data'),
+            "pool_name": "corporate_treasury_pool",
+            "pool_size": 5
+        }
+
+        connection_pool = pooling.MySQLConnectionPool(**db_config)
+        print(f"✅ 企业金库监控数据库连接池创建成功: {db_config['database']}")
+    else:
+        print("⚠️  config.yaml 不存在，无法初始化数据库连接")
+except Exception as e:
     print(f"❌ 企业金库监控数据库连接池创建失败: {e}")
+    import traceback
+    traceback.print_exc()
     connection_pool = None
 
 
