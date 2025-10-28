@@ -93,7 +93,7 @@ def main():
                 results = conn.execute(text('''
                     SELECT
                         symbol,
-                        signal,
+                        `signal`,
                         total_score,
                         technical_score,
                         news_score,
