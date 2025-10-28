@@ -144,7 +144,8 @@ class UnifiedDataScheduler:
 
         # 5. 合约监控服务
         try:
-            self.futures_monitor = FuturesMonitorService(config_path=self.config)
+            # FuturesMonitorService 需要配置文件路径，不是配置字典
+            self.futures_monitor = FuturesMonitorService(config_path='config.yaml')
             logger.info("  ✓ 合约监控服务")
         except Exception as e:
             self.futures_monitor = None
