@@ -17,6 +17,7 @@ import yaml
 from datetime import datetime
 from loguru import logger
 from sqlalchemy import create_engine, text
+from urllib.parse import quote_plus
 
 
 def main():
@@ -29,9 +30,10 @@ def main():
     db_config = config['database']['mysql']
 
     try:
-        # 构建数据库连接
+        # 构建数据库连接（密码需要 URL 编码以处理特殊字符）
+        password_encoded = quote_plus(db_config['password'])
         db_url = (
-            f"mysql+pymysql://{db_config['user']}:{db_config['password']}"
+            f"mysql+pymysql://{db_config['user']}:{password_encoded}"
             f"@{db_config['host']}:{db_config['port']}/{db_config['database']}"
         )
         engine = create_engine(db_url)
