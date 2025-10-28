@@ -89,6 +89,9 @@ async function loadDashboard() {
             updateHyperliquid(data.hyperliquid || {});
             updateStats(data.stats || {}, data.hyperliquid || {});
             document.getElementById('last-update').textContent = data.last_updated || '-';
+
+            // 加载EMA信号
+            loadEMASignals();
         }
     } catch (error) {
         console.error('加载仪表盘数据失败:', error);
@@ -735,6 +738,130 @@ function updateCorporateTreasury(data) {
     `;
 
     section.innerHTML = html;
+}
+
+// 加载EMA信号
+async function loadEMASignals() {
+    try {
+        const response = await fetch(`${API_BASE}/api/ema-signals?limit=10`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+            updateEMASignals(result.data);
+        }
+    } catch (error) {
+        console.error('加载EMA信号失败:', error);
+        document.getElementById('ema-signals-container').innerHTML = `
+            <div class="text-center p-3 text-muted">
+                <i class="bi bi-exclamation-triangle"></i>
+                <div>加载EMA信号失败</div>
+            </div>
+        `;
+    }
+}
+
+// 更新EMA信号显示
+function updateEMASignals(signals) {
+    const container = document.getElementById('ema-signals-container');
+
+    if (!signals || signals.length === 0) {
+        container.innerHTML = `
+            <div class="text-center p-4 text-muted">
+                <i class="bi bi-info-circle" style="font-size: 2rem;"></i>
+                <div class="mt-2">暂无EMA信号</div>
+                <small>系统每15分钟自动扫描一次</small>
+            </div>
+        `;
+        document.getElementById('ema-buy-count').textContent = '0';
+        document.getElementById('ema-sell-count').textContent = '0';
+        return;
+    }
+
+    // 统计买入和卖出信号数量
+    const buyCount = signals.filter(s => s.signal_type === 'BUY').length;
+    const sellCount = signals.filter(s => s.signal_type === 'SELL').length;
+    document.getElementById('ema-buy-count').textContent = buyCount;
+    document.getElementById('ema-sell-count').textContent = sellCount;
+
+    // 生成信号卡片
+    let html = '<div class="row g-2">';
+
+    signals.forEach(signal => {
+        const isBuy = signal.signal_type === 'BUY';
+        const typeClass = isBuy ? 'success' : 'danger';
+        const typeIcon = isBuy ? 'arrow-up-circle' : 'arrow-down-circle';
+        const typeText = isBuy ? '买入' : '卖出';
+
+        // 信号强度徽章
+        let strengthBadge = '';
+        let strengthClass = '';
+        if (signal.signal_strength === 'strong') {
+            strengthBadge = '强';
+            strengthClass = 'bg-warning text-dark';
+        } else if (signal.signal_strength === 'medium') {
+            strengthBadge = '中';
+            strengthClass = 'bg-info';
+        } else {
+            strengthBadge = '弱';
+            strengthClass = 'bg-secondary';
+        }
+
+        // 格式化时间
+        const signalTime = new Date(signal.timestamp);
+        const now = new Date();
+        const diffMinutes = Math.floor((now - signalTime) / 1000 / 60);
+        let timeAgo = '';
+        if (diffMinutes < 60) {
+            timeAgo = `${diffMinutes}分钟前`;
+        } else if (diffMinutes < 1440) {
+            timeAgo = `${Math.floor(diffMinutes / 60)}小时前`;
+        } else {
+            timeAgo = `${Math.floor(diffMinutes / 1440)}天前`;
+        }
+
+        html += `
+            <div class="col-md-6 col-lg-4 col-xl-3">
+                <div class="card border-${typeClass} h-100">
+                    <div class="card-body p-2">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="mb-0">
+                                <i class="bi bi-${typeIcon} text-${typeClass}"></i>
+                                <strong>${signal.symbol}</strong>
+                            </h6>
+                            <span class="badge ${strengthClass}">${strengthBadge}</span>
+                        </div>
+                        <div class="small">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">信号:</span>
+                                <span class="badge bg-${typeClass}">${typeText}</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">价格:</span>
+                                <strong>$${formatPrice(signal.price)}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">涨跌:</span>
+                                <span class="${signal.price_change_pct >= 0 ? 'text-success' : 'text-danger'}">
+                                    ${formatPercent(signal.price_change_pct)}
+                                </span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">成交量:</span>
+                                <span>${signal.volume_ratio.toFixed(1)}x</span>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">时间:</span>
+                                <span>${timeAgo}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    container.innerHTML = html;
 }
 
 // 初始化
