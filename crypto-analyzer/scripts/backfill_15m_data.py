@@ -1,11 +1,11 @@
 """
-回填最近5小时的 15分钟 K线数据
-Backfill recent 5 hours of 15m kline data
+回填最近10小时的 15分钟 K线数据
+Backfill recent 10 hours of 15m kline data
 
 用途：
 - 为 EMA 信号监控提供足够的历史数据（需要至少31条）
 - 从 Binance 和 Gate.io 采集数据
-- 采集最近 5 小时 = 20 条 15m K线数据
+- 采集最近 10 小时 = 40 条 15m K线数据（满足31条需求）
 """
 
 import asyncio
@@ -27,10 +27,10 @@ from sqlalchemy import text
 
 
 async def backfill_15m_data():
-    """回填最近5小时的15分钟K线数据"""
+    """回填最近10小时的15分钟K线数据"""
 
     logger.info("=" * 80)
-    logger.info("🔄 回填最近5小时的 15分钟 K线数据")
+    logger.info("🔄 回填最近10小时的 15分钟 K线数据")
     logger.info("=" * 80 + "\n")
 
     # 加载配置
@@ -44,10 +44,10 @@ async def backfill_15m_data():
     for symbol in symbols:
         logger.info(f"   - {symbol}")
 
-    logger.info(f"\n⏰ 时间范围: 最近 5 小时")
+    logger.info(f"\n⏰ 时间范围: 最近 10 小时")
     logger.info(f"📈 时间周期: 15m")
     logger.info(f"🏦 交易所: Binance, Gate.io")
-    logger.info(f"📦 预计采集: {len(symbols)} 币种 × 20 条 = {len(symbols) * 20} 条数据\n")
+    logger.info(f"📦 预计采集: {len(symbols)} 币种 × 40 条 = {len(symbols) * 40} 条数据\n")
 
     # 初始化数据库服务
     db_config = config.get('database', {})
@@ -81,7 +81,7 @@ async def backfill_15m_data():
                 klines_data = await binance_collector.fetch_ohlcv(
                     symbol=symbol,
                     timeframe='15m',
-                    limit=20  # 最近20条（5小时）
+                    limit=40  # 最近40条（10小时）
                 )
                 if klines_data is not None and len(klines_data) > 0:
                     used_exchange = 'binance'
@@ -95,7 +95,7 @@ async def backfill_15m_data():
                     klines_data = await gate_collector.fetch_ohlcv(
                         symbol=symbol,
                         timeframe='15m',
-                        limit=20
+                        limit=40  # 最近40条（10小时）
                     )
                     if klines_data is not None and len(klines_data) > 0:
                         used_exchange = 'gate'
