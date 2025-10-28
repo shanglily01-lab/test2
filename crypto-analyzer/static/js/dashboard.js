@@ -626,6 +626,117 @@ function initTooltips() {
     });
 }
 
+// 加载企业金库汇总数据
+async function loadCorporateTreasury() {
+    try {
+        const response = await fetch(`${API_BASE}/api/corporate-treasury/summary`);
+        const result = await response.json();
+
+        if (result.success) {
+            updateCorporateTreasury(result.data);
+        }
+    } catch (error) {
+        console.error('加载企业金库数据失败:', error);
+        const section = document.getElementById('corporate-treasury-section');
+        if (section) {
+            section.innerHTML = '<div class="text-center p-3 text-muted">加载失败</div>';
+        }
+    }
+}
+
+// 更新企业金库显示
+function updateCorporateTreasury(data) {
+    const section = document.getElementById('corporate-treasury-section');
+    if (!section) return;
+
+    const summary = data.summary || {};
+    const topHolders = data.top_holders || [];
+
+    let html = `
+        <!-- 汇总统计 -->
+        <div class="row g-3 mb-3">
+            <div class="col-md-2">
+                <div class="text-center p-3" style="background: rgba(102, 126, 234, 0.1); border-radius: 10px;">
+                    <div class="small text-muted mb-1">监控公司</div>
+                    <div class="h4 mb-0 fw-bold text-primary">${summary.total_companies || 0}</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center p-3" style="background: rgba(255, 215, 0, 0.1); border-radius: 10px;">
+                    <div class="small text-muted mb-1">BTC 总持仓</div>
+                    <div class="h4 mb-0 fw-bold" style="color: #f5a623;">${formatNumber(summary.total_btc_holdings, 2)} BTC</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center p-3" style="background: rgba(56, 239, 125, 0.1); border-radius: 10px;">
+                    <div class="small text-muted mb-1">总市值 (USD)</div>
+                    <div class="h4 mb-0 fw-bold text-success">$${formatLargeNumber(summary.total_value_usd)}</div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center p-3" style="background: rgba(0, 242, 254, 0.1); border-radius: 10px;">
+                    <div class="small text-muted mb-1">BTC 价格</div>
+                    <div class="h5 mb-0 fw-bold text-info">$${formatNumber(summary.current_btc_price, 0)}</div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center p-3" style="background: rgba(255, 106, 0, 0.1); border-radius: 10px;">
+                    <div class="small text-muted mb-1">30天活跃</div>
+                    <div class="h4 mb-0 fw-bold" style="color: #ff6a00;">${summary.active_companies_30d || 0}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top 5 持仓公司 -->
+        <h6 class="mb-3"><i class="bi bi-trophy-fill text-warning"></i> Top 5 BTC 持仓公司</h6>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 60px;">排名</th>
+                        <th>公司名称</th>
+                        <th>代码</th>
+                        <th class="text-end">BTC 持仓</th>
+                        <th class="text-end">市值 (USD)</th>
+                        <th class="text-center">最近更新</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    if (topHolders.length === 0) {
+        html += '<tr><td colspan="6" class="text-center text-muted p-3">暂无数据</td></tr>';
+    } else {
+        topHolders.slice(0, 5).forEach((holder, index) => {
+            const rank = index + 1;
+            let rankBadge = '';
+            if (rank === 1) rankBadge = '<span class="badge" style="background: linear-gradient(135deg, #ffd700, #ffed4e); color: #000;">🥇 1</span>';
+            else if (rank === 2) rankBadge = '<span class="badge" style="background: linear-gradient(135deg, #c0c0c0, #e8e8e8); color: #000;">🥈 2</span>';
+            else if (rank === 3) rankBadge = '<span class="badge" style="background: linear-gradient(135deg, #cd7f32, #daa520); color: #fff;">🥉 3</span>';
+            else rankBadge = `<span class="badge bg-secondary">${rank}</span>`;
+
+            html += `
+                <tr>
+                    <td>${rankBadge}</td>
+                    <td><strong>${holder.company_name}</strong></td>
+                    <td><span class="badge bg-primary">${holder.ticker_symbol || 'N/A'}</span></td>
+                    <td class="text-end"><strong>${formatNumber(holder.btc_holdings, 2)}</strong> BTC</td>
+                    <td class="text-end text-success fw-bold">$${formatLargeNumber(holder.value_usd)}</td>
+                    <td class="text-center"><small class="text-muted">${holder.last_update || '-'}</small></td>
+                </tr>
+            `;
+        });
+    }
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    section.innerHTML = html;
+}
+
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
     // 初始化 Bootstrap tooltips
@@ -637,9 +748,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 加载数据
     loadDashboard();
+    loadCorporateTreasury();
 
-    // 定期刷新 (每5秒)
+    // 定期刷新 (每5秒主数据，每30秒企业金库数据)
     setInterval(loadDashboard, 5000);
+    setInterval(loadCorporateTreasury, 30000);
 
     console.log('增强版Dashboard已初始化');
 });
