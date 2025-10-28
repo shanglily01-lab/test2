@@ -55,8 +55,8 @@ async def backfill_15m_data():
     logger.info("✅ 数据库服务初始化成功\n")
 
     # 初始化采集器
-    from app.collectors.price_collector import BinanceCollector
-    binance_collector = BinanceCollector(config)
+    from app.collectors.price_collector import PriceCollector
+    binance_collector = PriceCollector(exchange_id='binance', config=config)
     gate_collector = GateCollector(config)
 
     logger.info("=" * 80)
