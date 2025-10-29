@@ -215,8 +215,7 @@ except Exception as e:
     traceback.print_exc()
 
 # 注册企业金库监控API路由
-# 临时禁用：在Windows上导致服务器崩溃
-ENABLE_CORPORATE_TREASURY = False  # 设置为True启用企业金库API
+ENABLE_CORPORATE_TREASURY = True  # 启用企业金库API
 
 if ENABLE_CORPORATE_TREASURY:
     try:
