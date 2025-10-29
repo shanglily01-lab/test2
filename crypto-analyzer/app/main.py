@@ -81,16 +81,20 @@ async def lifespan(app: FastAPI):
         logger.info("🔄 开始初始化分析模块...")
 
         # 初始化价格采集器
-        # 注意：MultiExchangeCollector在Windows上可能导致服务器崩溃
-        # 如果遇到ERR_EMPTY_RESPONSE错误，请使用MockPriceCollector
-        USE_REAL_API = False  # 设置为True使用真实API（Linux），False使用模拟数据（Windows兼容）
+        # 使用真实API从Binance和Gate.io获取数据
+        USE_REAL_API = True  # True=真实API, False=模拟数据
 
         if USE_REAL_API:
-            price_collector = MultiExchangeCollector(config)
-            logger.info("✅ 价格采集器初始化成功（真实API模式）")
+            try:
+                price_collector = MultiExchangeCollector(config)
+                logger.info("✅ 价格采集器初始化成功（真实API模式 - Binance + Gate.io）")
+            except Exception as e:
+                logger.error(f"❌ 真实API初始化失败: {e}，切换到模拟模式")
+                price_collector = MockPriceCollector('binance_demo', config)
+                logger.info("✅ 价格采集器初始化成功（模拟模式 - 降级）")
         else:
             price_collector = MockPriceCollector('binance_demo', config)
-            logger.info("✅ 价格采集器初始化成功（模拟模式 - Windows兼容）")
+            logger.info("✅ 价格采集器初始化成功（模拟模式）")
 
         # 初始化新闻采集器（可能在Windows上导致问题）
         try:
