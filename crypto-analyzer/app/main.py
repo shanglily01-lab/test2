@@ -83,14 +83,14 @@ async def lifespan(app: FastAPI):
     enhanced_dashboard = None
 
     logger.warning("⚠️  所有分析模块已禁用（Windows兼容性修复中）")
+    logger.info("🚀 FastAPI 启动完成（最小化模式）")
 
-    yield  # 直接yield，跳过所有初始化代码
+    yield
 
     logger.info("👋 关闭系统...")
-    return  # 直接返回，跳过后续代码
 
-    # 以下代码不会执行
-    if False:
+    # 后续代码禁用
+    """
         logger.info("🚀 FastAPI 启动完成（最小化模式）")
 
         # 跳过后台初始化代码
@@ -169,18 +169,7 @@ async def lifespan(app: FastAPI):
         import traceback
         traceback.print_exc()
         logger.warning("⚠️  系统以降级模式运行,部分功能可能不可用")
-
-    yield
-
-    # 关闭时清理
-    logger.info("👋 关闭系统...")
-
-    # 停止价格缓存服务
-    try:
-        stop_global_price_cache()
-        logger.info("✅ 价格缓存服务已停止")
-    except Exception as e:
-        logger.error(f"停止价格缓存服务失败: {e}")
+    """
 
 
 # 创建FastAPI应用
