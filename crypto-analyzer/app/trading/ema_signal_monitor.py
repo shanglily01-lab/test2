@@ -219,8 +219,10 @@ class EMASignalMonitor:
                 )
             """)
 
-            async with self.db_service.get_async_session() as session:
-                await session.execute(insert_sql, {
+            # 使用同步session
+            session = self.db_service.get_session()
+            try:
+                session.execute(insert_sql, {
                     'symbol': signal['symbol'],
                     'timeframe': signal['timeframe'],
                     'signal_type': signal['signal_type'],
@@ -234,10 +236,11 @@ class EMASignalMonitor:
                     'price_change_pct': float(signal['price_change_pct']),
                     'ema_distance_pct': float(signal['ema_distance_pct'])
                 })
-                await session.commit()
-
-            logger.debug(f"✓ 已保存 {signal['symbol']} {signal['signal_type']} 信号到数据库")
-            return True
+                session.commit()
+                logger.debug(f"✓ 已保存 {signal['symbol']} {signal['signal_type']} 信号到数据库")
+                return True
+            finally:
+                session.close()
 
         except Exception as e:
             logger.error(f"保存EMA信号到数据库失败: {e}")
