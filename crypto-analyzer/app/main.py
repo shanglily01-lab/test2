@@ -290,7 +290,7 @@ async def favicon():
     # 如果有 favicon 文件，返回它
     favicon_path = Path("static/favicon.ico")
     if favicon_path.exists():
-        return FileResponse(favicon_path)
+        return FileResponse(str(favicon_path))
     # 否则返回 204 No Content，浏览器会使用默认图标
     from fastapi.responses import Response
     return Response(status_code=204)
@@ -301,7 +301,7 @@ async def hyperliquid_guide():
     """返回 Hyperliquid 指标说明文档"""
     guide_path = Path("HYPERLIQUID_INDICATORS_GUIDE.md")
     if guide_path.exists():
-        return FileResponse(guide_path, media_type="text/markdown")
+        return FileResponse(str(guide_path), media_type="text/markdown")
     else:
         raise HTTPException(status_code=404, detail="文档未找到")
 
@@ -309,7 +309,7 @@ async def hyperliquid_guide():
 @app.get("/test-futures")
 async def test_futures():
     """合约数据测试页面"""
-    return FileResponse("templates/test_futures.html")
+    return FileResponse(str(Path("templates/test_futures.html")))
 
 
 @app.get("/corporate-treasury")
@@ -317,7 +317,7 @@ async def corporate_treasury_page():
     """企业金库监控页面"""
     treasury_path = Path("templates/corporate_treasury.html")
     if treasury_path.exists():
-        return FileResponse(treasury_path)
+        return FileResponse(str(treasury_path))
     return {"error": "Page not found"}
 
 @app.get("/contract-trading")
@@ -325,7 +325,7 @@ async def contract_trading_page():
     """模拟合约交易页面"""
     contract_trading_path = Path("templates/contract_trading.html")
     if contract_trading_path.exists():
-        return FileResponse(contract_trading_path)
+        return FileResponse(str(contract_trading_path))
     else:
         raise HTTPException(status_code=404, detail="模拟合约交易页面未找到")
 
@@ -336,11 +336,11 @@ async def strategies_page():
     # 优先使用app/web/templates下的页面
     strategies_path = Path("app/web/templates/strategy_manager.html")
     if strategies_path.exists():
-        return FileResponse(strategies_path)
+        return FileResponse(str(strategies_path))
     # 备用：templates目录
     strategies_path_backup = Path("templates/strategy_manager.html")
     if strategies_path_backup.exists():
-        return FileResponse(strategies_path_backup)
+        return FileResponse(str(strategies_path_backup))
     else:
         raise HTTPException(status_code=404, detail="投资策略页面未找到")
 
@@ -350,7 +350,7 @@ async def auto_trading_page():
     """自动合约交易页面 - futures_trading.html"""
     auto_trading_path = Path("templates/futures_trading.html")
     if auto_trading_path.exists():
-        return FileResponse(auto_trading_path)
+        return FileResponse(str(auto_trading_path))
     else:
         raise HTTPException(status_code=404, detail="自动合约交易页面未找到")
 
@@ -377,7 +377,7 @@ async def dashboard_page():
     """
     dashboard_path = Path("templates/dashboard.html")
     if dashboard_path.exists():
-        return FileResponse(dashboard_path)
+        return FileResponse(str(dashboard_path))
     else:
         raise HTTPException(status_code=404, detail="Dashboard page not found")
 
@@ -389,7 +389,7 @@ async def strategy_manager_page():
     """
     strategy_path = Path("app/web/templates/strategy_manager.html")
     if strategy_path.exists():
-        return FileResponse(strategy_path)
+        return FileResponse(str(strategy_path))
     else:
         raise HTTPException(status_code=404, detail="Strategy manager page not found")
 
@@ -401,7 +401,7 @@ async def dashboard_page_alt():
     """
     dashboard_path = Path("templates/dashboard.html")
     if dashboard_path.exists():
-        return FileResponse(dashboard_path)
+        return FileResponse(str(dashboard_path))
     else:
         raise HTTPException(status_code=404, detail="Dashboard page not found")
 
@@ -433,7 +433,7 @@ async def futures_trading_page():
     """
     futures_path = Path("templates/futures_trading.html")
     if futures_path.exists():
-        return FileResponse(futures_path)
+        return FileResponse(str(futures_path))
     else:
         raise HTTPException(status_code=404, detail="Futures trading page not found")
 
@@ -445,7 +445,7 @@ async def strategy_manager_page_alt():
     """
     strategy_path = Path("app/web/templates/strategy_manager.html")
     if strategy_path.exists():
-        return FileResponse(strategy_path)
+        return FileResponse(str(strategy_path))
     else:
         raise HTTPException(status_code=404, detail="Strategy manager page not found")
 
