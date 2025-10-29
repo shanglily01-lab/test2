@@ -820,9 +820,19 @@ async def not_found_handler(request, exc):
 
 @app.exception_handler(500)
 async def server_error_handler(request, exc):
+    import traceback
+    error_detail = str(exc)
+    error_traceback = traceback.format_exc()
+    logger.error(f"500错误: {error_detail}\n{error_traceback}")
+
     return JSONResponse(
         status_code=500,
-        content={"error": "服务器内部错误"}
+        content={
+            "error": "服务器内部错误",
+            "detail": error_detail,
+            "type": type(exc).__name__,
+            "traceback": error_traceback
+        }
     )
 
 
