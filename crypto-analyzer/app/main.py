@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
 
     # 加载配置
-    config_path = Path("config.yaml")
+    config_path = project_root / "config.yaml"
     if config_path.exists():
         with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
@@ -203,7 +203,7 @@ app.add_middleware(
 )
 
 # 挂载静态文件目录
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(project_root / "static")), name="static")
 
 # 注册策略管理API路由
 try:
@@ -288,7 +288,7 @@ async def root():
 async def favicon():
     """返回 favicon - 避免 404 错误"""
     # 如果有 favicon 文件，返回它
-    favicon_path = Path("static/favicon.ico")
+    favicon_path = project_root / "static" / "favicon.ico"
     if favicon_path.exists():
         return FileResponse(str(favicon_path))
     # 否则返回 204 No Content，浏览器会使用默认图标
@@ -299,7 +299,7 @@ async def favicon():
 @app.get("/HYPERLIQUID_INDICATORS_GUIDE.md")
 async def hyperliquid_guide():
     """返回 Hyperliquid 指标说明文档"""
-    guide_path = Path("HYPERLIQUID_INDICATORS_GUIDE.md")
+    guide_path = project_root / "HYPERLIQUID_INDICATORS_GUIDE.md"
     if guide_path.exists():
         return FileResponse(str(guide_path), media_type="text/markdown")
     else:
@@ -309,13 +309,13 @@ async def hyperliquid_guide():
 @app.get("/test-futures")
 async def test_futures():
     """合约数据测试页面"""
-    return FileResponse(str(Path("templates/test_futures.html")))
+    return FileResponse(str(project_root / "templates" / "test_futures.html"))
 
 
 @app.get("/corporate-treasury")
 async def corporate_treasury_page():
     """企业金库监控页面"""
-    treasury_path = Path("templates/corporate_treasury.html")
+    treasury_path = project_root / "templates" / "corporate_treasury.html"
     if treasury_path.exists():
         return FileResponse(str(treasury_path))
     return {"error": "Page not found"}
@@ -323,7 +323,7 @@ async def corporate_treasury_page():
 @app.get("/contract-trading")
 async def contract_trading_page():
     """模拟合约交易页面"""
-    contract_trading_path = Path("templates/contract_trading.html")
+    contract_trading_path = project_root / "templates" / "contract_trading.html"
     if contract_trading_path.exists():
         return FileResponse(str(contract_trading_path))
     else:
@@ -334,11 +334,11 @@ async def contract_trading_page():
 async def strategies_page():
     """投资策略管理页面 - strategy_manager.html"""
     # 优先使用app/web/templates下的页面
-    strategies_path = Path("app/web/templates/strategy_manager.html")
+    strategies_path = project_root / "app" / "web" / "templates" / "strategy_manager.html"
     if strategies_path.exists():
         return FileResponse(str(strategies_path))
     # 备用：templates目录
-    strategies_path_backup = Path("templates/strategy_manager.html")
+    strategies_path_backup = project_root / "templates" / "strategy_manager.html"
     if strategies_path_backup.exists():
         return FileResponse(str(strategies_path_backup))
     else:
@@ -348,7 +348,7 @@ async def strategies_page():
 @app.get("/auto-trading")
 async def auto_trading_page():
     """自动合约交易页面 - futures_trading.html"""
-    auto_trading_path = Path("templates/futures_trading.html")
+    auto_trading_path = project_root / "templates" / "futures_trading.html"
     if auto_trading_path.exists():
         return FileResponse(str(auto_trading_path))
     else:
@@ -375,7 +375,7 @@ async def dashboard_page():
     """
     增强版仪表盘页面
     """
-    dashboard_path = Path("templates/dashboard.html")
+    dashboard_path = project_root / "templates" / "dashboard.html"
     if dashboard_path.exists():
         return FileResponse(str(dashboard_path))
     else:
@@ -387,7 +387,7 @@ async def strategy_manager_page():
     """
     策略管理页面
     """
-    strategy_path = Path("app/web/templates/strategy_manager.html")
+    strategy_path = project_root / "app" / "web" / "templates" / "strategy_manager.html"
     if strategy_path.exists():
         return FileResponse(str(strategy_path))
     else:
@@ -399,7 +399,7 @@ async def dashboard_page_alt():
     """
     增强版仪表盘页面 (备用路径)
     """
-    dashboard_path = Path("templates/dashboard.html")
+    dashboard_path = project_root / "templates" / "dashboard.html"
     if dashboard_path.exists():
         return FileResponse(str(dashboard_path))
     else:
@@ -411,14 +411,7 @@ def paper_trading_page():
     """
     模拟交易页面（改为同步函数，避免阻塞）
     """
-    from pathlib import Path
-    trading_path = Path("templates/paper_trading.html")
-
-    if not trading_path.exists():
-        # 尝试绝对路径
-        import os
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        trading_path = Path(base_dir) / "templates" / "paper_trading.html"
+    trading_path = project_root / "templates" / "paper_trading.html"
 
     if trading_path.exists():
         return FileResponse(str(trading_path))
@@ -431,7 +424,7 @@ async def futures_trading_page():
     """
     合约交易页面
     """
-    futures_path = Path("templates/futures_trading.html")
+    futures_path = project_root / "templates" / "futures_trading.html"
     if futures_path.exists():
         return FileResponse(str(futures_path))
     else:
@@ -443,7 +436,7 @@ async def strategy_manager_page_alt():
     """
     策略管理页面（备用路径）
     """
-    strategy_path = Path("app/web/templates/strategy_manager.html")
+    strategy_path = project_root / "app" / "web" / "templates" / "strategy_manager.html"
     if strategy_path.exists():
         return FileResponse(str(strategy_path))
     else:
