@@ -152,8 +152,38 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # 关闭时的清理工作
     logger.info("👋 关闭系统...")
-    # 所有模块初始化代码已禁用（Windows兼容性修复中）
+
+    try:
+        # 清理价格采集器
+        if price_collector:
+            if hasattr(price_collector, 'close'):
+                await price_collector.close()
+            logger.info("✅ 价格采集器已关闭")
+
+        # 清理新闻采集器
+        if news_aggregator:
+            if hasattr(news_aggregator, 'close'):
+                await news_aggregator.close()
+            logger.info("✅ 新闻采集器已关闭")
+
+        # 清理其他模块（如果有close方法）
+        for module_name, module in [
+            ('technical_analyzer', technical_analyzer),
+            ('sentiment_analyzer', sentiment_analyzer),
+            ('signal_generator', signal_generator),
+        ]:
+            if module and hasattr(module, 'close'):
+                await module.close()
+                logger.info(f"✅ {module_name}已关闭")
+
+        logger.info("🎉 所有模块已安全关闭")
+
+    except Exception as e:
+        logger.error(f"❌ 关闭模块时出错: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # 创建FastAPI应用
