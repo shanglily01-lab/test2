@@ -11,6 +11,7 @@ from mysql.connector import pooling
 import yaml
 from pathlib import Path
 from decimal import Decimal
+from app.services.price_cache_service import get_global_price_cache
 
 router = APIRouter()
 
@@ -117,29 +118,45 @@ async def get_etf_summary():
                 "timestamp": datetime.now().isoformat()
             }
 
-        # 获取BTC价格和ETH价格（从实时价格表）
-        cursor.execute("""
-            SELECT symbol, last_price
-            FROM market_prices
-            WHERE symbol IN ('BTC/USDT', 'ETH/USDT')
-            AND exchange = 'binance'
-            ORDER BY timestamp DESC
-            LIMIT 2
-        """)
-        prices = cursor.fetchall()
+        # 获取BTC价格和ETH价格
+        # 方案1: 从价格缓存服务获取（实时价格）
         btc_price = 0
         eth_price = 0
-        for p in prices:
-            if p['symbol'] == 'BTC/USDT':
-                btc_price = float(p['last_price']) if p['last_price'] else 0
-            elif p['symbol'] == 'ETH/USDT':
-                eth_price = float(p['last_price']) if p['last_price'] else 0
 
-        # 如果实时价格表没有数据，使用默认值
+        price_cache = get_global_price_cache()
+        if price_cache:
+            btc_price_decimal = price_cache.get_price('BTC/USDT')
+            eth_price_decimal = price_cache.get_price('ETH/USDT')
+
+            if btc_price_decimal and btc_price_decimal > 0:
+                btc_price = float(btc_price_decimal)
+            if eth_price_decimal and eth_price_decimal > 0:
+                eth_price = float(eth_price_decimal)
+
+        # 方案2: 如果价格缓存没有数据，从price_data表获取
+        if btc_price == 0 or eth_price == 0:
+            try:
+                cursor.execute("""
+                    SELECT symbol, close_price
+                    FROM price_data
+                    WHERE symbol IN ('BTCUSDT', 'ETHUSDT')
+                    ORDER BY timestamp DESC
+                    LIMIT 2
+                """)
+                prices = cursor.fetchall()
+                for p in prices:
+                    if p['symbol'] == 'BTCUSDT' and btc_price == 0:
+                        btc_price = float(p['close_price']) if p['close_price'] else 0
+                    elif p['symbol'] == 'ETHUSDT' and eth_price == 0:
+                        eth_price = float(p['close_price']) if p['close_price'] else 0
+            except Exception as e:
+                print(f"⚠️ 从price_data表获取价格失败: {e}")
+
+        # 方案3: 如果还是没有数据，使用默认值
         if btc_price == 0:
-            btc_price = 100000
+            btc_price = 100000  # 默认BTC价格
         if eth_price == 0:
-            eth_price = 3500
+            eth_price = 3500    # 默认ETH价格
 
         # 获取最新一天的所有ETF数据
         cursor.execute("""
