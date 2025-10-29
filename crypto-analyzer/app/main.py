@@ -811,6 +811,7 @@ async def get_dashboard():
             "error": str(e),
             "message": "数据加载失败，请稍后重试"
         }
+    """
 
 
 @app.get("/api/futures")
