@@ -29,7 +29,7 @@ import yaml
 # from app.analyzers.sentiment_analyzer import SentimentAnalyzer
 # from app.analyzers.signal_generator import SignalGenerator
 # from app.api.enhanced_dashboard_cached import EnhancedDashboardCached as EnhancedDashboard
-# from app.services.price_cache_service import init_global_price_cache, stop_global_price_cache
+from app.services.price_cache_service import init_global_price_cache, stop_global_price_cache
 
 
 # 全局变量
@@ -137,9 +137,14 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  EnhancedDashboard初始化失败: {e}")
             enhanced_dashboard = None
 
-        # 价格缓存服务暂时禁用
-        price_cache_service = None
-        logger.warning("⚠️  价格缓存服务已禁用")
+        # 初始化价格缓存服务
+        try:
+            db_config = config.get('database', {})
+            price_cache_service = init_global_price_cache(db_config, update_interval=5)
+            logger.info("✅ 价格缓存服务初始化成功（每5秒更新）")
+        except Exception as e:
+            logger.warning(f"⚠️  价格缓存服务初始化失败: {e}")
+            price_cache_service = None
 
         logger.info("🎉 分析模块初始化完成！")
 
@@ -163,6 +168,13 @@ async def lifespan(app: FastAPI):
 
     # 关闭时的清理工作
     logger.info("👋 关闭系统...")
+
+    # 停止价格缓存服务
+    if price_cache_service:
+        try:
+            stop_global_price_cache()
+        except Exception as e:
+            logger.warning(f"停止价格缓存服务失败: {e}")
 
     # Windows兼容性：简化关闭逻辑，不调用可能阻塞的close()方法
     # 让Python的垃圾回收机制自动清理资源
