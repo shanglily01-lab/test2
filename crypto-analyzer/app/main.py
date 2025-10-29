@@ -705,16 +705,8 @@ async def get_dashboard():
         start_time = now
         symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'])
 
-        # 在单独的线程池中执行，避免阻塞其他请求
-        import asyncio
-        from concurrent.futures import ThreadPoolExecutor
-
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            data = await loop.run_in_executor(
-                executor,
-                lambda: asyncio.run(enhanced_dashboard.get_dashboard_data(symbols))
-            )
+        # 直接调用异步方法，不要嵌套事件循环
+        data = await enhanced_dashboard.get_dashboard_data(symbols)
 
         # 更新缓存
         _dashboard_cache = data
