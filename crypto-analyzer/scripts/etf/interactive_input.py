@@ -17,6 +17,36 @@ import sys
 class ETFInteractiveInput:
     """ETF 数据交互式录入"""
 
+    @staticmethod
+    def parse_number(input_str: str) -> float:
+        """
+        解析数字输入，支持多种格式：
+        - 普通数字: 123.45
+        - 千分位: 65,430 -> 65430
+        - 括号表示负数: (60.5) -> -60.5
+        - 带括号和逗号: (1,234.56) -> -1234.56
+        """
+        if not input_str:
+            return 0.0
+
+        input_str = input_str.strip()
+
+        # 检查是否有括号（表示负数）
+        is_negative = False
+        if input_str.startswith('(') and input_str.endswith(')'):
+            is_negative = True
+            input_str = input_str[1:-1].strip()
+
+        # 移除千分位逗号
+        input_str = input_str.replace(',', '')
+
+        # 转换为浮点数
+        try:
+            value = float(input_str)
+            return -value if is_negative else value
+        except ValueError:
+            raise ValueError(f"无法解析数字: {input_str}")
+
     # ETF 列表
     BTC_ETFS = [
         ('IBIT', 'BlackRock'),
@@ -110,12 +140,15 @@ class ETFInteractiveInput:
 
         print("💡 提示:")
         print("  - 净流入：Farside网站显示的单位是百万美元（M），请直接输入该数字")
-        print("    例如: Farside显示 125.5，直接输入 125.5")
-        print("    负数表示流出，例如: -10.5")
+        print("    • 正常数字: 125.5")
+        print("    • 带千分位: 65,430 (自动识别)")
+        print("    • 括号表示负数: (60.5) = -60.5")
         if asset_type == 'BTC':
-            print("  - BTC持仓：输入BTC数量，例如: 45123.5")
+            print("  - BTC持仓：输入BTC数量")
+            print("    • 例如: 45123.5 或 45,123.5")
         else:
-            print("  - ETH持仓：输入ETH数量，例如: 123456.78")
+            print("  - ETH持仓：输入ETH数量")
+            print("    • 例如: 123456.78 或 123,456.78")
         print("  - 如果没有数据或为0，直接按回车跳过")
         print("  - 输入 'q' 退出当前录入\n")
 
@@ -134,15 +167,16 @@ class ETFInteractiveInput:
                 # 空值或0
                 if not net_inflow_input:
                     net_inflow = 0
+                    net_inflow_m = 0
                     break
 
-                # 尝试转换为数字
+                # 尝试解析数字（支持千分位和括号）
                 try:
-                    net_inflow_m = float(net_inflow_input)
+                    net_inflow_m = self.parse_number(net_inflow_input)
                     net_inflow = int(net_inflow_m * 1_000_000)  # 转换为完整数字
                     break
-                except ValueError:
-                    print("    ❌ 无效输入，请输入数字")
+                except ValueError as e:
+                    print(f"    ❌ 无效输入: {e}")
 
             # 2. 录入持仓总量
             holdings = 0
@@ -159,10 +193,10 @@ class ETFInteractiveInput:
                         break
 
                     try:
-                        holdings = float(holdings_input)
+                        holdings = self.parse_number(holdings_input)
                         break
-                    except ValueError:
-                        print("    ❌ 无效输入，请输入数字")
+                    except ValueError as e:
+                        print(f"    ❌ 无效输入: {e}")
 
             elif asset_type == 'ETH':
                 while True:
@@ -177,10 +211,10 @@ class ETFInteractiveInput:
                         break
 
                     try:
-                        holdings = float(holdings_input)
+                        holdings = self.parse_number(holdings_input)
                         break
-                    except ValueError:
-                        print("    ❌ 无效输入，请输入数字")
+                    except ValueError as e:
+                        print(f"    ❌ 无效输入: {e}")
 
             # 添加到数据列表
             data_row = {
