@@ -362,15 +362,17 @@ class EMASignalMonitor:
 
             # 检查是否已经提醒过（避免重复提醒）
             last_signal_time = self.signal_history.get(signal_key)
-            current_utc_time = datetime.now(timezone.utc)
+            # 使用 UTC+8 北京时间
+            utc8_tz = timezone(timedelta(hours=8))
+            current_time = datetime.now(utc8_tz)
             if last_signal_time:
-                time_since_last = current_utc_time - last_signal_time
+                time_since_last = current_time - last_signal_time
                 if time_since_last < timedelta(hours=1):  # 1小时内不重复提醒
                     logger.debug(f"{symbol}: {signal_type}信号已在 {time_since_last.seconds//60} 分钟前提醒过")
                     return None
 
-            # 记录信号时间（使用UTC时间）
-            self.signal_history[signal_key] = current_utc_time
+            # 记录信号时间（使用 UTC+8 北京时间）
+            self.signal_history[signal_key] = current_time
 
             # 计算信号详细信息
             current_price = closes[-1]
@@ -383,13 +385,13 @@ class EMASignalMonitor:
                 ema_distance_pct
             )
 
-            # 构建信号（使用UTC时间，与币安K线数据时区一致）
+            # 构建信号（使用 UTC+8 北京时间）
             signal = {
                 'symbol': symbol,
                 'timeframe': self.timeframe,
                 'signal_type': signal_type,
                 'signal_strength': signal_strength,
-                'timestamp': current_utc_time,  # 使用UTC时间
+                'timestamp': current_time,  # 使用 UTC+8 北京时间
                 'price': current_price,
                 'short_ema': short_ema_values[-1],
                 'long_ema': long_ema_values[-1],
