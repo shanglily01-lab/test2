@@ -20,17 +20,23 @@ router = APIRouter()
 project_root = Path(__file__).parent.parent.parent
 config_path = project_root / "config.yaml"
 connection_pool = None
+_init_failed = False  # 标记初始化是否已失败，避免重复尝试
 
 
 def get_db_connection():
     """获取数据库连接（延迟初始化连接池）"""
-    global connection_pool
+    global connection_pool, _init_failed
+
+    # 如果之前初始化失败过，直接返回错误，避免重复尝试
+    if _init_failed:
+        raise HTTPException(status_code=500, detail="数据库连接池初始化失败，请检查配置和数据库状态")
 
     # 延迟初始化：只在第一次调用时创建连接池
     if connection_pool is None:
         try:
             if not config_path.exists():
-                raise HTTPException(status_code=500, detail="config.yaml 不存在，无法初始化数据库连接")
+                _init_failed = True
+                raise HTTPException(status_code=500, detail=f"config.yaml 不存在: {config_path}")
 
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
@@ -44,23 +50,36 @@ def get_db_connection():
                 "password": mysql_config.get('password', ''),
                 "database": mysql_config.get('database', 'binance-data'),
                 "pool_name": "corporate_treasury_pool",
-                "pool_size": 5
+                "pool_size": 5,
+                "pool_reset_session": True,
+                "autocommit": True
             }
 
             connection_pool = pooling.MySQLConnectionPool(**db_config)
             print(f"✅ 企业金库监控数据库连接池创建成功: {db_config['database']}")
+
+        except HTTPException:
+            raise
         except mysql.connector.Error as e:
-            raise HTTPException(status_code=500, detail=f"数据库连接失败: {str(e)}")
+            _init_failed = True
+            error_msg = f"MySQL连接失败: {str(e)}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
         except Exception as e:
+            _init_failed = True
             import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=f"数据库连接池初始化失败: {str(e)}")
+            error_trace = traceback.format_exc()
+            print(f"❌ 数据库连接池初始化失败:\n{error_trace}")
+            raise HTTPException(status_code=500, detail=f"初始化失败: {str(e)}")
 
     # 从连接池获取连接
     try:
-        return connection_pool.get_connection()
+        conn = connection_pool.get_connection()
+        return conn
     except mysql.connector.Error as e:
-        raise HTTPException(status_code=500, detail=f"数据库连接失败: {str(e)}")
+        error_msg = f"获取数据库连接失败: {str(e)}"
+        print(f"❌ {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/api/corporate-treasury/summary")
