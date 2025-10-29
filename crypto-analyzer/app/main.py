@@ -202,9 +202,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 挂载静态文件目录
-app.mount("/static", StaticFiles(directory=str(project_root / "static")), name="static")
-
 # 注册策略管理API路由
 try:
     from app.api.strategy_api import router as strategy_router
@@ -827,6 +824,15 @@ async def server_error_handler(request, exc):
         status_code=500,
         content={"error": "服务器内部错误"}
     )
+
+
+# ==================== 静态文件挂载 ====================
+# 注意：必须在所有路由注册之后挂载静态文件
+try:
+    app.mount("/static", StaticFiles(directory=str(project_root / "static")), name="static")
+    logger.info("✅ 静态文件目录已挂载: /static")
+except Exception as e:
+    logger.warning(f"⚠️  静态文件挂载失败: {e}")
 
 
 # ==================== 启动服务 ====================
