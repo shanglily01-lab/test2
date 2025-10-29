@@ -647,13 +647,177 @@ async function loadCorporateTreasury() {
     }
 }
 
+// 更新Dashboard页面的企业金库统计
+function updateTreasuryStats(summary, topHolders) {
+    // 更新统计卡片
+    const totalCompanies = document.getElementById('treasury-total-companies');
+    const totalBtc = document.getElementById('treasury-total-btc');
+    const totalValue = document.getElementById('treasury-total-value');
+    const btcPrice = document.getElementById('treasury-btc-price');
+
+    if (totalCompanies) totalCompanies.textContent = summary.total_companies || '-';
+    if (totalBtc) totalBtc.textContent = formatNumber(summary.total_btc_holdings, 0) + ' BTC';
+    if (totalValue) totalValue.textContent = '$' + formatLargeNumber(summary.total_value_usd);
+    if (btcPrice) btcPrice.textContent = '$' + formatNumber(summary.current_btc_price, 0);
+
+    // 渲染图表
+    renderTreasuryCharts(topHolders);
+}
+
+// 渲染企业金库图表
+function renderTreasuryCharts(topHolders) {
+    if (!topHolders || topHolders.length === 0) return;
+
+    // Top 10持仓公司柱状图
+    const topHoldersCtx = document.getElementById('treasuryTopHoldersChart');
+    if (topHoldersCtx) {
+        // 销毁旧图表
+        if (chartInstances.treasuryTopHolders) {
+            chartInstances.treasuryTopHolders.destroy();
+        }
+
+        const top5 = topHolders.slice(0, 5);
+        chartInstances.treasuryTopHolders = new Chart(topHoldersCtx, {
+            type: 'bar',
+            data: {
+                labels: top5.map(h => h.company_name),
+                datasets: [{
+                    label: 'BTC持仓量',
+                    data: top5.map(h => h.btc_holdings),
+                    backgroundColor: [
+                        'rgba(255, 215, 0, 0.8)',
+                        'rgba(192, 192, 192, 0.8)',
+                        'rgba(205, 127, 50, 0.8)',
+                        'rgba(102, 126, 234, 0.8)',
+                        'rgba(56, 239, 125, 0.8)'
+                    ],
+                    borderColor: [
+                        'rgb(255, 215, 0)',
+                        'rgb(192, 192, 192)',
+                        'rgb(205, 127, 50)',
+                        'rgb(102, 126, 234)',
+                        'rgb(56, 239, 125)'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Top 5 企业BTC持仓排名',
+                        font: { size: 14, weight: 'bold' }
+                    },
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return formatNumber(context.parsed.y, 2) + ' BTC';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return formatNumber(value, 0);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // 按类别分组饼图
+    const categoryCtx = document.getElementById('treasuryCategoryChart');
+    if (categoryCtx) {
+        // 销毁旧图表
+        if (chartInstances.treasuryCategory) {
+            chartInstances.treasuryCategory.destroy();
+        }
+
+        // 按category分组统计
+        const categoryData = {};
+        topHolders.forEach(h => {
+            const cat = h.category || 'other';
+            if (!categoryData[cat]) categoryData[cat] = 0;
+            categoryData[cat] += h.btc_holdings;
+        });
+
+        const categories = Object.keys(categoryData);
+        const categoryLabels = {
+            'mining': '矿业公司',
+            'holding': '持币公司',
+            'payment': '支付公司',
+            'other': '其他'
+        };
+
+        chartInstances.treasuryCategory = new Chart(categoryCtx, {
+            type: 'doughnut',
+            data: {
+                labels: categories.map(c => categoryLabels[c] || c),
+                datasets: [{
+                    data: categories.map(c => categoryData[c]),
+                    backgroundColor: [
+                        'rgba(102, 126, 234, 0.8)',
+                        'rgba(56, 239, 125, 0.8)',
+                        'rgba(255, 193, 7, 0.8)',
+                        'rgba(220, 53, 69, 0.8)'
+                    ],
+                    borderColor: [
+                        'rgb(102, 126, 234)',
+                        'rgb(56, 239, 125)',
+                        'rgb(255, 193, 7)',
+                        'rgb(220, 53, 69)'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: '按公司类别分布',
+                        font: { size: 14, weight: 'bold' }
+                    },
+                    legend: {
+                        position: 'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${label}: ${formatNumber(value, 2)} BTC (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
 // 更新企业金库显示
 function updateCorporateTreasury(data) {
-    const section = document.getElementById('corporate-treasury-section');
-    if (!section) return;
-
     const summary = data.summary || {};
     const topHolders = data.top_holders || [];
+
+    // 更新Dashboard页面的企业金库统计卡片
+    updateTreasuryStats(summary, topHolders);
+
+    // 更新原有的企业金库section（如果存在）
+    const section = document.getElementById('corporate-treasury-section');
+    if (!section) return;
 
     let html = `
         <!-- 汇总统计 -->
