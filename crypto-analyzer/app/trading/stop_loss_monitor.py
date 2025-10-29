@@ -88,18 +88,18 @@ class StopLossMonitor:
         """
         cursor = self.connection.cursor(pymysql.cursors.DictCursor)
 
-        # 转换交易对格式: BTC/USDT -> BTCUSDT
-        binance_symbol = symbol.replace('/', '')
-
+        # kline_data 表中的 symbol 格式是 BTC/USDT（带斜杠）
         sql = """
         SELECT close_price
-        FROM klines_1h
+        FROM kline_data
         WHERE symbol = %s
-        ORDER BY close_time DESC
+        AND timeframe = '1h'
+        AND exchange = 'binance'
+        ORDER BY open_time DESC
         LIMIT 1
         """
 
-        cursor.execute(sql, (binance_symbol,))
+        cursor.execute(sql, (symbol,))
         result = cursor.fetchone()
         cursor.close()
 
