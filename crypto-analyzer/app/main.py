@@ -80,9 +80,17 @@ async def lifespan(app: FastAPI):
 
         logger.info("🔄 开始初始化分析模块...")
 
-        # 初始化价格采集器（使用真实API）
-        price_collector = MultiExchangeCollector(config)
-        logger.info("✅ 价格采集器初始化成功（真实API模式）")
+        # 初始化价格采集器
+        # 注意：MultiExchangeCollector在Windows上可能导致服务器崩溃
+        # 如果遇到ERR_EMPTY_RESPONSE错误，请使用MockPriceCollector
+        USE_REAL_API = False  # 设置为True使用真实API（Linux），False使用模拟数据（Windows兼容）
+
+        if USE_REAL_API:
+            price_collector = MultiExchangeCollector(config)
+            logger.info("✅ 价格采集器初始化成功（真实API模式）")
+        else:
+            price_collector = MockPriceCollector('binance_demo', config)
+            logger.info("✅ 价格采集器初始化成功（模拟模式 - Windows兼容）")
 
         # 初始化新闻采集器
         news_aggregator = NewsAggregator(config)
