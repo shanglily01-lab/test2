@@ -71,62 +71,29 @@ async def lifespan(app: FastAPI):
     price_cache_service = None
     logger.warning("⚠️  价格缓存服务已禁用（Windows兼容性）")
 
-    # 初始化各个模块（延迟加载，避免阻塞启动）
-    try:
-        # 检查是否启用演示模式
-        demo_mode = config.get('demo_mode', False)
+    # 完全禁用模块初始化（Windows崩溃问题）
+    global price_collector, news_aggregator, technical_analyzer
+    global sentiment_analyzer, signal_generator, enhanced_dashboard
 
-        # 同步初始化所有模块（不使用后台线程）
-        logger.info("🔄 开始同步初始化分析模块...")
+    price_collector = None
+    news_aggregator = None
+    technical_analyzer = None
+    sentiment_analyzer = None
+    signal_generator = None
+    enhanced_dashboard = None
 
-        global price_collector, news_aggregator, technical_analyzer
-        global sentiment_analyzer, signal_generator, enhanced_dashboard
+    logger.warning("⚠️  所有分析模块已禁用（Windows兼容性修复中）")
 
-        try:
-            # 1. 价格采集器
-            from app.collectors.price_collector import MultiExchangeCollector
-            price_collector = MultiExchangeCollector(config)
-            logger.info("  ✓ 价格采集器初始化成功")
+    yield  # 直接yield，跳过所有初始化代码
 
-            # 2. 新闻采集器
-            from app.collectors.news_collector import NewsAggregator
-            news_aggregator = NewsAggregator(config)
-            logger.info("  ✓ 新闻采集器初始化成功")
+    logger.info("👋 关闭系统...")
+    return  # 直接返回，跳过后续代码
 
-            # 3. 技术分析器
-            from app.analyzers.technical_indicators import TechnicalIndicators
-            technical_analyzer = TechnicalIndicators(config.get('indicators', {}))
-            logger.info("  ✓ 技术分析器初始化成功")
+    # 以下代码不会执行
+    if False:
+        logger.info("🚀 FastAPI 启动完成（最小化模式）")
 
-            # 4. 情绪分析器
-            from app.analyzers.sentiment_analyzer import SentimentAnalyzer
-            sentiment_analyzer = SentimentAnalyzer(config)
-            logger.info("  ✓ 情绪分析器初始化成功")
-
-            # 5. 信号生成器
-            from app.services.signal_generator import SignalGenerator
-            signal_generator = SignalGenerator(config)
-            logger.info("  ✓ 信号生成器初始化成功")
-
-            # 6. 增强版仪表盘
-            from app.api.enhanced_dashboard import EnhancedDashboard
-            enhanced_dashboard = EnhancedDashboard(config)
-            logger.info("  ✓ 增强版仪表盘初始化成功")
-
-            logger.info("✅ 所有分析模块初始化完成")
-
-        except Exception as e:
-            logger.error(f"❌ 模块初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-            # 即使初始化失败也继续启动
-            price_collector = None
-            news_aggregator = None
-            technical_analyzer = None
-            sentiment_analyzer = None
-            signal_generator = None
-            enhanced_dashboard = None
-
+        # 跳过后台初始化代码
         # 在后台线程初始化这些模块（不阻塞事件循环）
         def init_modules_sync():
             """同步初始化分析模块（在单独线程中运行）"""
