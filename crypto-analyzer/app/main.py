@@ -20,16 +20,16 @@ from contextlib import asynccontextmanager
 from loguru import logger
 import yaml
 
-# 导入模块
-from app.collectors.price_collector import MultiExchangeCollector
-from app.collectors.mock_price_collector import MockPriceCollector
-from app.collectors.news_collector import NewsAggregator
-from app.analyzers.technical_indicators import TechnicalIndicators
-from app.analyzers.sentiment_analyzer import SentimentAnalyzer
-from app.analyzers.signal_generator import SignalGenerator
-# 使用缓存版API，性能提升30倍 ⚡
-from app.api.enhanced_dashboard_cached import EnhancedDashboardCached as EnhancedDashboard
-from app.services.price_cache_service import init_global_price_cache, stop_global_price_cache
+# 延迟导入：注释掉模块级别的import，改为在使用时才导入
+# 避免某些模块在导入时的初始化代码导致Windows崩溃
+# from app.collectors.price_collector import MultiExchangeCollector
+# from app.collectors.mock_price_collector import MockPriceCollector
+# from app.collectors.news_collector import NewsAggregator
+# from app.analyzers.technical_indicators import TechnicalIndicators
+# from app.analyzers.sentiment_analyzer import SentimentAnalyzer
+# from app.analyzers.signal_generator import SignalGenerator
+# from app.api.enhanced_dashboard_cached import EnhancedDashboardCached as EnhancedDashboard
+# from app.services.price_cache_service import init_global_price_cache, stop_global_price_cache
 
 
 # 全局变量
@@ -67,17 +67,9 @@ async def lifespan(app: FastAPI):
             'symbols': ['BTC/USDT', 'ETH/USDT']
         }
 
-    # 初始化价格缓存服务（优先启动，Paper Trading 依赖它）
-    try:
-        # 传递完整的 database 配置（包括 type、mysql 等）
-        db_config = config.get('database', {})
-        price_cache_service = init_global_price_cache(db_config, update_interval=5)
-        logger.info("✅ 价格缓存服务已启动（5秒更新间隔）")
-    except Exception as e:
-        logger.warning(f"⚠️  价格缓存服务启动失败: {e}，Paper Trading 将直接查询数据库")
-        import traceback
-        traceback.print_exc()
-        price_cache_service = None
+    # 临时禁用价格缓存服务（可能导致Windows崩溃）
+    price_cache_service = None
+    logger.warning("⚠️  价格缓存服务已禁用（Windows兼容性）")
 
     # 初始化各个模块（延迟加载，避免阻塞启动）
     try:
