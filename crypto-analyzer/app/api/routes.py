@@ -23,7 +23,11 @@ def get_db_service():
     global _db_service
     if _db_service is None:
         import yaml
-        with open('config.yaml', 'r', encoding='utf-8') as f:
+        from pathlib import Path
+        # 使用绝对路径
+        project_root = Path(__file__).parent.parent.parent
+        config_path = project_root / 'config.yaml'
+        with open(config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
         _db_service = DatabaseService(config.get('database', {}))
     return _db_service

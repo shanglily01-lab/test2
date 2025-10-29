@@ -16,7 +16,9 @@ from pathlib import Path
 router = APIRouter()
 
 # 从 config.yaml 加载数据库配置
-config_path = Path("config.yaml")
+# 使用绝对路径，相对于项目根目录
+project_root = Path(__file__).parent.parent.parent
+config_path = project_root / "config.yaml"
 connection_pool = None
 
 try:
