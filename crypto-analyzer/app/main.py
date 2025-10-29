@@ -836,6 +836,28 @@ async def server_error_handler(request, exc):
     )
 
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """捕获所有未处理的异常"""
+    import traceback
+    error_detail = str(exc)
+    error_traceback = traceback.format_exc()
+    error_type = type(exc).__name__
+
+    logger.error(f"🔥 全局异常捕获 - {error_type}: {error_detail}\n{error_traceback}")
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "服务器内部错误",
+            "detail": error_detail,
+            "type": error_type,
+            "traceback": error_traceback,
+            "path": str(request.url)
+        }
+    )
+
+
 # ==================== 启动服务 ====================
 
 if __name__ == "__main__":
