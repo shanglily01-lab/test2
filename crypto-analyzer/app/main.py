@@ -84,29 +84,56 @@ async def lifespan(app: FastAPI):
         # 检查是否启用演示模式
         demo_mode = config.get('demo_mode', False)
 
-        # 注意：这些模块的初始化被移到后台任务，不阻塞启动
-        # Paper Trading 不依赖这些模块，可以独立运行
-        # 临时禁用：后台初始化在Windows上导致崩溃
-        ENABLE_BACKGROUND_INIT = False
+        # 同步初始化所有模块（不使用后台线程）
+        logger.info("🔄 开始同步初始化分析模块...")
 
-        logger.info("⚡ 快速启动模式：延迟加载分析模块")
-
-        # 设置为 None，在需要时才初始化
         global price_collector, news_aggregator, technical_analyzer
         global sentiment_analyzer, signal_generator, enhanced_dashboard
-        price_collector = None
-        news_aggregator = None
-        technical_analyzer = None
-        sentiment_analyzer = None
-        signal_generator = None
-        enhanced_dashboard = None
 
-        if not ENABLE_BACKGROUND_INIT:
-            logger.warning("⚠️  后台模块初始化已禁用（Windows兼容性）")
-            logger.info("🚀 FastAPI 启动完成（最小化模式）")
-            yield
-            logger.info("👋 FastAPI 关闭")
-            return
+        try:
+            # 1. 价格采集器
+            from app.collectors.price_collector import MultiExchangeCollector
+            price_collector = MultiExchangeCollector(config)
+            logger.info("  ✓ 价格采集器初始化成功")
+
+            # 2. 新闻采集器
+            from app.collectors.news_collector import NewsAggregator
+            news_aggregator = NewsAggregator(config)
+            logger.info("  ✓ 新闻采集器初始化成功")
+
+            # 3. 技术分析器
+            from app.analyzers.technical_indicators import TechnicalIndicators
+            technical_analyzer = TechnicalIndicators(config.get('indicators', {}))
+            logger.info("  ✓ 技术分析器初始化成功")
+
+            # 4. 情绪分析器
+            from app.analyzers.sentiment_analyzer import SentimentAnalyzer
+            sentiment_analyzer = SentimentAnalyzer(config)
+            logger.info("  ✓ 情绪分析器初始化成功")
+
+            # 5. 信号生成器
+            from app.services.signal_generator import SignalGenerator
+            signal_generator = SignalGenerator(config)
+            logger.info("  ✓ 信号生成器初始化成功")
+
+            # 6. 增强版仪表盘
+            from app.api.enhanced_dashboard import EnhancedDashboard
+            enhanced_dashboard = EnhancedDashboard(config)
+            logger.info("  ✓ 增强版仪表盘初始化成功")
+
+            logger.info("✅ 所有分析模块初始化完成")
+
+        except Exception as e:
+            logger.error(f"❌ 模块初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+            # 即使初始化失败也继续启动
+            price_collector = None
+            news_aggregator = None
+            technical_analyzer = None
+            sentiment_analyzer = None
+            signal_generator = None
+            enhanced_dashboard = None
 
         # 在后台线程初始化这些模块（不阻塞事件循环）
         def init_modules_sync():
@@ -677,6 +704,28 @@ async def get_dashboard():
     """
     获取增强版仪表盘数据（优化缓存策略）
     整合所有数据源：价格、投资建议、新闻、Hyperliquid聪明钱等
+    """
+    # 临时：直接返回空数据，避免任何可能导致崩溃的代码
+    from datetime import datetime
+    return {
+        "success": True,
+        "data": {
+            "prices": [],
+            "futures": [],
+            "recommendations": [],
+            "news": [],
+            "hyperliquid": {},
+            "stats": {
+                "total_symbols": 0,
+                "bullish_count": 0,
+                "bearish_count": 0
+            },
+            "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        },
+        "message": "Dashboard临时禁用（Windows兼容性修复中）"
+    }
+
+    # 以下代码暂时不执行
     """
     global _dashboard_cache, _dashboard_cache_time
 
