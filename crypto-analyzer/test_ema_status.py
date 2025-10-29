@@ -166,10 +166,10 @@ def check_ema_signals_history(engine, config):
                 SELECT
                     COUNT(*) as total_signals,
                     COUNT(DISTINCT symbol) as unique_symbols,
-                    MAX(signal_time) as last_signal,
-                    MIN(signal_time) as first_signal
+                    MAX(timestamp) as last_signal,
+                    MIN(timestamp) as first_signal
                 FROM ema_signals
-                WHERE signal_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)
             """)
 
             result = conn.execute(query)
@@ -190,14 +190,14 @@ def check_ema_signals_history(engine, config):
                 recent_query = text("""
                     SELECT
                         symbol,
-                        signal_time,
+                        timestamp,
                         signal_strength,
-                        current_price,
-                        ema_short,
-                        ema_long,
+                        price,
+                        short_ema,
+                        long_ema,
                         volume_ratio
                     FROM ema_signals
-                    ORDER BY signal_time DESC
+                    ORDER BY timestamp DESC
                     LIMIT 5
                 """)
 
