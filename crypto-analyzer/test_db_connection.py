@@ -50,9 +50,10 @@ try:
 
     tables = [
         'price_data',
-        'futures_data',
+        'futures_open_interest',
+        'futures_long_short_ratio',
         'investment_recommendations',
-        'news',
+        'news_data',
         'ema_signals',
         'technical_indicators_cache',
         'price_stats_24h',
