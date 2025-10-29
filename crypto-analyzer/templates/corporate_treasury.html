@@ -343,7 +343,7 @@
             <p class="subtitle">Corporate Treasury Monitoring - BTC Holdings Tracker</p>
             <div class="nav-links">
                 <a href="/dashboard">← 返回主页</a>
-                <a href="/dashboard">📊 增强看板</a>
+                <a href="#" onclick="openEnhancedDashboard(); return false;">📊 增强看板</a>
             </div>
         </header>
 
@@ -838,6 +838,274 @@
             if (absNum >= 1000) return (absNum / 1000).toFixed(2) + 'K';
             return absNum.toFixed(2);
         }
+
+        // 增强看板相关变量
+        let chartInstances = {};
+
+        // 打开增强看板模态框
+        function openEnhancedDashboard() {
+            const modal = document.getElementById('enhancedDashboardModal');
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+
+            // 加载并渲染图表
+            renderEnhancedCharts();
+        }
+
+        // 关闭增强看板模态框
+        function closeEnhancedDashboard() {
+            const modal = document.getElementById('enhancedDashboardModal');
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // 渲染增强看板图表
+        async function renderEnhancedCharts() {
+            try {
+                const response = await fetch('/api/corporate-treasury/summary');
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error('获取数据失败');
+                }
+
+                const summary = result.data.summary || {};
+                const topHolders = result.data.top_holders || [];
+
+                // 更新统计数据
+                document.getElementById('modal-total-companies').textContent = summary.total_companies || '-';
+                document.getElementById('modal-total-btc').textContent = formatNumber(summary.total_btc_holdings, 0) + ' BTC';
+                document.getElementById('modal-total-value').textContent = '$' + formatLargeNumber(summary.total_value_usd);
+                document.getElementById('modal-btc-price').textContent = '$' + formatNumber(summary.current_btc_price, 0);
+
+                // 渲染Top 5持仓柱状图
+                renderTopHoldersChart(topHolders);
+
+                // 渲染类别分布饼图
+                renderCategoryChart(topHolders);
+
+            } catch (error) {
+                console.error('加载增强看板数据失败:', error);
+                alert('加载数据失败，请稍后重试');
+            }
+        }
+
+        // 渲染Top 5持仓柱状图
+        function renderTopHoldersChart(topHolders) {
+            const ctx = document.getElementById('topHoldersChart');
+            if (!ctx) return;
+
+            // 销毁旧图表
+            if (chartInstances.topHolders) {
+                chartInstances.topHolders.destroy();
+            }
+
+            const top5 = topHolders.slice(0, 5);
+            chartInstances.topHolders = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: top5.map(h => h.company_name),
+                    datasets: [{
+                        label: 'BTC持仓量',
+                        data: top5.map(h => h.btc_holdings),
+                        backgroundColor: [
+                            'rgba(255, 215, 0, 0.8)',
+                            'rgba(192, 192, 192, 0.8)',
+                            'rgba(205, 127, 50, 0.8)',
+                            'rgba(102, 126, 234, 0.8)',
+                            'rgba(56, 239, 125, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgb(255, 215, 0)',
+                            'rgb(192, 192, 192)',
+                            'rgb(205, 127, 50)',
+                            'rgb(102, 126, 234)',
+                            'rgb(56, 239, 125)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Top 5 企业BTC持仓排名',
+                            font: { size: 16, weight: 'bold' },
+                            color: '#fff'
+                        },
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatNumber(context.parsed.y, 2) + ' BTC';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#b8d4ff',
+                                callback: function(value) {
+                                    return formatNumber(value, 0);
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#b8d4ff'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 渲染类别分布饼图
+        function renderCategoryChart(topHolders) {
+            const ctx = document.getElementById('categoryChart');
+            if (!ctx) return;
+
+            // 销毁旧图表
+            if (chartInstances.category) {
+                chartInstances.category.destroy();
+            }
+
+            // 按category分组统计
+            const categoryData = {};
+            topHolders.forEach(h => {
+                const cat = h.category || 'other';
+                if (!categoryData[cat]) categoryData[cat] = 0;
+                categoryData[cat] += h.btc_holdings;
+            });
+
+            const categories = Object.keys(categoryData);
+            const categoryLabels = {
+                'mining': '矿业公司',
+                'holding': '持币公司',
+                'payment': '支付公司',
+                'other': '其他'
+            };
+
+            chartInstances.category = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: categories.map(c => categoryLabels[c] || c),
+                    datasets: [{
+                        data: categories.map(c => categoryData[c]),
+                        backgroundColor: [
+                            'rgba(102, 126, 234, 0.8)',
+                            'rgba(56, 239, 125, 0.8)',
+                            'rgba(255, 193, 7, 0.8)',
+                            'rgba(220, 53, 69, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgb(102, 126, 234)',
+                            'rgb(56, 239, 125)',
+                            'rgb(255, 193, 7)',
+                            'rgb(220, 53, 69)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '按公司类别分布',
+                            font: { size: 16, weight: 'bold' },
+                            color: '#fff'
+                        },
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#b8d4ff'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${formatNumber(value, 2)} BTC (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('enhancedDashboardModal');
+            if (event.target === modal) {
+                closeEnhancedDashboard();
+            }
+        }
     </script>
+
+    <!-- 增强看板模态框 -->
+    <div id="enhancedDashboardModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0, 0, 0, 0.8); backdrop-filter: blur(5px);">
+        <div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); margin: 2% auto; padding: 0; width: 90%; max-width: 1200px; border-radius: 20px; box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5); position: relative;">
+            <!-- 关闭按钮 -->
+            <span onclick="closeEnhancedDashboard()" style="color: #fff; position: absolute; top: 15px; right: 25px; font-size: 35px; font-weight: bold; cursor: pointer; z-index: 10000;">&times;</span>
+
+            <!-- 标题 -->
+            <div style="padding: 30px; border-bottom: 2px solid rgba(255, 255, 255, 0.2);">
+                <h2 style="color: #ffd700; margin: 0; font-size: 2em;">📊 企业金库增强看板</h2>
+                <p style="color: #b8d4ff; margin-top: 10px; font-size: 1.1em;">Enhanced Treasury Analytics Dashboard</p>
+            </div>
+
+            <!-- 统计卡片 -->
+            <div style="padding: 30px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                    <div style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 15px; padding: 20px; text-align: center;">
+                        <div style="color: #b8d4ff; font-size: 0.9em; margin-bottom: 10px;">监控公司</div>
+                        <div id="modal-total-companies" style="color: #ffd700; font-size: 2em; font-weight: bold;">-</div>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 15px; padding: 20px; text-align: center;">
+                        <div style="color: #b8d4ff; font-size: 0.9em; margin-bottom: 10px;">BTC总持仓</div>
+                        <div id="modal-total-btc" style="color: #ffd700; font-size: 2em; font-weight: bold;">-</div>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 15px; padding: 20px; text-align: center;">
+                        <div style="color: #b8d4ff; font-size: 0.9em; margin-bottom: 10px;">总市值(美元)</div>
+                        <div id="modal-total-value" style="color: #38ef7d; font-size: 2em; font-weight: bold;">-</div>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border-radius: 15px; padding: 20px; text-align: center;">
+                        <div style="color: #b8d4ff; font-size: 0.9em; margin-bottom: 10px;">当前BTC价格</div>
+                        <div id="modal-btc-price" style="color: #00f2fe; font-size: 2em; font-weight: bold;">-</div>
+                    </div>
+                </div>
+
+                <!-- 图表区域 -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                    <div style="background: rgba(255, 255, 255, 0.05); border-radius: 15px; padding: 20px;">
+                        <canvas id="topHoldersChart" height="300"></canvas>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.05); border-radius: 15px; padding: 20px;">
+                        <canvas id="categoryChart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
 </body>
 </html>
