@@ -700,6 +700,56 @@ async def get_dashboard():
                     logger.warning(f"获取 {symbol} 价格失败: {e}")
                     continue
 
+        # 获取投资建议数据
+        recommendations_data = []
+        try:
+            from app.database.db_service import DatabaseService
+            db_config = config.get('database', {})
+            db_service = DatabaseService(db_config)
+
+            # 从数据库读取投资建议
+            session = db_service.get_session()
+            if session:
+                from sqlalchemy import text
+                sql = text("""
+                    SELECT
+                        symbol,
+                        recommendation,
+                        confidence,
+                        reasoning,
+                        technical_score,
+                        news_sentiment_score,
+                        funding_rate_score,
+                        smart_money_score,
+                        current_price,
+                        risk_level,
+                        updated_at
+                    FROM investment_recommendations
+                    WHERE symbol IN :symbols
+                    ORDER BY confidence DESC
+                """)
+
+                result = session.execute(sql, {"symbols": tuple(symbols)})
+                for row in result:
+                    recommendations_data.append({
+                        "symbol": row[0],
+                        "recommendation": row[1],
+                        "confidence": float(row[2]) if row[2] else 0,
+                        "reasoning": row[3],
+                        "technical_score": float(row[4]) if row[4] else 0,
+                        "news_sentiment_score": float(row[5]) if row[5] else 0,
+                        "funding_rate_score": float(row[6]) if row[6] else 0,
+                        "smart_money_score": float(row[7]) if row[7] else 0,
+                        "current_price": float(row[8]) if row[8] else 0,
+                        "risk_level": row[9],
+                        "updated_at": row[10].strftime('%Y-%m-%d %H:%M:%S') if row[10] else None
+                    })
+                session.close()
+                logger.info(f"✅ 获取到 {len(recommendations_data)} 条投资建议")
+        except Exception as e:
+            logger.warning(f"⚠️  获取投资建议失败: {e}")
+            recommendations_data = []
+
         # 统计
         bullish = sum(1 for p in prices_data if p.get('change_24h', 0) > 0)
         bearish = sum(1 for p in prices_data if p.get('change_24h', 0) < 0)
@@ -709,7 +759,7 @@ async def get_dashboard():
             "data": {
                 "prices": prices_data,
                 "futures": [],  # 暂时禁用（数据库问题）
-                "recommendations": [],  # 暂时禁用（数据库问题）
+                "recommendations": recommendations_data,
                 "news": [],  # 暂时禁用（API限制）
                 "hyperliquid": {},  # 暂时禁用（数据库问题）
                 "stats": {
@@ -719,7 +769,7 @@ async def get_dashboard():
                 },
                 "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             },
-            "message": "实时数据（来自Binance和Gate.io）"
+            "message": "实时数据（来自Binance和Gate.io）+ 投资建议"
         }
 
     except Exception as e:
