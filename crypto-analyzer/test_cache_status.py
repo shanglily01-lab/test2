@@ -24,32 +24,37 @@ def load_config():
 
 
 def get_db_connection(config):
-    """获取数据库连接"""
-    db_config = config.get('database', {}).get('mysql', {})
+    """获取数据库连接（与DatabaseService完全相同的方式）"""
+    from urllib.parse import quote_plus
 
-    host = db_config.get('host', 'localhost')
-    port = db_config.get('port', 3306)
-    user = db_config.get('user', 'root')
-    password = db_config.get('password', '')
-    database = db_config.get('database', 'crypto_analysis')
+    # 按照 DatabaseService 的方式读取配置
+    db_config = config.get('database', {})
+    mysql_config = db_config.get('mysql', {})
+
+    host = mysql_config.get('host', 'localhost')
+    port = mysql_config.get('port', 3306)
+    user = mysql_config.get('user', 'root')
+    password = mysql_config.get('password', '')
+    database = mysql_config.get('database', 'binance-data')
 
     logger.info(f"\n📊 数据库配置:")
     logger.info(f"   Host: {host}")
     logger.info(f"   Port: {port}")
     logger.info(f"   User: {user}")
     logger.info(f"   Database: {database}")
-    logger.info(f"   Password: {'*' * len(password)}")
+    logger.info(f"   Password: {'*' * len(password) if password else '(空)'}")
 
-    # 需要对密码中的特殊字符进行URL编码
-    from urllib.parse import quote_plus
+    # URL编码密码以处理特殊字符（与DatabaseService完全相同）
     password_encoded = quote_plus(password)
 
-    connection_string = (
-        f"mysql+pymysql://{user}:{password_encoded}"
-        f"@{host}:{port}/{database}"
-    )
+    # 创建连接字符串（与DatabaseService完全相同）
+    db_uri = f"mysql+pymysql://{user}:{password_encoded}@{host}:{port}/{database}?charset=utf8mb4"
 
-    return create_engine(connection_string)
+    return create_engine(
+        db_uri,
+        pool_pre_ping=True,  # 自动检测连接是否有效
+        echo=False
+    )
 
 
 def check_cache_tables(engine):
