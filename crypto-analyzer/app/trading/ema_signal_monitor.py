@@ -131,12 +131,12 @@ class EMASignalMonitor:
         volume_ratio: float
     ) -> bool:
         """
-        检测金叉信号
+        检测金叉信号（买入信号）
 
         Args:
             short_ema_history: 短期 EMA 历史（最近3个值）
             long_ema_history: 长期 EMA 历史（最近3个值）
-            volume_ratio: 当前成交量与平均成交量的比值
+            volume_ratio: 当前成交量与平均成交量的比值（保留用于信号强度计算）
 
         Returns:
             是否出现金叉
@@ -150,14 +150,12 @@ class EMASignalMonitor:
         long_current = long_ema_history[-1]
         long_prev = long_ema_history[-2]
 
-        # 检测金叉：
+        # 检测金叉（去掉成交量限制）：
         # 1. 前一根K线：短期EMA <= 长期EMA
-        # 2. 当前K线：短期EMA > 长期EMA
-        # 3. 成交量放大
+        # 2. 当前K线：短期EMA > 长期EMA（向上穿过）
         is_golden_cross = (
             short_prev <= long_prev and
-            short_current > long_current and
-            volume_ratio >= self.volume_threshold
+            short_current > long_current
         )
 
         return is_golden_cross
@@ -174,7 +172,7 @@ class EMASignalMonitor:
         Args:
             short_ema_history: 短期 EMA 历史（最近3个值）
             long_ema_history: 长期 EMA 历史（最近3个值）
-            volume_ratio: 当前成交量与平均成交量的比值
+            volume_ratio: 当前成交量与平均成交量的比值（保留用于信号强度计算）
 
         Returns:
             是否出现死叉
@@ -188,14 +186,12 @@ class EMASignalMonitor:
         long_current = long_ema_history[-1]
         long_prev = long_ema_history[-2]
 
-        # 检测死叉：
+        # 检测死叉（去掉成交量限制）：
         # 1. 前一根K线：短期EMA >= 长期EMA
-        # 2. 当前K线：短期EMA < 长期EMA
-        # 3. 成交量放大
+        # 2. 当前K线：短期EMA < 长期EMA（向下穿过）
         is_death_cross = (
             short_prev >= long_prev and
-            short_current < long_current and
-            volume_ratio >= self.volume_threshold
+            short_current < long_current
         )
 
         return is_death_cross
