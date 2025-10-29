@@ -826,26 +826,29 @@ async def server_error_handler(request, exc):
     )
 
 
-# ==================== 静态文件挂载 ====================
-# 注意：必须在所有路由注册之后挂载静态文件
-try:
-    app.mount("/static", StaticFiles(directory=str(project_root / "static")), name="static")
-    logger.info("✅ 静态文件目录已挂载: /static")
-except Exception as e:
-    logger.warning(f"⚠️  静态文件挂载失败: {e}")
-
-
 # ==================== 启动服务 ====================
 
 if __name__ == "__main__":
     import uvicorn
 
+    # 挂载静态文件目录（在所有路由注册之后）
+    try:
+        static_dir = project_root / "static"
+        logger.info(f"📁 静态文件目录: {static_dir}")
+        logger.info(f"📁 目录存在: {static_dir.exists()}")
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+        logger.info("✅ 静态文件目录已挂载: /static")
+    except Exception as e:
+        logger.error(f"❌ 静态文件挂载失败: {e}")
+        import traceback
+        traceback.print_exc()
+
     logger.info("启动FastAPI服务器...")
 
     uvicorn.run(
-        "app.main:app",
+        app,  # 直接传递app对象，而不是字符串
         host="0.0.0.0",
         port=8000,
-        reload=False,  # 开发模式，生产环境设为False
+        reload=False,
         log_level="info"
     )
