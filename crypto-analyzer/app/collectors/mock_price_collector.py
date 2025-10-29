@@ -118,6 +118,19 @@ class MockPriceCollector:
             logger.error(f"模拟获取 {symbol} 价格失败: {e}")
             return None
 
+    async def fetch_best_price(self, symbol: str) -> Optional[Dict]:
+        """
+        获取最优价格（兼容MultiExchangeCollector接口）
+
+        Args:
+            symbol: 交易对，如 'BTC/USDT'
+
+        Returns:
+            价格数据字典
+        """
+        # 直接使用fetch_ticker，因为模拟器只有一个"交易所"
+        return await self.fetch_ticker(symbol)
+
     async def fetch_ohlcv(
         self,
         symbol: str,

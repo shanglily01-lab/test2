@@ -67,23 +67,64 @@ async def lifespan(app: FastAPI):
             'symbols': ['BTC/USDT', 'ETH/USDT']
         }
 
-    # 临时禁用价格缓存服务（可能导致Windows崩溃）
-    price_cache_service = None
-    logger.warning("⚠️  价格缓存服务已禁用（Windows兼容性）")
+    # 使用延迟导入，避免模块级别的初始化代码
+    try:
+        from app.collectors.price_collector import MultiExchangeCollector
+        from app.collectors.mock_price_collector import MockPriceCollector
+        from app.collectors.news_collector import NewsAggregator
+        from app.analyzers.technical_indicators import TechnicalIndicators
+        from app.analyzers.sentiment_analyzer import SentimentAnalyzer
+        from app.analyzers.signal_generator import SignalGenerator
+        # EnhancedDashboardCached暂时禁用（数据库连接问题）
+        # from app.api.enhanced_dashboard_cached import EnhancedDashboardCached as EnhancedDashboard
 
-    # 完全禁用模块初始化（Windows崩溃问题）
-    global price_collector, news_aggregator, technical_analyzer
-    global sentiment_analyzer, signal_generator, enhanced_dashboard
+        logger.info("🔄 开始初始化分析模块...")
 
-    price_collector = None
-    news_aggregator = None
-    technical_analyzer = None
-    sentiment_analyzer = None
-    signal_generator = None
-    enhanced_dashboard = None
+        # 初始化价格采集器（使用模拟模式更稳定）
+        price_collector = MockPriceCollector('binance_demo', config)
+        logger.info("✅ 价格采集器初始化成功（模拟模式）")
 
-    logger.warning("⚠️  所有分析模块已禁用（Windows兼容性修复中）")
-    logger.info("🚀 FastAPI 启动完成（最小化模式）")
+        # 初始化新闻采集器
+        news_aggregator = NewsAggregator(config)
+        logger.info("✅ 新闻采集器初始化成功")
+
+        # 初始化技术分析器
+        technical_analyzer = TechnicalIndicators(config)
+        logger.info("✅ 技术分析器初始化成功")
+
+        # 初始化情绪分析器
+        sentiment_analyzer = SentimentAnalyzer()
+        logger.info("✅ 情绪分析器初始化成功")
+
+        # 初始化信号生成器
+        signal_generator = SignalGenerator(config)
+        logger.info("✅ 信号生成器初始化成功")
+
+        # EnhancedDashboard暂时禁用（数据库连接问题）
+        enhanced_dashboard = None
+        logger.warning("⚠️  EnhancedDashboard已禁用（数据库连接问题）")
+
+        # 价格缓存服务暂时禁用
+        price_cache_service = None
+        logger.warning("⚠️  价格缓存服务已禁用")
+
+        logger.info("🎉 分析模块初始化完成！")
+
+    except Exception as e:
+        logger.error(f"❌ 模块初始化失败: {e}")
+        import traceback
+        traceback.print_exc()
+        # 降级模式：所有模块设为None
+        price_collector = None
+        news_aggregator = None
+        technical_analyzer = None
+        sentiment_analyzer = None
+        signal_generator = None
+        enhanced_dashboard = None
+        price_cache_service = None
+        logger.warning("⚠️  系统以降级模式运行")
+
+    logger.info("🚀 FastAPI 启动完成")
 
     yield
 
