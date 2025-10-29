@@ -21,38 +21,42 @@ project_root = Path(__file__).parent.parent.parent
 config_path = project_root / "config.yaml"
 connection_pool = None
 
-try:
-    if config_path.exists():
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-
-        mysql_config = config.get('database', {}).get('mysql', {})
-
-        db_config = {
-            "host": mysql_config.get('host', 'localhost'),
-            "port": mysql_config.get('port', 3306),
-            "user": mysql_config.get('user', 'root'),
-            "password": mysql_config.get('password', ''),
-            "database": mysql_config.get('database', 'binance-data'),
-            "pool_name": "corporate_treasury_pool",
-            "pool_size": 5
-        }
-
-        connection_pool = pooling.MySQLConnectionPool(**db_config)
-        print(f"✅ 企业金库监控数据库连接池创建成功: {db_config['database']}")
-    else:
-        print("⚠️  config.yaml 不存在，无法初始化数据库连接")
-except Exception as e:
-    print(f"❌ 企业金库监控数据库连接池创建失败: {e}")
-    import traceback
-    traceback.print_exc()
-    connection_pool = None
-
 
 def get_db_connection():
-    """获取数据库连接"""
+    """获取数据库连接（延迟初始化连接池）"""
+    global connection_pool
+
+    # 延迟初始化：只在第一次调用时创建连接池
     if connection_pool is None:
-        raise HTTPException(status_code=500, detail="数据库连接池未初始化")
+        try:
+            if not config_path.exists():
+                raise HTTPException(status_code=500, detail="config.yaml 不存在，无法初始化数据库连接")
+
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+
+            mysql_config = config.get('database', {}).get('mysql', {})
+
+            db_config = {
+                "host": mysql_config.get('host', 'localhost'),
+                "port": mysql_config.get('port', 3306),
+                "user": mysql_config.get('user', 'root'),
+                "password": mysql_config.get('password', ''),
+                "database": mysql_config.get('database', 'binance-data'),
+                "pool_name": "corporate_treasury_pool",
+                "pool_size": 5
+            }
+
+            connection_pool = pooling.MySQLConnectionPool(**db_config)
+            print(f"✅ 企业金库监控数据库连接池创建成功: {db_config['database']}")
+        except mysql.connector.Error as e:
+            raise HTTPException(status_code=500, detail=f"数据库连接失败: {str(e)}")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"数据库连接池初始化失败: {str(e)}")
+
+    # 从连接池获取连接
     try:
         return connection_pool.get_connection()
     except mysql.connector.Error as e:

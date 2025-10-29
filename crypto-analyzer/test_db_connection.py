@@ -60,7 +60,12 @@ try:
         'hyperliquid_symbol_aggregation',
         'investment_recommendations_cache',
         'news_sentiment_aggregation',
-        'funding_rate_stats'
+        'funding_rate_stats',
+        # 企业金库相关表
+        'corporate_treasury_companies',
+        'corporate_treasury_purchases',
+        'corporate_treasury_financing',
+        'corporate_treasury_stock_prices'
     ]
 
     for table in tables:
