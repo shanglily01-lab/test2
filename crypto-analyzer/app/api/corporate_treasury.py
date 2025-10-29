@@ -12,6 +12,7 @@ import mysql.connector
 from mysql.connector import pooling
 import yaml
 from pathlib import Path
+from app.services.price_cache_service import get_global_price_cache
 
 router = APIRouter()
 
@@ -98,16 +99,25 @@ async def get_corporate_treasury_summary():
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # 获取当前 BTC 价格（从最近的持仓记录获取）
-        cursor.execute("""
-            SELECT average_price
-            FROM corporate_treasury_purchases
-            WHERE average_price > 0
-            ORDER BY purchase_date DESC
-            LIMIT 1
-        """)
-        btc_price_result = cursor.fetchone()
-        current_btc_price = btc_price_result['average_price'] if btc_price_result else 100000
+        # 获取当前 BTC 实时价格（从价格缓存服务）
+        price_cache = get_global_price_cache()
+        if price_cache:
+            btc_price_decimal = price_cache.get_price('BTC/USDT')
+            current_btc_price = float(btc_price_decimal) if btc_price_decimal > 0 else None
+        else:
+            current_btc_price = None
+
+        # 如果价格缓存服务不可用，从历史记录获取
+        if not current_btc_price:
+            cursor.execute("""
+                SELECT average_price
+                FROM corporate_treasury_purchases
+                WHERE average_price > 0
+                ORDER BY purchase_date DESC
+                LIMIT 1
+            """)
+            btc_price_result = cursor.fetchone()
+            current_btc_price = btc_price_result['average_price'] if btc_price_result else 100000
 
         # 统计数据
         cursor.execute("""
