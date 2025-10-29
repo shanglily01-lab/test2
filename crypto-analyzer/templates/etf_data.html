@@ -276,9 +276,18 @@
 
                 // 检查HTTP状态
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('API返回错误:', response.status, errorText);
-                    showError(`API请求失败 (${response.status}): ${errorText}`);
+                    // 尝试解析FastAPI的JSON错误响应
+                    try {
+                        const errorJson = await response.json();
+                        const errorMsg = errorJson.detail || errorJson.message || 'API请求失败';
+                        console.error('API返回错误:', response.status, errorJson);
+                        showError(`API请求失败 (${response.status}): ${errorMsg}`);
+                    } catch (e) {
+                        // 如果JSON解析失败，显示文本错误
+                        const errorText = await response.text();
+                        console.error('API返回错误:', response.status, errorText);
+                        showError(`API请求失败 (${response.status}): ${errorText}`);
+                    }
                     return;
                 }
 
