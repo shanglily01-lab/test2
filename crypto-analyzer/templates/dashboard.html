@@ -431,6 +431,31 @@
             </div>
         </div>
 
+        <!-- EMA信号区域 -->
+        <div class="row g-3 mb-4">
+            <div class="col-12">
+                <div class="main-card">
+                    <div class="card-header-custom d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-graph-up"></i> EMA交易信号 (15分钟)
+                        </h5>
+                        <div>
+                            <span class="badge bg-success me-2" id="ema-buy-count">0</span>
+                            <span class="badge bg-danger" id="ema-sell-count">0</span>
+                        </div>
+                    </div>
+                    <div class="card-body p-3">
+                        <div id="ema-signals-container">
+                            <div class="text-center p-3 text-muted">
+                                <div class="loading mb-2"></div>
+                                <div>正在加载EMA信号...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 企业金库统计区域 -->
         <div class="row g-3 mb-4">
             <div class="col-12">
@@ -478,31 +503,6 @@
                             </div>
                             <div class="col-md-6">
                                 <canvas id="treasuryCategoryChart" height="250"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- EMA信号区域 -->
-        <div class="row g-3 mb-4">
-            <div class="col-12">
-                <div class="main-card">
-                    <div class="card-header-custom d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            <i class="bi bi-graph-up"></i> EMA交易信号 (15分钟)
-                        </h5>
-                        <div>
-                            <span class="badge bg-success me-2" id="ema-buy-count">0</span>
-                            <span class="badge bg-danger" id="ema-sell-count">0</span>
-                        </div>
-                    </div>
-                    <div class="card-body p-3">
-                        <div id="ema-signals-container">
-                            <div class="text-center p-3 text-muted">
-                                <div class="loading mb-2"></div>
-                                <div>正在加载EMA信号...</div>
                             </div>
                         </div>
                     </div>

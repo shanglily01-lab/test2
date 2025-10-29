@@ -629,24 +629,6 @@ function initTooltips() {
     });
 }
 
-// 加载企业金库汇总数据
-async function loadCorporateTreasury() {
-    try {
-        const response = await fetch(`${API_BASE}/api/corporate-treasury/summary`);
-        const result = await response.json();
-
-        if (result.success) {
-            updateCorporateTreasury(result.data);
-        }
-    } catch (error) {
-        console.error('加载企业金库数据失败:', error);
-        const section = document.getElementById('corporate-treasury-section');
-        if (section) {
-            section.innerHTML = '<div class="text-center p-3 text-muted">加载失败</div>';
-        }
-    }
-}
-
 // 更新Dashboard页面的企业金库统计
 function updateTreasuryStats(summary, topHolders) {
     // 更新统计卡片
@@ -668,7 +650,7 @@ function updateTreasuryStats(summary, topHolders) {
 function renderTreasuryCharts(topHolders) {
     if (!topHolders || topHolders.length === 0) return;
 
-    // Top 10持仓公司柱状图
+    // Top 5持仓公司柱状图
     const topHoldersCtx = document.getElementById('treasuryTopHoldersChart');
     if (topHoldersCtx) {
         // 销毁旧图表
@@ -807,12 +789,30 @@ function renderTreasuryCharts(topHolders) {
     }
 }
 
+// 加载企业金库汇总数据
+async function loadCorporateTreasury() {
+    try {
+        const response = await fetch(`${API_BASE}/api/corporate-treasury/summary`);
+        const result = await response.json();
+
+        if (result.success) {
+            updateCorporateTreasury(result.data);
+        }
+    } catch (error) {
+        console.error('加载企业金库数据失败:', error);
+        const section = document.getElementById('corporate-treasury-section');
+        if (section) {
+            section.innerHTML = '<div class="text-center p-3 text-muted">加载失败</div>';
+        }
+    }
+}
+
 // 更新企业金库显示
 function updateCorporateTreasury(data) {
     const summary = data.summary || {};
     const topHolders = data.top_holders || [];
 
-    // 更新Dashboard页面的企业金库统计卡片
+    // 更新Dashboard页面的企业金库统计
     updateTreasuryStats(summary, topHolders);
 
     // 更新原有的企业金库section（如果存在）
