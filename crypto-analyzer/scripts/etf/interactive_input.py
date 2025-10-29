@@ -109,15 +109,20 @@ class ETFInteractiveInput:
         print(f"{'=' * 80}\n")
 
         print("💡 提示:")
-        print("  - Farside 网站显示的单位是百万美元（M），请直接输入该数字")
-        print("  - 例如: Farside显示 125.5，直接输入 125.5")
-        print("  - 负数表示流出，例如: -10.5")
+        print("  - 净流入：Farside网站显示的单位是百万美元（M），请直接输入该数字")
+        print("    例如: Farside显示 125.5，直接输入 125.5")
+        print("    负数表示流出，例如: -10.5")
+        if asset_type == 'BTC':
+            print("  - BTC持仓：输入BTC数量，例如: 45123.5")
+        else:
+            print("  - ETH持仓：输入ETH数量，例如: 123456.78")
         print("  - 如果没有数据或为0，直接按回车跳过")
         print("  - 输入 'q' 退出当前录入\n")
 
         for idx, (ticker, provider) in enumerate(etf_list, 1):
             print(f"[{idx}/{len(etf_list)}] {ticker} ({provider})")
 
+            # 1. 录入净流入
             while True:
                 net_inflow_input = input(f"    净流入(M USD): ").strip()
 
@@ -139,18 +144,68 @@ class ETFInteractiveInput:
                 except ValueError:
                     print("    ❌ 无效输入，请输入数字")
 
+            # 2. 录入持仓总量
+            holdings = 0
+            if asset_type == 'BTC':
+                while True:
+                    holdings_input = input(f"    BTC持仓总量: ").strip()
+
+                    if holdings_input.lower() == 'q':
+                        print("⚠️  退出当前录入")
+                        return
+
+                    if not holdings_input:
+                        holdings = 0
+                        break
+
+                    try:
+                        holdings = float(holdings_input)
+                        break
+                    except ValueError:
+                        print("    ❌ 无效输入，请输入数字")
+
+            elif asset_type == 'ETH':
+                while True:
+                    holdings_input = input(f"    ETH持仓总量: ").strip()
+
+                    if holdings_input.lower() == 'q':
+                        print("⚠️  退出当前录入")
+                        return
+
+                    if not holdings_input:
+                        holdings = 0
+                        break
+
+                    try:
+                        holdings = float(holdings_input)
+                        break
+                    except ValueError:
+                        print("    ❌ 无效输入，请输入数字")
+
             # 添加到数据列表
-            self.data.append({
+            data_row = {
                 'Date': self.trade_date,
                 'Ticker': ticker,
                 'NetInflow': net_inflow
-            })
+            }
+
+            if asset_type == 'BTC':
+                data_row['BTC_Holdings'] = holdings
+            elif asset_type == 'ETH':
+                data_row['ETH_Holdings'] = holdings
+
+            self.data.append(data_row)
 
             # 显示转换后的值
             if net_inflow != 0:
-                print(f"    ✓ 已记录: {net_inflow_m:,.1f}M = ${net_inflow:,}")
+                print(f"    ✓ 净流入: {net_inflow_m:,.1f}M = ${net_inflow:,}")
             else:
-                print(f"    ✓ 已记录: 0")
+                print(f"    ✓ 净流入: 0")
+
+            if holdings != 0:
+                print(f"    ✓ 持仓: {holdings:,.2f} {asset_type}")
+            else:
+                print(f"    ✓ 持仓: 0")
             print()
 
     def show_summary(self):
@@ -169,13 +224,26 @@ class ETFInteractiveInput:
         # 计算总净流入
         total_inflow = sum(item['NetInflow'] for item in self.data)
         total_inflow_m = total_inflow / 1_000_000
-
         print(f"总净流入: {total_inflow_m:,.1f}M USD")
+
+        # 计算总持仓
+        if 'BTC_Holdings' in self.data[0]:
+            total_btc = sum(item.get('BTC_Holdings', 0) for item in self.data)
+            print(f"BTC总持仓: {total_btc:,.2f} BTC")
+        elif 'ETH_Holdings' in self.data[0]:
+            total_eth = sum(item.get('ETH_Holdings', 0) for item in self.data)
+            print(f"ETH总持仓: {total_eth:,.2f} ETH")
+
         print()
 
         # 显示前10条记录
         print("数据预览 (前10条):")
-        print(f"{'Ticker':<10} {'NetInflow(M)':<15} {'NetInflow(USD)':<20}")
+        if 'BTC_Holdings' in self.data[0]:
+            print(f"{'Ticker':<10} {'NetInflow(M)':<15} {'BTC Holdings':<20}")
+        elif 'ETH_Holdings' in self.data[0]:
+            print(f"{'Ticker':<10} {'NetInflow(M)':<15} {'ETH Holdings':<20}")
+        else:
+            print(f"{'Ticker':<10} {'NetInflow(M)':<15}")
         print("-" * 50)
 
         for item in self.data[:10]:
@@ -183,7 +251,18 @@ class ETFInteractiveInput:
             net_inflow = item['NetInflow']
             net_inflow_m = net_inflow / 1_000_000
 
-            print(f"{ticker:<10} {net_inflow_m:>14,.1f} {net_inflow:>19,}")
+            holdings_str = ""
+            if 'BTC_Holdings' in item:
+                holdings = item['BTC_Holdings']
+                holdings_str = f"{holdings:>19,.2f}"
+            elif 'ETH_Holdings' in item:
+                holdings = item['ETH_Holdings']
+                holdings_str = f"{holdings:>19,.2f}"
+
+            if holdings_str:
+                print(f"{ticker:<10} {net_inflow_m:>14,.1f} {holdings_str}")
+            else:
+                print(f"{ticker:<10} {net_inflow_m:>14,.1f}")
 
         if len(self.data) > 10:
             print(f"... 还有 {len(self.data) - 10} 条记录")
@@ -206,8 +285,15 @@ class ETFInteractiveInput:
 
         # 保存CSV
         try:
+            # 根据数据类型确定CSV字段
+            fieldnames = ['Date', 'Ticker', 'NetInflow']
+            if 'BTC_Holdings' in self.data[0]:
+                fieldnames.append('BTC_Holdings')
+            elif 'ETH_Holdings' in self.data[0]:
+                fieldnames.append('ETH_Holdings')
+
             with open(filename, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=['Date', 'Ticker', 'NetInflow'])
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(self.data)
 
