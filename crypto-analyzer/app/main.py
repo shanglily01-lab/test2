@@ -679,9 +679,11 @@ async def get_dashboard():
                 logger.debug(f"✅ 返回缓存的 Dashboard 数据（缓存年龄: {cache_age:.1f}秒）")
                 return _dashboard_cache
 
-        # 如果 enhanced_dashboard 未初始化，返回降级数据
-        if not enhanced_dashboard:
-            logger.warning("⚠️  enhanced_dashboard 未初始化，返回基础数据")
+        # 临时禁用：enhanced_dashboard在Windows上导致崩溃
+        ENABLE_ENHANCED_DASHBOARD = False  # 设置为True启用完整dashboard
+
+        if not enhanced_dashboard or not ENABLE_ENHANCED_DASHBOARD:
+            logger.warning("⚠️  enhanced_dashboard 已禁用或未初始化，返回基础数据")
             return {
                 "success": True,
                 "data": {
@@ -697,7 +699,7 @@ async def get_dashboard():
                     },
                     "last_updated": now.strftime('%Y-%m-%d %H:%M:%S')
                 },
-                "message": "仪表盘服务正在初始化中，请稍后刷新"
+                "message": "仪表盘服务临时禁用，正在修复Windows兼容性问题"
             }
 
         # 缓存未命中或过期，重新获取
@@ -705,8 +707,15 @@ async def get_dashboard():
         start_time = now
         symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'])
 
-        # 直接调用异步方法，不要嵌套事件循环
-        data = await enhanced_dashboard.get_dashboard_data(symbols)
+        # 添加超时保护，防止长时间阻塞
+        try:
+            data = await asyncio.wait_for(
+                enhanced_dashboard.get_dashboard_data(symbols),
+                timeout=30.0  # 30秒超时
+            )
+        except asyncio.TimeoutError:
+            logger.error("❌ Dashboard数据获取超时(30秒)")
+            raise HTTPException(status_code=504, detail="数据获取超时，请稍后重试")
 
         # 更新缓存
         _dashboard_cache = data
