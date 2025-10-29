@@ -862,15 +862,16 @@
         // 渲染增强看板图表
         async function renderEnhancedCharts() {
             try {
-                const response = await fetch('/api/corporate-treasury/summary');
-                const result = await response.json();
+                // 获取汇总数据
+                const summaryResponse = await fetch('/api/corporate-treasury/summary');
+                const summaryResult = await summaryResponse.json();
 
-                if (!result.success) {
-                    throw new Error('获取数据失败');
+                if (!summaryResult.success) {
+                    throw new Error('获取汇总数据失败');
                 }
 
-                const summary = result.data.summary || {};
-                const topHolders = result.data.top_holders || [];
+                const summary = summaryResult.data.summary || {};
+                const topHolders = summaryResult.data.top_holders || [];
 
                 // 更新统计数据
                 document.getElementById('modal-total-companies').textContent = summary.total_companies || '-';
@@ -881,8 +882,17 @@
                 // 渲染Top 5持仓柱状图
                 renderTopHoldersChart(topHolders);
 
-                // 渲染类别分布饼图
-                renderCategoryChart(topHolders);
+                // 获取所有公司列表用于类别统计
+                const companiesResponse = await fetch('/api/corporate-treasury/companies?limit=100');
+                const companiesResult = await companiesResponse.json();
+
+                if (companiesResult.success) {
+                    // 渲染类别分布饼图（使用所有公司数据）
+                    renderCategoryChart(companiesResult.data || []);
+                } else {
+                    // 降级方案：使用top_holders数据
+                    renderCategoryChart(topHolders);
+                }
 
             } catch (error) {
                 console.error('加载增强看板数据失败:', error);
@@ -971,7 +981,7 @@
         }
 
         // 渲染类别分布饼图
-        function renderCategoryChart(topHolders) {
+        function renderCategoryChart(companies) {
             const ctx = document.getElementById('categoryChart');
             if (!ctx) return;
 
@@ -982,10 +992,12 @@
 
             // 按category分组统计
             const categoryData = {};
-            topHolders.forEach(h => {
-                const cat = h.category || 'other';
+            companies.forEach(company => {
+                const cat = company.category || 'other';
                 if (!categoryData[cat]) categoryData[cat] = 0;
-                categoryData[cat] += h.btc_holdings;
+                // 支持两种数据结构：btc_holdings 或 current_btc_holdings
+                const holdings = company.btc_holdings || company.current_btc_holdings || 0;
+                categoryData[cat] += holdings;
             });
 
             const categories = Object.keys(categoryData);
