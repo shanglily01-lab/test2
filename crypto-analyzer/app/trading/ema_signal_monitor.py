@@ -5,7 +5,7 @@
 
 import asyncio
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 import numpy as np
 from sqlalchemy import text
@@ -363,14 +363,15 @@ class EMASignalMonitor:
 
             # 检查是否已经提醒过（避免重复提醒）
             last_signal_time = self.signal_history.get(signal_key)
+            current_utc_time = datetime.now(timezone.utc)
             if last_signal_time:
-                time_since_last = datetime.now() - last_signal_time
+                time_since_last = current_utc_time - last_signal_time
                 if time_since_last < timedelta(hours=1):  # 1小时内不重复提醒
                     logger.debug(f"{symbol}: {signal_type}信号已在 {time_since_last.seconds//60} 分钟前提醒过")
                     return None
 
-            # 记录信号时间
-            self.signal_history[signal_key] = datetime.now()
+            # 记录信号时间（使用UTC时间）
+            self.signal_history[signal_key] = current_utc_time
 
             # 计算信号详细信息
             current_price = closes[-1]
@@ -383,13 +384,13 @@ class EMASignalMonitor:
                 ema_distance_pct
             )
 
-            # 构建信号
+            # 构建信号（使用UTC时间，与币安K线数据时区一致）
             signal = {
                 'symbol': symbol,
                 'timeframe': self.timeframe,
                 'signal_type': signal_type,
                 'signal_strength': signal_strength,
-                'timestamp': datetime.now(),
+                'timestamp': current_utc_time,  # 使用UTC时间
                 'price': current_price,
                 'short_ema': short_ema_values[-1],
                 'long_ema': long_ema_values[-1],
@@ -467,10 +468,16 @@ class EMASignalMonitor:
 
         emoji = strength_emoji.get(signal['signal_strength'], '📊')
 
+        # 格式化时间：显示UTC时间和本地时间(UTC+8)
+        utc_time = signal['timestamp']
+        # 转换为UTC+8本地时间
+        local_time = utc_time.astimezone(timezone(timedelta(hours=8)))
+        time_str = f"{utc_time.strftime('%Y-%m-%d %H:%M:%S')} UTC (本地: {local_time.strftime('%H:%M:%S')})"
+
         message = f"""
 {emoji} {signal['symbol']} 买入信号 ({signal['signal_strength'].upper()})
 
-⏰ 时间: {signal['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}
+⏰ 时间: {time_str}
 📊 周期: {signal['timeframe']}
 💰 价格: ${signal['price']:.2f} ({signal['price_change_pct']:+.2f}%)
 
