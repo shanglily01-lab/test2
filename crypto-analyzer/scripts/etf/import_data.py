@@ -104,6 +104,22 @@ class ETFDataImporter:
                             updated_at = CURRENT_TIMESTAMP
                         """
 
+                        # 解析持仓量（支持多种字段名格式）
+                        btc_holdings = None
+                        eth_holdings = None
+                        if db_asset_type == 'BTC':
+                            btc_holdings = self._parse_number(
+                                row.get('BTC_Holdings') or
+                                row.get('BTCHoldings') or
+                                row.get('btc_holdings')
+                            )
+                        elif db_asset_type == 'ETH':
+                            eth_holdings = self._parse_number(
+                                row.get('ETH_Holdings') or
+                                row.get('ETHHoldings') or
+                                row.get('eth_holdings')
+                            )
+
                         self.cursor.execute(insert_sql, (
                             etf_id,
                             ticker,
@@ -112,14 +128,23 @@ class ETFDataImporter:
                             self._parse_number(row.get('GrossInflow') or row.get('gross_inflow')),
                             self._parse_number(row.get('GrossOutflow') or row.get('gross_outflow')),
                             self._parse_number(row.get('AUM') or row.get('aum')),
-                            self._parse_number(row.get('BTCHoldings') or row.get('btc_holdings')) if db_asset_type == 'BTC' else None,
-                            self._parse_number(row.get('ETHHoldings') or row.get('eth_holdings')) if db_asset_type == 'ETH' else None,
+                            btc_holdings,
+                            eth_holdings,
                             self._parse_number(row.get('NAV') or row.get('nav')),
                             self._parse_number(row.get('Close') or row.get('close_price')),
                             self._parse_number(row.get('Volume') or row.get('volume'))
                         ))
 
                         imported += 1
+
+                        # 显示导入详情
+                        holdings_info = ""
+                        if btc_holdings:
+                            holdings_info = f", BTC持仓: {btc_holdings}"
+                        elif eth_holdings:
+                            holdings_info = f", ETH持仓: {eth_holdings}"
+
+                        print(f"  ✓ {ticker} ({trade_date}): 净流入 ${self._parse_number(row.get('NetInflow') or row.get('net_inflow'))}{holdings_info}")
 
                         if imported % 10 == 0:
                             print(f"  已导入 {imported} 条...")
