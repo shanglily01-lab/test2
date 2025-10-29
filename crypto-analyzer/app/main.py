@@ -130,8 +130,8 @@ async def lifespan(app: FastAPI):
 
         # 初始化 EnhancedDashboard（缓存版）
         try:
-            db_config = config.get('database', {})
-            enhanced_dashboard = EnhancedDashboard(db_config)
+            # EnhancedDashboard 需要完整的 config（它内部会提取 database 部分）
+            enhanced_dashboard = EnhancedDashboard(config)
             logger.info("✅ EnhancedDashboard（缓存版）初始化成功")
         except Exception as e:
             logger.warning(f"⚠️  EnhancedDashboard初始化失败: {e}")
