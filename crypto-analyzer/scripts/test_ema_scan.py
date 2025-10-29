@@ -45,7 +45,7 @@ async def main():
     # 初始化服务
     print("🔧 初始化服务...")
     try:
-        db_service = DatabaseService(config)
+        db_service = DatabaseService(config['database'])
         print("   ✅ 数据库服务初始化成功")
 
         ema_monitor = EMASignalMonitor(config, db_service)
