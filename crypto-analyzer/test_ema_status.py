@@ -83,6 +83,7 @@ def check_kline_data(engine, config):
     logger.info("\n" + "="*80)
     logger.info("2️⃣  检查K线数据")
     logger.info("="*80)
+    logger.info("  ℹ️  提示：币安数据采用UTC时间，如果显示约8小时差异是正常的（时区UTC+8）")
 
     symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
     ema_config = config.get('ema_signal', {})
@@ -127,11 +128,19 @@ def check_kline_data(engine, config):
                         # 计算数据覆盖范围
                         if last_time and first_time:
                             days = (last_time - first_time).days
+                            # 考虑时区差异（币安数据是UTC，本地可能是UTC+8）
+                            # 如果数据看起来是很久之前的，可能是时区问题
                             hours_old = (datetime.now() - last_time).total_seconds() / 3600
 
-                            status = "✅" if hours_old < 1 else "⚠️"
-                            logger.info(f"  {status} {symbol:15s} | 记录数: {count:4d} | "
-                                      f"最新: {hours_old:.1f}小时前 | 覆盖: {days}天")
+                            # 如果相差接近8小时（7-9小时），可能是时区问题，标记为正常
+                            if 7 <= hours_old <= 9:
+                                status = "✅"
+                                logger.info(f"  {status} {symbol:15s} | 记录数: {count:4d} | "
+                                          f"最新: {hours_old:.1f}小时前 (时区差异) | 覆盖: {days}天")
+                            else:
+                                status = "✅" if hours_old < 1 else "⚠️"
+                                logger.info(f"  {status} {symbol:15s} | 记录数: {count:4d} | "
+                                          f"最新: {hours_old:.1f}小时前 | 覆盖: {days}天")
                         else:
                             logger.info(f"  ✅ {symbol:15s} | 记录数: {count:4d}")
                     else:
@@ -326,10 +335,11 @@ def manual_ema_scan(config):
         else:
             logger.warning("  ⚠️  当前没有发现EMA买入信号")
             logger.info("\n  可能的原因:")
-            logger.info("  1. 当前市场没有满足EMA交叉条件的币种")
-            logger.info("  2. K线数据不足（需要至少30根K线计算EMA）")
+            logger.info("  1. 当前市场没有满足EMA交叉条件的币种（正常情况）")
+            logger.info("  2. K线数据不足（需要至少31根K线计算EMA）")
             logger.info("  3. 成交量阈值过高（当前配置需要成交量达到平均值的1.5倍）")
-            logger.info("  4. 时间周期数据缺失（检查15m K线数据）")
+            logger.info("  4. 短期EMA尚未上穿长期EMA（可以降低short_period参数）")
+            logger.info("\n  💡 提示：没有信号不代表有问题，可能是当前市场条件不满足")
 
         return len(signals) if signals else 0
 
