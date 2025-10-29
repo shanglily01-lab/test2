@@ -231,14 +231,20 @@ except Exception as e:
     traceback.print_exc()
 
 # 注册企业金库监控API路由
-try:
-    from app.api.corporate_treasury import router as corporate_treasury_router
-    app.include_router(corporate_treasury_router)
-    logger.info("✅ 企业金库监控API路由已注册")
-except Exception as e:
-    logger.warning(f"⚠️  企业金库监控API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
+# 临时禁用：在Windows上导致服务器崩溃
+ENABLE_CORPORATE_TREASURY = False  # 设置为True启用企业金库API
+
+if ENABLE_CORPORATE_TREASURY:
+    try:
+        from app.api.corporate_treasury import router as corporate_treasury_router
+        app.include_router(corporate_treasury_router)
+        logger.info("✅ 企业金库监控API路由已注册")
+    except Exception as e:
+        logger.warning(f"⚠️  企业金库监控API路由注册失败: {e}")
+        import traceback
+        traceback.print_exc()
+else:
+    logger.warning("⚠️  企业金库监控API已禁用（ENABLE_CORPORATE_TREASURY=False）")
 
 # 注册模拟合约交易API路由
 try:
