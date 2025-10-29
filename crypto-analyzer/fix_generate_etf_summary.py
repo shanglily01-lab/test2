@@ -111,7 +111,17 @@ try:
 
     # 构建动态查询 - 只查询存在的字段
     select_fields = ['p.asset_type', 'f.ticker', 'f.net_inflow', 'f.gross_inflow', 'f.gross_outflow', 'f.aum']
-    if 'holdings' in flows_columns:
+
+    # 检查持仓字段（支持单独的btc_holdings/eth_holdings或统一的holdings）
+    has_btc_holdings = 'btc_holdings' in flows_columns
+    has_eth_holdings = 'eth_holdings' in flows_columns
+    has_holdings = 'holdings' in flows_columns
+
+    if has_btc_holdings:
+        select_fields.append('f.btc_holdings')
+    if has_eth_holdings:
+        select_fields.append('f.eth_holdings')
+    if has_holdings:
         select_fields.append('f.holdings')
 
     query = f"""
@@ -120,6 +130,9 @@ try:
         JOIN crypto_etf_products p ON f.ticker = p.ticker
         WHERE f.trade_date = %s
     """
+
+    print(f"查询字段: {', '.join(select_fields)}")
+    print()
 
     # 为每个交易日生成汇总
     success_count = 0
@@ -156,9 +169,16 @@ try:
             gross_outflow = Decimal(str(flow['gross_outflow'])) if flow['gross_outflow'] else Decimal(0)
             aum = Decimal(str(flow['aum'])) if flow['aum'] else Decimal(0)
 
-            # 只有当表中有holdings字段时才累加
-            if 'holdings' in flow and flow['holdings']:
+            # 累加持仓量（支持btc_holdings/eth_holdings或统一的holdings字段）
+            holdings = Decimal(0)
+            if 'btc_holdings' in flow and flow['btc_holdings']:
+                holdings = Decimal(str(flow['btc_holdings']))
+            elif 'eth_holdings' in flow and flow['eth_holdings']:
+                holdings = Decimal(str(flow['eth_holdings']))
+            elif 'holdings' in flow and flow['holdings']:
                 holdings = Decimal(str(flow['holdings']))
+
+            if holdings > 0:
                 summary['total_holdings'] += holdings
 
             summary['total_net_inflow'] += net_inflow
