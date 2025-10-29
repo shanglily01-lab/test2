@@ -80,9 +80,9 @@ async def lifespan(app: FastAPI):
 
         logger.info("🔄 开始初始化分析模块...")
 
-        # 初始化价格采集器（使用模拟模式更稳定）
-        price_collector = MockPriceCollector('binance_demo', config)
-        logger.info("✅ 价格采集器初始化成功（模拟模式）")
+        # 初始化价格采集器（使用真实API）
+        price_collector = MultiExchangeCollector(config)
+        logger.info("✅ 价格采集器初始化成功（真实API模式）")
 
         # 初始化新闻采集器
         news_aggregator = NewsAggregator(config)
@@ -625,12 +625,18 @@ async def get_dashboard():
                 try:
                     price_info = await price_collector.fetch_best_price(symbol)
                     if price_info:
+                        # 从details数组的第一个元素获取详细信息
+                        details = price_info.get('details', [])
+                        first_detail = details[0] if details else {}
+
                         prices_data.append({
                             "symbol": symbol,
                             "price": price_info.get('price'),
-                            "change_24h": price_info.get('change_24h', 0),
-                            "volume": price_info.get('volume', 0),
-                            "exchange": price_info.get('exchange', 'mock')
+                            "change_24h": first_detail.get('change_24h', 0),
+                            "volume": price_info.get('total_volume', 0),
+                            "high": price_info.get('max_price', 0),
+                            "low": price_info.get('min_price', 0),
+                            "exchanges": price_info.get('exchanges', 1)
                         })
                 except Exception as e:
                     logger.warning(f"获取 {symbol} 价格失败: {e}")
@@ -655,7 +661,7 @@ async def get_dashboard():
                 },
                 "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             },
-            "message": "简化版Dashboard（使用模拟数据）"
+            "message": "实时数据（来自Binance和Gate.io）"
         }
 
     except Exception as e:
