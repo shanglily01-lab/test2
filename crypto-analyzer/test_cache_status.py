@@ -27,9 +27,26 @@ def get_db_connection(config):
     """获取数据库连接"""
     db_config = config.get('database', {}).get('mysql', {})
 
+    host = db_config.get('host', 'localhost')
+    port = db_config.get('port', 3306)
+    user = db_config.get('user', 'root')
+    password = db_config.get('password', '')
+    database = db_config.get('database', 'crypto_analysis')
+
+    logger.info(f"\n📊 数据库配置:")
+    logger.info(f"   Host: {host}")
+    logger.info(f"   Port: {port}")
+    logger.info(f"   User: {user}")
+    logger.info(f"   Database: {database}")
+    logger.info(f"   Password: {'*' * len(password)}")
+
+    # 需要对密码中的特殊字符进行URL编码
+    from urllib.parse import quote_plus
+    password_encoded = quote_plus(password)
+
     connection_string = (
-        f"mysql+pymysql://{db_config['user']}:{db_config['password']}"
-        f"@{db_config['host']}:{db_config['port']}/{db_config['database']}"
+        f"mysql+pymysql://{user}:{password_encoded}"
+        f"@{host}:{port}/{database}"
     )
 
     return create_engine(connection_string)
