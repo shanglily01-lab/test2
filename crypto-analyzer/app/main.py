@@ -86,15 +86,27 @@ async def lifespan(app: FastAPI):
 
         # 注意：这些模块的初始化被移到后台任务，不阻塞启动
         # Paper Trading 不依赖这些模块，可以独立运行
+        # 临时禁用：后台初始化在Windows上导致崩溃
+        ENABLE_BACKGROUND_INIT = False
+
         logger.info("⚡ 快速启动模式：延迟加载分析模块")
 
         # 设置为 None，在需要时才初始化
+        global price_collector, news_aggregator, technical_analyzer
+        global sentiment_analyzer, signal_generator, enhanced_dashboard
         price_collector = None
         news_aggregator = None
         technical_analyzer = None
         sentiment_analyzer = None
         signal_generator = None
         enhanced_dashboard = None
+
+        if not ENABLE_BACKGROUND_INIT:
+            logger.warning("⚠️  后台模块初始化已禁用（Windows兼容性）")
+            logger.info("🚀 FastAPI 启动完成（最小化模式）")
+            yield
+            logger.info("👋 FastAPI 关闭")
+            return
 
         # 在后台线程初始化这些模块（不阻塞事件循环）
         def init_modules_sync():
