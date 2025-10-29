@@ -273,6 +273,15 @@
         async function loadETFData() {
             try {
                 const response = await fetch('/api/etf/summary');
+
+                // 检查HTTP状态
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('API返回错误:', response.status, errorText);
+                    showError(`API请求失败 (${response.status}): ${errorText}`);
+                    return;
+                }
+
                 const result = await response.json();
 
                 if (result.success) {
@@ -281,10 +290,27 @@
                     updateETHTable(result.data.eth_etfs || []);
                 } else {
                     console.error('获取ETF数据失败:', result.message);
+                    showError(`获取ETF数据失败: ${result.message || '未知错误'}`);
                 }
             } catch (error) {
                 console.error('加载ETF数据失败:', error);
+                showError(`加载ETF数据失败: ${error.message}`);
             }
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            const errorHtml = `
+                <div style="background: rgba(255, 106, 0, 0.2); border: 1px solid #ff6a00; border-radius: 8px; padding: 20px; margin: 20px; text-align: center;">
+                    <h3 style="color: #ff6a00; margin: 0 0 10px 0;">⚠️ 加载失败</h3>
+                    <p style="color: #e0e7ff; margin: 0;">${message}</p>
+                    <button onclick="loadETFData()" style="margin-top: 15px; padding: 8px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                        🔄 重试
+                    </button>
+                </div>
+            `;
+            document.getElementById('btcETFTable').innerHTML = errorHtml;
+            document.getElementById('ethETFTable').innerHTML = '';
         }
 
         // 更新总览统计
