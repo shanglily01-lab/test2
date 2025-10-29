@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ETF数据监控 - ETF Data Monitoring</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            color: #e0e7ff;
+        }
+
+        .nav-links {
+            margin-top: 15px;
+        }
+
+        .nav-links a {
+            color: #ffd700;
+            text-decoration: none;
+            margin: 0 15px;
+            font-size: 1em;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #ffffff;
+        }
+
+        /* 总览卡片 */
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .summary-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .summary-card h3 {
+            font-size: 0.9em;
+            color: #e0e7ff;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .summary-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .summary-card .unit {
+            font-size: 0.9em;
+            color: #e0e7ff;
+            margin-left: 5px;
+        }
+
+        /* 主要内容区 */
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .section h2 {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #ffd700;
+        }
+
+        /* 表格样式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        table thead {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        table th {
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* 加载动画 */
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: #e0e7ff;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+
+        /* 徽章样式 */
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .badge-positive {
+            background: rgba(56, 239, 125, 0.2);
+            color: #38ef7d;
+            border: 1px solid rgba(56, 239, 125, 0.4);
+        }
+
+        .badge-negative {
+            background: rgba(255, 106, 0, 0.2);
+            color: #ff6a00;
+            border: 1px solid rgba(255, 106, 0, 0.4);
+        }
+
+        .badge-neutral {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e7ff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 ETF数据监控</h1>
+            <p class="subtitle">Crypto ETF Data Monitoring - Real-time BTC & ETH ETF Holdings Tracker</p>
+            <div class="nav-links">
+                <a href="/dashboard">← 返回主页</a>
+                <a href="#" onclick="openEnhancedDashboard(); return false;">📈 增强看板</a>
+            </div>
+        </header>
+
+        <!-- 总览统计 -->
+        <div class="summary-cards" id="summaryCards">
+            <div class="summary-card">
+                <h3>📈 ETF总数量</h3>
+                <div class="value" id="totalETFs">-</div>
+            </div>
+            <div class="summary-card">
+                <h3>💰 BTC总持仓</h3>
+                <div>
+                    <span class="value" id="totalBTC">-</span>
+                    <span class="unit">BTC</span>
+                </div>
+            </div>
+            <div class="summary-card">
+                <h3>💎 ETH总持仓</h3>
+                <div>
+                    <span class="value" id="totalETH">-</span>
+                    <span class="unit">ETH</span>
+                </div>
+            </div>
+            <div class="summary-card">
+                <h3>💵 总市值</h3>
+                <div>
+                    <span class="value" id="totalValue">-</span>
+                    <span class="unit">USD</span>
+                </div>
+            </div>
+            <div class="summary-card">
+                <h3>📊 24h资金流入</h3>
+                <div>
+                    <span class="value" id="netFlow24h">-</span>
+                    <span class="unit">USD</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主要内容区 -->
+        <div class="main-content">
+            <!-- BTC ETF列表 -->
+            <div class="section">
+                <h2>🪙 比特币ETF持仓</h2>
+                <div id="btcETFTable">
+                    <div class="loading">加载中</div>
+                </div>
+            </div>
+
+            <!-- ETH ETF列表 -->
+            <div class="section">
+                <h2>💎 以太坊ETF持仓</h2>
+                <div id="ethETFTable">
+                    <div class="loading">加载中</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载时获取数据
+        document.addEventListener('DOMContentLoaded', function() {
+            loadETFData();
+            // 每60秒刷新一次
+            setInterval(loadETFData, 60000);
+        });
+
+        // 加载ETF数据
+        async function loadETFData() {
+            try {
+                const response = await fetch('/api/etf/summary');
+                const result = await response.json();
+
+                if (result.success) {
+                    updateSummary(result.data);
+                    updateBTCTable(result.data.btc_etfs || []);
+                    updateETHTable(result.data.eth_etfs || []);
+                } else {
+                    console.error('获取ETF数据失败:', result.message);
+                }
+            } catch (error) {
+                console.error('加载ETF数据失败:', error);
+            }
+        }
+
+        // 更新总览统计
+        function updateSummary(data) {
+            const summary = data.summary || {};
+            document.getElementById('totalETFs').textContent = summary.total_etfs || '-';
+            document.getElementById('totalBTC').textContent = formatNumber(summary.total_btc, 0);
+            document.getElementById('totalETH').textContent = formatNumber(summary.total_eth, 0);
+            document.getElementById('totalValue').textContent = '$' + formatLargeNumber(summary.total_value_usd);
+
+            const netFlow = summary.net_flow_24h || 0;
+            const flowElement = document.getElementById('netFlow24h');
+            flowElement.textContent = (netFlow >= 0 ? '+' : '') + '$' + formatLargeNumber(Math.abs(netFlow));
+            flowElement.style.color = netFlow >= 0 ? '#38ef7d' : '#ff6a00';
+        }
+
+        // 更新BTC ETF表格
+        function updateBTCTable(etfs) {
+            const container = document.getElementById('btcETFTable');
+
+            if (etfs.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #e0e7ff; padding: 20px;">暂无数据</p>';
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>ETF名称</th>
+                            <th>代码</th>
+                            <th>BTC持仓</th>
+                            <th>市值(USD)</th>
+                            <th>24h流入</th>
+                            <th>更新时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            etfs.forEach((etf, index) => {
+                const flow24h = etf.flow_24h || 0;
+                const flowBadge = flow24h > 0 ? 'badge-positive' : (flow24h < 0 ? 'badge-negative' : 'badge-neutral');
+
+                html += `
+                    <tr>
+                        <td><strong>${index + 1}</strong></td>
+                        <td><strong>${etf.name}</strong></td>
+                        <td><span class="badge badge-neutral">${etf.symbol}</span></td>
+                        <td>${formatNumber(etf.btc_holdings, 2)} BTC</td>
+                        <td>$${formatLargeNumber(etf.market_value)}</td>
+                        <td><span class="badge ${flowBadge}">${flow24h >= 0 ? '+' : ''}$${formatLargeNumber(Math.abs(flow24h))}</span></td>
+                        <td>${formatDate(etf.updated_at)}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // 更新ETH ETF表格
+        function updateETHTable(etfs) {
+            const container = document.getElementById('ethETFTable');
+
+            if (etfs.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #e0e7ff; padding: 20px;">暂无数据</p>';
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>排名</th>
+                            <th>ETF名称</th>
+                            <th>代码</th>
+                            <th>ETH持仓</th>
+                            <th>市值(USD)</th>
+                            <th>24h流入</th>
+                            <th>更新时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            etfs.forEach((etf, index) => {
+                const flow24h = etf.flow_24h || 0;
+                const flowBadge = flow24h > 0 ? 'badge-positive' : (flow24h < 0 ? 'badge-negative' : 'badge-neutral');
+
+                html += `
+                    <tr>
+                        <td><strong>${index + 1}</strong></td>
+                        <td><strong>${etf.name}</strong></td>
+                        <td><span class="badge badge-neutral">${etf.symbol}</span></td>
+                        <td>${formatNumber(etf.eth_holdings, 2)} ETH</td>
+                        <td>$${formatLargeNumber(etf.market_value)}</td>
+                        <td><span class="badge ${flowBadge}">${flow24h >= 0 ? '+' : ''}$${formatLargeNumber(Math.abs(flow24h))}</span></td>
+                        <td>${formatDate(etf.updated_at)}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // 格式化数字
+        function formatNumber(num, decimals = 2) {
+            if (num === null || num === undefined) return '-';
+            return parseFloat(num).toLocaleString('en-US', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+
+        // 格式化大数字 (K, M, B, T)
+        function formatLargeNumber(num) {
+            if (!num) return '-';
+            const absNum = Math.abs(num);
+            if (absNum >= 1000000000000) return (absNum / 1000000000000).toFixed(2) + 'T';
+            if (absNum >= 1000000000) return (absNum / 1000000000).toFixed(2) + 'B';
+            if (absNum >= 1000000) return (absNum / 1000000).toFixed(2) + 'M';
+            if (absNum >= 1000) return (absNum / 1000).toFixed(2) + 'K';
+            return absNum.toFixed(2);
+        }
+
+        // 格式化日期
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+        }
+
+        // 增强看板功能（待实现）
+        function openEnhancedDashboard() {
+            alert('ETF增强看板功能开发中...');
+        }
+    </script>
+
+    <!-- 引入Chart.js用于后续图表扩展 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</body>
+</html>

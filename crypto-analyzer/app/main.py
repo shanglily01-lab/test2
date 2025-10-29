@@ -241,6 +241,16 @@ if ENABLE_CORPORATE_TREASURY:
 else:
     logger.warning("⚠️  企业金库监控API已禁用（ENABLE_CORPORATE_TREASURY=False）")
 
+# 注册ETF数据API路由
+try:
+    from app.api.etf_api import router as etf_router
+    app.include_router(etf_router)
+    logger.info("✅ ETF数据API路由已注册")
+except Exception as e:
+    logger.warning(f"⚠️  ETF数据API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册模拟合约交易API路由
 try:
     from app.api.contract_trading_api import router as contract_trading_router
@@ -378,6 +388,18 @@ async def dashboard_page():
         return FileResponse(str(dashboard_path))
     else:
         raise HTTPException(status_code=404, detail="Dashboard page not found")
+
+
+@app.get("/etf-data")
+async def etf_data_page():
+    """
+    ETF数据监控页面
+    """
+    etf_path = project_root / "templates" / "etf_data.html"
+    if etf_path.exists():
+        return FileResponse(str(etf_path))
+    else:
+        raise HTTPException(status_code=404, detail="ETF data page not found")
 
 
 @app.get("/strategy")
