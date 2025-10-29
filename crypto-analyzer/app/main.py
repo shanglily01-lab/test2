@@ -992,7 +992,7 @@ if __name__ == "__main__":
     uvicorn.run(
         app,  # 直接传递app对象，而不是字符串
         host="0.0.0.0",
-        port=8000,
+        port=9020,  # 改为9020端口，避免8000端口冲突
         reload=False,
         log_level="info"
     )
