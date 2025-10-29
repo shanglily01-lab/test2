@@ -610,28 +610,75 @@ _dashboard_cache_ttl_seconds = 30  # 增加到 30 秒缓存（降低查询频率
 @app.get("/api/dashboard")
 async def get_dashboard():
     """
-    获取增强版仪表盘数据（优化缓存策略）
-    整合所有数据源：价格、投资建议、新闻、Hyperliquid聪明钱等
+    获取增强版仪表盘数据（简化版，不依赖数据库）
+    使用已初始化的模块直接获取数据
     """
-    # 临时：直接返回空数据，避免任何可能导致崩溃的代码
     from datetime import datetime
-    return {
-        "success": True,
-        "data": {
-            "prices": [],
-            "futures": [],
-            "recommendations": [],
-            "news": [],
-            "hyperliquid": {},
-            "stats": {
-                "total_symbols": 0,
-                "bullish_count": 0,
-                "bearish_count": 0
+
+    try:
+        symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'])
+        prices_data = []
+
+        # 获取价格数据
+        if price_collector:
+            for symbol in symbols:
+                try:
+                    price_info = await price_collector.fetch_best_price(symbol)
+                    if price_info:
+                        prices_data.append({
+                            "symbol": symbol,
+                            "price": price_info.get('price'),
+                            "change_24h": price_info.get('change_24h', 0),
+                            "volume": price_info.get('volume', 0),
+                            "exchange": price_info.get('exchange', 'mock')
+                        })
+                except Exception as e:
+                    logger.warning(f"获取 {symbol} 价格失败: {e}")
+                    continue
+
+        # 统计
+        bullish = sum(1 for p in prices_data if p.get('change_24h', 0) > 0)
+        bearish = sum(1 for p in prices_data if p.get('change_24h', 0) < 0)
+
+        return {
+            "success": True,
+            "data": {
+                "prices": prices_data,
+                "futures": [],  # 暂时禁用（数据库问题）
+                "recommendations": [],  # 暂时禁用（数据库问题）
+                "news": [],  # 暂时禁用（API限制）
+                "hyperliquid": {},  # 暂时禁用（数据库问题）
+                "stats": {
+                    "total_symbols": len(prices_data),
+                    "bullish_count": bullish,
+                    "bearish_count": bearish
+                },
+                "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             },
-            "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        },
-        "message": "Dashboard临时禁用（Windows兼容性修复中）"
-    }
+            "message": "简化版Dashboard（使用模拟数据）"
+        }
+
+    except Exception as e:
+        logger.error(f"Dashboard数据获取失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "data": {
+                "prices": [],
+                "futures": [],
+                "recommendations": [],
+                "news": [],
+                "hyperliquid": {},
+                "stats": {
+                    "total_symbols": 0,
+                    "bullish_count": 0,
+                    "bearish_count": 0
+                },
+                "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            },
+            "error": str(e)
+        }
 
     # 以下代码暂时不执行
     """
