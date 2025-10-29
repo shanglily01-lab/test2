@@ -92,21 +92,37 @@ async def lifespan(app: FastAPI):
             price_collector = MockPriceCollector('binance_demo', config)
             logger.info("✅ 价格采集器初始化成功（模拟模式 - Windows兼容）")
 
-        # 初始化新闻采集器
-        news_aggregator = NewsAggregator(config)
-        logger.info("✅ 新闻采集器初始化成功")
+        # 初始化新闻采集器（可能在Windows上导致问题）
+        try:
+            news_aggregator = NewsAggregator(config)
+            logger.info("✅ 新闻采集器初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  新闻采集器初始化失败: {e}")
+            news_aggregator = None
 
         # 初始化技术分析器
-        technical_analyzer = TechnicalIndicators(config)
-        logger.info("✅ 技术分析器初始化成功")
+        try:
+            technical_analyzer = TechnicalIndicators(config)
+            logger.info("✅ 技术分析器初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  技术分析器初始化失败: {e}")
+            technical_analyzer = None
 
         # 初始化情绪分析器
-        sentiment_analyzer = SentimentAnalyzer()
-        logger.info("✅ 情绪分析器初始化成功")
+        try:
+            sentiment_analyzer = SentimentAnalyzer()
+            logger.info("✅ 情绪分析器初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  情绪分析器初始化失败: {e}")
+            sentiment_analyzer = None
 
         # 初始化信号生成器
-        signal_generator = SignalGenerator(config)
-        logger.info("✅ 信号生成器初始化成功")
+        try:
+            signal_generator = SignalGenerator(config)
+            logger.info("✅ 信号生成器初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  信号生成器初始化失败: {e}")
+            signal_generator = None
 
         # EnhancedDashboard暂时禁用（数据库连接问题）
         enhanced_dashboard = None
