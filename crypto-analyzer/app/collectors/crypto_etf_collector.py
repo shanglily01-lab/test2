@@ -530,8 +530,10 @@ if __name__ == '__main__':
     from app.database.db_service import DatabaseService
     import yaml
 
-    # 加载配置
-    with open('config.yaml', 'r', encoding='utf-8') as f:
+    # 加载配置（使用绝对路径）
+    project_root = Path(__file__).parent.parent.parent
+    config_path = project_root / 'config.yaml'
+    with open(config_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
     # 初始化数据库

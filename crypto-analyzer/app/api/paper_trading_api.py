@@ -20,8 +20,11 @@ router = APIRouter(prefix="/api/paper-trading", tags=["模拟交易"])
 
 @lru_cache()
 def get_config():
-    """缓存配置文件读取"""
-    with open('config.yaml', 'r', encoding='utf-8') as f:
+    """缓存配置文件读取（使用绝对路径）"""
+    from pathlib import Path
+    project_root = Path(__file__).parent.parent.parent
+    config_path = project_root / 'config.yaml'
+    with open(config_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
 
 def get_db_config():
