@@ -126,11 +126,11 @@ def check_investment_recommendations_cache(engine):
 
             logger.info(f"  ✅ 缓存表记录数: {count}")
 
-            # 查询前5条数据
+            # 查询前5条数据（signal是MySQL保留字，需要用反引号）
             query = text("""
                 SELECT
                     symbol,
-                    signal,
+                    `signal`,
                     confidence,
                     total_score,
                     technical_score,
