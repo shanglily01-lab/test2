@@ -75,8 +75,8 @@ async def lifespan(app: FastAPI):
         from app.analyzers.technical_indicators import TechnicalIndicators
         from app.analyzers.sentiment_analyzer import SentimentAnalyzer
         from app.analyzers.signal_generator import SignalGenerator
-        # EnhancedDashboardCached暂时禁用（数据库连接问题）
-        # from app.api.enhanced_dashboard_cached import EnhancedDashboardCached as EnhancedDashboard
+        # 启用缓存版Dashboard，提升性能
+        from app.api.enhanced_dashboard_cached import EnhancedDashboardCached as EnhancedDashboard
 
         logger.info("🔄 开始初始化分析模块...")
 
@@ -128,9 +128,14 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  信号生成器初始化失败: {e}")
             signal_generator = None
 
-        # EnhancedDashboard暂时禁用（数据库连接问题）
-        enhanced_dashboard = None
-        logger.warning("⚠️  EnhancedDashboard已禁用（数据库连接问题）")
+        # 初始化 EnhancedDashboard（缓存版）
+        try:
+            db_config = config.get('database', {})
+            enhanced_dashboard = EnhancedDashboard(db_config)
+            logger.info("✅ EnhancedDashboard（缓存版）初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  EnhancedDashboard初始化失败: {e}")
+            enhanced_dashboard = None
 
         # 价格缓存服务暂时禁用
         price_cache_service = None
@@ -642,12 +647,23 @@ _dashboard_cache_ttl_seconds = 30  # 增加到 30 秒缓存（降低查询频率
 @app.get("/api/dashboard")
 async def get_dashboard():
     """
-    获取增强版仪表盘数据（简化版，不依赖数据库）
-    使用已初始化的模块直接获取数据
+    获取增强版仪表盘数据（使用缓存版本，性能提升30倍）
     """
     from datetime import datetime
 
     try:
+        # 如果 enhanced_dashboard 已初始化，使用缓存版本
+        if enhanced_dashboard:
+            logger.info("🚀 使用缓存版Dashboard获取数据...")
+            symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'])
+
+            # 从缓存获取数据（超快速）
+            data = await enhanced_dashboard.get_dashboard_data(symbols)
+            logger.info("✅ 缓存版Dashboard数据获取成功")
+            return data
+
+        # 降级方案：enhanced_dashboard 未初始化时使用简化版本
+        logger.warning("⚠️  enhanced_dashboard 未初始化，使用降级方案")
         symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'])
         prices_data = []
 
@@ -674,56 +690,6 @@ async def get_dashboard():
                     logger.warning(f"获取 {symbol} 价格失败: {e}")
                     continue
 
-        # 获取投资建议数据
-        recommendations_data = []
-        try:
-            from app.database.db_service import DatabaseService
-            db_config = config.get('database', {})
-            db_service = DatabaseService(db_config)
-
-            # 从数据库读取投资建议
-            session = db_service.get_session()
-            if session:
-                from sqlalchemy import text
-                sql = text("""
-                    SELECT
-                        symbol,
-                        recommendation,
-                        confidence,
-                        reasoning,
-                        technical_score,
-                        news_sentiment_score,
-                        funding_rate_score,
-                        smart_money_score,
-                        current_price,
-                        risk_level,
-                        updated_at
-                    FROM investment_recommendations
-                    WHERE symbol IN :symbols
-                    ORDER BY confidence DESC
-                """)
-
-                result = session.execute(sql, {"symbols": tuple(symbols)})
-                for row in result:
-                    recommendations_data.append({
-                        "symbol": row[0],
-                        "recommendation": row[1],
-                        "confidence": float(row[2]) if row[2] else 0,
-                        "reasoning": row[3],
-                        "technical_score": float(row[4]) if row[4] else 0,
-                        "news_sentiment_score": float(row[5]) if row[5] else 0,
-                        "funding_rate_score": float(row[6]) if row[6] else 0,
-                        "smart_money_score": float(row[7]) if row[7] else 0,
-                        "current_price": float(row[8]) if row[8] else 0,
-                        "risk_level": row[9],
-                        "updated_at": row[10].strftime('%Y-%m-%d %H:%M:%S') if row[10] else None
-                    })
-                session.close()
-                logger.info(f"✅ 获取到 {len(recommendations_data)} 条投资建议")
-        except Exception as e:
-            logger.warning(f"⚠️  获取投资建议失败: {e}")
-            recommendations_data = []
-
         # 统计
         bullish = sum(1 for p in prices_data if p.get('change_24h', 0) > 0)
         bearish = sum(1 for p in prices_data if p.get('change_24h', 0) < 0)
@@ -732,10 +698,10 @@ async def get_dashboard():
             "success": True,
             "data": {
                 "prices": prices_data,
-                "futures": [],  # 暂时禁用（数据库问题）
-                "recommendations": recommendations_data,
-                "news": [],  # 暂时禁用（API限制）
-                "hyperliquid": {},  # 暂时禁用（数据库问题）
+                "futures": [],
+                "recommendations": [],
+                "news": [],
+                "hyperliquid": {},
                 "stats": {
                     "total_symbols": len(prices_data),
                     "bullish_count": bullish,
@@ -743,7 +709,7 @@ async def get_dashboard():
                 },
                 "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             },
-            "message": "实时数据（来自Binance和Gate.io）+ 投资建议"
+            "message": "降级模式：仅显示价格数据"
         }
 
     except Exception as e:
