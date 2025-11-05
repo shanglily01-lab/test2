@@ -365,6 +365,7 @@
             etfs.forEach((etf, index) => {
                 const flow24h = etf.flow_24h || 0;
                 const flowBadge = flow24h > 0 ? 'badge-positive' : (flow24h < 0 ? 'badge-negative' : 'badge-neutral');
+                const flowSign = flow24h >= 0 ? '+' : '-';
 
                 html += `
                     <tr>
@@ -373,7 +374,7 @@
                         <td><span class="badge badge-neutral">${etf.symbol}</span></td>
                         <td>${formatNumber(etf.btc_holdings, 2)} BTC</td>
                         <td>$${formatLargeNumber(etf.market_value)}</td>
-                        <td><span class="badge ${flowBadge}">${flow24h >= 0 ? '+' : ''}$${formatLargeNumber(Math.abs(flow24h))}</span></td>
+                        <td><span class="badge ${flowBadge}">${flowSign}$${formatLargeNumber(Math.abs(flow24h))}</span></td>
                         <td>${formatDate(etf.updated_at)}</td>
                     </tr>
                 `;
@@ -415,6 +416,7 @@
             etfs.forEach((etf, index) => {
                 const flow24h = etf.flow_24h || 0;
                 const flowBadge = flow24h > 0 ? 'badge-positive' : (flow24h < 0 ? 'badge-negative' : 'badge-neutral');
+                const flowSign = flow24h >= 0 ? '+' : '-';
 
                 html += `
                     <tr>
@@ -423,7 +425,7 @@
                         <td><span class="badge badge-neutral">${etf.symbol}</span></td>
                         <td>${formatNumber(etf.eth_holdings, 2)} ETH</td>
                         <td>$${formatLargeNumber(etf.market_value)}</td>
-                        <td><span class="badge ${flowBadge}">${flow24h >= 0 ? '+' : ''}$${formatLargeNumber(Math.abs(flow24h))}</span></td>
+                        <td><span class="badge ${flowBadge}">${flowSign}$${formatLargeNumber(Math.abs(flow24h))}</span></td>
                         <td>${formatDate(etf.updated_at)}</td>
                     </tr>
                 `;
