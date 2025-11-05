@@ -96,23 +96,51 @@ class CryptoETFCollector:
 
             print(f"📊 从 Farside 获取 {asset_type} ETF 数据...")
 
+            # 使用 Session 保持会话状态
+            session = requests.Session()
+
             # 使用更真实的浏览器请求头绕过反爬虫
             farside_headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': 'https://farside.co.uk/',
+                'Origin': 'https://farside.co.uk',
                 'DNT': '1',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
                 'Sec-Fetch-Dest': 'document',
                 'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-Site': 'same-origin',
                 'Sec-Fetch-User': '?1',
+                'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
                 'Cache-Control': 'max-age=0',
             }
 
-            response = requests.get(url, headers=farside_headers, timeout=30)
+            # 添加重试机制
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    # 添加随机延迟避免被检测
+                    if attempt > 0:
+                        time.sleep(2 + attempt)
+
+                    response = session.get(url, headers=farside_headers, timeout=30, allow_redirects=True)
+
+                    if response.status_code == 200:
+                        break
+                    elif attempt < max_retries - 1:
+                        print(f"  ⚠️  尝试 {attempt + 1}/{max_retries} 失败 (HTTP {response.status_code})，重试中...")
+                        continue
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        print(f"  ⚠️  尝试 {attempt + 1}/{max_retries} 失败: {e}，重试中...")
+                        continue
+                    else:
+                        raise
 
             if response.status_code != 200:
                 print(f"  ❌ 无法访问 Farside: HTTP {response.status_code}")
