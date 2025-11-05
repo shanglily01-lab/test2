@@ -43,7 +43,7 @@ class CacheUpdateService:
         if symbols is None:
             symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
 
-        logger.info(f"🔄 开始更新缓存 - {len(symbols)} 个币种")
+        # logger.info(f"🔄 开始更新缓存 - {len(symbols)} 个币种")  # 减少日志输出
         start_time = datetime.now()
 
         try:
@@ -66,10 +66,12 @@ class CacheUpdateService:
             failed_count = len(results) - success_count
 
             elapsed = (datetime.now() - start_time).total_seconds()
-            logger.info(
-                f"✅ 缓存更新完成 - 成功: {success_count}, 失败: {failed_count}, "
-                f"耗时: {elapsed:.2f}秒"
-            )
+            # 只在有失败时输出日志，或者每小时输出一次
+            if failed_count > 0 or datetime.now().minute == 0:
+                logger.info(
+                    f"✅ 缓存更新完成 - 成功: {success_count}, 失败: {failed_count}, "
+                    f"耗时: {elapsed:.2f}秒"
+                )
 
         except Exception as e:
             logger.error(f"❌ 缓存更新失败: {e}")
@@ -78,7 +80,7 @@ class CacheUpdateService:
 
     async def update_price_stats_cache(self, symbols: List[str]):
         """更新24小时价格统计缓存"""
-        logger.info("📊 更新价格统计缓存...")
+        # logger.info("📊 更新价格统计缓存...")  # 减少日志输出
 
         for symbol in symbols:
             try:
@@ -148,11 +150,11 @@ class CacheUpdateService:
                 logger.warning(f"更新{symbol}价格统计失败: {e}")
                 continue
 
-        logger.info(f"✅ 价格统计缓存更新完成 - {len(symbols)} 个币种")
+        # logger.info(f"✅ 价格统计缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_technical_indicators_cache(self, symbols: List[str]):
         """更新技术指标缓存"""
-        logger.info("📈 更新技术指标缓存...")
+        # logger.info("📈 更新技术指标缓存...")  # 减少日志输出
 
         for symbol in symbols:
             try:
@@ -241,11 +243,11 @@ class CacheUpdateService:
                 traceback.print_exc()
                 continue
 
-        logger.info(f"✅ 技术指标缓存更新完成 - {len(symbols)} 个币种")
+        # logger.info(f"✅ 技术指标缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_hyperliquid_aggregation(self, symbols: List[str]):
         """更新Hyperliquid聚合数据"""
-        logger.info("🧠 更新Hyperliquid聚合缓存...")
+        # logger.info("🧠 更新Hyperliquid聚合缓存...")  # 减少日志输出
 
         try:
             with HyperliquidDB() as db:
@@ -368,11 +370,11 @@ class CacheUpdateService:
         except Exception as e:
             logger.error(f"更新Hyperliquid聚合失败: {e}")
 
-        logger.info(f"✅ Hyperliquid聚合缓存更新完成 - {len(symbols)} 个币种")
+        # logger.info(f"✅ Hyperliquid聚合缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_news_sentiment_aggregation(self, symbols: List[str]):
         """更新新闻情绪聚合"""
-        logger.info("📰 更新新闻情绪聚合缓存...")
+        # logger.info("📰 更新新闻情绪聚合缓存...")  # 减少日志输出
 
         for symbol in symbols:
             try:
@@ -430,11 +432,11 @@ class CacheUpdateService:
                 logger.warning(f"更新{symbol}新闻情绪失败: {e}")
                 continue
 
-        logger.info(f"✅ 新闻情绪聚合缓存更新完成 - {len(symbols)} 个币种")
+        # logger.info(f"✅ 新闻情绪聚合缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_funding_rate_stats(self, symbols: List[str]):
         """更新资金费率统计"""
-        logger.info("💰 更新资金费率统计缓存...")
+        # logger.info("💰 更新资金费率统计缓存...")  # 减少日志输出
 
         for symbol in symbols:
             try:
@@ -481,7 +483,7 @@ class CacheUpdateService:
                 logger.warning(f"更新{symbol}资金费率统计失败: {e}")
                 continue
 
-        logger.info(f"✅ 资金费率统计缓存更新完成 - {len(symbols)} 个币种")
+        # logger.info(f"✅ 资金费率统计缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_recommendations_cache(self, symbols: List[str]):
         """更新投资建议缓存（综合所有缓存表的数据）"""

@@ -410,7 +410,7 @@ function updateRecommendations(recommendations) {
                     // 强制重绘
                     void el.offsetWidth;
                     el.classList.add('price-updated');
-                    console.log(`✓ ${symbol} 价格更新: ${previousPrices[symbol]} → ${currentPrice}`);
+                    // console.log(`✓ ${symbol} 价格更新: ${previousPrices[symbol]} → ${currentPrice}`);  // 减少日志输出
                 }
 
                 // 更新存储的价格
@@ -472,12 +472,12 @@ function updateNews(news) {
 function updateHyperliquid(data) {
     const container = document.getElementById('hyperliquid-section');
 
-    // 调试：输出接收到的数据
-    console.log('=== Hyperliquid 数据调试 ===');
-    console.log('data:', data);
-    console.log('monitored_wallets:', data ? data.monitored_wallets : 'undefined');
-    console.log('recent_trades length:', data && data.recent_trades ? data.recent_trades.length : 0);
-    console.log('top_coins length:', data && data.top_coins ? data.top_coins.length : 0);
+    // 调试日志已注释 - 减少console输出
+    // console.log('=== Hyperliquid 数据调试 ===');
+    // console.log('data:', data);
+    // console.log('monitored_wallets:', data ? data.monitored_wallets : 'undefined');
+    // console.log('recent_trades length:', data && data.recent_trades ? data.recent_trades.length : 0);
+    // console.log('top_coins length:', data && data.top_coins ? data.top_coins.length : 0);
 
     // 检查数据是否为空
     if (!data || (data.monitored_wallets === 0 && (!data.recent_trades || data.recent_trades.length === 0))) {
@@ -495,15 +495,15 @@ function updateHyperliquid(data) {
         return;
     }
 
-    // 调试: 输出PnL原始值
-    if (data.recent_trades && data.recent_trades.length > 0) {
-        console.log('=== Hyperliquid PnL 数据调试 ===');
-        data.recent_trades.slice(0, 5).forEach((trade, idx) => {
-            console.log(`交易 ${idx + 1}: ${trade.coin} ${trade.side}`);
-            console.log(`  原始 closed_pnl: ${trade.closed_pnl}`);
-            console.log(`  格式化后: ${formatLargeNumber(Math.abs(trade.closed_pnl))}`);
-        });
-    }
+    // 调试日志已注释 - 减少console输出
+    // if (data.recent_trades && data.recent_trades.length > 0) {
+    //     console.log('=== Hyperliquid PnL 数据调试 ===');
+    //     data.recent_trades.slice(0, 5).forEach((trade, idx) => {
+    //         console.log(`交易 ${idx + 1}: ${trade.coin} ${trade.side}`);
+    //         console.log(`  原始 closed_pnl: ${trade.closed_pnl}`);
+    //         console.log(`  格式化后: ${formatLargeNumber(Math.abs(trade.closed_pnl))}`);
+    //     });
+    // }
 
     const html = `
         <!-- 统计概览 -->
@@ -746,26 +746,26 @@ function updateCorporateTreasury(data) {
 // 加载EMA信号
 async function loadEMASignals() {
     try {
-        console.log('正在加载EMA信号...');
+        // console.log('正在加载EMA信号...');  // 减少console输出
         const response = await fetch(`${API_BASE}/api/ema-signals?limit=10`);
-        console.log('EMA信号API响应状态:', response.status);
+        // console.log('EMA信号API响应状态:', response.status);  // 减少console输出
 
         if (!response.ok) {
             throw new Error(`HTTP错误: ${response.status}`);
         }
 
         const result = await response.json();
-        console.log('EMA信号数据:', result);
+        // console.log('EMA信号数据:', result);  // 减少console输出
 
         if (result.success) {
             const signals = result.data || [];
-            console.log(`成功加载${signals.length}个EMA信号`);
+            // console.log(`成功加载${signals.length}个EMA信号`);  // 减少console输出
             updateEMASignals(signals);
         } else {
             throw new Error(result.detail || '未知错误');
         }
     } catch (error) {
-        console.error('加载EMA信号失败:', error);
+        console.error('加载EMA信号失败:', error);  // 保留错误日志
         document.getElementById('ema-signals-container').innerHTML = `
             <div class="text-center p-3 text-muted">
                 <i class="bi bi-exclamation-triangle text-warning"></i>
@@ -903,5 +903,5 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(loadDashboard, 5000);
     setInterval(loadCorporateTreasury, 30000);
 
-    console.log('增强版Dashboard已初始化');
+    // console.log('增强版Dashboard已初始化');  // 减少console输出
 });

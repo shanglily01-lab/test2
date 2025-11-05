@@ -40,7 +40,7 @@ class EnhancedDashboardCached:
         if symbols is None:
             symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
 
-        logger.info(f"📊 从缓存获取Dashboard数据 - {len(symbols)} 个币种")
+        # logger.info(f"📊 从缓存获取Dashboard数据 - {len(symbols)} 个币种")  # 减少日志输出
         start_time = datetime.now()
 
         # 并行读取缓存表
@@ -81,7 +81,7 @@ class EnhancedDashboardCached:
         signal_stats = self._calculate_signal_stats(recommendations)
 
         elapsed = (datetime.now() - start_time).total_seconds()
-        logger.info(f"✅ Dashboard数据获取完成，耗时: {elapsed:.3f}秒（从缓存）")
+        # logger.info(f"✅ Dashboard数据获取完成，耗时: {elapsed:.3f}秒（从缓存）")  # 减少日志输出
 
         return {
             'success': True,
@@ -151,13 +151,13 @@ class EnhancedDashboardCached:
                     'timestamp': row_dict['updated_at'].strftime('%Y-%m-%d %H:%M:%S') if row_dict['updated_at'] else ''
                 }
 
-                # 调试日志：打印 BTC 的数据
-                if row_dict['symbol'] == 'BTC/USDT':
-                    logger.info(f"🔍 BTC数据构建: volume_24h={price_data['volume_24h']}, quote_volume_24h={price_data['quote_volume_24h']}")
+                # 调试日志已移除 - 数据已验证正确
+                # if row_dict['symbol'] == 'BTC/USDT':
+                #     logger.info(f"🔍 BTC数据构建: volume_24h={price_data['volume_24h']}, quote_volume_24h={price_data['quote_volume_24h']}")
 
                 prices.append(price_data)
 
-            logger.debug(f"✅ 从缓存读取 {len(prices)} 个币种价格")
+            # logger.debug(f"✅ 从缓存读取 {len(prices)} 个币种价格")  # 减少日志输出
 
         except Exception as e:
             logger.error(f"从缓存读取价格失败: {e}")
