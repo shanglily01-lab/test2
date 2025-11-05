@@ -747,7 +747,8 @@ function updateCorporateTreasury(data) {
 async function loadEMASignals() {
     try {
         // console.log('正在加载EMA信号...');  // 减少console输出
-        const response = await fetch(`${API_BASE}/api/ema-signals?limit=10`);
+        // 请求最近7天的信号，最多显示20条
+        const response = await fetch(`${API_BASE}/api/ema-signals?limit=20&days=7`);
         // console.log('EMA信号API响应状态:', response.status);  // 减少console输出
 
         if (!response.ok) {

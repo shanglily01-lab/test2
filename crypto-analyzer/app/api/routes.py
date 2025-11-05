@@ -416,6 +416,7 @@ async def get_smart_money_dashboard():
 async def get_ema_signals(
     limit: int = 20,
     signal_type: Optional[str] = None,
+    days: int = 7,
     session: Session = Depends(get_db_session)
 ):
     """
@@ -424,12 +425,13 @@ async def get_ema_signals(
     Args:
         limit: 返回数量限制
         signal_type: 信号类型过滤 (BUY或SELL)
+        days: 查询最近N天的信号 (默认7天)
 
     Returns:
         EMA信号列表
     """
     try:
-        # 构建查询
+        # 构建查询 - 添加时间范围过滤
         query = """
             SELECT
                 symbol, timeframe, signal_type, signal_strength,
@@ -437,14 +439,15 @@ async def get_ema_signals(
                 ema_config, volume_ratio, price_change_pct, ema_distance_pct,
                 created_at
             FROM ema_signals
+            WHERE timestamp >= DATE_SUB(NOW(), INTERVAL :days DAY)
         """
 
         if signal_type:
-            query += " WHERE signal_type = :signal_type"
+            query += " AND signal_type = :signal_type"
 
         query += " ORDER BY timestamp DESC LIMIT :limit"
 
-        params = {'limit': limit}
+        params = {'limit': limit, 'days': days}
         if signal_type:
             params['signal_type'] = signal_type.upper()
 

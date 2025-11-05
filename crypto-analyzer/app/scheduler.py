@@ -676,6 +676,37 @@ class UnifiedDataScheduler:
             logger.error(f"EMA 信号监控任务失败: {e}")
             self.task_stats[task_name]['last_error'] = str(e)
 
+    async def cleanup_old_ema_signals(self):
+        """清理旧的EMA信号数据 (每天一次)"""
+        try:
+            logger.info("开始清理旧的EMA信号数据...")
+
+            from sqlalchemy import text
+            session = None
+            try:
+                session = self.db_service.Session()
+
+                # 删除30天前的数据
+                result = session.execute(text("""
+                    DELETE FROM ema_signals
+                    WHERE timestamp < DATE_SUB(NOW(), INTERVAL 30 DAY)
+                """))
+
+                deleted_count = result.rowcount
+                session.commit()
+
+                if deleted_count > 0:
+                    logger.info(f"✓ 已清理 {deleted_count} 条旧的EMA信号数据（30天前）")
+                else:
+                    logger.debug("无需清理，所有信号都在30天内")
+
+            finally:
+                if session:
+                    session.close()
+
+        except Exception as e:
+            logger.error(f"清理EMA信号数据失败: {e}")
+
     # ==================== 合约监控任务 ====================
 
     async def monitor_futures_positions(self):
@@ -1023,7 +1054,14 @@ class UnifiedDataScheduler:
             )
             logger.info("  ✓ Hyperliquid 排行榜 - 每天 02:00")
 
-            # 6. Hyperliquid 钱包监控 - 分级监控策略
+        # 5.5 EMA信号数据清理
+        schedule.every().day.at("03:00").do(
+            lambda: asyncio.run(self.cleanup_old_ema_signals())
+        )
+        logger.info("  ✓ EMA信号数据清理 (保留30天) - 每天 03:00")
+
+        # 6. Hyperliquid 钱包监控 - 分级监控策略
+        if self.hyperliquid_collector:
             # 高优先级钱包: 每5分钟监控 (PnL>10K, ROI>50%, 7天内活跃, 限200个)
             schedule.every(5).minutes.do(
                 lambda: asyncio.run(self.monitor_hyperliquid_wallets(priority='high'))
