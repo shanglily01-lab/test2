@@ -138,7 +138,7 @@ class EnhancedDashboardCached:
             for row in results:
                 row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
 
-                prices.append({
+                price_data = {
                     'symbol': row_dict['symbol'].replace('/USDT', ''),
                     'full_symbol': row_dict['symbol'],
                     'price': float(row_dict['current_price']),
@@ -149,7 +149,13 @@ class EnhancedDashboardCached:
                     'low_24h': float(row_dict['low_24h']) if row_dict['low_24h'] else 0,
                     'trend': row_dict['trend'],
                     'timestamp': row_dict['updated_at'].strftime('%Y-%m-%d %H:%M:%S') if row_dict['updated_at'] else ''
-                })
+                }
+
+                # 调试日志：打印 BTC 的数据
+                if row_dict['symbol'] == 'BTC/USDT':
+                    logger.info(f"🔍 BTC数据构建: volume_24h={price_data['volume_24h']}, quote_volume_24h={price_data['quote_volume_24h']}")
+
+                prices.append(price_data)
 
             logger.debug(f"✅ 从缓存读取 {len(prices)} 个币种价格")
 
