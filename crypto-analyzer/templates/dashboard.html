@@ -444,7 +444,10 @@
                         </h5>
                         <div>
                             <span class="badge bg-success me-2" id="ema-buy-count">0</span>
-                            <span class="badge bg-danger" id="ema-sell-count">0</span>
+                            <span class="badge bg-danger me-2" id="ema-sell-count">0</span>
+                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#emaHelpModal">
+                                <i class="bi bi-question-circle"></i> 信号说明
+                            </button>
                         </div>
                     </div>
                     <div class="card-body p-3">
@@ -592,6 +595,180 @@
                         5维度智能分析: 技术指标 + 新闻情绪 + 资金费率 + Hyperliquid + 链上数据 |
                         最后更新: <span id="last-update">-</span>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EMA信号说明模态框 -->
+    <div class="modal fade" id="emaHelpModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-graph-up"></i> EMA交易信号说明
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>什么是EMA信号？</strong><br>
+                        EMA（指数移动平均线）是一种技术分析指标，通过捕捉短期EMA和长期EMA的交叉来识别潜在的买入/卖出时机。
+                        本系统监控15分钟K线图，实时捕捉金叉（看涨）和死叉（看跌）信号。
+                    </div>
+
+                    <h6 class="mt-4"><i class="bi bi-hash"></i> 核心概念</h6>
+                    <hr>
+
+                    <div class="mb-4">
+                        <h6 class="text-success">📈 金叉 (Golden Cross) - BUY信号</h6>
+                        <p class="mb-2"><strong>定义：</strong>短期EMA从下方上穿长期EMA</p>
+                        <p class="mb-2"><strong>含义：</strong>价格上升动能增强，可能开启上涨趋势</p>
+                        <div class="bg-light p-3 rounded mb-2">
+                            <p class="mb-1"><strong>常见EMA组合：</strong></p>
+                            <ul class="small mb-0">
+                                <li><strong>EMA9/EMA21：</strong>快速反应，适合短线交易</li>
+                                <li><strong>EMA12/EMA26：</strong>中等速度，平衡灵敏度和稳定性</li>
+                                <li><strong>EMA50/EMA200：</strong>长期趋势，信号更可靠但反应慢</li>
+                            </ul>
+                        </div>
+                        <p class="mb-0"><strong>💡 交易建议：</strong>金叉出现时考虑买入做多，但需结合成交量和其他指标确认。</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6 class="text-danger">📉 死叉 (Death Cross) - SELL信号</h6>
+                        <p class="mb-2"><strong>定义：</strong>短期EMA从上方下穿长期EMA</p>
+                        <p class="mb-2"><strong>含义：</strong>价格下跌动能增强，可能开启下跌趋势</p>
+                        <p class="mb-0"><strong>💡 交易建议：</strong>死叉出现时考虑卖出或做空，止损保护盈利。</p>
+                    </div>
+
+                    <h6 class="mt-4"><i class="bi bi-star"></i> 信号强度分级</h6>
+                    <hr>
+
+                    <div class="mb-3">
+                        <h6 class="text-primary">🔥 强信号 (Strong)</h6>
+                        <p class="mb-2"><strong>判定条件：</strong>同时满足以下3个条件</p>
+                        <ul class="small">
+                            <li><strong>成交量放大：</strong>当前成交量 &gt; 平均成交量的1.5倍</li>
+                            <li><strong>EMA距离：</strong>短期EMA和长期EMA距离 &gt; 0.3%（价格变动明显）</li>
+                            <li><strong>价格变动：</strong>当前K线价格变动幅度 &gt; 0.5%</li>
+                        </ul>
+                        <p class="mb-0"><strong>💡 意义：</strong>信号可靠性高，成交量和价格变动都支持趋势。</p>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="text-primary">⚡ 中等信号 (Medium)</h6>
+                        <p class="mb-2"><strong>判定条件：</strong>满足以下任意2个条件</p>
+                        <ul class="small">
+                            <li>成交量放大 &gt; 1.3倍</li>
+                            <li>EMA距离 &gt; 0.2%</li>
+                            <li>价格变动 &gt; 0.3%</li>
+                        </ul>
+                        <p class="mb-0"><strong>💡 意义：</strong>信号中等可靠，建议轻仓试探或等待确认。</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h6 class="text-primary">💨 弱信号 (Weak)</h6>
+                        <p class="mb-2"><strong>判定条件：</strong>满足少于2个条件，或指标数值偏低</p>
+                        <p class="mb-0"><strong>💡 意义：</strong>信号较弱，可能是假突破，需谨慎对待或观望。</p>
+                    </div>
+
+                    <h6 class="mt-4"><i class="bi bi-info-circle"></i> 信号卡片信息解读</h6>
+                    <hr>
+
+                    <div class="mb-3">
+                        <p class="mb-2">每个信号卡片包含以下信息：</p>
+                        <ul class="small">
+                            <li><strong>币种名称：</strong>例如 BTC/USDT、ETH/USDT</li>
+                            <li><strong>信号类型：</strong>
+                                <span class="badge bg-success">BUY</span> 金叉做多，
+                                <span class="badge bg-danger">SELL</span> 死叉做空
+                            </li>
+                            <li><strong>信号强度：</strong>
+                                <span class="text-danger">🔥 强</span>、
+                                <span class="text-warning">⚡ 中</span>、
+                                <span class="text-muted">💨 弱</span>
+                            </li>
+                            <li><strong>时间周期：</strong>15分钟K线（15m timeframe）</li>
+                            <li><strong>信号时间：</strong>EMA交叉发生的精确时间</li>
+                            <li><strong>当前价格：</strong>信号产生时的价格</li>
+                            <li><strong>EMA配置：</strong>使用的EMA参数组合（如EMA9/EMA21）</li>
+                            <li><strong>价格变动：</strong>当前K线的涨跌幅百分比</li>
+                            <li><strong>成交量倍数：</strong>当前成交量相对于平均值的倍数</li>
+                            <li><strong>EMA距离：</strong>短期EMA和长期EMA之间的距离百分比</li>
+                        </ul>
+                    </div>
+
+                    <h6 class="mt-4"><i class="bi bi-lightbulb"></i> 如何使用</h6>
+                    <hr>
+
+                    <div class="mb-3">
+                        <h6 class="text-success">✅ 最佳实践</h6>
+                        <ul class="small">
+                            <li><strong>优先关注强信号：</strong>强信号成功率更高，特别是成交量放大明显时</li>
+                            <li><strong>结合趋势判断：</strong>在上涨趋势中的金叉更可靠，在下跌趋势中的死叉更可靠</li>
+                            <li><strong>多时间周期确认：</strong>15分钟信号适合短线，如需中长线，可参考1小时或4小时图</li>
+                            <li><strong>结合其他指标：</strong>
+                                <ul>
+                                    <li>配合合约数据：查看账户数比和持仓量比，确认散户和大户的观点</li>
+                                    <li>配合资金费率：正费率支持金叉，负费率支持死叉</li>
+                                    <li>配合Hyperliquid：聪明钱的方向与EMA信号一致时更可靠</li>
+                                </ul>
+                            </li>
+                            <li><strong>设置止损：</strong>即使是强信号也可能失败，务必设置止损位</li>
+                        </ul>
+                    </div>
+
+                    <div class="mb-3">
+                        <h6 class="text-danger">❌ 常见误区</h6>
+                        <ul class="small">
+                            <li><strong>盲目追单：</strong>不要看到信号就立即开仓，先观察价格是否突破关键位</li>
+                            <li><strong>忽略成交量：</strong>无量金叉/死叉往往是假信号</li>
+                            <li><strong>频繁交易：</strong>15分钟图信号较多，不是每个都值得交易，选择强信号</li>
+                            <li><strong>单一指标依赖：</strong>EMA只是技术分析的一部分，需结合多维度判断</li>
+                        </ul>
+                    </div>
+
+                    <h6 class="mt-4"><i class="bi bi-clock-history"></i> 信号时效性</h6>
+                    <hr>
+
+                    <div class="alert alert-warning">
+                        <p class="mb-2"><strong>⏰ 时间范围：</strong>默认显示最近 <strong>2天</strong> 的信号</p>
+                        <p class="mb-2"><strong>为什么只保留2天？</strong></p>
+                        <ul class="small mb-0">
+                            <li>加密市场变化快，超过2天的15分钟信号参考价值降低</li>
+                            <li>避免信息过载，聚焦最新、最有价值的交易机会</li>
+                            <li>系统每30天自动清理旧信号，保持数据库高效运行</li>
+                        </ul>
+                    </div>
+
+                    <div class="alert alert-success">
+                        <h6><i class="bi bi-trophy"></i> 成功案例场景</h6>
+                        <p class="mb-2"><strong>理想信号组合：</strong></p>
+                        <ul class="small mb-0">
+                            <li>✅ BTC出现 <strong>强金叉</strong>（成交量2.1倍，EMA距离0.5%，价格上涨1.2%）</li>
+                            <li>✅ 合约数据：账户数比1.2，持仓量比1.3（散户和大户都看多）</li>
+                            <li>✅ 资金费率：+0.03%（多头占优但未过热）</li>
+                            <li>✅ Hyperliquid：聪明钱净流入 $2.5M（大资金做多）</li>
+                            <li>✅ 新闻情绪：正面消息（如ETF通过、机构买入）</li>
+                        </ul>
+                        <p class="mt-2 mb-0"><strong>结论：</strong>这是一个多维度协同的强烈看涨信号，成功率较高！</p>
+                    </div>
+
+                    <div class="alert alert-danger mb-0">
+                        <h6><i class="bi bi-exclamation-triangle"></i> 风险提示</h6>
+                        <ul class="small mb-0">
+                            <li><strong>滞后性：</strong>EMA是滞后指标，价格已经变动后才产生信号</li>
+                            <li><strong>假突破：</strong>在震荡市场中，EMA容易产生频繁的虚假交叉</li>
+                            <li><strong>不是圣杯：</strong>没有任何指标能保证100%准确</li>
+                            <li><strong>仅供参考：</strong>本信号仅供参考，不构成投资建议</li>
+                            <li><strong>风险自担：</strong>交易有风险，请根据自身情况谨慎决策</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">知道了</button>
                 </div>
             </div>
         </div>
@@ -815,12 +992,13 @@
                         </div>
                     </div>
 
-                    <!-- 3. 资金费率 -->
+                    <!-- 3. 合约数据 (资金费率 + 多空比) -->
                     <div class="card mb-3">
                         <div class="card-header bg-light">
-                            <h6 class="mb-0">💰 资金费率 (Funding Rate)</h6>
+                            <h6 class="mb-0">💰 合约数据 (Futures Data)</h6>
                         </div>
                         <div class="card-body">
+                            <h6 class="text-primary">资金费率 (Funding Rate)</h6>
                             <p><strong>什么是资金费率？</strong></p>
                             <p>
                                 资金费率是永续合约市场中，多头和空头之间定期支付的费用。
@@ -834,11 +1012,52 @@
                                 <li><strong>资金费率 -0.05% ~ -0.01%：</strong> 市场看跌，空头占优</li>
                                 <li><strong>资金费率 &lt; -0.05%：</strong> 市场极度悲观，空头过热（可能反弹）</li>
                             </ul>
-                            <p><strong>评分规则：</strong></p>
+
+                            <hr class="my-3">
+
+                            <h6 class="text-primary">账户数比 (Account Ratio)</h6>
+                            <p><strong>数据来源：</strong>Binance全局账户数比率 (globalLongShortAccountRatio)</p>
+                            <p><strong>计算公式：</strong>做多账户数 / 做空账户数</p>
+                            <p><strong>如何解读？</strong></p>
+                            <ul>
+                                <li><strong>账户数比 &gt; 1.5：</strong> 散户极度乐观，大量开多（警惕追高风险）</li>
+                                <li><strong>账户数比 1.0 ~ 1.5：</strong> 散户情绪偏多，多头占优</li>
+                                <li><strong>账户数比 0.7 ~ 1.0：</strong> 散户情绪偏空，空头占优</li>
+                                <li><strong>账户数比 &lt; 0.7：</strong> 散户极度悲观，大量开空（可能反弹）</li>
+                            </ul>
+                            <p class="mb-2"><strong>💡 意义：</strong>反映散户情绪，人多不一定钱多。散户通常是市场的"逆向指标"。</p>
+
+                            <hr class="my-3">
+
+                            <h6 class="text-primary">持仓量比 (Position Ratio)</h6>
+                            <p><strong>数据来源：</strong>Binance Top 20%大户持仓量比率 (topLongShortPositionRatio)</p>
+                            <p><strong>计算公式：</strong>做多持仓量 / 做空持仓量（仅统计持仓量前20%的大户）</p>
+                            <p><strong>如何解读？</strong></p>
+                            <ul>
+                                <li><strong>持仓量比 &gt; 1.2：</strong> 大户资金大量流入多头，看涨信号强</li>
+                                <li><strong>持仓量比 1.0 ~ 1.2：</strong> 大户资金偏向多头</li>
+                                <li><strong>持仓量比 0.8 ~ 1.0：</strong> 大户资金偏向空头</li>
+                                <li><strong>持仓量比 &lt; 0.8：</strong> 大户资金大量流入空头，看跌信号强</li>
+                            </ul>
+                            <p class="mb-2"><strong>💡 意义：</strong>反映资金流向，真金白银的方向。大户通常比散户更理性。</p>
+
+                            <hr class="my-3">
+
+                            <h6 class="text-warning">⚠️ 两种比率的差异</h6>
+                            <div class="bg-light p-3 rounded">
+                                <p class="mb-2"><strong>散户 vs 大户的分歧：</strong></p>
+                                <ul class="small mb-0">
+                                    <li><strong>账户数比 &gt; 1 但 持仓量比 &lt; 1：</strong>散户看多但大户看空 → 可能是诱多陷阱</li>
+                                    <li><strong>账户数比 &lt; 1 但 持仓量比 &gt; 1：</strong>散户看空但大户看多 → 可能是低吸良机</li>
+                                    <li><strong>两者方向一致：</strong>散户和大户观点统一 → 趋势更可靠</li>
+                                </ul>
+                            </div>
+
+                            <p class="mt-3"><strong>评分规则：</strong></p>
                             <ul class="mb-0">
-                                <li><span class="badge bg-success">80-100分</span>：资金费率支持当前方向，趋势可靠</li>
-                                <li><span class="badge bg-warning">60-80分</span>：资金费率中性，无明确信号</li>
-                                <li><span class="badge bg-danger">0-60分</span>：资金费率与趋势背离，警惕反转</li>
+                                <li><span class="badge bg-success">80-100分</span>：资金费率和持仓量比同时支持趋势</li>
+                                <li><span class="badge bg-warning">60-80分</span>：部分指标支持，信号中等</li>
+                                <li><span class="badge bg-danger">0-60分</span>：指标冲突或与趋势背离</li>
                             </ul>
                         </div>
                     </div>
