@@ -64,14 +64,14 @@ class UnifiedDataScheduler:
         # 获取监控币种列表
         self.symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
 
-        # 初始化采集器
-        logger.info("初始化数据采集器...")
-        self._init_collectors()
-
-        # 初始化数据库服务
+        # 初始化数据库服务（必须在采集器之前，因为 ETF collector 需要它）
         logger.info("初始化数据库服务...")
         db_config = self.config.get('database', {})
         self.db_service = DatabaseService(db_config)
+
+        # 初始化采集器
+        logger.info("初始化数据采集器...")
+        self._init_collectors()
 
         # 初始化缓存更新服务
         logger.info("初始化缓存更新服务...")
