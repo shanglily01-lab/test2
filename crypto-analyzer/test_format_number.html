@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试数字格式化</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        table { border-collapse: collapse; margin: 20px 0; }
+        td, th { border: 1px solid #ddd; padding: 8px; }
+        th { background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h2>formatLargeNumber 函数测试</h2>
+
+    <table>
+        <tr>
+            <th>输入值</th>
+            <th>格式化结果</th>
+            <th>说明</th>
+        </tr>
+        <tr>
+            <td>106.2472</td>
+            <td id="test1"></td>
+            <td>BTC 成交量（数量）</td>
+        </tr>
+        <tr>
+            <td>10826183.45</td>
+            <td id="test2"></td>
+            <td>BTC 成交额（美元）</td>
+        </tr>
+        <tr>
+            <td>2502.4914</td>
+            <td id="test3"></td>
+            <td>ETH 成交量（数量）</td>
+        </tr>
+        <tr>
+            <td>8267054.68</td>
+            <td id="test4"></td>
+            <td>ETH 成交额（美元）</td>
+        </tr>
+        <tr>
+            <td>15950.9430</td>
+            <td id="test5"></td>
+            <td>SOL 成交量（数量）</td>
+        </tr>
+        <tr>
+            <td>2500093.72</td>
+            <td id="test6"></td>
+            <td>SOL 成交额（美元）</td>
+        </tr>
+    </table>
+
+    <h3>预期结果：</h3>
+    <ul>
+        <li>成交量：106.24, 2.50K, 15.95K</li>
+        <li>成交额：$10.83M, $8.27M, $2.50M</li>
+    </ul>
+
+    <script>
+        function formatLargeNumber(num) {
+            if (!num) return '-';
+            const absNum = Math.abs(num);
+            if (absNum >= 1000000000) return (absNum / 1000000000).toFixed(2) + 'B';
+            if (absNum >= 1000000) return (absNum / 1000000).toFixed(2) + 'M';
+            if (absNum >= 1000) return (absNum / 1000).toFixed(2) + 'K';
+            return absNum.toFixed(2);
+        }
+
+        document.getElementById('test1').textContent = formatLargeNumber(106.2472);
+        document.getElementById('test2').textContent = '$' + formatLargeNumber(10826183.45);
+        document.getElementById('test3').textContent = formatLargeNumber(2502.4914);
+        document.getElementById('test4').textContent = '$' + formatLargeNumber(8267054.68);
+        document.getElementById('test5').textContent = formatLargeNumber(15950.9430);
+        document.getElementById('test6').textContent = '$' + formatLargeNumber(2500093.72);
+    </script>
+</body>
+</html>
