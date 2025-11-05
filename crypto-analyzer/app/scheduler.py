@@ -1100,10 +1100,18 @@ class UnifiedDataScheduler:
             await self.collect_ethereum_data('1h')
             await asyncio.sleep(2)
 
-        # 5. Hyperliquid 数据（跳过初始采集，避免网络超时）
-        # if self.hyperliquid_collector:
-        #     await self.collect_hyperliquid_leaderboard()
-        logger.info("  ⊗ 跳过 Hyperliquid 初始采集（定时任务会自动执行）")
+        # 5. Hyperliquid 数据（添加错误处理，允许失败）
+        if self.hyperliquid_collector:
+            try:
+                logger.info("\n5. 采集 Hyperliquid 数据...")
+                await asyncio.wait_for(
+                    self.collect_hyperliquid_leaderboard(),
+                    timeout=60  # 60秒超时
+                )
+            except asyncio.TimeoutError:
+                logger.warning("  ⊗ Hyperliquid 采集超时（将在定时任务中重试）")
+            except Exception as e:
+                logger.warning(f"  ⊗ Hyperliquid 采集失败: {e}（将在定时任务中重试）")
 
         # 6. 首次缓存更新
         logger.info("\n🚀 性能优化：首次缓存更新...")
@@ -1113,9 +1121,16 @@ class UnifiedDataScheduler:
         await self.update_analysis_cache()
         await asyncio.sleep(2)
 
-        # if self.hyperliquid_collector:
-        #     await self.update_hyperliquid_cache()
-        logger.info("  ⊗ 跳过 Hyperliquid 缓存初始化")
+        if self.hyperliquid_collector:
+            try:
+                await asyncio.wait_for(
+                    self.update_hyperliquid_cache(),
+                    timeout=30  # 30秒超时
+                )
+            except asyncio.TimeoutError:
+                logger.warning("  ⊗ Hyperliquid 缓存更新超时")
+            except Exception as e:
+                logger.warning(f"  ⊗ Hyperliquid 缓存更新失败: {e}")
 
         logger.info("\n" + "=" * 80)
         logger.info("首次数据采集完成")

@@ -191,16 +191,33 @@ class HyperliquidCollector:
             # 方法: GET (不是 POST!)
             leaderboard_url = 'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard'
 
-            timeout = aiohttp.ClientTimeout(total=30, connect=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(leaderboard_url, proxy=self.proxy, ssl=False) as response:
+            # 增加超时时间，改善网络兼容性
+            timeout = aiohttp.ClientTimeout(total=60, connect=20, sock_read=30)
+
+            # 创建连接器，允许更灵活的 DNS 解析
+            connector = aiohttp.TCPConnector(
+                ssl=False,
+                force_close=True,  # 每次请求后关闭连接
+                limit=10,
+                ttl_dns_cache=300
+            )
+
+            async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+                logger.debug(f"正在请求 Hyperliquid 排行榜: {leaderboard_url}")
+
+                async with session.get(
+                    leaderboard_url,
+                    proxy=self.proxy,
+                    ssl=False,
+                    allow_redirects=True
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
 
                         # 提取 leaderboardRows 数组（直接包含所有交易者）
                         leaderboard = data.get('leaderboardRows', [])
 
-                        logger.info(f"获取排行榜: {len(leaderboard)} 个交易者")
+                        logger.info(f"✓ 获取排行榜: {len(leaderboard)} 个交易者")
                         return leaderboard if leaderboard else []
                     else:
                         # 记录详细的错误信息
@@ -208,8 +225,19 @@ class HyperliquidCollector:
                         logger.error(f"获取排行榜失败: HTTP {response.status}, 响应: {error_text}")
                         return []
 
+        except asyncio.TimeoutError:
+            logger.error(f"获取排行榜超时（网络连接慢或 API 不可达）")
+            return []
+        except asyncio.CancelledError:
+            logger.warning(f"获取排行榜被取消（可能是程序关闭）")
+            return []
+        except aiohttp.ClientError as e:
+            logger.error(f"获取排行榜网络错误: {e}")
+            return []
         except Exception as e:
-            logger.error(f"获取排行榜异常: {e}")
+            logger.error(f"获取排行榜异常: {type(e).__name__}: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return []
 
     def analyze_fill(self, fill: Dict) -> Optional[Dict]:
