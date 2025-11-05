@@ -404,17 +404,17 @@ class EnhancedDashboardCached:
                     t.address,
                     t.coin,
                     t.side,
-                    t.price,
-                    t.notional_usd,
-                    t.closed_pnl,
+                    MAX(t.price) as price,
+                    ROUND(t.notional_usd, 2) as notional_usd,
+                    MAX(t.closed_pnl) as closed_pnl,
                     t.trade_time,
-                    w.label as wallet_label
+                    MAX(w.label) as wallet_label
                 FROM hyperliquid_wallet_trades t
                 LEFT JOIN hyperliquid_monitored_wallets w ON t.address = w.address
                 WHERE t.trade_time >= :cutoff_time
                     AND w.is_monitoring = 1
                 GROUP BY t.address, t.coin, t.side, t.trade_time, ROUND(t.notional_usd, 2)
-                ORDER BY t.notional_usd DESC
+                ORDER BY ROUND(t.notional_usd, 2) DESC
                 LIMIT 50
             """), {"cutoff_time": cutoff_time})
 

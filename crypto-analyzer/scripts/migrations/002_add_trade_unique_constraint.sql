@@ -41,7 +41,7 @@ SELECT
     address,
     coin,
     side,
-    notional_usd,
+    ROUND(notional_usd, 2) as notional_usd,
     trade_time,
     COUNT(*) as count
 FROM hyperliquid_wallet_trades
