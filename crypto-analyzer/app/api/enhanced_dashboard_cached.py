@@ -137,32 +137,14 @@ class EnhancedDashboardCached:
 
             for row in results:
                 row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                # 注意：数据库中的字段名有误导性
-                # volume_24h 存的其实是 基础货币数量
-                # quote_volume_24h 存的其实是 USDT金额
-                # 但由于历史原因，可能字段值被互换了，需要验证数据
-
-                # 读取原始数据
-                base_volume = float(row_dict['volume_24h']) if row_dict['volume_24h'] else 0
-                quote_volume = float(row_dict['quote_volume_24h']) if row_dict['quote_volume_24h'] else 0
-
-                # 如果 quote_volume 为0但 base_volume 很大（>1000），说明数据可能互换了
-                # 临时解决方案：交换回来
-                if quote_volume == 0 and base_volume > 1000:
-                    # 数据被互换了，交换回来
-                    actual_quote_volume = base_volume  # volume_24h 里存的是成交额
-                    actual_base_volume = quote_volume  # quote_volume_24h 里存的是成交量（但是0）
-                else:
-                    actual_base_volume = base_volume
-                    actual_quote_volume = quote_volume
 
                 prices.append({
                     'symbol': row_dict['symbol'].replace('/USDT', ''),
                     'full_symbol': row_dict['symbol'],
                     'price': float(row_dict['current_price']),
                     'change_24h': float(row_dict['change_24h']) if row_dict['change_24h'] else 0,
-                    'volume_24h': actual_base_volume,  # 基础货币成交量
-                    'quote_volume_24h': actual_quote_volume,  # USDT成交额
+                    'volume_24h': float(row_dict['volume_24h']) if row_dict['volume_24h'] else 0,
+                    'quote_volume_24h': float(row_dict['quote_volume_24h']) if row_dict['quote_volume_24h'] else 0,
                     'high_24h': float(row_dict['high_24h']) if row_dict['high_24h'] else 0,
                     'low_24h': float(row_dict['low_24h']) if row_dict['low_24h'] else 0,
                     'trend': row_dict['trend'],
