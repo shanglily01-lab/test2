@@ -1100,9 +1100,10 @@ class UnifiedDataScheduler:
             await self.collect_ethereum_data('1h')
             await asyncio.sleep(2)
 
-        # 5. Hyperliquid 数据
-        if self.hyperliquid_collector:
-            await self.collect_hyperliquid_leaderboard()
+        # 5. Hyperliquid 数据（跳过初始采集，避免网络超时）
+        # if self.hyperliquid_collector:
+        #     await self.collect_hyperliquid_leaderboard()
+        logger.info("  ⊗ 跳过 Hyperliquid 初始采集（定时任务会自动执行）")
 
         # 6. 首次缓存更新
         logger.info("\n🚀 性能优化：首次缓存更新...")
@@ -1112,8 +1113,9 @@ class UnifiedDataScheduler:
         await self.update_analysis_cache()
         await asyncio.sleep(2)
 
-        if self.hyperliquid_collector:
-            await self.update_hyperliquid_cache()
+        # if self.hyperliquid_collector:
+        #     await self.update_hyperliquid_cache()
+        logger.info("  ⊗ 跳过 Hyperliquid 缓存初始化")
 
         logger.info("\n" + "=" * 80)
         logger.info("首次数据采集完成")
