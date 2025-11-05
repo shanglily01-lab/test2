@@ -416,7 +416,7 @@ async def get_smart_money_dashboard():
 async def get_ema_signals(
     limit: int = 20,
     signal_type: Optional[str] = None,
-    days: int = 7,
+    days: int = 2,
     session: Session = Depends(get_db_session)
 ):
     """
@@ -425,7 +425,7 @@ async def get_ema_signals(
     Args:
         limit: 返回数量限制
         signal_type: 信号类型过滤 (BUY或SELL)
-        days: 查询最近N天的信号 (默认7天)
+        days: 查询最近N天的信号 (默认2天)
 
     Returns:
         EMA信号列表
