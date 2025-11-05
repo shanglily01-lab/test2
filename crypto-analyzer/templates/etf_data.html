@@ -332,7 +332,8 @@
 
             const netFlow = summary.net_flow_24h || 0;
             const flowElement = document.getElementById('netFlow24h');
-            flowElement.textContent = (netFlow >= 0 ? '+' : '') + '$' + formatLargeNumber(Math.abs(netFlow));
+            const sign = netFlow >= 0 ? '+' : '-';
+            flowElement.textContent = sign + '$' + formatLargeNumber(Math.abs(netFlow));
             flowElement.style.color = netFlow >= 0 ? '#38ef7d' : '#ff6a00';
         }
 
