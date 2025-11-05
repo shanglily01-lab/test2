@@ -584,12 +584,22 @@ class EnhancedDashboardCached:
 
                 if data:
                     item['open_interest'] = float(data.get('open_interest', 0)) if data.get('open_interest') else 0
+
+                    # 账户数比
                     if data.get('long_short_ratio'):
-                        item['long_short_ratio'] = data['long_short_ratio'].get('ratio', 0)
+                        item['long_short_account_ratio'] = data['long_short_ratio'].get('ratio', 0)
                         item['long_account'] = data['long_short_ratio'].get('long_account', 0)
                         item['short_account'] = data['long_short_ratio'].get('short_account', 0)
                     else:
-                        item['long_short_ratio'] = 0
+                        item['long_short_account_ratio'] = 0
+
+                    # 持仓量比（新增）
+                    if data.get('long_short_position_ratio'):
+                        item['long_short_position_ratio'] = data['long_short_position_ratio'].get('ratio', 0)
+                        item['long_position'] = data['long_short_position_ratio'].get('long_position', 0)
+                        item['short_position'] = data['long_short_position_ratio'].get('short_position', 0)
+                    else:
+                        item['long_short_position_ratio'] = 0
             except Exception as e:
                 logger.warning(f"获取{symbol}持仓量和多空比失败: {e}")
                 continue

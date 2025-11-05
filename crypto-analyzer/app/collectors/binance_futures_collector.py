@@ -354,6 +354,55 @@ class BinanceFuturesCollector:
             logger.error(f"获取 {symbol} 多空比失败: {e}")
             return None
 
+    async def fetch_long_short_position_ratio(self, symbol: str, period: str = '5m') -> Optional[Dict]:
+        """
+        获取多空持仓量比率（Top 20%大户的持仓量）
+
+        Args:
+            symbol: 交易对
+            period: 时间周期 (5m, 15m, 30m, 1h, 2h, 4h, 6h, 12h, 1d)
+
+        Returns:
+            持仓量比率数据字典
+        """
+        try:
+            # 转换交易对格式
+            binance_symbol = symbol.replace('/', '')
+
+            # 使用公开API获取持仓量比
+            url = f"{self.base_url}/futures/data/topLongShortPositionRatio"
+            params = {
+                'symbol': binance_symbol,
+                'period': period,
+                'limit': 1
+            }
+
+            response = await asyncio.to_thread(requests.get, url, params=params)
+
+            if response.status_code == 200:
+                data = response.json()
+
+                if data and len(data) > 0:
+                    latest = data[0]
+
+                    return {
+                        'exchange': self.exchange_id,
+                        'symbol': symbol,
+                        'long_position': float(latest.get('longAccount', 0)),
+                        'short_position': float(latest.get('shortAccount', 0)),
+                        'long_short_position_ratio': float(latest.get('longShortRatio', 0)),
+                        'timestamp': datetime.fromtimestamp(int(latest.get('timestamp', 0)) / 1000) if latest.get('timestamp') else datetime.now(),
+                    }
+                else:
+                    return None
+            else:
+                logger.error(f"获取持仓量比失败: HTTP {response.status_code}")
+                return None
+
+        except Exception as e:
+            logger.error(f"获取 {symbol} 持仓量比失败: {e}")
+            return None
+
     async def fetch_all_data(self, symbol: str, timeframe: str = '1m') -> Dict:
         """
         获取所有合约数据（一次性采集）
@@ -366,19 +415,21 @@ class BinanceFuturesCollector:
             包含所有数据的字典
         """
         try:
-            # 并发获取所有数据
+            # 并发获取所有数据（包括账户数比和持仓量比）
             ticker_task = self.fetch_futures_ticker(symbol)
             klines_task = self.fetch_futures_klines(symbol, timeframe, limit=1)
             funding_task = self.fetch_funding_rate(symbol)
             oi_task = self.fetch_open_interest(symbol)
-            ls_task = self.fetch_long_short_ratio(symbol, period='5m')
+            ls_account_task = self.fetch_long_short_ratio(symbol, period='5m')
+            ls_position_task = self.fetch_long_short_position_ratio(symbol, period='5m')
 
-            ticker, klines, funding, oi, ls_ratio = await asyncio.gather(
+            ticker, klines, funding, oi, ls_account, ls_position = await asyncio.gather(
                 ticker_task,
                 klines_task,
                 funding_task,
                 oi_task,
-                ls_task,
+                ls_account_task,
+                ls_position_task,
                 return_exceptions=True
             )
 
@@ -389,7 +440,8 @@ class BinanceFuturesCollector:
                 'kline': klines.iloc[-1].to_dict() if klines is not None and not isinstance(klines, Exception) and len(klines) > 0 else None,
                 'funding_rate': funding if not isinstance(funding, Exception) else None,
                 'open_interest': oi if not isinstance(oi, Exception) else None,
-                'long_short_ratio': ls_ratio if not isinstance(ls_ratio, Exception) else None,
+                'long_short_account_ratio': ls_account if not isinstance(ls_account, Exception) else None,  # 账户数比
+                'long_short_position_ratio': ls_position if not isinstance(ls_position, Exception) else None,  # 持仓量比
             }
 
             return result

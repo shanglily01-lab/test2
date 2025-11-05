@@ -276,10 +276,15 @@ class FuturesLongShortRatio(Base):
     exchange = Column(String(20), nullable=False, default='binance_futures')  # 交易所
     period = Column(String(10), nullable=False, default='5m')  # 统计周期
 
-    # 多空比数据
-    long_account = Column(Float, nullable=False)  # 做多账户比例
-    short_account = Column(Float, nullable=False)  # 做空账户比例
-    long_short_ratio = Column(Float, nullable=False)  # 多空比率
+    # 多空比数据 - 账户数比
+    long_account = Column(Float, nullable=False)  # 做多账户数比例
+    short_account = Column(Float, nullable=False)  # 做空账户数比例
+    long_short_ratio = Column(Float, nullable=False)  # 账户数多空比率
+
+    # 多空比数据 - 持仓量比（新增）
+    long_position = Column(Float, nullable=True)  # 做多持仓量比例
+    short_position = Column(Float, nullable=True)  # 做空持仓量比例
+    long_short_position_ratio = Column(Float, nullable=True)  # 持仓量多空比率
 
     # 时间
     timestamp = Column(DateTime, nullable=False, index=True)  # 时间戳

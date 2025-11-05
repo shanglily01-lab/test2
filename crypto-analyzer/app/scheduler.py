@@ -390,18 +390,35 @@ class UnifiedDataScheduler:
                         }
                         self.db_service.save_open_interest_data(oi_data)
 
-                    # 5. 保存多空比
-                    if data.get('long_short_ratio'):
-                        ls = data['long_short_ratio']
+                    # 5. 保存多空比（账户数比 + 持仓量比）
+                    ls_account = data.get('long_short_account_ratio')
+                    ls_position = data.get('long_short_position_ratio')
+
+                    if ls_account or ls_position:
                         ls_data = {
                             'symbol': symbol,
                             'exchange': 'binance_futures',
                             'period': '5m',
-                            'long_account': ls['long_account'],
-                            'short_account': ls['short_account'],
-                            'long_short_ratio': ls['long_short_ratio'],
-                            'timestamp': ls['timestamp']
+                            'timestamp': datetime.now()
                         }
+
+                        # 账户数比数据
+                        if ls_account:
+                            ls_data.update({
+                                'long_account': ls_account['long_account'],
+                                'short_account': ls_account['short_account'],
+                                'long_short_ratio': ls_account['long_short_ratio'],
+                                'timestamp': ls_account['timestamp']
+                            })
+
+                        # 持仓量比数据
+                        if ls_position:
+                            ls_data.update({
+                                'long_position': ls_position['long_position'],
+                                'short_position': ls_position['short_position'],
+                                'long_short_position_ratio': ls_position['long_short_position_ratio']
+                            })
+
                         self.db_service.save_long_short_ratio_data(ls_data)
 
                     # 日志输出

@@ -539,6 +539,9 @@ class DatabaseService:
                 long_account=ls_data.get('long_account'),
                 short_account=ls_data.get('short_account'),
                 long_short_ratio=ls_data.get('long_short_ratio'),
+                long_position=ls_data.get('long_position'),  # 持仓量比 - 新增
+                short_position=ls_data.get('short_position'),  # 持仓量比 - 新增
+                long_short_position_ratio=ls_data.get('long_short_position_ratio'),  # 持仓量比 - 新增
                 timestamp=ls_data.get('timestamp')
             )
 
@@ -1367,11 +1370,19 @@ class DatabaseService:
                 result['timestamp'] = open_interest.timestamp
 
             if long_short_ratio:
+                # 账户数比
                 result['long_short_ratio'] = {
                     'long_account': long_short_ratio.long_account,
                     'short_account': long_short_ratio.short_account,
                     'ratio': long_short_ratio.long_short_ratio
                 }
+                # 持仓量比（新增）
+                if long_short_ratio.long_short_position_ratio:
+                    result['long_short_position_ratio'] = {
+                        'long_position': long_short_ratio.long_position,
+                        'short_position': long_short_ratio.short_position,
+                        'ratio': long_short_ratio.long_short_position_ratio
+                    }
                 if not result['timestamp']:
                     result['timestamp'] = long_short_ratio.timestamp
 
