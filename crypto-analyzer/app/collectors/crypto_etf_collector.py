@@ -77,16 +77,18 @@ class CryptoETFCollector:
 
     def fetch_farside_data(self, asset_type: str = 'BTC') -> List[Dict]:
         """
-        从 Farside Investors 网站抓取数据 (备选方案)
+        从 Farside Investors 网站抓取数据 (HTML解析)
 
         Args:
-            asset_type: 资产类型
+            asset_type: 资产类型 ('BTC' 或 'ETH')
 
         Returns:
             ETF 数据列表
         """
         try:
-            # Farside 提供 CSV 格式的数据
+            from bs4 import BeautifulSoup
+
+            # Farside网站URL
             if asset_type == 'BTC':
                 url = 'https://farside.co.uk/btc/'
             else:
@@ -95,17 +97,138 @@ class CryptoETFCollector:
             print(f"📊 从 Farside 获取 {asset_type} ETF 数据...")
             response = requests.get(url, headers=self.headers, timeout=30)
 
-            if response.status_code == 200:
-                # 这里需要解析 HTML 或 CSV
-                # 实际实现需要使用 BeautifulSoup 或 pandas
-                print(f"  ℹ️  Farside 数据需要 HTML 解析，建议使用 SoSoValue API")
-                return []
-            else:
+            if response.status_code != 200:
                 print(f"  ❌ 无法访问 Farside: HTTP {response.status_code}")
                 return []
 
+            # 解析HTML
+            soup = BeautifulSoup(response.text, 'lxml')
+
+            # Farside的数据通常在表格中
+            table = soup.find('table')
+            if not table:
+                print(f"  ❌ 未找到数据表格")
+                return []
+
+            # 解析表头（ETF产品名称）
+            headers = []
+            header_row = table.find('thead')
+            if header_row:
+                th_elements = header_row.find_all('th')
+                headers = [th.text.strip() for th in th_elements]
+
+            if not headers:
+                # 如果没有thead，尝试第一行tr
+                first_row = table.find('tr')
+                if first_row:
+                    headers = [td.text.strip() for td in first_row.find_all(['th', 'td'])]
+
+            print(f"  ✓ 找到 {len(headers)} 个列: {headers[:5]}...")
+
+            # 解析数据行
+            etf_data = []
+            tbody = table.find('tbody')
+            rows = tbody.find_all('tr') if tbody else table.find_all('tr')[1:]  # 跳过表头行
+
+            # 获取最新一行数据（通常是最后一行或倒数第二行）
+            if rows:
+                latest_row = rows[-1]
+                cells = latest_row.find_all(['td', 'th'])
+
+                # 第一列通常是日期
+                trade_date = cells[0].text.strip() if cells else None
+
+                # 解析日期 (格式: MM/DD/YYYY 或 DD/MM/YYYY)
+                from datetime import datetime
+                try:
+                    if '/' in trade_date:
+                        parts = trade_date.split('/')
+                        if len(parts) == 3:
+                            # 尝试 MM/DD/YYYY
+                            try:
+                                parsed_date = datetime.strptime(trade_date, '%m/%d/%Y').date()
+                            except ValueError:
+                                # 尝试 DD/MM/YYYY
+                                parsed_date = datetime.strptime(trade_date, '%d/%m/%Y').date()
+                    else:
+                        parsed_date = datetime.now().date()
+                except:
+                    parsed_date = datetime.now().date()
+
+                print(f"  ✓ 解析日期: {parsed_date}")
+
+                # 解析各个ETF的资金流入数据
+                for i, cell in enumerate(cells[1:], 1):  # 跳过日期列
+                    if i >= len(headers):
+                        break
+
+                    ticker = headers[i]
+                    if not ticker or ticker.lower() in ['date', 'total', '总计', '']:
+                        continue
+
+                    # 解析流入金额 (可能包含$, M, 逗号等)
+                    flow_text = cell.text.strip()
+                    try:
+                        # 移除货币符号和空格
+                        flow_text = flow_text.replace('$', '').replace(',', '').replace(' ', '')
+
+                        # 处理负数
+                        is_negative = flow_text.startswith('-') or flow_text.startswith('(')
+                        flow_text = flow_text.replace('-', '').replace('(', '').replace(')', '')
+
+                        # 处理单位 (M = Million)
+                        multiplier = 1
+                        if 'M' in flow_text.upper():
+                            multiplier = 1_000_000
+                            flow_text = flow_text.upper().replace('M', '')
+                        elif 'K' in flow_text.upper():
+                            multiplier = 1_000
+                            flow_text = flow_text.upper().replace('K', '')
+
+                        # 转换为数字
+                        if flow_text and flow_text not in ['-', '—', 'N/A', '']:
+                            net_inflow = float(flow_text) * multiplier
+                            if is_negative:
+                                net_inflow = -net_inflow
+                        else:
+                            net_inflow = 0
+
+                        # 创建ETF数据记录
+                        etf_record = {
+                            'ticker': ticker.upper(),
+                            'trade_date': parsed_date,
+                            'net_inflow': net_inflow,
+                            'gross_inflow': 0,  # Farside不提供
+                            'gross_outflow': 0,  # Farside不提供
+                            'aum': None,
+                            'btc_holdings': None,
+                            'eth_holdings': None,
+                            'shares_outstanding': None,
+                            'nav': None,
+                            'close_price': None,
+                            'volume': None,
+                            'data_source': 'farside'
+                        }
+
+                        etf_data.append(etf_record)
+
+                    except Exception as e:
+                        print(f"  ⚠️  解析 {ticker} 失败: {e}")
+                        continue
+
+                print(f"  ✅ 成功解析 {len(etf_data)} 个 ETF 数据")
+                return etf_data
+            else:
+                print(f"  ❌ 未找到数据行")
+                return []
+
+        except ImportError:
+            print(f"  ❌ 缺少 BeautifulSoup 库，请安装: pip install beautifulsoup4 lxml")
+            return []
         except Exception as e:
             print(f"  ❌ 获取 Farside 数据失败: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def fetch_alternative_api(self, asset_type: str = 'BTC') -> List[Dict]:
@@ -491,7 +614,11 @@ class CryptoETFCollector:
                 flows = self.fetch_alternative_api(asset_type)
 
             if not flows:
-                print(f"  ⚠️  无法获取 {asset_type} ETF 数据")
+                # 最后尝试 Farside 爬虫
+                flows = self.fetch_farside_data(asset_type)
+
+            if not flows:
+                print(f"  ⚠️  无法从任何数据源获取 {asset_type} ETF 数据")
                 results[asset_type] = {'saved': 0, 'failed': 0}
                 continue
 
