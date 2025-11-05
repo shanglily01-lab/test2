@@ -6,17 +6,31 @@
 import yaml
 from sqlalchemy import create_engine, text
 from datetime import datetime
+from urllib.parse import quote_plus
 
 # 加载配置
 with open('config.yaml', 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
-db_config = config.get('database', {}).get('mysql', {})
+# 获取数据库配置
+database_config = config.get('database', {})
+db_type = database_config.get('type', 'mysql')
+
+if db_type != 'mysql':
+    print(f"❌ 不支持的数据库类型: {db_type}")
+    print("此脚本仅支持 MySQL 数据库")
+    exit(1)
+
+db_config = database_config.get('mysql', {})
+
+# URL 编码密码（处理特殊字符）
+password = quote_plus(db_config.get('password', ''))
 
 # 创建数据库连接
 engine = create_engine(
-    f"mysql+pymysql://{db_config['user']}:{db_config['password']}@"
-    f"{db_config['host']}:{db_config['port']}/{db_config['database']}",
+    f"mysql+pymysql://{db_config.get('user', 'root')}:{password}@"
+    f"{db_config.get('host', 'localhost')}:{db_config.get('port', 3306)}/"
+    f"{db_config.get('database', 'binance-data')}",
     echo=False
 )
 
