@@ -592,7 +592,7 @@
                     <div class="card-body text-center text-muted small">
                         <i class="bi bi-info-circle"></i>
                         前端每5秒自动刷新 |
-                        5维度智能分析: 技术指标 + 新闻情绪 + 资金费率 + Hyperliquid + 链上数据 |
+                        6维度智能分析: 技术指标 + 新闻情绪 + 合约数据 + Hyperliquid + 链上数据 + ETF数据 |
                         最后更新: <span id="last-update">-</span>
                     </div>
                 </div>
@@ -915,12 +915,12 @@
                     <div class="alert alert-info">
                         <h6><i class="bi bi-info-circle"></i> 概述</h6>
                         <p class="mb-0">
-                            本系统采用 <strong>5维度智能分析模型</strong>，综合评估每个币种的投资价值，
+                            本系统采用 <strong>6维度智能分析模型</strong>，综合评估每个币种的投资价值，
                             为您提供数据驱动的投资建议。所有指标实时更新（每5秒刷新），确保您获得最新的市场洞察。
                         </p>
                     </div>
 
-                    <h5 class="mt-4 mb-3"><i class="bi bi-graph-up"></i> 五大核心指标详解</h5>
+                    <h5 class="mt-4 mb-3"><i class="bi bi-graph-up"></i> 六大核心指标详解</h5>
 
                     <!-- 1. 技术指标 -->
                     <div class="card mb-3">
@@ -1128,6 +1128,88 @@
                         </div>
                     </div>
 
+                    <!-- 6. ETF数据 -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">📊 ETF数据 (ETF Flow Data)</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>什么是加密货币ETF？</strong></p>
+                            <p>
+                                ETF（交易所交易基金）是一种在传统证券交易所上市的投资工具，允许传统金融投资者通过合规渠道投资加密货币。
+                                ETF资金流向是机构投资者情绪的重要风向标。
+                            </p>
+                            <p><strong>监控的ETF类型：</strong></p>
+                            <ul>
+                                <li><strong>现货ETF：</strong> 直接持有实物加密货币（如灰度GBTC、BlackRock IBIT）</li>
+                                <li><strong>期货ETF：</strong> 通过期货合约间接投资（如ProShares BITO）</li>
+                                <li><strong>做空ETF：</strong> 反向做空加密货币的ETF</li>
+                            </ul>
+
+                            <p><strong>关键指标：</strong></p>
+                            <ul>
+                                <li><strong>单日资金流入/流出：</strong> 当日ETF的净买入/卖出金额
+                                    <ul>
+                                        <li>大量流入 (&gt; $100M) → 机构看好，长期看涨</li>
+                                        <li>大量流出 (&lt; -$100M) → 机构撤离，看跌信号</li>
+                                    </ul>
+                                </li>
+                                <li><strong>累计持仓量 (AUM)：</strong> ETF管理的总资产规模
+                                    <ul>
+                                        <li>AUM持续增长 → 机构兴趣增加</li>
+                                        <li>AUM下降 → 机构信心减弱</li>
+                                    </ul>
+                                </li>
+                                <li><strong>连续流入/流出天数：</strong> 资金流向的持续性
+                                    <ul>
+                                        <li>连续5天以上流入 → 趋势确立，强烈看涨</li>
+                                        <li>连续5天以上流出 → 趋势反转，强烈看跌</li>
+                                    </ul>
+                                </li>
+                            </ul>
+
+                            <p><strong>重点ETF产品：</strong></p>
+                            <div class="bg-light p-3 rounded mb-3">
+                                <p class="mb-1"><strong>比特币ETF：</strong></p>
+                                <ul class="small mb-2">
+                                    <li><strong>BlackRock IBIT：</strong>全球最大资管公司，影响力巨大</li>
+                                    <li><strong>Grayscale GBTC：</strong>最早的比特币信托，流入流出风向标</li>
+                                    <li><strong>Fidelity FBTC：</strong>传统金融巨头，机构信赖度高</li>
+                                </ul>
+                                <p class="mb-1"><strong>以太坊ETF：</strong></p>
+                                <ul class="small mb-0">
+                                    <li><strong>BlackRock ETHA：</strong>以太坊现货ETF领头羊</li>
+                                    <li><strong>Grayscale ETHE：</strong>以太坊信托产品</li>
+                                </ul>
+                            </div>
+
+                            <p><strong>如何解读ETF数据？</strong></p>
+                            <ul>
+                                <li><strong>流入 + 价格上涨：</strong>机构和市场同步看涨，趋势强劲</li>
+                                <li><strong>流入 + 价格下跌：</strong>机构逢低吸筹，潜在底部信号</li>
+                                <li><strong>流出 + 价格上涨：</strong>机构获利了结，警惕顶部风险</li>
+                                <li><strong>流出 + 价格下跌：</strong>机构恐慌离场，趋势疲软</li>
+                            </ul>
+
+                            <p><strong>评分规则：</strong></p>
+                            <ul class="mb-0">
+                                <li><span class="badge bg-success">80-100分</span>：大额持续流入，机构强烈看好</li>
+                                <li><span class="badge bg-warning">60-80分</span>：小额流入或流出，机构情绪中性</li>
+                                <li><span class="badge bg-danger">0-60分</span>：大额持续流出，机构信心不足</li>
+                            </ul>
+
+                            <div class="alert alert-info mt-3 mb-0">
+                                <p class="mb-1"><strong>💡 为什么ETF数据重要？</strong></p>
+                                <ul class="small mb-0">
+                                    <li><strong>机构资金体量大：</strong>单个ETF日流入可达数亿美元，对市场影响显著</li>
+                                    <li><strong>长期持有倾向：</strong>机构投资者通常持有周期较长，资金更稳定</li>
+                                    <li><strong>合规性信号：</strong>ETF流入表明传统金融对加密货币的接受度提升</li>
+                                    <li><strong>宏观经济关联：</strong>ETF数据反映机构对宏观经济和加密市场的综合判断</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- 综合评分说明 -->
                     <h5 class="mt-4 mb-3"><i class="bi bi-calculator"></i> 综合评分与信号生成</h5>
                     <div class="card mb-3">
@@ -1135,9 +1217,18 @@
                             <p><strong>置信度计算公式：</strong></p>
                             <div class="bg-light p-3 rounded mb-3">
                                 <code>
-                                置信度 = (技术指标 × 60% + 新闻情绪 × 30% + 资金费率 × 10% + Hyperliquid × 5% + 链上数据 × 5%) / 5
+                                置信度 = (技术指标 × 40% + 新闻情绪 × 20% + 合约数据 × 15% + Hyperliquid × 10% + 链上数据 × 5% + ETF数据 × 10%) / 6
                                 </code>
                             </div>
+                            <p class="mb-2"><strong>各指标权重说明：</strong></p>
+                            <ul class="small">
+                                <li><strong>技术指标 (40%)：</strong>最高权重，价格走势和技术形态是短期交易的核心</li>
+                                <li><strong>新闻情绪 (20%)：</strong>重要权重，市场情绪直接影响短期波动</li>
+                                <li><strong>合约数据 (15%)：</strong>包含资金费率、账户数比、持仓量比，反映市场多空力量</li>
+                                <li><strong>Hyperliquid (10%)：</strong>聪明钱动向，专业交易者的参考</li>
+                                <li><strong>ETF数据 (10%)：</strong>机构资金流向，影响中长期趋势</li>
+                                <li><strong>链上数据 (5%)：</strong>巨鲸和链上活动，作为辅助参考</li>
+                            </ul>
                             <p><strong>信号判定规则：</strong></p>
                             <table class="table table-bordered">
                                 <thead>
@@ -1208,9 +1299,10 @@
                             <strong>实时价格：</strong>每5秒刷新 |
                             <strong>技术指标：</strong>每5分钟更新 |
                             <strong>新闻情绪：</strong>每15分钟更新 |
-                            <strong>资金费率：</strong>每5分钟更新 |
+                            <strong>合约数据：</strong>每5分钟更新 |
                             <strong>Hyperliquid：</strong>每30分钟更新 |
-                            <strong>链上数据：</strong>每5分钟更新
+                            <strong>链上数据：</strong>每5分钟更新 |
+                            <strong>ETF数据：</strong>每日更新（交易日结束后）
                         </p>
                     </div>
                 </div>
