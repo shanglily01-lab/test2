@@ -95,12 +95,11 @@ class CacheUpdateService:
                 price_24h_ago = float(past_kline.close) if past_kline else current_price
 
                 # 获取24小时K线数据
-                # ⚠️ 临时修改：改为1小时数据，用于快速验证 quote_volume 修复
-                # TODO: 等数据积累24小时后改回 hours=24, limit=24
+                # 注意：数据库存储的是本地时间（UTC+8），不是UTC时间
                 klines_24h = self.db_service.get_klines(
-                    symbol, '5m',  # 改用5分钟K线
-                    start_time=datetime.utcnow() - timedelta(hours=1),  # 使用UTC时间！数据库timestamp是UTC
-                    limit=12  # 5分钟 * 12 = 1小时
+                    symbol, '5m',  # 使用5分钟K线
+                    start_time=datetime.now() - timedelta(hours=24),  # 使用本地时间
+                    limit=288  # 5分钟 * 288 = 24小时
                 )
 
                 if not klines_24h:
