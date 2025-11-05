@@ -520,13 +520,20 @@
                                 <tr>
                                     <th>币种</th>
                                     <th class="text-end">持仓量</th>
-                                    <th class="text-end">多空比</th>
+                                    <th class="text-end">
+                                        账户数比
+                                        <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" title="做多账户数 / 做空账户数（反映散户情绪）"></i>
+                                    </th>
+                                    <th class="text-end">
+                                        持仓量比
+                                        <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" title="做多持仓量 / 做空持仓量（反映资金流向，Top 20%大户）"></i>
+                                    </th>
                                     <th class="text-end">资金费率</th>
                                 </tr>
                             </thead>
                             <tbody id="futures-table">
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted p-4">
+                                    <td colspan="5" class="text-center text-muted p-4">
                                         <div class="spinner-border spinner-border-sm" role="status"></div>
                                         加载中...
                                     </td>

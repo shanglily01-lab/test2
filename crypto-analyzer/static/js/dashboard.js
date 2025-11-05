@@ -143,7 +143,7 @@ function updateFuturesTable(futuresData) {
     const tbody = document.getElementById('futures-table');
 
     if (!futuresData || futuresData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-4">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-4">暂无数据</td></tr>';
         return;
     }
 
@@ -161,24 +161,45 @@ function updateFuturesTable(futuresData) {
             }
         }
 
-        // 处理多空比 - 显示比率并着色
-        let longShortStr = '-';
-        let ratioClass = '';
-        if (f.long_short_ratio !== undefined && f.long_short_ratio !== 0) {
-            const ratio = f.long_short_ratio;
-            longShortStr = ratio.toFixed(2);
+        // 处理账户数比 - 显示比率并着色
+        let accountRatioStr = '-';
+        let accountRatioClass = '';
+        if (f.long_short_account_ratio !== undefined && f.long_short_account_ratio !== 0) {
+            const ratio = f.long_short_account_ratio;
+            accountRatioStr = ratio.toFixed(2);
 
             // 根据多空比着色：>1偏多(绿色)，<1偏空(红色)
             if (ratio > 1.2) {
-                ratioClass = 'text-success fw-bold';  // 明显偏多
+                accountRatioClass = 'text-success fw-bold';  // 明显偏多
             } else if (ratio > 1.0) {
-                ratioClass = 'text-success';  // 轻微偏多
+                accountRatioClass = 'text-success';  // 轻微偏多
             } else if (ratio < 0.8) {
-                ratioClass = 'text-danger fw-bold';  // 明显偏空
+                accountRatioClass = 'text-danger fw-bold';  // 明显偏空
             } else if (ratio < 1.0) {
-                ratioClass = 'text-danger';  // 轻微偏空
+                accountRatioClass = 'text-danger';  // 轻微偏空
             } else {
-                ratioClass = 'text-muted';  // 平衡
+                accountRatioClass = 'text-muted';  // 平衡
+            }
+        }
+
+        // 处理持仓量比 - 显示比率并着色（新增）
+        let positionRatioStr = '-';
+        let positionRatioClass = '';
+        if (f.long_short_position_ratio !== undefined && f.long_short_position_ratio !== 0) {
+            const ratio = f.long_short_position_ratio;
+            positionRatioStr = ratio.toFixed(2);
+
+            // 根据持仓量比着色：>1偏多(绿色)，<1偏空(红色)
+            if (ratio > 1.2) {
+                positionRatioClass = 'text-success fw-bold';  // 明显偏多
+            } else if (ratio > 1.0) {
+                positionRatioClass = 'text-success';  // 轻微偏多
+            } else if (ratio < 0.8) {
+                positionRatioClass = 'text-danger fw-bold';  // 明显偏空
+            } else if (ratio < 1.0) {
+                positionRatioClass = 'text-danger';  // 轻微偏空
+            } else {
+                positionRatioClass = 'text-muted';  // 平衡
             }
         }
 
@@ -199,8 +220,11 @@ function updateFuturesTable(futuresData) {
                 <td class="text-end">
                     <small class="text-muted">${openInterestStr}</small>
                 </td>
-                <td class="text-end ${ratioClass}">
-                    ${longShortStr}
+                <td class="text-end ${accountRatioClass}">
+                    ${accountRatioStr}
+                </td>
+                <td class="text-end ${positionRatioClass}">
+                    ${positionRatioStr}
                 </td>
                 <td class="text-end ${fundingClass}">
                     <small>${fundingRateStr}</small>
