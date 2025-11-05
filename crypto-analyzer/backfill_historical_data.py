@@ -123,13 +123,17 @@ class HistoricalDataBackfill:
                     try:
                         logger.info(f"  正在从 {exchange} 获取数据...")
 
-                        # 获取 K线数据
-                        df = await self.price_collector.fetch_ohlcv(
+                        # 获取 K线数据 - 直接使用底层 collector
+                        if exchange not in self.price_collector.collectors:
+                            logger.warning(f"  ⊗ {exchange} 未启用")
+                            continue
+
+                        collector = self.price_collector.collectors[exchange]
+                        df = await collector.fetch_ohlcv(
                             symbol=symbol,
                             timeframe=timeframe,
                             since=int(start_dt.timestamp() * 1000),
-                            limit=limit,
-                            exchange=exchange
+                            limit=limit
                         )
 
                         if df is None or len(df) == 0:
