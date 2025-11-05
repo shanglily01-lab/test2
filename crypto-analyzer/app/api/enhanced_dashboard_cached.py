@@ -395,16 +395,25 @@ class EnhancedDashboardCached:
             top_coins_data = result.fetchall()
 
             # 获取最近大额交易（从原表，因为需要详细信息）
+            # 使用 GROUP BY 去重，避免显示重复的交易
             from datetime import timedelta
             cutoff_time = datetime.now() - timedelta(hours=24)
             result = session.execute(text("""
                 SELECT
-                    t.*,
+                    MAX(t.id) as id,
+                    t.address,
+                    t.coin,
+                    t.side,
+                    t.price,
+                    t.notional_usd,
+                    t.closed_pnl,
+                    t.trade_time,
                     w.label as wallet_label
                 FROM hyperliquid_wallet_trades t
                 LEFT JOIN hyperliquid_monitored_wallets w ON t.address = w.address
                 WHERE t.trade_time >= :cutoff_time
                     AND w.is_monitoring = 1
+                GROUP BY t.address, t.coin, t.side, t.trade_time, ROUND(t.notional_usd, 2)
                 ORDER BY t.notional_usd DESC
                 LIMIT 50
             """), {"cutoff_time": cutoff_time})
