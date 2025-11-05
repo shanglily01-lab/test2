@@ -17,8 +17,6 @@ requests==2.31.0          # HTTP library for funding rate API calls
 # ==================== Data Processing and Analysis ====================
 pandas>=2.0.0             # Compatible with Python 3.11+
 numpy>=1.24.0
-beautifulsoup4==4.12.2    # HTML parsing for web scraping
-lxml==4.9.3               # HTML/XML parser for BeautifulSoup
 # pandas-ta - OPTIONAL (not required, system has built-in fallback methods)
 # Not available for Python 3.11 via pip. To install on Python 3.11:
 # pip install git+https://github.com/twopirllc/pandas-ta.git

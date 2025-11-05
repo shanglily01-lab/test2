@@ -10,7 +10,7 @@
 - Hyperliquid 排行榜: 每天一次
 - 资金费率 (Binance + Gate.io): 每5分钟
 - 新闻数据: 每15分钟
-- ETF 数据 (Farside.co.uk): 每天 13:17
+- ETF 数据 (SoSoValue/CoinGlass API): 每天 13:17
 
 缓存更新频率（性能优化）：
 - 价格统计缓存: 每1分钟
@@ -167,7 +167,7 @@ class UnifiedDataScheduler:
         etf_config = self.config.get('etf_collector', {})
         if etf_config.get('enabled', True):  # 默认启用
             self.etf_collector = CryptoETFCollector(self.db_service)
-            logger.info("  ✓ ETF 数据采集器 (Farside.co.uk)")
+            logger.info("  ✓ ETF 数据采集器 (SoSoValue + CoinGlass)")
         else:
             self.etf_collector = None
             logger.info("  ⊗ ETF 数据采集器 (未启用)")
@@ -1136,7 +1136,7 @@ class UnifiedDataScheduler:
             schedule.every().day.at("13:17").do(
                 lambda: asyncio.run(self.collect_etf_data())
             )
-            logger.info("  ✓ ETF 数据采集 (Farside.co.uk BTC & ETH) - 每天 13:17")
+            logger.info("  ✓ ETF 数据采集 (SoSoValue + CoinGlass BTC & ETH) - 每天 13:17")
 
         # 6. Hyperliquid 钱包监控 - 分级监控策略
         if self.hyperliquid_collector:
