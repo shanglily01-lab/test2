@@ -142,7 +142,8 @@ class EnhancedDashboardCached:
                     'full_symbol': row_dict['symbol'],
                     'price': float(row_dict['current_price']),
                     'change_24h': float(row_dict['change_24h']) if row_dict['change_24h'] else 0,
-                    'volume_24h': float(row_dict['quote_volume_24h']) if row_dict['quote_volume_24h'] else 0,
+                    'volume_24h': float(row_dict['volume_24h']) if row_dict['volume_24h'] else 0,  # 基础货币成交量
+                    'quote_volume_24h': float(row_dict['quote_volume_24h']) if row_dict['quote_volume_24h'] else 0,  # USDT成交额
                     'high_24h': float(row_dict['high_24h']) if row_dict['high_24h'] else 0,
                     'low_24h': float(row_dict['low_24h']) if row_dict['low_24h'] else 0,
                     'trend': row_dict['trend'],

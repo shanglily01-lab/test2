@@ -112,7 +112,7 @@ function updatePrices(prices) {
     const tbody = document.getElementById('price-table');
 
     if (!prices || prices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted p-4">暂无数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-4">暂无数据</td></tr>';
         return;
     }
 
@@ -129,6 +129,9 @@ function updatePrices(prices) {
                 </td>
                 <td class="text-end text-muted">
                     ${formatLargeNumber(p.volume_24h)}
+                </td>
+                <td class="text-end text-muted">
+                    $${formatLargeNumber(p.quote_volume_24h)}
                 </td>
             </tr>
         `;
