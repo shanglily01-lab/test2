@@ -4,7 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ETF数据监控 - ETF Data Monitoring</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #38ef7d;
+            --danger: #ff6a00;
+            --warning: #ffd700;
+            --info: #00f2fe;
+            --dark: #1a1a2e;
+            --light: #f8f9fa;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -14,7 +27,8 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #ffffff;
+            background-attachment: fixed;
+            color: #333;
             padding: 20px;
             min-height: 100vh;
         }
@@ -24,38 +38,37 @@
             margin: 0 auto;
         }
 
-        header {
-            text-align: center;
+        /* 导航栏 */
+        .navbar {
+            background: rgba(255, 255, 255, 0.95) !important;
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 15px 25px;
             margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         }
 
-        h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-        }
-
-        .subtitle {
-            font-size: 1.1em;
-            color: #e0e7ff;
-        }
-
-        .nav-links {
-            margin-top: 15px;
+        .navbar-brand {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .nav-links a {
-            color: #ffd700;
+            color: var(--primary);
             text-decoration: none;
             margin: 0 15px;
-            font-size: 1em;
-            transition: color 0.3s;
+            font-weight: 500;
+            transition: all 0.3s;
+            padding: 8px 15px;
+            border-radius: 8px;
         }
 
         .nav-links a:hover {
-            color: #ffffff;
+            background: rgba(102, 126, 234, 0.1);
+            color: var(--secondary);
         }
 
         /* 总览卡片 */
@@ -67,60 +80,89 @@
         }
 
         .summary-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            transition: transform 0.3s, box-shadow 0.3s;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            border: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .summary-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
         }
 
         .summary-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            transform: translateY(-8px);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.15);
         }
 
         .summary-card h3 {
-            font-size: 0.9em;
-            color: #e0e7ff;
-            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-bottom: 15px;
             text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
         }
 
         .summary-card .value {
-            font-size: 2em;
-            font-weight: bold;
-            color: #ffd700;
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 5px;
         }
 
         .summary-card .unit {
-            font-size: 0.9em;
-            color: #e0e7ff;
-            margin-left: 5px;
+            font-size: 0.9rem;
+            color: #adb5bd;
+            font-weight: 500;
+            margin-left: 8px;
         }
 
         /* 主要内容区 */
         .main-content {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 20px;
+            gap: 25px;
         }
 
         .section {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            border: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
         }
 
         .section h2 {
-            font-size: 1.5em;
-            margin-bottom: 20px;
-            color: #ffd700;
+            font-size: 1.8rem;
+            margin-bottom: 25px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         /* 表格样式 */
+        .table-container {
+            overflow-x: auto;
+            border-radius: 15px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -128,31 +170,67 @@
         }
 
         table thead {
-            background: rgba(255, 255, 255, 0.1);
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
         }
 
         table th {
-            padding: 12px;
+            padding: 15px;
             text-align: left;
-            font-weight: bold;
-            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         table td {
-            padding: 12px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+            color: #495057;
         }
 
-        table tr:hover {
-            background: rgba(255, 255, 255, 0.05);
+        table tbody tr {
+            transition: all 0.2s ease;
+        }
+
+        table tbody tr:hover {
+            background: rgba(102, 126, 234, 0.05);
+            transform: scale(1.01);
+        }
+
+        /* 徽章样式 */
+        .badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            border: none;
+        }
+
+        .badge-positive {
+            background: linear-gradient(135deg, #11998e 0%, var(--success) 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(56, 239, 125, 0.3);
+        }
+
+        .badge-negative {
+            background: linear-gradient(135deg, #ee0979 0%, var(--danger) 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 106, 0, 0.3);
+        }
+
+        .badge-neutral {
+            background: #e9ecef;
+            color: #495057;
         }
 
         /* 加载动画 */
         .loading {
             text-align: center;
-            padding: 50px;
+            padding: 60px;
             font-size: 1.2em;
-            color: #e0e7ff;
+            color: #6c757d;
         }
 
         .loading::after {
@@ -166,44 +244,105 @@
             60%, 100% { content: '...'; }
         }
 
-        /* 徽章样式 */
-        .badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            font-weight: bold;
+        /* 错误消息 */
+        .error-message {
+            background: linear-gradient(135deg, #ee0979 0%, var(--danger) 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 0;
+            box-shadow: 0 8px 25px rgba(255, 106, 0, 0.3);
         }
 
-        .badge-positive {
-            background: rgba(56, 239, 125, 0.2);
-            color: #38ef7d;
-            border: 1px solid rgba(56, 239, 125, 0.4);
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .navbar-brand {
+                font-size: 1.4rem;
+            }
+
+            .section {
+                padding: 20px;
+            }
+
+            table {
+                font-size: 0.85em;
+            }
+
+            th, td {
+                padding: 10px 8px;
+            }
         }
 
-        .badge-negative {
-            background: rgba(255, 106, 0, 0.2);
-            color: #ff6a00;
-            border: 1px solid rgba(255, 106, 0, 0.4);
+        /* 增强看板模态框 */
+        .enhanced-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            overflow-y: auto;
         }
 
-        .badge-neutral {
-            background: rgba(255, 255, 255, 0.1);
-            color: #e0e7ff;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+        .enhanced-modal-content {
+            background: white;
+            border-radius: 25px;
+            padding: 40px;
+            max-width: 1200px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            margin: 2% auto;
+        }
+
+        .modal-close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(102, 126, 234, 0.1);
+            border: none;
+            color: var(--primary);
+            font-size: 28px;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close-btn:hover {
+            background: var(--danger);
+            color: white;
+            transform: rotate(90deg);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>📊 ETF数据监控</h1>
-            <p class="subtitle">Crypto ETF Data Monitoring - Real-time BTC & ETH ETF Holdings Tracker</p>
-            <div class="nav-links">
-                <a href="/dashboard">← 返回主页</a>
-                <a href="#" onclick="openEnhancedDashboard(); return false;">📈 增强看板</a>
+        <!-- 导航栏 -->
+        <nav class="navbar">
+            <div class="d-flex justify-content-between align-items-center w-100">
+                <div class="navbar-brand">📊 ETF数据监控</div>
+                <div class="nav-links">
+                    <a href="/dashboard"><i class="bi bi-house-door"></i> 返回主页</a>
+                    <a href="#" onclick="openEnhancedDashboard(); return false;"><i class="bi bi-graph-up"></i> 增强看板</a>
+                </div>
             </div>
-        </header>
+        </nav>
 
         <!-- 总览统计 -->
         <div class="summary-cards" id="summaryCards">
@@ -246,16 +385,20 @@
             <!-- BTC ETF列表 -->
             <div class="section">
                 <h2><span style="color: #f7931a;">₿</span> 比特币ETF持仓</h2>
-                <div id="btcETFTable">
-                    <div class="loading">加载中</div>
+                <div class="table-container">
+                    <div id="btcETFTable">
+                        <div class="loading">加载中</div>
+                    </div>
                 </div>
             </div>
 
             <!-- ETH ETF列表 -->
             <div class="section">
                 <h2><span style="color: #627eea;">Ξ</span> 以太坊ETF持仓</h2>
-                <div id="ethETFTable">
-                    <div class="loading">加载中</div>
+                <div class="table-container">
+                    <div id="ethETFTable">
+                        <div class="loading">加载中</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -274,16 +417,13 @@
             try {
                 const response = await fetch('/api/etf/summary');
 
-                // 检查HTTP状态
                 if (!response.ok) {
-                    // 尝试解析FastAPI的JSON错误响应
                     try {
                         const errorJson = await response.json();
                         const errorMsg = errorJson.detail || errorJson.message || 'API请求失败';
                         console.error('API返回错误:', response.status, errorJson);
                         showError(`API请求失败 (${response.status}): ${errorMsg}`);
                     } catch (e) {
-                        // 如果JSON解析失败，显示文本错误
                         const errorText = await response.text();
                         console.error('API返回错误:', response.status, errorText);
                         showError(`API请求失败 (${response.status}): ${errorText}`);
@@ -310,10 +450,10 @@
         // 显示错误信息
         function showError(message) {
             const errorHtml = `
-                <div style="background: rgba(255, 106, 0, 0.2); border: 1px solid #ff6a00; border-radius: 8px; padding: 20px; margin: 20px; text-align: center;">
-                    <h3 style="color: #ff6a00; margin: 0 0 10px 0;">⚠️ 加载失败</h3>
-                    <p style="color: #e0e7ff; margin: 0;">${message}</p>
-                    <button onclick="loadETFData()" style="margin-top: 15px; padding: 8px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                <div class="error-message">
+                    <h3 style="margin: 0 0 10px 0;">⚠️ 加载失败</h3>
+                    <p style="margin: 0 0 15px 0;">${message}</p>
+                    <button onclick="loadETFData()" class="btn btn-light" style="border-radius: 8px;">
                         🔄 重试
                     </button>
                 </div>
@@ -334,7 +474,7 @@
             const flowElement = document.getElementById('netFlow24h');
             const sign = netFlow >= 0 ? '+' : '-';
             flowElement.textContent = sign + '$' + formatLargeNumber(Math.abs(netFlow));
-            flowElement.style.color = netFlow >= 0 ? '#38ef7d' : '#ff6a00';
+            flowElement.style.color = netFlow >= 0 ? 'var(--success)' : 'var(--danger)';
         }
 
         // 更新BTC ETF表格
@@ -342,7 +482,7 @@
             const container = document.getElementById('btcETFTable');
 
             if (etfs.length === 0) {
-                container.innerHTML = '<p style="text-align: center; color: #e0e7ff; padding: 20px;">暂无数据</p>';
+                container.innerHTML = '<p style="text-align: center; color: #6c757d; padding: 40px;">暂无数据</p>';
                 return;
             }
 
@@ -369,10 +509,10 @@
 
                 html += `
                     <tr>
-                        <td><strong>${index + 1}</strong></td>
+                        <td><strong style="color: var(--primary);">${index + 1}</strong></td>
                         <td><strong>${etf.name}</strong></td>
                         <td><span class="badge badge-neutral">${etf.symbol}</span></td>
-                        <td>${formatNumber(etf.btc_holdings, 2)} BTC</td>
+                        <td><strong>${formatNumber(etf.btc_holdings, 2)}</strong> BTC</td>
                         <td>$${formatLargeNumber(etf.market_value)}</td>
                         <td><span class="badge ${flowBadge}">${flowSign}$${formatLargeNumber(Math.abs(flow24h))}</span></td>
                         <td>${formatDate(etf.updated_at)}</td>
@@ -393,7 +533,7 @@
             const container = document.getElementById('ethETFTable');
 
             if (etfs.length === 0) {
-                container.innerHTML = '<p style="text-align: center; color: #e0e7ff; padding: 20px;">暂无数据</p>';
+                container.innerHTML = '<p style="text-align: center; color: #6c757d; padding: 40px;">暂无数据</p>';
                 return;
             }
 
@@ -420,10 +560,10 @@
 
                 html += `
                     <tr>
-                        <td><strong>${index + 1}</strong></td>
+                        <td><strong style="color: var(--primary);">${index + 1}</strong></td>
                         <td><strong>${etf.name}</strong></td>
                         <td><span class="badge badge-neutral">${etf.symbol}</span></td>
-                        <td>${formatNumber(etf.eth_holdings, 2)} ETH</td>
+                        <td><strong>${formatNumber(etf.eth_holdings, 2)}</strong> ETH</td>
                         <td>$${formatLargeNumber(etf.market_value)}</td>
                         <td><span class="badge ${flowBadge}">${flowSign}$${formatLargeNumber(Math.abs(flow24h))}</span></td>
                         <td>${formatDate(etf.updated_at)}</td>
@@ -466,19 +606,12 @@
             return date.toLocaleDateString('zh-CN') + ' ' + date.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
         }
 
-        // ========================================================================
         // 增强看板功能
-        // ========================================================================
+        let enhancedData = null;
 
-        let enhancedData = null; // 缓存增强看板数据
-
-        // 打开增强看板
         async function openEnhancedDashboard() {
             try {
-                // 显示模态框
                 document.getElementById('enhancedModal').style.display = 'flex';
-
-                // 加载数据
                 await loadEnhancedDashboardData();
             } catch (error) {
                 console.error('打开增强看板失败:', error);
@@ -486,12 +619,10 @@
             }
         }
 
-        // 关闭增强看板
         function closeEnhancedDashboard() {
             document.getElementById('enhancedModal').style.display = 'none';
         }
 
-        // 点击模态框外部关闭
         window.onclick = function(event) {
             const modal = document.getElementById('enhancedModal');
             if (event.target === modal) {
@@ -499,7 +630,6 @@
             }
         }
 
-        // 加载增强看板数据
         async function loadEnhancedDashboardData() {
             try {
                 const response = await fetch('/api/etf/summary');
@@ -520,50 +650,30 @@
             }
         }
 
-        // 渲染增强看板
         function renderEnhancedDashboard() {
             const { summary, btc_etfs, eth_etfs } = enhancedData;
 
-            // 更新统计卡片
             document.getElementById('modalTotalETFs').textContent = summary.total_etfs || 0;
             document.getElementById('modalTotalBTC').textContent = formatNumber(summary.total_btc, 2);
             document.getElementById('modalTotalETH').textContent = formatNumber(summary.total_eth, 2);
             document.getElementById('modalTotalValue').textContent = '$' + formatLargeNumber(summary.total_value_usd);
 
-            // 渲染图表
             renderETFDistributionCharts(btc_etfs, eth_etfs);
         }
 
-        // 渲染ETF分布图表
         function renderETFDistributionCharts(btcETFs, ethETFs) {
-            // BTC ETF Top 5 持仓
-            const btcTop5 = btcETFs
-                .sort((a, b) => b.btc_holdings - a.btc_holdings)
-                .slice(0, 5);
+            const btcTop5 = btcETFs.sort((a, b) => b.btc_holdings - a.btc_holdings).slice(0, 5);
+            const ethTop5 = ethETFs.sort((a, b) => b.eth_holdings - a.eth_holdings).slice(0, 5);
 
-            // ETH ETF Top 5 持仓
-            const ethTop5 = ethETFs
-                .sort((a, b) => b.eth_holdings - a.eth_holdings)
-                .slice(0, 5);
-
-            // 渲染BTC Top 5柱状图
             renderBarChart('btcHoldingsChart', btcTop5, 'btc_holdings', 'BTC');
-
-            // 渲染ETH Top 5柱状图
             renderBarChart('ethHoldingsChart', ethTop5, 'eth_holdings', 'ETH');
-
-            // 渲染BTC提供商分布饼图
             renderProviderPieChart('btcProviderChart', btcETFs, 'btc_holdings');
-
-            // 渲染ETH提供商分布饼图
             renderProviderPieChart('ethProviderChart', ethETFs, 'eth_holdings');
         }
 
-        // 渲染柱状图
         function renderBarChart(canvasId, data, holdingsKey, assetType) {
             const ctx = document.getElementById(canvasId).getContext('2d');
 
-            // 销毁旧图表
             if (window[canvasId + 'Instance']) {
                 window[canvasId + 'Instance'].destroy();
             }
@@ -571,13 +681,12 @@
             const labels = data.map(etf => etf.symbol);
             const values = data.map(etf => etf[holdingsKey]);
 
-            // 颜色渐变
             const colors = [
-                'rgba(247, 147, 26, 0.8)',   // 金色
-                'rgba(192, 192, 192, 0.8)',  // 银色
-                'rgba(205, 127, 50, 0.8)',   // 铜色
-                'rgba(102, 126, 234, 0.8)',  // 紫色
-                'rgba(118, 184, 82, 0.8)'    // 绿色
+                'rgba(102, 126, 234, 0.8)',
+                'rgba(118, 75, 162, 0.8)',
+                'rgba(56, 239, 125, 0.8)',
+                'rgba(255, 106, 0, 0.8)',
+                'rgba(0, 242, 254, 0.8)'
             ];
 
             window[canvasId + 'Instance'] = new Chart(ctx, {
@@ -589,72 +698,63 @@
                         data: values,
                         backgroundColor: colors,
                         borderColor: colors.map(c => c.replace('0.8', '1')),
-                        borderWidth: 1
+                        borderWidth: 2
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: {
-                            display: false
-                        },
+                        legend: { display: false },
                         title: {
                             display: true,
                             text: `Top 5 ${assetType} ETF 持仓`,
-                            color: '#e0e7ff',
-                            font: { size: 14 }
+                            color: '#495057',
+                            font: { size: 16, weight: 'bold' }
                         }
                     },
                     scales: {
                         y: {
                             beginAtZero: true,
-                            ticks: { color: '#e0e7ff' },
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                            ticks: { color: '#6c757d' },
+                            grid: { color: '#e9ecef' }
                         },
                         x: {
-                            ticks: { color: '#e0e7ff' },
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                            ticks: { color: '#6c757d' },
+                            grid: { color: '#e9ecef' }
                         }
                     }
                 }
             });
         }
 
-        // 渲染提供商分布饼图
         function renderProviderPieChart(canvasId, etfs, holdingsKey) {
             const ctx = document.getElementById(canvasId).getContext('2d');
 
-            // 销毁旧图表
             if (window[canvasId + 'Instance']) {
                 window[canvasId + 'Instance'].destroy();
             }
 
-            // 按提供商聚合持仓
             const providerData = {};
             etfs.forEach(etf => {
-                const provider = etf.provider;
+                const provider = etf.provider || 'Unknown';
                 const holdings = etf[holdingsKey] || 0;
                 providerData[provider] = (providerData[provider] || 0) + holdings;
             });
 
-            // 转换为数组并排序
-            const providers = Object.entries(providerData)
-                .sort((a, b) => b[1] - a[1]);
-
+            const providers = Object.entries(providerData).sort((a, b) => b[1] - a[1]);
             const labels = providers.map(p => p[0]);
             const values = providers.map(p => p[1]);
 
-            // 彩色调色板
             const colors = [
-                'rgba(247, 147, 26, 0.8)',
                 'rgba(102, 126, 234, 0.8)',
-                'rgba(118, 184, 82, 0.8)',
-                'rgba(237, 100, 166, 0.8)',
-                'rgba(255, 159, 64, 0.8)',
-                'rgba(153, 102, 255, 0.8)',
-                'rgba(54, 162, 235, 0.8)',
-                'rgba(255, 99, 132, 0.8)'
+                'rgba(118, 75, 162, 0.8)',
+                'rgba(56, 239, 125, 0.8)',
+                'rgba(255, 106, 0, 0.8)',
+                'rgba(0, 242, 254, 0.8)',
+                'rgba(255, 215, 0, 0.8)',
+                'rgba(247, 147, 26, 0.8)',
+                'rgba(98, 126, 234, 0.8)'
             ];
 
             window[canvasId + 'Instance'] = new Chart(ctx, {
@@ -665,7 +765,7 @@
                         data: values,
                         backgroundColor: colors,
                         borderColor: colors.map(c => c.replace('0.8', '1')),
-                        borderWidth: 1
+                        borderWidth: 2
                     }]
                 },
                 options: {
@@ -674,13 +774,13 @@
                     plugins: {
                         legend: {
                             position: 'right',
-                            labels: { color: '#e0e7ff', font: { size: 11 } }
+                            labels: { color: '#495057', font: { size: 12 } }
                         },
                         title: {
                             display: true,
                             text: '提供商分布',
-                            color: '#e0e7ff',
-                            font: { size: 14 }
+                            color: '#495057',
+                            font: { size: 16, weight: 'bold' }
                         }
                     }
                 }
@@ -688,61 +788,49 @@
         }
     </script>
 
-    <!-- 引入Chart.js用于后续图表扩展 -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
     <!-- 增强看板模态框 -->
-    <div id="enhancedModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; padding: 30px; max-width: 1200px; width: 90%; max-height: 90vh; overflow-y: auto; position: relative;">
-            <!-- 关闭按钮 -->
-            <button onclick="closeEnhancedDashboard()" style="position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); border: none; color: white; font-size: 24px; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; transition: all 0.3s;">×</button>
-
-            <!-- 标题 -->
-            <h2 style="color: white; text-align: center; margin-bottom: 30px; font-size: 28px;">
+    <div id="enhancedModal" class="enhanced-modal">
+        <div class="enhanced-modal-content">
+            <button class="modal-close-btn" onclick="closeEnhancedDashboard()">&times;</button>
+            
+            <h2 style="color: var(--primary); margin-bottom: 30px; font-size: 2rem; font-weight: 700;">
                 📊 ETF 增强看板
             </h2>
 
-            <!-- 统计卡片 -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
-                <div style="background: rgba(255,255,255,0.15); padding: 20px; border-radius: 12px; text-align: center;">
-                    <div style="color: rgba(255,255,255,0.8); font-size: 14px; margin-bottom: 8px;">ETF总数量</div>
-                    <div id="modalTotalETFs" style="color: white; font-size: 32px; font-weight: bold;">-</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 25px; border-radius: 15px; text-align: center; color: white;">
+                    <div style="font-size: 0.9rem; opacity: 0.9; margin-bottom: 10px;">ETF总数量</div>
+                    <div id="modalTotalETFs" style="font-size: 2.5rem; font-weight: bold;">-</div>
                 </div>
-                <div style="background: rgba(255,255,255,0.15); padding: 20px; border-radius: 12px; text-align: center;">
-                    <div style="color: rgba(255,255,255,0.8); font-size: 14px; margin-bottom: 8px;">BTC总持仓</div>
-                    <div id="modalTotalBTC" style="color: #f7931a; font-size: 32px; font-weight: bold;">-</div>
-                    <div style="color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 4px;">BTC</div>
+                <div style="background: linear-gradient(135deg, #f7931a 0%, #ffa500 100%); padding: 25px; border-radius: 15px; text-align: center; color: white;">
+                    <div style="font-size: 0.9rem; opacity: 0.9; margin-bottom: 10px;">BTC总持仓</div>
+                    <div id="modalTotalBTC" style="font-size: 2.5rem; font-weight: bold;">-</div>
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">BTC</div>
                 </div>
-                <div style="background: rgba(255,255,255,0.15); padding: 20px; border-radius: 12px; text-align: center;">
-                    <div style="color: rgba(255,255,255,0.8); font-size: 14px; margin-bottom: 8px;">ETH总持仓</div>
-                    <div id="modalTotalETH" style="color: #627eea; font-size: 32px; font-weight: bold;">-</div>
-                    <div style="color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 4px;">ETH</div>
+                <div style="background: linear-gradient(135deg, #627eea 0%, #8b9eff 100%); padding: 25px; border-radius: 15px; text-align: center; color: white;">
+                    <div style="font-size: 0.9rem; opacity: 0.9; margin-bottom: 10px;">ETH总持仓</div>
+                    <div id="modalTotalETH" style="font-size: 2.5rem; font-weight: bold;">-</div>
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 5px;">ETH</div>
                 </div>
-                <div style="background: rgba(255,255,255,0.15); padding: 20px; border-radius: 12px; text-align: center;">
-                    <div style="color: rgba(255,255,255,0.8); font-size: 14px; margin-bottom: 8px;">总市值</div>
-                    <div id="modalTotalValue" style="color: #38ef7d; font-size: 32px; font-weight: bold;">-</div>
+                <div style="background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%); padding: 25px; border-radius: 15px; text-align: center; color: white;">
+                    <div style="font-size: 0.9rem; opacity: 0.9; margin-bottom: 10px;">总市值</div>
+                    <div id="modalTotalValue" style="font-size: 2.5rem; font-weight: bold;">-</div>
                 </div>
             </div>
 
-            <!-- 图表区域 -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px;">
-                <!-- BTC Top 5 持仓 -->
-                <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 12px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 25px;">
+                <div style="background: #f8f9fa; padding: 25px; border-radius: 15px;">
                     <canvas id="btcHoldingsChart" height="250"></canvas>
                 </div>
-
-                <!-- ETH Top 5 持仓 -->
-                <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 12px;">
+                <div style="background: #f8f9fa; padding: 25px; border-radius: 15px;">
                     <canvas id="ethHoldingsChart" height="250"></canvas>
                 </div>
-
-                <!-- BTC 提供商分布 -->
-                <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 12px;">
+                <div style="background: #f8f9fa; padding: 25px; border-radius: 15px;">
                     <canvas id="btcProviderChart" height="250"></canvas>
                 </div>
-
-                <!-- ETH 提供商分布 -->
-                <div style="background: rgba(255,255,255,0.1); padding: 20px; border-radius: 12px;">
+                <div style="background: #f8f9fa; padding: 25px; border-radius: 15px;">
                     <canvas id="ethProviderChart" height="250"></canvas>
                 </div>
             </div>
