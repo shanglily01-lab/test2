@@ -140,8 +140,8 @@ async def lifespan(app: FastAPI):
         # 初始化价格缓存服务
         try:
             db_config = config.get('database', {})
-            price_cache_service = init_global_price_cache(db_config, update_interval=5)
-            logger.info("✅ 价格缓存服务初始化成功（每5秒更新）")
+            price_cache_service = init_global_price_cache(db_config, update_interval=3)
+            logger.info("✅ 价格缓存服务初始化成功（每3秒更新）")
         except Exception as e:
             logger.warning(f"⚠️  价格缓存服务初始化失败: {e}")
             price_cache_service = None

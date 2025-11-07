@@ -13,7 +13,7 @@
 - ETF 数据 (SoSoValue/CoinGlass API): 每天 13:17
 
 缓存更新频率（性能优化）：
-- 价格统计缓存: 每1分钟
+- 价格统计缓存: 每30秒
 - 分析缓存 (技术指标、新闻情绪、资金费率、投资建议): 每5分钟
 - Hyperliquid聚合缓存: 每10分钟
 """
@@ -1161,11 +1161,11 @@ class UnifiedDataScheduler:
         # 7. 缓存更新任务
         logger.info("\n  🚀 性能优化: 缓存自动更新")
 
-        # 价格缓存 - 每1分钟
-        schedule.every(1).minutes.do(
+        # 价格缓存 - 每30秒
+        schedule.every(30).seconds.do(
             lambda: asyncio.run(self.update_price_cache())
         )
-        logger.info("  ✓ 价格统计缓存 - 每 1 分钟")
+        logger.info("  ✓ 价格统计缓存 - 每 30 秒")
 
         # 分析缓存 - 每5分钟
         schedule.every(5).minutes.do(
@@ -1301,7 +1301,7 @@ class UnifiedDataScheduler:
     # ==================== 缓存更新任务 ====================
 
     async def update_price_cache(self):
-        """更新价格统计缓存 (每1分钟)"""
+        """更新价格统计缓存 (每30秒)"""
         task_name = 'cache_price'
         try:
             logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始更新价格缓存...")

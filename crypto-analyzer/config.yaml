@@ -18,7 +18,8 @@ symbols:
   - SUI/USDT
   - APT/USDT
   - ZEC/USDT
-  - VIRTUAL/USDT  # 虚拟币
+  - VIRTUAL/USDT
+  - PUMP/USDT  # 泵币
   # 添加更多币种...
 
 # ==================== 交易所配置 ====================
@@ -43,7 +44,7 @@ exchanges:
 # ==================== 数据采集配置 ====================
 collector:
   # 价格数据采集间隔（秒）
-  price_interval: 60
+  price_interval: 30  # 从60秒优化为30秒，提升实时性
 
   # K线时间周期
   timeframes:
