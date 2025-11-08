@@ -4,1319 +4,1283 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>加密货币智能分析系统 - 增强版</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
+        /* Crypto Analyzer - Enhanced Professional Trading Platform UI */
         :root {
-            --primary: #667eea;
-            --success: #38ef7d;
-            --danger: #ff6a00;
-            --warning: #ffc107;
-            --info: #00f2fe;
-            --dark: #1a1a2e;
-            --light: #f8f9fa;
+            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
+            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
+            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
+            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
+            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
+            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
+            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
+            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
+            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
+            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
         }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
+        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
+        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
+        .header-subtitle { color: var(--text-secondary); font-size: 13px; }
+        .nav-container { background: var(--bg-secondary); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
+        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; }
+        .nav-link { padding: var(--spacing-sm) var(--spacing-lg); background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 500; font-size: 13px; border: 1px solid transparent; }
+        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
+        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
+        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
+        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .card-body { padding: 0; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
+        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; cursor: pointer; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
+        .stat-card:hover::before { opacity: 1; }
+        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
+        .stat-change { font-size: 13px; color: var(--text-secondary); }
+        .stat-change.positive { color: var(--success-green); }
+        .stat-change.negative { color: var(--danger-red); }
+        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
+        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
+        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
+        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
+        th:hover { background: var(--bg-hover); }
+        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
+        tr:last-child td { border-bottom: none; }
+        tbody tr { transition: background-color var(--transition-fast); }
+        tbody tr:hover { background: var(--bg-hover); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-success { background: var(--success-green); color: white; }
+        .btn-success:hover:not(:disabled) { background: #059669; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-danger { background: var(--danger-red); color: white; }
+        .btn-danger:hover:not(:disabled) { background: #DC2626; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
+        .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-muted); }
+        .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
+        .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+        .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
+        .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
+        .badge-success { background: var(--success-green-bg); color: var(--success-green); }
+        .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
+        .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
+        .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
+        .badge-warning { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
+        .price { font-family: var(--font-mono); font-weight: 600; font-size: 16px; }
+        .position-card { background: var(--bg-card); border: 1px solid var(--border-default); border-left-width: 4px; border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); transition: all var(--transition-base); }
+        .position-card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
+        .position-card.long { border-left-color: var(--success-green); }
+        .position-card.short { border-left-color: var(--danger-red); }
+        .pnl-positive { color: var(--success-green); }
+        .pnl-negative { color: var(--danger-red); }
 
-        body {
-            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%);
-            background-attachment: fixed;
-            min-height: 100vh;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            color: #e0e0e0;
-            line-height: 1.6;
-        }
-
-        /* 导航栏 */
-        .navbar {
-            background: rgba(20, 25, 45, 0.95) !important;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .navbar-brand {
-            font-weight: 700;
-            font-size: 1.5rem;
-            background: linear-gradient(135deg, var(--primary), var(--success));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        /* 统计卡片 */
-        .stat-card {
-            border-radius: 20px;
-            border: none;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-            overflow: hidden;
+        /* Tooltip styles */
+        .tooltip-trigger {
             position: relative;
         }
 
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.2);
+        .tooltip-trigger::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-8px);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            max-width: 300px;
+            white-space: normal;
+            width: max-content;
+            z-index: 10000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s, transform 0.2s;
         }
 
-        .stat-card::before {
+        .tooltip-trigger:hover::after {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-4px);
+        }
+
+        .tooltip-trigger::before {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 5px;
-        }
-
-        .stat-card.primary::before { background: var(--primary); }
-        .stat-card.success::before { background: var(--success); }
-        .stat-card.danger::before { background: var(--danger); }
-        .stat-card.info::before { background: var(--info); }
-
-        .stat-icon {
-            font-size: 3rem;
-            opacity: 0.2;
-            position: absolute;
-            right: 20px;
-            bottom: 10px;
-        }
-
-        .stat-value {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin: 0;
-        }
-
-        .stat-label {
-            font-size: 0.9rem;
-            color: #6c757d;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        /* 主卡片 */
-        .main-card {
-            background: white;
-            border-radius: 20px;
-            border: none;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-
-        .card-header-custom {
-            background: linear-gradient(135deg, var(--primary) 0%, #764ba2 100%);
-            color: white;
-            padding: 1.5rem;
-            border: none;
-        }
-
-        .card-header-custom h5 {
-            margin: 0;
-            font-weight: 600;
-        }
-
-        /* 投资建议卡片 */
-        .recommendation-card {
-            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
-            border-radius: 15px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            border-left: 5px solid var(--primary);
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s ease;
-        }
-
-        .recommendation-card:hover {
-            transform: translateX(5px);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
-        }
-
-        .signal-badge {
-            display: inline-block;
-            padding: 0.5rem 1rem;
-            border-radius: 25px;
-            font-weight: 600;
-            font-size: 0.9rem;
-            letter-spacing: 0.5px;
-        }
-
-        .signal-STRONG_BUY {
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-            color: white;
-            box-shadow: 0 4px 15px rgba(56, 239, 125, 0.4);
-        }
-
-        .signal-BUY {
-            background: #d1f4e0;
-            color: #198754;
-        }
-
-        .signal-HOLD {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .signal-SELL {
-            background: #f8d7da;
-            color: #dc3545;
-        }
-
-        .signal-STRONG_SELL {
-            background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
-            color: white;
-            box-shadow: 0 4px 15px rgba(255, 106, 0, 0.4);
-        }
-
-        /* 评分雷达图容器 */
-        .score-radar {
-            width: 200px;
-            height: 200px;
-            margin: 0 auto;
-        }
-
-        /* 价格表格 */
-        .price-table {
-            font-size: 0.95rem;
-        }
-
-        .price-table tbody tr {
-            transition: background-color 0.2s ease;
-        }
-
-        .price-table tbody tr:hover {
-            background-color: rgba(102, 126, 234, 0.1);
-        }
-
-        .price-up {
-            color: #38ef7d;
-            font-weight: 600;
-        }
-
-        .price-down {
-            color: #ff6a00;
-            font-weight: 600;
-        }
-
-        /* 新闻卡片 */
-        .news-card {
-            padding: 1rem;
-            border-bottom: 1px solid #e0e0e0;
-            transition: all 0.2s ease;
-        }
-
-        .news-card:hover {
-            background-color: rgba(102, 126, 234, 0.05);
-        }
-
-        .news-card:last-child {
-            border-bottom: none;
-        }
-
-        .sentiment-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 15px;
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-
-        .sentiment-positive { background: #d1f4e0; color: #198754; }
-        .sentiment-negative { background: #f8d7da; color: #dc3545; }
-        .sentiment-neutral { background: #e2e3e5; color: #6c757d; }
-
-        /* Hyperliquid聪明钱 */
-        .smart-money-card {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: white;
-            border-radius: 15px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .smart-money-stat {
-            text-align: center;
-            padding: 1rem;
-        }
-
-        .smart-money-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--success);
-        }
-
-        .smart-money-label {
-            font-size: 0.8rem;
-            opacity: 0.7;
-            text-transform: uppercase;
-        }
-
-        /* 交易列表 */
-        .trade-item {
-            background: rgba(255, 255, 255, 0.05);
-            padding: 0.75rem;
-            border-radius: 10px;
-            margin-bottom: 0.5rem;
-            font-size: 0.9rem;
-        }
-
-        .trade-long { border-left: 4px solid var(--success); }
-        .trade-short { border-left: 4px solid var(--danger); }
-
-        /* 进度条 */
-        .custom-progress {
-            height: 10px;
-            border-radius: 10px;
-            background: rgba(0, 0, 0, 0.1);
-        }
-
-        .custom-progress-bar {
-            border-radius: 10px;
-            transition: width 0.6s ease;
-        }
-
-        /* 加载动画 */
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* 价格更新动画 */
-        @keyframes priceFlash {
-            0% { background-color: rgba(56, 239, 125, 0.3); }
-            100% { background-color: transparent; }
-        }
-
-        .price-updated {
-            animation: priceFlash 0.8s ease;
-        }
-
-        /* 滚动条 */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.05);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--primary);
-            border-radius: 10px;
-        }
-
-        /* 响应式 */
-        @media (max-width: 768px) {
-            .stat-value { font-size: 2rem; }
-            .recommendation-card { padding: 1rem; }
-        }
-
-        /* 标签样式 */
-        .badge-custom {
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-
-        /* 详细信息展开 */
-        details summary {
-            cursor: pointer;
-            user-select: none;
-            font-weight: 600;
-            color: var(--primary);
-        }
-
-        details summary:hover {
-            color: var(--danger);
-        }
-
-        /* 工具提示 */
-        .tooltip-custom {
-            position: relative;
-            display: inline-block;
-        }
-
-        .tooltip-custom .tooltip-text {
-            visibility: hidden;
-            background-color: #333;
-            color: #fff;
-            text-align: center;
-            border-radius: 6px;
-            padding: 5px 10px;
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
+            bottom: 100%;
             left: 50%;
-            margin-left: -60px;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: rgba(0, 0, 0, 0.9);
             opacity: 0;
-            transition: opacity 0.3s;
+            transition: opacity 0.2s;
+            z-index: 10000;
         }
 
-        .tooltip-custom:hover .tooltip-text {
-            visibility: visible;
+        .tooltip-trigger:hover::before {
             opacity: 1;
+        }
+
+        .status-indicator { display: inline-flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); background: var(--bg-tertiary); border-radius: var(--radius-full); font-size: 12px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .status-dot.online { background: var(--success-green); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
+        .empty-state-icon { font-size: 48px; margin-bottom: var(--spacing-lg); opacity: 0.5; }
+        .empty-state-text { font-size: 15px; margin-bottom: var(--spacing-sm); }
+        .text-primary { color: var(--text-primary); } .text-secondary { color: var(--text-secondary); }
+        .text-success { color: var(--success-green); } .text-danger { color: var(--danger-red); }
+        .text-warning { color: var(--warning-yellow); }
+        .d-flex { display: flex; } .align-center { align-items: center; } .justify-between { justify-content: space-between; }
+        .gap-sm { gap: var(--spacing-sm); } .gap-md { gap: var(--spacing-md); }
+        .mb-sm { margin-bottom: var(--spacing-sm); } .font-mono { font-family: var(--font-mono); }
+        .text-xs { font-size: 11px; } .text-sm { font-size: 13px; } .text-2xl { font-size: 24px; }
+        .font-bold { font-weight: 700; }
+        .fade-in { animation: fadeIn var(--transition-base) ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .chart-container { position: relative; height: 300px; }
+        .mini-chart { height: 80px; }
+        .alert-badge { position: absolute; top: -8px; right: -8px; background: var(--danger-red); color: white; border-radius: var(--radius-full); width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; animation: bounce 2s infinite; }
+        @keyframes bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } 60% { transform: translateY(-5px); } }
+        .notification { position: fixed; top: 80px; right: 20px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); box-shadow: var(--shadow-xl); z-index: 1000; min-width: 300px; animation: slideInRight 0.3s ease-out; }
+        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .notification.success { border-left: 4px solid var(--success-green); }
+        .notification.warning { border-left: 4px solid var(--warning-yellow); }
+        .notification.error { border-left: 4px solid var(--danger-red); }
+        .spinner { border: 3px solid var(--bg-tertiary); border-top: 3px solid var(--primary-blue); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .portfolio-item { padding: var(--spacing-md); background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: var(--spacing-sm); }
+        .search-box { width: 100%; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; }
+        .search-box:focus { outline: none; border-color: var(--primary-blue); }
+        @media (max-width: 768px) {
+            .container { padding: var(--spacing-md); }
+            .stats-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-md); }
+            .stat-value { font-size: 20px; }
+            .nav-links { flex-direction: column; }
+            th, td { padding: var(--spacing-sm); }
+            .chart-container { height: 200px; }
         }
     </style>
 </head>
 <body>
-    <!-- 导航栏 -->
-    <nav class="navbar navbar-dark sticky-top">
-        <div class="container-fluid">
-            <a class="navbar-brand">
-                <i class="bi bi-graph-up-arrow"></i>
-                加密货币智能分析系统 - 增强版
-            </a>
-            <div class="d-flex align-items-center">
-                <a href="/paper_trading" class="btn btn-sm btn-outline-warning me-2">
-                    <i class="bi bi-wallet2"></i> 模拟交易
+    <div class="container">
+        <!-- Header -->
+        <header class="header fade-in">
+            <div class="d-flex justify-between align-center">
+                <div>
+                    <h1 class="header-title">
+                        <i class="bi bi-graph-up"></i>
+                        加密货币智能分析系统 - 增强版
+                    </h1>
+                    <p class="header-subtitle">
+                        <span class="status-indicator">
+                            <span class="status-dot online"></span>
+                            系统运行中
+                        </span>
+                        <span style="margin-left: 16px;">最后更新: <span id="lastUpdate">--</span></span>
+                        <span style="margin-left: 16px;">下次刷新: <span id="nextRefresh">30</span>秒</span>
+                    </p>
+                </div>
+                <div class="d-flex gap-md">
+                    <button class="btn btn-ghost" onclick="toggleAlerts()" style="position: relative;">
+                        <i class="bi bi-bell"></i> 提醒
+                        <span class="alert-badge" id="alertCount" style="display: none;">0</span>
+                    </button>
+                    <button class="btn btn-ghost" onclick="refreshData()">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.location.href='/settings'">
+                        <i class="bi bi-gear"></i> 设置
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-container slide-up">
+            <div class="nav-links">
+                <a href="/" class="nav-link active">
+                    <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
-                <a href="/contract-trading" class="btn btn-sm btn-outline-success me-2">
-                    <i class="bi bi-graph-up-arrow"></i> 模拟合约
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 合约交易
                 </a>
-                <a href="/strategies" class="btn btn-sm btn-outline-primary me-2">
-                    <i class="bi bi-lightning-charge"></i> 投资策略
+                <a href="/contract_trading" class="nav-link">
+                    <i class="bi bi-cash-stack"></i> 模拟合约
                 </a>
-                <a href="/auto-trading" class="btn btn-sm btn-outline-danger me-2">
-                    <i class="bi bi-robot"></i> 自动合约交易
+                <a href="/paper_trading" class="nav-link">
+                    <i class="bi bi-journals"></i> 模拟现货
                 </a>
-                <a href="/etf-data" class="btn btn-sm btn-outline-primary me-2">
-                    <i class="bi bi-graph-up"></i> ETF数据
+                <a href="/strategies" class="nav-link">
+                    <i class="bi bi-diagram-3"></i> 策略管理
                 </a>
-                <a href="/corporate-treasury" class="btn btn-sm btn-outline-info me-2">
-                    <i class="bi bi-bank"></i> 企业金库
-                </a>
-                <span class="text-white me-3">
-                    <i class="bi bi-clock"></i>
-                    <span id="current-time"></span>
-                </span>
-                <button class="btn btn-sm btn-outline-light" onclick="loadDashboard()">
-                    <i class="bi bi-arrow-clockwise"></i> 刷新
-                </button>
+            </div>
+        </nav>
+
+
+        <!-- 24h EMA Signals Cards -->
+        <div class="card slide-up" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                    <h2 class="card-title" style="margin: 0;">
+                        <i class="bi bi-graph-up"></i>
+                        24小时 EMA 信号【15分钟】
+                    </h2>
+                    <button class="btn btn-sm btn-outline" onclick="toggleEmaExplanation()" style="font-size: 12px; padding: 4px 12px;">
+                        <i class="bi bi-info-circle"></i> EMA信号说明
+                    </button>
+                </div>
+                <div class="d-flex gap-sm">
+                    <span class="badge badge-success" id="ema24hBuyCount">买入: 0</span>
+                    <span class="badge badge-danger" id="ema24hSellCount">卖出: 0</span>
+                    <span class="badge badge-info" id="ema24hTotalCount">总计: 0</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="ema24hCardsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; max-height: 380px; overflow-y: auto;">
+                    <div class="empty-state">
+                        <div class="empty-state-text">加载中...</div>
+                    </div>
+                </div>
             </div>
         </div>
-    </nav>
 
-    <div class="container-fluid p-4">
-        <!-- 顶部统计卡片 -->
-        <div class="row g-3 mb-4">
-            <div class="col-md-3">
-                <div class="stat-card primary bg-white p-3">
-                    <div class="stat-label">监控币种</div>
-                    <div class="stat-value" id="total-symbols">-</div>
-                    <i class="bi bi-coin stat-icon"></i>
+        <!-- Main Content Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+            <!-- Investment Recommendations -->
+            <div class="card slide-up" id="recommendations">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-lightbulb"></i>
+                        投资建议
+                    </h2>
+                    <button class="btn btn-sm btn-secondary" onclick="showInvestmentExplanation()">
+                        <i class="bi bi-info-circle"></i> 智能投资说明
+                    </button>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <div id="recommendationsContainer" style="max-height: 600px; overflow-y: scroll; overflow-x: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">💡</div>
+                            <div class="empty-state-text">加载中...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="stat-card success bg-white p-3">
-                    <div class="stat-label">看涨信号</div>
-                    <div class="stat-value text-success" id="bullish-count">-</div>
-                    <i class="bi bi-arrow-up-circle stat-icon"></i>
+
+            <!-- Price Table -->
+            <div class="card slide-up" id="prices">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-currency-exchange"></i>
+                        实时价格
+                    </h2>
+                    <span class="badge badge-info" id="priceCount">0</span>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stat-card danger bg-white p-3">
-                    <div class="stat-label">看跌信号</div>
-                    <div class="stat-value text-danger" id="bearish-count">-</div>
-                    <i class="bi bi-arrow-down-circle stat-icon"></i>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="stat-card info bg-white p-3">
-                    <div class="stat-label">聪明钱钱包</div>
-                    <div class="stat-value text-info" id="smart-money-count">-</div>
-                    <i class="bi bi-wallet2 stat-icon"></i>
+                <div class="card-body" style="padding: 0;">
+                    <div style="max-height: 600px; overflow-y: scroll; overflow-x: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
+                        <table id="priceTable" style="width: 100%; border-collapse: collapse; background: var(--bg-card);">
+                            <thead style="position: sticky; top: 0; background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); z-index: 1;">
+                                <tr>
+                                    <th onclick="sortPrices('symbol')" style="padding: 12px 16px; text-align: left; cursor: pointer;">交易对 <i class="bi bi-arrow-down-up"></i></th>
+                                    <th onclick="sortPrices('price')" style="padding: 12px 16px; text-align: left; cursor: pointer;">价格 (USDT) <i class="bi bi-arrow-down-up"></i></th>
+                                    <th onclick="sortPrices('change_24h')" style="padding: 12px 16px; text-align: left; cursor: pointer;">24h涨跌 <i class="bi bi-arrow-down-up"></i></th>
+                                    <th onclick="sortPrices('volume_24h')" style="padding: 12px 16px; text-align: left; cursor: pointer;">24h交易量 <i class="bi bi-arrow-down-up"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody id="priceTableBody">
+                                <tr>
+                                    <td colspan="4" class="empty-state">
+                                        <div class="empty-state-icon">📊</div>
+                                        <div class="empty-state-text">加载中...</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- EMA信号区域 -->
-        <div class="row g-3 mb-4">
-            <div class="col-12">
-                <div class="main-card">
-                    <div class="card-header-custom d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            <i class="bi bi-graph-up"></i> EMA交易信号 (15分钟)
-                        </h5>
+        <!-- News and Futures Section Side by Side -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+            <!-- News Section -->
+            <div class="card slide-up">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-newspaper"></i>
+                        最新新闻
+                    </h2>
+                    <span class="badge badge-info" id="newsCount">0</span>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <div id="newsContainer" style="max-height: 500px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📰</div>
+                            <div class="empty-state-text">加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Real-time Futures Section -->
+            <div class="card slide-up">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-lightning"></i>
+                        实时合约
+                    </h2>
+                    <span class="badge badge-success">实时</span>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <div style="max-height: 500px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
+                        <table style="width: 100%; border-collapse: collapse; background: var(--bg-card);">
+                            <thead style="position: sticky; top: 0; background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); z-index: 1;">
+                                <tr>
+                                    <th style="padding: 12px 16px; text-align: left;">交易对</th>
+                                    <th style="padding: 12px 16px; text-align: left;">标记价格</th>
+                                    <th style="padding: 12px 16px; text-align: left;">资金费率</th>
+                                    <th style="padding: 12px 16px; text-align: left;">24h涨跌</th>
+                                    <th style="padding: 12px 16px; text-align: left;">多空比</th>
+                                    <th style="padding: 12px 16px; text-align: left;">未平仓量</th>
+                                </tr>
+                            </thead>
+                            <tbody id="futuresBody">
+                                <tr>
+                                    <td colspan="6" class="empty-state">
+                                        <div class="empty-state-text">加载中...</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hyperliquid Section -->
+        <div class="card slide-up" id="hyperliquid">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-wallet2"></i>
+                    Hyperliquid 聪明钱活动
+                </h2>
+                <span class="badge badge-success">实时</span>
+            </div>
+            <div class="card-body">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                        <div class="text-secondary text-sm mb-sm">24h交易量</div>
+                        <div class="text-2xl font-bold" id="hlVolume24h">--</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                        <div class="text-secondary text-sm mb-sm">活跃钱包</div>
+                        <div class="text-2xl font-bold" id="hlActiveWallets">--</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                        <div class="text-secondary text-sm mb-sm">最近交易</div>
+                        <div class="text-2xl font-bold" id="hlRecentTrades">--</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                        <div class="text-secondary text-sm mb-sm">做多/做空比</div>
+                        <div class="text-2xl font-bold" id="hlLongShortRatio">--</div>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>钱包</th>
+                                <th>币种</th>
+                                <th>方向</th>
+                                <th>金额 (USD)</th>
+                                <th>盈亏</th>
+                                <th>时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hlTradesBody">
+                            <tr>
+                                <td colspan="6" class="empty-state">
+                                    <div class="empty-state-text">加载中...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let currentData = null;
+        let sortColumn = 'change_24h';
+        let sortDirection = 'desc';
+        let refreshCountdown = 30;
+        let refreshInterval = null;
+        let countdownInterval = null;
+        let charts = {};
+
+        // 智能格式化价格
+        function formatPrice(price) {
+            if (price === null || price === undefined || isNaN(price)) return '-';
+            const num = parseFloat(price);
+            if (num >= 1000) {
+                return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            } else if (num >= 1) {
+                return num.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+            } else {
+                return num.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 });
+            }
+        }
+
+        // 格式化大数字
+        function formatLargeNumber(num) {
+            if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
+            if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
+            return num.toFixed(2);
+        }
+
+        // 加载数据
+        async function loadData() {
+            try {
+                const response = await fetch('/api/dashboard');
+                const data = await response.json();
+
+                if (data.success) {
+                    currentData = data.data;
+                    updateStats(data.data);
+                    updatePriceTable(data.data.prices);
+                    updateRecommendations(data.data.recommendations);
+                    updateNews(data.data.news);
+                    updateHyperliquid(data.data.hyperliquid);
+                    updateCharts(data.data);
+                    loadFuturesData();
+                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('zh-CN');
+                    resetRefreshCountdown();
+                    checkAlerts(data.data);
+                }
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                showNotification('数据加载失败', 'error');
+            }
+        }
+
+        // 更新统计数据
+        function updateStats(data) {
+            // 统计面板已移除,此函数保留为空以兼容
+        }
+
+        // 更新图表
+        function updateCharts(data) {
+            // 迷你图表已移除,此函数保留为空以兼容
+        }
+
+        // 更新价格表
+        async function updatePriceTable(prices) {
+            const tbody = document.getElementById('priceTableBody');
+            document.getElementById('priceCount').textContent = prices?.length || 0;
+
+            if (!prices || prices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><div class="empty-state-text">暂无数据</div></td></tr>';
+                return;
+            }
+
+            // 排序
+            const sorted = [...prices].sort((a, b) => {
+                const aVal = a[sortColumn] || 0;
+                const bVal = b[sortColumn] || 0;
+                return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+
+            tbody.innerHTML = sorted.map(p => {
+                return `
+                    <tr>
+                        <td><strong>${p.symbol}</strong></td>
+                        <td class="price font-mono">$${formatPrice(p.price)}</td>
+                        <td class="${p.change_24h >= 0 ? 'pnl-positive' : 'pnl-negative'} font-bold">
+                            ${p.change_24h >= 0 ? '+' : ''}${p.change_24h.toFixed(2)}%
+                        </td>
+                        <td class="text-secondary">$${formatLargeNumber(p.volume_24h)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 排序价格表
+        function sortPrices(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'desc';
+            }
+            if (currentData) {
+                updatePriceTable(currentData.prices);
+            }
+        }
+
+        // 更新投资建议
+        async function updateRecommendations(recommendations) {
+            const container = document.getElementById('recommendationsContainer');
+
+            if (!recommendations || recommendations.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无建议</div></div>';
+                return;
+            }
+
+            // 显示所有建议,取前10个
+            const allRecs = recommendations.slice(0, 10);
+
+            container.innerHTML = allRecs.map(rec => {
+                // 根据信号类型设置样式
+                let cardClass = 'position-card';
+                let badgeClass = 'badge-neutral';
+                let badgeText = '观望';
+
+                if (rec.signal === 'STRONG_BUY') {
+                    cardClass += ' long';
+                    badgeClass = 'badge-success';
+                    badgeText = '强烈买入';
+                } else if (rec.signal === 'BUY') {
+                    cardClass += ' long';
+                    badgeClass = 'badge-success';
+                    badgeText = '买入';
+                } else if (rec.signal === 'STRONG_SELL') {
+                    cardClass += ' short';
+                    badgeClass = 'badge-danger';
+                    badgeText = '强烈卖出';
+                } else if (rec.signal === 'SELL') {
+                    cardClass += ' short';
+                    badgeClass = 'badge-danger';
+                    badgeText = '卖出';
+                }
+
+                // 获取维度评分，BTC和ETH有6个维度，其他币种5个维度
+                const scores = rec.scores || rec.score || {};
+                const isBTCorETH = rec.symbol === 'BTCUSDT' || rec.symbol === 'ETHUSDT' ||
+                                   rec.symbol === 'BTC/USDT' || rec.symbol === 'ETH/USDT' ||
+                                   rec.full_symbol === 'BTC/USDT' || rec.full_symbol === 'ETH/USDT';
+
+                // 解析reasons列表，提取各维度的理由
+                const reasons = rec.reasons || [];
+                const reasonMap = {
+                    technical: '基于EMA、MACD、RSI等指标综合分析',
+                    news: '分析最近24小时相关新闻情绪',
+                    funding: '永续合约资金费率反映多空力量',
+                    hyperliquid: '聪明钱交易动向追踪',
+                    ethereum: '链上活跃度和交易量分析',
+                    etf: 'ETF净流入/流出资金监控'
+                };
+
+                // 从reasons中提取理由
+                reasons.forEach(reason => {
+                    if (reason.includes('技术指标')) {
+                        reasonMap.technical = reason.replace('📊 ', '');
+                    } else if (reason.includes('新闻面')) {
+                        reasonMap.news = reason.replace('📰 ', '');
+                    } else if (reason.includes('资金费率')) {
+                        reasonMap.funding = reason.replace('💰 ', '');
+                    } else if (reason.includes('Hyperliquid')) {
+                        reasonMap.hyperliquid = reason.replace('🧠 ', '');
+                    } else if (reason.includes('链上')) {
+                        reasonMap.ethereum = reason.replace('⛓️  ', '');
+                    } else if (reason.includes('ETF')) {
+                        reasonMap.etf = reason.replace('🏦 ', '');
+                    }
+                });
+
+                const dimensions = [
+                    { name: '技术指标', key: 'technical', value: scores.technical || 50, reason: reasonMap.technical },
+                    { name: '新闻情绪', key: 'news', value: scores.news || 50, reason: reasonMap.news },
+                    { name: '资金费率', key: 'funding', value: scores.funding || 50, reason: reasonMap.funding },
+                    { name: 'Hyperliquid', key: 'hyperliquid', value: scores.hyperliquid || 50, reason: reasonMap.hyperliquid },
+                    { name: '链上数据', key: 'ethereum', value: scores.ethereum || 50, reason: reasonMap.ethereum }
+                ];
+
+                // 只有BTC和ETH才显示ETF维度，并且确保有ETF数据
+                if (isBTCorETH && (scores.etf !== undefined || reasonMap.etf !== 'ETF净流入/流出资金监控')) {
+                    dimensions.push({ name: 'ETF流向', key: 'etf', value: scores.etf || 50, reason: reasonMap.etf });
+                }
+
+                // 生成维度评分HTML，带气泡提示
+                const dimensionsHTML = dimensions.map(dim => {
+                    let color = 'var(--text-secondary)';
+                    if (dim.value >= 60) color = 'var(--success-green)';
+                    else if (dim.value <= 40) color = 'var(--danger-red)';
+
+                    return `
+                        <div style="display: flex; justify-content: space-between; align-items: center; position: relative;">
+                            <span style="font-size: 11px; cursor: help; position: relative;" class="tooltip-trigger" data-tooltip="${dim.reason}">
+                                ${dim.name} <i class="bi bi-question-circle" style="font-size: 10px; opacity: 0.6;"></i>
+                            </span>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <div style="width: 40px; height: 4px; background: var(--bg-primary); border-radius: 2px; overflow: hidden;">
+                                    <div style="width: ${dim.value}%; height: 100%; background: ${color}; transition: width 0.3s;"></div>
+                                </div>
+                                <span style="font-size: 11px; font-weight: 600; color: ${color}; min-width: 28px; text-align: right;">${Math.round(dim.value)}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="${cardClass}" style="margin-bottom: 12px; padding: 16px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <!-- 左侧：基本信息 -->
+                            <div>
+                                <div class="d-flex justify-between align-center mb-sm">
+                                    <strong style="font-size: 16px;">${rec.symbol}</strong>
+                                    <span class="badge ${badgeClass}">${badgeText}</span>
+                                </div>
+                                <div class="text-sm text-secondary" style="line-height: 1.8;">
+                                    <div>当前价: <span class="font-mono" style="color: var(--text-primary);">$${formatPrice(rec.current_price)}</span></div>
+                                    <div>建仓价: <span class="font-mono" style="color: var(--text-primary);">$${formatPrice(rec.entry_price)}</span></div>
+                                    <div>止损价: <span class="font-mono" style="color: var(--danger-red);">$${formatPrice(rec.stop_loss)}</span></div>
+                                    <div>止盈价: <span class="font-mono" style="color: var(--success-green);">$${formatPrice(rec.take_profit)}</span></div>
+                                </div>
+                            </div>
+
+                            <!-- 右侧：多维分析 -->
+                            <div style="background: var(--bg-tertiary); padding: 12px; border-radius: var(--radius-md);">
+                                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">${isBTCorETH ? '六维分析' : '五维分析'}</div>
+                                <div style="display: grid; gap: 5px;">
+                                    ${dimensionsHTML}
+                                </div>
+                                <div style="border-top: 1px solid var(--border-default); margin-top: 10px; padding-top: 10px;">
+                                    <div class="d-flex justify-between" style="font-size: 13px;">
+                                        <span style="color: var(--text-secondary); font-weight: 600;">综合置信度</span>
+                                        <span style="font-weight: 700; color: var(--primary-blue); font-size: 14px;">${rec.confidence.toFixed(0)}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 更新新闻
+        function updateNews(news) {
+            const container = document.getElementById('newsContainer');
+            document.getElementById('newsCount').textContent = news?.length || 0;
+
+            if (!news || news.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无新闻</div></div>';
+                return;
+            }
+
+            container.innerHTML = news.slice(0, 20).map(n => {
+                const sentimentBadge = n.sentiment === 'positive' ? '<span class="badge badge-success">利好</span>' :
+                                      n.sentiment === 'negative' ? '<span class="badge badge-danger">利空</span>' :
+                                      '<span class="badge badge-neutral">中性</span>';
+
+                return `
+                    <div class="portfolio-item" style="cursor: pointer;" onclick="window.open('${n.url}', '_blank')">
+                        <div class="d-flex justify-between align-center mb-sm">
+                            <strong style="flex: 1;">${n.title}</strong>
+                            ${sentimentBadge}
+                        </div>
+                        <div class="text-xs text-secondary d-flex justify-between">
+                            <span>${n.source}</span>
+                            <span>${n.published_at}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 更新Hyperliquid数据
+        function updateHyperliquid(hl) {
+            if (!hl) return;
+
+            document.getElementById('hlVolume24h').textContent = '$' + formatLargeNumber(hl.total_volume_24h || 0);
+            document.getElementById('hlActiveWallets').textContent = hl.active_wallets || 0;
+            document.getElementById('hlRecentTrades').textContent = hl.recent_trades?.length || 0;
+
+            // 计算做多做空比例
+            const trades = hl.recent_trades || [];
+            const longCount = trades.filter(t => t.side === 'LONG').length;
+            const shortCount = trades.filter(t => t.side === 'SHORT').length;
+            const ratio = shortCount > 0 ? (longCount / shortCount).toFixed(2) : longCount;
+            document.getElementById('hlLongShortRatio').textContent = ratio;
+
+            const tbody = document.getElementById('hlTradesBody');
+
+            if (trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">暂无交易</div></td></tr>';
+                return;
+            }
+
+            // 确保按交易时间降序排列（最新的在最上面）
+            trades.sort((a, b) => new Date(b.trade_time) - new Date(a.trade_time));
+
+            tbody.innerHTML = trades.slice(0, 15).map(t => `
+                <tr>
+                    <td>
+                        <span class="badge badge-neutral" title="${t.wallet_label}">${t.wallet_label?.substring(0, 10) || 'Unknown'}</span>
+                    </td>
+                    <td><strong>${t.coin}</strong></td>
+                    <td>
+                        <span class="badge ${t.side === 'LONG' ? 'badge-success' : 'badge-danger'}">
+                            ${t.side === 'LONG' ? '做多' : '做空'}
+                        </span>
+                    </td>
+                    <td class="font-mono">$${formatLargeNumber(t.notional_usd)}</td>
+                    <td class="${t.closed_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'} font-mono">
+                        ${t.closed_pnl !== 0 ? (t.closed_pnl >= 0 ? '+' : '') + formatLargeNumber(t.closed_pnl) : '-'}
+                    </td>
+                    <td class="text-secondary text-sm">${t.trade_time}</td>
+                </tr>
+            `).join('');
+        }
+
+        // 加载24h EMA信号卡片
+        async function load24hEmaSignals() {
+            try {
+                // 使用days=1参数获取24小时内的信号
+                const response = await fetch('/api/ema-signals?limit=50&days=1');
+                const data = await response.json();
+
+                if (data.success) {
+                    // 进一步过滤，只保留24小时内的信号
+                    const now = new Date();
+                    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                    const filtered24h = data.data.filter(signal => {
+                        const signalTime = new Date(signal.timestamp);
+                        return signalTime >= oneDayAgo;
+                    });
+                    update24hEmaCards(filtered24h);
+                }
+            } catch (error) {
+                console.error('加载24h EMA信号失败:', error);
+            }
+        }
+
+        // 更新24h EMA信号卡片
+        function update24hEmaCards(signals) {
+            const container = document.getElementById('ema24hCardsContainer');
+
+            const total = signals?.length || 0;
+            const buyCount = signals ? signals.filter(s => s.signal_type === 'BUY').length : 0;
+            const sellCount = signals ? signals.filter(s => s.signal_type === 'SELL').length : 0;
+
+            const buyEl = document.getElementById('ema24hBuyCount');
+            const sellEl = document.getElementById('ema24hSellCount');
+            const totalEl = document.getElementById('ema24hTotalCount');
+            if (buyEl) buyEl.textContent = `买入: ${buyCount}`;
+            if (sellEl) sellEl.textContent = `卖出: ${sellCount}`;
+            if (totalEl) totalEl.textContent = `总计: ${total}`;
+
+            if (!signals || signals.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><div class="empty-state-text">暂无24h EMA信号</div></div>';
+                return;
+            }
+
+            container.innerHTML = signals.map(s => {
+                const signalColor = s.signal_type === 'BUY' ? 'var(--success-green)' : 'var(--danger-red)';
+                const signalBg = s.signal_type === 'BUY' ? 'rgba(46, 204, 113, 0.1)' : 'rgba(231, 76, 60, 0.1)';
+                const signalIcon = s.signal_type === 'BUY' ? '📈' : '📉';
+                const signalText = s.signal_type === 'BUY' ? '买入' : '卖出';
+                const priceChangeClass = s.price_change_pct >= 0 ? 'pnl-positive' : 'pnl-negative';
+
+                return `
+                    <div class="position-card" style="background: ${signalBg}; border-left: 4px solid ${signalColor}; padding: 16px;">
+                        <div class="d-flex justify-between align-center mb-sm">
+                            <div>
+                                <strong style="font-size: 16px;">${s.symbol}</strong>
+                                <span style="font-size: 11px; color: var(--text-secondary); margin-left: 6px;">${s.timeframe}</span>
+                            </div>
+                            <span style="font-size: 24px;">${signalIcon}</span>
+                        </div>
+
+                        <div style="display: grid; gap: 8px; margin-bottom: 12px;">
+                            <div class="d-flex justify-between">
+                                <span style="font-size: 12px; color: var(--text-secondary);">信号:</span>
+                                <span style="font-size: 12px; font-weight: 600; color: ${signalColor};">${signalText}</span>
+                            </div>
+                            <div class="d-flex justify-between">
+                                <span style="font-size: 12px; color: var(--text-secondary);">强度:</span>
+                                <div style="display: flex; align-items: center; gap: 6px; flex: 1; max-width: 120px;">
+                                    <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                                        <div style="width: ${s.signal_strength}%; height: 100%; background: ${signalColor}; transition: width 0.3s;"></div>
+                                    </div>
+                                    <span style="font-size: 11px; font-weight: 600; color: ${signalColor};">${s.signal_strength}%</span>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-between">
+                                <span style="font-size: 12px; color: var(--text-secondary);">价格:</span>
+                                <span style="font-size: 12px; font-family: var(--font-mono);">$${formatPrice(s.price)}</span>
+                            </div>
+                            <div class="d-flex justify-between">
+                                <span style="font-size: 12px; color: var(--text-secondary);">24h涨跌:</span>
+                                <span class="${priceChangeClass}" style="font-size: 12px; font-weight: 600;">
+                                    ${s.price_change_pct >= 0 ? '+' : ''}${s.price_change_pct.toFixed(2)}%
+                                </span>
+                            </div>
+                        </div>
+
+                        <div style="font-size: 10px; color: var(--text-secondary); text-align: right;">
+                            ${new Date(s.timestamp).toLocaleString('zh-CN', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 加载实时合约数据
+        async function loadFuturesData() {
+            try {
+                // 使用现有价格数据模拟合约数据
+                if (currentData && currentData.prices) {
+                    updateFuturesData(currentData.prices);
+                }
+            } catch (error) {
+                console.error('加载合约数据失败:', error);
+            }
+        }
+
+        // 更新实时合约数据
+        function updateFuturesData(prices) {
+            const tbody = document.getElementById('futuresBody');
+
+            if (!prices || prices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">暂无合约数据</div></td></tr>';
+                return;
+            }
+
+            // 取前15个交易对
+            tbody.innerHTML = prices.slice(0, 15).map(p => {
+                const changeClass = p.change_24h >= 0 ? 'pnl-positive' : 'pnl-negative';
+                // 模拟资金费率 (实际应从API获取)
+                const fundingRate = (Math.random() * 0.002 - 0.001).toFixed(4);
+                const fundingClass = fundingRate >= 0 ? 'text-success' : 'text-danger';
+
+                // 模拟多空比 (实际应从API获取)
+                const longShortRatio = (0.5 + Math.random() * 2).toFixed(2);
+                const longShortClass = longShortRatio >= 1 ? 'pnl-positive' : 'pnl-negative';
+
+                return `
+                    <tr>
+                        <td><strong>${p.symbol}</strong></td>
+                        <td class="price font-mono">$${formatPrice(p.price)}</td>
+                        <td class="font-mono ${fundingClass}">${(fundingRate * 100).toFixed(4)}%</td>
+                        <td class="${changeClass} font-bold">
+                            ${p.change_24h >= 0 ? '+' : ''}${p.change_24h.toFixed(2)}%
+                        </td>
+                        <td class="font-mono ${longShortClass}">${longShortRatio}</td>
+                        <td class="text-secondary">$${formatLargeNumber(p.volume_24h)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 检查告警
+        function checkAlerts(data) {
+            let alertCount = 0;
+
+            // 检查强烈买入信号
+            const strongBuys = data.recommendations?.filter(r => r.signal === 'STRONG_BUY' && r.confidence >= 70) || [];
+            alertCount += strongBuys.length;
+
+            // 检查异常波动
+            const highVolatility = data.prices?.filter(p => Math.abs(p.change_24h) > 10) || [];
+            alertCount += highVolatility.length;
+
+            const alertBadge = document.getElementById('alertCount');
+            if (alertCount > 0) {
+                alertBadge.textContent = alertCount;
+                alertBadge.style.display = 'flex';
+            } else {
+                alertBadge.style.display = 'none';
+            }
+        }
+
+        // 通知功能
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.innerHTML = `
+                <div class="d-flex justify-between align-center">
+                    <strong>${message}</strong>
+                    <button class="btn btn-sm btn-ghost" onclick="this.parentElement.parentElement.remove()">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+
+        // 刷新倒计时
+        function resetRefreshCountdown() {
+            refreshCountdown = 30;
+            if (countdownInterval) clearInterval(countdownInterval);
+
+            countdownInterval = setInterval(() => {
+                refreshCountdown--;
+                document.getElementById('nextRefresh').textContent = refreshCountdown;
+
+                if (refreshCountdown <= 0) {
+                    loadData();
+                }
+            }, 1000);
+        }
+
+        // 刷新数据
+        function refreshData() {
+            showNotification('正在刷新数据...', 'success');
+            loadData();
+        }
+
+        // 滚动到指定区域
+        function scrollToSection(id) {
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // 查看详情
+        function viewDetails(symbol) {
+            window.location.href = '/futures_trading?symbol=' + encodeURIComponent(symbol);
+        }
+
+        // 查看分析
+        function viewAnalysis(symbol) {
+            showNotification(`查看 ${symbol} 详细分析`, 'success');
+            // TODO: 打开分析模态框
+        }
+
+        // 交易
+        function trade(symbol) {
+            if (confirm('是否要交易 ' + symbol + '?')) {
+                window.location.href = '/futures_trading?symbol=' + encodeURIComponent(symbol);
+            }
+        }
+
+        // 添加到关注列表
+        function addToWatchlist(symbol) {
+            showNotification(`${symbol} 已添加到关注列表`, 'success');
+            // TODO: 保存到本地存储或服务器
+        }
+
+        // 交易合约
+        function tradeFutures(symbol) {
+            if (confirm('是否要进行 ' + symbol + ' 合约交易?')) {
+                window.location.href = '/futures_trading?symbol=' + encodeURIComponent(symbol);
+            }
+        }
+
+        // 切换提醒面板
+        function toggleAlerts() {
+            showNotification('提醒功能开发中...', 'warning');
+            // TODO: 显示提醒面板
+        }
+
+        // 初始化
+        window.addEventListener('load', () => {
+            loadData();
+            load24hEmaSignals(); // 加载24h EMA信号
+            resetRefreshCountdown();
+        });
+
+        // 页面可见性变化时停止/恢复刷新
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (countdownInterval) clearInterval(countdownInterval);
+            } else {
+                resetRefreshCountdown();
+            }
+        });
+
+        // 查看投资建议详情
+        async function viewRecommendationDetails(symbol) {
+            try {
+                // 从当前数据中找到对应的推荐
+                const recommendation = currentData.recommendations.find(r => r.symbol === symbol);
+                if (!recommendation) {
+                    showNotification('未找到该交易对的投资建议', 'error');
+                    return;
+                }
+
+                // 显示详情弹窗
+                showRecommendationModal(recommendation);
+            } catch (error) {
+                console.error('加载详情失败:', error);
+                showNotification('加载详情失败', 'error');
+            }
+        }
+
+        // 显示投资建议详情模态框
+        function showRecommendationModal(rec) {
+            const modal = document.getElementById('recommendationModal');
+            const modalContent = document.getElementById('modalContent');
+
+            // 计算潜在收益率
+            const potentialGain = ((rec.take_profit - rec.entry_price) / rec.entry_price * 100).toFixed(2);
+            const potentialLoss = ((rec.entry_price - rec.stop_loss) / rec.entry_price * 100).toFixed(2);
+            const riskRewardRatio = (potentialGain / potentialLoss).toFixed(2);
+
+            // 获取信号类型
+            let signalBadge = '';
+            if (rec.signal === 'STRONG_BUY') {
+                signalBadge = '<span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">强烈买入</span>';
+            } else if (rec.signal === 'BUY') {
+                signalBadge = '<span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">买入</span>';
+            } else if (rec.signal === 'STRONG_SELL') {
+                signalBadge = '<span class="badge badge-danger" style="font-size: 14px; padding: 6px 12px;">强烈卖出</span>';
+            } else if (rec.signal === 'SELL') {
+                signalBadge = '<span class="badge badge-danger" style="font-size: 14px; padding: 6px 12px;">卖出</span>';
+            } else {
+                signalBadge = '<span class="badge badge-neutral" style="font-size: 14px; padding: 6px 12px;">观望</span>';
+            }
+
+            modalContent.innerHTML = `
+                <div style="padding: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-default);">
                         <div>
-                            <span class="badge bg-success me-2" id="ema-buy-count">0</span>
-                            <span class="badge bg-danger me-2" id="ema-sell-count">0</span>
-                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#emaHelpModal">
-                                <i class="bi bi-question-circle"></i> 信号说明
-                            </button>
+                            <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">${rec.symbol}</h2>
+                            <div style="font-size: 14px; color: var(--text-secondary);">投资分析报告</div>
+                        </div>
+                        <div>
+                            ${signalBadge}
                         </div>
                     </div>
-                    <div class="card-body p-3">
-                        <div id="ema-signals-container">
-                            <div class="text-center p-3 text-muted">
-                                <div class="loading mb-2"></div>
-                                <div>正在加载EMA信号...</div>
+
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px;">
+                        <div style="background: var(--bg-tertiary); padding: 16px; border-radius: var(--radius-md);">
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当前价格</div>
+                            <div style="font-size: 20px; font-weight: 700; font-family: var(--font-mono);">$${formatPrice(rec.current_price)}</div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: 16px; border-radius: var(--radius-md);">
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">置信度</div>
+                            <div style="font-size: 20px; font-weight: 700;">${rec.confidence.toFixed(0)}%</div>
+                        </div>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 24px;">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">📊 交易建议</h3>
+                        <div style="display: grid; gap: 12px;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">建仓价格：</span>
+                                <span style="font-family: var(--font-mono); font-weight: 600;">$${formatPrice(rec.entry_price)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">止损价格：</span>
+                                <span style="font-family: var(--font-mono); font-weight: 600; color: var(--danger-red);">$${formatPrice(rec.stop_loss)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">止盈价格：</span>
+                                <span style="font-family: var(--font-mono); font-weight: 600; color: var(--success-green);">$${formatPrice(rec.take_profit)}</span>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- 主要内容区 -->
-        <div class="row g-3">
-            <!-- 左侧: 投资建议 -->
-            <div class="col-lg-6">
-                <div class="main-card" style="height: 800px; display: flex; flex-direction: column;">
-                    <div class="card-header-custom d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="bi bi-lightbulb-fill"></i> 智能投资建议</h5>
-                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#investmentHelpModal">
-                            <i class="bi bi-question-circle"></i> 分析说明
+                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 24px;">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">📈 风险收益分析</h3>
+                        <div style="display: grid; gap: 12px;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">潜在收益：</span>
+                                <span style="font-weight: 600; color: var(--success-green);">+${potentialGain}%</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">潜在损失：</span>
+                                <span style="font-weight: 600; color: var(--danger-red);">-${potentialLoss}%</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--text-secondary);">风险收益比：</span>
+                                <span style="font-weight: 600;">1:${riskRewardRatio}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg);">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">💡 投资建议</h3>
+                        <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 12px;">
+                            基于技术指标分析，${rec.symbol} 当前呈现 <strong style="color: var(--text-primary);">${signalBadge.replace('<span class="badge', '<span style="display: inline;" class="badge').replace('</span>', '</span>')}</strong> 信号。
+                        </p>
+                        ${rec.signal.includes('BUY') ? `
+                        <p style="color: var(--text-secondary); line-height: 1.6;">
+                            建议在 <strong style="color: var(--text-primary);">$${formatPrice(rec.entry_price)}</strong> 附近建仓，
+                            设置止损位于 <strong style="color: var(--danger-red);">$${formatPrice(rec.stop_loss)}</strong>，
+                            目标价位 <strong style="color: var(--success-green);">$${formatPrice(rec.take_profit)}</strong>。
+                        </p>
+                        ` : rec.signal.includes('SELL') ? `
+                        <p style="color: var(--text-secondary); line-height: 1.6;">
+                            建议考虑在当前价位减仓或观望，等待更好的入场时机。
+                        </p>
+                        ` : `
+                        <p style="color: var(--text-secondary); line-height: 1.6;">
+                            当前市场信号不明朗，建议保持观望，等待更明确的交易信号。
+                        </p>
+                        `}
+                    </div>
+
+                    <div style="display: flex; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-secondary" onclick="closeRecommendationModal()" style="flex: 1;">
+                            关闭
+                        </button>
+                        ${rec.signal.includes('BUY') ? `
+                        <button class="btn btn-success" onclick="trade('${rec.symbol}'); closeRecommendationModal();" style="flex: 1;">
+                            立即交易
+                        </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+
+            modal.style.display = 'flex';
+        }
+
+        // 关闭模态框
+        function closeRecommendationModal() {
+            const modal = document.getElementById('recommendationModal');
+            modal.style.display = 'none';
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('recommendationModal');
+            if (event.target === modal) {
+                closeRecommendationModal();
+            }
+            const explanationModal = document.getElementById('explanationModal');
+            if (event.target === explanationModal) {
+                closeExplanationModal();
+            }
+        }
+
+        // 显示智能投资说明
+        function showInvestmentExplanation() {
+            const modal = document.getElementById('explanationModal');
+            const modalContent = document.getElementById('explanationContent');
+
+            modalContent.innerHTML = `
+                <div style="padding: 24px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-default);">
+                        <div>
+                            <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">智能投资建议说明</h2>
+                            <div style="font-size: 14px; color: var(--text-secondary);">多维度分析系统</div>
+                        </div>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--primary-blue);">📊 六维分析体系</h3>
+                        <div style="display: grid; gap: 12px;">
+                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--primary-blue);">
+                                <div style="font-weight: 600; margin-bottom: 6px;">1. 技术指标 (Technical)</div>
+                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                                    分析 EMA、MACD、RSI、布林带等经典技术指标，评估价格趋势和动能。
+                                </div>
+                            </div>
+                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--success-green);">
+                                <div style="font-weight: 600; margin-bottom: 6px;">2. 新闻情绪 (News Sentiment)</div>
+                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                                    通过 AI 分析加密货币新闻的正面、负面情绪，评估市场舆论方向。
+                                </div>
+                            </div>
+                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--warning-yellow);">
+                                <div style="font-weight: 600; margin-bottom: 6px;">3. 资金费率 (Funding Rate)</div>
+                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                                    监控永续合约资金费率，识别多空力量对比和过度杠杆风险。
+                                </div>
+                            </div>
+                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--secondary-purple);">
+                                <div style="font-weight: 600; margin-bottom: 6px;">4. Hyperliquid 聪明钱</div>
+                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                                    追踪链上大户和成功交易者的动向，捕捉聪明钱的交易信号。
+                                </div>
+                            </div>
+                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--info-blue);">
+                                <div style="font-weight: 600; margin-bottom: 6px;">5. 链上数据 (On-Chain)</div>
+                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                                    分析活跃地址数、交易量、持币分布等链上指标，评估网络健康度。
+                                </div>
+                            </div>
+                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--secondary-orange);">
+                                <div style="font-weight: 600; margin-bottom: 6px;">6. ETF 资金流向</div>
+                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                                    监控比特币和以太坊 ETF 的净流入/流出，评估机构资金动向。
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--success-green);">🎯 综合置信度计算</h3>
+                        <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
+                            <p style="margin-bottom: 12px;">综合置信度由六个维度的评分加权计算得出，范围 0-100%：</p>
+                            <ul style="margin-left: 20px; margin-bottom: 12px;">
+                                <li><strong style="color: var(--success-green);">80-100%</strong>：非常强的信号，建议重点关注</li>
+                                <li><strong style="color: var(--primary-blue);">60-79%</strong>：较强信号，可以适度参与</li>
+                                <li><strong style="color: var(--warning-yellow);">40-59%</strong>：信号不明确，建议观望</li>
+                                <li><strong style="color: var(--danger-red);">0-39%</strong>：弱信号，不建议操作</li>
+                            </ul>
+                            <p style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--warning-yellow);">
+                                <strong>⚠️ 风险提示：</strong> 本系统仅供参考，不构成投资建议。加密货币市场波动剧烈，请根据自身风险承受能力谨慎决策。
+                            </p>
+                        </div>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg);">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--primary-blue);">💡 如何使用</h3>
+                        <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
+                            <ol style="margin-left: 20px;">
+                                <li style="margin-bottom: 8px;">查看投资建议列表，按综合置信度排序</li>
+                                <li style="margin-bottom: 8px;">关注六维评分，了解信号来源和强度</li>
+                                <li style="margin-bottom: 8px;">参考建仓价、止损价、止盈价制定交易计划</li>
+                                <li style="margin-bottom: 8px;">结合自身判断，切勿盲目跟随</li>
+                                <li>严格执行止损，控制风险敞口</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 12px; margin-top: 24px;">
+                        <button class="btn btn-primary" onclick="closeExplanationModal()" style="flex: 1;">
+                            我已了解
                         </button>
                     </div>
-                    <div class="card-body" style="flex: 1; overflow-y: auto;" id="recommendations">
-                        <div class="text-center p-5 text-muted">
-                            <div class="loading mb-2"></div>
-                            <div>正在分析...</div>
-                        </div>
-                    </div>
                 </div>
-            </div>
+            `;
 
-            <!-- 右侧: 实时价格 + 合约数据 -->
-            <div class="col-lg-6" style="height: 800px; display: flex; flex-direction: column;">
-                <!-- 实时价格 -->
-                <div class="main-card mb-3" style="height: 400px; flex-shrink: 0; display: flex; flex-direction: column;">
-                    <div class="card-header-custom">
-                        <h5><i class="bi bi-currency-bitcoin"></i> 实时价格</h5>
-                    </div>
-                    <div class="card-body p-0" style="flex: 1; overflow-y: auto;">
-                        <table class="table price-table mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>币种</th>
-                                    <th class="text-end">价格 (USDT)</th>
-                                    <th class="text-end">24h涨跌</th>
-                                    <th class="text-end">24h成交量</th>
-                                    <th class="text-end">24h成交额</th>
-                                </tr>
-                            </thead>
-                            <tbody id="price-table">
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted p-4">
-                                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                                        加载中...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+            modal.style.display = 'flex';
+        }
 
-                <!-- 合约数据 -->
-                <div class="main-card" style="flex: 1; display: flex; flex-direction: column;">
-                    <div class="card-header-custom" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                        <h5><i class="bi bi-bar-chart-line"></i> 合约数据</h5>
-                    </div>
-                    <div class="card-body p-0" style="flex: 1; overflow-y: auto;">
-                        <table class="table price-table mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>币种</th>
-                                    <th class="text-end">持仓量</th>
-                                    <th class="text-end">
-                                        账户数比
-                                        <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" title="做多账户数 / 做空账户数（反映散户情绪）"></i>
-                                    </th>
-                                    <th class="text-end">
-                                        持仓量比
-                                        <i class="bi bi-info-circle text-muted" data-bs-toggle="tooltip" title="做多持仓量 / 做空持仓量（反映资金流向，Top 20%大户）"></i>
-                                    </th>
-                                    <th class="text-end">资金费率</th>
-                                </tr>
-                            </thead>
-                            <tbody id="futures-table">
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted p-4">
-                                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                                        加载中...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
+        // 关闭说明模态框
+        function closeExplanationModal() {
+            const modal = document.getElementById('explanationModal');
+            modal.style.display = 'none';
+        }
+    </script>
 
-        <!-- 最新新闻 -->
-        <div class="row g-3 mt-3">
-            <div class="col-12">
-                <div class="main-card" style="height: 500px; display: flex; flex-direction: column;">
-                    <div class="card-header-custom">
-                        <h5><i class="bi bi-newspaper"></i> 最新新闻</h5>
-                    </div>
-                    <div class="card-body p-0" style="flex: 1; overflow-y: auto;" id="news-list">
-                        <div class="text-center p-4 text-muted">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            加载中...
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Hyperliquid聪明钱 -->
-        <div class="row g-3 mt-3">
-            <div class="col-12">
-                <div class="main-card">
-                    <div class="card-header-custom d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="bi bi-wallet2"></i> Hyperliquid 聪明钱活动</h5>
-                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#hyperliquidHelpModal">
-                            <i class="bi bi-question-circle"></i> 指标说明
-                        </button>
-                    </div>
-                    <div class="card-body" id="hyperliquid-section">
-                        <div class="text-center p-4 text-muted">
-                            <div class="spinner-border spinner-border-sm" role="status"></div>
-                            加载中...
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 页脚 -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="main-card">
-                    <div class="card-body text-center text-muted small">
-                        <i class="bi bi-info-circle"></i>
-                        前端每5秒自动刷新 |
-                        6维度智能分析: 技术指标 + 新闻情绪 + 合约数据 + Hyperliquid + 链上数据 + ETF数据 |
-                        最后更新: <span id="last-update">-</span>
-                    </div>
-                </div>
-            </div>
+    <!-- 投资建议详情模态框 -->
+    <div id="recommendationModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); align-items: center; justify-content: center;">
+        <div id="modalContent" style="background: var(--bg-card); border-radius: var(--radius-lg); max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-xl); border: 1px solid var(--border-default);">
         </div>
     </div>
 
-    <!-- EMA信号说明模态框 -->
-    <div class="modal fade" id="emaHelpModal" tabindex="-1">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="bi bi-graph-up"></i> EMA交易信号说明
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i>
-                        <strong>什么是EMA信号？</strong><br>
-                        EMA（指数移动平均线）是一种技术分析指标，通过捕捉短期EMA和长期EMA的交叉来识别潜在的买入/卖出时机。
-                        本系统监控15分钟K线图，实时捕捉金叉（看涨）和死叉（看跌）信号。
-                    </div>
-
-                    <h6 class="mt-4"><i class="bi bi-hash"></i> 核心概念</h6>
-                    <hr>
-
-                    <div class="mb-4">
-                        <h6 class="text-success">📈 金叉 (Golden Cross) - BUY信号</h6>
-                        <p class="mb-2"><strong>定义：</strong>短期EMA从下方上穿长期EMA</p>
-                        <p class="mb-2"><strong>含义：</strong>价格上升动能增强，可能开启上涨趋势</p>
-                        <div class="bg-light p-3 rounded mb-2">
-                            <p class="mb-1"><strong>常见EMA组合：</strong></p>
-                            <ul class="small mb-0">
-                                <li><strong>EMA9/EMA21：</strong>快速反应，适合短线交易</li>
-                                <li><strong>EMA12/EMA26：</strong>中等速度，平衡灵敏度和稳定性</li>
-                                <li><strong>EMA50/EMA200：</strong>长期趋势，信号更可靠但反应慢</li>
-                            </ul>
-                        </div>
-                        <p class="mb-0"><strong>💡 交易建议：</strong>金叉出现时考虑买入做多，但需结合成交量和其他指标确认。</p>
-                    </div>
-
-                    <div class="mb-4">
-                        <h6 class="text-danger">📉 死叉 (Death Cross) - SELL信号</h6>
-                        <p class="mb-2"><strong>定义：</strong>短期EMA从上方下穿长期EMA</p>
-                        <p class="mb-2"><strong>含义：</strong>价格下跌动能增强，可能开启下跌趋势</p>
-                        <p class="mb-0"><strong>💡 交易建议：</strong>死叉出现时考虑卖出或做空，止损保护盈利。</p>
-                    </div>
-
-                    <h6 class="mt-4"><i class="bi bi-star"></i> 信号强度分级</h6>
-                    <hr>
-
-                    <div class="mb-3">
-                        <h6 class="text-primary">🔥 强信号 (Strong)</h6>
-                        <p class="mb-2"><strong>判定条件：</strong>同时满足以下3个条件</p>
-                        <ul class="small">
-                            <li><strong>成交量放大：</strong>当前成交量 &gt; 平均成交量的1.5倍</li>
-                            <li><strong>EMA距离：</strong>短期EMA和长期EMA距离 &gt; 0.3%（价格变动明显）</li>
-                            <li><strong>价格变动：</strong>当前K线价格变动幅度 &gt; 0.5%</li>
-                        </ul>
-                        <p class="mb-0"><strong>💡 意义：</strong>信号可靠性高，成交量和价格变动都支持趋势。</p>
-                    </div>
-
-                    <div class="mb-3">
-                        <h6 class="text-primary">⚡ 中等信号 (Medium)</h6>
-                        <p class="mb-2"><strong>判定条件：</strong>满足以下任意2个条件</p>
-                        <ul class="small">
-                            <li>成交量放大 &gt; 1.3倍</li>
-                            <li>EMA距离 &gt; 0.2%</li>
-                            <li>价格变动 &gt; 0.3%</li>
-                        </ul>
-                        <p class="mb-0"><strong>💡 意义：</strong>信号中等可靠，建议轻仓试探或等待确认。</p>
-                    </div>
-
-                    <div class="mb-4">
-                        <h6 class="text-primary">💨 弱信号 (Weak)</h6>
-                        <p class="mb-2"><strong>判定条件：</strong>满足少于2个条件，或指标数值偏低</p>
-                        <p class="mb-0"><strong>💡 意义：</strong>信号较弱，可能是假突破，需谨慎对待或观望。</p>
-                    </div>
-
-                    <h6 class="mt-4"><i class="bi bi-info-circle"></i> 信号卡片信息解读</h6>
-                    <hr>
-
-                    <div class="mb-3">
-                        <p class="mb-2">每个信号卡片包含以下信息：</p>
-                        <ul class="small">
-                            <li><strong>币种名称：</strong>例如 BTC/USDT、ETH/USDT</li>
-                            <li><strong>信号类型：</strong>
-                                <span class="badge bg-success">BUY</span> 金叉做多，
-                                <span class="badge bg-danger">SELL</span> 死叉做空
-                            </li>
-                            <li><strong>信号强度：</strong>
-                                <span class="text-danger">🔥 强</span>、
-                                <span class="text-warning">⚡ 中</span>、
-                                <span class="text-muted">💨 弱</span>
-                            </li>
-                            <li><strong>时间周期：</strong>15分钟K线（15m timeframe）</li>
-                            <li><strong>信号时间：</strong>EMA交叉发生的精确时间</li>
-                            <li><strong>当前价格：</strong>信号产生时的价格</li>
-                            <li><strong>EMA配置：</strong>使用的EMA参数组合（如EMA9/EMA21）</li>
-                            <li><strong>价格变动：</strong>当前K线的涨跌幅百分比</li>
-                            <li><strong>成交量倍数：</strong>当前成交量相对于平均值的倍数</li>
-                            <li><strong>EMA距离：</strong>短期EMA和长期EMA之间的距离百分比</li>
-                        </ul>
-                    </div>
-
-                    <h6 class="mt-4"><i class="bi bi-lightbulb"></i> 如何使用</h6>
-                    <hr>
-
-                    <div class="mb-3">
-                        <h6 class="text-success">✅ 最佳实践</h6>
-                        <ul class="small">
-                            <li><strong>优先关注强信号：</strong>强信号成功率更高，特别是成交量放大明显时</li>
-                            <li><strong>结合趋势判断：</strong>在上涨趋势中的金叉更可靠，在下跌趋势中的死叉更可靠</li>
-                            <li><strong>多时间周期确认：</strong>15分钟信号适合短线，如需中长线，可参考1小时或4小时图</li>
-                            <li><strong>结合其他指标：</strong>
-                                <ul>
-                                    <li>配合合约数据：查看账户数比和持仓量比，确认散户和大户的观点</li>
-                                    <li>配合资金费率：正费率支持金叉，负费率支持死叉</li>
-                                    <li>配合Hyperliquid：聪明钱的方向与EMA信号一致时更可靠</li>
-                                </ul>
-                            </li>
-                            <li><strong>设置止损：</strong>即使是强信号也可能失败，务必设置止损位</li>
-                        </ul>
-                    </div>
-
-                    <div class="mb-3">
-                        <h6 class="text-danger">❌ 常见误区</h6>
-                        <ul class="small">
-                            <li><strong>盲目追单：</strong>不要看到信号就立即开仓，先观察价格是否突破关键位</li>
-                            <li><strong>忽略成交量：</strong>无量金叉/死叉往往是假信号</li>
-                            <li><strong>频繁交易：</strong>15分钟图信号较多，不是每个都值得交易，选择强信号</li>
-                            <li><strong>单一指标依赖：</strong>EMA只是技术分析的一部分，需结合多维度判断</li>
-                        </ul>
-                    </div>
-
-                    <h6 class="mt-4"><i class="bi bi-clock-history"></i> 信号时效性</h6>
-                    <hr>
-
-                    <div class="alert alert-warning">
-                        <p class="mb-2"><strong>⏰ 时间范围：</strong>默认显示最近 <strong>2天</strong> 的信号</p>
-                        <p class="mb-2"><strong>为什么只保留2天？</strong></p>
-                        <ul class="small mb-0">
-                            <li>加密市场变化快，超过2天的15分钟信号参考价值降低</li>
-                            <li>避免信息过载，聚焦最新、最有价值的交易机会</li>
-                            <li>系统每30天自动清理旧信号，保持数据库高效运行</li>
-                        </ul>
-                    </div>
-
-                    <div class="alert alert-success">
-                        <h6><i class="bi bi-trophy"></i> 成功案例场景</h6>
-                        <p class="mb-2"><strong>理想信号组合：</strong></p>
-                        <ul class="small mb-0">
-                            <li>✅ BTC出现 <strong>强金叉</strong>（成交量2.1倍，EMA距离0.5%，价格上涨1.2%）</li>
-                            <li>✅ 合约数据：账户数比1.2，持仓量比1.3（散户和大户都看多）</li>
-                            <li>✅ 资金费率：+0.03%（多头占优但未过热）</li>
-                            <li>✅ Hyperliquid：聪明钱净流入 $2.5M（大资金做多）</li>
-                            <li>✅ 新闻情绪：正面消息（如ETF通过、机构买入）</li>
-                        </ul>
-                        <p class="mt-2 mb-0"><strong>结论：</strong>这是一个多维度协同的强烈看涨信号，成功率较高！</p>
-                    </div>
-
-                    <div class="alert alert-danger mb-0">
-                        <h6><i class="bi bi-exclamation-triangle"></i> 风险提示</h6>
-                        <ul class="small mb-0">
-                            <li><strong>滞后性：</strong>EMA是滞后指标，价格已经变动后才产生信号</li>
-                            <li><strong>假突破：</strong>在震荡市场中，EMA容易产生频繁的虚假交叉</li>
-                            <li><strong>不是圣杯：</strong>没有任何指标能保证100%准确</li>
-                            <li><strong>仅供参考：</strong>本信号仅供参考，不构成投资建议</li>
-                            <li><strong>风险自担：</strong>交易有风险，请根据自身情况谨慎决策</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">知道了</button>
-                </div>
-            </div>
+    <!-- 智能投资说明模态框 -->
+    <div id="explanationModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); align-items: center; justify-content: center;">
+        <div id="explanationContent" style="background: var(--bg-card); border-radius: var(--radius-lg); max-width: 700px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-xl); border: 1px solid var(--border-default);">
         </div>
     </div>
-
-    <!-- Hyperliquid指标说明模态框 -->
-    <div class="modal fade" id="hyperliquidHelpModal" tabindex="-1">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="bi bi-wallet2"></i> Hyperliquid 聪明钱指标说明
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i>
-                        <strong>什么是聪明钱？</strong><br>
-                        聪明钱是指在 Hyperliquid 平台上持续盈利、ROI 高的专业交易者。追踪他们的交易行为可以为投资决策提供重要参考。
-                    </div>
-
-                    <h6 class="mt-4"><i class="bi bi-hash"></i> 核心指标</h6>
-                    <hr>
-
-                    <div class="mb-4">
-                        <h6 class="text-primary">1. 监控钱包数</h6>
-                        <p class="mb-2"><strong>定义：</strong>系统当前监控的聪明钱钱包总数</p>
-                        <p class="mb-2"><strong>筛选标准：</strong></p>
-                        <ul class="small">
-                            <li>累计盈亏 (PnL) &gt; $10,000</li>
-                            <li>投资回报率 (ROI) &gt; 20%</li>
-                            <li>账户价值 &gt; $5,000</li>
-                        </ul>
-                        <p class="mb-0"><strong>💡 意义：</strong>数量越多，统计越可靠。建议 1000+ 个钱包。</p>
-                    </div>
-
-                    <div class="mb-4">
-                        <h6 class="text-primary">2. 24h交易量</h6>
-                        <p class="mb-2"><strong>定义：</strong>所有监控钱包在最近24小时的总交易金额（USD）</p>
-                        <p class="mb-2"><strong>参考标准：</strong></p>
-                        <ul class="small">
-                            <li>&lt; $5M：市场较为平静</li>
-                            <li>$5M - $20M：正常交易活跃度</li>
-                            <li>$20M - $50M：市场活跃，有重要行情</li>
-                            <li>&gt; $50M：极度活跃，重大行情或事件</li>
-                        </ul>
-                        <p class="mb-0"><strong>💡 意义：</strong>交易量增加表示市场活跃度上升，聪明钱正在积极布局。</p>
-                    </div>
-
-                    <div class="mb-4">
-                        <h6 class="text-primary">3. Top活跃币种</h6>
-                        <p class="mb-2"><strong>定义：</strong>显示交易最活跃的前5个币种及其净流入/流出</p>
-                        <p class="mb-2"><strong>计算公式：</strong></p>
-                        <div class="bg-light p-2 rounded small mb-2">
-                            净流入 = LONG交易总额 - SHORT交易总额
-                        </div>
-                        <p class="mb-2"><strong>颜色含义：</strong></p>
-                        <ul class="small">
-                            <li>🟢 <span class="text-success">绿色 ▲</span>：净流入为正，聪明钱偏向做多（看涨）</li>
-                            <li>🔴 <span class="text-danger">红色 ▼</span>：净流入为负，聪明钱偏向做空（看跌）</li>
-                        </ul>
-                        <p class="mb-2"><strong>示例：</strong></p>
-                        <ul class="small">
-                            <li><span class="text-success">BTC ▲ $2.5M</span> → 聪明钱在做多BTC，做多比做空多250万美元</li>
-                            <li><span class="text-danger">ETH ▼ $1.8M</span> → 聪明钱在做空ETH，做空比做多多180万美元</li>
-                        </ul>
-                        <p class="mb-0"><strong>💡 强烈信号：</strong>净流入 &gt; $2M 或 &lt; -$2M 时，方向较为明确。</p>
-                    </div>
-
-                    <div class="mb-4">
-                        <h6 class="text-primary">4. 最近大额交易</h6>
-                        <p class="mb-2"><strong>显示内容：</strong>按交易金额从大到小排序的前20笔交易</p>
-                        <p class="mb-2"><strong>交易卡片信息：</strong></p>
-                        <ul class="small">
-                            <li><strong>币种 + 方向：</strong>
-                                <span class="badge bg-success">LONG</span> 做多/看涨，
-                                <span class="badge bg-danger">SHORT</span> 做空/看跌
-                            </li>
-                            <li><strong>交易金额：</strong>该笔交易的名义价值（USD）</li>
-                            <li><strong>钱包标签：</strong>交易者的标识，可追踪特定高手</li>
-                            <li><strong>交易时间：</strong>成交时间</li>
-                            <li><strong>PnL (已实现盈亏)：</strong>
-                                <span class="text-success">绿色 = 盈利</span>，
-                                <span class="text-danger">红色 = 亏损</span>
-                            </li>
-                        </ul>
-                        <p class="mb-0"><strong>💡 关键：</strong>连续盈利的交易方向值得重点关注。</p>
-                    </div>
-
-                    <h6 class="mt-4"><i class="bi bi-lightbulb"></i> 如何使用</h6>
-                    <hr>
-
-                    <div class="mb-3">
-                        <h6 class="text-success">📈 看涨信号组合</h6>
-                        <ul class="small">
-                            <li>24h交易量显著增加 (&gt; $20M)</li>
-                            <li>Top币种大多显示绿色 ▲（净流入为正）</li>
-                            <li>最近大额交易以 LONG 为主</li>
-                            <li>高盈利的 LONG 交易占比高</li>
-                        </ul>
-                    </div>
-
-                    <div class="mb-3">
-                        <h6 class="text-danger">📉 看跌信号组合</h6>
-                        <ul class="small">
-                            <li>Top币种大多显示红色 ▼（净流出为负）</li>
-                            <li>最近大额交易以 SHORT 为主</li>
-                            <li>LONG 交易出现大额亏损</li>
-                        </ul>
-                    </div>
-
-                    <div class="alert alert-warning mb-0">
-                        <h6><i class="bi bi-exclamation-triangle"></i> 重要提示</h6>
-                        <ul class="small mb-0">
-                            <li><strong>不是绝对信号：</strong>聪明钱也会犯错，需结合技术分析、基本面等多维度判断</li>
-                            <li><strong>数据延迟：</strong>数据每30分钟更新一次，不适合极短线交易</li>
-                            <li><strong>风险管理：</strong>即使跟随聪明钱，也要设置止损</li>
-                            <li><strong>样本大小：</strong>监控钱包越多（建议 &gt; 1000），数据越可靠</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <a href="/HYPERLIQUID_INDICATORS_GUIDE.md" target="_blank" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-file-text"></i> 查看完整文档
-                    </a>
-                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">关闭</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 智能投资分析说明模态框 -->
-    <div class="modal fade" id="investmentHelpModal" tabindex="-1">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">
-                        <i class="bi bi-lightbulb-fill"></i> 智能投资分析说明
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <h6><i class="bi bi-info-circle"></i> 概述</h6>
-                        <p class="mb-0">
-                            本系统采用 <strong>6维度智能分析模型</strong>，综合评估每个币种的投资价值，
-                            为您提供数据驱动的投资建议。所有指标实时更新（每5秒刷新），确保您获得最新的市场洞察。
-                        </p>
-                    </div>
-
-                    <h5 class="mt-4 mb-3"><i class="bi bi-graph-up"></i> 六大核心指标详解</h5>
-
-                    <!-- 1. 技术指标 -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">📊 技术指标 (Technical Indicators)</h6>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>分析内容：</strong></p>
-                            <ul>
-                                <li><strong>RSI (相对强弱指数):</strong> 判断超买/超卖状态
-                                    <ul>
-                                        <li>RSI &gt; 70 → 超买（可能回调）</li>
-                                        <li>RSI &lt; 30 → 超卖（可能反弹）</li>
-                                    </ul>
-                                </li>
-                                <li><strong>MACD (平滑异同移动平均线):</strong> 捕捉趋势变化
-                                    <ul>
-                                        <li>金叉 (MACD线上穿信号线) → 看涨</li>
-                                        <li>死叉 (MACD线下穿信号线) → 看跌</li>
-                                    </ul>
-                                </li>
-                                <li><strong>布林带 (Bollinger Bands):</strong> 识别价格区间
-                                    <ul>
-                                        <li>价格触及下轨 → 超卖，可能反弹</li>
-                                        <li>价格触及上轨 → 超买，可能回调</li>
-                                    </ul>
-                                </li>
-                                <li><strong>EMA (指数移动平均线):</strong> 判断趋势方向
-                                    <ul>
-                                        <li>短期EMA &gt; 长期EMA → 上升趋势</li>
-                                        <li>短期EMA &lt; 长期EMA → 下降趋势</li>
-                                    </ul>
-                                </li>
-                            </ul>
-                            <p><strong>评分规则：</strong></p>
-                            <ul class="mb-0">
-                                <li><span class="badge bg-success">80-100分</span>：多个指标强烈看涨/看跌，信号明确</li>
-                                <li><span class="badge bg-warning">60-80分</span>：部分指标支持，信号中等</li>
-                                <li><span class="badge bg-secondary">0-60分</span>：指标冲突或信号弱，建议观望</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <!-- 2. 新闻情绪 -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">📰 新闻情绪 (News Sentiment)</h6>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>分析来源：</strong></p>
-                            <ul>
-                                <li><strong>新闻标题和内容：</strong> 来自 CoinDesk、Cointelegraph 等权威媒体</li>
-                                <li><strong>Reddit社区讨论：</strong> r/CryptoCurrency、r/Bitcoin 等热门社区</li>
-                                <li><strong>Twitter大V动态：</strong> 行业KOL的推文和观点</li>
-                                <li><strong>SEC监管公告：</strong> 美国证券交易委员会的官方消息</li>
-                            </ul>
-                            <p><strong>情绪分析方法：</strong></p>
-                            <ul>
-                                <li><strong>NLP自然语言处理：</strong> 识别文本中的情绪倾向（积极/消极/中性）</li>
-                                <li><strong>关键词权重：</strong> "突破"、"上涨" → 正面；"崩盘"、"下跌" → 负面</li>
-                                <li><strong>时效性加权：</strong> 最近1小时的新闻权重最高，24小时前的权重递减</li>
-                            </ul>
-                            <p><strong>评分规则：</strong></p>
-                            <ul class="mb-0">
-                                <li><span class="badge bg-success">80-100分</span>：大量正面新闻，市场情绪积极</li>
-                                <li><span class="badge bg-warning">40-60分</span>：新闻中性，市场情绪平稳</li>
-                                <li><span class="badge bg-danger">0-40分</span>：负面新闻较多，市场情绪消极</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <!-- 3. 合约数据 (资金费率 + 多空比) -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">💰 合约数据 (Futures Data)</h6>
-                        </div>
-                        <div class="card-body">
-                            <h6 class="text-primary">资金费率 (Funding Rate)</h6>
-                            <p><strong>什么是资金费率？</strong></p>
-                            <p>
-                                资金费率是永续合约市场中，多头和空头之间定期支付的费用。
-                                当资金费率为正时，多头支付给空头；为负时，空头支付给多头。
-                            </p>
-                            <p><strong>如何解读？</strong></p>
-                            <ul>
-                                <li><strong>资金费率 &gt; 0.05%：</strong> 市场极度乐观，多头过热（可能回调风险）</li>
-                                <li><strong>资金费率 0.01% ~ 0.05%：</strong> 市场看涨，多头占优</li>
-                                <li><strong>资金费率 -0.01% ~ 0.01%：</strong> 市场中性，多空平衡</li>
-                                <li><strong>资金费率 -0.05% ~ -0.01%：</strong> 市场看跌，空头占优</li>
-                                <li><strong>资金费率 &lt; -0.05%：</strong> 市场极度悲观，空头过热（可能反弹）</li>
-                            </ul>
-
-                            <hr class="my-3">
-
-                            <h6 class="text-primary">账户数比 (Account Ratio)</h6>
-                            <p><strong>数据来源：</strong>Binance全局账户数比率 (globalLongShortAccountRatio)</p>
-                            <p><strong>计算公式：</strong>做多账户数 / 做空账户数</p>
-                            <p><strong>如何解读？</strong></p>
-                            <ul>
-                                <li><strong>账户数比 &gt; 1.5：</strong> 散户极度乐观，大量开多（警惕追高风险）</li>
-                                <li><strong>账户数比 1.0 ~ 1.5：</strong> 散户情绪偏多，多头占优</li>
-                                <li><strong>账户数比 0.7 ~ 1.0：</strong> 散户情绪偏空，空头占优</li>
-                                <li><strong>账户数比 &lt; 0.7：</strong> 散户极度悲观，大量开空（可能反弹）</li>
-                            </ul>
-                            <p class="mb-2"><strong>💡 意义：</strong>反映散户情绪，人多不一定钱多。散户通常是市场的"逆向指标"。</p>
-
-                            <hr class="my-3">
-
-                            <h6 class="text-primary">持仓量比 (Position Ratio)</h6>
-                            <p><strong>数据来源：</strong>Binance Top 20%大户持仓量比率 (topLongShortPositionRatio)</p>
-                            <p><strong>计算公式：</strong>做多持仓量 / 做空持仓量（仅统计持仓量前20%的大户）</p>
-                            <p><strong>如何解读？</strong></p>
-                            <ul>
-                                <li><strong>持仓量比 &gt; 1.2：</strong> 大户资金大量流入多头，看涨信号强</li>
-                                <li><strong>持仓量比 1.0 ~ 1.2：</strong> 大户资金偏向多头</li>
-                                <li><strong>持仓量比 0.8 ~ 1.0：</strong> 大户资金偏向空头</li>
-                                <li><strong>持仓量比 &lt; 0.8：</strong> 大户资金大量流入空头，看跌信号强</li>
-                            </ul>
-                            <p class="mb-2"><strong>💡 意义：</strong>反映资金流向，真金白银的方向。大户通常比散户更理性。</p>
-
-                            <hr class="my-3">
-
-                            <h6 class="text-warning">⚠️ 两种比率的差异</h6>
-                            <div class="bg-light p-3 rounded">
-                                <p class="mb-2"><strong>散户 vs 大户的分歧：</strong></p>
-                                <ul class="small mb-0">
-                                    <li><strong>账户数比 &gt; 1 但 持仓量比 &lt; 1：</strong>散户看多但大户看空 → 可能是诱多陷阱</li>
-                                    <li><strong>账户数比 &lt; 1 但 持仓量比 &gt; 1：</strong>散户看空但大户看多 → 可能是低吸良机</li>
-                                    <li><strong>两者方向一致：</strong>散户和大户观点统一 → 趋势更可靠</li>
-                                </ul>
-                            </div>
-
-                            <p class="mt-3"><strong>评分规则：</strong></p>
-                            <ul class="mb-0">
-                                <li><span class="badge bg-success">80-100分</span>：资金费率和持仓量比同时支持趋势</li>
-                                <li><span class="badge bg-warning">60-80分</span>：部分指标支持，信号中等</li>
-                                <li><span class="badge bg-danger">0-60分</span>：指标冲突或与趋势背离</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <!-- 4. Hyperliquid聪明钱 -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">🧠 Hyperliquid聪明钱 (Smart Money on Hyperliquid)</h6>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>什么是聪明钱？</strong></p>
-                            <p>
-                                聪明钱是指在Hyperliquid DEX上交易表现优异的钱包地址，
-                                这些地址通过精准的交易决策积累了可观的利润（PnL）和高ROI。
-                            </p>
-                            <p><strong>监控标准：</strong></p>
-                            <ul>
-                                <li><strong>PnL (已实现盈亏) &gt; $10,000：</strong> 盈利能力强</li>
-                                <li><strong>ROI (投资回报率) &gt; 20%：</strong> 回报率高</li>
-                                <li><strong>账户价值 &gt; $50,000：</strong> 资金量大，影响力强</li>
-                            </ul>
-                            <p><strong>分析维度：</strong></p>
-                            <ul>
-                                <li><strong>交易方向：</strong> 聪明钱正在做多(LONG)还是做空(SHORT)？</li>
-                                <li><strong>交易金额：</strong> 单笔交易超过$50,000视为大额交易</li>
-                                <li><strong>净流入/流出：</strong> 做多金额 - 做空金额 = 净流入</li>
-                                <li><strong>交易时间：</strong> 最近24小时的活动最具参考价值</li>
-                            </ul>
-                            <p><strong>评分规则：</strong></p>
-                            <ul class="mb-0">
-                                <li><span class="badge bg-success">80-100分</span>：聪明钱大量买入/卖出，方向明确</li>
-                                <li><span class="badge bg-warning">60-80分</span>：聪明钱中等活跃，信号中等</li>
-                                <li><span class="badge bg-secondary">0-60分</span>：聪明钱无明显动作或方向分散</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <!-- 5. 链上数据 -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">⛓️ 链上数据 (On-Chain Data)</h6>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>分析内容：</strong></p>
-                            <ul>
-                                <li><strong>大额转账监控：</strong> 追踪交易所和巨鲸地址的资金流动
-                                    <ul>
-                                        <li>转入交易所 → 可能卖出（看跌）</li>
-                                        <li>转出交易所 → 可能囤币（看涨）</li>
-                                    </ul>
-                                </li>
-                                <li><strong>活跃地址数：</strong> 反映网络活跃度和用户兴趣</li>
-                                <li><strong>交易量：</strong> 链上交易量增加表明市场热度提升</li>
-                                <li><strong>Gas费用：</strong> Ethereum网络Gas费飙升通常预示大量交易</li>
-                            </ul>
-                            <p><strong>监控地址：</strong></p>
-                            <ul>
-                                <li><strong>Binance钱包：</strong> 最大的交易所，资金流动风向标</li>
-                                <li><strong>巨鲸地址：</strong> 持币量巨大的个人或机构</li>
-                                <li><strong>DeFi协议：</strong> Uniswap、Aave等DeFi项目的智能合约</li>
-                            </ul>
-                            <p><strong>评分规则：</strong></p>
-                            <ul class="mb-0">
-                                <li><span class="badge bg-success">80-100分</span>：链上活动活跃，资金流向支持趋势</li>
-                                <li><span class="badge bg-warning">60-80分</span>：链上活动正常，无明确信号</li>
-                                <li><span class="badge bg-secondary">0-60分</span>：链上活动低迷或资金异常流动</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <!-- 6. ETF数据 -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0">📊 ETF数据 (ETF Flow Data)</h6>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>什么是加密货币ETF？</strong></p>
-                            <p>
-                                ETF（交易所交易基金）是一种在传统证券交易所上市的投资工具，允许传统金融投资者通过合规渠道投资加密货币。
-                                ETF资金流向是机构投资者情绪的重要风向标。
-                            </p>
-                            <p><strong>监控的ETF类型：</strong></p>
-                            <ul>
-                                <li><strong>现货ETF：</strong> 直接持有实物加密货币（如灰度GBTC、BlackRock IBIT）</li>
-                                <li><strong>期货ETF：</strong> 通过期货合约间接投资（如ProShares BITO）</li>
-                                <li><strong>做空ETF：</strong> 反向做空加密货币的ETF</li>
-                            </ul>
-
-                            <p><strong>关键指标：</strong></p>
-                            <ul>
-                                <li><strong>单日资金流入/流出：</strong> 当日ETF的净买入/卖出金额
-                                    <ul>
-                                        <li>大量流入 (&gt; $100M) → 机构看好，长期看涨</li>
-                                        <li>大量流出 (&lt; -$100M) → 机构撤离，看跌信号</li>
-                                    </ul>
-                                </li>
-                                <li><strong>累计持仓量 (AUM)：</strong> ETF管理的总资产规模
-                                    <ul>
-                                        <li>AUM持续增长 → 机构兴趣增加</li>
-                                        <li>AUM下降 → 机构信心减弱</li>
-                                    </ul>
-                                </li>
-                                <li><strong>连续流入/流出天数：</strong> 资金流向的持续性
-                                    <ul>
-                                        <li>连续5天以上流入 → 趋势确立，强烈看涨</li>
-                                        <li>连续5天以上流出 → 趋势反转，强烈看跌</li>
-                                    </ul>
-                                </li>
-                            </ul>
-
-                            <p><strong>重点ETF产品：</strong></p>
-                            <div class="bg-light p-3 rounded mb-3">
-                                <p class="mb-1"><strong>比特币ETF：</strong></p>
-                                <ul class="small mb-2">
-                                    <li><strong>BlackRock IBIT：</strong>全球最大资管公司，影响力巨大</li>
-                                    <li><strong>Grayscale GBTC：</strong>最早的比特币信托，流入流出风向标</li>
-                                    <li><strong>Fidelity FBTC：</strong>传统金融巨头，机构信赖度高</li>
-                                </ul>
-                                <p class="mb-1"><strong>以太坊ETF：</strong></p>
-                                <ul class="small mb-0">
-                                    <li><strong>BlackRock ETHA：</strong>以太坊现货ETF领头羊</li>
-                                    <li><strong>Grayscale ETHE：</strong>以太坊信托产品</li>
-                                </ul>
-                            </div>
-
-                            <p><strong>如何解读ETF数据？</strong></p>
-                            <ul>
-                                <li><strong>流入 + 价格上涨：</strong>机构和市场同步看涨，趋势强劲</li>
-                                <li><strong>流入 + 价格下跌：</strong>机构逢低吸筹，潜在底部信号</li>
-                                <li><strong>流出 + 价格上涨：</strong>机构获利了结，警惕顶部风险</li>
-                                <li><strong>流出 + 价格下跌：</strong>机构恐慌离场，趋势疲软</li>
-                            </ul>
-
-                            <p><strong>评分规则：</strong></p>
-                            <ul class="mb-0">
-                                <li><span class="badge bg-success">80-100分</span>：大额持续流入，机构强烈看好</li>
-                                <li><span class="badge bg-warning">60-80分</span>：小额流入或流出，机构情绪中性</li>
-                                <li><span class="badge bg-danger">0-60分</span>：大额持续流出，机构信心不足</li>
-                            </ul>
-
-                            <div class="alert alert-info mt-3 mb-0">
-                                <p class="mb-1"><strong>💡 为什么ETF数据重要？</strong></p>
-                                <ul class="small mb-0">
-                                    <li><strong>机构资金体量大：</strong>单个ETF日流入可达数亿美元，对市场影响显著</li>
-                                    <li><strong>长期持有倾向：</strong>机构投资者通常持有周期较长，资金更稳定</li>
-                                    <li><strong>合规性信号：</strong>ETF流入表明传统金融对加密货币的接受度提升</li>
-                                    <li><strong>宏观经济关联：</strong>ETF数据反映机构对宏观经济和加密市场的综合判断</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 综合评分说明 -->
-                    <h5 class="mt-4 mb-3"><i class="bi bi-calculator"></i> 综合评分与信号生成</h5>
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <p><strong>置信度计算公式：</strong></p>
-                            <div class="bg-light p-3 rounded mb-3">
-                                <code>
-                                置信度 = (技术指标 × 40% + 新闻情绪 × 20% + 合约数据 × 15% + Hyperliquid × 10% + 链上数据 × 5% + ETF数据 × 10%) / 6
-                                </code>
-                            </div>
-                            <p class="mb-2"><strong>各指标权重说明：</strong></p>
-                            <ul class="small">
-                                <li><strong>技术指标 (40%)：</strong>最高权重，价格走势和技术形态是短期交易的核心</li>
-                                <li><strong>新闻情绪 (20%)：</strong>重要权重，市场情绪直接影响短期波动</li>
-                                <li><strong>合约数据 (15%)：</strong>包含资金费率、账户数比、持仓量比，反映市场多空力量</li>
-                                <li><strong>Hyperliquid (10%)：</strong>聪明钱动向，专业交易者的参考</li>
-                                <li><strong>ETF数据 (10%)：</strong>机构资金流向，影响中长期趋势</li>
-                                <li><strong>链上数据 (5%)：</strong>巨鲸和链上活动，作为辅助参考</li>
-                            </ul>
-                            <p><strong>信号判定规则：</strong></p>
-                            <table class="table table-bordered">
-                                <thead>
-                                    <tr>
-                                        <th>置信度</th>
-                                        <th>信号</th>
-                                        <th>建议操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr class="table-success">
-                                        <td><strong>≥ 75%</strong></td>
-                                        <td><span class="badge bg-success">强烈看涨</span></td>
-                                        <td>可考虑建仓做多，设置止损</td>
-                                    </tr>
-                                    <tr class="table-success">
-                                        <td><strong>60% ~ 75%</strong></td>
-                                        <td><span class="badge bg-success">看涨</span></td>
-                                        <td>轻仓试探，观察趋势</td>
-                                    </tr>
-                                    <tr class="table-warning">
-                                        <td><strong>40% ~ 60%</strong></td>
-                                        <td><span class="badge bg-warning">观望</span></td>
-                                        <td>信号不明确，建议等待</td>
-                                    </tr>
-                                    <tr class="table-danger">
-                                        <td><strong>25% ~ 40%</strong></td>
-                                        <td><span class="badge bg-danger">看跌</span></td>
-                                        <td>考虑减仓或做空</td>
-                                    </tr>
-                                    <tr class="table-danger">
-                                        <td><strong>&lt; 25%</strong></td>
-                                        <td><span class="badge bg-danger">强烈看跌</span></td>
-                                        <td>及时止损，避免风险</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- 使用建议 -->
-                    <h5 class="mt-4 mb-3"><i class="bi bi-lightbulb"></i> 使用建议</h5>
-                    <div class="alert alert-success">
-                        <h6><i class="bi bi-check-circle"></i> 最佳实践</h6>
-                        <ul class="mb-0">
-                            <li><strong>关注多维度协同：</strong> 5个指标同时看涨/看跌时，信号最可靠</li>
-                            <li><strong>结合价格行为：</strong> 技术指标 + 实际价格走势双重确认</li>
-                            <li><strong>设置止损止盈：</strong> 系统提供的建仓价、止损价、止盈价仅供参考</li>
-                            <li><strong>分批建仓：</strong> 不要一次性全仓，分批买入降低风险</li>
-                            <li><strong>定期复盘：</strong> 记录交易决策，总结哪些信号最有效</li>
-                        </ul>
-                    </div>
-
-                    <div class="alert alert-danger">
-                        <h6><i class="bi bi-exclamation-triangle"></i> 风险提示</h6>
-                        <ul class="mb-0">
-                            <li><strong>非绝对准确：</strong> 任何分析系统都无法保证100%准确</li>
-                            <li><strong>市场变化快：</strong> 加密货币市场波动极大，行情瞬息万变</li>
-                            <li><strong>仅供参考：</strong> 本系统提供的建议仅供参考，不构成投资建议</li>
-                            <li><strong>自行判断：</strong> 请结合自身风险承受能力和投资经验做决策</li>
-                            <li><strong>风险自担：</strong> 投资有风险，入市需谨慎</li>
-                        </ul>
-                    </div>
-
-                    <div class="alert alert-info mb-0">
-                        <h6><i class="bi bi-clock"></i> 更新频率说明</h6>
-                        <p class="mb-0">
-                            <strong>实时价格：</strong>每5秒刷新 |
-                            <strong>技术指标：</strong>每5分钟更新 |
-                            <strong>新闻情绪：</strong>每15分钟更新 |
-                            <strong>合约数据：</strong>每5分钟更新 |
-                            <strong>Hyperliquid：</strong>每30分钟更新 |
-                            <strong>链上数据：</strong>每5分钟更新 |
-                            <strong>ETF数据：</strong>每日更新（交易日结束后）
-                        </p>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">知道了</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="/static/js/dashboard.js"></script>
 </body>
 </html>
