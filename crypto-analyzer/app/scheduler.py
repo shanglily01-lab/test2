@@ -884,7 +884,7 @@ class UnifiedDataScheduler:
             with HyperliquidDB() as db:
                 # 使用新的分级监控逻辑
                 results = await self.hyperliquid_collector.monitor_all_addresses(
-                    hours=1,  # 回溯1小时
+                    hours=168,  # 回溯7天（7*24=168小时）
                     priority=priority,
                     hyperliquid_db=db
                 )

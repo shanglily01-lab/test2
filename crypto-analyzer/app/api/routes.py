@@ -480,3 +480,104 @@ async def get_ema_signals(
     except Exception as e:
         logger.error(f"获取EMA信号失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Hyperliquid聪明钱交易API ====================
+
+@router.get("/api/hyperliquid/trades")
+async def get_hyperliquid_smart_money_trades(
+    hours: int = 168,  # 默认7天（7*24=168小时）
+    min_usd: float = 50000,
+    limit: int = 200,
+    coin: Optional[str] = None,
+    side: Optional[str] = None
+):
+    """
+    获取 Hyperliquid 前100名聪明钱在指定时间内的交易
+
+    Args:
+        hours: 时间窗口（小时），默认24
+        min_usd: 最小交易金额（USD），默认50000
+        limit: 返回数量限制，默认200
+        coin: 币种过滤（可选），如 BTC, ETH
+        side: 方向过滤（可选），LONG 或 SHORT
+
+    Returns:
+        交易列表及统计信息
+    """
+    try:
+        import yaml
+        from pathlib import Path
+        from app.collectors.hyperliquid_collector import HyperliquidCollector
+        import asyncio
+
+        # 加载配置
+        project_root = Path(__file__).parent.parent.parent
+        config_path = project_root / 'config.yaml'
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+
+        # 创建采集器
+        collector = HyperliquidCollector(config)
+
+        # 抓取数据（调用新方法）
+        logger.info(f"API: 开始抓取 Hyperliquid 聪明钱交易（{hours}h, ≥${min_usd:,.0f}）")
+        trades = await collector.fetch_top_smart_money_trades_24h(
+            top_n=100,
+            min_trade_usd=min_usd,
+            hours=hours
+        )
+
+        # 过滤
+        if coin:
+            trades = [t for t in trades if t.get('coin', '').upper() == coin.upper()]
+
+        if side:
+            trades = [t for t in trades if t.get('side', '').upper() == side.upper()]
+
+        # 限制数量
+        trades = trades[:limit]
+
+        # 统计
+        long_trades = [t for t in trades if t.get('side') == 'LONG']
+        short_trades = [t for t in trades if t.get('side') == 'SHORT']
+
+        total_long_usd = sum(t.get('notional_usd', 0) for t in long_trades)
+        total_short_usd = sum(t.get('notional_usd', 0) for t in short_trades)
+
+        unique_wallets = len(set(t.get('address') for t in trades))
+        unique_coins = len(set(t.get('coin') for t in trades))
+
+        # 计算多空比
+        long_short_ratio = len(long_trades) / len(short_trades) if len(short_trades) > 0 else 0
+
+        logger.info(f"API: 返回 {len(trades)} 笔交易")
+
+        return {
+            "success": True,
+            "data": {
+                "trades": trades,
+                "statistics": {
+                    "total_count": len(trades),
+                    "long_count": len(long_trades),
+                    "short_count": len(short_trades),
+                    "total_long_usd": round(total_long_usd, 2),
+                    "total_short_usd": round(total_short_usd, 2),
+                    "net_flow_usd": round(total_long_usd - total_short_usd, 2),
+                    "unique_wallets": unique_wallets,
+                    "unique_coins": unique_coins,
+                    "long_short_ratio": round(long_short_ratio, 2),
+                    "time_range_hours": hours,
+                    "min_trade_usd": min_usd
+                }
+            }
+        }
+
+    except asyncio.CancelledError:
+        logger.warning("API请求被取消")
+        raise HTTPException(status_code=503, detail="请求被取消")
+    except Exception as e:
+        logger.error(f"获取 Hyperliquid 聪明钱交易失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
