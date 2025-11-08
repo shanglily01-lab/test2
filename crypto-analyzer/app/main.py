@@ -276,20 +276,24 @@ except Exception as e:
 
 @app.get("/")
 async def root():
-    """首页"""
-    return {
-        "name": "加密货币交易分析系统",
-        "version": "1.0.0",
-        "status": "running",
-        "docs": "/docs",
-        "endpoints": {
-            "价格查询": "/api/price/{symbol}",
-            "技术分析": "/api/analysis/{symbol}",
-            "新闻情绪": "/api/news/{symbol}",
-            "交易信号": "/api/signals/{symbol}",
-            "批量信号": "/api/signals/batch"
+    """首页 - 返回主页HTML"""
+    index_path = project_root / "templates" / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path))
+    else:
+        return {
+            "name": "加密货币交易分析系统",
+            "version": "1.0.0",
+            "status": "running",
+            "docs": "/docs",
+            "endpoints": {
+                "价格查询": "/api/price/{symbol}",
+                "技术分析": "/api/analysis/{symbol}",
+                "新闻情绪": "/api/news/{symbol}",
+                "交易信号": "/api/signals/{symbol}",
+                "批量信号": "/api/signals/batch"
+            }
         }
-    }
 
 
 @app.get("/favicon.ico")
@@ -321,6 +325,7 @@ async def test_futures():
 
 
 @app.get("/corporate-treasury")
+@app.get("/corporate_treasury")
 async def corporate_treasury_page():
     """企业金库监控页面"""
     treasury_path = project_root / "templates" / "corporate_treasury.html"
@@ -390,7 +395,58 @@ async def dashboard_page():
         raise HTTPException(status_code=404, detail="Dashboard page not found")
 
 
+
+
+@app.get("/dashboard_new")
+async def dashboard_new_page():
+    """
+    新版仪表盘页面（Gate.io风格）
+    """
+    dashboard_path = project_root / "templates" / "dashboard_new.html"
+    if dashboard_path.exists():
+        return FileResponse(str(dashboard_path))
+    else:
+        raise HTTPException(status_code=404, detail="New dashboard page not found")
+
+
+@app.get("/contract_trading_new")
+async def contract_trading_new_page():
+    """
+    新版模拟合约交易页面（Gate.io风格）
+    """
+    contract_trading_path = project_root / "templates" / "contract_trading_new.html"
+    if contract_trading_path.exists():
+        return FileResponse(str(contract_trading_path))
+    else:
+        raise HTTPException(status_code=404, detail="New contract trading page not found")
+
+
+@app.get("/futures_trading_new")
+async def futures_trading_new_page():
+    """
+    新版真实合约交易页面（Gate.io风格）
+    """
+    futures_trading_path = project_root / "templates" / "futures_trading_new.html"
+    if futures_trading_path.exists():
+        return FileResponse(str(futures_trading_path))
+    else:
+        raise HTTPException(status_code=404, detail="New futures trading page not found")
+
+
+@app.get("/paper_trading_new")
+async def paper_trading_new_page():
+    """
+    新版模拟现货交易页面（Gate.io风格）
+    """
+    paper_trading_path = project_root / "templates" / "paper_trading_new.html"
+    if paper_trading_path.exists():
+        return FileResponse(str(paper_trading_path))
+    else:
+        raise HTTPException(status_code=404, detail="New paper trading page not found")
+
+
 @app.get("/etf-data")
+@app.get("/etf_data")
 async def etf_data_page():
     """
     ETF数据监控页面

@@ -485,10 +485,21 @@ class EnhancedInvestmentAnalyzer:
             stop_loss = current_price * 0.98
             take_profit = current_price * 1.02
 
+        # 智能选择小数位数
+        # 价格 >= 1000: 2位小数
+        # 价格 >= 1: 4位小数
+        # 价格 < 1: 6位小数
+        if current_price >= 1000:
+            decimals = 2
+        elif current_price >= 1:
+            decimals = 4
+        else:
+            decimals = 6
+
         return (
-            round(entry, 2),
-            round(stop_loss, 2),
-            round(take_profit, 2)
+            round(entry, decimals),
+            round(stop_loss, decimals),
+            round(take_profit, decimals)
         )
 
     def _generate_reasons(

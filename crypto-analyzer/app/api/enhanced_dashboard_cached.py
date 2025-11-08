@@ -246,6 +246,7 @@ class EnhancedDashboardCached:
                         'funding': float(row_dict['funding_score']) if row_dict['funding_score'] else 50,
                         'hyperliquid': float(row_dict['hyperliquid_score']) if row_dict['hyperliquid_score'] else 50,
                         'ethereum': float(row_dict['ethereum_score']) if row_dict['ethereum_score'] else 50,
+                        'etf': float(row_dict['etf_score']) if row_dict.get('etf_score') else 50,
                     },
                     'data_sources': {
                         'technical': bool(row_dict['has_technical']),
@@ -253,6 +254,7 @@ class EnhancedDashboardCached:
                         'funding': bool(row_dict['has_funding']),
                         'hyperliquid': bool(row_dict['has_hyperliquid']),
                         'ethereum': bool(row_dict['has_ethereum']),
+                        'etf': bool(row_dict.get('has_etf')),
                     },
                     'data_completeness': float(row_dict['data_completeness']) if row_dict['data_completeness'] else 0,
                     'funding_rate': funding_rates.get(symbol)
@@ -397,7 +399,7 @@ class EnhancedDashboardCached:
             # 获取最近大额交易（从原表，因为需要详细信息）
             # 使用 GROUP BY 去重，避免显示重复的交易
             from datetime import timedelta
-            cutoff_time = datetime.now() - timedelta(hours=24)
+            cutoff_time = datetime.now() - timedelta(hours=72)  # 扩展到72小时以显示更多钱包
             result = session.execute(text("""
                 SELECT
                     MAX(t.id) as id,
@@ -414,7 +416,7 @@ class EnhancedDashboardCached:
                 WHERE t.trade_time >= :cutoff_time
                     AND w.is_monitoring = 1
                 GROUP BY t.address, t.coin, t.side, t.trade_time, ROUND(t.notional_usd, 2)
-                ORDER BY ROUND(t.notional_usd, 2) DESC
+                ORDER BY t.trade_time DESC
                 LIMIT 50
             """), {"cutoff_time": cutoff_time})
 

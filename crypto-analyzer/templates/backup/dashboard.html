@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>加密货币智能分析系统</title>
+    <link rel="stylesheet" href="/static/css/trading-platform.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header fade-in">
+            <div class="d-flex justify-between align-center">
+                <div>
+                    <h1 class="header-title">
+                        <i class="bi bi-graph-up"></i>
+                        加密货币智能分析系统
+                    </h1>
+                    <p class="header-subtitle">
+                        <span class="status-indicator">
+                            <span class="status-dot online"></span>
+                            系统运行中
+                        </span>
+                        <span style="margin-left: 16px;">最后更新: <span id="lastUpdate">--</span></span>
+                    </p>
+                </div>
+                <div class="d-flex gap-md">
+                    <button class="btn btn-ghost" onclick="refreshData()">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.location.href='/settings'">
+                        <i class="bi bi-gear"></i> 设置
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-container slide-up">
+            <div class="nav-links">
+                <a href="/" class="nav-link active">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 合约交易
+                </a>
+                <a href="/contract_trading" class="nav-link">
+                    <i class="bi bi-cash-stack"></i> 模拟合约
+                </a>
+                <a href="/paper_trading" class="nav-link">
+                    <i class="bi bi-journals"></i> 模拟现货
+                </a>
+                <a href="/strategies" class="nav-link">
+                    <i class="bi bi-diagram-3"></i> 策略管理
+                </a>
+            </div>
+        </nav>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid slide-up">
+            <div class="stat-card">
+                <div class="stat-label">监控交易对</div>
+                <div class="stat-value" id="totalSymbols">--</div>
+                <div class="stat-change">实时监控中</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">投资建议</div>
+                <div class="stat-value text-success" id="buySignals">--</div>
+                <div class="stat-change">买入信号</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Hyperliquid钱包</div>
+                <div class="stat-value" id="monitoredWallets">--</div>
+                <div class="stat-change">正在监控</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">24h交易量</div>
+                <div class="stat-value" id="totalVolume">--</div>
+                <div class="stat-change">USDT</div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 24px;">
+            <!-- Price Table -->
+            <div class="card slide-up">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-currency-exchange"></i>
+                        实时价格监控
+                    </h2>
+                    <span class="badge badge-info" id="priceCount">0</span>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <div style="max-height: 500px; overflow-y: scroll; overflow-x: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
+                        <table id="priceTable" style="width: 100%; border-collapse: collapse; background: var(--bg-card);">
+                            <thead style="position: sticky; top: 0; background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); z-index: 1;">
+                                <tr>
+                                    <th style="padding: 12px 16px; text-align: left;">交易对</th>
+                                    <th style="padding: 12px 16px; text-align: left;">价格 (USDT)</th>
+                                    <th style="padding: 12px 16px; text-align: left;">24h涨跌</th>
+                                    <th style="padding: 12px 16px; text-align: left;">24h交易量</th>
+                                    <th style="padding: 12px 16px; text-align: left;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="priceTableBody">
+                                <tr>
+                                    <td colspan="5" class="empty-state">
+                                        <div class="empty-state-icon">📊</div>
+                                        <div class="empty-state-text">加载中...</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Investment Recommendations -->
+            <div class="card slide-up">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-lightbulb"></i>
+                        投资建议
+                    </h2>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <div id="recommendationsContainer" style="max-height: 500px; overflow-y: scroll; overflow-x: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">💡</div>
+                            <div class="empty-state-text">加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hyperliquid Section -->
+        <div class="card slide-up">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-wallet2"></i>
+                    Hyperliquid 聪明钱活动
+                </h2>
+                <span class="badge badge-success">实时</span>
+            </div>
+            <div class="card-body">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                        <div class="text-secondary text-sm mb-sm">24h交易量</div>
+                        <div class="text-2xl font-bold" id="hlVolume24h">--</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                        <div class="text-secondary text-sm mb-sm">活跃钱包</div>
+                        <div class="text-2xl font-bold" id="hlActiveWallets">--</div>
+                    </div>
+                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                        <div class="text-secondary text-sm mb-sm">最近交易</div>
+                        <div class="text-2xl font-bold" id="hlRecentTrades">--</div>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>钱包</th>
+                                <th>币种</th>
+                                <th>方向</th>
+                                <th>金额 (USD)</th>
+                                <th>时间</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hlTradesBody">
+                            <tr>
+                                <td colspan="5" class="empty-state">
+                                    <div class="empty-state-text">加载中...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 智能格式化价格
+        function formatPrice(price) {
+            if (price === null || price === undefined || isNaN(price)) return '-';
+            const num = parseFloat(price);
+            if (num >= 1000) {
+                return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            } else if (num >= 1) {
+                return num.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+            } else {
+                return num.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 });
+            }
+        }
+
+        // 格式化大数字
+        function formatLargeNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
+            return num.toFixed(2);
+        }
+
+        // 加载数据
+        async function loadData() {
+            try {
+                const response = await fetch('/api/dashboard');
+                const data = await response.json();
+
+                if (data.success) {
+                    updateStats(data.data);
+                    updatePriceTable(data.data.prices);
+                    updateRecommendations(data.data.recommendations);
+                    updateHyperliquid(data.data.hyperliquid);
+                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('zh-CN');
+                }
+            } catch (error) {
+                console.error('加载数据失败:', error);
+            }
+        }
+
+        // 更新统计数据
+        function updateStats(data) {
+            document.getElementById('totalSymbols').textContent = data.prices?.length || 0;
+            document.getElementById('buySignals').textContent = data.recommendations?.filter(r => r.signal === 'BUY' || r.signal === 'STRONG_BUY').length || 0;
+            document.getElementById('monitoredWallets').textContent = data.hyperliquid?.monitored_wallets || 0;
+            document.getElementById('totalVolume').textContent = formatLargeNumber(data.hyperliquid?.volume_24h || 0);
+        }
+
+        // 更新价格表
+        function updatePriceTable(prices) {
+            const tbody = document.getElementById('priceTableBody');
+            document.getElementById('priceCount').textContent = prices?.length || 0;
+
+            if (!prices || prices.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">暂无数据</div></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = prices.slice(0, 20).map(p => `
+                <tr>
+                    <td><strong>${p.symbol}</strong></td>
+                    <td class="price font-mono">$${formatPrice(p.price)}</td>
+                    <td class="${p.change_24h >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                        ${p.change_24h >= 0 ? '+' : ''}${p.change_24h.toFixed(2)}%
+                    </td>
+                    <td class="text-secondary">$${formatLargeNumber(p.volume_24h)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="viewDetails('${p.symbol}')">
+                            查看
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 更新投资建议
+        function updateRecommendations(recommendations) {
+            const container = document.getElementById('recommendationsContainer');
+
+            if (!recommendations || recommendations.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无建议</div></div>';
+                return;
+            }
+
+            const buyRecs = recommendations.filter(r => r.signal === 'BUY' || r.signal === 'STRONG_BUY').slice(0, 5);
+
+            container.innerHTML = '<div style="padding: 16px;">' + buyRecs.map(rec => `
+                <div class="position-card long" style="margin-bottom: 12px;">
+                    <div class="d-flex justify-between align-center mb-sm">
+                        <strong>${rec.symbol}</strong>
+                        <span class="badge badge-success">${rec.signal === 'STRONG_BUY' ? '强烈买入' : '买入'}</span>
+                    </div>
+                    <div class="text-sm text-secondary mb-sm">
+                        <div>建仓价: <span class="font-mono">$${formatPrice(rec.entry_price)}</span></div>
+                        <div>止损价: <span class="font-mono">$${formatPrice(rec.stop_loss)}</span></div>
+                        <div>止盈价: <span class="font-mono">$${formatPrice(rec.take_profit)}</span></div>
+                    </div>
+                    <div class="d-flex justify-between align-center">
+                        <span class="text-xs text-secondary">置信度: ${(rec.confidence * 100).toFixed(0)}%</span>
+                        <button class="btn btn-sm btn-success" onclick="trade('${rec.symbol}')">
+                            立即交易
+                        </button>
+                    </div>
+                </div>
+            `).join('') + '<div style="height: 1px;"></div></div>';
+        }
+
+        // 更新Hyperliquid数据
+        function updateHyperliquid(hl) {
+            if (!hl) return;
+
+            document.getElementById('hlVolume24h').textContent = '$' + formatLargeNumber(hl.volume_24h || 0);
+            document.getElementById('hlActiveWallets').textContent = hl.active_wallets || 0;
+            document.getElementById('hlRecentTrades').textContent = hl.recent_trades?.length || 0;
+
+            const tbody = document.getElementById('hlTradesBody');
+            const trades = hl.recent_trades || [];
+
+            if (trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="empty-state-text">暂无交易</div></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = trades.slice(0, 10).map(t => `
+                <tr>
+                    <td>
+                        <span class="badge badge-neutral">${t.label || t.address.substring(0, 8) + '...'}</span>
+                    </td>
+                    <td><strong>${t.coin}</strong></td>
+                    <td>
+                        <span class="badge ${t.side === 'LONG' ? 'badge-success' : 'badge-danger'}">
+                            ${t.side === 'LONG' ? '做多' : '做空'}
+                        </span>
+                    </td>
+                    <td class="font-mono">$${formatLargeNumber(t.notional_usd)}</td>
+                    <td class="text-secondary text-sm">${new Date(t.trade_time).toLocaleTimeString('zh-CN')}</td>
+                </tr>
+            `).join('');
+        }
+
+        // 刷新数据
+        function refreshData() {
+            loadData();
+        }
+
+        // 查看详情
+        function viewDetails(symbol) {
+            alert('查看 ' + symbol + ' 详情（功能开发中）');
+        }
+
+        // 交易
+        function trade(symbol) {
+            if (confirm('是否要交易 ' + symbol + '?')) {
+                window.location.href = '/futures_trading?symbol=' + encodeURIComponent(symbol);
+            }
+        }
+
+        // 初始化
+        loadData();
+        setInterval(loadData, 30000); // 每30秒刷新
+    </script>
+</body>
+</html>

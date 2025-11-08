@@ -39,8 +39,8 @@ class HistoricalDataBackfill:
         with open(config_path, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
 
-        # 获取监控币种
-        self.symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
+        # 只监控 PUMP/USDT
+        self.symbols = ['PUMP/USDT']
 
         # 初始化数据库
         from app.database.db_service import DatabaseService
@@ -51,7 +51,7 @@ class HistoricalDataBackfill:
         from app.collectors.price_collector import MultiExchangeCollector
         self.price_collector = MultiExchangeCollector(self.config)
 
-        logger.info(f"初始化完成，监控币种: {len(self.symbols)} 个")
+        logger.info(f"初始化完成，目标币种: PUMP/USDT")
 
     async def backfill_klines(
         self,
@@ -337,14 +337,14 @@ class HistoricalDataBackfill:
 async def main():
     """主函数"""
 
-    # 配置参数
-    START_DATE = '2025-10-29'  # 开始日期
-    END_DATE = '2025-11-04'    # 结束日期
+    # 配置参数 - PUMP/USDT 最近8天数据
+    START_DATE = '2025-10-30'  # 开始日期
+    END_DATE = '2025-11-07'    # 结束日期
     TIMEFRAMES = ['1m', '5m', '15m', '1h']  # 时间周期
 
     logger.info(f"""
 ╔════════════════════════════════════════════════════════════╗
-║          历史数据回填脚本                                    ║
+║          历史数据回填脚本 - PUMP/USDT                       ║
 ╠════════════════════════════════════════════════════════════╣
 ║  日期范围: {START_DATE} ~ {END_DATE}                  ║
 ║  时间周期: {', '.join(TIMEFRAMES)}                         ║

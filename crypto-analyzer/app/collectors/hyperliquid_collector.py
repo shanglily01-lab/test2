@@ -74,6 +74,14 @@ class HyperliquidCollector:
                             data = await response.json()
                             logger.debug(f"获取用户 {address[:10]}... 状态成功")
                             return data
+                        elif response.status == 429:
+                            # 速率限制，使用更长的延迟
+                            logger.warning(f"获取用户状态失败: HTTP 429 速率限制 (尝试 {attempt + 1}/{max_retries})")
+                            if attempt < max_retries - 1:
+                                wait_time = 5 * (attempt + 1)
+                                logger.info(f"等待 {wait_time} 秒后重试...")
+                                await asyncio.sleep(wait_time)
+                            continue
                         else:
                             logger.warning(f"获取用户状态失败: HTTP {response.status} (尝试 {attempt + 1}/{max_retries})")
                             if attempt < max_retries - 1:
@@ -123,6 +131,14 @@ class HyperliquidCollector:
                             fills = await response.json()
                             logger.info(f"获取 {address[:10]}... 成交记录: {len(fills)} 笔")
                             return fills[:limit] if fills else []
+                        elif response.status == 429:
+                            # 速率限制，使用更长的延迟
+                            logger.warning(f"获取成交记录失败: HTTP 429 速率限制 (尝试 {attempt + 1}/{max_retries})")
+                            if attempt < max_retries - 1:
+                                wait_time = 5 * (attempt + 1)  # 5秒、10秒、15秒
+                                logger.info(f"等待 {wait_time} 秒后重试...")
+                                await asyncio.sleep(wait_time)
+                            continue
                         else:
                             logger.warning(f"获取成交记录失败: HTTP {response.status} (尝试 {attempt + 1}/{max_retries})")
                             if attempt < max_retries - 1:
@@ -650,4 +666,122 @@ class HyperliquidCollector:
 
         except Exception as e:
             logger.error(f"发现聪明交易者失败: {e}")
+            return []
+
+    async def fetch_top_smart_money_trades_24h(
+        self,
+        top_n: int = 100,
+        min_trade_usd: float = 50000,
+        hours: int = 24
+    ) -> List[Dict]:
+        """
+        抓取前N名聪明钱在24小时内的所有交易
+
+        Args:
+            top_n: 取排行榜前N名（默认100）
+            min_trade_usd: 最小交易金额阈值（USD）
+            hours: 时间窗口（小时）
+
+        Returns:
+            交易列表
+        """
+        try:
+            logger.info(f"开始抓取前 {top_n} 名聪明钱的 {hours}h 交易数据（单笔≥${min_trade_usd:,.0f}）")
+
+            # 1. 从排行榜获取聪明交易者（使用week榜单，更稳定）
+            smart_traders = await self.discover_smart_traders(period="week", min_pnl=10000)
+
+            if not smart_traders:
+                logger.warning("未能获取聪明交易者列表")
+                return []
+
+            # 2. 取前N名，按PnL排序
+            top_traders = sorted(smart_traders, key=lambda x: x['pnl'], reverse=True)[:top_n]
+            logger.info(f"筛选出前 {len(top_traders)} 名交易者")
+
+            # 3. 批量抓取这些地址的成交记录
+            all_trades = []
+            cutoff_time = datetime.now() - timedelta(hours=hours)
+
+            total_fills = 0
+            total_analyzed = 0
+            total_time_filtered = 0
+            total_amount_filtered = 0
+
+            for i, trader in enumerate(top_traders, 1):
+                address = trader['address']
+
+                try:
+                    # 抓取成交记录（限制100笔，API限制）
+                    fills = await self.fetch_user_fills(address, limit=100)
+                    total_fills += len(fills)
+
+                    if not fills:
+                        continue
+
+                    # 过滤：时间窗口 + 最小金额
+                    for fill in fills:
+                        fill_data = self.analyze_fill(fill)
+
+                        if not fill_data:
+                            continue
+
+                        total_analyzed += 1
+
+                        # 时间过滤
+                        trade_time = fill_data.get('timestamp')
+                        if not trade_time or trade_time < cutoff_time:
+                            total_time_filtered += 1
+                            continue
+
+                        # 金额过滤
+                        notional_usd = fill_data.get('notional_usd', 0)
+                        if notional_usd < min_trade_usd:
+                            total_amount_filtered += 1
+                            continue
+
+                        # 补充交易者信息
+                        fill_data['trader_pnl'] = trader['pnl']
+                        fill_data['trader_roi'] = trader['roi']
+                        fill_data['trader_account_value'] = trader['account_value']
+
+                        all_trades.append(fill_data)
+
+                    # 每10个地址输出一次进度
+                    if i % 10 == 0:
+                        logger.info(f"  进度: {i}/{len(top_traders)}, 已收集 {len(all_trades)} 笔交易")
+
+                    # API限流控制：每个地址间隔1.5秒（避免429错误）
+                    await asyncio.sleep(1.5)
+
+                except asyncio.CancelledError:
+                    logger.warning(f"任务被取消，停止抓取")
+                    break
+                except Exception as e:
+                    logger.warning(f"抓取地址 {address[:10]}... 失败: {e}")
+                    continue
+
+            # 打印详细统计信息
+            logger.info(f"\n{'='*60}")
+            logger.info(f"统计信息汇总:")
+            logger.info(f"  - 总共获取的 fills 数量: {total_fills}")
+            logger.info(f"  - 成功解析的交易数: {total_analyzed}")
+            logger.info(f"  - 时间范围内的交易: {total_fills - total_time_filtered}")
+            logger.info(f"  - 符合金额要求的交易(≥${min_trade_usd:,.0f}): {len(all_trades)}")
+            logger.info(f"{'='*60}\n")
+
+            # 4. 按时间倒序排序（过滤掉 timestamp 为 None 的记录）
+            all_trades = [t for t in all_trades if t.get('timestamp') is not None]
+            all_trades.sort(key=lambda x: x['timestamp'], reverse=True)
+
+            logger.info(f"✓ 完成！共收集 {len(all_trades)} 笔聪明钱交易（24h内，≥${min_trade_usd:,.0f}）")
+            return all_trades
+
+        except asyncio.CancelledError:
+            logger.warning("抓取任务被取消")
+            return []
+        except Exception as e:
+            logger.error(f"抓取聪明钱交易失败: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return []
