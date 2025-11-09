@@ -3,7 +3,7 @@
 提供账户管理、下单、持仓查询等功能
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 from pydantic import BaseModel
 from typing import Optional, List
 from decimal import Decimal
@@ -13,6 +13,7 @@ from functools import lru_cache
 
 from app.trading.paper_trading_engine import PaperTradingEngine
 from app.services.price_cache_service import get_global_price_cache
+from loguru import logger
 
 router = APIRouter(prefix="/api/paper-trading", tags=["模拟交易"])
 
@@ -50,6 +51,7 @@ class PlaceOrderRequest(BaseModel):
     order_type: str = "MARKET"  # MARKET 或 LIMIT
     price: Optional[float] = None  # 限价单价格
     order_source: str = "manual"  # manual, signal, auto
+    pending_order_id: Optional[str] = None  # 待成交订单ID（如果是从待成交订单触发的）
 
 
 class CreateAccountRequest(BaseModel):
@@ -211,7 +213,8 @@ async def place_order(request: PlaceOrderRequest, engine: PaperTradingEngine = D
             quantity=Decimal(str(request.quantity)),
             order_type=request.order_type.upper(),
             price=Decimal(str(request.price)) if request.price else None,
-            order_source=request.order_source
+            order_source=request.order_source,
+            pending_order_id=request.pending_order_id
         )
 
         if success:
@@ -267,9 +270,9 @@ async def get_positions(account_id: Optional[int] = None, engine: PaperTradingEn
 
 
 @router.get("/trades")
-async def get_trades(account_id: Optional[int] = None, limit: int = 50, engine: PaperTradingEngine = Depends(get_engine)):
+async def get_trades(account_id: Optional[int] = None, limit: int = 100, engine: PaperTradingEngine = Depends(get_engine)):
     """
-    获取交易历史
+    获取交易历史（从数据库读取）
 
     Args:
         account_id: 账户ID
@@ -278,33 +281,111 @@ async def get_trades(account_id: Optional[int] = None, limit: int = 50, engine: 
     Returns:
         交易历史列表
     """
+    conn = engine._get_connection()
     try:
-        summary = engine.get_account_summary(account_id or 1)
-        if not summary:
-            raise HTTPException(status_code=404, detail="账户不存在")
+        with conn.cursor() as cursor:
+            # 从数据库直接读取所有交易历史
+            cursor.execute(
+                """SELECT * FROM paper_trading_trades
+                WHERE account_id = %s
+                ORDER BY trade_time DESC
+                LIMIT %s""",
+                (account_id or 1, limit)
+            )
+            trades = cursor.fetchall()
 
-        trades = []
-        for trade in summary['recent_trades'][:limit]:
-            trades.append({
-                "trade_id": trade['trade_id'],
-                "order_id": trade['order_id'],
-                "symbol": trade['symbol'],
-                "side": trade['side'],
-                "price": float(trade['price']),
-                "quantity": float(trade['quantity']),
-                "total_amount": float(trade['total_amount']),
-                "fee": float(trade['fee']),
-                "realized_pnl": float(trade['realized_pnl']) if trade['realized_pnl'] else None,
-                "pnl_pct": float(trade['pnl_pct']) if trade['pnl_pct'] else None,
-                "trade_time": trade['trade_time'].strftime('%Y-%m-%d %H:%M:%S')
-            })
+            result = []
+            for trade in trades:
+                result.append({
+                    "trade_id": trade['trade_id'],
+                    "order_id": trade['order_id'],
+                    "symbol": trade['symbol'],
+                    "side": trade['side'],
+                    "price": float(trade['price']),
+                    "quantity": float(trade['quantity']),
+                    "total_amount": float(trade['total_amount']),
+                    "fee": float(trade['fee']),
+                    "realized_pnl": float(trade['realized_pnl']) if trade['realized_pnl'] else None,
+                    "pnl_pct": float(trade['pnl_pct']) if trade['pnl_pct'] else None,
+                    "cost_price": float(trade['cost_price']) if trade['cost_price'] else None,
+                    "trade_time": trade['trade_time'].strftime('%Y-%m-%d %H:%M:%S') if trade['trade_time'] else None
+                })
 
-        return {
-            "trades": trades,
-            "total_count": len(trades)
-        }
+            return {
+                "success": True,
+                "trades": result,
+                "total_count": len(result)
+            }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
+@router.get("/orders")
+async def get_orders(account_id: Optional[int] = None, limit: int = 100, status: Optional[str] = None, engine: PaperTradingEngine = Depends(get_engine)):
+    """
+    获取订单历史（从数据库读取）
+
+    Args:
+        account_id: 账户ID
+        limit: 返回数量限制
+        status: 订单状态过滤 (PENDING, FILLED, CANCELLED, REJECTED)
+
+    Returns:
+        订单历史列表
+    """
+    conn = engine._get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 构建查询
+            if status:
+                cursor.execute(
+                    """SELECT * FROM paper_trading_orders
+                    WHERE account_id = %s AND status = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s""",
+                    (account_id or 1, status, limit)
+                )
+            else:
+                cursor.execute(
+                    """SELECT * FROM paper_trading_orders
+                    WHERE account_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s""",
+                    (account_id or 1, limit)
+                )
+            orders = cursor.fetchall()
+
+            result = []
+            for order in orders:
+                result.append({
+                    "order_id": order['order_id'],
+                    "symbol": order['symbol'],
+                    "side": order['side'],
+                    "order_type": order['order_type'],
+                    "price": float(order['price']) if order['price'] else None,
+                    "quantity": float(order['quantity']),
+                    "executed_quantity": float(order['executed_quantity']),
+                    "total_amount": float(order['total_amount']) if order['total_amount'] else None,
+                    "executed_amount": float(order['executed_amount']) if order['executed_amount'] else None,
+                    "fee": float(order['fee']),
+                    "status": order['status'],
+                    "avg_fill_price": float(order['avg_fill_price']) if order['avg_fill_price'] else None,
+                    "fill_time": order['fill_time'].strftime('%Y-%m-%d %H:%M:%S') if order['fill_time'] else None,
+                    "order_source": order['order_source'],
+                    "created_at": order['created_at'].strftime('%Y-%m-%d %H:%M:%S') if order['created_at'] else None
+                })
+
+            return {
+                "success": True,
+                "orders": result,
+                "total_count": len(result)
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
 
 
 @router.get("/price")
@@ -353,6 +434,138 @@ async def update_positions(account_id: Optional[int] = None, engine: PaperTradin
             "success": True,
             "message": "持仓市值已更新"
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class CreatePendingOrderRequest(BaseModel):
+    """创建待成交订单请求"""
+    account_id: Optional[int] = None
+    order_id: str
+    symbol: str
+    side: str
+    quantity: float
+    trigger_price: float
+    order_source: str = "auto"
+
+
+@router.post("/pending-order")
+async def create_pending_order(
+    request: CreatePendingOrderRequest = Body(...),
+    engine: PaperTradingEngine = Depends(get_engine)
+):
+    """
+    创建待成交订单
+
+    Returns:
+        创建结果
+    """
+    try:
+        account_id = request.account_id or 1
+        success, message = engine.create_pending_order(
+            account_id=account_id,
+            order_id=request.order_id,
+            symbol=request.symbol,
+            side=request.side.upper(),
+            quantity=Decimal(str(request.quantity)),
+            trigger_price=Decimal(str(request.trigger_price)),
+            order_source=request.order_source
+        )
+        
+        if success:
+            return {
+                "success": True,
+                "message": message
+            }
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"创建待成交订单失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pending-orders")
+async def get_pending_orders(
+    account_id: Optional[int] = None,
+    executed: bool = False,
+    engine: PaperTradingEngine = Depends(get_engine)
+):
+    """
+    获取待成交订单列表
+
+    Args:
+        account_id: 账户ID
+        executed: 是否只获取已执行的订单
+
+    Returns:
+        待成交订单列表
+    """
+    try:
+        orders = engine.get_pending_orders(account_id or 1, executed=executed)
+        
+        # 转换数据格式，确保所有字段都可以序列化
+        result = []
+        for order in orders:
+            result.append({
+                "order_id": order.get('order_id', ''),
+                "symbol": order.get('symbol', ''),
+                "side": order.get('side', ''),
+                "quantity": float(order.get('quantity', 0)) if order.get('quantity') is not None else 0,
+                "trigger_price": float(order.get('trigger_price', 0)) if order.get('trigger_price') is not None else 0,
+                "frozen_amount": float(order.get('frozen_amount', 0)) if order.get('frozen_amount') is not None else 0,
+                "frozen_quantity": float(order.get('frozen_quantity', 0)) if order.get('frozen_quantity') is not None else 0,
+                "status": order.get('status', 'PENDING'),
+                "executed": bool(order.get('executed', False)),
+                "order_source": order.get('order_source', 'auto'),
+                "created_at": order.get('created_at').strftime('%Y-%m-%d %H:%M:%S') if order.get('created_at') else None,
+                "executed_at": order.get('executed_at').strftime('%Y-%m-%d %H:%M:%S') if order.get('executed_at') else None
+            })
+        
+        return {
+            "success": True,
+            "orders": result,
+            "count": len(result)
+        }
+    except Exception as e:
+        logger.error(f"获取待成交订单失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/pending-order")
+async def cancel_pending_order(
+    order_id: str,
+    account_id: Optional[int] = None,
+    engine: PaperTradingEngine = Depends(get_engine)
+):
+    """
+    撤销待成交订单
+
+    Args:
+        order_id: 订单ID（使用查询参数，支持包含斜杠等特殊字符）
+        account_id: 账户ID
+
+    Returns:
+        撤销结果
+    """
+    try:
+        # 使用查询参数可以正确处理包含斜杠的order_id
+        logger.debug(f"收到撤单请求: order_id={order_id}, account_id={account_id}")
+        success, message = engine.cancel_pending_order(account_id or 1, order_id)
+        if success:
+            return {
+                "success": True,
+                "message": message
+            }
+        else:
+            raise HTTPException(status_code=400, detail=message)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -417,6 +417,7 @@ async def get_ema_signals(
     limit: int = 20,
     signal_type: Optional[str] = None,
     days: int = 2,
+    hours: Optional[int] = None,
     session: Session = Depends(get_db_session)
 ):
     """
@@ -426,46 +427,75 @@ async def get_ema_signals(
         limit: 返回数量限制
         signal_type: 信号类型过滤 (BUY或SELL)
         days: 查询最近N天的信号 (默认2天)
+        hours: 查询最近N小时的信号 (优先级高于days)
 
     Returns:
         EMA信号列表
     """
     try:
         # 构建查询 - 添加时间范围过滤
-        query = """
-            SELECT
-                symbol, timeframe, signal_type, signal_strength,
-                timestamp, price, short_ema, long_ema,
-                ema_config, volume_ratio, price_change_pct, ema_distance_pct,
-                created_at
-            FROM ema_signals
-            WHERE timestamp >= DATE_SUB(NOW(), INTERVAL :days DAY)
-        """
+        if hours is not None:
+            # 使用UTC时间确保时区一致性
+            from datetime import datetime, timedelta, timezone
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+            query = """
+                SELECT
+                    symbol, timeframe, signal_type, signal_strength,
+                    timestamp, price, short_ema, long_ema,
+                    ema_config, volume_ratio, price_change_pct, ema_distance_pct,
+                    created_at
+                FROM ema_signals
+                WHERE timestamp >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL :hours HOUR)
+            """
+            params = {'limit': limit, 'hours': hours}
+        else:
+            query = """
+                SELECT
+                    symbol, timeframe, signal_type, signal_strength,
+                    timestamp, price, short_ema, long_ema,
+                    ema_config, volume_ratio, price_change_pct, ema_distance_pct,
+                    created_at
+                FROM ema_signals
+                WHERE timestamp >= DATE_SUB(NOW(), INTERVAL :days DAY)
+            """
+            params = {'limit': limit, 'days': days}
 
         if signal_type:
             query += " AND signal_type = :signal_type"
+            params['signal_type'] = signal_type.upper()
 
         query += " ORDER BY timestamp DESC LIMIT :limit"
 
-        params = {'limit': limit, 'days': days}
-        if signal_type:
-            params['signal_type'] = signal_type.upper()
-
         result = session.execute(text(query), params)
         signals = []
+        
+        # 获取当前时间（用于前端过滤）
+        from datetime import datetime, timedelta
+        cutoff_time = datetime.now() - timedelta(hours=hours if hours is not None else (days * 24))
 
         for row in result:
+            volume_ratio = float(row.volume_ratio) if row.volume_ratio else 0.0
+            # 确保时间戳正确转换
+            timestamp = row.timestamp
+            if timestamp and hasattr(timestamp, 'isoformat'):
+                timestamp_str = timestamp.isoformat()
+            elif timestamp:
+                timestamp_str = str(timestamp)
+            else:
+                timestamp_str = None
+                
             signals.append({
                 'symbol': row.symbol,
                 'timeframe': row.timeframe,
                 'signal_type': row.signal_type,
                 'signal_strength': row.signal_strength,
-                'timestamp': row.timestamp.isoformat() if row.timestamp else None,
+                'timestamp': timestamp_str,
                 'price': float(row.price),
                 'short_ema': float(row.short_ema),
                 'long_ema': float(row.long_ema),
                 'ema_config': row.ema_config,
-                'volume_ratio': float(row.volume_ratio),
+                'volume_ratio': volume_ratio,
+                'volume_multiple': volume_ratio,  # 添加 volume_multiple 字段，前端使用
                 'price_change_pct': float(row.price_change_pct),
                 'ema_distance_pct': float(row.ema_distance_pct),
                 'created_at': row.created_at.isoformat() if row.created_at else None

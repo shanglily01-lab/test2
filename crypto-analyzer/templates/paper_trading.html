@@ -29,16 +29,47 @@
         .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
         .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
         .header-subtitle { color: var(--text-secondary); font-size: 13px; }
-        .nav-container { background: var(--bg-secondary); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; }
-        .nav-link { padding: var(--spacing-sm) var(--spacing-lg); background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 500; font-size: 13px; border: 1px solid transparent; }
-        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
-        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
+        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; flex-wrap: wrap; }
+        /* Signal Dropdown Styles */
+        .signal-dropdown { position: relative; }
+        .signal-btn { position: relative; }
+        .signal-badge { position: absolute; top: -4px; right: -4px; background: var(--danger-red); color: white; border-radius: 10px; padding: 2px 6px; font-size: 10px; font-weight: 700; min-width: 18px; text-align: center; line-height: 1.4; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4); animation: pulse-badge 2s ease-in-out infinite; }
+        @keyframes pulse-badge { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        .signal-dropdown-menu { position: absolute; top: calc(100% + 8px); background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); box-shadow: var(--shadow-xl); min-width: 320px; max-width: 400px; max-height: 500px; overflow-y: auto; z-index: 1000; display: none; padding: var(--spacing-md); }
+        .signal-dropdown-menu::-webkit-scrollbar { width: 6px; }
+        .signal-dropdown-menu::-webkit-scrollbar-track { background: var(--bg-tertiary); border-radius: 3px; }
+        .signal-dropdown-menu::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+        .signal-dropdown-menu::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
+        .signal-dropdown-menu.show { display: block; animation: slideDown var(--transition-base) ease-out; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .signal-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: var(--spacing-md); margin-bottom: var(--spacing-md); border-bottom: 1px solid var(--border-default); }
+        .signal-header h3 { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: var(--spacing-sm); }
+        .signal-table-container { overflow-x: auto; }
+        .signal-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .signal-table thead { background: var(--bg-tertiary); }
+        .signal-table th { padding: var(--spacing-sm) var(--spacing-md); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--border-default); white-space: nowrap; }
+        .signal-table th:first-child { width: 60px; }
+        .signal-table td { padding: var(--spacing-sm) var(--spacing-md); border-bottom: 1px solid var(--border-default); color: var(--text-primary); }
+        .signal-table tbody tr { cursor: pointer; transition: all var(--transition-fast); }
+        .signal-table tbody tr:hover { background: var(--bg-hover); }
+        .signal-table tbody tr:last-child td { border-bottom: none; }
+        .signal-symbol { font-weight: 700; font-size: 13px; color: var(--text-primary); }
+        .signal-strength-badge { font-size: 10px; padding: 2px 6px; }
+        .signal-price { font-family: var(--font-mono); color: var(--success-green); font-weight: 600; }
+        .signal-time { font-size: 11px; color: var(--text-secondary); }
+        .signal-empty { text-align: center; padding: var(--spacing-xl); color: var(--text-secondary); font-size: 13px; }
+        .signal-loading { text-align: center; padding: var(--spacing-xl); color: var(--text-secondary); font-size: 13px; }
+        .badge-warning { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
+        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); display: flex; flex-direction: column; }
         .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
-        .card-body { padding: 0; }
+        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); user-select: none; }
+        .card-title:hover { background: var(--bg-hover) !important; }
+        .card-body { padding: 0; flex: 1; min-height: 0; }
+        .card-body::-webkit-scrollbar { width: 6px; }
+        .card-body::-webkit-scrollbar-track { background: var(--bg-tertiary); border-radius: 3px; }
+        .card-body::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+        .card-body::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
         .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; }
         .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
@@ -59,6 +90,7 @@
         tbody tr:hover { background: var(--bg-hover); }
         .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-sm { padding: var(--spacing-xs) var(--spacing-md); font-size: 12px; }
         .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
         .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
         .btn-success { background: var(--success-green); color: white; }
@@ -76,9 +108,14 @@
         .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
         .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
         .price { font-family: var(--font-mono); font-weight: 600; font-size: 16px; }
-        .position-card { background: var(--bg-card); border: 1px solid var(--border-default); border-left-width: 4px; border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); transition: all var(--transition-base); }
+        .position-card { background: var(--bg-card); border: 1px solid var(--border-default); border-left-width: 4px; border-radius: var(--radius-md); padding: calc(var(--spacing-lg) * 0.7); margin-bottom: calc(var(--spacing-md) * 0.7); transition: all var(--transition-base); }
         .position-card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
         .position-card.long { border-left-color: var(--success-green); }
+        .position-card.pending-buy { border-left-color: var(--primary-blue); background: linear-gradient(135deg, var(--bg-card) 0%, rgba(43, 111, 237, 0.05) 100%); }
+        .position-card.pending-sell { border-left-color: var(--warning-yellow); background: linear-gradient(135deg, var(--bg-card) 0%, rgba(245, 158, 11, 0.05) 100%); }
+        .pending-badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; background: var(--bg-tertiary); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; margin-left: 8px; }
+        .pending-badge.pending-buy { color: var(--primary-blue); background: rgba(43, 111, 237, 0.1); }
+        .pending-badge.pending-sell { color: var(--warning-yellow); background: rgba(245, 158, 11, 0.1); }
         .pnl-positive { color: var(--success-green); }
         .pnl-negative { color: var(--danger-red); }
         .status-indicator { display: inline-flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); background: var(--bg-tertiary); border-radius: var(--radius-full); font-size: 12px; }
@@ -92,8 +129,19 @@
         .text-success { color: var(--success-green); } .text-danger { color: var(--danger-red); }
         .d-flex { display: flex; } .align-center { align-items: center; } .justify-between { justify-content: space-between; }
         .gap-sm { gap: var(--spacing-sm); } .gap-md { gap: var(--spacing-md); }
-        .mb-sm { margin-bottom: var(--spacing-sm); } .font-mono { font-family: var(--font-mono); }
-        .text-xs { font-size: 11px; } .text-sm { font-size: 13px; } .text-2xl { font-size: 24px; }
+        .mb-sm { margin-bottom: var(--spacing-sm); } .mb-lg { margin-bottom: var(--spacing-lg); } .mb-xs { margin-bottom: var(--spacing-xs); }
+        .font-mono { font-family: var(--font-mono); }
+        .text-xs { font-size: 11px; } .text-sm { font-size: 13px; } .text-lg { font-size: 18px; } .text-2xl { font-size: 24px; }
+        .w-full { width: 100%; }
+        /* Form Styles */
+        .form-group { margin-bottom: var(--spacing-lg); }
+        .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--spacing-sm); }
+        .form-control { width: 100%; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; font-family: var(--font-family); transition: all var(--transition-base); }
+        .form-control:focus { outline: none; border-color: var(--primary-blue); background: var(--bg-card); box-shadow: 0 0 0 3px rgba(43, 111, 237, 0.1); }
+        .form-control:disabled, .form-control[readonly] { opacity: 0.6; cursor: not-allowed; background: var(--bg-secondary); }
+        select.form-control { cursor: pointer; }
+        input[type="number"].form-control { font-family: var(--font-mono); }
+        input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary-blue); }
         .fade-in { animation: fadeIn var(--transition-base) ease-in; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         .slide-up { animation: slideUp var(--transition-slow) ease-out; }
@@ -102,8 +150,8 @@
             .container { padding: var(--spacing-md); }
             .stats-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-md); }
             .stat-value { font-size: 20px; }
-            .nav-links { flex-direction: column; }
             th, td { padding: var(--spacing-sm); }
+            .main-content { grid-template-columns: 1fr !important; }
         }
     </style>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
@@ -121,9 +169,12 @@
                     <p class="header-subtitle">无风险练习现货交易策略</p>
                 </div>
                 <div class="d-flex gap-md">
-                    <a href="/" class="btn btn-ghost">
+                    <button class="btn btn-ghost" onclick="window.location.href='/'">
                         <i class="bi bi-house"></i> 首页
-                    </a>
+                    </button>
+                    <button class="btn btn-ghost" onclick="window.location.href='/dashboard'">
+                        <i class="bi bi-speedometer2"></i> Dashboard
+                    </button>
                     <button class="btn btn-secondary" onclick="refreshData()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -131,26 +182,49 @@
             </div>
         </header>
 
-        <!-- Navigation -->
-        <nav class="nav-container">
-            <div class="nav-links">
-                <a href="/dashboard" class="nav-link">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 真实合约
-                </a>
-                <a href="/contract_trading" class="nav-link">
-                    <i class="bi bi-lightning-charge"></i> 模拟合约
-                </a>
-                <a href="/paper_trading" class="nav-link active">
-                    <i class="bi bi-journals"></i> 模拟现货
-                </a>
-            </div>
-        </nav>
 
         <!-- Account Stats -->
-        <div class="stats-grid">
+        <div class="stats-grid" style="grid-template-columns: repeat(5, minmax(250px, 1fr));">
+            <!-- 交易信号卡片 -->
+            <div class="signal-dropdown" style="position: relative;">
+                <div class="stat-card" style="cursor: pointer;" onclick="toggleSignalDropdown(event)">
+                    <div class="stat-label">
+                        <i class="bi bi-lightning-charge-fill" style="color: var(--success-green); margin-right: 4px;"></i>
+                        交易信号
+                        <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); loadEMASignals();" style="float: right; padding: 2px 6px; min-width: auto;">
+                            <i class="bi bi-arrow-clockwise" style="font-size: 11px;"></i>
+                        </button>
+                    </div>
+                    <div class="stat-value" id="signal-count-display">0</div>
+                    <div class="stat-change" id="signal-count-text">
+                        <span id="buy-count" style="color: var(--success-green);">买入: 0</span> | 
+                        <span id="sell-count" style="color: var(--danger-red);">卖出: 0</span>
+                    </div>
+                    <span class="signal-badge" id="nav-signal-count" style="display: none;">0</span>
+                </div>
+                <div class="signal-dropdown-menu" id="signal-dropdown-menu" style="left: 0; right: auto; min-width: 600px; max-width: 800px;">
+                    <div class="signal-header">
+                        <h3><i class="bi bi-lightning-charge-fill" style="color: var(--success-green);"></i> 4小时内EMA信号</h3>
+                        <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+                            <button class="btn btn-sm" id="filter-buy-btn" onclick="filterSignals('BUY')" style="padding: 4px 12px; background: var(--success-green); color: white; border: none;">
+                                买入
+                            </button>
+                            <button class="btn btn-sm btn-ghost" id="filter-sell-btn" onclick="filterSignals('SELL')" style="padding: 4px 12px;">
+                                卖出
+                            </button>
+                            <button class="btn btn-sm btn-ghost" id="filter-all-btn" onclick="filterSignals('ALL')" style="padding: 4px 12px;">
+                                全部
+                            </button>
+                            <button class="btn btn-sm btn-ghost" onclick="loadEMASignals()" style="padding: 4px 8px;">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="signal-table-container">
+                        <div id="nav-signal-list" class="signal-loading">加载中...</div>
+                    </div>
+                </div>
+            </div>
             <div class="stat-card">
                 <div class="stat-label">总权益 (USDT)</div>
                 <div class="stat-value" id="total-equity">0.00</div>
@@ -174,10 +248,10 @@
         </div>
 
         <!-- Main Content -->
-        <div style="display: grid; grid-template-columns: 380px 1fr; gap: 24px;">
+        <div class="main-content" style="display: grid; grid-template-columns: 608px 1fr; gap: 24px; align-items: start;">
             <!-- Trading Panel -->
-            <div>
-                <div class="card">
+            <div style="display: flex; flex-direction: column;">
+                <div class="card" id="tradingPanelCard" style="display: flex; flex-direction: column;">
                     <div class="card-header">
                         <h2 class="card-title">
                             <i class="bi bi-currency-exchange"></i>
@@ -193,12 +267,12 @@
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">
-                                    当前价格
-                                    <button type="button" class="btn btn-sm btn-ghost" onclick="refreshPrice(true)" style="float: right;">
+                                <div class="d-flex justify-between align-center" style="margin-bottom: var(--spacing-sm);">
+                                    <label class="form-label" style="margin-bottom: 0;">当前价格</label>
+                                    <button type="button" class="btn btn-sm btn-ghost" onclick="refreshPrice(true)" style="padding: 4px 8px; min-width: auto;">
                                         <i class="bi bi-arrow-clockwise"></i>
                                     </button>
-                                </label>
+                                </div>
                                 <input type="text" class="form-control" id="current-price" readonly>
                                 <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
                                     点击刷新获取最新价格
@@ -211,11 +285,41 @@
                                     预计金额: <span id="estimated-amount" class="font-mono">0.00</span> USDT
                                 </small>
                             </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                                <button type="button" class="btn btn-success w-full" onclick="placeTrade('BUY')">
+                            <div class="form-group" style="padding: var(--spacing-md); background: var(--bg-tertiary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
+                                    <input type="checkbox" id="auto-buy-checkbox" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary-blue);">
+                                    <label for="auto-buy-checkbox" class="form-label" style="margin: 0; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-primary);">
+                                        自动买入
+                                    </label>
+                                </div>
+                                <div id="auto-buy-settings" style="display: none;">
+                                    <label class="form-label" style="font-size: 12px; margin-bottom: var(--spacing-xs);">触发价格</label>
+                                    <input type="number" class="form-control" id="auto-buy-price" step="0.00000001" placeholder="低于此价格时自动买入" style="font-size: 13px;">
+                                    <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
+                                        当前价格低于设定价格时将自动执行买入
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="form-group" style="padding: var(--spacing-md); background: var(--bg-tertiary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
+                                    <input type="checkbox" id="auto-sell-checkbox" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--danger-red);">
+                                    <label for="auto-sell-checkbox" class="form-label" style="margin: 0; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-primary);">
+                                        自动卖出
+                                    </label>
+                                </div>
+                                <div id="auto-sell-settings" style="display: none;">
+                                    <label class="form-label" style="font-size: 12px; margin-bottom: var(--spacing-xs);">触发价格</label>
+                                    <input type="number" class="form-control" id="auto-sell-price" step="0.00000001" placeholder="高于此价格时自动卖出" style="font-size: 13px;">
+                                    <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
+                                        当前价格高于设定价格时将自动执行卖出
+                                    </small>
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); margin-top: var(--spacing-lg);">
+                                <button type="button" class="btn btn-success" style="width: 100%;" onclick="placeTrade('BUY')">
                                     <i class="bi bi-arrow-up-circle"></i> 买入
                                 </button>
-                                <button type="button" class="btn btn-danger w-full" onclick="placeTrade('SELL')">
+                                <button type="button" class="btn btn-danger" style="width: 100%;" onclick="placeTrade('SELL')">
                                     <i class="bi bi-arrow-down-circle"></i> 卖出
                                 </button>
                             </div>
@@ -224,58 +328,48 @@
                     </div>
                 </div>
 
-                <!-- EMA Signals -->
-                <div class="card" style="margin-top: 24px;">
-                    <div class="card-header">
-                        <h2 class="card-title text-lg">
-                            <i class="bi bi-lightning"></i>
-                            买入信号
-                        </h2>
-                        <span class="badge badge-info" id="signal-count">0</span>
-                    </div>
-                    <div class="card-body" style="max-height: 350px; overflow-y: auto;">
-                        <div id="ema-signals-list">
-                            <div class="empty-state-text text-sm">加载中...</div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- Positions & Trades -->
-            <div>
-                <!-- Tabs -->
-                <div class="d-flex gap-sm mb-lg">
-                    <button class="btn btn-secondary" id="tabPositions" onclick="showTab('positions')">
-                        <i class="bi bi-briefcase"></i> 当前持仓
-                    </button>
-                    <button class="btn btn-ghost" id="tabHistory" onclick="showTab('history')">
-                        <i class="bi bi-clock-history"></i> 交易历史
-                    </button>
-                </div>
-
-                <!-- Positions Tab -->
-                <div class="card" id="positionsTab">
+            <div style="display: flex; flex-direction: column;">
+                <!-- Combined Card with Tab Headers -->
+                <div class="card" id="positionsPanelCard" style="display: flex; flex-direction: column;">
                     <div class="card-header">
-                        <h2 class="card-title">当前持仓</h2>
+                        <div style="display: flex; gap: var(--spacing-lg); align-items: center;">
+                            <h2 class="card-title" id="tabPositionsTitle" onclick="showTab('positions')" style="cursor: pointer; margin: 0; padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); transition: all var(--transition-base);">
+                        <i class="bi bi-briefcase"></i> 当前持仓
+                            </h2>
+                            <h2 class="card-title" id="tabPendingTitle" onclick="showTab('pending')" style="cursor: pointer; margin: 0; padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); transition: all var(--transition-base); opacity: 0.6;">
+                                <i class="bi bi-hourglass-split"></i> 待成交
+                            </h2>
+                            <h2 class="card-title" id="tabHistoryTitle" onclick="showTab('history')" style="cursor: pointer; margin: 0; padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); transition: all var(--transition-base); opacity: 0.6;">
+                        <i class="bi bi-clock-history"></i> 交易历史
+                            </h2>
+                </div>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body" id="positionsCardBody" style="overflow-y: auto; overflow-x: hidden; padding: var(--spacing-md);">
+                        <!-- Positions Content -->
+                        <div id="positionsTab">
                         <div id="positions-list">
                             <div class="empty-state">
                                 <div class="empty-state-text">加载中...</div>
                             </div>
                         </div>
                     </div>
+                        <!-- Pending Orders Content -->
+                        <div id="pendingTab" style="display: none;">
+                            <div id="pending-orders-list">
+                                <div class="empty-state">
+                                    <div class="empty-state-text">加载中...</div>
                 </div>
-
-                <!-- History Tab -->
-                <div class="card" id="historyTab" style="display: none;">
-                    <div class="card-header">
-                        <h2 class="card-title">交易历史</h2>
                     </div>
-                    <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                        </div>
+                        <!-- History Content -->
+                        <div id="historyTab" style="display: none;">
                         <div id="trades-list">
                             <div class="empty-state">
                                 <div class="empty-state-text">加载中...</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -287,6 +381,202 @@
     <script>
         let currentSymbol = 'BTC/USDT';
         let currentPrice = 0;
+        let autoBuyEnabled = false;
+        let autoBuyTriggerPrice = 0;
+        let autoBuyExecuted = false; // 防止重复执行
+        let autoSellEnabled = false;
+        let autoSellTriggerPrice = 0;
+        let autoSellExecuted = false; // 防止重复执行
+        let positionsMap = {}; // 存储持仓数据，key为symbol，value为持仓对象
+        let pendingOrders = []; // 存储待成交订单（从数据库加载）
+        
+        // 从数据库加载待成交订单
+        async function loadPendingOrdersFromDB() {
+            try {
+                const response = await fetch('/api/paper-trading/pending-orders?executed=false');
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    console.error('HTTP错误:', response.status, data);
+                    pendingOrders = [];
+                    return;
+                }
+                
+                if (data.success && data.orders) {
+                    pendingOrders = data.orders.map(order => ({
+                        id: order.order_id,
+                        order_id: order.order_id,
+                        type: order.side,
+                        symbol: order.symbol,
+                        quantity: parseFloat(order.quantity) || 0,
+                        triggerPrice: parseFloat(order.trigger_price) || 0,
+                        frozenAmount: parseFloat(order.frozen_amount) || 0,
+                        frozenQuantity: parseFloat(order.frozen_quantity) || 0,
+                        status: order.status,
+                        executed: order.executed === true || order.executed === 1,
+                        createdAt: order.created_at
+                    }));
+                    // 恢复自动买入/卖出状态
+                    restoreAutoTradingState();
+                } else {
+                    pendingOrders = [];
+                }
+            } catch (error) {
+                console.error('从数据库加载待成交订单失败:', error);
+                pendingOrders = [];
+            }
+        }
+        
+        // 恢复自动交易状态
+        function restoreAutoTradingState() {
+            // 等待DOM加载完成
+            setTimeout(() => {
+                // 检查是否有当前交易对的待成交订单（排除已删除的）
+                const currentBuyOrder = pendingOrders.find(o => o.type === 'BUY' && o.symbol === currentSymbol && !o.executed && o.status !== 'DELETED');
+                const currentSellOrder = pendingOrders.find(o => o.type === 'SELL' && o.symbol === currentSymbol && !o.executed && o.status !== 'DELETED');
+                
+                if (currentBuyOrder) {
+                    autoBuyEnabled = true;
+                    autoBuyTriggerPrice = currentBuyOrder.triggerPrice;
+                    autoBuyExecuted = false;
+                    const checkbox = document.getElementById('auto-buy-checkbox');
+                    const settings = document.getElementById('auto-buy-settings');
+                    const priceInput = document.getElementById('auto-buy-price');
+                    if (checkbox) checkbox.checked = true;
+                    if (settings) settings.style.display = 'block';
+                    if (priceInput) priceInput.value = currentBuyOrder.triggerPrice;
+                }
+                
+                if (currentSellOrder) {
+                    autoSellEnabled = true;
+                    autoSellTriggerPrice = currentSellOrder.triggerPrice;
+                    autoSellExecuted = false;
+                    const checkbox = document.getElementById('auto-sell-checkbox');
+                    const settings = document.getElementById('auto-sell-settings');
+                    const priceInput = document.getElementById('auto-sell-price');
+                    if (checkbox) checkbox.checked = true;
+                    if (settings) settings.style.display = 'block';
+                    if (priceInput) priceInput.value = currentSellOrder.triggerPrice;
+                }
+            }, 100);
+        }
+        
+        // 创建待成交订单（保存到数据库）
+        async function createPendingOrder(type, symbol, quantity, triggerPrice) {
+            const orderId = `${type}_${symbol}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            try {
+                const response = await fetch('/api/paper-trading/pending-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: orderId,
+                        symbol: symbol,
+                        side: type,
+                        quantity: quantity,
+                        trigger_price: triggerPrice,
+                        order_source: 'auto'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    console.error('HTTP错误:', response.status, data);
+                    showResult(`创建待成交订单失败: ${data.detail || data.message || '未知错误'}`, 'danger');
+                    return null;
+                }
+                
+                if (data.success) {
+                    // 重新加载待成交订单列表
+                    await loadPendingOrdersFromDB();
+                    // 如果待成交订单标签页可见，刷新显示
+                    const pendingTab = document.getElementById('pendingTab');
+                    if (pendingTab && pendingTab.style.display !== 'none') {
+                        await loadPendingOrders();
+                    }
+                    return { id: orderId, order_id: orderId, type, symbol, quantity, triggerPrice };
+                } else {
+                    console.error('创建待成交订单失败:', data.message || data.detail || '未知错误');
+                    showResult(`创建待成交订单失败: ${data.message || data.detail || '未知错误'}`, 'danger');
+                    return null;
+                }
+            } catch (error) {
+                console.error('创建待成交订单异常:', error);
+                showResult(`创建待成交订单失败: ${error.message}`, 'danger');
+                return null;
+            }
+        }
+        
+        // 撤单并解冻资金/数量（软删除，状态改为DELETED）
+        async function cancelPendingOrder(orderId, silent = false) {
+            // 先尝试从前端数组获取订单信息（用于显示和关闭自动交易功能）
+            const order = pendingOrders.find(o => (o.order_id === orderId || o.id === orderId) && o.status !== 'DELETED');
+            
+            try {
+                // 使用查询参数而不是路径参数，避免orderId中包含斜杠导致路由解析错误
+                const response = await fetch(`/api/paper-trading/pending-order?order_id=${encodeURIComponent(orderId)}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    // HTTP错误（400, 500等）
+                    if (!silent) {
+                        showResult(data.detail || data.message || '撤单失败', 'danger');
+                    }
+                    console.error('撤单失败:', data);
+                    return false;
+                }
+                
+                if (data.success) {
+                    // 撤单成功
+                    // 如果是当前交易对的订单，且不是静默模式，关闭自动交易功能
+                    if (order && !silent && order.symbol === currentSymbol) {
+                        if (order.type === 'BUY') {
+                            document.getElementById('auto-buy-checkbox').checked = false;
+                            autoBuyEnabled = false;
+                            document.getElementById('auto-buy-settings').style.display = 'none';
+                            document.getElementById('auto-buy-price').value = '';
+                            autoBuyTriggerPrice = 0;
+                            autoBuyExecuted = false;
+                        } else {
+                            document.getElementById('auto-sell-checkbox').checked = false;
+                            autoSellEnabled = false;
+                            document.getElementById('auto-sell-settings').style.display = 'none';
+                            document.getElementById('auto-sell-price').value = '';
+                            autoSellTriggerPrice = 0;
+                            autoSellExecuted = false;
+                        }
+                    }
+                    
+                    // 显示撤单成功消息（如果不是静默模式）
+                    if (!silent) {
+                        const orderInfo = order ? `${order.symbol} ${order.type === 'BUY' ? '买入' : '卖出'}` : '订单';
+                        showResult(`已撤单: ${orderInfo}订单`, 'success');
+                    }
+                    
+                    // 重新加载待成交订单
+                    await loadPendingOrdersFromDB();
+                    loadPendingOrders();
+                    loadPositions();
+                    return true;
+                } else {
+                    // 后端返回失败
+                    if (!silent) {
+                        showResult(data.message || data.detail || '撤单失败', 'danger');
+                    }
+                    return false;
+                }
+            } catch (error) {
+                console.error('撤单失败:', error);
+                if (!silent) {
+                    showResult('撤单失败: ' + error.message, 'danger');
+                }
+                return false;
+            }
+        }
 
         // 格式化价格
         function formatPrice(price) {
@@ -299,42 +589,363 @@
 
         // 切换标签页
         function showTab(tab) {
-            const tabPositions = document.getElementById('tabPositions');
-            const tabHistory = document.getElementById('tabHistory');
+            const tabPositionsTitle = document.getElementById('tabPositionsTitle');
+            const tabPendingTitle = document.getElementById('tabPendingTitle');
+            const tabHistoryTitle = document.getElementById('tabHistoryTitle');
             const positionsTab = document.getElementById('positionsTab');
+            const pendingTab = document.getElementById('pendingTab');
             const historyTab = document.getElementById('historyTab');
 
+            // 重置所有标签样式
+            [tabPositionsTitle, tabPendingTitle, tabHistoryTitle].forEach(title => {
+                title.style.opacity = '0.6';
+                title.style.background = 'transparent';
+                title.style.color = 'var(--text-secondary)';
+            });
+
+            // 隐藏所有内容
+            positionsTab.style.display = 'none';
+            pendingTab.style.display = 'none';
+            historyTab.style.display = 'none';
+
             if (tab === 'positions') {
-                tabPositions.className = 'btn btn-secondary';
-                tabHistory.className = 'btn btn-ghost';
+                tabPositionsTitle.style.opacity = '1';
+                tabPositionsTitle.style.background = 'var(--bg-hover)';
+                tabPositionsTitle.style.color = 'var(--text-primary)';
                 positionsTab.style.display = 'block';
-                historyTab.style.display = 'none';
-            } else {
-                tabPositions.className = 'btn btn-ghost';
-                tabHistory.className = 'btn btn-secondary';
-                positionsTab.style.display = 'none';
+            } else if (tab === 'pending') {
+                tabPendingTitle.style.opacity = '1';
+                tabPendingTitle.style.background = 'var(--bg-hover)';
+                tabPendingTitle.style.color = 'var(--text-primary)';
+                pendingTab.style.display = 'block';
+                loadPendingOrders(); // 加载待成交订单
+            } else if (tab === 'history') {
+                tabHistoryTitle.style.opacity = '1';
+                tabHistoryTitle.style.background = 'var(--bg-hover)';
+                tabHistoryTitle.style.color = 'var(--text-primary)';
                 historyTab.style.display = 'block';
+                loadTrades(); // 加载交易历史
+            }
+            // 切换后重新同步高度
+            setTimeout(syncPanelHeights, 50);
+        }
+
+        // 同步面板高度
+        function syncPanelHeights() {
+            const tradingPanel = document.getElementById('tradingPanelCard');
+            const positionsPanel = document.getElementById('positionsPanelCard');
+            
+            if (tradingPanel && positionsPanel) {
+                // 等待DOM渲染完成
+                setTimeout(() => {
+                    const tradingHeight = tradingPanel.offsetHeight;
+                    // 设置固定高度
+                    positionsPanel.style.height = tradingHeight + 'px';
+                    positionsPanel.style.maxHeight = tradingHeight + 'px';
+                    positionsPanel.style.minHeight = tradingHeight + 'px';
+                    
+                    // 计算card-body的可用高度
+                    // 获取card的实际padding（通过getComputedStyle）
+                    const cardStyle = window.getComputedStyle(positionsPanel);
+                    const paddingTop = parseFloat(cardStyle.paddingTop);
+                    const paddingBottom = parseFloat(cardStyle.paddingBottom);
+                    const totalPadding = paddingTop + paddingBottom;
+                    
+                    const positionsHeader = positionsPanel.querySelector('.card-header');
+                    if (positionsHeader) {
+                        const headerStyle = window.getComputedStyle(positionsHeader);
+                        const headerHeight = positionsHeader.offsetHeight;
+                        const headerMarginBottom = parseFloat(headerStyle.marginBottom);
+                        const totalHeaderSpace = headerHeight + headerMarginBottom;
+                        
+                        // 可用高度 = 总高度 - 上下padding - header及其margin
+                        const availableHeight = tradingHeight - totalPadding - totalHeaderSpace;
+                        const cardBody = document.getElementById('positionsCardBody');
+                        if (cardBody) {
+                            cardBody.style.height = availableHeight + 'px';
+                            cardBody.style.maxHeight = availableHeight + 'px';
+                            cardBody.style.minHeight = availableHeight + 'px';
+                        }
+                    }
+                }, 100);
             }
         }
 
         // 初始化
         document.addEventListener('DOMContentLoaded', function() {
+            // 初始化标签页标题样式（默认显示当前持仓）
+            const tabPositionsTitle = document.getElementById('tabPositionsTitle');
+            const tabPendingTitle = document.getElementById('tabPendingTitle');
+            const tabHistoryTitle = document.getElementById('tabHistoryTitle');
+            if (tabPositionsTitle && tabPendingTitle && tabHistoryTitle) {
+                tabPositionsTitle.style.opacity = '1';
+                tabPositionsTitle.style.background = 'var(--bg-hover)';
+                tabPositionsTitle.style.color = 'var(--text-primary)';
+                tabPendingTitle.style.opacity = '0.6';
+                tabPendingTitle.style.background = 'transparent';
+                tabPendingTitle.style.color = 'var(--text-secondary)';
+                tabHistoryTitle.style.opacity = '0.6';
+                tabHistoryTitle.style.background = 'transparent';
+                tabHistoryTitle.style.color = 'var(--text-secondary)';
+            }
+            
+            // 同步面板高度
+            syncPanelHeights();
+            // 窗口大小改变时重新同步
+            window.addEventListener('resize', syncPanelHeights);
+            
+            // 从数据库加载待成交订单
+            loadPendingOrdersFromDB();
+            
+            // 先加载持仓数据，再加载交易对（这样切换时能立即填充数量）
+            refreshData().then(() => {
             loadSymbols();
-            refreshData();
-            loadEMASignals();
+            });
+
+            // 定期检查并执行待成交订单
+            setInterval(() => {
+                checkAndExecutePendingOrders();
+            }, 5000); // 每5秒检查一次
+            // 初始化时加载信号数量（4小时内）
+            (async () => {
+                try {
+                    const response = await fetch('/api/ema-signals?limit=100&hours=4');
+                    const data = await response.json();
+                    const signalCountDisplay = document.getElementById('signal-count-display');
+                    const buyCountElement = document.getElementById('buy-count');
+                    const sellCountElement = document.getElementById('sell-count');
+                    const navCountBadge = document.getElementById('nav-signal-count');
+                    
+                    if (data.success && data.data && data.data.length > 0) {
+                        // 前端再次过滤，确保只显示4小时内的信号
+                        const now = new Date();
+                        const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+                        
+                        allSignals = data.data.filter(signal => {
+                            if (!signal.timestamp) return false;
+                            const signalTime = new Date(signal.timestamp);
+                            return signalTime >= fourHoursAgo;
+                        });
+                        const buySignals = allSignals.filter(s => s.signal_type === 'BUY');
+                        const sellSignals = allSignals.filter(s => s.signal_type === 'SELL');
+                        const totalCount = allSignals.length;
+                        
+                        signalCountDisplay.textContent = totalCount;
+                        buyCountElement.textContent = `买入: ${buySignals.length}`;
+                        sellCountElement.textContent = `卖出: ${sellSignals.length}`;
+                        signalCountDisplay.style.color = totalCount >= 10 ? 'var(--success-green)' : (totalCount >= 5 ? 'var(--warning-yellow)' : 'var(--text-primary)');
+                        
+                        if (navCountBadge) {
+                            navCountBadge.textContent = totalCount;
+                            navCountBadge.style.display = 'inline-block';
+                        }
+                    } else {
+                        allSignals = [];
+                        signalCountDisplay.textContent = '0';
+                        buyCountElement.textContent = '买入: 0';
+                        sellCountElement.textContent = '卖出: 0';
+                        signalCountDisplay.style.color = 'var(--text-secondary)';
+                    }
+                } catch (error) {
+                    console.error('初始化信号数量失败:', error);
+                }
+            })();
 
             document.getElementById('symbol').addEventListener('change', function() {
                 currentSymbol = this.value;
                 refreshPrice(true);
+                // 如果该交易对有持仓，自动填充数量
+                fillQuantityFromPosition();
+                // 切换交易对时重置自动买入和自动卖出状态
+                autoBuyExecuted = false;
+                autoSellExecuted = false;
+                
+                // 检查是否有该交易对的待成交订单，如果有则恢复状态
+                const currentBuyOrder = pendingOrders.find(o => o.type === 'BUY' && o.symbol === currentSymbol && !o.executed && o.status !== 'DELETED');
+                const currentSellOrder = pendingOrders.find(o => o.type === 'SELL' && o.symbol === currentSymbol && !o.executed && o.status !== 'DELETED');
+                
+                if (currentBuyOrder) {
+                    autoBuyEnabled = true;
+                    autoBuyTriggerPrice = currentBuyOrder.triggerPrice;
+                    document.getElementById('auto-buy-checkbox').checked = true;
+                    document.getElementById('auto-buy-settings').style.display = 'block';
+                    document.getElementById('auto-buy-price').value = currentBuyOrder.triggerPrice;
+                } else {
+                    autoBuyEnabled = false;
+                    document.getElementById('auto-buy-checkbox').checked = false;
+                    document.getElementById('auto-buy-settings').style.display = 'none';
+                    document.getElementById('auto-buy-price').value = '';
+                    autoBuyTriggerPrice = 0;
+                }
+                
+                if (currentSellOrder) {
+                    autoSellEnabled = true;
+                    autoSellTriggerPrice = currentSellOrder.triggerPrice;
+                    document.getElementById('auto-sell-checkbox').checked = true;
+                    document.getElementById('auto-sell-settings').style.display = 'block';
+                    document.getElementById('auto-sell-price').value = currentSellOrder.triggerPrice;
+                } else {
+                    autoSellEnabled = false;
+                    document.getElementById('auto-sell-checkbox').checked = false;
+                    document.getElementById('auto-sell-settings').style.display = 'none';
+                    document.getElementById('auto-sell-price').value = '';
+                    autoSellTriggerPrice = 0;
+                }
+                
+                // 更新持仓显示和待成交订单
+                loadPositions();
+                loadPendingOrders();
             });
 
-            document.getElementById('quantity').addEventListener('input', function() {
+            document.getElementById('quantity').addEventListener('input', async function() {
                 const quantity = parseFloat(this.value) || 0;
                 const amount = quantity * currentPrice;
                 document.getElementById('estimated-amount').textContent = amount.toFixed(2);
+                
+                // 如果启用了自动买入或自动卖出，创建/更新待成交订单
+                if (autoBuyEnabled && currentSymbol && autoBuyTriggerPrice > 0 && quantity > 0) {
+                    await createPendingOrder('BUY', currentSymbol, quantity, autoBuyTriggerPrice);
+                }
+                if (autoSellEnabled && currentSymbol && autoSellTriggerPrice > 0 && quantity > 0) {
+                    await createPendingOrder('SELL', currentSymbol, quantity, autoSellTriggerPrice);
+                }
+                
+                // 如果启用了自动买入或自动卖出，更新持仓显示和待成交订单
+                if (autoBuyEnabled || autoSellEnabled) {
+                    loadPositions();
+                    loadPendingOrders();
+                }
             });
 
-            setInterval(loadEMASignals, 30000);
+            // 自动买入复选框事件
+            const autoBuyCheckbox = document.getElementById('auto-buy-checkbox');
+            const autoBuySettings = document.getElementById('auto-buy-settings');
+            autoBuyCheckbox.addEventListener('change', async function() {
+                autoBuyEnabled = this.checked;
+                autoBuySettings.style.display = this.checked ? 'block' : 'none';
+                autoBuyExecuted = false; // 重置执行状态
+                if (!this.checked) {
+                    document.getElementById('auto-buy-price').value = '';
+                    autoBuyTriggerPrice = 0;
+                    // 移除该交易对的待买入订单（排除已删除的）
+                    const buyOrders = pendingOrders.filter(o => o.type === 'BUY' && o.symbol === currentSymbol && !o.executed && o.status !== 'DELETED');
+                    if (buyOrders.length > 0) {
+                        // 静默撤单，不显示错误提示（因为这是用户主动取消勾选）
+                        for (const order of buyOrders) {
+                            await cancelPendingOrder(order.order_id, true);
+                        }
+                    }
+                } else {
+                    // 勾选自动买入时，不自动创建待成交订单
+                    // 待成交订单只在用户点击买入按钮时创建
+                    // 这里只更新触发价格（从输入框读取）
+                    const priceInput = document.getElementById('auto-buy-price');
+                    const triggerPrice = parseFloat(priceInput.value) || 0;
+                    if (triggerPrice > 0) {
+                        autoBuyTriggerPrice = triggerPrice;
+                    }
+                }
+                // 更新持仓显示和待成交订单
+                loadPositions();
+                loadPendingOrders();
+            });
+
+            // 自动买入触发价格输入事件
+            document.getElementById('auto-buy-price').addEventListener('input', function() {
+                autoBuyTriggerPrice = parseFloat(this.value) || 0;
+                autoBuyExecuted = false; // 价格改变时重置执行状态
+                // 不在输入时自动创建待成交订单，只在用户点击买入按钮时创建
+            });
+
+            // 自动卖出复选框事件
+            const autoSellCheckbox = document.getElementById('auto-sell-checkbox');
+            const autoSellSettings = document.getElementById('auto-sell-settings');
+            autoSellCheckbox.addEventListener('change', async function() {
+                autoSellEnabled = this.checked;
+                autoSellSettings.style.display = this.checked ? 'block' : 'none';
+                autoSellExecuted = false; // 重置执行状态
+                if (!this.checked) {
+                    document.getElementById('auto-sell-price').value = '';
+                    autoSellTriggerPrice = 0;
+                    // 移除该交易对的待卖出订单（静默撤单）
+                    const sellOrder = pendingOrders.find(o => o.type === 'SELL' && o.symbol === currentSymbol && !o.executed && o.status !== 'DELETED');
+                    if (sellOrder) {
+                        await cancelPendingOrder(sellOrder.order_id || sellOrder.id, true);
+                    }
+                } else {
+                    // 勾选自动卖出时，不自动创建待成交订单
+                    // 待成交订单只在用户点击卖出按钮时创建
+                    // 这里只更新触发价格（从输入框读取）
+                    const priceInput = document.getElementById('auto-sell-price');
+                    const triggerPrice = parseFloat(priceInput.value) || 0;
+                    if (triggerPrice > 0) {
+                        autoSellTriggerPrice = triggerPrice;
+                    }
+                }
+                // 更新持仓显示和待成交订单
+                loadPositions();
+                loadPendingOrders();
+            });
+
+            // 自动卖出触发价格输入事件
+            document.getElementById('auto-sell-price').addEventListener('input', function() {
+                autoSellTriggerPrice = parseFloat(this.value) || 0;
+                autoSellExecuted = false; // 价格改变时重置执行状态
+                // 不在输入时自动创建待成交订单，只在用户点击卖出按钮时创建
+            });
+
+            // 定期更新信号数量（4小时内，不展开菜单）
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/api/ema-signals?limit=100&hours=4');
+                    const data = await response.json();
+                    const navCountBadge = document.getElementById('nav-signal-count');
+                    if (data.success && data.data && data.data.length > 0) {
+                        // 前端再次过滤，确保只显示4小时内的信号
+                        const now = new Date();
+                        const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+                        
+                        allSignals = data.data.filter(signal => {
+                            if (!signal.timestamp) return false;
+                            const signalTime = new Date(signal.timestamp);
+                            return signalTime >= fourHoursAgo;
+                        });
+                        const buySignals = allSignals.filter(s => s.signal_type === 'BUY');
+                        const sellSignals = allSignals.filter(s => s.signal_type === 'SELL');
+                        const totalCount = allSignals.length;
+                        
+                        const signalCountDisplay = document.getElementById('signal-count-display');
+                        const buyCountElement = document.getElementById('buy-count');
+                        const sellCountElement = document.getElementById('sell-count');
+                        
+                        signalCountDisplay.textContent = totalCount;
+                        buyCountElement.textContent = `买入: ${buySignals.length}`;
+                        sellCountElement.textContent = `卖出: ${sellSignals.length}`;
+                        signalCountDisplay.style.color = totalCount >= 10 ? 'var(--success-green)' : (totalCount >= 5 ? 'var(--warning-yellow)' : 'var(--text-primary)');
+                        
+                        if (navCountBadge) {
+                            navCountBadge.textContent = totalCount;
+                            navCountBadge.style.display = 'inline-block';
+                        }
+                    } else {
+                        allSignals = [];
+                        const signalCountDisplay = document.getElementById('signal-count-display');
+                        const buyCountElement = document.getElementById('buy-count');
+                        const sellCountElement = document.getElementById('sell-count');
+                        
+                        signalCountDisplay.textContent = '0';
+                        buyCountElement.textContent = '买入: 0';
+                        sellCountElement.textContent = '卖出: 0';
+                        signalCountDisplay.style.color = 'var(--text-secondary)';
+                        
+                        if (navCountBadge) {
+                            navCountBadge.style.display = 'none';
+                        }
+                    }
+                } catch (error) {
+                    console.error('更新信号数量失败:', error);
+                }
+            }, 30000);
         });
 
         // 加载交易对
@@ -356,6 +967,8 @@
 
                     currentSymbol = data.symbols[0];
                     refreshPrice(true);
+                    // 如果该交易对有持仓，自动填充数量
+                    fillQuantityFromPosition();
                 } else {
                     symbolSelect.innerHTML = '<option value="">暂无可用交易对</option>';
                 }
@@ -371,6 +984,10 @@
                 loadPositions(),
                 loadTrades()
             ]);
+            // 刷新持仓后，如果当前交易对有持仓，更新数量
+            fillQuantityFromPosition();
+            // 数据加载完成后重新同步面板高度
+            setTimeout(syncPanelHeights, 150);
         }
 
         // 加载账户信息
@@ -410,16 +1027,31 @@
                 const data = await response.json();
 
                 const container = document.getElementById('positions-list');
-                if (data.positions && data.positions.length > 0) {
-                    container.innerHTML = data.positions.map(pos => {
+                
+                // 更新持仓映射表
+                positionsMap = {};
+                const positions = data.positions || [];
+                positions.forEach(pos => {
+                    positionsMap[pos.symbol] = pos;
+                });
+                
+                let htmlContent = '';
+                
+                // 显示实际持仓（只显示已成交的持仓，不显示任何待成交订单信息）
+                if (positions.length > 0) {
+                    htmlContent += positions.map(pos => {
                         const pnlClass = pos.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                        const cardClass = pos.unrealized_pnl >= 0 ? 'long' : 'short';
+                        
                         return `
-                            <div class="position-card ${pos.unrealized_pnl >= 0 ? 'long' : 'short'}" style="margin-bottom: 12px;">
-                                <div class="d-flex justify-between align-center mb-sm">
+                            <div class="position-card ${cardClass}" style="margin-bottom: 8px;">
+                                <div class="d-flex justify-between align-center" style="margin-bottom: 4px;">
+                                    <div>
                                     <strong class="text-lg">${pos.symbol}</strong>
+                                    </div>
                                     <span class="${pnlClass} font-mono">${pos.unrealized_pnl >= 0 ? '+' : ''}${pos.unrealized_pnl.toFixed(2)} USDT</span>
                                 </div>
-                                <div class="text-sm text-secondary mb-xs">
+                                <div class="text-sm text-secondary" style="margin-bottom: 3px;">
                                     数量: ${pos.quantity} | 成本: ${formatPrice(pos.avg_entry_price)} | 现价: ${formatPrice(pos.current_price)}
                                 </div>
                                 <div class="text-sm text-secondary">
@@ -428,38 +1060,213 @@
                             </div>
                         `;
                     }).join('');
-                } else {
+                }
+                
+                // 如果没有持仓，显示空状态（不显示任何待成交订单，待成交订单只在"待成交"标签页显示）
+                if (htmlContent === '') {
                     container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无持仓</div></div>';
+                } else {
+                    container.innerHTML = htmlContent;
                 }
             } catch (error) {
                 console.error('加载持仓失败:', error);
             }
         }
+        
+        // 根据当前交易对填充数量
+        function fillQuantityFromPosition() {
+            const quantityInput = document.getElementById('quantity');
+            if (currentSymbol && positionsMap[currentSymbol]) {
+                const position = positionsMap[currentSymbol];
+                quantityInput.value = parseFloat(position.quantity) || '';
+                // 触发input事件以更新预计金额
+                quantityInput.dispatchEvent(new Event('input'));
+            }
+        }
+
+        // 加载待成交订单（显示）
+        async function loadPendingOrders() {
+            const container = document.getElementById('pending-orders-list');
+            
+            // 从数据库重新加载
+            await loadPendingOrdersFromDB();
+            
+            // 过滤出未执行的订单，且状态不是DELETED
+            const activeOrders = pendingOrders.filter(o => !o.executed && o.status !== 'DELETED');
+            
+            if (activeOrders.length > 0) {
+                // 获取所有订单的当前价格
+                Promise.all(activeOrders.map(async (order) => {
+                    try {
+                        const response = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(order.symbol)}`);
+                        const data = await response.json();
+                        order.currentPrice = data.price || 0;
+                        
+                        // 判断状态
+                        if (order.type === 'BUY') {
+                            order.status = order.currentPrice < order.triggerPrice ? '等待触发' : '价格未达到';
+                            order.frozenAmount = order.quantity * order.triggerPrice;
+                        } else {
+                            order.status = order.currentPrice > order.triggerPrice ? '等待触发' : '价格未达到';
+                            const position = positionsMap[order.symbol];
+                            order.frozenQuantity = position ? Math.min(order.quantity, position.quantity) : order.quantity;
+                        }
+                    } catch (error) {
+                        order.currentPrice = 0;
+                        order.status = '获取价格失败';
+                    }
+                    return order;
+                })).then(orders => {
+                    container.innerHTML = orders.map(order => {
+                        const sideClass = order.type === 'BUY' ? 'badge-success' : 'badge-danger';
+                        const sideText = order.type === 'BUY' ? '待买入' : '待卖出';
+                        const frozenInfo = order.type === 'BUY' 
+                            ? `冻结资金: <span class="font-mono" style="color: var(--warning-yellow);">${order.frozenAmount ? order.frozenAmount.toFixed(2) : '0.00'} USDT</span>`
+                            : `冻结数量: <span class="font-mono" style="color: var(--warning-yellow);">${order.frozenQuantity || order.quantity}</span>`;
+                        
+                        return `
+                            <div class="position-card ${order.type === 'BUY' ? 'pending-buy' : 'pending-sell'}" style="margin-bottom: 8px;">
+                                <div class="d-flex justify-between align-center" style="margin-bottom: 4px;">
+                                    <div>
+                                        <span class="badge ${sideClass}">${sideText}</span>
+                                        <strong class="text-lg" style="margin-left: 8px;">${order.symbol}</strong>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: var(--spacing-sm);">
+                                        <span class="text-sm text-secondary">${order.status || '等待触发'}</span>
+                                        <button class="btn btn-sm btn-danger" onclick="cancelPendingOrder('${order.order_id || order.id}')" style="padding: 4px 12px; font-size: 12px; min-width: auto;">
+                                            <i class="bi bi-x-circle"></i> 撤单
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="text-sm text-secondary" style="margin-bottom: 3px;">
+                                    数量: ${order.quantity} | 触发价格: ${formatPrice(order.triggerPrice)} | 当前价格: ${formatPrice(order.currentPrice)}
+                                </div>
+                                <div class="text-sm text-secondary">
+                                    ${frozenInfo}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                });
+            } else {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无待成交订单</div></div>';
+            }
+        }
+        
+        // 检查并执行待成交订单
+        async function checkAndExecutePendingOrders() {
+            // 从数据库重新加载待成交订单
+            await loadPendingOrdersFromDB();
+            const activeOrders = pendingOrders.filter(o => !o.executed && o.status !== 'DELETED');
+            
+            for (const order of activeOrders) {
+                try {
+                    // 获取当前价格
+                    const response = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(order.symbol)}`);
+                    const data = await response.json();
+                    const currentPrice = data.price || 0;
+                    
+                    if (currentPrice === 0) continue;
+                    
+                    let shouldExecute = false;
+                    
+                    if (order.type === 'BUY' && currentPrice < order.triggerPrice) {
+                        shouldExecute = true;
+                    } else if (order.type === 'SELL' && currentPrice > order.triggerPrice) {
+                        shouldExecute = true;
+                    }
+                    
+                    if (shouldExecute) {
+                        // 执行订单
+                        try {
+                            const tradeResponse = await fetch('/api/paper-trading/order', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    symbol: order.symbol,
+                                    side: order.type,
+                                    quantity: order.quantity,
+                                    order_type: 'MARKET',
+                                    pending_order_id: order.order_id || order.id  // 传递待成交订单ID，用于精确匹配
+                                })
+                            });
+
+                            const tradeData = await tradeResponse.json();
+
+                            if (tradeResponse.ok && tradeData.success) {
+                                showResult(`自动${order.type === 'BUY' ? '买入' : '卖出'}成功: ${tradeData.message}`, 'success');
+                                
+                                // 如果是当前交易对的订单，关闭自动交易功能
+                                if (order.symbol === currentSymbol) {
+                                    if (order.type === 'BUY') {
+                                        document.getElementById('auto-buy-checkbox').checked = false;
+                                        autoBuyEnabled = false;
+                                        document.getElementById('auto-buy-settings').style.display = 'none';
+                                        document.getElementById('auto-buy-price').value = '';
+                                        autoBuyTriggerPrice = 0;
+                                    } else {
+                                        document.getElementById('auto-sell-checkbox').checked = false;
+                                        autoSellEnabled = false;
+                                        document.getElementById('auto-sell-settings').style.display = 'none';
+                                        document.getElementById('auto-sell-price').value = '';
+                                        autoSellTriggerPrice = 0;
+                                    }
+                                }
+                                
+                                // 重新加载待成交订单（数据库会自动标记为已执行）
+                                await loadPendingOrdersFromDB();
+                                setTimeout(refreshData, 500);
+                            } else {
+                                console.error(`执行订单失败: ${tradeData.detail || '下单失败'}`);
+                            }
+                        } catch (error) {
+                            console.error(`执行订单失败: ${error.message}`);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`检查订单价格失败: ${error.message}`);
+                }
+            }
+            
+            // 更新待成交订单显示
+            const pendingTab = document.getElementById('pendingTab');
+            if (pendingTab && pendingTab.style.display !== 'none') {
+                loadPendingOrders();
+            }
+        }
 
         // 加载交易历史
         async function loadTrades() {
+            const container = document.getElementById('trades-list');
+            if (!container) {
+                console.error('交易历史容器不存在');
+                return;
+            }
+            
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载中...</div></div>';
+            
             try {
                 const response = await fetch('/api/paper-trading/trades');
                 const data = await response.json();
 
-                const container = document.getElementById('trades-list');
                 if (data.trades && data.trades.length > 0) {
                     container.innerHTML = data.trades.map(trade => {
                         const sideClass = trade.side === 'BUY' ? 'badge-success' : 'badge-danger';
-                        const pnlHtml = trade.realized_pnl !== null
-                            ? `<div class="text-sm ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}" style="margin-top: 4px;">盈亏: ${trade.realized_pnl >= 0 ? '+' : ''}${trade.realized_pnl.toFixed(2)} USDT (${trade.pnl_pct >= 0 ? '+' : ''}${trade.pnl_pct.toFixed(2)}%)</div>`
+                        const pnlHtml = trade.realized_pnl !== null && trade.realized_pnl !== undefined
+                            ? `<div class="text-sm ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}" style="margin-top: 2px;">盈亏: ${trade.realized_pnl >= 0 ? '+' : ''}${(trade.realized_pnl || 0).toFixed(2)} USDT${trade.pnl_pct !== null && trade.pnl_pct !== undefined ? ` (${trade.pnl_pct >= 0 ? '+' : ''}${(trade.pnl_pct || 0).toFixed(2)}%)` : ''}</div>`
                             : '';
+                        const totalAmount = (trade.total_amount || 0).toFixed(2);
                         return `
-                            <div style="padding: 12px; border-bottom: 1px solid var(--border-default);">
+                            <div style="padding: 8px; border-bottom: 1px solid var(--border-default);">
                                 <div class="d-flex justify-between align-center">
                                     <div>
-                                        <span class="badge ${sideClass}">${trade.side}</span>
-                                        <strong style="margin-left: 8px;">${trade.symbol}</strong>
+                                        <span class="badge ${sideClass}">${trade.side || 'UNKNOWN'}</span>
+                                        <strong style="margin-left: 8px;">${trade.symbol || '-'}</strong>
                                     </div>
-                                    <span class="text-sm text-secondary">${trade.trade_time}</span>
+                                    <span class="text-sm text-secondary">${trade.trade_time || '-'}</span>
                                 </div>
-                                <div class="text-sm text-secondary" style="margin-top: 4px;">
-                                    ${trade.quantity} @ ${formatPrice(trade.price)} = ${trade.total_amount.toFixed(2)} USDT
+                                <div class="text-sm text-secondary" style="margin-top: 3px;">
+                                    ${trade.quantity || 0} @ ${formatPrice(trade.price)} = ${totalAmount} USDT
                                 </div>
                                 ${pnlHtml}
                             </div>
@@ -470,6 +1277,7 @@
                 }
             } catch (error) {
                 console.error('加载交易历史失败:', error);
+                container.innerHTML = `<div class="empty-state"><div class="empty-state-text">加载失败: ${error.message}</div></div>`;
             }
         }
 
@@ -489,15 +1297,150 @@
                     throw new Error(`${currentSymbol} 暂无价格数据`);
                 }
 
+                const oldPrice = currentPrice;
                 currentPrice = data.price;
                 priceInput.value = formatPrice(currentPrice);
 
                 const quantity = parseFloat(document.getElementById('quantity').value) || 0;
                 document.getElementById('estimated-amount').textContent = (quantity * currentPrice).toFixed(2);
+
+                // 检查自动买入和自动卖出条件（保留原有逻辑作为备用）
+                checkAutoBuy();
+                checkAutoSell();
+                
+                // 不再自动创建待成交订单，只在用户点击买入/卖出按钮时创建
+                // checkAndCreatePendingOrders(); // 已禁用
+                
+                // 如果持仓列表可见，刷新持仓显示（更新待买入/待卖出状态）
+                const positionsTab = document.getElementById('positionsTab');
+                const pendingTab = document.getElementById('pendingTab');
+                if (positionsTab && positionsTab.style.display !== 'none') {
+                    loadPositions();
+                }
+                if (pendingTab && pendingTab.style.display !== 'none') {
+                    loadPendingOrders();
+                }
             } catch (error) {
                 console.error('刷新价格失败:', error);
                 priceInput.value = '加载失败';
                 showResult(error.message, 'danger');
+            }
+        }
+
+        // 检查并执行自动买入
+        async function checkAutoBuy() {
+            if (!autoBuyEnabled || autoBuyExecuted || !currentSymbol || currentPrice === 0) {
+                return;
+            }
+
+            const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+            if (quantity <= 0) {
+                return;
+            }
+
+            if (autoBuyTriggerPrice > 0 && currentPrice < autoBuyTriggerPrice) {
+                // 触发自动买入
+                autoBuyExecuted = true;
+                showResult(`自动买入触发: 当前价格 ${formatPrice(currentPrice)} 低于设定价格 ${formatPrice(autoBuyTriggerPrice)}`, 'success');
+                
+                // 执行买入
+                try {
+                    const response = await fetch('/api/paper-trading/order', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            symbol: currentSymbol,
+                            side: 'BUY',
+                            quantity: quantity,
+                            order_type: 'MARKET'
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.success) {
+                        showResult(`自动买入成功: ${data.message}`, 'success');
+                        // 关闭自动买入功能
+                        document.getElementById('auto-buy-checkbox').checked = false;
+                        autoBuyEnabled = false;
+                        document.getElementById('auto-buy-settings').style.display = 'none';
+                        document.getElementById('auto-buy-price').value = '';
+                        autoBuyTriggerPrice = 0;
+                        
+                        document.getElementById('quantity').value = '';
+                        document.getElementById('estimated-amount').textContent = '0.00';
+                        loadPendingOrders(); // 更新待成交订单
+                        setTimeout(refreshData, 500);
+                    } else {
+                        showResult(`自动买入失败: ${data.detail || '下单失败'}`, 'danger');
+                        autoBuyExecuted = false; // 失败后允许重试
+                    }
+                } catch (error) {
+                    showResult('自动买入失败: ' + error.message, 'danger');
+                    autoBuyExecuted = false; // 失败后允许重试
+                }
+            }
+        }
+
+        // 检查并创建待成交订单（已禁用 - 不再自动创建，只在用户点击买入/卖出按钮时创建）
+        async function checkAndCreatePendingOrders() {
+            // 此功能已禁用，待成交订单只在用户点击买入/卖出按钮时创建
+            // 不再在输入价格或价格刷新时自动创建待成交订单
+            return;
+        }
+
+        // 检查并执行自动卖出
+        async function checkAutoSell() {
+            if (!autoSellEnabled || autoSellExecuted || !currentSymbol || currentPrice === 0) {
+                return;
+            }
+
+            const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+            if (quantity <= 0) {
+                return;
+            }
+
+            if (autoSellTriggerPrice > 0 && currentPrice > autoSellTriggerPrice) {
+                // 触发自动卖出
+                autoSellExecuted = true;
+                showResult(`自动卖出触发: 当前价格 ${formatPrice(currentPrice)} 高于设定价格 ${formatPrice(autoSellTriggerPrice)}`, 'success');
+                
+                // 执行卖出
+                try {
+                    const response = await fetch('/api/paper-trading/order', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            symbol: currentSymbol,
+                            side: 'SELL',
+                            quantity: quantity,
+                            order_type: 'MARKET'
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.success) {
+                        showResult(`自动卖出成功: ${data.message}`, 'success');
+                        // 关闭自动卖出功能
+                        document.getElementById('auto-sell-checkbox').checked = false;
+                        autoSellEnabled = false;
+                        document.getElementById('auto-sell-settings').style.display = 'none';
+                        document.getElementById('auto-sell-price').value = '';
+                        autoSellTriggerPrice = 0;
+                        
+                        document.getElementById('quantity').value = '';
+                        document.getElementById('estimated-amount').textContent = '0.00';
+                        loadPendingOrders(); // 更新待成交订单
+                        setTimeout(refreshData, 500);
+                    } else {
+                        showResult(`自动卖出失败: ${data.detail || '下单失败'}`, 'danger');
+                        autoSellExecuted = false; // 失败后允许重试
+                    }
+                } catch (error) {
+                    showResult('自动卖出失败: ' + error.message, 'danger');
+                    autoSellExecuted = false; // 失败后允许重试
+                }
             }
         }
 
@@ -511,6 +1454,43 @@
                 return;
             }
 
+            // 检查是否设置了触发价格
+            if (side === 'BUY' && autoBuyEnabled && autoBuyTriggerPrice > 0) {
+                // 如果当前价格 >= 买入触发价格，创建待买入订单而不是立即执行
+                if (currentPrice >= autoBuyTriggerPrice) {
+                    await createPendingOrder('BUY', symbol, quantity, autoBuyTriggerPrice);
+                    showResult(`已创建待买入订单: 当前价格 ${formatPrice(currentPrice)} 高于触发价格 ${formatPrice(autoBuyTriggerPrice)}，订单将在价格低于触发价时自动执行`, 'success');
+                    loadPendingOrders();
+                    return;
+                }
+            }
+
+            if (side === 'SELL' && autoSellEnabled && autoSellTriggerPrice > 0) {
+                // 如果当前价格 < 卖出触发价格（当前价格低于卖出价格），创建待卖出订单而不是立即执行
+                if (currentPrice < autoSellTriggerPrice) {
+                    // 先检查是否已有相同价格的待卖出订单
+                    const existingOrder = pendingOrders.find(o => 
+                        o.type === 'SELL' && 
+                        o.symbol === symbol && 
+                        !o.executed &&
+                        Math.abs(o.triggerPrice - autoSellTriggerPrice) < 0.0001
+                    );
+                    
+                    if (existingOrder) {
+                        showResult(`已存在待卖出订单: 触发价格 ${formatPrice(autoSellTriggerPrice)}`, 'warning');
+                        loadPendingOrders();
+                        return;
+                    }
+                    
+                    await createPendingOrder('SELL', symbol, quantity, autoSellTriggerPrice);
+                    showResult(`已创建待卖出订单: 当前价格 ${formatPrice(currentPrice)} 低于卖出价格 ${formatPrice(autoSellTriggerPrice)}，订单将在价格高于触发价时自动执行`, 'success');
+                    loadPendingOrders();
+                    return;
+                }
+                // 如果当前价格 >= 触发价格，继续执行下面的立即卖出逻辑
+            }
+
+            // 价格满足条件或未设置触发价格，立即执行交易
             try {
                 const response = await fetch('/api/paper-trading/order', {
                     method: 'POST',
@@ -538,59 +1518,274 @@
             }
         }
 
-        // 显示结果消息
+        // 显示结果消息（右下角提示）
         function showResult(message, type) {
-            const resultDiv = document.getElementById('trade-result');
+            // 创建固定定位的提示框
+            const toast = document.createElement('div');
             const bgColor = type === 'success' ? 'var(--success-green-bg)' : 'var(--danger-red-bg)';
             const textColor = type === 'success' ? 'var(--success-green)' : 'var(--danger-red)';
-            resultDiv.innerHTML = `
-                <div style="padding: 12px; background: ${bgColor}; color: ${textColor};
-                            border-radius: var(--radius-md); font-size: 13px;">
-                    ${message}
-                </div>
+            
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                padding: 12px 16px;
+                background: ${bgColor};
+                color: ${textColor};
+                border-radius: var(--radius-md);
+                font-size: 13px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                z-index: 10000;
+                max-width: 400px;
+                word-wrap: break-word;
+                animation: slideInRight 0.3s ease-out;
             `;
-            setTimeout(() => resultDiv.innerHTML = '', 3000);
+            toast.textContent = message;
+            
+            // 添加动画样式（如果还没有）
+            if (!document.getElementById('toast-animation-style')) {
+                const style = document.createElement('style');
+                style.id = 'toast-animation-style';
+                style.textContent = `
+                    @keyframes slideInRight {
+                        from {
+                            transform: translateX(100%);
+                            opacity: 0;
+                        }
+                        to {
+                            transform: translateX(0);
+                            opacity: 1;
+                        }
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            document.body.appendChild(toast);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                toast.style.animation = 'slideInRight 0.3s ease-out reverse';
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
+            }, 3000);
         }
 
-        // 加载EMA买入信号
-        async function loadEMASignals() {
-            try {
-                const response = await fetch('/api/paper-trading/ema-signals?limit=5');
-                const data = await response.json();
+        // 切换信号下拉菜单
+        function toggleSignalDropdown(event) {
+            event.stopPropagation();
+            const menu = document.getElementById('signal-dropdown-menu');
+            const isShowing = menu.classList.contains('show');
+            
+            if (!isShowing) {
+                menu.classList.add('show');
+                loadEMASignals();
+                // 点击外部关闭
+                setTimeout(() => {
+                    document.addEventListener('click', function closeOnOutsideClick(e) {
+                        if (!menu.contains(e.target) && !e.target.closest('.signal-btn')) {
+                            menu.classList.remove('show');
+                            document.removeEventListener('click', closeOnOutsideClick);
+                        }
+                    }, { once: true });
+                }, 0);
+            } else {
+                menu.classList.remove('show');
+            }
+        }
 
-                const container = document.getElementById('ema-signals-list');
-                const countBadge = document.getElementById('signal-count');
+        // 格式化时间
+        function formatTime(timestamp) {
+            if (!timestamp) return '-';
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diffMinutes = Math.floor((now - date) / 1000 / 60);
+            
+            if (diffMinutes < 1) return '刚刚';
+            if (diffMinutes < 60) return `${diffMinutes}分钟前`;
+            if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)}小时前`;
+            
+            return date.toLocaleString('zh-CN', { 
+                month: '2-digit', 
+                day: '2-digit', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
 
-                if (data.success && data.signals && data.signals.length > 0) {
-                    countBadge.textContent = data.signals.length;
-                    countBadge.className = 'badge badge-success';
+        let allSignals = []; // 存储所有信号
+        let currentFilter = 'ALL'; // 当前筛选类型
 
-                    container.innerHTML = data.signals.map(signal => {
+        // 筛选信号
+        function filterSignals(type) {
+            currentFilter = type;
+            
+            // 更新按钮样式
+            document.getElementById('filter-buy-btn').className = type === 'BUY' ? 'btn btn-sm' : 'btn btn-sm btn-ghost';
+            document.getElementById('filter-sell-btn').className = type === 'SELL' ? 'btn btn-sm' : 'btn btn-sm btn-ghost';
+            document.getElementById('filter-all-btn').className = type === 'ALL' ? 'btn btn-sm' : 'btn btn-sm btn-ghost';
+            
+            if (type === 'BUY') {
+                document.getElementById('filter-buy-btn').style.background = 'var(--success-green)';
+                document.getElementById('filter-buy-btn').style.color = 'white';
+                document.getElementById('filter-buy-btn').style.border = 'none';
+                document.getElementById('filter-sell-btn').style.background = 'transparent';
+                document.getElementById('filter-all-btn').style.background = 'transparent';
+            } else if (type === 'SELL') {
+                document.getElementById('filter-sell-btn').style.background = 'var(--danger-red)';
+                document.getElementById('filter-sell-btn').style.color = 'white';
+                document.getElementById('filter-sell-btn').style.border = 'none';
+                document.getElementById('filter-buy-btn').style.background = 'transparent';
+                document.getElementById('filter-all-btn').style.background = 'transparent';
+            } else {
+                document.getElementById('filter-all-btn').style.background = 'var(--primary-blue)';
+                document.getElementById('filter-all-btn').style.color = 'white';
+                document.getElementById('filter-all-btn').style.border = 'none';
+                document.getElementById('filter-buy-btn').style.background = 'transparent';
+                document.getElementById('filter-sell-btn').style.background = 'transparent';
+            }
+            
+            renderSignals();
+        }
+
+        // 渲染信号表格
+        function renderSignals() {
+            const navContainer = document.getElementById('nav-signal-list');
+            
+            // 根据筛选类型过滤信号
+            let filteredSignals = allSignals;
+            if (currentFilter === 'BUY') {
+                filteredSignals = allSignals.filter(s => s.signal_type === 'BUY');
+            } else if (currentFilter === 'SELL') {
+                filteredSignals = allSignals.filter(s => s.signal_type === 'SELL');
+            }
+            
+            if (filteredSignals.length > 0) {
+                navContainer.innerHTML = `
+                    <table class="signal-table">
+                        <thead>
+                            <tr>
+                                <th>类型</th>
+                                <th>币种</th>
+                                <th>时间周期</th>
+                                <th>价格</th>
+                                <th>涨跌幅</th>
+                                <th>成交倍数</th>
+                                <th>强度</th>
+                                <th>时间</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredSignals.map(signal => {
                         const strengthMap = { 'strong': '强', 'medium': '中', 'weak': '弱' };
-                        const badgeMap = { 'strong': 'badge-danger', 'medium': 'badge-warning', 'weak': 'badge-info' };
+                                const badgeMap = { 
+                                    'strong': 'badge-danger', 
+                                    'medium': 'badge-warning', 
+                                    'weak': 'badge-info' 
+                                };
                         const strength = strengthMap[signal.signal_strength] || '未知';
                         const badgeClass = badgeMap[signal.signal_strength] || 'badge-neutral';
+                                const price = formatPrice(signal.price || 0);
+                                const priceChange = signal.price_change_pct || 0;
+                                const priceChangeClass = priceChange >= 0 ? 'pnl-positive' : 'pnl-negative';
+                                const volumeMultiple = signal.volume_multiple || signal.volume_ratio || 0;
+                                const signalTypeClass = signal.signal_type === 'BUY' ? 'badge-success' : 'badge-danger';
+                                const signalTypeText = signal.signal_type === 'BUY' ? '买入' : '卖出';
 
                         return `
-                            <div class="position-card" style="margin-bottom: 8px; cursor: pointer;"
-                                 onclick="selectSymbolFromSignal('${signal.symbol}')">
-                                <div class="d-flex justify-between align-center">
-                                    <strong>${signal.symbol}</strong>
-                                    <span class="badge ${badgeClass}">${strength}</span>
-                                </div>
-                                <div class="text-xs text-secondary" style="margin-top: 4px;">
-                                    ${signal.timeframe} · 买入信号
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
+                                    <tr onclick="selectSymbolFromSignal('${signal.symbol}'); document.getElementById('signal-dropdown-menu').classList.remove('show');">
+                                        <td><span class="badge ${signalTypeClass}">${signalTypeText}</span></td>
+                                        <td><span class="signal-symbol">${signal.symbol}</span></td>
+                                        <td><span class="text-secondary">${signal.timeframe || '15m'}</span></td>
+                                        <td><span class="signal-price">$${price}</span></td>
+                                        <td><span class="${priceChangeClass}" style="font-weight: 600;">${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%</span></td>
+                                        <td><span class="text-secondary font-mono">×${volumeMultiple.toFixed(2)}</span></td>
+                                        <td><span class="badge ${badgeClass} signal-strength-badge">${strength}</span></td>
+                                        <td><span class="signal-time">${formatTime(signal.timestamp)}</span></td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                `;
                 } else {
-                    countBadge.textContent = '0';
-                    countBadge.className = 'badge badge-neutral';
-                    container.innerHTML = '<div class="empty-state-text text-sm">暂无信号</div>';
+                navContainer.innerHTML = `<div class="signal-empty"><i class="bi bi-inbox" style="font-size: 24px; opacity: 0.5; margin-bottom: 8px; display: block;"></i>4小时内暂无${currentFilter === 'BUY' ? '买入' : currentFilter === 'SELL' ? '卖出' : ''}信号</div>`;
+            }
+        }
+
+        // 加载EMA信号（4小时内）
+        async function loadEMASignals() {
+            try {
+                // 使用 /api/ema-signals 获取4小时内的所有信号
+                const response = await fetch('/api/ema-signals?limit=100&hours=4');
+                const data = await response.json();
+
+                const navContainer = document.getElementById('nav-signal-list');
+                const navCountBadge = document.getElementById('nav-signal-count');
+
+                if (data.success && data.data && data.data.length > 0) {
+                    // 前端再次过滤，确保只显示4小时内的信号
+                    const now = new Date();
+                    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+                    
+                    allSignals = data.data.filter(signal => {
+                        if (!signal.timestamp) return false;
+                        const signalTime = new Date(signal.timestamp);
+                        return signalTime >= fourHoursAgo;
+                    });
+                    
+                    // 统计买入和卖出信号数量
+                    const buySignals = allSignals.filter(s => s.signal_type === 'BUY');
+                    const sellSignals = allSignals.filter(s => s.signal_type === 'SELL');
+                    const totalCount = allSignals.length;
+                    
+                    // 更新信号卡片显示
+                    const signalCountDisplay = document.getElementById('signal-count-display');
+                    const buyCountElement = document.getElementById('buy-count');
+                    const sellCountElement = document.getElementById('sell-count');
+                    
+                    signalCountDisplay.textContent = totalCount;
+                    buyCountElement.textContent = `买入: ${buySignals.length}`;
+                    sellCountElement.textContent = `卖出: ${sellSignals.length}`;
+                    
+                    signalCountDisplay.style.color = totalCount >= 10 ? 'var(--success-green)' : (totalCount >= 5 ? 'var(--warning-yellow)' : 'var(--text-primary)');
+                    
+                    // 更新导航栏徽章（如果存在）
+                    if (navCountBadge) {
+                        navCountBadge.textContent = totalCount;
+                        navCountBadge.style.display = 'inline-block';
+                    }
+
+                    // 渲染信号表格（默认显示全部）
+                    currentFilter = 'ALL';
+                    document.getElementById('filter-all-btn').style.background = 'var(--primary-blue)';
+                    document.getElementById('filter-all-btn').style.color = 'white';
+                    document.getElementById('filter-all-btn').style.border = 'none';
+                    renderSignals();
+                } else {
+                    // 无信号
+                    allSignals = [];
+                    const signalCountDisplay = document.getElementById('signal-count-display');
+                    const buyCountElement = document.getElementById('buy-count');
+                    const sellCountElement = document.getElementById('sell-count');
+                    
+                    signalCountDisplay.textContent = '0';
+                    buyCountElement.textContent = '买入: 0';
+                    sellCountElement.textContent = '卖出: 0';
+                    signalCountDisplay.style.color = 'var(--text-secondary)';
+                    
+                    if (navCountBadge) {
+                        navCountBadge.style.display = 'none';
+                    }
+                    navContainer.innerHTML = '<div class="signal-empty"><i class="bi bi-inbox" style="font-size: 24px; opacity: 0.5; margin-bottom: 8px; display: block;"></i>4小时内暂无交易信号</div>';
                 }
             } catch (error) {
                 console.error('加载EMA信号失败:', error);
+                const navContainer = document.getElementById('nav-signal-list');
+                navContainer.innerHTML = '<div class="signal-empty">加载失败，请刷新重试</div>';
             }
         }
 
@@ -602,6 +1797,8 @@
                     symbolSelect.value = symbol;
                     currentSymbol = symbol;
                     refreshPrice(true);
+                    // 如果该交易对有持仓，自动填充数量
+                    fillQuantityFromPosition();
                     document.getElementById('trade-form').scrollIntoView({ behavior: 'smooth' });
                     break;
                 }

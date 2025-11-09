@@ -22,7 +22,7 @@ class CacheUpdateService:
 
     def __init__(self, config: dict):
         """
-        初始�?
+        初始化
 
         Args:
             config: 系统配置
@@ -38,16 +38,16 @@ class CacheUpdateService:
         更新所有缓存表
 
         Args:
-            symbols: 币种列表，如果为None则使用配置中的币�?
+            symbols: 币种列表，如果为None则使用配置中的币种
         """
         if symbols is None:
             symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
 
-        # logger.info(f"🔄 开始更新缓�?- {len(symbols)} 个币�?)  # 减少日志输出
+        # logger.info(f"🔄 开始更新缓存 - {len(symbols)} 个币种")  # 减少日志输出
         start_time = datetime.now()
 
         try:
-            # 并行更新各个缓存�?
+            # 并行更新各个缓存表
             tasks = [
                 self.update_price_stats_cache(symbols),
                 self.update_technical_indicators_cache(symbols),
@@ -66,15 +66,15 @@ class CacheUpdateService:
             failed_count = len(results) - success_count
 
             elapsed = (datetime.now() - start_time).total_seconds()
-            # 只在有失败时输出日志，或者每小时输出一�?
+            # 只在有失败时输出日志，或者每小时输出一次
             if failed_count > 0 or datetime.now().minute == 0:
                 logger.info(
-                    f"�?缓存更新完成 - 成功: {success_count}, 失败: {failed_count}, "
-                    f"耗时: {elapsed:.2f}�?
+                    f"✅ 缓存更新完成 - 成功: {success_count}, 失败: {failed_count}, "
+                    f"耗时: {elapsed:.2f}秒"
                 )
 
         except Exception as e:
-            logger.error(f"�?缓存更新失败: {e}")
+            logger.error(f"❌ 缓存更新失败: {e}")
             import traceback
             traceback.print_exc()
 
@@ -92,15 +92,15 @@ class CacheUpdateService:
                 current_price = float(latest_kline.close)
 
                 # 获取24小时前的价格
-                past_time = datetime.now() - timedelta(hours=168) # 7�죨7*24=168Сʱ��
+                past_time = datetime.now() - timedelta(hours=24)
                 past_kline = self.db_service.get_kline_at_time(symbol, '5m', past_time)
                 price_24h_ago = float(past_kline.close) if past_kline else current_price
 
-                # 获取24小时K线数�?
+                # 获取24小时K线数据
                 # 注意：数据库存储的是本地时间（UTC+8），不是UTC时间
                 klines_24h = self.db_service.get_klines(
-                    symbol, '5m',  # 使用5分钟K�?
-                    start_time=datetime.now() - timedelta(hours=168) # 7�죨7*24=168Сʱ��,  # 使用本地时间
+                    symbol, '5m',  # 使用5分钟K线
+                    start_time=datetime.now() - timedelta(hours=24),  # 使用本地时间
                     limit=288  # 5分钟 * 288 = 24小时
                 )
 
@@ -130,7 +130,7 @@ class CacheUpdateService:
                 else:
                     trend = 'sideways'
 
-                # 写入数据�?
+                # 写入数据库
                 self._upsert_price_stats(
                     symbol=symbol,
                     current_price=current_price,
@@ -150,15 +150,15 @@ class CacheUpdateService:
                 logger.warning(f"更新{symbol}价格统计失败: {e}")
                 continue
 
-        # logger.info(f"�?价格统计缓存更新完成 - {len(symbols)} 个币�?)  # 减少日志输出
+        # logger.info(f"✅ 价格统计缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_technical_indicators_cache(self, symbols: List[str]):
-        """更新技术指标缓�?""
-        # logger.info("📈 更新技术指标缓�?..")  # 减少日志输出
+        """更新技术指标缓存"""
+        # logger.info("📈 更新技术指标缓存...")  # 减少日志输出
 
         for symbol in symbols:
             try:
-                # 获取足够的K线数据用于计算技术指�?
+                # 获取足够的K线数据用于计算技术指标
                 klines = self.db_service.get_latest_klines(symbol, '1h', limit=200)
                 if not klines or len(klines) < 50:
                     logger.warning(f"{symbol} K线数据不足，跳过")
@@ -174,7 +174,7 @@ class CacheUpdateService:
                     'volume': float(k.volume)
                 } for k in reversed(klines)])
 
-                # 计算技术指�?
+                # 计算技术指标
                 indicators = self.technical_analyzer.analyze(df)
                 if not indicators:
                     continue
@@ -187,10 +187,10 @@ class CacheUpdateService:
                 kdj = indicators.get('kdj', {})
                 volume = indicators.get('volume', {})
 
-                # 计算技术评�?(0-100)
+                # 计算技术评分 (0-100)
                 technical_score = self._calculate_technical_score(indicators)
 
-                # 生成技术信�?
+                # 生成技术信号
                 if technical_score >= 75:
                     technical_signal = 'STRONG_BUY'
                 elif technical_score >= 60:
@@ -202,11 +202,11 @@ class CacheUpdateService:
                 else:
                     technical_signal = 'STRONG_SELL'
 
-                # 获取24小时成交�?
+                # 获取24小时成交量
                 volume_24h = volume.get('volume_24h', 0)
                 volume_avg = volume.get('average_volume', 0)
 
-                # 写入数据�?
+                # 写入数据库
                 self._upsert_technical_indicators(
                     symbol=symbol,
                     timeframe='1h',
@@ -238,12 +238,12 @@ class CacheUpdateService:
                 )
 
             except Exception as e:
-                logger.warning(f"更新{symbol}技术指标失�? {e}")
+                logger.warning(f"更新{symbol}技术指标失败: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
 
-        # logger.info(f"�?技术指标缓存更新完�?- {len(symbols)} 个币�?)  # 减少日志输出
+        # logger.info(f"✅ 技术指标缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_hyperliquid_aggregation(self, symbols: List[str]):
         """更新Hyperliquid聚合数据"""
@@ -254,10 +254,10 @@ class CacheUpdateService:
                 monitored = db.get_monitored_wallets(active_only=True)
 
                 if not monitored:
-                    logger.warning("没有活跃的监控钱�?)
+                    logger.warning("没有活跃的监控钱包")
                     return
 
-                # 对每个币种进行聚�?
+                # 对每个币种进行聚合
                 for symbol in symbols:
                     try:
                         coin = symbol.split('/')[0]
@@ -274,11 +274,11 @@ class CacheUpdateService:
                         active_wallets = set()
                         trade_sizes = []
 
-                        # 遍历所有监控钱�?
+                        # 遍历所有监控钱包
                         for wallet in monitored:
-                            trades = db.get_wallet_recent_trades(wallet['address'], hours=168) # 7�죨7*24=168Сʱ��
+                            trades = db.get_wallet_recent_trades(wallet['address'], hours=24)
 
-                            # 筛选该币种的交�?
+                            # 筛选该币种的交易
                             coin_trades = [
                                 t for t in trades
                                 if t['coin'] == coin or t['coin'] == coin_index or
@@ -307,7 +307,7 @@ class CacheUpdateService:
                                     net_flow -= notional
                                     outflow += notional
 
-                        # 如果没有交易，跳�?
+                        # 如果没有交易，跳过
                         if long_trades + short_trades == 0:
                             continue
 
@@ -340,7 +340,7 @@ class CacheUpdateService:
                             hyperliquid_signal = 'NEUTRAL'
                             sentiment = 'neutral'
 
-                        # 写入数据�?
+                        # 写入数据库
                         self._upsert_hyperliquid_aggregation(
                             symbol=coin,
                             period='24h',
@@ -370,7 +370,7 @@ class CacheUpdateService:
         except Exception as e:
             logger.error(f"更新Hyperliquid聚合失败: {e}")
 
-        # logger.info(f"�?Hyperliquid聚合缓存更新完成 - {len(symbols)} 个币�?)  # 减少日志输出
+        # logger.info(f"✅ Hyperliquid聚合缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_news_sentiment_aggregation(self, symbols: List[str]):
         """更新新闻情绪聚合"""
@@ -383,7 +383,7 @@ class CacheUpdateService:
                 # 获取24小时内的新闻
                 news_list = self.db_service.get_recent_news(hours=24, limit=1000)
 
-                # 筛选相关新�?
+                # 筛选相关新闻
                 relevant_news = [
                     n for n in news_list
                     if n.symbols and coin in n.symbols
@@ -398,7 +398,7 @@ class CacheUpdateService:
                 negative_news = sum(1 for n in relevant_news if n.sentiment == 'negative')
                 neutral_news = sum(1 for n in relevant_news if n.sentiment == 'neutral')
 
-                # 计算情绪指数 (-100 �?+100)
+                # 计算情绪指数 (-100 到 +100)
                 sentiment_index = ((positive_news - negative_news) / total_news) * 100 if total_news > 0 else 0
 
                 # 平均情绪分数
@@ -414,7 +414,7 @@ class CacheUpdateService:
                 # 计算新闻评分 (0-100)
                 news_score = self._calculate_news_score(sentiment_index, total_news, len(major_events))
 
-                # 写入数据�?
+                # 写入数据库
                 self._upsert_news_sentiment(
                     symbol=coin,
                     period='24h',
@@ -432,7 +432,7 @@ class CacheUpdateService:
                 logger.warning(f"更新{symbol}新闻情绪失败: {e}")
                 continue
 
-        # logger.info(f"�?新闻情绪聚合缓存更新完成 - {len(symbols)} 个币�?)  # 减少日志输出
+        # logger.info(f"✅ 新闻情绪聚合缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_funding_rate_stats(self, symbols: List[str]):
         """更新资金费率统计"""
@@ -468,7 +468,7 @@ class CacheUpdateService:
                     market_sentiment = 'normal'
                     trend = 'neutral'
 
-                # 写入数据�?
+                # 写入数据库
                 self._upsert_funding_rate_stats(
                     symbol=symbol,
                     current_rate=current_rate,
@@ -483,7 +483,7 @@ class CacheUpdateService:
                 logger.warning(f"更新{symbol}资金费率统计失败: {e}")
                 continue
 
-        # logger.info(f"�?资金费率统计缓存更新完成 - {len(symbols)} 个币�?)  # 减少日志输出
+        # logger.info(f"✅ 资金费率统计缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_recommendations_cache(self, symbols: List[str]):
         """更新投资建议缓存（综合所有缓存表的数据）"""
@@ -491,7 +491,7 @@ class CacheUpdateService:
 
         for symbol in symbols:
             try:
-                # 从缓存表读取各维度数�?
+                # 从缓存表读取各维度数据
                 technical_data = self._get_cached_technical_data(symbol)
                 news_data = self._get_cached_news_data(symbol)
                 funding_data = self._get_cached_funding_data(symbol)
@@ -505,7 +505,7 @@ class CacheUpdateService:
                 if current_price == 0:
                     continue
 
-                # 使用投资分析器生成综合分�?
+                # 使用投资分析器生成综合分析
                 analysis = self.investment_analyzer.analyze(
                     symbol=symbol,
                     technical_data=technical_data,
@@ -526,23 +526,23 @@ class CacheUpdateService:
                 traceback.print_exc()
                 continue
 
-        logger.info(f"�?投资建议缓存更新完成 - {len(symbols)} 个币�?)
+        logger.info(f"✅ 投资建议缓存更新完成 - {len(symbols)} 个币种")
 
-    # ========== 辅助方法：计算评�?==========
+    # ========== 辅助方法：计算评分 ==========
 
     def _calculate_technical_score(self, indicators: dict) -> float:
-        """计算技术指标综合评�?(0-100)"""
-        score = 50.0  # 基础�?
+        """计算技术指标综合评分 (0-100)"""
+        score = 50.0  # 基础分
 
         # RSI评分
         rsi = indicators.get('rsi', {})
         rsi_value = rsi.get('value', 50)
         if rsi_value < 30:
-            score += 15  # 超卖，看�?
+            score += 15  # 超卖，看涨
         elif rsi_value > 70:
-            score -= 15  # 超买，看�?
+            score -= 15  # 超买，看跌
         elif 40 <= rsi_value <= 60:
-            score += 5  # 中性区�?
+            score += 5  # 中性区域
 
         # MACD评分
         macd = indicators.get('macd', {})
@@ -551,14 +551,26 @@ class CacheUpdateService:
         elif macd.get('bearish_cross'):
             score -= 15
 
-        # EMA趋势评分
+        # EMA趋势评分（包含放量倍数）
         ema = indicators.get('ema', {})
-        if ema.get('trend') == 'bullish':
-            score += 10
-        elif ema.get('trend') == 'bearish':
-            score -= 10
+        volume_multiple = ema.get('volume_multiple', 1.0)
 
-        # 成交量评�?
+        if ema.get('trend') == 'up':
+            score += 10
+            # 如果上涨趋势且放量，额外加分
+            if volume_multiple >= 2.0:
+                score += 10  # 放量2倍以上
+            elif volume_multiple >= 1.5:
+                score += 5   # 放量1.5倍以上
+        elif ema.get('trend') == 'down':
+            score -= 10
+            # 如果下跌趋势且放量，额外减分
+            if volume_multiple >= 2.0:
+                score -= 10  # 放量2倍以上
+            elif volume_multiple >= 1.5:
+                score -= 5   # 放量1.5倍以上
+
+        # 成交量评分
         volume = indicators.get('volume', {})
         if volume.get('above_average'):
             score += 10
@@ -584,13 +596,13 @@ class CacheUpdateService:
         elif net_flow < -100000:
             score -= 10
 
-        # 多空比评�?
+        # 多空比评分
         if long_short_ratio > 2:
             score += 10
         elif long_short_ratio < 0.5:
             score -= 10
 
-        # 活跃钱包数评�?
+        # 活跃钱包数评分
         if active_wallets > 10:
             score += 10
         elif active_wallets > 5:
@@ -604,7 +616,7 @@ class CacheUpdateService:
         score = 50.0
 
         # 情绪指数评分
-        score += sentiment_index * 0.3  # sentiment_index范围-100�?100
+        score += sentiment_index * 0.3  # sentiment_index范围-100到+100
 
         # 新闻数量评分
         if total_news > 20:
@@ -620,8 +632,8 @@ class CacheUpdateService:
 
     def _calculate_funding_score(self, funding_rate: float) -> float:
         """计算资金费率评分 (0-100)"""
-        # 负费率（空头过度�? 看涨
-        # 正费率（多头过度�? 看跌
+        # 负费率（空头过度）= 看涨
+        # 正费率（多头过度）= 看跌
 
         if funding_rate < -0.001:  # -0.1%
             return 85  # 强烈看涨
@@ -632,12 +644,12 @@ class CacheUpdateService:
         elif funding_rate > 0.0005:  # 0.05%
             return 30  # 看跌
         else:
-            return 50  # 中�?
+            return 50  # 中性
 
-    # ========== 辅助方法：从缓存表读取数�?==========
+    # ========== 辅助方法：从缓存表读取数据 ==========
 
     def _get_cached_technical_data(self, symbol: str) -> Optional[dict]:
-        """从缓存表读取技术指标数�?""
+        """从缓存表读取技术指标数据"""
         session = None
         try:
             session = self.db_service.get_session()
@@ -671,7 +683,7 @@ class CacheUpdateService:
                 }
             }
         except Exception as e:
-            logger.warning(f"读取{symbol}技术指标缓存失�? {e}")
+            logger.warning(f"读取{symbol}技术指标缓存失败: {e}")
             return None
         finally:
             if session:
@@ -800,7 +812,7 @@ class CacheUpdateService:
         从缓存表读取ETF资金流向数据
 
         Args:
-            symbol: 交易对，�?'BTC/USDT' �?'ETH/USDT'
+            symbol: 交易对，如 'BTC/USDT' 或 'ETH/USDT'
 
         Returns:
             ETF数据字典，包含评分和详细信息
@@ -816,7 +828,7 @@ class CacheUpdateService:
 
             session = self.db_service.get_session()
 
-            # 获取最�?天的ETF汇总数�?
+            # 获取最近7天的ETF汇总数据
             sql = text("""
                 SELECT
                     trade_date,
@@ -846,22 +858,22 @@ class CacheUpdateService:
                 record = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
                 etf_records.append(record)
 
-            # 计算ETF评分和信�?
+            # 计算ETF评分和信号
             latest = etf_records[0]
             latest_inflow = float(latest['total_net_inflow']) if latest.get('total_net_inflow') else 0
 
-            # 计算3日平均流�?
+            # 计算3日平均流入
             recent_3 = etf_records[:min(3, len(etf_records))]
             avg_3day_inflow = sum(float(r['total_net_inflow'] or 0) for r in recent_3) / len(recent_3)
 
-            # 计算7日总流�?
+            # 计算7日总流入
             weekly_total = sum(float(r['total_net_inflow'] or 0) for r in etf_records)
 
             # 计算ETF评分 (0-100)
             etf_score = self._calculate_etf_score(latest_inflow, avg_3day_inflow, weekly_total)
 
             # 确定信号
-            if avg_3day_inflow > 100000000:  # 1亿美�?
+            if avg_3day_inflow > 100000000:  # 1亿美元
                 signal = 'STRONG_BUY'
                 confidence = 0.9
             elif avg_3day_inflow > 50000000:  # 5千万美元
@@ -907,16 +919,16 @@ class CacheUpdateService:
         """
         计算ETF评分 (0-100)
 
-        机构资金流入是非常强的看涨信号，流出是看跌信�?
+        机构资金流入是非常强的看涨信号，流出是看跌信号
         """
-        score = 50.0  # 基础�?
+        score = 50.0  # 基础分
 
         # 最新日流入评分 (权重40%)
-        if latest_inflow > 500000000:  # 5�?
+        if latest_inflow > 500000000:  # 5亿+
             score += 20
-        elif latest_inflow > 200000000:  # 2�?
+        elif latest_inflow > 200000000:  # 2亿+
             score += 15
-        elif latest_inflow > 100000000:  # 1�?
+        elif latest_inflow > 100000000:  # 1亿+
             score += 10
         elif latest_inflow > 0:
             score += 5
@@ -929,10 +941,10 @@ class CacheUpdateService:
         elif latest_inflow < 0:
             score -= 5
 
-        # 3日平均流入评�?(权重35%)
-        if avg_3day > 300000000:  # 3�?
+        # 3日平均流入评分 (权重35%)
+        if avg_3day > 300000000:  # 3亿+
             score += 18
-        elif avg_3day > 150000000:  # 1.5�?
+        elif avg_3day > 150000000:  # 1.5亿+
             score += 12
         elif avg_3day > 50000000:  # 5千万+
             score += 8
@@ -947,12 +959,12 @@ class CacheUpdateService:
         elif avg_3day < 0:
             score -= 4
 
-        # 7日总流入评�?(权重25%)
-        if weekly_total > 1000000000:  # 10�?
+        # 7日总流入评分 (权重25%)
+        if weekly_total > 1000000000:  # 10亿+
             score += 12
-        elif weekly_total > 500000000:  # 5�?
+        elif weekly_total > 500000000:  # 5亿+
             score += 8
-        elif weekly_total > 200000000:  # 2�?
+        elif weekly_total > 200000000:  # 2亿+
             score += 5
         elif weekly_total > 0:
             score += 2
@@ -970,7 +982,7 @@ class CacheUpdateService:
     # ========== 辅助方法：写入数据库 ==========
 
     def _upsert_price_stats(self, **kwargs):
-        """插入或更新价格统�?""
+        """插入或更新价格统计"""
         session = None
         try:
             session = self.db_service.get_session()
@@ -1012,7 +1024,7 @@ class CacheUpdateService:
                 session.close()
 
     def _upsert_technical_indicators(self, **kwargs):
-        """插入或更新技术指�?""
+        """插入或更新技术指标"""
         session = None
         try:
             session = self.db_service.get_session()
@@ -1070,7 +1082,7 @@ class CacheUpdateService:
         except Exception as e:
             if session:
                 session.rollback()
-            logger.error(f"写入技术指标失�? {e}")
+            logger.error(f"写入技术指标失败: {e}")
         finally:
             if session:
                 session.close()
@@ -1128,7 +1140,7 @@ class CacheUpdateService:
                 session.close()
 
     def _upsert_news_sentiment(self, **kwargs):
-        """插入或更新新闻情�?""
+        """插入或更新新闻情绪"""
         session = None
         try:
             session = self.db_service.get_session()
@@ -1165,7 +1177,7 @@ class CacheUpdateService:
                 session.close()
 
     def _upsert_funding_rate_stats(self, **kwargs):
-        """插入或更新资金费率统�?""
+        """插入或更新资金费率统计"""
         session = None
         try:
             session = self.db_service.get_session()
@@ -1200,7 +1212,7 @@ class CacheUpdateService:
                 session.close()
 
     def _upsert_recommendation(self, symbol: str, analysis: dict):
-        """插入或更新投资建�?""
+        """插入或更新投资建议"""
         import json
         session = None
         try:

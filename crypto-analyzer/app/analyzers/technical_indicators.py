@@ -388,7 +388,9 @@ class TechnicalIndicators:
                     'short': latest['ema_short'],
                     'long': latest['ema_long'],
                     'bullish_cross': latest['ema_short'] > latest['ema_long'],
-                    'trend': 'up' if latest['ema_short'] > latest['ema_long'] else 'down'
+                    'trend': 'up' if latest['ema_short'] > latest['ema_long'] else 'down',
+                    'volume_ratio': latest['volume'] / latest['vol_ma20'] if latest['vol_ma20'] > 0 else 1.0,
+                    'volume_multiple': round(latest['volume'] / latest['vol_ma20'], 2) if latest['vol_ma20'] > 0 else 1.0
                 },
                 'kdj': {
                     'k': latest['kdj_k'],

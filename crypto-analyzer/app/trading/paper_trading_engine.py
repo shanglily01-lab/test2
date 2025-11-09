@@ -159,7 +159,8 @@ class PaperTradingEngine:
                    order_type: str = 'MARKET',
                    price: Decimal = None,
                    order_source: str = 'manual',
-                   signal_id: int = None) -> Tuple[bool, str, Optional[str]]:
+                   signal_id: int = None,
+                   pending_order_id: Optional[str] = None) -> Tuple[bool, str, Optional[str]]:
         """
         下单
 
@@ -172,6 +173,7 @@ class PaperTradingEngine:
             price: 限价单价格
             order_source: 订单来源
             signal_id: 信号ID
+            pending_order_id: 待成交订单ID（如果是从待成交订单触发的，用于精确匹配）
 
         Returns:
             (是否成功, 消息, 订单ID)
@@ -243,7 +245,47 @@ class PaperTradingEngine:
                     conn.rollback()
                     return False, message, None
 
-                # 8. 提交事务
+                # 8. 检查是否有对应的待成交订单，如果有则标记为已执行
+                # 优先通过pending_order_id精确匹配，如果没有则查找同交易对同方向的待成交订单
+                if pending_order_id:
+                    # 精确匹配：通过pending_order_id查找
+                    cursor.execute(
+                        """SELECT order_id FROM paper_trading_pending_orders
+                        WHERE account_id = %s AND order_id = %s 
+                        AND executed = FALSE AND status = 'PENDING'""",
+                        (account_id, pending_order_id)
+                    )
+                    pending_order = cursor.fetchone()
+                    if pending_order:
+                        cursor.execute(
+                            """UPDATE paper_trading_pending_orders
+                            SET executed = TRUE, status = 'EXECUTED', executed_at = NOW(),
+                                executed_order_id = %s, updated_at = NOW()
+                            WHERE account_id = %s AND order_id = %s""",
+                            (order_id, account_id, pending_order_id)
+                        )
+                        logger.info(f"待成交订单 {pending_order_id} 已标记为已执行，执行订单ID: {order_id}")
+                else:
+                    # 兼容旧逻辑：查找同交易对同方向的待成交订单（最早创建的）
+                    cursor.execute(
+                        """SELECT order_id FROM paper_trading_pending_orders
+                        WHERE account_id = %s AND symbol = %s AND side = %s 
+                        AND executed = FALSE AND status = 'PENDING'
+                        ORDER BY created_at ASC LIMIT 1""",
+                        (account_id, symbol, side)
+                    )
+                    pending_order = cursor.fetchone()
+                    if pending_order:
+                        cursor.execute(
+                            """UPDATE paper_trading_pending_orders
+                            SET executed = TRUE, status = 'EXECUTED', executed_at = NOW(),
+                                executed_order_id = %s, updated_at = NOW()
+                            WHERE account_id = %s AND order_id = %s""",
+                            (order_id, account_id, pending_order['order_id'])
+                        )
+                        logger.info(f"待成交订单 {pending_order['order_id']} 已标记为已执行，执行订单ID: {order_id}")
+
+                # 9. 提交事务
                 conn.commit()
                 logger.info(f"订单 {order_id} 执行成功: {side} {quantity} {symbol} @ {exec_price}")
                 return True, f"订单执行成功，{side} {quantity} {symbol} @ {exec_price:.2f} USDT", order_id
@@ -584,5 +626,216 @@ class PaperTradingEngine:
                     'recent_orders': recent_orders,
                     'recent_trades': recent_trades
                 }
+        finally:
+            conn.close()
+
+    def get_pending_orders(self, account_id: int, executed: bool = False) -> List[Dict]:
+        """
+        获取待成交订单列表
+
+        Args:
+            account_id: 账户ID
+            executed: 是否只获取已执行的订单
+
+        Returns:
+            待成交订单列表
+        """
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                if executed:
+                    # 只获取已执行的订单
+                    cursor.execute(
+                        """SELECT * FROM paper_trading_pending_orders
+                        WHERE account_id = %s AND executed = TRUE
+                        ORDER BY executed_at DESC""",
+                        (account_id,)
+                    )
+                else:
+                    # 只获取未执行的订单，且状态不是DELETED
+                    cursor.execute(
+                        """SELECT * FROM paper_trading_pending_orders
+                        WHERE account_id = %s AND executed = FALSE AND status != 'DELETED'
+                        ORDER BY created_at DESC""",
+                        (account_id,)
+                    )
+                orders = cursor.fetchall()
+                logger.debug(f"获取待成交订单: account_id={account_id}, executed={executed}, 数量={len(orders)}")
+                return orders
+        except Exception as e:
+            logger.error(f"获取待成交订单失败: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def create_pending_order(
+        self,
+        account_id: int,
+        order_id: str,
+        symbol: str,
+        side: str,
+        quantity: Decimal,
+        trigger_price: Decimal,
+        order_source: str = 'auto'
+    ) -> Tuple[bool, str]:
+        """
+        创建待成交订单
+
+        Args:
+            account_id: 账户ID
+            order_id: 订单ID
+            symbol: 交易对
+            side: 订单方向 BUY/SELL
+            quantity: 数量
+            trigger_price: 触发价格
+            order_source: 订单来源
+
+        Returns:
+            (是否成功, 消息)
+        """
+        conn = self._get_connection()
+        try:
+            # 1. 检查账户是否存在
+            account = self.get_account(account_id)
+            if not account:
+                return False, "账户不存在"
+
+            if account['status'] != 'active':
+                return False, "账户未激活"
+
+            # 2. 计算需要冻结的资金或数量
+            with conn.cursor() as cursor:
+                if side == 'BUY':
+                    # 买入：需要冻结 USDT
+                    total_cost = trigger_price * quantity
+                    fee = total_cost * self.fee_rate
+                    frozen_amount = total_cost + fee
+
+                    # 检查余额是否足够
+                    if account['current_balance'] < frozen_amount:
+                        return False, f"余额不足，需要冻结 {frozen_amount:.2f} USDT，当前余额 {account['current_balance']:.2f} USDT"
+
+                    # 冻结资金
+                    cursor.execute(
+                        """UPDATE paper_trading_accounts
+                        SET current_balance = current_balance - %s,
+                            frozen_balance = frozen_balance + %s
+                        WHERE id = %s""",
+                        (frozen_amount, frozen_amount, account_id)
+                    )
+                    frozen_quantity = Decimal('0')
+                else:
+                    # 卖出：需要冻结持仓数量
+                    position = self._get_position(account_id, symbol)
+                    if not position or position['available_quantity'] < quantity:
+                        available = position['available_quantity'] if position else 0
+                        return False, f"持仓不足，需要冻结 {quantity} 个，当前可用 {available} 个"
+
+                    # 冻结持仓数量
+                    cursor.execute(
+                        """UPDATE paper_trading_positions
+                        SET available_quantity = available_quantity - %s
+                        WHERE account_id = %s AND symbol = %s AND status = 'open'""",
+                        (quantity, account_id, symbol)
+                    )
+                    frozen_amount = Decimal('0')
+                    frozen_quantity = quantity
+
+                # 3. 创建待成交订单记录
+                cursor.execute(
+                    """INSERT INTO paper_trading_pending_orders
+                    (account_id, order_id, symbol, side, quantity, trigger_price,
+                     frozen_amount, frozen_quantity, status, executed, order_source, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (account_id, order_id, symbol, side, quantity, trigger_price,
+                     frozen_amount, frozen_quantity, 'PENDING', False, order_source, datetime.now())
+                )
+
+                conn.commit()
+                logger.info(f"创建待成交订单成功: {order_id} - {side} {quantity} {symbol} @ {trigger_price}")
+                return True, f"待成交订单创建成功"
+
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"创建待成交订单失败: {e}")
+            return False, f"创建待成交订单失败: {str(e)}"
+        finally:
+            conn.close()
+
+    def cancel_pending_order(self, account_id: int, order_id: str) -> Tuple[bool, str]:
+        """
+        撤销待成交订单
+
+        Args:
+            account_id: 账户ID
+            order_id: 订单ID
+
+        Returns:
+            (是否成功, 消息)
+        """
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                # 1. 获取待成交订单信息（排除已删除的）
+                logger.debug(f"尝试撤销订单: account_id={account_id}, order_id={order_id}")
+                cursor.execute(
+                    """SELECT * FROM paper_trading_pending_orders
+                    WHERE account_id = %s AND order_id = %s AND executed = FALSE AND status != 'DELETED'""",
+                    (account_id, order_id)
+                )
+                order = cursor.fetchone()
+
+                if not order:
+                    # 检查订单是否存在但状态不对
+                    cursor.execute(
+                        """SELECT status, executed FROM paper_trading_pending_orders
+                        WHERE account_id = %s AND order_id = %s""",
+                        (account_id, order_id)
+                    )
+                    existing_order = cursor.fetchone()
+                    if existing_order:
+                        logger.warning(f"订单存在但状态不符合撤销条件: order_id={order_id}, status={existing_order.get('status')}, executed={existing_order.get('executed')}")
+                        return False, f"订单状态不符合撤销条件（状态: {existing_order.get('status')}, 已执行: {existing_order.get('executed')}）"
+                    else:
+                        logger.warning(f"订单不存在: account_id={account_id}, order_id={order_id}")
+                        return False, "待成交订单不存在、已执行或已删除"
+
+                # 2. 解冻资金或持仓
+                if order['side'] == 'BUY':
+                    # 买入订单：解冻 USDT
+                    frozen_amount = Decimal(str(order['frozen_amount']))
+                    cursor.execute(
+                        """UPDATE paper_trading_accounts
+                        SET current_balance = current_balance + %s,
+                            frozen_balance = frozen_balance - %s
+                        WHERE id = %s""",
+                        (frozen_amount, frozen_amount, account_id)
+                    )
+                else:
+                    # 卖出订单：解冻持仓数量
+                    frozen_quantity = Decimal(str(order['frozen_quantity']))
+                    cursor.execute(
+                        """UPDATE paper_trading_positions
+                        SET available_quantity = available_quantity + %s
+                        WHERE account_id = %s AND symbol = %s AND status = 'open'""",
+                        (frozen_quantity, account_id, order['symbol'])
+                    )
+
+                # 3. 软删除：将状态改为DELETED，而不是真正删除
+                cursor.execute(
+                    """UPDATE paper_trading_pending_orders
+                    SET status = 'DELETED', updated_at = NOW()
+                    WHERE account_id = %s AND order_id = %s""",
+                    (account_id, order_id)
+                )
+
+                conn.commit()
+                logger.info(f"撤销待成交订单成功: {order_id} (状态已改为DELETED)")
+                return True, "待成交订单撤销成功"
+
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"撤销待成交订单失败: {e}")
+            return False, f"撤销待成交订单失败: {str(e)}"
         finally:
             conn.close()

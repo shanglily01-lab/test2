@@ -32,7 +32,7 @@ import yaml
 from app.services.price_cache_service import init_global_price_cache, stop_global_price_cache
 
 
-# 全局变量
+    # 全局变量
 config = {}
 price_collector = None
 news_aggregator = None
@@ -41,6 +41,7 @@ sentiment_analyzer = None
 signal_generator = None
 enhanced_dashboard = None
 price_cache_service = None  # 价格缓存服务
+pending_order_executor = None  # 待成交订单自动执行器
 
 
 @asynccontextmanager
@@ -51,6 +52,7 @@ async def lifespan(app: FastAPI):
 
     global config, price_collector, news_aggregator
     global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
+    global pending_order_executor
 
     # 加载配置
     config_path = project_root / "config.yaml"
@@ -146,6 +148,25 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  价格缓存服务初始化失败: {e}")
             price_cache_service = None
 
+        # 初始化待成交订单自动执行器
+        try:
+            from app.services.pending_order_executor import PendingOrderExecutor
+            from app.trading.paper_trading_engine import PaperTradingEngine
+            
+            db_config = config.get('database', {}).get('mysql', {})
+            trading_engine = PaperTradingEngine(db_config, price_cache_service=price_cache_service)
+            pending_order_executor = PendingOrderExecutor(
+                db_config=db_config,
+                trading_engine=trading_engine,
+                price_cache_service=price_cache_service
+            )
+            logger.info("✅ 待成交订单自动执行服务初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  待成交订单自动执行服务初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+            pending_order_executor = None
+
         logger.info("🎉 分析模块初始化完成！")
 
     except Exception as e:
@@ -160,14 +181,33 @@ async def lifespan(app: FastAPI):
         signal_generator = None
         enhanced_dashboard = None
         price_cache_service = None
+        pending_order_executor = None
         logger.warning("⚠️  系统以降级模式运行")
 
     logger.info("🚀 FastAPI 启动完成")
+    
+    # 在异步上下文中启动后台任务
+    if pending_order_executor:
+        try:
+            import asyncio
+            pending_order_executor.task = asyncio.create_task(pending_order_executor.run_loop(interval=5))
+            logger.info("✅ 待成交订单自动执行服务已启动（每5秒检查）")
+        except Exception as e:
+            logger.warning(f"⚠️  启动待成交订单自动执行任务失败: {e}")
+            pending_order_executor = None
 
     yield
 
     # 关闭时的清理工作
     logger.info("👋 关闭系统...")
+
+    # 停止待成交订单自动执行器
+    if pending_order_executor:
+        try:
+            pending_order_executor.stop()
+            logger.info("✅ 待成交订单自动执行服务已停止")
+        except Exception as e:
+            logger.warning(f"停止待成交订单自动执行服务失败: {e}")
 
     # 停止价格缓存服务
     if price_cache_service:
