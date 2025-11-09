@@ -20,6 +20,34 @@ from contextlib import asynccontextmanager
 from loguru import logger
 import yaml
 
+# 配置日志文件（按天轮转）
+log_dir = project_root / "logs"
+log_dir.mkdir(exist_ok=True)
+
+# 移除默认的控制台处理器，避免重复输出
+logger.remove()
+
+# 添加控制台输出（INFO级别以上，带颜色）
+logger.add(
+    sys.stderr,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+    level="INFO",
+    colorize=True
+)
+
+# 添加文件输出（按天轮转，保留30天）
+logger.add(
+    log_dir / "main_{time:YYYY-MM-DD}.log",
+    rotation="00:00",  # 每天午夜轮转
+    retention="30 days",  # 保留30天的日志
+    level="DEBUG",  # 文件记录DEBUG级别以上的所有日志
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+    encoding="utf-8",
+    enqueue=True,  # 异步写入，提高性能
+    backtrace=True,  # 记录异常堆栈
+    diagnose=True  # 记录变量值
+)
+
 # 延迟导入：注释掉模块级别的import，改为在使用时才导入
 # 避免某些模块在导入时的初始化代码导致Windows崩溃
 # from app.collectors.price_collector import MultiExchangeCollector
