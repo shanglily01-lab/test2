@@ -39,9 +39,13 @@ class FuturesTradingEngine:
 
     def _get_cursor(self):
         """获取数据库游标"""
-        if not self.connection or not self.connection.open:
-            self._connect_db()
-        return self.connection.cursor()
+        try:
+            if not self.connection or not self.connection.open:
+                self._connect_db()
+            return self.connection.cursor()
+        except Exception as e:
+            logger.error(f"获取数据库游标失败: {e}")
+            raise
 
     def get_current_price(self, symbol: str) -> Decimal:
         """
@@ -118,8 +122,11 @@ class FuturesTradingEngine:
         position_side: str,  # 'LONG' or 'SHORT'
         quantity: Decimal,
         leverage: int = 1,
+        limit_price: Optional[Decimal] = None,
         stop_loss_pct: Optional[Decimal] = None,
         take_profit_pct: Optional[Decimal] = None,
+        stop_loss_price: Optional[Decimal] = None,
+        take_profit_price: Optional[Decimal] = None,
         source: str = 'manual',
         signal_id: Optional[int] = None
     ) -> Dict:
@@ -132,22 +139,185 @@ class FuturesTradingEngine:
             position_side: LONG(多头) 或 SHORT(空头)
             quantity: 开仓数量（币数）
             leverage: 杠杆倍数
-            stop_loss_pct: 止损百分比
-            take_profit_pct: 止盈百分比
+            stop_loss_pct: 止损百分比（可选）
+            take_profit_pct: 止盈百分比（可选）
+            stop_loss_price: 止损价格（可选，优先于百分比）
+            take_profit_price: 止盈价格（可选，优先于百分比）
             source: 来源
             signal_id: 信号ID
 
         Returns:
             开仓结果
         """
-        cursor = self._get_cursor()
+        try:
+            cursor = self._get_cursor()
+        except Exception as cursor_error:
+            logger.error(f"获取数据库游标失败: {cursor_error}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {
+                'success': False,
+                'message': f"数据库连接失败: {str(cursor_error)}"
+            }
 
         try:
             # 1. 获取当前价格
-            current_price = self.get_current_price(symbol)
+            try:
+                current_price = self.get_current_price(symbol)
+                if not current_price or current_price <= 0:
+                    raise ValueError(f"无法获取{symbol}的有效价格")
+            except Exception as price_error:
+                logger.error(f"获取价格失败: {price_error}")
+                import traceback
+                logger.error(traceback.format_exc())
+                return {
+                    'success': False,
+                    'message': f"无法获取{symbol}的价格，请检查数据源或稍后重试。错误: {str(price_error)}"
+                }
 
-            # 2. 计算名义价值和所需保证金
-            notional_value = current_price * quantity
+            # 1.5. 检查限价单逻辑
+            # 如果设置了限价，检查是否需要创建未成交订单
+            if limit_price and limit_price > 0:
+                should_create_pending_order = False
+                if position_side == 'LONG':
+                    # 做多：当前价格高于限价，则创建未成交订单
+                    if current_price > limit_price:
+                        should_create_pending_order = True
+                else:  # SHORT
+                    # 做空：当前价格低于限价，则创建未成交订单
+                    if current_price < limit_price:
+                        should_create_pending_order = True
+                
+                if should_create_pending_order:
+                    # 使用限价计算保证金
+                    limit_notional_value = limit_price * quantity
+                    limit_margin_required = limit_notional_value / Decimal(leverage)
+                    limit_fee = limit_notional_value * Decimal('0.0004')
+                    
+                    # 计算止盈止损价格（基于限价）
+                    limit_stop_loss_price = None
+                    limit_take_profit_price = None
+                    
+                    # 处理止损价格：优先使用直接指定的价格，否则根据百分比计算
+                    if stop_loss_price is None:
+                        if stop_loss_pct:
+                            if position_side == 'LONG':
+                                limit_stop_loss_price = limit_price * (1 - stop_loss_pct / 100)
+                            else:
+                                limit_stop_loss_price = limit_price * (1 + stop_loss_pct / 100)
+                        else:
+                            limit_stop_loss_price = None
+                    else:
+                        limit_stop_loss_price = stop_loss_price
+                    
+                    # 处理止盈价格：优先使用直接指定的价格，否则根据百分比计算
+                    if take_profit_price is None:
+                        if take_profit_pct:
+                            if position_side == 'LONG':
+                                limit_take_profit_price = limit_price * (1 + take_profit_pct / 100)
+                            else:
+                                limit_take_profit_price = limit_price * (1 - take_profit_pct / 100)
+                        else:
+                            limit_take_profit_price = None
+                    else:
+                        limit_take_profit_price = take_profit_price
+                    
+                    # 检查账户余额
+                    cursor.execute(
+                        "SELECT current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
+                        (account_id,)
+                    )
+                    account = cursor.fetchone()
+                    if not account:
+                        return {
+                            'success': False,
+                            'message': f"账户 {account_id} 不存在"
+                        }
+                    
+                    current_balance = Decimal(str(account['current_balance']))
+                    frozen_balance = Decimal(str(account.get('frozen_balance', 0) or 0))
+                    available_balance = current_balance - frozen_balance
+                    
+                    if available_balance < (limit_margin_required + limit_fee):
+                        return {
+                            'success': False,
+                            'message': f"余额不足。需要: {limit_margin_required + limit_fee:.2f} USDT, 可用: {available_balance:.2f} USDT"
+                        }
+                    
+                    # 创建未成交订单
+                    order_id = f"FUT-{uuid.uuid4().hex[:16].upper()}"
+                    side = f"OPEN_{position_side}"
+                    
+                    # 冻结保证金
+                    new_balance = current_balance - limit_margin_required - limit_fee
+                    cursor.execute(
+                        """UPDATE paper_trading_accounts
+                        SET current_balance = %s, frozen_balance = frozen_balance + %s
+                        WHERE id = %s""",
+                        (float(new_balance), float(limit_margin_required), account_id)
+                    )
+                    
+                    # 创建订单记录（包含止盈止损）
+                    order_sql = """
+                        INSERT INTO futures_orders (
+                            account_id, order_id, symbol,
+                            side, order_type, leverage,
+                            price, quantity, executed_quantity,
+                            margin, total_value, executed_value,
+                            fee, fee_rate, status,
+                            stop_loss_price, take_profit_price,
+                            order_source, signal_id, created_at
+                        ) VALUES (
+                            %s, %s, %s,
+                            %s, 'LIMIT', %s,
+                            %s, %s, 0,
+                            %s, %s, 0,
+                            %s, %s, 'PENDING',
+                            %s, %s,
+                            %s, %s, %s
+                        )
+                    """
+                    
+                    cursor.execute(order_sql, (
+                        account_id, order_id, symbol,
+                        side, leverage,
+                        float(limit_price), float(quantity),
+                        float(limit_margin_required), float(limit_notional_value),
+                        float(limit_fee), float(Decimal('0.0004')),
+                        float(limit_stop_loss_price) if limit_stop_loss_price else None,
+                        float(limit_take_profit_price) if limit_take_profit_price else None,
+                        source, signal_id, datetime.now()
+                    ))
+                    
+                    self.connection.commit()
+                    
+                    logger.info(
+                        f"创建限价单: {symbol} {position_side} {quantity} @ {limit_price} "
+                        f"(当前价格: {current_price}), 杠杆{leverage}x, "
+                        f"止损: {limit_stop_loss_price}, 止盈: {limit_take_profit_price}"
+                    )
+                    
+                    return {
+                        'success': True,
+                        'order_id': order_id,
+                        'symbol': symbol,
+                        'position_side': position_side,
+                        'quantity': float(quantity),
+                        'limit_price': float(limit_price),
+                        'current_price': float(current_price),
+                        'leverage': leverage,
+                        'margin': float(limit_margin_required),
+                        'stop_loss_price': float(limit_stop_loss_price) if limit_stop_loss_price else None,
+                        'take_profit_price': float(limit_take_profit_price) if limit_take_profit_price else None,
+                        'order_type': 'LIMIT',
+                        'status': 'PENDING',
+                        'message': f"限价单已创建，等待价格达到 {limit_price} 时成交"
+                    }
+                # 如果限价单可以立即成交，继续执行下面的市价单逻辑
+
+            # 2. 计算名义价值和所需保证金（使用限价或当前价格）
+            entry_price = limit_price if limit_price and limit_price > 0 else current_price
+            notional_value = entry_price * quantity
             margin_required = notional_value / Decimal(leverage)
 
             # 3. 计算手续费 (0.04%)
@@ -155,41 +325,63 @@ class FuturesTradingEngine:
             fee = notional_value * fee_rate
 
             # 4. 检查账户余额
-            cursor.execute(
-                "SELECT current_balance FROM paper_trading_accounts WHERE id = %s",
-                (account_id,)
-            )
-            account = cursor.fetchone()
-            if not account:
-                raise ValueError(f"账户 {account_id} 不存在")
-
-            available_balance = Decimal(str(account['current_balance']))
-            if available_balance < (margin_required + fee):
-                raise ValueError(
-                    f"余额不足。需要: {margin_required + fee:.2f} USDT, "
-                    f"可用: {available_balance:.2f} USDT"
+            try:
+                cursor.execute(
+                    "SELECT current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
+                    (account_id,)
                 )
+                account = cursor.fetchone()
+                if not account:
+                    return {
+                        'success': False,
+                        'message': f"账户 {account_id} 不存在"
+                    }
 
-            # 5. 计算强平价和止盈止损价
+                # 计算可用余额 = 当前余额 - 冻结余额
+                current_balance = Decimal(str(account['current_balance']))
+                frozen_balance = Decimal(str(account.get('frozen_balance', 0) or 0))
+                available_balance = current_balance - frozen_balance
+                
+                if available_balance < (margin_required + fee):
+                    return {
+                        'success': False,
+                        'message': f"余额不足。需要: {margin_required + fee:.2f} USDT, 可用: {available_balance:.2f} USDT (总余额: {current_balance:.2f}, 冻结: {frozen_balance:.2f})"
+                    }
+            except Exception as balance_error:
+                logger.error(f"检查账户余额失败: {balance_error}")
+                import traceback
+                logger.error(traceback.format_exc())
+                return {
+                    'success': False,
+                    'message': f"检查账户余额失败: {str(balance_error)}"
+                }
+
+            # 5. 计算强平价和止盈止损价（使用限价或当前价格）
             liquidation_price = self.calculate_liquidation_price(
-                current_price, position_side, leverage
+                entry_price, position_side, leverage
             )
 
-            if stop_loss_pct:
-                if position_side == 'LONG':
-                    stop_loss_price = current_price * (1 - stop_loss_pct / 100)
+            # 处理止损价格：优先使用直接指定的价格，否则根据百分比计算
+            if stop_loss_price is None:
+                if stop_loss_pct:
+                    if position_side == 'LONG':
+                        stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
+                    else:
+                        stop_loss_price = entry_price * (1 + stop_loss_pct / 100)
                 else:
-                    stop_loss_price = current_price * (1 + stop_loss_pct / 100)
-            else:
-                stop_loss_price = None
+                    stop_loss_price = None
+            # 如果直接指定了止损价格，使用指定的价格
 
-            if take_profit_pct:
-                if position_side == 'LONG':
-                    take_profit_price = current_price * (1 + take_profit_pct / 100)
+            # 处理止盈价格：优先使用直接指定的价格，否则根据百分比计算
+            if take_profit_price is None:
+                if take_profit_pct:
+                    if position_side == 'LONG':
+                        take_profit_price = entry_price * (1 + take_profit_pct / 100)
+                    else:
+                        take_profit_price = entry_price * (1 - take_profit_pct / 100)
                 else:
-                    take_profit_price = current_price * (1 - take_profit_pct / 100)
-            else:
-                take_profit_price = None
+                    take_profit_price = None
+            # 如果直接指定了止盈价格，使用指定的价格
 
             # 6. 创建持仓记录
             position_sql = """
@@ -211,7 +403,7 @@ class FuturesTradingEngine:
             cursor.execute(position_sql, (
                 account_id, symbol, position_side, leverage,
                 float(quantity), float(notional_value), float(margin_required),
-                float(current_price), float(current_price), float(liquidation_price),
+                float(entry_price), float(entry_price), float(liquidation_price),
                 float(stop_loss_price) if stop_loss_price else None,
                 float(take_profit_price) if take_profit_price else None,
                 float(stop_loss_pct) if stop_loss_pct else None,
@@ -236,7 +428,7 @@ class FuturesTradingEngine:
                     order_source, signal_id
                 ) VALUES (
                     %s, %s, %s, %s,
-                    %s, 'MARKET', %s,
+                    %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, 'FILLED',
@@ -245,13 +437,16 @@ class FuturesTradingEngine:
                 )
             """
 
+            # 确定订单类型：如果有限价且不等于当前价格，则为限价单，否则为市价单
+            order_type = 'LIMIT' if (limit_price and limit_price > 0 and limit_price != current_price) else 'MARKET'
+            
             cursor.execute(order_sql, (
                 account_id, order_id, position_id, symbol,
-                side, leverage,
-                float(current_price), float(quantity), float(quantity),
+                side, order_type, leverage,
+                float(entry_price), float(quantity), float(quantity),
                 float(margin_required), float(notional_value), float(notional_value),
                 float(fee), float(fee_rate),
-                float(current_price), datetime.now(),
+                float(entry_price), datetime.now(),
                 source, signal_id
             ))
 
@@ -274,13 +469,14 @@ class FuturesTradingEngine:
 
             cursor.execute(trade_sql, (
                 account_id, order_id, position_id, trade_id,
-                symbol, side, float(current_price), float(quantity), float(notional_value),
+                symbol, side, float(entry_price), float(quantity), float(notional_value),
                 leverage, float(margin_required), float(fee), float(fee_rate),
-                float(current_price), datetime.now()
+                float(entry_price), datetime.now()
             ))
 
             # 9. 更新账户余额
-            new_balance = available_balance - margin_required - fee
+            # 减少当前余额，增加冻结余额（保证金）
+            new_balance = current_balance - margin_required - fee
             cursor.execute(
                 """UPDATE paper_trading_accounts
                 SET current_balance = %s, frozen_balance = frozen_balance + %s
@@ -291,7 +487,7 @@ class FuturesTradingEngine:
             self.connection.commit()
 
             logger.info(
-                f"开仓成功: {symbol} {position_side} {quantity} @ {current_price}, "
+                f"开仓成功: {symbol} {position_side} {quantity} @ {entry_price}, "
                 f"杠杆{leverage}x, 保证金{margin_required:.2f} USDT"
             )
 
@@ -303,7 +499,7 @@ class FuturesTradingEngine:
                 'symbol': symbol,
                 'position_side': position_side,
                 'quantity': float(quantity),
-                'entry_price': float(current_price),
+                'entry_price': float(entry_price),
                 'leverage': leverage,
                 'margin': float(margin_required),
                 'fee': float(fee),
@@ -314,8 +510,14 @@ class FuturesTradingEngine:
             }
 
         except Exception as e:
-            self.connection.rollback()
+            if self.connection:
+                try:
+                    self.connection.rollback()
+                except:
+                    pass
             logger.error(f"开仓失败: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 'success': False,
                 'error': str(e),
@@ -364,11 +566,16 @@ class FuturesTradingEngine:
             if close_quantity is None:
                 close_quantity = quantity
 
+            if close_quantity <= 0:
+                raise ValueError(f"平仓数量必须大于0")
+            
             if close_quantity > quantity:
                 raise ValueError(f"平仓数量{close_quantity}大于持仓数量{quantity}")
 
             # 2. 获取当前价格
             current_price = self.get_current_price(symbol)
+            if not current_price or current_price <= 0:
+                raise ValueError(f"无法获取{symbol}的有效价格")
 
             # 3. 计算盈亏
             close_value = current_price * close_quantity
@@ -389,11 +596,21 @@ class FuturesTradingEngine:
             realized_pnl = pnl - fee
 
             # 收益率 = 盈亏 / 成本
-            pnl_pct = (pnl / open_value) * 100
+            if open_value > 0:
+                pnl_pct = (pnl / open_value) * 100
+            else:
+                pnl_pct = Decimal('0')
 
             # ROI = 盈亏 / 保证金 (杠杆收益率)
-            position_margin = margin * (close_quantity / quantity)
-            roi = (pnl / position_margin) * 100
+            if quantity > 0:
+                position_margin = margin * (close_quantity / quantity)
+            else:
+                position_margin = margin
+            
+            if position_margin > 0:
+                roi = (pnl / position_margin) * 100
+            else:
+                roi = Decimal('0')
 
             # 5. 创建平仓订单
             order_id = f"FUT-{uuid.uuid4().hex[:16].upper()}"
@@ -488,15 +705,29 @@ class FuturesTradingEngine:
 
                 released_margin = margin - remaining_margin
 
-            # 8. 更新账户余额
+            # 8. 更新账户余额和交易统计
+            # 判断是盈利还是亏损
+            is_winning_trade = realized_pnl > 0
+            
             cursor.execute(
                 """UPDATE paper_trading_accounts
                 SET current_balance = current_balance + %s + %s,
                     frozen_balance = frozen_balance - %s,
-                    realized_pnl = realized_pnl + %s
+                    realized_pnl = realized_pnl + %s,
+                    total_trades = total_trades + 1,
+                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
                 WHERE id = %s""",
                 (float(released_margin), float(realized_pnl), float(released_margin),
-                 float(realized_pnl), account_id)
+                 float(realized_pnl), float(realized_pnl), float(realized_pnl), account_id)
+            )
+            
+            # 更新胜率
+            cursor.execute(
+                """UPDATE paper_trading_accounts
+                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                WHERE id = %s""",
+                (account_id,)
             )
 
             self.connection.commit()
@@ -523,8 +754,14 @@ class FuturesTradingEngine:
             }
 
         except Exception as e:
-            self.connection.rollback()
+            if self.connection:
+                try:
+                    self.connection.rollback()
+                except:
+                    pass
             logger.error(f"平仓失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {
                 'success': False,
                 'error': str(e),
@@ -544,8 +781,12 @@ class FuturesTradingEngine:
 
         positions = cursor.fetchall()
 
-        # 更新每个持仓的当前盈亏
+        # 更新每个持仓的当前盈亏，并统一字段名
         for pos in positions:
+            # 将 id 映射为 position_id，保持与API一致
+            if 'id' in pos and 'position_id' not in pos:
+                pos['position_id'] = pos['id']
+            
             try:
                 current_price = self.get_current_price(pos['symbol'])
                 entry_price = Decimal(str(pos['entry_price']))

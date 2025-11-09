@@ -304,6 +304,9 @@
                     </p>
                 </div>
                 <div class="d-flex gap-md">
+                    <button class="btn btn-ghost" onclick="window.location.href='/'">
+                        <i class="bi bi-house"></i> 返回首页
+                    </button>
                     <button class="btn btn-ghost" onclick="toggleAlerts()" style="position: relative;">
                         <i class="bi bi-bell"></i> 提醒
                         <span class="alert-badge" id="alertCount" style="display: none;">0</span>
@@ -321,20 +324,20 @@
         <!-- Navigation -->
         <nav class="nav-container slide-up">
             <div class="nav-links">
-                <a href="/" class="nav-link active">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
                 <a href="/paper_trading" class="nav-link">
                     <i class="bi bi-journals"></i> 模拟现货
                 </a>
                 <a href="/futures_trading" class="nav-link">
                     <i class="bi bi-graph-up-arrow"></i> 模拟合约
                 </a>
-                <a href="/contract_trading" class="nav-link">
-                    <i class="bi bi-cash-stack"></i> 自动合约交易
-                </a>
                 <a href="/strategies" class="nav-link">
                     <i class="bi bi-diagram-3"></i> 策略管理
+                </a>
+                <a href="/etf_data" class="nav-link">
+                    <i class="bi bi-pie-chart"></i> ETF 数据
+                </a>
+                <a href="/corporate_treasury" class="nav-link">
+                    <i class="bi bi-building"></i> 企业金库
                 </a>
             </div>
         </nav>
@@ -346,7 +349,7 @@
                 <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
                     <h2 class="card-title" style="margin: 0;">
                         <i class="bi bi-graph-up"></i>
-                        24小时 EMA 信号【15分钟】
+                        <span id="ema24h-title">EMA信号</span>
                     </h2>
                     <button class="btn btn-sm btn-outline" onclick="toggleEmaExplanation()" style="font-size: 12px; padding: 4px 12px;">
                         <i class="bi bi-info-circle"></i> 详细说明
@@ -369,7 +372,7 @@
                 <div class="card-header">
                     <h2 class="card-title">
                         <i class="bi bi-lightbulb"></i>
-                        投资建议
+                        <span id="recommendations-title">投资建议</span>
                     </h2>
                     <button class="btn btn-sm btn-secondary" onclick="showInvestmentExplanation()" style="margin-left: auto;">
                         <i class="bi bi-info-circle"></i> 详细说明
@@ -390,7 +393,7 @@
                 <div class="card-header">
                     <h2 class="card-title">
                         <i class="bi bi-currency-exchange"></i>
-                        实时价格
+                        <span id="prices-title">实时价格</span>
                     </h2>
                     <button class="btn btn-sm btn-secondary" onclick="showPriceExplanation()" style="margin-left: auto;">
                         <i class="bi bi-info-circle"></i> 详细说明
@@ -428,7 +431,7 @@
                 <div class="card-header">
                     <h2 class="card-title">
                         <i class="bi bi-newspaper"></i>
-                        最新新闻
+                        <span id="news-title">最新新闻</span>
                     </h2>
                     <button class="btn btn-sm btn-secondary" onclick="showCardInfo('news')" style="margin-left: auto;">
                         <i class="bi bi-info-circle"></i> 详细说明
@@ -449,7 +452,7 @@
                 <div class="card-header">
                     <h2 class="card-title">
                         <i class="bi bi-lightning"></i>
-                        实时合约
+                        <span id="futures-title">实时合约</span>
                     </h2>
                     <button class="btn btn-sm btn-secondary" onclick="showCardInfo('futures')" style="margin-left: auto;">
                         <i class="bi bi-info-circle"></i> 详细说明
@@ -605,7 +608,13 @@
         // 更新价格表
         async function updatePriceTable(prices) {
             const tbody = document.getElementById('priceTableBody');
-            // document.getElementById('priceCount').textContent = prices?.length || 0;
+            const titleEl = document.getElementById('prices-title');
+            
+            // 更新标题数量统计
+            if (titleEl) {
+                const count = prices ? prices.length : 0;
+                titleEl.textContent = `实时价格【${count}】`;
+            }
 
             if (!prices || prices.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><div class="empty-state-text">暂无数据</div></td></tr>';
@@ -649,6 +658,13 @@
         // 更新投资建议
         async function updateRecommendations(recommendations) {
             const container = document.getElementById('recommendationsContainer');
+            const titleEl = document.getElementById('recommendations-title');
+            
+            // 更新标题数量统计
+            if (titleEl) {
+                const count = recommendations ? recommendations.length : 0;
+                titleEl.textContent = `投资建议【${count}】`;
+            }
 
             if (!recommendations || recommendations.length === 0) {
                 container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无建议</div></div>';
@@ -789,7 +805,13 @@
         // 更新新闻
         function updateNews(news) {
             const container = document.getElementById('newsContainer');
-            // document.getElementById('newsCount').textContent = news?.length || 0;
+            const titleEl = document.getElementById('news-title');
+            
+            // 更新标题数量统计
+            if (titleEl) {
+                const count = news ? news.length : 0;
+                titleEl.textContent = `最新新闻【${count}】`;
+            }
 
             if (!news || news.length === 0) {
                 container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无新闻</div></div>';
@@ -886,10 +908,16 @@
         // 更新24h EMA信号卡片
         function update24hEmaCards(signals) {
             const container = document.getElementById('ema24hCardsContainer');
+            const titleEl = document.getElementById('ema24h-title');
 
             const total = signals?.length || 0;
-            const buyCount = signals ? signals.filter(s => s.signal_type === 'BUY').length : 0;
-            const sellCount = signals ? signals.filter(s => s.signal_type === 'SELL').length : 0;
+            const buyCount = signals ? signals.filter(s => s.signal_type === 'BUY' || s.signal_type === 'GOLDEN_CROSS').length : 0;
+            const sellCount = signals ? signals.filter(s => s.signal_type === 'SELL' || s.signal_type === 'DEATH_CROSS').length : 0;
+            
+            // 更新标题数量统计：显示买入、卖出、总信号数
+            if (titleEl) {
+                titleEl.textContent = `EMA信号 [买入:${buyCount} 卖出:${sellCount} 总计:${total}]`;
+            }
 
             if (!signals || signals.length === 0) {
                 container.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><div class="empty-state-text">暂无24h EMA信号</div></div>';
@@ -928,8 +956,8 @@
                                 </div>
                             </div>
                             <div class="d-flex justify-between">
-                                <span style="font-size: 12px; color: var(--text-secondary);">成交倍数:</span>
-                                <span style="font-size: 12px; font-weight: 600; color: ${(s.volume_multiple || 0) >= 2.0 ? '#f39c12' : (s.volume_multiple || 0) >= 1.5 ? '#3498db' : 'var(--text-primary)'};">×${(s.volume_multiple || 0).toFixed(2)}</span>
+                                <span style="font-size: 12px; color: var(--text-secondary);">${s.volume_type || ((s.volume_ratio || s.volume_multiple || 0) > 1 ? '放量' : '缩量')}:</span>
+                                <span style="font-size: 12px; font-weight: 600; color: ${(s.volume_ratio || s.volume_multiple || 0) >= 2.0 ? '#f39c12' : (s.volume_ratio || s.volume_multiple || 0) >= 1.5 ? '#3498db' : 'var(--text-primary)'};">×${(s.volume_ratio || s.volume_multiple || 0).toFixed(2)}</span>
                             </div>
                             <div class="d-flex justify-between">
                                 <span style="font-size: 12px; color: var(--text-secondary);">价格:</span>
@@ -966,6 +994,13 @@
         // 更新实时合约数据
         function updateFuturesData(prices) {
             const tbody = document.getElementById('futuresBody');
+            const titleEl = document.getElementById('futures-title');
+            
+            // 更新标题数量统计
+            if (titleEl) {
+                const count = prices ? prices.length : 0;
+                titleEl.textContent = `实时合约【${count}】`;
+            }
 
             if (!prices || prices.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">暂无合约数据</div></td></tr>';
@@ -1514,7 +1549,7 @@
         <div style="padding: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-default);">
                 <div>
-                    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">24小时 EMA 信号详细说明</h2>
+                    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">EMA信号详细说明</h2>
                     <div style="font-size: 14px; color: var(--text-secondary);">15分钟级别技术分析系统</div>
                 </div>
                 <button onclick="closeExplanationModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.background='var(--bg-tertiary)'; this.style.color='var(--text-primary)';" onmouseout="this.style.background='none'; this.style.color='var(--text-secondary)';">
@@ -2196,12 +2231,10 @@
                 </div>
             </div>
 
-            <div style="background: var(--info-blue); opacity: 0.1; padding: 16px; border-radius: var(--radius-lg); border-left: 4px solid var(--info-blue); margin-bottom: 20px;">
-                <div style="opacity: 10;">
-                    <strong style="color: var(--info-blue);">🧠 什么是聪明钱（Smart Money）</strong>
-                    <div style="margin: 8px 0 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                        聪明钱指在市场中长期保持盈利、拥有专业知识和信息优势的投资者。Hyperliquid作为链上交易所，所有交易透明可查，为追踪聪明钱行为提供了独特优势。通过分析这些成功交易者的操作，可以洞察市场趋势和潜在机会。
-                    </div>
+            <div style="background: rgba(59, 130, 246, 0.1); padding: 16px; border-radius: var(--radius-lg); border-left: 4px solid var(--info-blue); margin-bottom: 20px;">
+                <strong style="color: var(--info-blue);">🧠 什么是聪明钱（Smart Money）</strong>
+                <div style="margin: 8px 0 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
+                    聪明钱指在市场中长期保持盈利、拥有专业知识和信息优势的投资者。Hyperliquid作为链上交易所，所有交易透明可查，为追踪聪明钱行为提供了独特优势。通过分析这些成功交易者的操作，可以洞察市场趋势和潜在机会。
                 </div>
             </div>
 

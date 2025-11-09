@@ -442,7 +442,7 @@ async def get_ema_signals(
                 SELECT
                     symbol, timeframe, signal_type, signal_strength,
                     timestamp, price, short_ema, long_ema,
-                    ema_config, volume_ratio, price_change_pct, ema_distance_pct,
+                    ema_config, volume_ratio, volume_type, price_change_pct, ema_distance_pct,
                     created_at
                 FROM ema_signals
                 WHERE timestamp >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL :hours HOUR)
@@ -453,7 +453,7 @@ async def get_ema_signals(
                 SELECT
                     symbol, timeframe, signal_type, signal_strength,
                     timestamp, price, short_ema, long_ema,
-                    ema_config, volume_ratio, price_change_pct, ema_distance_pct,
+                    ema_config, volume_ratio, volume_type, price_change_pct, ema_distance_pct,
                     created_at
                 FROM ema_signals
                 WHERE timestamp >= DATE_SUB(NOW(), INTERVAL :days DAY)
@@ -495,6 +495,7 @@ async def get_ema_signals(
                 'long_ema': float(row.long_ema),
                 'ema_config': row.ema_config,
                 'volume_ratio': volume_ratio,
+                'volume_type': row.volume_type if hasattr(row, 'volume_type') and row.volume_type else ('放量' if volume_ratio > 1 else '缩量'),  # 成交量类型
                 'volume_multiple': volume_ratio,  # 添加 volume_multiple 字段，前端使用
                 'price_change_pct': float(row.price_change_pct),
                 'ema_distance_pct': float(row.ema_distance_pct),

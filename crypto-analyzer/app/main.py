@@ -42,6 +42,7 @@ signal_generator = None
 enhanced_dashboard = None
 price_cache_service = None  # 价格缓存服务
 pending_order_executor = None  # 待成交订单自动执行器
+futures_limit_order_executor = None  # 合约限价单自动执行器
 
 
 @asynccontextmanager
@@ -52,7 +53,7 @@ async def lifespan(app: FastAPI):
 
     global config, price_collector, news_aggregator
     global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
-    global pending_order_executor
+    global pending_order_executor, futures_limit_order_executor
 
     # 加载配置
     config_path = project_root / "config.yaml"
@@ -148,7 +149,7 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  价格缓存服务初始化失败: {e}")
             price_cache_service = None
 
-        # 初始化待成交订单自动执行器
+        # 初始化待成交订单自动执行器（现货交易）
         try:
             from app.services.pending_order_executor import PendingOrderExecutor
             from app.trading.paper_trading_engine import PaperTradingEngine
@@ -160,12 +161,31 @@ async def lifespan(app: FastAPI):
                 trading_engine=trading_engine,
                 price_cache_service=price_cache_service
             )
-            logger.info("✅ 待成交订单自动执行服务初始化成功")
+            logger.info("✅ 待成交订单自动执行服务初始化成功（现货交易）")
         except Exception as e:
             logger.warning(f"⚠️  待成交订单自动执行服务初始化失败: {e}")
             import traceback
             traceback.print_exc()
             pending_order_executor = None
+
+        # 初始化合约限价单自动执行器
+        try:
+            from app.services.futures_limit_order_executor import FuturesLimitOrderExecutor
+            from app.trading.futures_trading_engine import FuturesTradingEngine
+            
+            db_config = config.get('database', {}).get('mysql', {})
+            futures_engine = FuturesTradingEngine(db_config)
+            futures_limit_order_executor = FuturesLimitOrderExecutor(
+                db_config=db_config,
+                trading_engine=futures_engine,
+                price_cache_service=price_cache_service
+            )
+            logger.info("✅ 合约限价单自动执行服务初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  合约限价单自动执行服务初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+            futures_limit_order_executor = None
 
         logger.info("🎉 分析模块初始化完成！")
 
@@ -182,6 +202,7 @@ async def lifespan(app: FastAPI):
         enhanced_dashboard = None
         price_cache_service = None
         pending_order_executor = None
+        futures_limit_order_executor = None
         logger.warning("⚠️  系统以降级模式运行")
 
     logger.info("🚀 FastAPI 启动完成")
@@ -191,10 +212,20 @@ async def lifespan(app: FastAPI):
         try:
             import asyncio
             pending_order_executor.task = asyncio.create_task(pending_order_executor.run_loop(interval=5))
-            logger.info("✅ 待成交订单自动执行服务已启动（每5秒检查）")
+            logger.info("✅ 待成交订单自动执行服务已启动（每5秒检查，现货交易）")
         except Exception as e:
             logger.warning(f"⚠️  启动待成交订单自动执行任务失败: {e}")
             pending_order_executor = None
+
+    # 启动合约限价单自动执行服务
+    if futures_limit_order_executor:
+        try:
+            import asyncio
+            futures_limit_order_executor.task = asyncio.create_task(futures_limit_order_executor.run_loop(interval=5))
+            logger.info("✅ 合约限价单自动执行服务已启动（每5秒检查）")
+        except Exception as e:
+            logger.warning(f"⚠️  启动合约限价单自动执行任务失败: {e}")
+            futures_limit_order_executor = None
 
     yield
 
@@ -207,7 +238,15 @@ async def lifespan(app: FastAPI):
             pending_order_executor.stop()
             logger.info("✅ 待成交订单自动执行服务已停止")
         except Exception as e:
-            logger.warning(f"停止待成交订单自动执行服务失败: {e}")
+            logger.warning(f"⚠️  停止待成交订单自动执行服务失败: {e}")
+
+    # 停止合约限价单自动执行器
+    if futures_limit_order_executor:
+        try:
+            futures_limit_order_executor.stop()
+            logger.info("✅ 合约限价单自动执行服务已停止")
+        except Exception as e:
+            logger.warning(f"⚠️  停止合约限价单自动执行服务失败: {e}")
 
     # 停止价格缓存服务
     if price_cache_service:
@@ -385,15 +424,19 @@ async def contract_trading_page():
 
 @app.get("/strategies")
 async def strategies_page():
-    """投资策略管理页面 - strategy_manager.html"""
-    # 优先使用app/web/templates下的页面
-    strategies_path = project_root / "app" / "web" / "templates" / "strategy_manager.html"
+    """投资策略管理页面"""
+    # 优先使用templates/strategies.html（新版本）
+    strategies_path = project_root / "templates" / "strategies.html"
     if strategies_path.exists():
         return FileResponse(str(strategies_path))
-    # 备用：templates目录
-    strategies_path_backup = project_root / "templates" / "strategy_manager.html"
+    # 备用：app/web/templates下的页面
+    strategies_path_backup = project_root / "app" / "web" / "templates" / "strategy_manager.html"
     if strategies_path_backup.exists():
         return FileResponse(str(strategies_path_backup))
+    # 备用：templates目录下的旧文件
+    strategies_path_backup2 = project_root / "templates" / "strategy_manager.html"
+    if strategies_path_backup2.exists():
+        return FileResponse(str(strategies_path_backup2))
     else:
         raise HTTPException(status_code=404, detail="投资策略页面未找到")
 
@@ -983,7 +1026,7 @@ async def get_futures_data():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/futures/{symbol}")
+@app.get("/api/futures/data/{symbol}")
 async def get_futures_by_symbol(symbol: str):
     """
     获取指定币种的合约数据（持仓量、多空比）

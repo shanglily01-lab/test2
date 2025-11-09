@@ -172,12 +172,14 @@ class EnhancedDashboardCached:
     async def _get_recommendations_from_cache(self, symbols: List[str]) -> List[Dict]:
         """
         从投资建议缓存表读取推荐数据（超快）
+        确保所有配置的交易对都返回，即使没有缓存数据也返回默认值
 
         Returns:
             建议列表
         """
         recommendations = []
         session = None
+        cached_symbols = set()  # 记录已从缓存获取的交易对
 
         try:
             session = self.db_service.get_session()
@@ -226,6 +228,7 @@ class EnhancedDashboardCached:
                 # Convert Row to dict
                 row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
                 symbol = row_dict['symbol']
+                cached_symbols.add(symbol)
 
                 recommendations.append({
                     'symbol': symbol.replace('/USDT', ''),
@@ -260,12 +263,67 @@ class EnhancedDashboardCached:
                     'funding_rate': funding_rates.get(symbol)
                 })
 
-            logger.debug(f"✅ 从缓存读取 {len(recommendations)} 个投资建议")
+            # 为没有缓存数据的交易对创建默认建议
+            for symbol in symbols:
+                if symbol not in cached_symbols:
+                    recommendations.append({
+                        'symbol': symbol.replace('/USDT', ''),
+                        'full_symbol': symbol,
+                        'signal': '持有',
+                        'confidence': 0,
+                        'current_price': 0,
+                        'entry_price': 0,
+                        'stop_loss': 0,
+                        'take_profit': 0,
+                        'reasons': ['数据不足，无法生成投资建议'],
+                        'risk_level': 'UNKNOWN',
+                        'risk_factors': ['缺少价格数据'],
+                        'scores': {
+                            'total': 50,
+                            'technical': 50,
+                            'news': 50,
+                            'funding': 50,
+                            'hyperliquid': 50,
+                            'ethereum': 50,
+                            'etf': 50,
+                        },
+                        'data_sources': {
+                            'technical': False,
+                            'news': False,
+                            'funding': False,
+                            'hyperliquid': False,
+                            'ethereum': False,
+                            'etf': False,
+                        },
+                        'data_completeness': 0,
+                        'funding_rate': None
+                    })
+
+            logger.debug(f"✅ 从缓存读取 {len([r for r in recommendations if r['current_price'] > 0])} 个有效投资建议，{len([r for r in recommendations if r['current_price'] == 0])} 个数据不足的交易对")
 
         except Exception as e:
             logger.error(f"从缓存读取投资建议失败: {e}")
             import traceback
             traceback.print_exc()
+            # 如果查询失败，至少返回所有交易对的默认值
+            for symbol in symbols:
+                recommendations.append({
+                    'symbol': symbol.replace('/USDT', ''),
+                    'full_symbol': symbol,
+                    'signal': '持有',
+                    'confidence': 0,
+                    'current_price': 0,
+                    'entry_price': 0,
+                    'stop_loss': 0,
+                    'take_profit': 0,
+                    'reasons': ['数据获取失败'],
+                    'risk_level': 'UNKNOWN',
+                    'risk_factors': [],
+                    'scores': {'total': 50, 'technical': 50, 'news': 50, 'funding': 50, 'hyperliquid': 50, 'ethereum': 50, 'etf': 50},
+                    'data_sources': {'technical': False, 'news': False, 'funding': False, 'hyperliquid': False, 'ethereum': False, 'etf': False},
+                    'data_completeness': 0,
+                    'funding_rate': None
+                })
         finally:
             if session:
                 session.close()

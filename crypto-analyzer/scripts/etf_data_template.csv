@@ -1,6 +1,0 @@
-ticker,trade_date,net_inflow,gross_inflow,gross_outflow,aum,btc_holdings,eth_holdings,data_source
-IBIT,2025-01-27,125.5,200.0,74.5,50000,21000,,manual
-FBTC,2025-01-27,85.3,150.0,64.7,30000,15000,,manual
-ARKB,2025-01-27,45.2,100.0,54.8,20000,10000,,manual
-BITB,2025-01-27,32.1,80.0,47.9,15000,8000,,manual
-GBTC,2025-01-27,-15.5,50.0,65.5,25000,12000,,manual

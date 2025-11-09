@@ -4,400 +4,229 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crypto Analyzer - 专业加密货币分析平台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        /* Crypto Analyzer - Enhanced Professional Trading Platform UI */
+        :root {
+            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
+            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
+            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
+            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
+            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
+            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
+            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
+            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
+            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
+            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
         }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%);
-            color: #e0e0e0;
-            line-height: 1.6;
-            min-height: 100vh;
-        }
-
-        .navbar {
-            background: rgba(20, 25, 45, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 1rem 2rem;
-            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .nav-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 2rem;
-            list-style: none;
-        }
-
-        .nav-links a {
-            color: #e0e0e0;
-            text-decoration: none;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-        }
-
-        .nav-links a:hover {
-            background: rgba(102, 126, 234, 0.1);
-            color: #667eea;
-        }
-
-        .nav-links a.active {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .hero-section {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 5rem 2rem;
-            text-align: center;
-        }
-
-        .hero-section h1 {
-            font-size: 3.5rem;
-            margin-bottom: 1.5rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-weight: 800;
-        }
-
-        .hero-section p {
-            font-size: 1.3rem;
-            color: #a0a0a0;
-            margin-bottom: 3rem;
-            max-width: 800px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .cta-buttons {
-            display: flex;
-            gap: 1.5rem;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        .btn {
-            padding: 1rem 2.5rem;
-            border-radius: 12px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            font-size: 1.1rem;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-secondary {
-            background: rgba(30, 35, 55, 0.6);
-            color: #667eea;
-            border: 2px solid #667eea;
-        }
-
-        .btn-secondary:hover {
-            background: rgba(102, 126, 234, 0.1);
-            transform: translateY(-3px);
-        }
-
-        .features-section {
-            max-width: 1400px;
-            margin: 5rem auto;
-            padding: 0 2rem;
-        }
-
-        .section-title {
-            text-align: center;
-            font-size: 2.5rem;
-            margin-bottom: 3rem;
-            color: #667eea;
-        }
-
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-        }
-
-        .feature-card {
-            background: rgba(30, 35, 55, 0.6);
-            border-radius: 16px;
-            padding: 2rem;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-            text-align: center;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-10px);
-            box-shadow: 0 15px 40px rgba(102, 126, 234, 0.3);
-            border-color: rgba(102, 126, 234, 0.5);
-        }
-
-        .feature-icon {
-            font-size: 3rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .feature-card h3 {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            color: #667eea;
-        }
-
-        .feature-card p {
-            color: #a0a0a0;
-            line-height: 1.8;
-        }
-
-        .market-overview {
-            max-width: 1400px;
-            margin: 5rem auto;
-            padding: 0 2rem;
-        }
-
-        .market-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-top: 2rem;
-        }
-
-        .market-card {
-            background: rgba(30, 35, 55, 0.6);
-            border-radius: 16px;
-            padding: 1.5rem;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
-        }
-
-        .market-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
-        }
-
-        .market-label {
-            font-size: 0.9rem;
-            color: #888;
-            margin-bottom: 0.5rem;
-        }
-
-        .market-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #667eea;
-        }
-
-        .market-change {
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-        }
-
-        .positive {
-            color: #10b981;
-        }
-
-        .negative {
-            color: #ef4444;
-        }
-
-        .footer {
-            background: rgba(20, 25, 45, 0.95);
-            padding: 3rem 2rem;
-            margin-top: 5rem;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .footer-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            text-align: center;
-            color: #888;
-        }
-
-        .footer-content p {
-            margin-bottom: 1rem;
-        }
-
-        .footer-links {
-            display: flex;
-            gap: 2rem;
-            justify-content: center;
-            margin-top: 2rem;
-        }
-
-        .footer-links a {
-            color: #667eea;
-            text-decoration: none;
-            transition: all 0.3s ease;
-        }
-
-        .footer-links a:hover {
-            color: #764ba2;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
+        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
+        .header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-lg); }
+        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-md); }
+        .header-subtitle { color: var(--text-secondary); font-size: 13px; margin-top: var(--spacing-xs); }
+        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; }
+        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
+        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
+        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
+        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .hero-section { text-align: center; padding: var(--spacing-2xl) 0; margin-bottom: var(--spacing-2xl); }
+        .hero-title { font-size: 48px; font-weight: 800; margin-bottom: var(--spacing-lg); background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-purple) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1.2; }
+        .hero-subtitle { font-size: 20px; color: var(--text-secondary); margin-bottom: var(--spacing-2xl); max-width: 800px; margin-left: auto; margin-right: auto; }
+        .cta-buttons { display: flex; gap: var(--spacing-lg); justify-content: center; flex-wrap: wrap; margin-bottom: var(--spacing-2xl); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-lg) var(--spacing-2xl); font-size: 16px; font-weight: 600; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
+        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .btn-primary:hover { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
+        .btn-secondary:hover { background: var(--bg-hover); border-color: var(--border-muted); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
+        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
+        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); }
+        .card-title { font-size: 24px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .card-body { padding: 0; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
+        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; cursor: pointer; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
+        .stat-card:hover::before { opacity: 1; }
+        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
+        .stat-value { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
+        .stat-change { font-size: 13px; color: var(--text-secondary); }
+        .stat-change.positive { color: var(--success-green); }
+        .stat-change.negative { color: var(--danger-red); }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--spacing-xl); margin-top: var(--spacing-xl); }
+        .feature-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); transition: all var(--transition-base); text-align: center; position: relative; overflow: hidden; }
+        .feature-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
+        .feature-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
+        .feature-card:hover::before { opacity: 1; }
+        .feature-icon { font-size: 48px; margin-bottom: var(--spacing-lg); }
+        .feature-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-md); }
+        .feature-description { color: var(--text-secondary); line-height: 1.7; font-size: 14px; }
+        .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
+        .loading::after { content: '...'; animation: dots 1.5s steps(4, end) infinite; }
+        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
         @media (max-width: 768px) {
-            .nav-links {
-                display: none;
-            }
-
-            .hero-section h1 {
-                font-size: 2.5rem;
-            }
-
-            .hero-section p {
-                font-size: 1.1rem;
-            }
-
-            .features-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .cta-buttons {
-                flex-direction: column;
-            }
+            .hero-title { font-size: 32px; }
+            .hero-subtitle { font-size: 16px; }
+            .features-grid { grid-template-columns: 1fr; }
+            .cta-buttons { flex-direction: column; }
         }
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="logo">Crypto Analyzer</div>
-            <ul class="nav-links">
-                <li><a href="/" class="active">主页</a></li>
-                <li><a href="/dashboard_new">仪表板</a></li>
-                <li><a href="/contract_trading_new">合约交易</a></li>
-                <li><a href="/strategies">投资策略</a></li>
-                <li><a href="/etf_data">ETF数据</a></li>
-                <li><a href="/corporate_treasury">企业金库</a></li>
-            </ul>
-        </div>
-    </nav>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div>
+                    <h1 class="header-title">
+                        <i class="bi bi-speedometer2"></i>
+                        Crypto Analyzer
+                    </h1>
+                    <p class="header-subtitle">专业加密货币分析平台</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="window.location.href='/dashboard'">
+                        <i class="bi bi-speedometer2"></i> 进入仪表板
+                    </button>
+                </div>
+            </div>
+        </header>
 
-    <section class="hero-section">
-        <h1>专业加密货币分析平台</h1>
-        <p>实时监控市场动态，洞察投资机会，掌握数据驱动的交易策略</p>
-        <div class="cta-buttons">
-            <a href="/dashboard_new" class="btn btn-primary">进入仪表板</a>
-            <a href="/strategies" class="btn btn-secondary">查看策略</a>
-        </div>
-    </section>
+        <!-- Navigation -->
+        <nav class="nav-container">
+            <div class="nav-links">
+                <a href="/" class="nav-link active">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+                <a href="/paper_trading" class="nav-link">
+                    <i class="bi bi-journals"></i> 模拟现货
+                </a>
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 模拟合约
+                </a>
+                <a href="/strategies" class="nav-link">
+                    <i class="bi bi-diagram-3"></i> 策略管理
+                </a>
+                <a href="/etf_data" class="nav-link">
+                    <i class="bi bi-pie-chart"></i> ETF 数据
+                </a>
+                <a href="/corporate_treasury" class="nav-link">
+                    <i class="bi bi-building"></i> 企业金库
+                </a>
+            </div>
+        </nav>
 
-    <section class="market-overview">
-        <h2 class="section-title">市场概览</h2>
-        <div class="market-cards">
-            <div class="market-card">
-                <div class="market-label">比特币价格</div>
-                <div class="market-value">$96,428</div>
-                <div class="market-change positive">+2.8% (24h)</div>
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <h1 class="hero-title">专业加密货币分析平台</h1>
+            <p class="hero-subtitle">实时监控市场动态，洞察投资机会，掌握数据驱动的交易策略</p>
+            <div class="cta-buttons">
+                <a href="/dashboard" class="btn btn-primary">
+                    <i class="bi bi-speedometer2"></i> 进入仪表板
+                </a>
+                <a href="/strategies" class="btn btn-secondary">
+                    <i class="bi bi-diagram-3"></i> 查看策略
+                </a>
+                <a href="/paper_trading" class="btn btn-secondary">
+                    <i class="bi bi-journals"></i> 模拟交易
+                </a>
             </div>
-            <div class="market-card">
-                <div class="market-label">以太坊价格</div>
-                <div class="market-value">$3,542</div>
-                <div class="market-change positive">+3.2% (24h)</div>
-            </div>
-            <div class="market-card">
-                <div class="market-label">总市值</div>
-                <div class="market-value">$3.48T</div>
-                <div class="market-change positive">+4.1% (24h)</div>
-            </div>
-            <div class="market-card">
-                <div class="market-label">24H交易量</div>
-                <div class="market-value">$285B</div>
-                <div class="market-change negative">-2.5% (24h)</div>
-            </div>
-        </div>
-    </section>
+        </section>
 
-    <section class="features-section">
-        <h2 class="section-title">核心功能</h2>
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="feature-icon">📊</div>
-                <h3>实时数据分析</h3>
-                <p>多维度数据采集与分析，覆盖主流交易所，提供毫秒级市场数据更新</p>
+        <!-- Market Overview -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-graph-up"></i>
+                    市场概览
+                </h2>
             </div>
-            <div class="feature-card">
-                <div class="feature-icon">📈</div>
-                <h3>合约交易监控</h3>
-                <p>永续合约、交割合约全方位监控，资金费率、持仓分析一目了然</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">💼</div>
-                <h3>ETF数据追踪</h3>
-                <p>全球加密货币ETF实时监控，资金流向、机构持仓变化尽在掌握</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🎯</div>
-                <h3>投资策略系统</h3>
-                <p>量化策略回测、信号生成、风险管理，助您构建专业投资组合</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">🏢</div>
-                <h3>企业金库分析</h3>
-                <p>追踪上市公司加密资产配置，洞察机构投资趋势与持仓动向</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">⚡</div>
-                <h3>智能告警系统</h3>
-                <p>自定义价格、资金费率、交易量告警，重要市场变化实时推送</p>
+            <div class="card-body">
+                <div class="stats-grid" id="marketStats">
+                    <div class="stat-card">
+                        <div class="stat-label">比特币价格</div>
+                        <div class="stat-value" id="btcPrice">-</div>
+                        <div class="stat-change" id="btcChange">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">以太坊价格</div>
+                        <div class="stat-value" id="ethPrice">-</div>
+                        <div class="stat-change" id="ethChange">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">总市值</div>
+                        <div class="stat-value" id="totalMarketCap">-</div>
+                        <div class="stat-change" id="marketCapChange">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">24H交易量</div>
+                        <div class="stat-value" id="totalVolume">-</div>
+                        <div class="stat-change" id="volumeChange">-</div>
+                    </div>
+                </div>
             </div>
         </div>
-    </section>
 
-    <footer class="footer">
-        <div class="footer-content">
-            <p>&copy; 2025 Crypto Analyzer. 专业的加密货币分析平台</p>
-            <p>数据仅供参考，投资需谨慎</p>
-            <div class="footer-links">
-                <a href="#">关于我们</a>
-                <a href="#">使用条款</a>
-                <a href="#">隐私政策</a>
-                <a href="#">联系我们</a>
+        <!-- Features Section -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-star"></i>
+                    核心功能
+                </h2>
+            </div>
+            <div class="card-body">
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">📊</div>
+                        <h3 class="feature-title">实时数据分析</h3>
+                        <p class="feature-description">多维度数据采集与分析，覆盖主流交易所，提供毫秒级市场数据更新</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📈</div>
+                        <h3 class="feature-title">合约交易监控</h3>
+                        <p class="feature-description">永续合约、交割合约全方位监控，资金费率、持仓分析一目了然</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">💼</div>
+                        <h3 class="feature-title">ETF数据追踪</h3>
+                        <p class="feature-description">全球加密货币ETF实时监控，资金流向、机构持仓变化尽在掌握</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🎯</div>
+                        <h3 class="feature-title">投资策略系统</h3>
+                        <p class="feature-description">量化策略回测、信号生成、风险管理，助您构建专业投资组合</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🏢</div>
+                        <h3 class="feature-title">企业金库分析</h3>
+                        <p class="feature-description">追踪上市公司加密资产配置，洞察机构投资趋势与持仓动向</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">⚡</div>
+                        <h3 class="feature-title">智能告警系统</h3>
+                        <p class="feature-description">自定义价格、资金费率、交易量告警，重要市场变化实时推送</p>
+                    </div>
+                </div>
             </div>
         </div>
-    </footer>
+    </div>
 
     <script>
         // 格式化价格
         function formatPrice(price) {
-            if (!price) return '-';
+            if (!price || isNaN(price)) return '-';
             return new Intl.NumberFormat('en-US', {
                 style: 'currency',
                 currency: 'USD',
@@ -406,26 +235,30 @@
             }).format(price);
         }
 
-        // 格式化百分比
-        function formatPercent(value) {
-            if (value === null || value === undefined) return '-';
-            const sign = value >= 0 ? '+' : '';
-            return `${sign}${value.toFixed(2)}%`;
+        // 格式化大额数字
+        function formatLargeNumber(num) {
+            if (!num || isNaN(num)) return '-';
+            const absNum = Math.abs(num);
+            if (absNum >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
+            if (absNum >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+            if (absNum >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+            return formatPrice(num);
         }
 
-        // 格式化市值
-        function formatMarketCap(value) {
-            if (!value) return '-';
-            if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
-            if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-            if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-            return formatPrice(value);
+        // 格式化百分比
+        function formatPercent(value) {
+            if (value === null || value === undefined || isNaN(value)) return '-';
+            const sign = value >= 0 ? '+' : '';
+            return `${sign}${value.toFixed(2)}%`;
         }
 
         // 加载市场数据
         async function loadMarketData() {
             try {
                 const response = await fetch('/api/prices');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
 
                 if (data.success && data.prices) {
@@ -438,32 +271,51 @@
 
         // 更新市场卡片
         function updateMarketCards(prices) {
-            const cards = document.querySelectorAll('.market-card');
+            if (!prices || prices.length === 0) return;
 
             // 更新BTC
             const btc = prices.find(p => p.symbol === 'BTC/USDT' || p.symbol === 'BTCUSDT');
-            if (btc && cards[0]) {
-                cards[0].querySelector('.market-value').textContent = formatPrice(btc.price);
-                const changeEl = cards[0].querySelector('.market-change');
-                changeEl.textContent = `${formatPercent(btc.change_24h)} (24h)`;
-                changeEl.className = 'market-change ' + (btc.change_24h >= 0 ? 'positive' : 'negative');
+            if (btc) {
+                const btcPriceEl = document.getElementById('btcPrice');
+                const btcChangeEl = document.getElementById('btcChange');
+                if (btcPriceEl) {
+                    btcPriceEl.textContent = formatPrice(btc.price);
+                }
+                if (btcChangeEl) {
+                    btcChangeEl.textContent = `${formatPercent(btc.change_24h || 0)} (24h)`;
+                    btcChangeEl.className = 'stat-change ' + ((btc.change_24h || 0) >= 0 ? 'positive' : 'negative');
+                }
             }
 
             // 更新ETH
             const eth = prices.find(p => p.symbol === 'ETH/USDT' || p.symbol === 'ETHUSDT');
-            if (eth && cards[1]) {
-                cards[1].querySelector('.market-value').textContent = formatPrice(eth.price);
-                const changeEl = cards[1].querySelector('.market-change');
-                changeEl.textContent = `${formatPercent(eth.change_24h)} (24h)`;
-                changeEl.className = 'market-change ' + (eth.change_24h >= 0 ? 'positive' : 'negative');
+            if (eth) {
+                const ethPriceEl = document.getElementById('ethPrice');
+                const ethChangeEl = document.getElementById('ethChange');
+                if (ethPriceEl) {
+                    ethPriceEl.textContent = formatPrice(eth.price);
+                }
+                if (ethChangeEl) {
+                    ethChangeEl.textContent = `${formatPercent(eth.change_24h || 0)} (24h)`;
+                    ethChangeEl.className = 'stat-change ' + ((eth.change_24h || 0) >= 0 ? 'positive' : 'negative');
+                }
             }
 
-            // 计算总市值（示例）
-            if (btc && cards[2]) {
-                const totalMC = prices.reduce((sum, p) => sum + (p.volume || 0), 0);
-                if (totalMC > 0) {
-                    cards[2].querySelector('.market-value').textContent = formatMarketCap(totalMC);
-                }
+            // 计算总市值和交易量（简化计算）
+            let totalMarketCap = 0;
+            let totalVolume = 0;
+            prices.forEach(p => {
+                if (p.market_cap) totalMarketCap += p.market_cap;
+                if (p.volume) totalVolume += p.volume;
+            });
+
+            const totalMarketCapEl = document.getElementById('totalMarketCap');
+            const totalVolumeEl = document.getElementById('totalVolume');
+            if (totalMarketCapEl && totalMarketCap > 0) {
+                totalMarketCapEl.textContent = formatLargeNumber(totalMarketCap);
+            }
+            if (totalVolumeEl && totalVolume > 0) {
+                totalVolumeEl.textContent = formatLargeNumber(totalVolume);
             }
         }
 

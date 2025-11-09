@@ -110,6 +110,13 @@ function updateStats(stats, hyperliquid) {
 // 更新价格表格
 function updatePrices(prices) {
     const tbody = document.getElementById('price-table');
+    const titleEl = document.getElementById('prices-title');
+    
+    // 更新标题数量统计
+    if (titleEl) {
+        const count = prices ? prices.length : 0;
+        titleEl.textContent = `实时价格【${count}】`;
+    }
 
     if (!prices || prices.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-4">暂无数据</td></tr>';
@@ -141,6 +148,13 @@ function updatePrices(prices) {
 // 更新合约数据表格
 function updateFuturesTable(futuresData) {
     const tbody = document.getElementById('futures-table');
+    const titleEl = document.getElementById('futures-title');
+    
+    // 更新标题数量统计
+    if (titleEl) {
+        const count = futuresData ? futuresData.length : 0;
+        titleEl.textContent = `实时合约【${count}】`;
+    }
 
     if (!futuresData || futuresData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted p-4">暂无数据</td></tr>';
@@ -237,6 +251,13 @@ function updateFuturesTable(futuresData) {
 // 更新投资建议
 function updateRecommendations(recommendations) {
     const container = document.getElementById('recommendations');
+    const titleEl = document.getElementById('recommendations-title');
+    
+    // 更新标题数量统计
+    if (titleEl) {
+        const count = recommendations ? recommendations.length : 0;
+        titleEl.textContent = `投资建议【${count}】`;
+    }
 
     if (!recommendations || recommendations.length === 0) {
         container.innerHTML = '<div class="text-center p-5 text-muted">暂无投资建议</div>';
@@ -455,6 +476,13 @@ function getScoreColor(score) {
 // 更新新闻列表
 function updateNews(news) {
     const container = document.getElementById('news-list');
+    const titleEl = document.getElementById('news-title');
+    
+    // 更新标题数量统计
+    if (titleEl) {
+        const count = news ? news.length : 0;
+        titleEl.textContent = `最新新闻【${count}】`;
+    }
 
     if (!news || news.length === 0) {
         container.innerHTML = '<div class="text-center p-4 text-muted">暂无新闻</div>';
@@ -893,8 +921,8 @@ function updateEMASignals(signals) {
                                 </span>
                             </div>
                             <div class="d-flex justify-content-between mb-1">
-                                <span class="text-muted">成交量:</span>
-                                <span>${signal.volume_ratio.toFixed(1)}x</span>
+                                <span class="text-muted">${signal.volume_type || (signal.volume_ratio > 1 ? '放量' : '缩量')}:</span>
+                                <span>${signal.volume_ratio.toFixed(2)}x</span>
                             </div>
                             <div class="d-flex justify-content-between">
                                 <span class="text-muted">时间:</span>

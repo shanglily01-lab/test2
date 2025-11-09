@@ -129,20 +129,20 @@ class EMASignalMonitor:
         short_ema_history: List[float],
         long_ema_history: List[float],
         volume_ratio: float
-    ) -> bool:
+    ) -> tuple[bool, str]:
         """
         检测金叉信号（买入信号）
 
         Args:
             short_ema_history: 短期 EMA 历史（最近3个值）
             long_ema_history: 长期 EMA 历史（最近3个值）
-            volume_ratio: 当前成交量与平均成交量的比值（保留用于信号强度计算）
+            volume_ratio: 当前成交量与平均成交量的比值
 
         Returns:
-            是否出现金叉
+            (是否出现金叉, 成交量类型: '放量' 或 '缩量')
         """
         if len(short_ema_history) < 2 or len(long_ema_history) < 2:
-            return False
+            return False, ''
 
         # 当前值和前一个值
         short_current = short_ema_history[-1]
@@ -150,7 +150,7 @@ class EMASignalMonitor:
         long_current = long_ema_history[-1]
         long_prev = long_ema_history[-2]
 
-        # 检测金叉（去掉成交量限制）：
+        # 检测金叉：
         # 1. 前一根K线：短期EMA <= 长期EMA
         # 2. 当前K线：短期EMA > 长期EMA（向上穿过）
         is_golden_cross = (
@@ -158,27 +158,30 @@ class EMASignalMonitor:
             short_current > long_current
         )
 
-        return is_golden_cross
+        # 判断成交量类型：放量（>1）或缩量（<1）
+        volume_type = '放量' if volume_ratio > 1 else '缩量'
+
+        return is_golden_cross, volume_type
 
     def detect_death_cross(
         self,
         short_ema_history: list,
         long_ema_history: list,
         volume_ratio: float
-    ) -> bool:
+    ) -> tuple[bool, str]:
         """
         检测 EMA 死叉（卖出信号）
 
         Args:
             short_ema_history: 短期 EMA 历史（最近3个值）
             long_ema_history: 长期 EMA 历史（最近3个值）
-            volume_ratio: 当前成交量与平均成交量的比值（保留用于信号强度计算）
+            volume_ratio: 当前成交量与平均成交量的比值
 
         Returns:
-            是否出现死叉
+            (是否出现死叉, 成交量类型: '放量' 或 '缩量')
         """
         if len(short_ema_history) < 2 or len(long_ema_history) < 2:
-            return False
+            return False, ''
 
         # 当前值和前一个值
         short_current = short_ema_history[-1]
@@ -186,7 +189,7 @@ class EMASignalMonitor:
         long_current = long_ema_history[-1]
         long_prev = long_ema_history[-2]
 
-        # 检测死叉（去掉成交量限制）：
+        # 检测死叉：
         # 1. 前一根K线：短期EMA >= 长期EMA
         # 2. 当前K线：短期EMA < 长期EMA（向下穿过）
         is_death_cross = (
@@ -194,7 +197,10 @@ class EMASignalMonitor:
             short_current < long_current
         )
 
-        return is_death_cross
+        # 判断成交量类型：放量（>1）或缩量（<1）
+        volume_type = '放量' if volume_ratio > 1 else '缩量'
+
+        return is_death_cross, volume_type
 
     async def save_signal_to_db(self, signal: Dict) -> bool:
         """
@@ -211,11 +217,11 @@ class EMASignalMonitor:
                 INSERT INTO ema_signals (
                     symbol, timeframe, signal_type, signal_strength,
                     timestamp, price, short_ema, long_ema,
-                    ema_config, volume_ratio, price_change_pct, ema_distance_pct
+                    ema_config, volume_ratio, volume_type, price_change_pct, ema_distance_pct
                 ) VALUES (
                     :symbol, :timeframe, :signal_type, :signal_strength,
                     :timestamp, :price, :short_ema, :long_ema,
-                    :ema_config, :volume_ratio, :price_change_pct, :ema_distance_pct
+                    :ema_config, :volume_ratio, :volume_type, :price_change_pct, :ema_distance_pct
                 )
             """)
 
@@ -233,6 +239,7 @@ class EMASignalMonitor:
                     'long_ema': float(signal['long_ema']),
                     'ema_config': signal['ema_config'],
                     'volume_ratio': float(signal['volume_ratio']),
+                    'volume_type': signal.get('volume_type', '未知'),
                     'price_change_pct': float(signal['price_change_pct']),
                     'ema_distance_pct': float(signal['ema_distance_pct'])
                 })
@@ -339,14 +346,14 @@ class EMASignalMonitor:
             volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
 
             # 检测金叉（买入信号）
-            is_golden_cross = self.detect_golden_cross(
+            is_golden_cross, buy_volume_type = self.detect_golden_cross(
                 short_ema_values,
                 long_ema_values,
                 volume_ratio
             )
 
             # 检测死叉（卖出信号）
-            is_death_cross = self.detect_death_cross(
+            is_death_cross, sell_volume_type = self.detect_death_cross(
                 short_ema_values,
                 long_ema_values,
                 volume_ratio
@@ -356,8 +363,9 @@ class EMASignalMonitor:
             if not is_golden_cross and not is_death_cross:
                 return None
 
-            # 确定信号类型
+            # 确定信号类型和成交量类型
             signal_type = 'BUY' if is_golden_cross else 'SELL'
+            volume_type = buy_volume_type if is_golden_cross else sell_volume_type
             signal_key = f"{symbol}_{signal_type}"
 
             # 检查是否已经提醒过（避免重复提醒）
@@ -397,6 +405,7 @@ class EMASignalMonitor:
                 'long_ema': long_ema_values[-1],
                 'ema_config': f'EMA{self.short_period}/EMA{self.long_period}',
                 'volume_ratio': volume_ratio,
+                'volume_type': volume_type,  # 成交量类型：放量或缩量
                 'price_change_pct': price_change_pct,
                 'ema_distance_pct': ema_distance_pct,
                 'details': {
@@ -415,7 +424,7 @@ class EMASignalMonitor:
 
             logger.info(f"   价格: ${current_price:.2f} | 变动: {price_change_pct:+.2f}%")
             logger.info(f"   短期EMA{self.short_period}: {short_ema_values[-1]:.2f} | 长期EMA{self.long_period}: {long_ema_values[-1]:.2f}")
-            logger.info(f"   成交量放大: {volume_ratio:.2f}x")
+            logger.info(f"   成交量: {volume_type} ({volume_ratio:.2f}x)")
 
             # 保存信号到数据库
             await self.save_signal_to_db(signal)
@@ -490,7 +499,7 @@ class EMASignalMonitor:
 📊 成交量:
    • 当前: {signal['details']['current_volume']:.2f}
    • 平均: {signal['details']['avg_volume']:.2f}
-   • 放大倍数: {signal['volume_ratio']:.2f}x
+   • 倍数: {signal['volume_ratio']:.2f}x ({signal.get('volume_type', '未知')})
 
 💡 建议: 短期 EMA 向上穿过长期 EMA，考虑买入机会
 """

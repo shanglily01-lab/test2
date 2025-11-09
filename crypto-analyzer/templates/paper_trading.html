@@ -1673,7 +1673,7 @@
                                 <th>时间周期</th>
                                 <th>价格</th>
                                 <th>涨跌幅</th>
-                                <th>成交倍数</th>
+                                <th>成交量</th>
                                 <th>强度</th>
                                 <th>时间</th>
                             </tr>
@@ -1692,6 +1692,8 @@
                                 const priceChange = signal.price_change_pct || 0;
                                 const priceChangeClass = priceChange >= 0 ? 'pnl-positive' : 'pnl-negative';
                                 const volumeMultiple = signal.volume_multiple || signal.volume_ratio || 0;
+                                const volumeType = signal.volume_type || (volumeMultiple > 1 ? '放量' : '缩量');
+                                const volumeTypeClass = volumeType === '放量' ? 'badge-success' : 'badge-secondary';
                                 const signalTypeClass = signal.signal_type === 'BUY' ? 'badge-success' : 'badge-danger';
                                 const signalTypeText = signal.signal_type === 'BUY' ? '买入' : '卖出';
 
@@ -1702,7 +1704,9 @@
                                         <td><span class="text-secondary">${signal.timeframe || '15m'}</span></td>
                                         <td><span class="signal-price">$${price}</span></td>
                                         <td><span class="${priceChangeClass}" style="font-weight: 600;">${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)}%</span></td>
-                                        <td><span class="text-secondary font-mono">×${volumeMultiple.toFixed(2)}</span></td>
+                                        <td>
+                                            <span class="text-secondary font-mono">×${volumeMultiple.toFixed(2)}</span>
+                                        </td>
                                         <td><span class="badge ${badgeClass} signal-strength-badge">${strength}</span></td>
                                         <td><span class="signal-time">${formatTime(signal.timestamp)}</span></td>
                                     </tr>

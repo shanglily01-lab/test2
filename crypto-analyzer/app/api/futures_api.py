@@ -10,11 +10,12 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel, Field
 import yaml
 from decimal import Decimal
 from typing import Dict, List, Optional
+from datetime import datetime
 from loguru import logger
 import pymysql
 
@@ -43,6 +44,7 @@ class OpenPositionRequest(BaseModel):
     position_side: str = Field(..., description="持仓方向: LONG 或 SHORT")
     quantity: float = Field(..., gt=0, description="数量")
     leverage: int = Field(default=1, ge=1, le=125, description="杠杆倍数")
+    limit_price: Optional[float] = Field(None, description="限价价格（如果设置则创建限价单）")
     stop_loss_pct: Optional[float] = Field(None, description="止损百分比")
     take_profit_pct: Optional[float] = Field(None, description="止盈百分比")
     stop_loss_price: Optional[float] = Field(None, description="止损价格")
@@ -208,6 +210,14 @@ async def open_position(request: OpenPositionRequest):
     开一个新的合约持仓，支持多头（LONG）和空头（SHORT）
     """
     try:
+        # 验证请求参数
+        if not request.symbol:
+            raise HTTPException(status_code=400, detail="交易对不能为空")
+        if not request.quantity or request.quantity <= 0:
+            raise HTTPException(status_code=400, detail="数量必须大于0")
+        if request.leverage < 1 or request.leverage > 125:
+            raise HTTPException(status_code=400, detail="杠杆倍数必须在1-125之间")
+        
         # 开仓
         result = engine.open_position(
             account_id=request.account_id,
@@ -215,6 +225,7 @@ async def open_position(request: OpenPositionRequest):
             position_side=request.position_side,
             quantity=Decimal(str(request.quantity)),
             leverage=request.leverage,
+            limit_price=Decimal(str(request.limit_price)) if request.limit_price else None,
             stop_loss_pct=Decimal(str(request.stop_loss_pct)) if request.stop_loss_pct else None,
             take_profit_pct=Decimal(str(request.take_profit_pct)) if request.take_profit_pct else None,
             stop_loss_price=Decimal(str(request.stop_loss_price)) if request.stop_loss_price else None,
@@ -223,42 +234,209 @@ async def open_position(request: OpenPositionRequest):
             signal_id=request.signal_id
         )
 
-        if result['success']:
+        if result.get('success'):
             return {
                 'success': True,
                 'message': 'Position opened successfully',
                 'data': result
             }
         else:
-            raise HTTPException(status_code=400, detail=result['message'])
+            error_message = result.get('message') or result.get('error') or '开仓失败'
+            raise HTTPException(status_code=400, detail=error_message)
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to open position: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 订单管理 ====================
+
+@router.get('/orders')
+async def get_orders(account_id: int = 2, status: str = 'PENDING'):
+    """
+    获取订单列表
+    
+    - **account_id**: 账户ID（默认2）
+    - **status**: 订单状态（PENDING, FILLED, PARTIALLY_FILLED, CANCELLED, REJECTED, all, pending）
+        - pending: 获取所有未成交订单（PENDING 和 PARTIALLY_FILLED）
+    """
+    try:
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        sql = """
+        SELECT
+            id,
+            order_id,
+            account_id,
+            position_id,
+            symbol,
+            side,
+            order_type,
+            leverage,
+            price,
+            quantity,
+            executed_quantity,
+            margin,
+            total_value,
+            executed_value,
+            fee,
+            status,
+            avg_fill_price,
+            fill_time,
+            stop_price,
+            stop_loss_price,
+            take_profit_price,
+            order_source,
+            signal_id,
+            realized_pnl,
+            pnl_pct,
+            notes,
+            created_at,
+            updated_at
+        FROM futures_orders
+        WHERE account_id = %s
+        """
+        
+        params = [account_id]
+        if status == 'pending':
+            # 获取所有未成交订单（PENDING 和 PARTIALLY_FILLED）
+            sql += " AND status IN ('PENDING', 'PARTIALLY_FILLED')"
+        elif status != 'all':
+            sql += " AND status = %s"
+            params.append(status)
+        
+        sql += " ORDER BY created_at DESC LIMIT 100"
+        
+        cursor.execute(sql, params)
+        orders = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        
+        # 转换 Decimal 为 float
+        for order in orders:
+            for key, value in order.items():
+                if isinstance(value, Decimal):
+                    order[key] = float(value)
+                elif isinstance(value, datetime):
+                    order[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+        
+        return {
+            'success': True,
+            'data': orders,
+            'count': len(orders)
+        }
+        
+    except Exception as e:
+        logger.error(f"获取订单列表失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete('/orders/{order_id}')
+async def cancel_order(order_id: str, account_id: int = 2):
+    """
+    撤销订单
+    
+    - **order_id**: 订单ID
+    - **account_id**: 账户ID（默认2）
+    """
+    try:
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        # 检查订单是否存在且未成交
+        cursor.execute(
+            """SELECT id, status FROM futures_orders 
+            WHERE order_id = %s AND account_id = %s""",
+            (order_id, account_id)
+        )
+        order = cursor.fetchone()
+        
+        if not order:
+            cursor.close()
+            connection.close()
+            raise HTTPException(status_code=404, detail="订单不存在")
+        
+        if order['status'] not in ['PENDING', 'PARTIALLY_FILLED']:
+            cursor.close()
+            connection.close()
+            raise HTTPException(status_code=400, detail=f"订单状态为 {order['status']}，无法撤销")
+        
+        # 更新订单状态
+        cursor.execute(
+            """UPDATE futures_orders 
+            SET status = 'CANCELLED', updated_at = NOW()
+            WHERE order_id = %s AND account_id = %s""",
+            (order_id, account_id)
+        )
+        
+        # 释放冻结的保证金
+        cursor.execute(
+            """SELECT margin FROM futures_orders 
+            WHERE order_id = %s AND account_id = %s""",
+            (order_id, account_id)
+        )
+        order_info = cursor.fetchone()
+        
+        if order_info and order_info['margin']:
+            # 释放保证金到可用余额（current_balance = current_balance + margin, frozen_balance = frozen_balance - margin）
+            cursor.execute(
+                """UPDATE paper_trading_accounts 
+                SET current_balance = current_balance + %s,
+                    frozen_balance = frozen_balance - %s,
+                    updated_at = NOW()
+                WHERE id = %s""",
+                (order_info['margin'], order_info['margin'], account_id)
+            )
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        
+        return {
+            'success': True,
+            'message': '订单已撤销'
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"撤销订单失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==================== 平仓 ====================
 
 @router.post('/close/{position_id}')
-async def close_position(position_id: int, request: ClosePositionRequest = None):
+async def close_position(
+    position_id: int, 
+    request: Optional[ClosePositionRequest] = Body(None)
+):
     """
     平仓
 
     关闭指定的持仓，可以全部平仓或部分平仓
     """
     try:
+        # 如果请求体为空或None，使用默认值
         if request is None:
             request = ClosePositionRequest()
-
+        
         close_quantity = Decimal(str(request.close_quantity)) if request.close_quantity else None
 
         # 平仓
         result = engine.close_position(
             position_id=position_id,
             close_quantity=close_quantity,
-            reason=request.reason
+            reason=request.reason or 'manual'
         )
 
         if result['success']:
@@ -274,6 +452,8 @@ async def close_position(position_id: int, request: ClosePositionRequest = None)
         raise
     except Exception as e:
         logger.error(f"Failed to close position {position_id}: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

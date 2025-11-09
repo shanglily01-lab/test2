@@ -20,6 +20,7 @@ symbols:
   - ZEC/USDT
   - VIRTUAL/USDT
   - PUMP/USDT  # 泵币
+  - ORDI/USDT  # Ordinals
   # 添加更多币种...
 
 # ==================== 交易所配置 ====================
@@ -544,7 +545,7 @@ ema_signal:
   short_period: 9                  # 短期 EMA 周期（默认9）
   long_period: 21                  # 长期 EMA 周期（默认21）
   timeframe: '15m'                 # 时间周期: '5m', '15m', '1h'
-  volume_threshold: 1.5            # 成交量倍数阈值
+  volume_threshold: 1.5            # 成交量倍数阈值（已废弃，现使用放量>1或缩量<1判断）
 
 # ==================== 通知配置 ====================
 notification:
