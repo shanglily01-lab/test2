@@ -1210,19 +1210,13 @@
         // 加载24h EMA信号卡片
         async function load24hEmaSignals() {
             try {
-                // 使用days=1参数获取24小时内的信号
-                const response = await fetch('/api/ema-signals?limit=50&days=1');
+                // 使用hours=24参数获取24小时内的信号（API会精确过滤）
+                const response = await fetch('/api/ema-signals?limit=50&hours=24');
                 const data = await response.json();
 
                 if (data.success) {
-                    // 进一步过滤，只保留24小时内的信号
-                    const now = new Date();
-                    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-                    const filtered24h = data.data.filter(signal => {
-                        const signalTime = new Date(signal.timestamp);
-                        return signalTime >= oneDayAgo;
-                    });
-                    update24hEmaCards(filtered24h);
+                    // API已经按24小时过滤，直接使用返回的数据
+                    update24hEmaCards(data.data);
                 }
             } catch (error) {
                 console.error('加载24h EMA信号失败:', error);
@@ -1906,7 +1900,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-default);">
                 <div>
                     <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">EMA信号详细说明</h2>
-                    <div style="font-size: 14px; color: var(--text-secondary);">15分钟级别技术分析系统</div>
+                    <div style="font-size: 14px; color: var(--text-secondary);">24小时数据 · 15分钟级别技术分析系统</div>
                 </div>
                 <button onclick="closeExplanationModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.background='var(--bg-tertiary)'; this.style.color='var(--text-primary)';" onmouseout="this.style.background='none'; this.style.color='var(--text-secondary)';">
                     <i class="bi bi-x-lg"></i>
