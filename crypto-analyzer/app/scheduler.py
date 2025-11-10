@@ -920,7 +920,7 @@ class UnifiedDataScheduler:
                                 'mark_price': pos.get('mark_price', pos['entry_price']),
                                 'notional_usd': pos['notional_usd'],
                                 'unrealized_pnl': pos['unrealized_pnl'],
-                                'leverage': 1,
+                                'leverage': pos.get('leverage', 1),  # 从采集器获取杠杆倍数
                                 'raw_data': {}
                             }
                             db.save_wallet_position(address, position_data, snapshot_time)

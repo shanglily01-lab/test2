@@ -359,12 +359,37 @@ class HyperliquidCollector:
             # 5. 提取当前持仓
             positions = []
             if user_state and 'assetPositions' in user_state:
+                # 获取账户保证金信息（用于计算杠杆）
+                margin_summary = user_state.get('marginSummary', {})
+                account_value = float(margin_summary.get('accountValue', 0)) if margin_summary else 0
+                
                 for pos in user_state['assetPositions']:
                     position = pos.get('position', {})
                     coin = position.get('coin', '')
                     szi = float(position.get('szi', 0))  # 持仓数量（带符号，正=多，负=空）
                     entry_px = float(position.get('entryPx', 0))
                     unrealized_pnl = float(position.get('unrealizedPnl', 0))
+                    
+                    # 计算名义价值
+                    notional_usd = abs(szi) * entry_px
+                    
+                    # 计算杠杆倍数：杠杆 = 名义价值 / 保证金
+                    # Hyperliquid API 可能不直接提供每个持仓的杠杆，需要从账户级别计算
+                    leverage = 1.0  # 默认值
+                    if notional_usd > 0:
+                        # 尝试从 position 中获取 margin 信息
+                        margin_used = float(position.get('marginUsed', 0))
+                        if margin_used > 0:
+                            leverage = notional_usd / margin_used
+                        else:
+                            # 如果没有 marginUsed，尝试从 accountValue 和总持仓价值估算
+                            # 这是一个近似值，可能不够准确
+                            total_notional = sum(abs(float(p.get('position', {}).get('szi', 0)) * float(p.get('position', {}).get('entryPx', 0))) 
+                                                for p in user_state.get('assetPositions', []))
+                            if total_notional > 0 and account_value > 0:
+                                # 估算：假设所有持仓使用相同的杠杆比例
+                                estimated_leverage = total_notional / account_value
+                                leverage = max(1.0, min(estimated_leverage, 50.0))  # 限制在1-50倍之间
 
                     if szi != 0:  # 只记录非零持仓
                         positions.append({
@@ -373,7 +398,8 @@ class HyperliquidCollector:
                             'side': 'LONG' if szi > 0 else 'SHORT',
                             'entry_price': entry_px,
                             'unrealized_pnl': unrealized_pnl,
-                            'notional_usd': abs(szi) * entry_px
+                            'notional_usd': notional_usd,
+                            'leverage': round(leverage, 2)  # 保留2位小数
                         })
 
             # 6. 构建返回数据
