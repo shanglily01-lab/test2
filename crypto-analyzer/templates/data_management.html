@@ -514,13 +514,25 @@
                 
                 if (result.success && result.data) {
                     container.innerHTML = result.data.map(item => {
-                        const statusBadge = item.status === 'active' 
-                            ? '<span class="badge badge-success">运行中</span>'
-                            : item.status === 'warning'
-                            ? '<span class="badge badge-warning">延迟</span>'
-                            : item.status === 'inactive'
-                            ? '<span class="badge badge-neutral">未运行</span>'
-                            : '<span class="badge badge-danger">错误</span>';
+                        // 企业金库数据是手动导入的，状态显示需要特殊处理
+                        let statusBadge = '';
+                        if (item.type === '企业金库数据') {
+                            statusBadge = item.status === 'active' 
+                                ? '<span class="badge badge-success">已导入</span>'
+                                : item.status === 'warning'
+                                ? '<span class="badge badge-warning">数据较旧</span>'
+                                : item.status === 'inactive'
+                                ? '<span class="badge badge-neutral">未导入</span>'
+                                : '<span class="badge badge-danger">错误</span>';
+                        } else {
+                            statusBadge = item.status === 'active' 
+                                ? '<span class="badge badge-success">运行中</span>'
+                                : item.status === 'warning'
+                                ? '<span class="badge badge-warning">延迟</span>'
+                                : item.status === 'inactive'
+                                ? '<span class="badge badge-neutral">未运行</span>'
+                                : '<span class="badge badge-danger">错误</span>';
+                        }
                         
                         const latestTime = item.latest_time ? formatDateTime(item.latest_time) : '无数据';
                         const count = formatNumber(item.count || 0);

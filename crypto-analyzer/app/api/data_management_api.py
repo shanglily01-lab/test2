@@ -781,16 +781,37 @@ async def get_collection_status():
                 FROM corporate_treasury_financing
             """)
             treasury_result = cursor.fetchone()
+            
+            # 企业金库数据是手动导入的，不是自动采集的
+            # 状态判断：如果有数据且最近30天内有更新，显示为active；如果有数据但较旧，显示为warning；如果没有数据，显示为inactive
+            status = 'inactive'
+            if treasury_result and treasury_result['count'] > 0:
+                if treasury_result['latest_time']:
+                    # 检查最新更新时间是否在30天内
+                    latest_time = treasury_result['latest_time']
+                    # latest_time已经是datetime对象（从数据库查询返回）
+                    if latest_time:
+                        # 计算时间差（秒）
+                        time_diff = (datetime.now() - latest_time).total_seconds()
+                        if time_diff < 2592000:  # 30天 = 2592000秒
+                            status = 'active'
+                        else:
+                            status = 'warning'  # 数据较旧
+                    else:
+                        status = 'active'  # 有数据但没有更新时间字段
+                else:
+                    status = 'active'  # 有数据但没有更新时间字段
+            
             collection_status.append({
                 'type': '企业金库数据',
                 'category': 'treasury_data',
                 'icon': 'bi-building',
-                'description': '企业融资记录数据',
+                'description': '企业融资记录数据（手动导入）',
                 'count': treasury_result['count'] if treasury_result else 0,
                 'latest_time': treasury_result['latest_time'].isoformat() if treasury_result and treasury_result['latest_time'] else None,
                 'oldest_time': treasury_result['oldest_time'].isoformat() if treasury_result and treasury_result['oldest_time'] else None,
                 'company_count': treasury_result['company_count'] if treasury_result else 0,
-                'status': 'active' if treasury_result and treasury_result['count'] > 0 else 'inactive'
+                'status': status
             })
         except Exception as e:
             logger.error(f"获取企业金库数据情况失败: {e}")
