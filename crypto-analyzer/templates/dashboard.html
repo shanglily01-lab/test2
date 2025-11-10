@@ -75,6 +75,72 @@
         .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
         .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
         .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
+        
+        /* 美化的详细说明按钮 */
+        .btn-info-beautiful {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            background: linear-gradient(135deg, rgba(43, 111, 237, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
+            border: 1px solid rgba(43, 111, 237, 0.2);
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            transition: all var(--transition-base);
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-info-beautiful::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.5s;
+        }
+        .btn-info-beautiful:hover::before {
+            left: 100%;
+        }
+        .btn-info-beautiful:hover {
+            color: var(--primary-blue);
+            background: linear-gradient(135deg, rgba(43, 111, 237, 0.2) 0%, rgba(124, 58, 237, 0.2) 100%);
+            border-color: rgba(43, 111, 237, 0.4);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(43, 111, 237, 0.2);
+        }
+        .btn-info-beautiful i {
+            font-size: 13px;
+            transition: transform var(--transition-base);
+        }
+        .btn-info-beautiful:hover i {
+            transform: rotate(180deg);
+        }
+        
+        /* EMA统计徽章样式 */
+        .stat-badge {
+            transition: all var(--transition-base);
+            cursor: default;
+        }
+        .stat-badge-buy:hover {
+            background: rgba(16, 185, 129, 0.25) !important;
+            border-color: rgba(16, 185, 129, 0.5) !important;
+            transform: scale(1.05);
+        }
+        .stat-badge-sell:hover {
+            background: rgba(239, 68, 68, 0.25) !important;
+            border-color: rgba(239, 68, 68, 0.5) !important;
+            transform: scale(1.05);
+        }
+        .stat-badge-total:hover {
+            background: var(--bg-hover) !important;
+            border-color: var(--border-muted) !important;
+            transform: scale(1.05);
+        }
         .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
         .badge-success { background: var(--success-green-bg); color: var(--success-green); }
         .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
@@ -361,8 +427,24 @@
                         <i class="bi bi-graph-up"></i>
                         <span id="ema24h-title">EMA信号</span>
                     </h2>
-                    <button class="btn btn-sm btn-outline" onclick="toggleEmaExplanation()" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
-                        <i class="bi bi-info-circle"></i> 详细说明
+                    <!-- EMA信号统计徽章 -->
+                    <div id="ema24h-stats" style="display: flex; align-items: center; gap: 8px; margin-left: auto; margin-right: 12px;">
+                        <div class="stat-badge stat-badge-buy" style="display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: var(--radius-full); background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);">
+                            <i class="bi bi-arrow-up-circle-fill" style="color: var(--success-green); font-size: 12px;"></i>
+                            <span style="font-size: 11px; font-weight: 600; color: var(--success-green);">买入: <span id="ema-buy-count">0</span></span>
+                        </div>
+                        <div class="stat-badge stat-badge-sell" style="display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: var(--radius-full); background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);">
+                            <i class="bi bi-arrow-down-circle-fill" style="color: var(--danger-red); font-size: 12px;"></i>
+                            <span style="font-size: 11px; font-weight: 600; color: var(--danger-red);">卖出: <span id="ema-sell-count">0</span></span>
+                        </div>
+                        <div class="stat-badge stat-badge-total" style="display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: var(--radius-full); background: var(--bg-tertiary); border: 1px solid var(--border-default);">
+                            <i class="bi bi-list-ul" style="color: var(--text-secondary); font-size: 12px;"></i>
+                            <span style="font-size: 11px; font-weight: 600; color: var(--text-secondary);">总计: <span id="ema-total-count">0</span></span>
+                        </div>
+                    </div>
+                    <button class="btn-info-beautiful" onclick="toggleEmaExplanation()" title="查看EMA信号详细说明">
+                        <i class="bi bi-info-circle"></i>
+                        <span>详细说明</span>
                     </button>
                 </div>
             </div>
@@ -385,8 +467,9 @@
                             <i class="bi bi-lightbulb"></i>
                             <span id="recommendations-title">投资建议</span>
                         </h2>
-                        <button class="btn btn-sm btn-outline" onclick="showInvestmentExplanation()" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
-                            <i class="bi bi-info-circle"></i> 详细说明
+                        <button class="btn-info-beautiful" onclick="showInvestmentExplanation()" title="查看投资建议详细说明">
+                            <i class="bi bi-info-circle"></i>
+                            <span>详细说明</span>
                         </button>
                     </div>
                 </div>
@@ -408,8 +491,9 @@
                             <i class="bi bi-currency-exchange"></i>
                             <span id="prices-title">实时价格</span>
                         </h2>
-                        <button class="btn btn-sm btn-outline" onclick="showPriceExplanation()" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
-                            <i class="bi bi-info-circle"></i> 详细说明
+                        <button class="btn-info-beautiful" onclick="showPriceExplanation()" title="查看实时价格详细说明">
+                            <i class="bi bi-info-circle"></i>
+                            <span>详细说明</span>
                         </button>
                     </div>
                 </div>
@@ -448,8 +532,9 @@
                             <i class="bi bi-newspaper"></i>
                             <span id="news-title">最新新闻</span>
                         </h2>
-                        <button class="btn btn-sm btn-outline" onclick="showCardInfo('news')" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
-                            <i class="bi bi-info-circle"></i> 详细说明
+                        <button class="btn-info-beautiful" onclick="showCardInfo('news')" title="查看新闻详细说明">
+                            <i class="bi bi-info-circle"></i>
+                            <span>详细说明</span>
                         </button>
                     </div>
                 </div>
@@ -471,8 +556,9 @@
                             <i class="bi bi-lightning"></i>
                             <span id="futures-title">实时合约</span>
                         </h2>
-                        <button class="btn btn-sm btn-outline" onclick="showCardInfo('futures')" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
-                            <i class="bi bi-info-circle"></i> 详细说明
+                        <button class="btn-info-beautiful" onclick="showCardInfo('futures')" title="查看实时合约详细说明">
+                            <i class="bi bi-info-circle"></i>
+                            <span>详细说明</span>
                         </button>
                     </div>
                 </div>
@@ -510,8 +596,9 @@
                         <i class="bi bi-wallet2"></i>
                         Hyperliquid 聪明钱活动
                     </h2>
-                    <button class="btn btn-sm btn-outline" onclick="showHyperliquidExplanation()" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
-                        <i class="bi bi-info-circle"></i> 详细说明
+                    <button class="btn-info-beautiful" onclick="showHyperliquidExplanation()" title="查看Hyperliquid聪明钱活动详细说明">
+                        <i class="bi bi-info-circle"></i>
+                        <span>详细说明</span>
                     </button>
                 </div>
             </div>
@@ -934,10 +1021,19 @@
             const buyCount = signals ? signals.filter(s => s.signal_type === 'BUY' || s.signal_type === 'GOLDEN_CROSS').length : 0;
             const sellCount = signals ? signals.filter(s => s.signal_type === 'SELL' || s.signal_type === 'DEATH_CROSS').length : 0;
             
-            // 更新标题数量统计：显示买入、卖出、总信号数（带颜色分类）
+            // 更新标题（只显示标题，统计信息在徽章中显示）
             if (titleEl) {
-                titleEl.innerHTML = `EMA信号 [<span style="color: var(--success-green); font-weight: 600;">买入:${buyCount}</span> <span style="color: var(--danger-red); font-weight: 600;">卖出:${sellCount}</span> <span style="color: var(--text-secondary); font-weight: 600;">总计:${total}</span>]`;
+                titleEl.textContent = 'EMA信号';
             }
+            
+            // 更新统计徽章
+            const buyCountEl = document.getElementById('ema-buy-count');
+            const sellCountEl = document.getElementById('ema-sell-count');
+            const totalCountEl = document.getElementById('ema-total-count');
+            
+            if (buyCountEl) buyCountEl.textContent = buyCount;
+            if (sellCountEl) sellCountEl.textContent = sellCount;
+            if (totalCountEl) totalCountEl.textContent = total;
 
             if (!signals || signals.length === 0) {
                 container.innerHTML = '<div class="empty-state" style="grid-column: 1/-1;"><div class="empty-state-text">暂无24h EMA信号</div></div>';
