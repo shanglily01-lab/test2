@@ -684,6 +684,14 @@
                             <i class="bi bi-lightbulb"></i>
                             <span id="recommendations-title">投资建议</span>
                         </h2>
+                        <div id="recommendations-stats" style="display: flex; gap: 8px; align-items: center; margin-left: 12px;">
+                            <span class="badge badge-success" id="buy-count-badge" style="font-size: 11px; padding: 4px 8px;">
+                                <i class="bi bi-arrow-up-circle"></i> 买入: <span id="buy-count">0</span>
+                            </span>
+                            <span class="badge badge-danger" id="sell-count-badge" style="font-size: 11px; padding: 4px 8px;">
+                                <i class="bi bi-arrow-down-circle"></i> 卖出: <span id="sell-count">0</span>
+                            </span>
+                        </div>
                         <button class="btn-info-beautiful" onclick="showInvestmentExplanation()" title="查看投资建议详细说明">
                             <i class="bi bi-info-circle"></i>
                             <span>详细说明</span>
@@ -913,6 +921,7 @@
                     loadFuturesData();
                     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('zh-CN');
                     resetRefreshCountdown();
+                    resetRecommendationsRefreshCountdown(); // 启动投资建议刷新倒计时
                     checkAlerts(data.data);
                 }
             } catch (error) {
@@ -990,6 +999,24 @@
             if (titleEl) {
                 const count = recommendations ? recommendations.length : 0;
                 titleEl.textContent = `投资建议【${count}】`;
+            }
+            
+            // 更新买入/卖出信号统计
+            if (recommendations && recommendations.length > 0) {
+                const buyCount = recommendations.filter(r => r.signal === 'BUY' || r.signal === 'STRONG_BUY').length;
+                const sellCount = recommendations.filter(r => r.signal === 'SELL' || r.signal === 'STRONG_SELL').length;
+                
+                document.getElementById('buy-count').textContent = buyCount;
+                document.getElementById('sell-count').textContent = sellCount;
+                
+                // 显示统计徽章
+                const statsEl = document.getElementById('recommendations-stats');
+                if (statsEl) {
+                    statsEl.style.display = 'flex';
+                }
+            } else {
+                document.getElementById('buy-count').textContent = '0';
+                document.getElementById('sell-count').textContent = '0';
             }
 
             if (!recommendations || recommendations.length === 0) {
@@ -1423,6 +1450,44 @@
                     loadData();
                 }
             }, 1000);
+        }
+        
+        // 重置投资建议刷新倒计时（每5分钟刷新一次）
+        function resetRecommendationsRefreshCountdown() {
+            recommendationsRefreshCountdown = 300; // 5分钟 = 300秒
+            if (recommendationsCountdownInterval) clearInterval(recommendationsCountdownInterval);
+
+            recommendationsCountdownInterval = setInterval(() => {
+                recommendationsRefreshCountdown--;
+                
+                // 每5分钟刷新投资建议数据
+                if (recommendationsRefreshCountdown <= 0) {
+                    loadRecommendationsOnly();
+                    recommendationsRefreshCountdown = 300; // 重置倒计时
+                }
+            }, 1000);
+        }
+        
+        // 仅加载投资建议数据（不刷新其他数据）
+        async function loadRecommendationsOnly() {
+            try {
+                const response = await fetch('/api/dashboard');
+                const data = await response.json();
+
+                if (data.success && data.data) {
+                    // 只更新投资建议
+                    if (data.data.recommendations) {
+                        currentData.recommendations = data.data.recommendations;
+                        updateRecommendations(data.data.recommendations);
+                    }
+                    // 更新统计信息（包含信号统计）
+                    if (data.data.stats) {
+                        updateStats(data.data);
+                    }
+                }
+            } catch (error) {
+                console.error('刷新投资建议失败:', error);
+            }
         }
 
         // 刷新数据

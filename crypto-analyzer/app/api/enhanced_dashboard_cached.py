@@ -574,15 +574,28 @@ class EnhancedDashboardCached:
 
     def _calculate_signal_stats(self, recommendations: List[Dict]) -> Dict:
         """统计信号分布"""
-        bullish_count = sum(
+        strong_buy_count = sum(
             1 for r in recommendations
-            if r['signal'] in ['BUY', 'STRONG_BUY']
+            if r['signal'] == 'STRONG_BUY'
+        )
+        
+        buy_count = sum(
+            1 for r in recommendations
+            if r['signal'] == 'BUY'
+        )
+        
+        strong_sell_count = sum(
+            1 for r in recommendations
+            if r['signal'] == 'STRONG_SELL'
+        )
+        
+        sell_count = sum(
+            1 for r in recommendations
+            if r['signal'] == 'SELL'
         )
 
-        bearish_count = sum(
-            1 for r in recommendations
-            if r['signal'] in ['SELL', 'STRONG_SELL']
-        )
+        bullish_count = strong_buy_count + buy_count
+        bearish_count = strong_sell_count + sell_count
 
         hold_count = sum(
             1 for r in recommendations
@@ -590,9 +603,14 @@ class EnhancedDashboardCached:
         )
 
         return {
+            'strong_buy_count': strong_buy_count,
+            'buy_count': buy_count,
+            'strong_sell_count': strong_sell_count,
+            'sell_count': sell_count,
             'bullish_count': bullish_count,
             'bearish_count': bearish_count,
-            'hold_count': hold_count
+            'hold_count': hold_count,
+            'total_count': len(recommendations)
         }
 
     async def _get_futures_from_cache(self, symbols: List[str]) -> List[Dict]:
