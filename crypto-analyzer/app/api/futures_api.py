@@ -757,7 +757,8 @@ async def get_futures_price(symbol: str):
         if not price:
             try:
                 from app.database.db_service import DatabaseService
-                db_service = DatabaseService(db_config)
+                # DatabaseService 需要完整的 database 配置，包含 type 和 mysql 子字典
+                db_service = DatabaseService(config.get('database', {}))
                 latest_kline = db_service.get_latest_kline(symbol, '1m')
                 if latest_kline:
                     price = float(latest_kline.close)
