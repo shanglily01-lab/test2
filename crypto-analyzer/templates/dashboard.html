@@ -587,7 +587,7 @@
                             系统运行中
                         </span>
                         <span style="margin-left: 16px;">最后更新: <span id="lastUpdate">--</span></span>
-                        <span style="margin-left: 16px;">下次刷新: <span id="nextRefresh">30</span>秒</span>
+                        <span style="margin-left: 16px;">下次刷新: <span id="nextRefresh">15</span>秒</span>
                     </p>
                 </div>
                 <div class="d-flex gap-md">
@@ -870,7 +870,7 @@
         let currentData = null;
         let sortColumn = 'change_24h';
         let sortDirection = 'desc';
-        let refreshCountdown = 30;
+        let refreshCountdown = 15;
         let refreshInterval = null;
         let countdownInterval = null;
         let charts = {};
@@ -1406,7 +1406,7 @@
 
         // 刷新倒计时
         function resetRefreshCountdown() {
-            refreshCountdown = 30;
+            refreshCountdown = 15;
             if (countdownInterval) clearInterval(countdownInterval);
 
             countdownInterval = setInterval(() => {
@@ -2049,7 +2049,7 @@
                         <strong style="color: var(--text-primary);">监控标的：</strong><span style="color: var(--text-primary);">币安所有 USDT 交易对，动态获取活跃交易对列表</span>
                     </div>
                     <div class="explanation-info-box">
-                        <strong style="color: var(--text-primary);">采集频率：</strong><span style="color: var(--text-primary);">每30秒自动刷新一次，页面显示倒计时和最后更新时间</span>
+                        <strong style="color: var(--text-primary);">采集频率：</strong><span style="color: var(--text-primary);">每15秒自动刷新一次，页面显示倒计时和最后更新时间</span>
                     </div>
                 </div>
             </div>
@@ -2309,7 +2309,7 @@
                         <strong style="color: var(--text-primary);">监控标的：</strong>USDT本位永续合约，包括主流和热门币种
                     </div>
                     <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md);">
-                        <strong style="color: var(--text-primary);">采集频率：</strong>30秒更新一次，资金费率每8小时结算一次
+                        <strong style="color: var(--text-primary);">采集频率：</strong>15秒更新一次，资金费率每8小时结算一次
                     </div>
                 </div>
             </div>
@@ -2465,7 +2465,7 @@
                         <strong style="color: var(--text-primary);">采集频率：</strong>
                         <ul style="margin: 8px 0 0 20px;">
                             <li>实时交易：通过 WebSocket 订阅，延迟 < 1秒</li>
-                            <li>持仓快照：每30秒轮询一次</li>
+                            <li>持仓快照：每15秒轮询一次</li>
                             <li>历史统计：每小时计算一次胜率、盈亏等指标</li>
                         </ul>
                     </div>

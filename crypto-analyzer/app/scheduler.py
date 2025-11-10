@@ -3,16 +3,16 @@
 整合所有数据源的采集任务，按照不同频率定时执行
 
 采集频率：
-- Binance 现货数据: 1m, 5m, 1h, 1d
-- Binance 合约数据: 每1分钟 (价格、K线、资金费率、持仓量、多空比)
-- Gate.io K线数据: 1m, 5m, 1h, 1d
+- Binance 现货数据: 1m(每5秒), 5m, 1h, 1d
+- Binance 合约数据: 每5秒 (价格、K线、资金费率、持仓量、多空比)
+- Gate.io K线数据: 1m(每5秒), 5m, 1h, 1d
 - Ethereum 链上数据: 5m, 1h, 1d
 - Hyperliquid 排行榜: 每天一次
 - 资金费率 (Binance + Gate.io): 每5分钟
 - 新闻数据: 每15分钟
 
 缓存更新频率（性能优化）：
-- 价格统计缓存: 每30秒
+- 价格统计缓存: 每15秒
 - 分析缓存 (技术指标、新闻情绪、资金费率、投资建议): 每5分钟
 - Hyperliquid聚合缓存: 每10分钟
 """
@@ -984,10 +984,10 @@ class UnifiedDataScheduler:
         exchanges_str = ' + '.join(enabled_exchanges) if enabled_exchanges else 'Binance'
 
         # 1. 现货数据 (Binance + Gate.io等)
-        schedule.every(1).minutes.do(
+        schedule.every(5).seconds.do(
             lambda: asyncio.run(self.collect_binance_data('1m'))
         )
-        logger.info(f"  ✓ 现货({exchanges_str}) 1分钟数据 - 每 1 分钟")
+        logger.info(f"  ✓ 现货({exchanges_str}) 1分钟数据 - 每 5 秒")
 
         schedule.every(5).minutes.do(
             lambda: asyncio.run(self.collect_binance_data('5m'))
@@ -1011,10 +1011,10 @@ class UnifiedDataScheduler:
 
         # 1.5 币安合约数据
         if self.futures_collector:
-            schedule.every(1).minutes.do(
+            schedule.every(5).seconds.do(
                 lambda: asyncio.run(self.collect_binance_futures_data())
             )
-            logger.info("  ✓ 币安合约数据 (价格+K线+资金费率+持仓量+多空比) - 每 1 分钟")
+            logger.info("  ✓ 币安合约数据 (价格+K线+资金费率+持仓量+多空比) - 每 5 秒")
 
         # 2. 资金费率
         schedule.every(5).minutes.do(
@@ -1104,10 +1104,10 @@ class UnifiedDataScheduler:
         logger.info("\n  🚀 性能优化: 缓存自动更新")
 
         # 价格缓存 - 每30秒
-        schedule.every(30).seconds.do(
+        schedule.every(15).seconds.do(
             lambda: asyncio.run(self.update_price_cache())
         )
-        logger.info("  ✓ 价格统计缓存 - 每 30 秒")
+        logger.info("  ✓ 价格统计缓存 - 每 15 秒")
 
         # 分析缓存 - 每5分钟
         schedule.every(5).minutes.do(
@@ -1243,7 +1243,7 @@ class UnifiedDataScheduler:
     # ==================== 缓存更新任务 ====================
 
     async def update_price_cache(self):
-        """更新价格统计缓存 (每30秒)"""
+        """更新价格统计缓存 (每15秒)"""
         task_name = 'cache_price'
         try:
             logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始更新价格缓存...")

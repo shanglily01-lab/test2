@@ -33,7 +33,7 @@ exchanges:
     options:
       defaultType: spot
 collector:
-  price_interval: 30
+  price_interval: 5
   timeframes:
   - 1m
   - 5m
