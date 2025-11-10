@@ -165,21 +165,31 @@ class FuturesLimitOrderExecutor:
                                     )
                                     
                                     if result.get('success'):
-                                        # 更新订单状态为已成交
+                                        # 从结果中获取实际的 symbol（确保一致性）
+                                        actual_symbol = result.get('symbol', symbol)
+                                        
+                                        # 验证 symbol 是否匹配
+                                        if actual_symbol != symbol:
+                                            logger.warning(f"⚠️  限价单 {order_id} symbol 不匹配: 订单中为 {symbol}, 开仓结果为 {actual_symbol}")
+                                        
+                                        # 计算已成交价值
+                                        executed_value = float(limit_price * quantity)
+                                        
+                                        # 更新订单状态为已成交（不更新 symbol，保持原订单的 symbol）
                                         cursor.execute(
                                             """UPDATE futures_orders
                                             SET status = 'FILLED',
-                                                executed_quantity = quantity,
-                                                executed_value = total_value,
+                                                executed_quantity = %s,
+                                                executed_value = %s,
                                                 avg_fill_price = %s,
                                                 fill_time = NOW()
                                             WHERE order_id = %s""",
-                                            (float(limit_price), order_id)
+                                            (float(quantity), executed_value, float(limit_price), order_id)
                                         )
                                         
                                         conn.commit()
                                         
-                                        logger.info(f"✅ 限价单 {order_id} 执行成功: {result.get('message', '')}")
+                                        logger.info(f"✅ 限价单 {order_id} 执行成功: {symbol} {position_side} {quantity} @ {limit_price}, 持仓ID: {result.get('position_id')}, {result.get('message', '')}")
                                     else:
                                         # 如果开仓失败，恢复冻结的保证金
                                         if frozen_margin > 0:
