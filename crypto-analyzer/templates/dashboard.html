@@ -2027,22 +2027,22 @@
     const modalContent = document.getElementById('explanationContent');
 
     modalContent.innerHTML = `
-        <div style="padding: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-default);">
+        <div class="explanation-content-wrapper">
+            <div class="explanation-header">
                 <div>
-                    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">实时价格详细说明</h2>
-                    <div style="font-size: 14px; color: var(--text-secondary);">市场行情数据监控</div>
+                    <h2 class="explanation-title">实时价格详细说明</h2>
+                    <div class="explanation-subtitle">市场行情数据监控</div>
                 </div>
-                <button onclick="closeExplanationModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.background='var(--bg-tertiary)'; this.style.color='var(--text-primary)';" onmouseout="this.style.background='none'; this.style.color='var(--text-secondary)';">
+                <button class="explanation-close-btn" onclick="closeExplanationModal()">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
 
             <div class="explanation-section">
                 <h3 class="explanation-section-title">📊 数据采集</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
+                <div style="font-size: 13px; color: var(--text-primary); line-height: 1.8;">
                     <div class="explanation-info-box">
-                        <strong style="color: var(--text-primary);">数据来源：</strong>币安现货市场 API（Binance Spot Market /ticker/24hr 接口）
+                        <strong style="color: var(--text-primary);">数据来源：</strong><span style="color: var(--text-primary);">币安现货市场 API（Binance Spot Market /ticker/24hr 接口）</span>
                     </div>
                     <div class="explanation-info-box">
                         <strong style="color: var(--text-primary);">采集种类：</strong><span style="color: var(--text-primary);">实时价格、24小时最高/最低价、24小时涨跌幅、24小时成交量/成交额</span>
