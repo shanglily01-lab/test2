@@ -32,6 +32,17 @@
         .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-md); }
         .header-subtitle { color: var(--text-secondary); font-size: 13px; margin-top: var(--spacing-xs); }
         .header-actions { display: flex; gap: var(--spacing-md); align-items: center; }
+        .user-menu { display: flex; align-items: center; gap: var(--spacing-md); }
+        .notification-btn, .user-btn { position: relative; background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-primary); width: 40px; height: 40px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all var(--transition-base); font-size: 18px; }
+        .notification-btn:hover, .user-btn:hover { background: var(--bg-hover); border-color: var(--primary-blue); color: var(--primary-blue); }
+        .notification-badge { position: absolute; top: -4px; right: -4px; background: var(--danger-red); color: white; font-size: 10px; font-weight: 700; width: 18px; height: 18px; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg-primary); }
+        .user-dropdown { position: relative; }
+        .dropdown-menu { position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); min-width: 200px; box-shadow: var(--shadow-lg); z-index: 1000; display: none; overflow: hidden; }
+        .dropdown-menu.active { display: block; }
+        .dropdown-item { padding: var(--spacing-md) var(--spacing-lg); color: var(--text-primary); text-decoration: none; display: flex; align-items: center; gap: var(--spacing-sm); transition: all var(--transition-fast); border-bottom: 1px solid var(--border-default); }
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover { background: var(--bg-hover); color: var(--primary-blue); }
+        .dropdown-header { padding: var(--spacing-md) var(--spacing-lg); background: var(--bg-tertiary); border-bottom: 1px solid var(--border-default); font-weight: 600; color: var(--text-primary); }
         .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
         .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
         .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
@@ -100,58 +111,58 @@
                     </div>
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-secondary" onclick="window.location.href='/dashboard'">
-                        <i class="bi bi-speedometer2"></i> 进入仪表板
-                    </button>
+                    <div class="user-menu">
+                        <!-- 提醒按钮 -->
+                        <div class="user-dropdown">
+                            <button class="notification-btn" onclick="toggleNotifications()" title="通知">
+                                <i class="bi bi-bell"></i>
+                                <span class="notification-badge" id="notificationCount" style="display: none;">0</span>
+                            </button>
+                            <div class="dropdown-menu" id="notificationMenu">
+                                <div class="dropdown-header">
+                                    <i class="bi bi-bell"></i> 通知中心
+                                </div>
+                                <div id="notificationList" style="max-height: 400px; overflow-y: auto;">
+                                    <div class="dropdown-item" style="color: var(--text-secondary); justify-content: center; padding: var(--spacing-xl);">
+                                        <i class="bi bi-inbox"></i> 暂无通知
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 用户菜单 -->
+                        <div class="user-dropdown">
+                            <button class="user-btn" onclick="toggleUserMenu()" title="用户">
+                                <i class="bi bi-person-circle"></i>
+                            </button>
+                            <div class="dropdown-menu" id="userMenu">
+                                <div class="dropdown-header" id="userInfo">
+                                    <i class="bi bi-person"></i> 游客
+                                </div>
+                                <a href="#" class="dropdown-item" onclick="showLoginModal(); return false;">
+                                    <i class="bi bi-box-arrow-in-right"></i> 登录
+                                </a>
+                                <a href="#" class="dropdown-item" onclick="showRegisterModal(); return false;">
+                                    <i class="bi bi-person-plus"></i> 注册
+                                </a>
+                                <a href="/dashboard" class="dropdown-item">
+                                    <i class="bi bi-speedometer2"></i> 进入仪表板
+                                </a>
+                                <div class="dropdown-item" style="border-top: 1px solid var(--border-default); margin-top: var(--spacing-xs);">
+                                    <i class="bi bi-gear"></i> 设置
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </header>
 
-        <!-- Navigation -->
-        <nav class="nav-container slide-up">
-            <div class="nav-links">
-                <a href="/" class="nav-link active">
-                    <i class="bi bi-house"></i> 首页
-                </a>
-                <a href="/dashboard" class="nav-link">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/paper_trading" class="nav-link">
-                    <i class="bi bi-journals"></i> 模拟现货
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 模拟合约
-                </a>
-                <a href="/strategies" class="nav-link">
-                    <i class="bi bi-diagram-3"></i> 策略管理
-                </a>
-                <a href="/etf_data" class="nav-link">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/data_management" class="nav-link">
-                    <i class="bi bi-database"></i> 数据管理
-                </a>
-            </div>
-        </nav>
 
         <!-- Hero Section -->
         <section class="hero-section">
             <h1 class="hero-title">专业加密货币分析平台</h1>
             <p class="hero-subtitle">实时监控市场动态，洞察投资机会，掌握数据驱动的交易策略</p>
-            <div class="cta-buttons">
-                <a href="/dashboard" class="btn btn-primary">
-                    <i class="bi bi-speedometer2"></i> 进入仪表板
-                </a>
-                <a href="/strategies" class="btn btn-secondary">
-                    <i class="bi bi-diagram-3"></i> 查看策略
-                </a>
-                <a href="/paper_trading" class="btn btn-secondary">
-                    <i class="bi bi-journals"></i> 模拟交易
-                </a>
-            </div>
         </section>
 
         <!-- Market Overview -->
@@ -327,6 +338,94 @@
             if (totalVolumeEl && totalVolume > 0) {
                 totalVolumeEl.textContent = formatLargeNumber(totalVolume);
             }
+        }
+
+        // 切换用户菜单
+        function toggleUserMenu() {
+            const menu = document.getElementById('userMenu');
+            const notificationMenu = document.getElementById('notificationMenu');
+            menu.classList.toggle('active');
+            if (notificationMenu) notificationMenu.classList.remove('active');
+        }
+
+        // 切换通知菜单
+        function toggleNotifications() {
+            const menu = document.getElementById('notificationMenu');
+            const userMenu = document.getElementById('userMenu');
+            menu.classList.toggle('active');
+            if (userMenu) userMenu.classList.remove('active');
+            // 加载通知
+            loadNotifications();
+        }
+
+        // 点击外部关闭菜单
+        document.addEventListener('click', function(event) {
+            const userMenu = document.getElementById('userMenu');
+            const notificationMenu = document.getElementById('notificationMenu');
+            const userBtn = event.target.closest('.user-btn');
+            const notificationBtn = event.target.closest('.notification-btn');
+            
+            if (!userBtn && userMenu && !userMenu.contains(event.target)) {
+                userMenu.classList.remove('active');
+            }
+            if (!notificationBtn && notificationMenu && !notificationMenu.contains(event.target)) {
+                notificationMenu.classList.remove('active');
+            }
+        });
+
+        // 加载通知
+        async function loadNotifications() {
+            const notificationList = document.getElementById('notificationList');
+            const notificationCount = document.getElementById('notificationCount');
+            
+            try {
+                // 这里可以调用API获取通知
+                // const response = await fetch('/api/notifications');
+                // const data = await response.json();
+                
+                // 示例通知数据
+                const notifications = [
+                    { id: 1, type: 'info', message: '系统已更新到最新版本', time: '2分钟前' },
+                    { id: 2, type: 'warning', message: 'BTC价格波动超过5%', time: '10分钟前' },
+                ];
+                
+                if (notifications.length > 0) {
+                    notificationList.innerHTML = notifications.map(n => `
+                        <div class="dropdown-item">
+                            <i class="bi bi-${n.type === 'warning' ? 'exclamation-triangle' : 'info-circle'}" 
+                               style="color: ${n.type === 'warning' ? 'var(--warning-yellow)' : 'var(--info-blue)'};"></i>
+                            <div style="flex: 1;">
+                                <div style="font-size: 13px;">${n.message}</div>
+                                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">${n.time}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                    
+                    notificationCount.textContent = notifications.length;
+                    notificationCount.style.display = 'flex';
+                } else {
+                    notificationList.innerHTML = `
+                        <div class="dropdown-item" style="color: var(--text-secondary); justify-content: center; padding: var(--spacing-xl);">
+                            <i class="bi bi-inbox"></i> 暂无通知
+                        </div>
+                    `;
+                    notificationCount.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('加载通知失败:', error);
+            }
+        }
+
+        // 显示登录模态框
+        function showLoginModal() {
+            alert('登录功能开发中...');
+            // 这里可以打开登录模态框
+        }
+
+        // 显示注册模态框
+        function showRegisterModal() {
+            alert('注册功能开发中...');
+            // 这里可以打开注册模态框
         }
 
         // 页面加载时执行
