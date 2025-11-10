@@ -651,7 +651,8 @@ class EnhancedDashboardCached:
 
         # 获取价格数据（用于补充合约数据中的价格和涨跌幅）
         prices_data = await self._get_prices_from_cache(symbols)
-        prices_map = {p['symbol']: p for p in prices_data} if prices_data else {}
+        # 使用 full_symbol 作为键，因为合约数据使用 full_symbol
+        prices_map = {p.get('full_symbol', p['symbol']): p for p in prices_data} if prices_data else {}
         
         # 补充持仓量、多空比和价格数据（从原始表读取）
         for item in futures_data:
@@ -679,6 +680,7 @@ class EnhancedDashboardCached:
                         item['long_short_position_ratio'] = 0
                 
                 # 补充价格和涨跌幅信息（从价格缓存中获取）
+                # 使用 full_symbol 匹配
                 if symbol in prices_map:
                     price_info = prices_map[symbol]
                     item['price'] = price_info.get('price', 0)
@@ -686,6 +688,9 @@ class EnhancedDashboardCached:
                     item['change_24h'] = price_info.get('change_24h', 0)
                     item['price_change_24h'] = price_info.get('change_24h', 0)
                     item['volume_24h'] = price_info.get('volume_24h', 0)
+                else:
+                    # 如果匹配失败，记录警告
+                    logger.debug(f"未找到 {symbol} 的价格数据，prices_map keys: {list(prices_map.keys())[:5] if prices_map else 'empty'}")
             except Exception as e:
                 logger.warning(f"获取{symbol}持仓量和多空比失败: {e}")
                 continue
