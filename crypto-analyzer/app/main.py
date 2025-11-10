@@ -415,8 +415,12 @@ async def root():
 
 @app.get("/favicon.ico")
 async def favicon():
-    """返回 favicon - 避免 404 错误"""
-    # 如果有 favicon 文件，返回它
+    """返回 favicon - 使用AlphaFlow Logo"""
+    # 优先使用Logo作为favicon
+    logo_path = project_root / "static" / "images" / "logo" / "alphaflow-logo-minimal.svg"
+    if logo_path.exists():
+        return FileResponse(str(logo_path), media_type="image/svg+xml")
+    # 如果有 favicon.ico 文件，返回它
     favicon_path = project_root / "static" / "favicon.ico"
     if favicon_path.exists():
         return FileResponse(str(favicon_path))
