@@ -474,10 +474,10 @@ class EnhancedDashboardCached:
                 FROM hyperliquid_wallet_trades t
                 LEFT JOIN hyperliquid_monitored_wallets w ON t.address = w.address
                 LEFT JOIN (
-                    SELECT trader_id, coin, leverage, snapshot_time,
-                           ROW_NUMBER() OVER (PARTITION BY trader_id, coin ORDER BY snapshot_time DESC) as rn
-                    FROM hyperliquid_wallet_positions
-                ) p ON t.address = (SELECT address FROM hyperliquid_traders WHERE id = p.trader_id LIMIT 1)
+                    SELECT p.trader_id, p.coin, p.leverage, p.snapshot_time,
+                           ROW_NUMBER() OVER (PARTITION BY p.trader_id, p.coin ORDER BY p.snapshot_time DESC) as rn
+                    FROM hyperliquid_wallet_positions p
+                ) p ON t.trader_id = p.trader_id
                     AND t.coin = p.coin
                     AND p.rn = 1
                     AND p.snapshot_time <= t.trade_time
