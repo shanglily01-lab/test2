@@ -642,20 +642,20 @@
             historyTab.style.display = 'none';
 
             if (tab === 'positions') {
+                tabPositionsTitle.className = 'btn btn-primary';
                 tabPositionsTitle.style.opacity = '1';
-                tabPositionsTitle.style.background = 'var(--bg-hover)';
-                tabPositionsTitle.style.color = 'var(--text-primary)';
+                tabPositionsTitle.style.boxShadow = 'var(--shadow-md)';
                 positionsTab.style.display = 'block';
             } else if (tab === 'pending') {
+                tabPendingTitle.className = 'btn btn-primary';
                 tabPendingTitle.style.opacity = '1';
-                tabPendingTitle.style.background = 'var(--bg-hover)';
-                tabPendingTitle.style.color = 'var(--text-primary)';
+                tabPendingTitle.style.boxShadow = 'var(--shadow-md)';
                 pendingTab.style.display = 'block';
                 loadPendingOrders(); // 加载待成交订单
             } else if (tab === 'history') {
+                tabHistoryTitle.className = 'btn btn-primary';
                 tabHistoryTitle.style.opacity = '1';
-                tabHistoryTitle.style.background = 'var(--bg-hover)';
-                tabHistoryTitle.style.color = 'var(--text-primary)';
+                tabHistoryTitle.style.boxShadow = 'var(--shadow-md)';
                 historyTab.style.display = 'block';
                 loadTrades(); // 加载交易历史
             }
