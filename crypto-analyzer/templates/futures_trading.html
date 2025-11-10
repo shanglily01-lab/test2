@@ -449,15 +449,15 @@
                 <!-- Open Positions -->
                 <div class="card slide-up positions-card" style="margin-bottom: 0;">
                     <div class="card-header">
-                        <div style="display: flex; gap: var(--spacing-lg); align-items: center; flex: 1;">
-                            <h2 class="card-title" id="tabPositionsTitle" onclick="showPositionsTab('positions')" style="cursor: pointer; margin: 0; padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); transition: all var(--transition-base); opacity: 1;">
+                        <div style="display: flex; gap: var(--spacing-md); align-items: center; flex: 1; flex-wrap: wrap;">
+                            <button class="btn btn-primary" id="tabPositionsTitle" onclick="showPositionsTab('positions')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-md);">
                                 <i class="bi bi-briefcase"></i>
                                 <span id="positions-title">持仓中</span>
-                            </h2>
-                            <h2 class="card-title" id="tabOrdersTitle" onclick="showPositionsTab('orders')" style="cursor: pointer; margin: 0; padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); transition: all var(--transition-base); opacity: 0.6;">
+                            </button>
+                            <button class="btn btn-secondary" id="tabOrdersTitle" onclick="showPositionsTab('orders')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
                                 <i class="bi bi-hourglass-split"></i>
                                 <span id="orders-title">未成交订单</span>
-                            </h2>
+                            </button>
                         </div>
                         <div class="d-flex align-center gap-md">
                             <span class="badge badge-info" id="positionCount" style="display: none;">0 个持仓</span>

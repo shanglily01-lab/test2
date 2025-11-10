@@ -368,17 +368,17 @@
                 <!-- Combined Card with Tab Headers -->
                 <div class="card" id="positionsPanelCard" style="display: flex; flex-direction: column;">
                     <div class="card-header">
-                        <div style="display: flex; gap: var(--spacing-lg); align-items: center;">
-                            <h2 class="card-title" id="tabPositionsTitle" onclick="showTab('positions')" style="cursor: pointer; margin: 0; padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); transition: all var(--transition-base);">
-                        <i class="bi bi-briefcase"></i> 当前持仓
-                            </h2>
-                            <h2 class="card-title" id="tabPendingTitle" onclick="showTab('pending')" style="cursor: pointer; margin: 0; padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); transition: all var(--transition-base); opacity: 0.6;">
+                        <div style="display: flex; gap: var(--spacing-md); align-items: center; flex-wrap: wrap;">
+                            <button class="btn btn-primary" id="tabPositionsTitle" onclick="showTab('positions')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-md);">
+                                <i class="bi bi-briefcase"></i> 当前持仓
+                            </button>
+                            <button class="btn btn-secondary" id="tabPendingTitle" onclick="showTab('pending')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
                                 <i class="bi bi-hourglass-split"></i> 待成交
-                            </h2>
-                            <h2 class="card-title" id="tabHistoryTitle" onclick="showTab('history')" style="cursor: pointer; margin: 0; padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-md); transition: all var(--transition-base); opacity: 0.6;">
-                        <i class="bi bi-clock-history"></i> 交易历史
-                            </h2>
-                </div>
+                            </button>
+                            <button class="btn btn-secondary" id="tabHistoryTitle" onclick="showTab('history')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
+                                <i class="bi bi-clock-history"></i> 交易历史
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body" id="positionsCardBody" style="overflow-y: auto; overflow-x: hidden; padding: var(--spacing-md);">
                         <!-- Positions Content -->
@@ -631,9 +631,9 @@
 
             // 重置所有标签样式
             [tabPositionsTitle, tabPendingTitle, tabHistoryTitle].forEach(title => {
-                title.style.opacity = '0.6';
-                title.style.background = 'transparent';
-                title.style.color = 'var(--text-secondary)';
+                title.className = 'btn btn-secondary';
+                title.style.opacity = '0.7';
+                title.style.boxShadow = 'var(--shadow-sm)';
             });
 
             // 隐藏所有内容
