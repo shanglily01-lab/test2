@@ -786,6 +786,64 @@ async def get_futures_price(symbol: str):
 
 # ==================== 健康检查 ====================
 
+@router.get('/trades')
+async def get_trades(account_id: int = 2, limit: int = 50):
+    """
+    获取交易历史记录
+
+    - **account_id**: 账户ID（默认2）
+    - **limit**: 返回记录数（默认50）
+    """
+    try:
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+        sql = """
+        SELECT
+            t.id,
+            t.trade_id,
+            t.position_id,
+            t.symbol,
+            t.side,
+            t.price,
+            t.quantity,
+            t.notional_value,
+            t.leverage,
+            t.margin,
+            t.fee,
+            t.realized_pnl,
+            t.pnl_pct,
+            t.roi,
+            t.entry_price,
+            t.trade_time
+        FROM futures_trades t
+        WHERE t.account_id = %s
+        ORDER BY t.trade_time DESC
+        LIMIT %s
+        """
+
+        cursor.execute(sql, (account_id, limit))
+        trades = cursor.fetchall()
+        cursor.close()
+        connection.close()
+
+        # 转换 Decimal 为 float
+        for trade in trades:
+            for key, value in trade.items():
+                if isinstance(value, Decimal):
+                    trade[key] = float(value)
+
+        return {
+            'success': True,
+            'data': trades,
+            'count': len(trades)
+        }
+
+    except Exception as e:
+        logger.error(f"获取交易历史失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get('/symbols')
 async def get_symbols():
     """

@@ -1341,10 +1341,10 @@
             }
         }
 
-        // 加载交易记录
+        // 加载交易记录（从futures_trades表获取）
         async function loadTrades() {
             try {
-                const response = await fetch(`${API_BASE}/positions?account_id=2&status=closed`);
+                const response = await fetch(`${API_BASE}/trades?account_id=2&limit=50`);
                 const data = await response.json();
 
                 const tradesBody = document.getElementById('tradesBody');
@@ -1356,30 +1356,38 @@
                 tradesLoading.style.display = 'none';
 
                 if (data.success && data.data && data.data.length > 0) {
-                    const recentTrades = data.data.slice(0, 20);
+                    // 只显示平仓交易（CLOSE_LONG 或 CLOSE_SHORT）
+                    const closeTrades = data.data.filter(t => t.side && (t.side.includes('CLOSE')));
+                    const recentTrades = closeTrades.slice(0, 20);
 
-                    tradesBody.innerHTML = recentTrades.map(trade => `
+                    tradesBody.innerHTML = recentTrades.map(trade => {
+                        const isLong = trade.side === 'CLOSE_LONG';
+                        const sideText = isLong ? '多' : '空';
+                        const sideBadge = isLong ? 'badge-success' : 'badge-danger';
+                        
+                        return `
                         <tr>
                             <td><strong>${trade.symbol}</strong></td>
-                            <td><span class="badge ${trade.position_side === 'LONG' ? 'badge-success' : 'badge-danger'}">${trade.position_side === 'LONG' ? '多' : '空'}</span></td>
+                            <td><span class="badge ${sideBadge}">${sideText}</span></td>
                             <td><span class="badge badge-info">${trade.leverage || 1}x</span></td>
                             <td class="text-sm">
-                                <div>开: <span class="font-mono">$${formatPrice(trade.entry_price)}</span></div>
-                                <div class="text-secondary">平: <span class="font-mono">$${trade.current_price ? formatPrice(trade.current_price) : '--'}</span></div>
+                                <div>开: <span class="font-mono">$${trade.entry_price ? formatPrice(trade.entry_price) : '--'}</span></div>
+                                <div class="text-secondary">平: <span class="font-mono">$${formatPrice(trade.price)}</span></div>
                             </td>
                             <td>${trade.quantity || '--'}</td>
                             <td class="pnl ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
                                 ${trade.realized_pnl >= 0 ? '+' : ''}${formatLargeNumber(trade.realized_pnl || 0)}
                             </td>
-                            <td class="pnl ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                                ${trade.unrealized_pnl_pct >= 0 ? '+' : ''}${(trade.unrealized_pnl_pct || 0).toFixed(2)}%
+                            <td class="pnl ${trade.pnl_pct >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                ${trade.pnl_pct >= 0 ? '+' : ''}${(trade.pnl_pct || 0).toFixed(2)}%
                             </td>
-                            <td class="text-sm">${formatLargeNumber((trade.margin || 0) * 0.0004)}</td>
-                            <td class="text-sm text-secondary">${trade.close_time ? new Date(trade.close_time).toLocaleString('zh-CN') : '--'}</td>
+                            <td class="text-sm">${formatLargeNumber(trade.fee || 0)}</td>
+                            <td class="text-sm text-secondary">${trade.trade_time ? new Date(trade.trade_time).toLocaleString('zh-CN') : '--'}</td>
                         </tr>
-                    `).join('');
+                    `;
+                    }).join('');
 
-                    const count = recentTrades.length;
+                    const count = closeTrades.length;
                     tradesTitle.textContent = `最近交易记录 [${count}]`;
                     tradesTable.style.display = 'block';
                     tradesEmpty.style.display = 'none';
