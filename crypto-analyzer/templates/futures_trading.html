@@ -1356,8 +1356,15 @@
                 tradesLoading.style.display = 'none';
 
                 if (data.success && data.data && data.data.length > 0) {
-                    // 只显示平仓交易（CLOSE_LONG 或 CLOSE_SHORT）
-                    const closeTrades = data.data.filter(t => t.side && (t.side.includes('CLOSE')));
+                    // 只显示平仓交易（CLOSE_LONG 或 CLOSE_SHORT），并按时间倒序排列
+                    const closeTrades = data.data
+                        .filter(t => t.side && (t.side.includes('CLOSE')))
+                        .sort((a, b) => {
+                            // 按交易时间倒序排列（最新的在前）
+                            const timeA = new Date(a.trade_time).getTime();
+                            const timeB = new Date(b.trade_time).getTime();
+                            return timeB - timeA;
+                        });
                     const recentTrades = closeTrades.slice(0, 20);
 
                     tradesBody.innerHTML = recentTrades.map(trade => {
