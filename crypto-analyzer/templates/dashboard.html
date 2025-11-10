@@ -272,11 +272,11 @@
             z-index: 9999;
             animation: fadeIn var(--transition-base) ease-in;
             padding: var(--spacing-xl);
+            align-items: center;
+            justify-content: center;
         }
         .modal-overlay.active {
             display: flex;
-            align-items: center;
-            justify-content: center;
         }
         .modal-container {
             background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
@@ -286,12 +286,27 @@
             max-width: 700px;
             width: 90%;
             max-height: 85vh;
-            overflow: hidden;
+            overflow-y: auto;
+            overflow-x: hidden;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(43, 111, 237, 0.1);
             animation: modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
             display: flex;
             flex-direction: column;
             position: relative;
+        }
+        .modal-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .modal-container::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-full);
+        }
+        .modal-container::-webkit-scrollbar-thumb {
+            background: var(--primary-blue);
+            border-radius: var(--radius-full);
+        }
+        .modal-container::-webkit-scrollbar-thumb:hover {
+            background: var(--primary-blue-hover);
         }
         .modal-container::before {
             content: '';
