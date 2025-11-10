@@ -881,6 +881,8 @@
         let refreshCountdown = 15;
         let refreshInterval = null;
         let countdownInterval = null;
+        let recommendationsRefreshCountdown = 300; // 投资建议刷新倒计时（5分钟 = 300秒）
+        let recommendationsCountdownInterval = null;
         let charts = {};
 
         // 智能格式化价格
