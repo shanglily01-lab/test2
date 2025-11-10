@@ -1313,8 +1313,11 @@
         // 加载实时合约数据
         async function loadFuturesData() {
             try {
-                // 使用现有价格数据模拟合约数据
-                if (currentData && currentData.prices) {
+                // 使用从API获取的合约数据
+                if (currentData && currentData.futures) {
+                    updateFuturesData(currentData.futures);
+                } else if (currentData && currentData.prices) {
+                    // 如果没有合约数据，使用价格数据作为fallback
                     updateFuturesData(currentData.prices);
                 }
             } catch (error) {
@@ -1323,42 +1326,45 @@
         }
 
         // 更新实时合约数据
-        function updateFuturesData(prices) {
+        function updateFuturesData(futures) {
             const tbody = document.getElementById('futuresBody');
             const titleEl = document.getElementById('futures-title');
             
             // 更新标题数量统计
             if (titleEl) {
-                const count = prices ? prices.length : 0;
+                const count = futures ? futures.length : 0;
                 titleEl.textContent = `实时合约【${count}】`;
             }
 
-            if (!prices || prices.length === 0) {
+            if (!futures || futures.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">暂无合约数据</div></td></tr>';
                 return;
             }
 
             // 取前15个交易对
-            tbody.innerHTML = prices.slice(0, 15).map(p => {
-                const changeClass = p.change_24h >= 0 ? 'pnl-positive' : 'pnl-negative';
-                // 模拟资金费率 (实际应从API获取)
-                const fundingRate = (Math.random() * 0.002 - 0.001).toFixed(4);
-                const fundingClass = fundingRate >= 0 ? 'text-success' : 'text-danger';
-
-                // 模拟多空比 (实际应从API获取)
-                const longShortRatio = (0.5 + Math.random() * 2).toFixed(2);
+            tbody.innerHTML = futures.slice(0, 15).map(f => {
+                // 使用真实数据字段
+                const price = f.price || f.current_price || 0;
+                const change24h = f.change_24h || f.price_change_24h || 0;
+                const fundingRate = f.funding_rate || f.current_rate || 0;
+                const fundingRatePct = f.funding_rate_pct || f.current_rate_pct || (fundingRate * 100);
+                const longShortRatio = f.long_short_account_ratio || f.long_short_ratio || 1.0;
+                const openInterest = f.open_interest || 0;
+                
+                const changeClass = change24h >= 0 ? 'pnl-positive' : 'pnl-negative';
+                const fundingClass = fundingRatePct >= 0 ? 'text-success' : 'text-danger';
                 const longShortClass = longShortRatio >= 1 ? 'pnl-positive' : 'pnl-negative';
 
                 return `
                     <tr>
-                        <td><strong>${p.symbol}</strong></td>
-                        <td class="price font-mono">$${formatPrice(p.price)}</td>
-                        <td class="font-mono ${fundingClass}">${(fundingRate * 100).toFixed(4)}%</td>
+                        <td><strong>${f.full_symbol || f.symbol}</strong></td>
+                        <td class="price font-mono">$${formatPrice(price)}</td>
+                        <td class="font-mono ${fundingClass}">${fundingRatePct >= 0 ? '+' : ''}${fundingRatePct.toFixed(4)}%</td>
                         <td class="${changeClass} font-bold">
-                            ${p.change_24h >= 0 ? '+' : ''}${p.change_24h.toFixed(2)}%
+                            ${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%
                         </td>
-                        <td class="font-mono ${longShortClass}">${longShortRatio}</td>
-                        <td class="text-secondary">$${formatLargeNumber(p.volume_24h)}</td>
+                        <td class="font-mono ${longShortClass}">${longShortRatio.toFixed(2)}</td>
+                        <td class="text-secondary">$${formatLargeNumber(openInterest)}</td>
                     </tr>
                 `;
             }).join('');
