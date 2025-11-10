@@ -30,6 +30,11 @@
         .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
         .header-subtitle { color: var(--text-secondary); font-size: 13px; }
         .header-actions { display: flex; gap: var(--spacing-md); align-items: center; flex-wrap: wrap; }
+        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
+        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
+        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
+        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
         /* Signal Dropdown Styles */
         .signal-dropdown { position: relative; }
         .signal-btn { position: relative; }
@@ -169,12 +174,6 @@
                     <p class="header-subtitle">无风险练习现货交易策略</p>
                 </div>
                 <div class="d-flex gap-md">
-                    <button class="btn btn-ghost" onclick="window.location.href='/'">
-                        <i class="bi bi-house"></i> 首页
-                    </button>
-                    <button class="btn btn-ghost" onclick="window.location.href='/dashboard'">
-                        <i class="bi bi-speedometer2"></i> Dashboard
-                    </button>
                     <button class="btn btn-secondary" onclick="refreshData()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -182,6 +181,35 @@
             </div>
         </header>
 
+        <!-- Navigation -->
+        <nav class="nav-container slide-up">
+            <div class="nav-links">
+                <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+                <a href="/paper_trading" class="nav-link active">
+                    <i class="bi bi-journals"></i> 模拟现货
+                </a>
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 模拟合约
+                </a>
+                <a href="/strategies" class="nav-link">
+                    <i class="bi bi-diagram-3"></i> 策略管理
+                </a>
+                <a href="/etf_data" class="nav-link">
+                    <i class="bi bi-pie-chart"></i> ETF 数据
+                </a>
+                <a href="/corporate_treasury" class="nav-link">
+                    <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
+                </a>
+            </div>
+        </nav>
 
         <!-- Account Stats -->
         <div class="stats-grid" style="grid-template-columns: repeat(5, minmax(250px, 1fr));">

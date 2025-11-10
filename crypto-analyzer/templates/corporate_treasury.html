@@ -88,10 +88,15 @@
         .category-holding { background: var(--primary-blue-light); color: var(--primary-blue); }
         .category-mining { background: var(--success-green-bg); color: var(--success-green); }
         .category-payment { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
+        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @media (max-width: 1024px) {
             .card-body > div[style*="grid"] {
                 grid-template-columns: 1fr !important;
             }
+        }
+        @media (max-width: 768px) {
+            .nav-links { flex-direction: column; }
         }
     </style>
 </head>
@@ -108,9 +113,6 @@
                     <p class="header-subtitle">追踪上市公司加密货币持仓 · 实时更新 · 机构投资趋势分析</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-ghost" onclick="window.location.href='/'">
-                        <i class="bi bi-house"></i> 返回首页
-                    </button>
                     <button class="btn btn-ghost" onclick="loadTreasuryData()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -119,9 +121,12 @@
         </header>
 
         <!-- Navigation -->
-        <nav class="nav-container">
+        <nav class="nav-container slide-up">
             <div class="nav-links">
                 <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
                 <a href="/paper_trading" class="nav-link">
@@ -138,6 +143,9 @@
                 </a>
                 <a href="/corporate_treasury" class="nav-link active">
                     <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
                 </a>
             </div>
         </nav>

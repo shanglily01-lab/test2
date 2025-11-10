@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据管理 - Crypto Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        /* Crypto Analyzer - Enhanced Professional Trading Platform UI */
+        :root {
+            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
+            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
+            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
+            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
+            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
+            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
+            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
+            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
+            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
+            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
+        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
+        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
+        .header-subtitle { color: var(--text-secondary); font-size: 13px; }
+        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
+        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
+        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
+        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
+        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
+        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
+        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .card-body { padding: 0; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
+        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
+        .stat-card:hover::before { opacity: 1; }
+        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
+        .stat-value { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
+        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
+        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
+        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
+        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
+        tr:last-child td { border-bottom: none; }
+        tbody tr { transition: background-color var(--transition-fast); }
+        tbody tr:hover { background: var(--bg-hover); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-danger { background: var(--danger-red); color: white; }
+        .btn-danger:hover:not(:disabled) { background: #DC2626; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
+        .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-muted); }
+        .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
+        .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
+        .badge-success { background: var(--success-green-bg); color: var(--success-green); }
+        .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
+        .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
+        .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
+        .badge-warning { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
+        .spinner { border: 3px solid var(--bg-tertiary); border-top: 3px solid var(--primary-blue); border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
+        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
+        .empty-state-icon { font-size: 48px; margin-bottom: var(--spacing-lg); opacity: 0.5; }
+        .text-mono { font-family: var(--font-mono); }
+        .text-success { color: var(--success-green); }
+        .text-danger { color: var(--danger-red); }
+        .text-warning { color: var(--warning-yellow); }
+        .text-secondary { color: var(--text-secondary); }
+        .fade-in { animation: fadeIn var(--transition-base) ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); z-index: 9999; animation: fadeIn var(--transition-base) ease-in; }
+        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
+        .modal-container { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: var(--shadow-xl); animation: slideUp var(--transition-slow) ease-out; }
+        .modal-header { padding: var(--spacing-xl); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 20px; font-weight: 600; color: var(--text-primary); }
+        .modal-body { padding: var(--spacing-xl); }
+        .modal-footer { padding: var(--spacing-xl); border-top: 1px solid var(--border-default); display: flex; justify-content: flex-end; gap: var(--spacing-md); }
+        .input-group { margin-bottom: var(--spacing-lg); }
+        .input-label { display: block; margin-bottom: var(--spacing-sm); color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+        .input-field { width: 100%; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; }
+        .input-field:focus { outline: none; border-color: var(--primary-blue); }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); box-shadow: var(--shadow-xl); z-index: 10000; min-width: 300px; animation: slideInRight 0.3s ease-out; }
+        .toast.success { border-left: 4px solid var(--success-green); }
+        .toast.error { border-left: 4px solid var(--danger-red); }
+        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @media (max-width: 768px) {
+            .container { padding: var(--spacing-md); }
+            .stats-grid { grid-template-columns: 1fr; }
+            .nav-links { flex-direction: column; }
+            th, td { padding: var(--spacing-sm); font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header fade-in">
+            <div>
+                <h1 class="header-title">
+                    <i class="bi bi-database"></i>
+                    数据管理
+                </h1>
+                <p class="header-subtitle">查看和管理系统采集的各种数据</p>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-container slide-up">
+            <div class="nav-links">
+                <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+                <a href="/paper_trading" class="nav-link">
+                    <i class="bi bi-journals"></i> 模拟现货
+                </a>
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 模拟合约
+                </a>
+                <a href="/strategies" class="nav-link">
+                    <i class="bi bi-diagram-3"></i> 策略管理
+                </a>
+                <a href="/etf_data" class="nav-link">
+                    <i class="bi bi-pie-chart"></i> ETF 数据
+                </a>
+                <a href="/corporate_treasury" class="nav-link">
+                    <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/data_management" class="nav-link active">
+                    <i class="bi bi-database"></i> 数据管理
+                </a>
+            </div>
+        </nav>
+
+        <!-- Data Collection Status -->
+        <div class="card slide-up">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-activity"></i>
+                    数据采集情况
+                </h2>
+                <button class="btn btn-secondary btn-sm" onclick="loadCollectionStatus()">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="stats-grid" id="collectionStatus">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <div style="margin-top: var(--spacing-md);">加载中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Collection -->
+        <div class="card slide-up">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-download"></i>
+                    数据采集
+                </h2>
+            </div>
+            <div class="card-body">
+                <form id="dataCollectionForm" onsubmit="startDataCollection(event)">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--spacing-lg);">
+                        <div class="input-group">
+                            <label class="input-label">
+                                <i class="bi bi-currency-exchange"></i> 交易对
+                            </label>
+                            <input type="text" id="collectionSymbols" class="input-field" 
+                                   placeholder="例如: BTC/USDT,ETH/USDT (多个用逗号分隔)" 
+                                   required>
+                            <p style="margin-top: var(--spacing-xs); color: var(--text-secondary); font-size: 11px;">
+                                支持多个交易对，用逗号分隔
+                            </p>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">
+                                <i class="bi bi-info-circle"></i> 采集说明
+                            </label>
+                            <div style="padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-md); color: var(--text-secondary); font-size: 13px;">
+                                <i class="bi bi-check-circle"></i> 将自动采集：价格数据 + K线数据（1m, 5m, 15m, 1h, 1d）
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+                                <input type="checkbox" id="collectFutures" style="width: 18px; height: 18px; cursor: pointer;">
+                                <span style="color: var(--text-primary); font-size: 14px;">
+                                    <i class="bi bi-graph-up-arrow"></i> 同时采集合约数据
+                                </span>
+                            </label>
+                            <p style="margin-top: var(--spacing-xs); color: var(--text-secondary); font-size: 11px; margin-left: 26px;">
+                                勾选后将同时采集币安合约数据（价格、K线、资金费率、持仓量、多空比）
+                            </p>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">
+                                <i class="bi bi-calendar-range"></i> 开始时间
+                            </label>
+                            <input type="datetime-local" id="collectionStartTime" class="input-field" required>
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">
+                                <i class="bi bi-calendar-range"></i> 结束时间
+                            </label>
+                            <input type="datetime-local" id="collectionEndTime" class="input-field" required>
+                        </div>
+                    </div>
+                    <div style="margin-top: var(--spacing-md);">
+                        <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
+                            <input type="checkbox" id="saveToConfig" style="width: 18px; height: 18px; cursor: pointer;">
+                            <span style="color: var(--text-primary); font-size: 14px;">
+                                <i class="bi bi-file-earmark-text"></i> 保存到配置文件
+                            </span>
+                        </label>
+                        <p style="margin-top: var(--spacing-xs); color: var(--text-secondary); font-size: 11px; margin-left: 26px;">
+                            勾选后将自动更新 config.yaml 文件，添加新的交易对和时间周期
+                        </p>
+                    </div>
+                    <div style="margin-top: var(--spacing-lg); display: flex; gap: var(--spacing-md);">
+                        <button type="submit" class="btn btn-primary" id="collectionSubmitBtn">
+                            <i class="bi bi-play-circle"></i>
+                            开始采集
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="resetCollectionForm()">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                            重置
+                        </button>
+                    </div>
+                    <div id="collectionResult" style="margin-top: var(--spacing-lg);"></div>
+                    <div id="collectionProgress" style="margin-top: var(--spacing-md); display: none;">
+                        <div style="background: var(--bg-tertiary); border-radius: var(--radius-md); padding: var(--spacing-md);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm);">
+                                <span style="font-size: 13px; color: var(--text-secondary);">采集进度</span>
+                                <span id="collectionProgressText" style="font-size: 13px; color: var(--text-secondary);">0%</span>
+                            </div>
+                            <div style="background: var(--bg-secondary); border-radius: var(--radius-full); height: 8px; overflow: hidden;">
+                                <div id="collectionProgressBar" style="background: var(--primary-blue); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+                            </div>
+                            <div id="collectionStatusText" style="margin-top: var(--spacing-sm); font-size: 12px; color: var(--text-secondary);"></div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Data Import -->
+        <div class="card slide-up">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-upload"></i>
+                    数据导入
+                </h2>
+            </div>
+            <div class="card-body">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: var(--spacing-xl);">
+                    <!-- ETF数据导入 -->
+                    <div style="border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg);">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: var(--spacing-md); display: flex; align-items: center; gap: var(--spacing-sm);">
+                            <i class="bi bi-pie-chart"></i>
+                            ETF数据导入
+                        </h3>
+                        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: var(--spacing-md);">
+                            CSV格式: Date,Ticker,NetInflow,BTC_Holdings (或 ETH_Holdings)<br>
+                            <span style="font-size: 11px; color: var(--text-tertiary);">参考 scripts/etf/interactive_input.py 的简化格式</span>
+                        </p>
+                        <div style="margin-bottom: var(--spacing-md);">
+                            <button class="btn btn-secondary btn-sm" onclick="downloadETFTemplate()" style="width: 100%;">
+                                <i class="bi bi-download"></i>
+                                下载模板文件
+                            </button>
+                        </div>
+                        <form id="etfImportForm" onsubmit="importETFData(event)">
+                            <div class="input-group">
+                                <label class="input-label">选择CSV文件</label>
+                                <input type="file" id="etfFile" accept=".csv" required class="input-field" style="padding: var(--spacing-sm);">
+                            </div>
+                            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                                <i class="bi bi-upload"></i>
+                                导入ETF数据
+                            </button>
+                        </form>
+                        <div id="etfImportResult" style="margin-top: var(--spacing-md);"></div>
+                    </div>
+                    
+                    <!-- 企业金库数据导入 -->
+                    <div style="border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg);">
+                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: var(--spacing-md); display: flex; align-items: center; gap: var(--spacing-sm);">
+                            <i class="bi bi-building"></i>
+                            企业金库数据导入
+                        </h3>
+                        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: var(--spacing-md);">
+                            支持两种导入格式：<br>
+                            <span style="font-size: 11px; color: var(--text-tertiary);">1. 持仓数据（文本格式，参考 import_template.txt）</span><br>
+                            <span style="font-size: 11px; color: var(--text-tertiary);">2. 融资数据（CSV格式）</span>
+                        </p>
+                        <div style="margin-bottom: var(--spacing-md); display: flex; gap: var(--spacing-sm);">
+                            <button class="btn btn-secondary btn-sm" onclick="downloadTreasuryTemplate()" style="flex: 1;">
+                                <i class="bi bi-download"></i>
+                                持仓模板
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="downloadTreasuryFinancingTemplate()" style="flex: 1;">
+                                <i class="bi bi-download"></i>
+                                融资模板
+                            </button>
+                        </div>
+                        <form id="treasuryImportForm" onsubmit="importTreasuryData(event)">
+                            <div class="input-group">
+                                <label class="input-label">选择文件（.txt 或 .csv）</label>
+                                <input type="file" id="treasuryFile" accept=".txt,.csv" required class="input-field" style="padding: var(--spacing-sm);">
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">数据日期 (可选)</label>
+                                <input type="date" id="treasuryDate" class="input-field" style="padding: var(--spacing-sm);">
+                            </div>
+                            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                                <i class="bi bi-upload"></i>
+                                导入企业金库数据
+                            </button>
+                        </form>
+                        <div id="treasuryImportResult" style="margin-top: var(--spacing-md);"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Statistics Summary -->
+        <div class="card slide-up">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-bar-chart"></i>
+                    数据统计概览
+                </h2>
+                <button class="btn btn-secondary btn-sm" onclick="refreshStatistics()">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="stats-grid" id="summaryStats">
+                    <div class="stat-card">
+                        <div class="stat-label">总记录数</div>
+                        <div class="stat-value" id="totalRecords">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">总数据表</div>
+                        <div class="stat-value" id="totalTables">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">总存储大小</div>
+                        <div class="stat-value" id="totalSize">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Tables -->
+        <div class="card slide-up">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-table"></i>
+                    数据表详情
+                </h2>
+                <div style="display: flex; gap: var(--spacing-md);">
+                    <input type="text" id="searchInput" class="input-field" placeholder="搜索表名或描述..." style="width: 300px; padding: var(--spacing-sm) var(--spacing-md);" onkeyup="filterTables()">
+                    <button class="btn btn-secondary btn-sm" onclick="refreshStatistics()">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-container">
+                    <table id="dataTable">
+                        <thead>
+                            <tr>
+                                <th>表名</th>
+                                <th>描述</th>
+                                <th>记录数</th>
+                                <th>存储大小</th>
+                                <th>最新数据</th>
+                                <th>最早数据</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <tr>
+                                <td colspan="7" class="loading">
+                                    <div class="spinner"></div>
+                                    <div style="margin-top: var(--spacing-md);">加载中...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cleanup Modal -->
+        <div class="modal-overlay" id="cleanupModal">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 class="modal-title">
+                        <i class="bi bi-trash"></i>
+                        清理旧数据
+                    </h3>
+                    <button class="btn btn-ghost btn-sm" onclick="closeCleanupModal()">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group">
+                        <label class="input-label">表名</label>
+                        <input type="text" id="cleanupTableName" class="input-field" readonly>
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">保留天数</label>
+                        <input type="number" id="cleanupDays" class="input-field" value="30" min="1" max="365">
+                        <p style="margin-top: var(--spacing-sm); color: var(--text-secondary); font-size: 12px;">
+                            将删除超过指定天数的旧数据，保留最近N天的数据
+                        </p>
+                    </div>
+                    <div style="background: var(--warning-yellow-bg); border: 1px solid var(--warning-yellow); border-radius: var(--radius-md); padding: var(--spacing-md); margin-top: var(--spacing-lg);">
+                        <p style="color: var(--warning-yellow); font-size: 13px; margin: 0;">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>警告：</strong>此操作不可撤销，请谨慎操作！
+                        </p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeCleanupModal()">取消</button>
+                    <button class="btn btn-danger" onclick="confirmCleanup()">
+                        <i class="bi bi-trash"></i>
+                        确认清理
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sample Data Modal -->
+        <div class="modal-overlay" id="sampleModal">
+            <div class="modal-container" style="max-width: 900px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">
+                        <i class="bi bi-eye"></i>
+                        样本数据 - <span id="sampleTableName"></span>
+                    </h3>
+                    <button class="btn btn-ghost btn-sm" onclick="closeSampleModal()">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-container">
+                        <table id="sampleTable">
+                            <thead id="sampleTableHead"></thead>
+                            <tbody id="sampleTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let statisticsData = null;
+        let currentCleanupTable = null;
+
+        // 页面加载时获取数据
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCollectionStatus();
+            loadStatistics();
+            
+            // 设置默认时间范围（最近7天）
+            const endTime = new Date();
+            const startTime = new Date();
+            startTime.setDate(startTime.getDate() - 7);
+            
+            document.getElementById('collectionStartTime').value = formatDateTimeLocal(startTime);
+            document.getElementById('collectionEndTime').value = formatDateTimeLocal(endTime);
+            
+            // 数据类型已移除，默认采集价格和K线数据
+        });
+
+        // 加载数据采集情况
+        async function loadCollectionStatus() {
+            const container = document.getElementById('collectionStatus');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top: var(--spacing-md);">加载中...</div></div>';
+            
+            try {
+                const response = await fetch('/api/data-management/collection-status');
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    container.innerHTML = result.data.map(item => {
+                        const statusBadge = item.status === 'active' 
+                            ? '<span class="badge badge-success">运行中</span>'
+                            : item.status === 'warning'
+                            ? '<span class="badge badge-warning">延迟</span>'
+                            : item.status === 'inactive'
+                            ? '<span class="badge badge-neutral">未运行</span>'
+                            : '<span class="badge badge-danger">错误</span>';
+                        
+                        const latestTime = item.latest_time ? formatDateTime(item.latest_time) : '无数据';
+                        const count = formatNumber(item.count || 0);
+                        
+                        let extraInfo = '';
+                        if (item.symbol_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">交易对: ${item.symbol_count}</div>`;
+                        if (item.exchange_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">交易所: ${item.exchange_count}</div>`;
+                        if (item.etf_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">ETF数量: ${item.etf_count}</div>`;
+                        if (item.company_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">公司数量: ${item.company_count}</div>`;
+                        
+                        return `
+                            <div class="stat-card">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm);">
+                                    <div class="stat-label" style="margin: 0;">
+                                        <i class="bi ${item.icon}"></i> ${item.type}
+                                    </div>
+                                    ${statusBadge}
+                                </div>
+                                <div class="stat-value" style="font-size: 24px;">${count}</div>
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-top: var(--spacing-xs);">
+                                    最新: ${latestTime}
+                                </div>
+                                ${extraInfo}
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    container.innerHTML = '<div class="empty-state">加载失败</div>';
+                }
+            } catch (error) {
+                console.error('加载数据采集情况失败:', error);
+                container.innerHTML = '<div class="empty-state">加载失败: ' + error.message + '</div>';
+            }
+        }
+
+        // 加载统计数据
+        async function loadStatistics() {
+            const tableBody = document.getElementById('tableBody');
+            tableBody.innerHTML = '<tr><td colspan="7" class="loading"><div class="spinner"></div><div style="margin-top: var(--spacing-md);">加载中...</div></td></tr>';
+            
+            try {
+                const response = await fetch('/api/data-management/statistics');
+                const result = await response.json();
+                
+                if (result.success) {
+                    statisticsData = result.data;
+                    
+                    // 更新汇总统计
+                    document.getElementById('totalRecords').textContent = formatNumber(result.data.summary.total_records);
+                    document.getElementById('totalTables').textContent = result.data.summary.total_tables;
+                    document.getElementById('totalSize').textContent = result.data.summary.total_size_mb ? `${result.data.summary.total_size_mb.toFixed(2)} MB` : '0 MB';
+                    
+                    // 渲染表格
+                    renderTable(result.data.tables);
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="7" class="empty-state">加载失败</td></tr>';
+                }
+            } catch (error) {
+                console.error('加载统计数据失败:', error);
+                tableBody.innerHTML = '<tr><td colspan="7" class="empty-state">加载失败: ' + error.message + '</td></tr>';
+            }
+        }
+
+        // 渲染表格
+        function renderTable(tables) {
+            const tableBody = document.getElementById('tableBody');
+            
+            if (!tables || tables.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无数据</td></tr>';
+                return;
+            }
+            
+            tableBody.innerHTML = tables.map(table => {
+                const existsBadge = table.exists 
+                    ? '<span class="badge badge-success">存在</span>' 
+                    : '<span class="badge badge-neutral">不存在</span>';
+                
+                const count = table.exists ? formatNumber(table.count) : '-';
+                const size = table.exists && table.size_mb ? `${table.size_mb.toFixed(2)} MB` : '-';
+                const latestTime = table.latest_time ? formatDateTime(table.latest_time) : '-';
+                const oldestTime = table.oldest_time ? formatDateTime(table.oldest_time) : '-';
+                
+                const canCleanup = ['price_data', 'kline_data', 'news_data', 'funding_rate_data', 
+                                   'futures_open_interest', 'futures_long_short_ratio', 
+                                   'smart_money_transactions', 'ema_signals'].includes(table.name);
+                
+                return `
+                    <tr data-table-name="${table.name}" data-label="${table.label}">
+                        <td>
+                            <div style="display: flex; align-items: center; gap: var(--spacing-sm);">
+                                <code class="text-mono">${table.name}</code>
+                                ${existsBadge}
+                            </div>
+                        </td>
+                        <td>
+                            <div>${table.label}</div>
+                            <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">
+                                ${table.description || ''}
+                            </div>
+                        </td>
+                        <td class="text-mono">${count}</td>
+                        <td class="text-mono">${size}</td>
+                        <td class="text-secondary" style="font-size: 12px;">${latestTime}</td>
+                        <td class="text-secondary" style="font-size: 12px;">${oldestTime}</td>
+                        <td>
+                            <div style="display: flex; gap: var(--spacing-sm);">
+                                ${table.exists ? `
+                                    <button class="btn btn-secondary btn-sm" onclick="viewSample('${table.name}')" title="查看样本数据">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                ` : ''}
+                                ${canCleanup && table.exists ? `
+                                    <button class="btn btn-danger btn-sm" onclick="openCleanupModal('${table.name}')" title="清理旧数据">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 过滤表格
+        function filterTables() {
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            const rows = document.querySelectorAll('#tableBody tr[data-table-name]');
+            
+            rows.forEach(row => {
+                const tableName = row.getAttribute('data-table-name').toLowerCase();
+                const label = row.getAttribute('data-label').toLowerCase();
+                const matches = tableName.includes(searchInput) || label.includes(searchInput);
+                row.style.display = matches ? '' : 'none';
+            });
+        }
+
+        // 查看样本数据
+        async function viewSample(tableName) {
+            const modal = document.getElementById('sampleModal');
+            const tableNameSpan = document.getElementById('sampleTableName');
+            const tableHead = document.getElementById('sampleTableHead');
+            const tableBody = document.getElementById('sampleTableBody');
+            
+            tableNameSpan.textContent = tableName;
+            tableHead.innerHTML = '<tr><th>加载中...</th></tr>';
+            tableBody.innerHTML = '';
+            modal.classList.add('active');
+            
+            try {
+                const response = await fetch(`/api/data-management/table/${tableName}/sample?limit=10`);
+                const result = await response.json();
+                
+                if (result.success && result.data.length > 0) {
+                    // 获取表头
+                    const headers = Object.keys(result.data[0]);
+                    tableHead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+                    
+                    // 渲染数据
+                    tableBody.innerHTML = result.data.map(row => {
+                        return `<tr>${headers.map(h => {
+                            const value = row[h];
+                            if (value === null || value === undefined) return '<td class="text-secondary">-</td>';
+                            if (typeof value === 'number') return `<td class="text-mono">${formatNumber(value)}</td>`;
+                            if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                return `<td class="text-secondary" style="font-size: 12px;">${formatDateTime(value)}</td>`;
+                            }
+                            return `<td>${String(value).substring(0, 100)}${String(value).length > 100 ? '...' : ''}</td>`;
+                        }).join('')}</tr>`;
+                    }).join('');
+                } else {
+                    tableHead.innerHTML = '<tr><th>无数据</th></tr>';
+                    tableBody.innerHTML = '<tr><td class="empty-state">该表暂无数据</td></tr>';
+                }
+            } catch (error) {
+                console.error('加载样本数据失败:', error);
+                tableHead.innerHTML = '<tr><th>错误</th></tr>';
+                tableBody.innerHTML = '<tr><td class="text-danger">加载失败: ' + error.message + '</td></tr>';
+            }
+        }
+
+        // 关闭样本数据模态框
+        function closeSampleModal() {
+            document.getElementById('sampleModal').classList.remove('active');
+        }
+
+        // 打开清理模态框
+        function openCleanupModal(tableName) {
+            currentCleanupTable = tableName;
+            document.getElementById('cleanupTableName').value = tableName;
+            document.getElementById('cleanupDays').value = 30;
+            document.getElementById('cleanupModal').classList.add('active');
+        }
+
+        // 关闭清理模态框
+        function closeCleanupModal() {
+            document.getElementById('cleanupModal').classList.remove('active');
+            currentCleanupTable = null;
+        }
+
+        // 确认清理
+        async function confirmCleanup() {
+            if (!currentCleanupTable) return;
+            
+            const days = parseInt(document.getElementById('cleanupDays').value);
+            if (!days || days < 1) {
+                showToast('请输入有效的天数', 'error');
+                return;
+            }
+            
+            const confirmMsg = `确定要清理表 "${currentCleanupTable}" 中超过 ${days} 天的旧数据吗？此操作不可撤销！`;
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(
+                    `/api/data-management/table/${currentCleanupTable}/cleanup?days=${days}&confirm=true`,
+                    { method: 'DELETE' }
+                );
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast(
+                        `清理成功！删除了 ${result.deleted_count} 条记录（清理前: ${result.before_count}, 清理后: ${result.after_count}）`,
+                        'success'
+                    );
+                    closeCleanupModal();
+                    // 刷新统计数据
+                    setTimeout(() => loadStatistics(), 1000);
+                } else {
+                    showToast('清理失败: ' + (result.message || '未知错误'), 'error');
+                }
+            } catch (error) {
+                console.error('清理数据失败:', error);
+                showToast('清理失败: ' + error.message, 'error');
+            }
+        }
+
+        // 刷新统计数据
+        function refreshStatistics() {
+            loadStatistics();
+        }
+
+        // 下载ETF模板
+        function downloadETFTemplate() {
+            window.location.href = '/api/data-management/template/etf';
+        }
+
+        // 下载企业金库持仓模板（文本格式）
+        function downloadTreasuryTemplate() {
+            window.location.href = '/api/data-management/template/corporate-treasury';
+        }
+
+        // 下载企业金库融资模板（CSV格式）
+        function downloadTreasuryFinancingTemplate() {
+            window.location.href = '/api/data-management/template/corporate-treasury-financing';
+        }
+
+        // 导入ETF数据
+        async function importETFData(event) {
+            event.preventDefault();
+            const fileInput = document.getElementById('etfFile');
+            const resultDiv = document.getElementById('etfImportResult');
+            
+            if (!fileInput.files || !fileInput.files[0]) {
+                showToast('请选择文件', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('asset_type', 'BTC');
+            
+            resultDiv.innerHTML = '<div class="spinner"></div> <span>导入中...</span>';
+            
+            try {
+                const response = await fetch('/api/data-management/import/etf', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div style="color: var(--success-green);">
+                            <i class="bi bi-check-circle"></i>
+                            ${result.message}
+                        </div>
+                        ${result.errors && result.errors.length > 0 ? `
+                            <div style="margin-top: var(--spacing-sm); font-size: 12px; color: var(--text-secondary);">
+                                <details>
+                                    <summary style="cursor: pointer;">查看错误详情 (${result.error_count}条)</summary>
+                                    <ul style="margin-top: var(--spacing-sm); padding-left: var(--spacing-lg);">
+                                        ${result.errors.map(e => `<li style="color: var(--danger-red);">${e}</li>`).join('')}
+                                    </ul>
+                                </details>
+                            </div>
+                        ` : ''}
+                    `;
+                    showToast(result.message, 'success');
+                    // 刷新采集情况
+                    setTimeout(() => loadCollectionStatus(), 1000);
+                } else {
+                    resultDiv.innerHTML = `<div style="color: var(--danger-red);">导入失败: ${result.message || '未知错误'}</div>`;
+                    showToast('导入失败', 'error');
+                }
+            } catch (error) {
+                console.error('导入ETF数据失败:', error);
+                resultDiv.innerHTML = `<div style="color: var(--danger-red);">导入失败: ${error.message}</div>`;
+                showToast('导入失败: ' + error.message, 'error');
+            }
+        }
+
+        // 导入企业金库数据
+        async function importTreasuryData(event) {
+            event.preventDefault();
+            const fileInput = document.getElementById('treasuryFile');
+            const dateInput = document.getElementById('treasuryDate');
+            const resultDiv = document.getElementById('treasuryImportResult');
+            
+            if (!fileInput.files || !fileInput.files[0]) {
+                showToast('请选择文件', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('asset_type', 'BTC');
+            if (dateInput.value) {
+                formData.append('data_date', dateInput.value);
+            }
+            
+            resultDiv.innerHTML = '<div class="spinner"></div> <span>导入中...</span>';
+            
+            try {
+                const response = await fetch('/api/data-management/import/corporate-treasury', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div style="color: var(--success-green);">
+                            <i class="bi bi-check-circle"></i>
+                            ${result.message}
+                        </div>
+                        ${result.errors && result.errors.length > 0 ? `
+                            <div style="margin-top: var(--spacing-sm); font-size: 12px; color: var(--text-secondary);">
+                                <details>
+                                    <summary style="cursor: pointer;">查看错误详情 (${result.error_count}条)</summary>
+                                    <ul style="margin-top: var(--spacing-sm); padding-left: var(--spacing-lg);">
+                                        ${result.errors.map(e => `<li style="color: var(--danger-red);">${e}</li>`).join('')}
+                                    </ul>
+                                </details>
+                            </div>
+                        ` : ''}
+                    `;
+                    showToast(result.message, 'success');
+                    // 刷新采集情况
+                    setTimeout(() => loadCollectionStatus(), 1000);
+                } else {
+                    resultDiv.innerHTML = `<div style="color: var(--danger-red);">导入失败: ${result.message || '未知错误'}</div>`;
+                    showToast('导入失败', 'error');
+                }
+            } catch (error) {
+                console.error('导入企业金库数据失败:', error);
+                resultDiv.innerHTML = `<div style="color: var(--danger-red);">导入失败: ${error.message}</div>`;
+                showToast('导入失败: ' + error.message, 'error');
+            }
+        }
+
+        // 格式化数字
+        function formatNumber(num) {
+            if (num === null || num === undefined) return '-';
+            if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
+            return num.toLocaleString();
+        }
+
+        // 格式化日期时间
+        function formatDateTime(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch {
+                return dateStr;
+            }
+        }
+
+        // 开始数据采集
+        async function startDataCollection(event) {
+            event.preventDefault();
+            
+            const symbols = document.getElementById('collectionSymbols').value.trim();
+            const startTime = document.getElementById('collectionStartTime').value;
+            const endTime = document.getElementById('collectionEndTime').value;
+            const saveToConfig = document.getElementById('saveToConfig').checked;
+            const collectFutures = document.getElementById('collectFutures').checked;
+            
+            // 默认同时采集价格数据和K线数据（所有周期）
+            const timeframes = ['1m', '5m', '15m', '1h', '1d'];
+            const resultDiv = document.getElementById('collectionResult');
+            const progressDiv = document.getElementById('collectionProgress');
+            const submitBtn = document.getElementById('collectionSubmitBtn');
+            
+            if (!symbols) {
+                showToast('请输入交易对', 'error');
+                return;
+            }
+            
+            // 验证时间范围
+            const start = new Date(startTime);
+            const end = new Date(endTime);
+            if (start >= end) {
+                showToast('结束时间必须晚于开始时间', 'error');
+                return;
+            }
+            
+            // 禁用提交按钮
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div> 采集中...';
+            
+            // 显示进度条
+            progressDiv.style.display = 'block';
+            updateCollectionProgress(0, '准备开始采集...');
+            
+            resultDiv.innerHTML = '';
+            
+            try {
+                const symbolList = symbols.split(',').map(s => s.trim()).filter(s => s);
+                
+                const requestData = {
+                    symbols: symbolList,
+                    data_type: 'both',  // 同时采集价格和K线数据
+                    start_time: startTime,
+                    end_time: endTime,
+                    timeframes: timeframes,
+                    collect_futures: collectFutures,  // 是否采集合约数据
+                    save_to_config: saveToConfig
+                };
+                
+                const response = await fetch('/api/data-management/collect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    updateCollectionProgress(100, '采集完成！');
+                    const configMsg = result.config_updated ? 
+                        '<div style="margin-top: var(--spacing-xs); color: var(--success-green); font-weight: 500;"><i class="bi bi-file-earmark-check"></i> 配置文件已更新</div>' : '';
+                    const futuresMsg = result.collect_futures ? ' + 合约数据' : '';
+                    const timeframeMsg = `<div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">采集内容: 价格数据 + K线数据（1m, 5m, 15m, 1h, 1d）${futuresMsg}</div>`;
+                    resultDiv.innerHTML = `
+                        <div style="background: var(--success-green-bg); border: 1px solid var(--success-green); border-radius: var(--radius-md); padding: var(--spacing-md);">
+                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--success-green);">
+                                <i class="bi bi-check-circle"></i>
+                                <strong>采集成功</strong>
+                            </div>
+                            <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
+                                <div>成功采集 ${result.total_saved || 0} 条数据</div>
+                                <div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">
+                                    交易对: ${symbolList.join(', ')}<br>
+                                    时间范围: ${formatDateTime(startTime)} - ${formatDateTime(endTime)}
+                                </div>
+                                ${timeframeMsg}
+                                ${configMsg}
+                            </div>
+                        </div>
+                    `;
+                    const toastMsg = result.config_updated ? '数据采集成功，配置文件已更新' : '数据采集成功';
+                    showToast(toastMsg, 'success');
+                    // 刷新采集情况
+                    setTimeout(() => loadCollectionStatus(), 2000);
+                } else {
+                    updateCollectionProgress(0, '采集失败');
+                    resultDiv.innerHTML = `
+                        <div style="background: var(--danger-red-bg); border: 1px solid var(--danger-red); border-radius: var(--radius-md); padding: var(--spacing-md);">
+                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--danger-red);">
+                                <i class="bi bi-exclamation-circle"></i>
+                                <strong>采集失败</strong>
+                            </div>
+                            <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
+                                ${result.message || '未知错误'}
+                            </div>
+                        </div>
+                    `;
+                    showToast('数据采集失败', 'error');
+                }
+            } catch (error) {
+                console.error('数据采集失败:', error);
+                updateCollectionProgress(0, '采集失败');
+                resultDiv.innerHTML = `
+                    <div style="background: var(--danger-red-bg); border: 1px solid var(--danger-red); border-radius: var(--radius-md); padding: var(--spacing-md);">
+                        <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--danger-red);">
+                            <i class="bi bi-exclamation-circle"></i>
+                            <strong>采集失败</strong>
+                        </div>
+                        <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
+                            ${error.message}
+                        </div>
+                    </div>
+                `;
+                showToast('数据采集失败: ' + error.message, 'error');
+            } finally {
+                // 恢复提交按钮
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="bi bi-play-circle"></i> 开始采集';
+            }
+        }
+        
+        // 更新采集进度
+        function updateCollectionProgress(percent, statusText) {
+            const progressBar = document.getElementById('collectionProgressBar');
+            const progressText = document.getElementById('collectionProgressText');
+            const statusTextEl = document.getElementById('collectionStatusText');
+            
+            progressBar.style.width = percent + '%';
+            progressText.textContent = percent + '%';
+            if (statusTextEl) {
+                statusTextEl.textContent = statusText || '';
+            }
+        }
+        
+        // 重置采集表单
+        function resetCollectionForm() {
+            document.getElementById('dataCollectionForm').reset();
+            document.getElementById('collectionResult').innerHTML = '';
+            document.getElementById('collectionProgress').style.display = 'none';
+            
+            // 重置默认时间范围
+            const endTime = new Date();
+            const startTime = new Date();
+            startTime.setDate(startTime.getDate() - 7);
+            
+            document.getElementById('collectionStartTime').value = formatDateTimeLocal(startTime);
+            document.getElementById('collectionEndTime').value = formatDateTimeLocal(endTime);
+        }
+        
+        // 格式化日期时间为本地datetime-local格式
+        function formatDateTimeLocal(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+
+        // 显示提示消息
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <div style="display: flex; align-items: center; gap: var(--spacing-md);">
+                    <i class="bi bi-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                    <div>${message}</div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideInRight 0.3s ease-out reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // 点击模态框外部关闭
+        document.getElementById('cleanupModal')?.addEventListener('click', function(e) {
+            if (e.target === this) closeCleanupModal();
+        });
+        
+        document.getElementById('sampleModal')?.addEventListener('click', function(e) {
+            if (e.target === this) closeSampleModal();
+        });
+    </script>
+</body>
+</html>
+

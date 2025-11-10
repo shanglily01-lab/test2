@@ -72,11 +72,14 @@
         .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
         .loading::after { content: '...'; animation: dots 1.5s steps(4, end) infinite; }
         @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
+        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @media (max-width: 768px) {
             .hero-title { font-size: 32px; }
             .hero-subtitle { font-size: 16px; }
             .features-grid { grid-template-columns: 1fr; }
             .cta-buttons { flex-direction: column; }
+            .nav-links { flex-direction: column; }
         }
     </style>
 </head>
@@ -101,7 +104,7 @@
         </header>
 
         <!-- Navigation -->
-        <nav class="nav-container">
+        <nav class="nav-container slide-up">
             <div class="nav-links">
                 <a href="/" class="nav-link active">
                     <i class="bi bi-house"></i> 首页
@@ -123,6 +126,9 @@
                 </a>
                 <a href="/corporate_treasury" class="nav-link">
                     <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
                 </a>
             </div>
         </nav>

@@ -358,6 +358,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册数据管理API路由
+try:
+    from app.api.data_management_api import router as data_management_router
+    app.include_router(data_management_router)
+    logger.info("✅ 数据管理API路由已注册")
+except Exception as e:
+    logger.warning(f"⚠️  数据管理API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册模拟合约交易API路由
 try:
     from app.api.contract_trading_api import router as contract_trading_router
@@ -448,6 +458,17 @@ async def contract_trading_page():
         return FileResponse(str(contract_trading_path))
     else:
         raise HTTPException(status_code=404, detail="模拟合约交易页面未找到")
+
+
+@app.get("/data_management")
+@app.get("/data-management")
+async def data_management_page():
+    """数据管理页面"""
+    data_management_path = project_root / "templates" / "data_management.html"
+    if data_management_path.exists():
+        return FileResponse(str(data_management_path))
+    else:
+        raise HTTPException(status_code=404, detail="数据管理页面未找到")
 
 
 @app.get("/strategies")

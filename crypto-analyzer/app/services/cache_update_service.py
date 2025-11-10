@@ -104,14 +104,32 @@ class CacheUpdateService:
                     limit=288  # 5分钟 * 288 = 24小时
                 )
 
+                # 如果24小时内数据不足，尝试获取所有可用的5分钟K线数据（最多24小时）
+                if not klines_24h or len(klines_24h) < 10:
+                    # 尝试获取更多历史数据
+                    klines_24h = self.db_service.get_klines(
+                        symbol, '5m',
+                        start_time=None,  # 不限制开始时间
+                        limit=288
+                    )
+                    # 只取最近24小时的数据
+                    if klines_24h:
+                        cutoff_time = datetime.now() - timedelta(hours=24)
+                        klines_24h = [k for k in klines_24h if k.timestamp >= cutoff_time]
+                
+                # 如果仍然没有数据，使用最新价格作为默认值
                 if not klines_24h:
-                    continue
-
-                # 计算统计数据
-                high_24h = max(float(k.high) for k in klines_24h)
-                low_24h = min(float(k.low) for k in klines_24h)
-                volume_24h = sum(float(k.volume) for k in klines_24h)
-                quote_volume_24h = sum(float(k.quote_volume) for k in klines_24h if k.quote_volume)
+                    logger.warning(f"{symbol}: 没有足够的24小时K线数据，使用当前价格作为默认值")
+                    high_24h = current_price
+                    low_24h = current_price
+                    volume_24h = 0
+                    quote_volume_24h = 0
+                else:
+                    # 计算统计数据
+                    high_24h = max(float(k.high) for k in klines_24h)
+                    low_24h = min(float(k.low) for k in klines_24h)
+                    volume_24h = sum(float(k.volume) for k in klines_24h)
+                    quote_volume_24h = sum(float(k.quote_volume) for k in klines_24h if k.quote_volume)
 
                 change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100 if price_24h_ago > 0 else 0
                 change_24h_abs = current_price - price_24h_ago

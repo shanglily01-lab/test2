@@ -86,6 +86,11 @@
             }
         }
         .last-update { color: var(--text-tertiary); font-size: 12px; margin-top: var(--spacing-sm); }
+        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @media (max-width: 768px) {
+            .nav-links { flex-direction: column; }
+        }
     </style>
 </head>
 <body>
@@ -101,9 +106,6 @@
                     <p class="header-subtitle">实时追踪全球加密货币ETF表现与资金流向</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-ghost" onclick="window.location.href='/'">
-                        <i class="bi bi-house"></i> 返回首页
-                    </button>
                     <button class="btn btn-ghost" onclick="loadETFData()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -112,9 +114,12 @@
         </header>
 
         <!-- Navigation -->
-        <nav class="nav-container">
+        <nav class="nav-container slide-up">
             <div class="nav-links">
                 <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
                 <a href="/paper_trading" class="nav-link">
@@ -132,8 +137,11 @@
                 <a href="/corporate_treasury" class="nav-link">
                     <i class="bi bi-building"></i> 企业金库
                 </a>
-        </div>
-    </nav>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
+                </a>
+            </div>
+        </nav>
 
         <!-- Loading State -->
         <div id="loadingState" class="loading">正在加载ETF数据</div>

@@ -70,6 +70,8 @@
         .btn-danger:hover:not(:disabled) { background: #DC2626; transform: translateY(-1px); box-shadow: var(--shadow-md); }
         .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
         .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-muted); }
+        .btn-outline { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-default); }
+        .btn-outline:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-muted); }
         .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
         .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
         .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
@@ -304,9 +306,6 @@
                     </p>
                 </div>
                 <div class="d-flex gap-md">
-                    <button class="btn btn-ghost" onclick="window.location.href='/'">
-                        <i class="bi bi-house"></i> 返回首页
-                    </button>
                     <button class="btn btn-ghost" onclick="toggleAlerts()" style="position: relative;">
                         <i class="bi bi-bell"></i> 提醒
                         <span class="alert-badge" id="alertCount" style="display: none;">0</span>
@@ -324,6 +323,12 @@
         <!-- Navigation -->
         <nav class="nav-container slide-up">
             <div class="nav-links">
+                <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link active">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
                 <a href="/paper_trading" class="nav-link">
                     <i class="bi bi-journals"></i> 模拟现货
                 </a>
@@ -339,6 +344,9 @@
                 <a href="/corporate_treasury" class="nav-link">
                     <i class="bi bi-building"></i> 企业金库
                 </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
+                </a>
             </div>
         </nav>
 
@@ -351,7 +359,7 @@
                         <i class="bi bi-graph-up"></i>
                         <span id="ema24h-title">EMA信号</span>
                     </h2>
-                    <button class="btn btn-sm btn-outline" onclick="toggleEmaExplanation()" style="font-size: 12px; padding: 4px 12px;">
+                    <button class="btn btn-sm btn-outline" onclick="toggleEmaExplanation()" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
                         <i class="bi bi-info-circle"></i> 详细说明
                     </button>
                 </div>
@@ -370,13 +378,15 @@
             <!-- Investment Recommendations -->
             <div class="card slide-up" id="recommendations">
                 <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-lightbulb"></i>
-                        <span id="recommendations-title">投资建议</span>
-                    </h2>
-                    <button class="btn btn-sm btn-secondary" onclick="showInvestmentExplanation()" style="margin-left: auto;">
-                        <i class="bi bi-info-circle"></i> 详细说明
-                    </button>
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                        <h2 class="card-title" style="margin: 0;">
+                            <i class="bi bi-lightbulb"></i>
+                            <span id="recommendations-title">投资建议</span>
+                        </h2>
+                        <button class="btn btn-sm btn-outline" onclick="showInvestmentExplanation()" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
+                            <i class="bi bi-info-circle"></i> 详细说明
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body" style="padding: 0;">
                     <div id="recommendationsContainer" style="max-height: 600px; overflow-y: scroll; overflow-x: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
@@ -391,13 +401,15 @@
             <!-- Price Table -->
             <div class="card slide-up" id="prices">
                 <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-currency-exchange"></i>
-                        <span id="prices-title">实时价格</span>
-                    </h2>
-                    <button class="btn btn-sm btn-secondary" onclick="showPriceExplanation()" style="margin-left: auto;">
-                        <i class="bi bi-info-circle"></i> 详细说明
-                    </button>
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                        <h2 class="card-title" style="margin: 0;">
+                            <i class="bi bi-currency-exchange"></i>
+                            <span id="prices-title">实时价格</span>
+                        </h2>
+                        <button class="btn btn-sm btn-outline" onclick="showPriceExplanation()" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
+                            <i class="bi bi-info-circle"></i> 详细说明
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body" style="padding: 0;">
                     <div style="max-height: 600px; overflow-y: scroll; overflow-x: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
@@ -429,13 +441,15 @@
             <!-- News Section -->
             <div class="card slide-up">
                 <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-newspaper"></i>
-                        <span id="news-title">最新新闻</span>
-                    </h2>
-                    <button class="btn btn-sm btn-secondary" onclick="showCardInfo('news')" style="margin-left: auto;">
-                        <i class="bi bi-info-circle"></i> 详细说明
-                    </button>
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                        <h2 class="card-title" style="margin: 0;">
+                            <i class="bi bi-newspaper"></i>
+                            <span id="news-title">最新新闻</span>
+                        </h2>
+                        <button class="btn btn-sm btn-outline" onclick="showCardInfo('news')" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
+                            <i class="bi bi-info-circle"></i> 详细说明
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body" style="padding: 0;">
                     <div id="newsContainer" style="max-height: 500px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
@@ -450,13 +464,15 @@
             <!-- Real-time Futures Section -->
             <div class="card slide-up">
                 <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-lightning"></i>
-                        <span id="futures-title">实时合约</span>
-                    </h2>
-                    <button class="btn btn-sm btn-secondary" onclick="showCardInfo('futures')" style="margin-left: auto;">
-                        <i class="bi bi-info-circle"></i> 详细说明
-                    </button>
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                        <h2 class="card-title" style="margin: 0;">
+                            <i class="bi bi-lightning"></i>
+                            <span id="futures-title">实时合约</span>
+                        </h2>
+                        <button class="btn btn-sm btn-outline" onclick="showCardInfo('futures')" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
+                            <i class="bi bi-info-circle"></i> 详细说明
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body" style="padding: 0;">
                     <div style="max-height: 500px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
@@ -487,13 +503,15 @@
         <!-- Hyperliquid Section -->
         <div class="card slide-up" id="hyperliquid">
             <div class="card-header">
-                <h2 class="card-title">
-                    <i class="bi bi-wallet2"></i>
-                    Hyperliquid 聪明钱活动
-                </h2>
-                <button class="btn btn-sm btn-secondary" onclick="showHyperliquidExplanation()" style="margin-left: auto;">
-                    <i class="bi bi-info-circle"></i> 详细说明
-                </button>
+                <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                    <h2 class="card-title" style="margin: 0;">
+                        <i class="bi bi-wallet2"></i>
+                        Hyperliquid 聪明钱活动
+                    </h2>
+                    <button class="btn btn-sm btn-outline" onclick="showHyperliquidExplanation()" style="font-size: 12px; padding: 4px 12px; margin-left: auto;">
+                        <i class="bi bi-info-circle"></i> 详细说明
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -671,8 +689,8 @@
                 return;
             }
 
-            // 显示所有建议,取前10个
-            const allRecs = recommendations.slice(0, 10);
+            // 显示所有建议（按置信度排序，已由后端完成）
+            const allRecs = recommendations;
 
             container.innerHTML = allRecs.map(rec => {
                 // 根据信号类型设置样式
@@ -914,9 +932,9 @@
             const buyCount = signals ? signals.filter(s => s.signal_type === 'BUY' || s.signal_type === 'GOLDEN_CROSS').length : 0;
             const sellCount = signals ? signals.filter(s => s.signal_type === 'SELL' || s.signal_type === 'DEATH_CROSS').length : 0;
             
-            // 更新标题数量统计：显示买入、卖出、总信号数
+            // 更新标题数量统计：显示买入、卖出、总信号数（带颜色分类）
             if (titleEl) {
-                titleEl.textContent = `EMA信号 [买入:${buyCount} 卖出:${sellCount} 总计:${total}]`;
+                titleEl.innerHTML = `EMA信号 [<span style="color: var(--success-green); font-weight: 600;">买入:${buyCount}</span> <span style="color: var(--danger-red); font-weight: 600;">卖出:${sellCount}</span> <span style="color: var(--text-secondary); font-weight: 600;">总计:${total}</span>]`;
             }
 
             if (!signals || signals.length === 0) {

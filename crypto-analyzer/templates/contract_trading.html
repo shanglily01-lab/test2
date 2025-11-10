@@ -29,9 +29,9 @@
         .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
         .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
         .header-subtitle { color: var(--text-secondary); font-size: 13px; }
-        .nav-container { background: var(--bg-secondary); border-radius: var(--radius-lg); padding: var(--spacing-md); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; }
-        .nav-link { padding: var(--spacing-sm) var(--spacing-lg); background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 500; font-size: 13px; border: 1px solid transparent; }
+        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
+        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
+        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
         .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
         .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
         .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
@@ -132,19 +132,31 @@
         </header>
 
         <!-- Navigation -->
-        <nav class="nav-container">
+        <nav class="nav-container slide-up">
             <div class="nav-links">
                 <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
                     <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/contract_trading" class="nav-link active">
-                    <i class="bi bi-lightning-charge"></i> 模拟合约
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 真实合约
                 </a>
                 <a href="/paper_trading" class="nav-link">
                     <i class="bi bi-journals"></i> 模拟现货
+                </a>
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 模拟合约
+                </a>
+                <a href="/strategies" class="nav-link">
+                    <i class="bi bi-diagram-3"></i> 策略管理
+                </a>
+                <a href="/etf_data" class="nav-link">
+                    <i class="bi bi-pie-chart"></i> ETF 数据
+                </a>
+                <a href="/corporate_treasury" class="nav-link">
+                    <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
                 </a>
             </div>
         </nav>

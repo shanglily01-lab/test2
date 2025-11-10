@@ -85,6 +85,8 @@
         .toast.success { border-left: 4px solid var(--success-green); }
         .toast.error { border-left: 4px solid var(--danger-red); }
         @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         .strategy-detail { margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default); }
         .detail-row { display: flex; justify-content: space-between; padding: var(--spacing-sm) 0; font-size: 13px; }
         .detail-label { color: var(--text-secondary); }
@@ -104,9 +106,6 @@
                     <p class="header-subtitle">智能量化策略 · 风险评估 · 收益优化</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-ghost" onclick="window.location.href='/'">
-                        <i class="bi bi-house"></i> 返回首页
-                    </button>
                     <button class="btn btn-ghost" onclick="loadStrategies()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -118,9 +117,12 @@
         </header>
 
         <!-- Navigation -->
-        <nav class="nav-container">
+        <nav class="nav-container slide-up">
             <div class="nav-links">
                 <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
                 <a href="/paper_trading" class="nav-link">
@@ -137,6 +139,9 @@
                 </a>
                 <a href="/corporate_treasury" class="nav-link">
                     <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
                 </a>
             </div>
         </nav>

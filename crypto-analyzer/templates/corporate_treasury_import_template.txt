@@ -1,0 +1,34 @@
+# 企业金库批量导入模板
+# 从 Bitcoin Treasuries 网站复制的格式示例
+# 使用方法：复制以下内容，或从 https://bitcointreasuries.net/ 复制最新数据
+
+1
+Strategy
+🇺🇸	MSTR	640,808
+2
+MARA Holdings, Inc.
+🇺🇸	MARA	53,250
+3
+XXI
+🇺🇸	CEP	43,514
+4
+Metaplanet Inc.
+🇯🇵	MTPLF	30,823
+5
+Bitcoin Standard Treasury Company
+🇺🇸	CEPO	30,021
+6
+Riot Platforms, Inc.
+🇺🇸	RIOT	19,287
+7
+Tesla, Inc.
+🇺🇸	TSLA	11,509
+8
+Coinbase Global, Inc.
+🇺🇸	COIN	11,776
+9
+Block, Inc.
+🇺🇸	SQ	8,692
+10
+Galaxy Digital Holdings Ltd
+🇺🇸	GLXY	6,894

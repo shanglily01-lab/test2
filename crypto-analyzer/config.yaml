@@ -1,556 +1,358 @@
-# 加密货币交易分析系统配置文件
-# 复制此文件为 config.yaml 并修改相应配置
-
-# ==================== 监控币种 ====================
 symbols:
-  - BTC/USDT   # 比特币
-  - ETH/USDT   # 以太坊
-  - BNB/USDT   # 币安币
-  - DOGE/USDT  # 狗狗币
-  - SOL/USDT   # Solana
-  - LTC/USDT   # 莱特币
-  - HYPE/USDT   # 
-  - BERA/USDT
-  - TON/USDT
-  - LINK/USDT
-  - BCH/USDT
-  - ETC/USDT
-  - SUI/USDT
-  - APT/USDT
-  - ZEC/USDT
-  - VIRTUAL/USDT
-  - PUMP/USDT  # 泵币
-  - ORDI/USDT  # Ordinals
-  # 添加更多币种...
-
-# ==================== 交易所配置 ====================
-# 演示模式: 如果无法访问真实交易所API(网络限制)，启用演示模式使用模拟数据
-demo_mode: false  # true=使用模拟数据, false=使用真实API
-
+- BTC/USDT
+- ETH/USDT
+- BNB/USDT
+- DOGE/USDT
+- SOL/USDT
+- LTC/USDT
+- HYPE/USDT
+- BERA/USDT
+- TON/USDT
+- LINK/USDT
+- BCH/USDT
+- ETC/USDT
+- SUI/USDT
+- APT/USDT
+- ZEC/USDT
+- VIRTUAL/USDT
+- PUMP/USDT
+- ORDI/USDT
+- AR/USDT
+demo_mode: false
 exchanges:
   binance:
     enabled: true
-    api_key: 'qipAB06CHXkpKhAmWtNWAtBq5TO3OQRtVeLZAk4wVqttp6REZdNNE7KJfDiiMhRV'
-    api_secret: "SzpJhzSElikCDTdEEXgaR48oh8cSJHLpNjLfOgV2aTLlwH1iMERiZYpsQWBlplDY"
+    api_key: qipAB06CHXkpKhAmWtNWAtBq5TO3OQRtVeLZAk4wVqttp6REZdNNE7KJfDiiMhRV
+    api_secret: SzpJhzSElikCDTdEEXgaR48oh8cSJHLpNjLfOgV2aTLlwH1iMERiZYpsQWBlplDY
     options:
-      defaultType: "spot" # spot, future, swap
-
+      defaultType: spot
   gate:
     enabled: true
-    api_key: "4808622a3af8bda94a5ee270193db5d5"           # Gate.io API key (可选，公开数据无需填写)
-    api_secret: "560cd4fcc044a7c5ad7a3a136c77e038536fa983d6c3eb9492763502750303f3"
+    api_key: 4808622a3af8bda94a5ee270193db5d5
+    api_secret: 560cd4fcc044a7c5ad7a3a136c77e038536fa983d6c3eb9492763502750303f3
     options:
-      defaultType: "spot"
-
-# ==================== 数据采集配置 ====================
+      defaultType: spot
 collector:
-  # 价格数据采集间隔（秒）
-  price_interval: 30  # 从60秒优化为30秒，提升实时性
-
-  # K线时间周期
+  price_interval: 30
   timeframes:
-    - 5m   # 5分钟
-    - 1h   # 1小时
-    - 1d   # 1天
-
-  # 历史数据加载（首次启动）
+  - 1m
+  - 5m
+  - 15m
+  - 1h
+  - 1d
   historical_days: 30
-
-# ==================== 调度任务配置 ====================
 scheduler:
-  # Binance 数据采集频率
   binance:
-    5m_interval: 5      # 5分钟K线 - 每5分钟采集
-    1h_interval: 60     # 1小时K线 - 每1小时采集
-    1d_time: "00:05"    # 1天K线 - 每天00:05采集
-
-  # Ethereum 链上数据采集频率
+    5m_interval: 5
+    1h_interval: 60
+    1d_time: 00:05
   ethereum:
-    5m_interval: 5      # 5分钟 - 每5分钟采集 (回溯1小时)
-    1h_interval: 60     # 1小时 - 每1小时采集 (回溯6小时)
-    1d_time: "00:10"    # 1天 - 每天00:10采集 (回溯24小时)
-
-  # Hyperliquid 数据采集频率
+    5m_interval: 5
+    1h_interval: 60
+    1d_time: 00:10
   hyperliquid:
-    daily_time: "02:00" # 每天02:00采集排行榜
-
-  # 资金费率采集频率
+    daily_time: 02:00
   funding_rate:
-    interval: 5         # 每5分钟采集
-
-  # 新闻数据采集频率
+    interval: 5
   news:
-    interval: 15        # 每15分钟采集
-
-# ==================== 新闻数据源配置 ====================
+    interval: 15
 news:
-  # 新闻采集间隔（分钟）
   news_interval: 15
-
-  # CryptoPanic API
   cryptopanic:
-    enabled: true  # 暂时禁用，没有API key
-    api_key: "826a79a401aa14ec3e346b7ba84d2cd57299a99c"  # 从 https://cryptopanic.com/developers/api/ 获取
-    filter: "hot"  # hot: 热门, rising: 上升, bullish: 利好, bearish: 利空
-
-  # RSS订阅源
+    enabled: true
+    api_key: 826a79a401aa14ec3e346b7ba84d2cd57299a99c
+    filter: hot
   rss:
     enabled: true
     sources:
-      - coindesk
-      - cointelegraph
-      - bitcoinmagazine
-      - cryptoslate
-
-  # Reddit社区
+    - coindesk
+    - cointelegraph
+    - bitcoinmagazine
+    - cryptoslate
   reddit:
     enabled: true
-    client_id: "3wDsL3raqIviY2_oWqc-BQ"     # 从 https://www.reddit.com/prefs/apps 获取
-    client_secret: "vd2RKRAIBwAqhfzIncka1hB8BN_sNA"
-    proxy: "http://127.0.0.1:7890"  # 代理地址，访问 Reddit API 需要代理
+    client_id: 3wDsL3raqIviY2_oWqc-BQ
+    client_secret: vd2RKRAIBwAqhfzIncka1hB8BN_sNA
+    proxy: http://127.0.0.1:7890
     subreddits:
-      - CryptoCurrency
-      - Bitcoin
-      - ethereum
-
-  # ========== 新增：权威渠道 ==========
-
-  # SEC (美国证券交易委员会) - 监管新闻
+    - CryptoCurrency
+    - Bitcoin
+    - ethereum
   sec:
-    enabled: true    # 强烈推荐启用，监管消息影响巨大
-    # SEC RSS 无需 API key，公开访问
-    importance: "critical"  # 重要性：critical, high, medium
+    enabled: true
+    importance: critical
     categories:
-      - news          # 新闻发布
-      - litigation    # 诉讼公告
-      - administrative # 行政命令
-
-  # Twitter 大V监控 - 需要 Twitter API v2
+    - news
+    - litigation
+    - administrative
   twitter:
-    enabled: false   # 需要 Twitter API 订阅，$100/月起
-    bearer_token: "AAAAAAAAAAAAAAAAAAAAAIyy4wEAAAAAPNUMv1mZeCTVJ%2FQ9xz0K3XaHxb4%3D9UuKff6pLBTojcb8VHcllLeK2QM0y15w0kyKyiA1JlfKW72uI3"  # 从 https://developer.twitter.com/en/portal/dashboard 获取
-    api_key: "kROtWxKFuSIDgu8PI5Eld9KSQ"
-    api_secret: "AerreoyB5i0b6IzVuNNDfTCUgEinkl9sTOe5TPTmxwtsTl8DkK"
-    proxy: "http://127.0.0.1:7890"  # 代理地址，访问 Twitter API 需要代理
-
-    # 监控的加密货币大V账号
-    # ⚠️ 免费版 API 限制：每 15 分钟只能 15 次请求
-    # 每个账号需要 2 次请求（获取 ID + 获取推文）
-    # 建议只监控 3-5 个最重要的账号
+    enabled: false
+    bearer_token: AAAAAAAAAAAAAAAAAAAAAIyy4wEAAAAAPNUMv1mZeCTVJ%2FQ9xz0K3XaHxb4%3D9UuKff6pLBTojcb8VHcllLeK2QM0y15w0kyKyiA1JlfKW72uI3
+    api_key: kROtWxKFuSIDgu8PI5Eld9KSQ
+    api_secret: AerreoyB5i0b6IzVuNNDfTCUgEinkl9sTOe5TPTmxwtsTl8DkK
+    proxy: http://127.0.0.1:7890
     vip_accounts:
-      # 只保留最重要的3个 (6次请求，不超限)
-      - username: "elonmusk"
-        name: "Elon Musk"
-        importance: "critical"
-        related_tokens: ["DOGE", "BTC"]
-
-      - username: "VitalikButerin"
-        name: "Vitalik Buterin"
-        importance: "critical"
-        related_tokens: ["ETH"]
-
-      - username: "cz_binance"
-        name: "CZ (Changpeng Zhao)"
-        importance: "critical"
-        related_tokens: ["BNB", "BTC", "ETH"]
-
-      # 以下账号已注释，避免超过免费版限制
-      # 如需启用，请升级到 Basic 版 ($100/月)
-
-      # - username: "realDonaldTrump"
-      #   name: "Donald Trump"
-      #   importance: "high"
-      #   related_tokens: ["BTC", "TRUMP"]
-
-      # - username: "brian_armstrong"
-      #   name: "Brian Armstrong (Coinbase CEO)"
-      #   importance: "high"
-      #   related_tokens: ["BTC", "ETH", "COIN"]
-
-      # - username: "michael_saylor"
-      #   name: "Michael Saylor (MicroStrategy)"
-      #   importance: "high"
-      #   related_tokens: ["BTC"]
-
-      # - username: "APompliano"
-      #   name: "Anthony Pompliano"
-      #   importance: "medium"
-      #   related_tokens: ["BTC"]
-
-      # - username: "DocumentingBTC"
-      #   name: "Documenting Bitcoin"
-      #   importance: "medium"
-      #   related_tokens: ["BTC"]
-
-      # - username: "WuBlockchain"
-      #   name: "Wu Blockchain"
-      #   importance: "medium"
-      #   related_tokens: ["BTC", "ETH"]
-
-  # CoinGecko - 项目状态更新
+    - username: elonmusk
+      name: Elon Musk
+      importance: critical
+      related_tokens:
+      - DOGE
+      - BTC
+    - username: VitalikButerin
+      name: Vitalik Buterin
+      importance: critical
+      related_tokens:
+      - ETH
+    - username: cz_binance
+      name: CZ (Changpeng Zhao)
+      importance: critical
+      related_tokens:
+      - BNB
+      - BTC
+      - ETH
   coingecko:
-    enabled: true    # 免费，推荐启用
-    api_key: ""      # 可选，免费用户不需要
-    proxy: "http://127.0.0.1:7890"  # 如果无法访问CoinGecko则使用代理
-    # 免费版限制: 10-30 calls/min
-    # Pro 版: $129/月，500 calls/min
-
-  # Telegram 频道监控 (未来扩展)
+    enabled: true
+    api_key: ''
+    proxy: http://127.0.0.1:7890
   telegram:
     enabled: false
-    api_id: ""
-    api_hash: ""
-    channels:  # 监控的频道
-      - "@whale_alert"      # 大额转账提醒
-      - "@crypto_whale"     # 加密鲸鱼
-      - "@binance_api"      # Binance 官方
-
-  # Discord 服务器监控 (未来扩展)
+    api_id: ''
+    api_hash: ''
+    channels:
+    - '@whale_alert'
+    - '@crypto_whale'
+    - '@binance_api'
   discord:
     enabled: false
-    bot_token: ""
+    bot_token: ''
     servers:
-      - name: "Ethereum"
-        server_id: ""
-      - name: "Solana"
-        server_id: ""
-
-# ==================== 技术指标参数 ====================
+    - name: Ethereum
+      server_id: ''
+    - name: Solana
+      server_id: ''
 indicators:
-  # RSI指标
   rsi:
     period: 14
-    overbought: 70   # 超买线
-    oversold: 30     # 超卖线
-
-  # MACD指标
+    overbought: 70
+    oversold: 30
   macd:
     fast: 12
     slow: 26
     signal: 9
-
-  # 布林带
   bollinger:
     period: 20
     std: 2
-
-  # 均线
   ema:
     short: 12
     long: 26
-
-  # KDJ指标
   kdj:
     period: 9
     signal: 3
-
-# ==================== 交易信号配置 ====================
 signals:
-  # 信号权重分配
   weights:
-    technical: 0.60    # 技术指标权重 60%
-    news: 0.30         # 新闻情绪权重 30%
-    social: 0.10       # 社交媒体权重 10%
-
-  # 置信度阈值
+    technical: 0.6
+    news: 0.3
+    social: 0.1
   confidence:
-    strong_long: 0.75   # 强烈做多
-    long: 0.60          # 做多
-    hold: 0.40          # 持有/观望
-    short: 0.60         # 做空
-    strong_short: 0.75  # 强烈做空
-
-  # 风险管理
+    strong_long: 0.75
+    long: 0.6
+    hold: 0.4
+    short: 0.6
+    strong_short: 0.75
   risk:
-    max_position: 0.5    # 单个币种最大仓位 50%
-    stop_loss_pct: 0.02  # 止损百分比 2%
-    take_profit_pct: 0.06 # 止盈百分比 6%
-
-# ==================== API服务配置 ====================
+    max_position: 0.5
+    stop_loss_pct: 0.02
+    take_profit_pct: 0.06
 api:
-  host: "0.0.0.0"
-  port: 9020  # 端口已改为9020，避免与8000端口冲突
+  host: 0.0.0.0
+  port: 9020
   debug: false
   cors_origins:
-    - "*"  # 生产环境应限制具体域名
-
-  # API限流
+  - '*'
   rate_limit:
     enabled: true
     requests_per_minute: 60
-
-# ==================== 数据库配置 ====================
 database:
-  type: "mysql"  # mysql, sqlite, postgresql
-
-  # MySQL配置
+  type: mysql
   mysql:
-    host: "localhost"
+    host: localhost
     port: 3306
-    user: "root"
-    password: "Tonny@1000"  # 修改为你的MySQL密码
-    database: 'binance-data'  # 数据库名称
-
-  # SQLite配置（备选）
+    user: root
+    password: Tonny@1000
+    database: binance-data
   sqlite:
-    path: "./data/crypto.db"
-
-  # PostgreSQL配置（备选）
+    path: ./data/crypto.db
   postgresql:
-    host: "localhost"
+    host: localhost
     port: 5432
-    database: "crypto_analyzer"
-    username: "postgres"
-    password: "password"
-
-  # 数据保留策略
+    database: crypto_analyzer
+    username: postgres
+    password: password
   retention:
-    price_data_days: 90      # 价格数据保留90天
-    news_data_days: 30       # 新闻数据保留30天
-    signals_data_days: 180   # 交易信号保留180天
-
-# ==================== 通知配置 ====================
+    price_data_days: 90
+    news_data_days: 30
+    signals_data_days: 180
 notifications:
-  # Telegram通知
   telegram:
     enabled: false
-    bot_token: ""           # 从 @BotFather 获取
-    chat_id: ""             # 你的Chat ID
+    bot_token: ''
+    chat_id: ''
     notify_events:
-      - strong_signal       # 强信号
-      - major_news          # 重大新闻
-      - price_alert         # 价格预警
-
-  # 邮件通知
+    - strong_signal
+    - major_news
+    - price_alert
   email:
     enabled: false
-    smtp_host: "smtp.gmail.com"
+    smtp_host: smtp.gmail.com
     smtp_port: 587
-    username: ""
-    password: ""
-    to_address: ""
-
-  # 价格预警
+    username: ''
+    password: ''
+    to_address: ''
   price_alerts:
     enabled: true
     conditions:
-      - symbol: BTC/USDT
-        above: 50000
-        below: 40000
-      - symbol: ETH/USDT
-        above: 3000
-        below: 2000
-
-# ==================== 日志配置 ====================
+    - symbol: BTC/USDT
+      above: 50000
+      below: 40000
+    - symbol: ETH/USDT
+      above: 3000
+      below: 2000
 logging:
-  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
-  file: "./logs/app.log"
-  rotation: "10 MB"
-  retention: "30 days"
-  format: "{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}"
-
-# ==================== 回测配置 ====================
+  level: INFO
+  file: ./logs/app.log
+  rotation: 10 MB
+  retention: 30 days
+  format: '{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}'
 backtest:
   enabled: false
-  start_date: "2023-01-01"
-  end_date: "2023-12-31"
+  start_date: '2023-01-01'
+  end_date: '2023-12-31'
   initial_capital: 10000
-  commission: 0.001  # 0.1% 手续费
-
-# ==================== 聪明钱监控配置 ====================
+  commission: 0.001
 smart_money:
   enabled: true
-
-  # 区块链浏览器API密钥
-  etherscan_api_key: "IZQFMDIK16MHNG9TKU8ZWKE13SVJ7279Z7"  # 从 https://etherscan.io/myapikey 获取(免费)
-  bscscan_api_key: "IZQFMDIK16MHNG9TKU8ZWKE13SVJ7279Z7"    # 从 https://bscscan.com/myapikey 获取(免费)
-
-  # 代理设置（如果需要）
-  proxy: "http://127.0.0.1:7890"  # Clash/V2Ray等代理地址，不需要代理可以留空或注释
-
-  # 最小交易金额阈值(USD) - 只监控大额交易
-  min_transaction_usd: 100000  # $100K
-
-  # 监控地址列表
+  etherscan_api_key: IZQFMDIK16MHNG9TKU8ZWKE13SVJ7279Z7
+  bscscan_api_key: IZQFMDIK16MHNG9TKU8ZWKE13SVJ7279Z7
+  proxy: http://127.0.0.1:7890
+  min_transaction_usd: 100000
   addresses:
-    # 推荐: 超活跃地址
-    - address: "0x28C6c06298d514Db089934071355E5743bf21d60"
-      blockchain: "ethereum"
-      label: "Binance 14"
-      type: "institution"
-    
-    - address: "0xdfd5293d8e347dfe59e90efd55b2956a1343963d"
-      blockchain: "ethereum"
-      label: "Binance Hot Wallet 6"
-      type: "institution"
-    
-    - address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
-      blockchain: "ethereum"
-      label: "Vitalik Buterin"
-      type: "whale"
-    
-    - address: "0xf584F8728B874a6a5c7A8d4d387C9aae9172D621"
-      blockchain: "ethereum"
-      label: "Jump Trading"
-      type: "institution"
-    
-    - address: "0x00000000ae347930bd1e7b0f35588b92280f9e75"
-      blockchain: "ethereum"
-      label: "Wintermute"
-      type: "institution"
-
-    # ==================== BSC (币安智能链) 聪明钱地址 ====================
-
-    # --- 交易所热钱包 (超高交易量) ---
-    - address: "0x8894E0a0c962CB723c1976a4421c95949bE2D4E3"
-      blockchain: "bsc"
-      label: "Binance BSC Hot Wallet 1"
-      type: "institution"
-
-    - address: "0xF977814e90dA44bFA03b6295A0616a897441aceC"
-      blockchain: "bsc"
-      label: "Binance Cold Wallet"
-      type: "institution"
-
-    - address: "0x0D0707963952f2fBA59dD06f2b425ace40b492Fe"
-      blockchain: "bsc"
-      label: "Gate.io BSC Wallet"
-      type: "institution"
-
-    - address: "0x3f5CE5FBFe3E9af3971dD833D26bA9b5C936f0bE"
-      blockchain: "bsc"
-      label: "Binance: Binance-Peg Tokens"
-      type: "institution"
-
-    # --- DeFi 协议 (市场做市/流动性) ---
-    - address: "0x10ED43C718714eb63d5aA57B78B54704E256024E"
-      blockchain: "bsc"
-      label: "PancakeSwap V2 Router"
-      type: "defi"
-
-    - address: "0x73feaa1eE314F8c655E354234017bE2193C9E24E"
-      blockchain: "bsc"
-      label: "PancakeSwap Main Staking"
-      type: "defi"
-
-    - address: "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff"
-      blockchain: "bsc"
-      label: "QuickSwap Router"
-      type: "defi"
-
-    # --- 知名巨鲸/做市商 ---
-    - address: "0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8"
-      blockchain: "bsc"
-      label: "BSC Whale #1"
-      type: "whale"
-
-    - address: "0x8cFe327CEc66d1C090Dd72bd0FF11d690C33a2Eb"
-      blockchain: "bsc"
-      label: "BSC Whale #2"
-      type: "whale"
-
-    - address: "0x4B16c5dE96EB2117bBE5fd171E4d203624B014aa"
-      blockchain: "bsc"
-      label: "BSC Smart Trader 1"
-      type: "smartTrader"
-
-    # --- Venus Protocol (BSC 最大借贷协议) ---
-    - address: "0xfD36E2c2a6789Db23113685031d7F16329158384"
-      blockchain: "bsc"
-      label: "Venus Protocol Controller"
-      type: "defi"
-
-    # --- Alameda Research (历史大户，参考) ---
-    - address: "0x2FAF487A4414Fe77e2327F0bf4AE2a264a776AD2"
-      blockchain: "bsc"
-      label: "FTX/Alameda BSC Wallet"
-      type: "institution"
-
-    # --- NFT/GameFi 大户 ---
-    - address: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
-      blockchain: "bsc"
-      label: "BSC GameFi Whale"
-      type: "whale"
-
-    # 可以继续添加更多聪明钱地址
-    # - address: "0x..."
-    #   blockchain: "bsc"
-    #   label: "My BSC Smart Money"
-    #   type: "smartTrader"
-
-  # 监控设置
+  - address: '0x28C6c06298d514Db089934071355E5743bf21d60'
+    blockchain: ethereum
+    label: Binance 14
+    type: institution
+  - address: '0xdfd5293d8e347dfe59e90efd55b2956a1343963d'
+    blockchain: ethereum
+    label: Binance Hot Wallet 6
+    type: institution
+  - address: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'
+    blockchain: ethereum
+    label: Vitalik Buterin
+    type: whale
+  - address: '0xf584F8728B874a6a5c7A8d4d387C9aae9172D621'
+    blockchain: ethereum
+    label: Jump Trading
+    type: institution
+  - address: '0x00000000ae347930bd1e7b0f35588b92280f9e75'
+    blockchain: ethereum
+    label: Wintermute
+    type: institution
+  - address: '0x8894E0a0c962CB723c1976a4421c95949bE2D4E3'
+    blockchain: bsc
+    label: Binance BSC Hot Wallet 1
+    type: institution
+  - address: '0xF977814e90dA44bFA03b6295A0616a897441aceC'
+    blockchain: bsc
+    label: Binance Cold Wallet
+    type: institution
+  - address: '0x0D0707963952f2fBA59dD06f2b425ace40b492Fe'
+    blockchain: bsc
+    label: Gate.io BSC Wallet
+    type: institution
+  - address: '0x3f5CE5FBFe3E9af3971dD833D26bA9b5C936f0bE'
+    blockchain: bsc
+    label: 'Binance: Binance-Peg Tokens'
+    type: institution
+  - address: '0x10ED43C718714eb63d5aA57B78B54704E256024E'
+    blockchain: bsc
+    label: PancakeSwap V2 Router
+    type: defi
+  - address: '0x73feaa1eE314F8c655E354234017bE2193C9E24E'
+    blockchain: bsc
+    label: PancakeSwap Main Staking
+    type: defi
+  - address: '0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff'
+    blockchain: bsc
+    label: QuickSwap Router
+    type: defi
+  - address: '0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8'
+    blockchain: bsc
+    label: 'BSC Whale #1'
+    type: whale
+  - address: '0x8cFe327CEc66d1C090Dd72bd0FF11d690C33a2Eb'
+    blockchain: bsc
+    label: 'BSC Whale #2'
+    type: whale
+  - address: '0x4B16c5dE96EB2117bBE5fd171E4d203624B014aa'
+    blockchain: bsc
+    label: BSC Smart Trader 1
+    type: smartTrader
+  - address: '0xfD36E2c2a6789Db23113685031d7F16329158384'
+    blockchain: bsc
+    label: Venus Protocol Controller
+    type: defi
+  - address: '0x2FAF487A4414Fe77e2327F0bf4AE2a264a776AD2'
+    blockchain: bsc
+    label: FTX/Alameda BSC Wallet
+    type: institution
+  - address: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D'
+    blockchain: bsc
+    label: BSC GameFi Whale
+    type: whale
   monitoring:
-    interval_minutes: 5  # 每5分钟检查一次
-    lookback_hours: 24   # 回溯24小时的交易
-
-  # 信号生成规则
+    interval_minutes: 5
+    lookback_hours: 24
   signal_rules:
-    min_addresses: 2     # 至少2个地址同时买入/卖出才生成信号
-    min_net_flow: 500000 # 净流入至少$500K才生成信号
-    large_tx_threshold: 1000000  # $1M+ 视为超大交易
-
-# ==================== Hyperliquid 监控配置 ====================
+    min_addresses: 2
+    min_net_flow: 500000
+    large_tx_threshold: 1000000
 hyperliquid:
-  enabled: true  # 已修复网络错误处理，重新启用
-
-  # 最小交易金额阈值(USD)
-  min_trade_usd: 50000  # $50K
-  
-  # 监控地址列表 (大户/聪明钱)
-  addresses:   # 空列表，通过排行榜自动发现交易者
-    # 示例地址 - 请替换为实际发现的聪明交易者
-    # - address: "0x..."
-    #   label: "Smart Trader 1"
-    #   type: "trader"
-    - address: "0xe7cebed7210ff24c6d4e7029400d7247c2a8cb69"
-      label: "smart1"
-      type: "trader"
-  
-  # 自动发现聪明交易者
+  enabled: true
+  min_trade_usd: 50000
+  addresses:
+  - address: '0xe7cebed7210ff24c6d4e7029400d7247c2a8cb69'
+    label: smart1
+    type: trader
   auto_discover:
     enabled: true
-    period: "week"  # day, week, month, allTime
-    min_pnl: 10000  # 最低盈利 $10K
-    update_interval_hours: 24  # 每24小时更新一次
-
-  # 监控设置
+    period: week
+    min_pnl: 10000
+    update_interval_hours: 24
   monitoring:
-    interval_minutes: 10  # 每10分钟检查一次
-    lookback_hours: 48    # 回溯48小时的交易
-
-# ==================== 高级功能 ====================
+    interval_minutes: 10
+    lookback_hours: 48
 advanced:
-  # 机器学习预测（实验性）
   ml_prediction:
     enabled: false
-    model_path: "./models/lstm_model.h5"
-
-  # 链上数据分析
+    model_path: ./models/lstm_model.h5
   onchain:
     enabled: false
-    etherscan_api_key: ""
-    bscscan_api_key: ""
-
-  # 多策略组合
+    etherscan_api_key: ''
+    bscscan_api_key: ''
   multi_strategy:
     enabled: false
     strategies:
-      - trend_following
-      - mean_reversion
-      - breakout
-
-# ==================== EMA 买入信号监控配置 ====================
+    - trend_following
+    - mean_reversion
+    - breakout
 ema_signal:
-  enabled: true                    # 启用 EMA 监控
-  short_period: 9                  # 短期 EMA 周期（默认9）
-  long_period: 21                  # 长期 EMA 周期（默认21）
-  timeframe: '15m'                 # 时间周期: '5m', '15m', '1h'
-  volume_threshold: 1.5            # 成交量倍数阈值（已废弃，现使用放量>1或缩量<1判断）
-
-# ==================== 通知配置 ====================
+  enabled: true
+  short_period: 9
+  long_period: 21
+  timeframe: 15m
+  volume_threshold: 1.5
 notification:
-  log: true                        # 日志通知
-  file: true                       # 文件通知
-  alert_file: 'signals/ema_alerts.txt'  # 信号文件路径
-  email: false                     # 邮件通知（可选）
-  telegram: false                  # Telegram 通知（可选）
+  log: true
+  file: true
+  alert_file: signals/ema_alerts.txt
+  email: false
+  telegram: false
