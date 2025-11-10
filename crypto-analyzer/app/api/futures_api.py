@@ -699,19 +699,20 @@ async def get_account(account_id: int):
 
 # ==================== 价格查询 ====================
 
-@router.get('/price/{symbol}')
+@router.get('/price/{symbol:path}')
 async def get_futures_price(symbol: str):
     """
     获取合约价格
     
     - **symbol**: 交易对，如 BTC/USDT 或 BTCUSDT
+    使用 {symbol:path} 以支持URL中包含斜杠的符号
     """
     try:
         import aiohttp
         from aiohttp import ClientTimeout
         
-        # 标准化交易对格式
-        symbol_clean = symbol.replace('/', '').upper()
+        # 标准化交易对格式（处理URL编码的斜杠）
+        symbol_clean = symbol.replace('/', '').replace('%2F', '').upper()
         
         price = None
         source = None
