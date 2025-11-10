@@ -711,11 +711,12 @@
             const tabPendingTitle = document.getElementById('tabPendingTitle');
             const tabHistoryTitle = document.getElementById('tabHistoryTitle');
             if (tabPositionsTitle && tabPendingTitle && tabHistoryTitle) {
+                tabPositionsTitle.className = 'btn btn-primary';
                 tabPositionsTitle.style.opacity = '1';
-                tabPositionsTitle.style.background = 'var(--bg-hover)';
-                tabPositionsTitle.style.color = 'var(--text-primary)';
-                tabPendingTitle.style.opacity = '0.6';
-                tabPendingTitle.style.background = 'transparent';
+                tabPositionsTitle.style.boxShadow = 'var(--shadow-md)';
+                tabPendingTitle.className = 'btn btn-secondary';
+                tabPendingTitle.style.opacity = '0.7';
+                tabPendingTitle.style.boxShadow = 'var(--shadow-sm)';
                 tabPendingTitle.style.color = 'var(--text-secondary)';
                 tabHistoryTitle.style.opacity = '0.6';
                 tabHistoryTitle.style.background = 'transparent';
