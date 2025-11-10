@@ -797,6 +797,19 @@ async def get_collection_status():
         
         # 6. 企业金库数据情况
         try:
+            # 企业金库数据包括两个表：持仓记录(purchases)和融资记录(financing)
+            # 检查持仓记录表（主要数据）
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as count,
+                    MAX(updated_at) as latest_time,
+                    MIN(created_at) as oldest_time,
+                    COUNT(DISTINCT company_id) as company_count
+                FROM corporate_treasury_purchases
+            """)
+            purchases_result = cursor.fetchone()
+            
+            # 检查融资记录表
             cursor.execute("""
                 SELECT 
                     COUNT(*) as count,
@@ -805,25 +818,44 @@ async def get_collection_status():
                     COUNT(DISTINCT company_id) as company_count
                 FROM corporate_treasury_financing
             """)
-            treasury_result = cursor.fetchone()
+            financing_result = cursor.fetchone()
+            
+            # 合并两个表的数据
+            total_count = (purchases_result['count'] if purchases_result else 0) + (financing_result['count'] if financing_result else 0)
+            total_company_count = max(
+                purchases_result['company_count'] if purchases_result else 0,
+                financing_result['company_count'] if financing_result else 0
+            )
+            
+            # 获取最新的更新时间（从两个表中取最新的）
+            latest_time = None
+            if purchases_result and purchases_result['latest_time']:
+                latest_time = purchases_result['latest_time']
+            if financing_result and financing_result['latest_time']:
+                if not latest_time or financing_result['latest_time'] > latest_time:
+                    latest_time = financing_result['latest_time']
+            
+            # 获取最早的创建时间
+            oldest_time = None
+            if purchases_result and purchases_result['oldest_time']:
+                oldest_time = purchases_result['oldest_time']
+            if financing_result and financing_result['oldest_time']:
+                if not oldest_time or financing_result['oldest_time'] < oldest_time:
+                    oldest_time = financing_result['oldest_time']
             
             # 企业金库数据是手动导入的，不是自动采集的
             # 状态判断：如果有数据且最近30天内有更新，显示为active；如果有数据但较旧，显示为warning；如果没有数据，显示为inactive
             status = 'inactive'
-            if treasury_result and treasury_result['count'] > 0:
-                if treasury_result['latest_time']:
+            if total_count > 0:
+                if latest_time:
                     # 检查最新更新时间是否在30天内
-                    latest_time = treasury_result['latest_time']
                     # latest_time已经是datetime对象（从数据库查询返回）
-                    if latest_time:
-                        # 计算时间差（秒）
-                        time_diff = (datetime.now() - latest_time).total_seconds()
-                        if time_diff < 2592000:  # 30天 = 2592000秒
-                            status = 'active'
-                        else:
-                            status = 'warning'  # 数据较旧
+                    # 计算时间差（秒）
+                    time_diff = (datetime.now() - latest_time).total_seconds()
+                    if time_diff < 2592000:  # 30天 = 2592000秒
+                        status = 'active'
                     else:
-                        status = 'active'  # 有数据但没有更新时间字段
+                        status = 'warning'  # 数据较旧
                 else:
                     status = 'active'  # 有数据但没有更新时间字段
             
@@ -831,11 +863,11 @@ async def get_collection_status():
                 'type': '企业金库数据',
                 'category': 'treasury_data',
                 'icon': 'bi-building',
-                'description': '企业融资记录数据（手动导入）',
-                'count': treasury_result['count'] if treasury_result else 0,
-                'latest_time': treasury_result['latest_time'].isoformat() if treasury_result and treasury_result['latest_time'] else None,
-                'oldest_time': treasury_result['oldest_time'].isoformat() if treasury_result and treasury_result['oldest_time'] else None,
-                'company_count': treasury_result['company_count'] if treasury_result else 0,
+                'description': '企业持仓和融资记录数据（手动导入）',
+                'count': total_count,
+                'latest_time': latest_time.isoformat() if latest_time else None,
+                'oldest_time': oldest_time.isoformat() if oldest_time else None,
+                'company_count': total_company_count,
                 'status': status
             })
         except Exception as e:
@@ -1348,7 +1380,7 @@ async def import_corporate_treasury_data(
                             VALUES (%s, %s, %s, %s, %s, %s)
                         """, (company_id, purchase_date, asset_type, quantity, holdings, 'manual'))
                         logger.info(f"新增: {company_name} ({ticker}) - {quantity:+,.0f} {asset_type} → {holdings:,.0f}")
-                        imported += 1
+                    imported += 1
                     
                 except Exception as e:
                     error_msg = f"{company_name} ({ticker}): {str(e)}"
@@ -1768,7 +1800,7 @@ async def collect_historical_data(request: Dict):
                         logger.info(f"{symbol} 价格数据采集完成，保存 {saved_count} 条")
                     else:
                         errors.append(f"{symbol}: 未获取到价格数据")
-                
+                    
                 if collect_kline:
                     # 采集K线数据 - 对所有时间周期进行采集
                     if not timeframes:
@@ -1778,20 +1810,20 @@ async def collect_historical_data(request: Dict):
                     for timeframe in timeframes:
                         try:
                             logger.info(f"  采集 {symbol} {timeframe} K线数据...")
-                            # 使用历史数据采集方法
-                            df = await collector.fetch_historical_data(
-                                symbol=symbol,
-                                timeframe=timeframe,
-                                days=int((end_time - start_time).total_seconds() / 86400) + 1
-                            )
-                            
-                            if df is not None and len(df) > 0:
-                                # 过滤时间范围
-                                df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
-                                
+                    # 使用历史数据采集方法
+                    df = await collector.fetch_historical_data(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        days=int((end_time - start_time).total_seconds() / 86400) + 1
+                    )
+                    
+                    if df is not None and len(df) > 0:
+                        # 过滤时间范围
+                        df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+                        
                                 timeframe_saved = 0
-                                for _, row in df.iterrows():
-                                    try:
+                        for _, row in df.iterrows():
+                            try:
                                         # 计算时间戳（毫秒）
                                         timestamp = row['timestamp']
                                         # 确保timestamp是datetime类型
@@ -1816,41 +1848,41 @@ async def collect_historical_data(request: Dict):
                                         # 获取当前时间作为created_at
                                         created_at = datetime.now()
                                         
-                                        cursor.execute("""
-                                            INSERT INTO kline_data
+                                cursor.execute("""
+                                    INSERT INTO kline_data
                                             (symbol, exchange, timeframe, open_time, close_time, timestamp, open_price, high_price, low_price, close_price, volume, quote_volume, created_at)
                                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                            ON DUPLICATE KEY UPDATE
-                                                open_price = VALUES(open_price),
-                                                high_price = VALUES(high_price),
-                                                low_price = VALUES(low_price),
-                                                close_price = VALUES(close_price),
-                                                volume = VALUES(volume),
+                                    ON DUPLICATE KEY UPDATE
+                                        open_price = VALUES(open_price),
+                                        high_price = VALUES(high_price),
+                                        low_price = VALUES(low_price),
+                                        close_price = VALUES(close_price),
+                                        volume = VALUES(volume),
                                                 quote_volume = VALUES(quote_volume),
                                                 created_at = VALUES(created_at)
-                                        """, (
-                                            symbol,
-                                            'binance',  # 默认交易所
-                                            timeframe,
+                                """, (
+                                    symbol,
+                                    'binance',  # 默认交易所
+                                    timeframe,
                                             open_time_ms,
                                             close_time_ms,
                                             timestamp_dt,
-                                            float(row['open']),
-                                            float(row['high']),
-                                            float(row['low']),
-                                            float(row['close']),
-                                            float(row['volume']),
+                                    float(row['open']),
+                                    float(row['high']),
+                                    float(row['low']),
+                                    float(row['close']),
+                                    float(row['volume']),
                                             float(row.get('quote_volume', 0)),
                                             created_at
-                                        ))
+                                ))
                                         timeframe_saved += 1
-                                    except Exception as e:
+                            except Exception as e:
                                         logger.error(f"保存K线数据失败 ({timeframe}): {e}")
-                                        continue
-                                
+                                continue
+                        
                                 symbol_saved += timeframe_saved
                                 logger.info(f"  ✓ {symbol} {timeframe} K线数据采集完成，保存 {timeframe_saved} 条")
-                            else:
+                    else:
                                 logger.warning(f"  ⊗ {symbol} {timeframe}: 未获取到K线数据")
                         except Exception as e:
                             error_msg = f"{symbol} {timeframe}: {str(e)}"
