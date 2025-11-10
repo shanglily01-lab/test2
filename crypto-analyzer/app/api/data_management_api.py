@@ -1810,20 +1810,20 @@ async def collect_historical_data(request: Dict):
                     for timeframe in timeframes:
                         try:
                             logger.info(f"  采集 {symbol} {timeframe} K线数据...")
-                    # 使用历史数据采集方法
-                    df = await collector.fetch_historical_data(
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        days=int((end_time - start_time).total_seconds() / 86400) + 1
-                    )
-                    
-                    if df is not None and len(df) > 0:
-                        # 过滤时间范围
-                        df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
-                        
+                            # 使用历史数据采集方法
+                            df = await collector.fetch_historical_data(
+                                symbol=symbol,
+                                timeframe=timeframe,
+                                days=int((end_time - start_time).total_seconds() / 86400) + 1
+                            )
+                            
+                            if df is not None and len(df) > 0:
+                                # 过滤时间范围
+                                df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+                                
                                 timeframe_saved = 0
-                        for _, row in df.iterrows():
-                            try:
+                                for _, row in df.iterrows():
+                                    try:
                                         # 计算时间戳（毫秒）
                                         timestamp = row['timestamp']
                                         # 确保timestamp是datetime类型
@@ -1848,41 +1848,41 @@ async def collect_historical_data(request: Dict):
                                         # 获取当前时间作为created_at
                                         created_at = datetime.now()
                                         
-                                cursor.execute("""
-                                    INSERT INTO kline_data
+                                        cursor.execute("""
+                                            INSERT INTO kline_data
                                             (symbol, exchange, timeframe, open_time, close_time, timestamp, open_price, high_price, low_price, close_price, volume, quote_volume, created_at)
                                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                    ON DUPLICATE KEY UPDATE
-                                        open_price = VALUES(open_price),
-                                        high_price = VALUES(high_price),
-                                        low_price = VALUES(low_price),
-                                        close_price = VALUES(close_price),
-                                        volume = VALUES(volume),
+                                            ON DUPLICATE KEY UPDATE
+                                                open_price = VALUES(open_price),
+                                                high_price = VALUES(high_price),
+                                                low_price = VALUES(low_price),
+                                                close_price = VALUES(close_price),
+                                                volume = VALUES(volume),
                                                 quote_volume = VALUES(quote_volume),
                                                 created_at = VALUES(created_at)
-                                """, (
-                                    symbol,
-                                    'binance',  # 默认交易所
-                                    timeframe,
+                                        """, (
+                                            symbol,
+                                            'binance',  # 默认交易所
+                                            timeframe,
                                             open_time_ms,
                                             close_time_ms,
                                             timestamp_dt,
-                                    float(row['open']),
-                                    float(row['high']),
-                                    float(row['low']),
-                                    float(row['close']),
-                                    float(row['volume']),
+                                            float(row['open']),
+                                            float(row['high']),
+                                            float(row['low']),
+                                            float(row['close']),
+                                            float(row['volume']),
                                             float(row.get('quote_volume', 0)),
                                             created_at
-                                ))
+                                        ))
                                         timeframe_saved += 1
-                            except Exception as e:
+                                    except Exception as e:
                                         logger.error(f"保存K线数据失败 ({timeframe}): {e}")
-                                continue
-                        
+                                        continue
+                                
                                 symbol_saved += timeframe_saved
                                 logger.info(f"  ✓ {symbol} {timeframe} K线数据采集完成，保存 {timeframe_saved} 条")
-                    else:
+                            else:
                                 logger.warning(f"  ⊗ {symbol} {timeframe}: 未获取到K线数据")
                         except Exception as e:
                             error_msg = f"{symbol} {timeframe}: {str(e)}"
