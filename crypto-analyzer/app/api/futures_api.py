@@ -707,12 +707,8 @@ async def get_futures_price(symbol: str):
     - **symbol**: 交易对，如 BTC/USDT 或 BTCUSDT
     """
     try:
-        try:
-            import httpx
-        except ImportError:
-            # 如果没有httpx，使用requests
-            import requests
-            httpx = None
+        import aiohttp
+        from aiohttp import ClientTimeout
         
         # 标准化交易对格式
         symbol_clean = symbol.replace('/', '').upper()
@@ -720,33 +716,21 @@ async def get_futures_price(symbol: str):
         price = None
         source = None
         
+        timeout = ClientTimeout(total=5)
+        
         # 1. 优先从Binance合约API获取
         try:
-            if httpx:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    response = await client.get(
-                        f'https://fapi.binance.com/fapi/v1/ticker/price',
-                        params={'symbol': symbol_clean}
-                    )
-                    if response.status_code == 200:
-                        data = response.json()
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(
+                    'https://fapi.binance.com/fapi/v1/ticker/price',
+                    params={'symbol': symbol_clean}
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
                         if data and 'price' in data:
                             price = float(data['price'])
                             source = 'binance_futures'
                             logger.debug(f"从Binance合约API获取 {symbol} 价格: {price}")
-            else:
-                # 使用requests同步调用
-                response = requests.get(
-                    f'https://fapi.binance.com/fapi/v1/ticker/price',
-                    params={'symbol': symbol_clean},
-                    timeout=5
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    if data and 'price' in data:
-                        price = float(data['price'])
-                        source = 'binance_futures'
-                        logger.debug(f"从Binance合约API获取 {symbol} 价格: {price}")
         except Exception as e:
             logger.debug(f"Binance合约API获取失败: {e}")
         
@@ -754,31 +738,17 @@ async def get_futures_price(symbol: str):
         if not price:
             try:
                 gate_symbol = symbol.replace('/', '_')
-                if httpx:
-                    async with httpx.AsyncClient(timeout=5.0) as client:
-                        response = await client.get(
-                            f'https://api.gateio.ws/api/v4/futures/usdt/tickers',
-                            params={'contract': gate_symbol}
-                        )
-                        if response.status_code == 200:
-                            data = response.json()
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(
+                        'https://api.gateio.ws/api/v4/futures/usdt/tickers',
+                        params={'contract': gate_symbol}
+                    ) as response:
+                        if response.status == 200:
+                            data = await response.json()
                             if data and len(data) > 0 and 'last' in data[0]:
                                 price = float(data[0]['last'])
                                 source = 'gateio_futures'
                                 logger.debug(f"从Gate.io合约API获取 {symbol} 价格: {price}")
-                else:
-                    # 使用requests同步调用
-                    response = requests.get(
-                        f'https://api.gateio.ws/api/v4/futures/usdt/tickers',
-                        params={'contract': gate_symbol},
-                        timeout=5
-                    )
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data and len(data) > 0 and 'last' in data[0]:
-                            price = float(data[0]['last'])
-                            source = 'gateio_futures'
-                            logger.debug(f"从Gate.io合约API获取 {symbol} 价格: {price}")
             except Exception as e:
                 logger.debug(f"Gate.io合约API获取失败: {e}")
         
