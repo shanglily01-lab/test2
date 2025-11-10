@@ -1245,6 +1245,8 @@ async def import_corporate_treasury_data(
         is_text_format = file.filename.endswith('.txt')
         
         imported = 0
+        updated = 0
+        skipped = 0
         errors = []
         
         if is_text_format:
@@ -1307,6 +1309,7 @@ async def import_corporate_treasury_data(
                         # 如果持仓量相同，跳过
                         if existing_holdings and float(existing_holdings) == holdings:
                             logger.debug(f"跳过（已存在）: {company_name} - {holdings:,.0f} {asset_type}")
+                            skipped += 1
                             continue
                         
                         # 更新记录
@@ -1316,6 +1319,7 @@ async def import_corporate_treasury_data(
                             WHERE id = %s
                         """, (holdings, existing_id))
                         logger.info(f"更新: {company_name} ({ticker}) - {holdings:,.0f} {asset_type}")
+                        updated += 1
                     else:
                         # 3. 获取上一次的持仓量（计算购买数量）
                         cursor.execute("""
@@ -1344,8 +1348,7 @@ async def import_corporate_treasury_data(
                             VALUES (%s, %s, %s, %s, %s, %s)
                         """, (company_id, purchase_date, asset_type, quantity, holdings, 'manual'))
                         logger.info(f"新增: {company_name} ({ticker}) - {quantity:+,.0f} {asset_type} → {holdings:,.0f}")
-                    
-                    imported += 1
+                        imported += 1
                     
                 except Exception as e:
                     error_msg = f"{company_name} ({ticker}): {str(e)}"
@@ -1354,7 +1357,19 @@ async def import_corporate_treasury_data(
                     import traceback
                     logger.error(traceback.format_exc())
             
-            message = f'成功导入 {imported} 条持仓记录，失败 {len(errors)} 条'
+            # 构建详细的消息
+            total_processed = imported + updated + skipped
+            message_parts = []
+            if imported > 0:
+                message_parts.append(f"新增 {imported} 条")
+            if updated > 0:
+                message_parts.append(f"更新 {updated} 条")
+            if skipped > 0:
+                message_parts.append(f"跳过 {skipped} 条（已存在且持仓量相同）")
+            if errors:
+                message_parts.append(f"失败 {len(errors)} 条")
+            
+            message = f"共处理 {total_processed} 条记录：" + "，".join(message_parts) if message_parts else f"共处理 {total_processed} 条记录"
             
         else:
             # CSV格式：融资数据
@@ -1440,6 +1455,8 @@ async def import_corporate_treasury_data(
         return {
             'success': True,
             'imported': imported,
+            'updated': updated if is_text_format else 0,
+            'skipped': skipped if is_text_format else 0,
             'errors': errors,
             'error_count': len(errors),
             'message': message
