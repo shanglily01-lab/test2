@@ -2044,96 +2044,94 @@
                     <div class="explanation-info-box">
                         <strong style="color: var(--text-primary);">数据来源：</strong>币安现货市场 API（Binance Spot Market /ticker/24hr 接口）
                     </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 10px;">
-                        <strong style="color: var(--text-primary);">采集种类：</strong>实时价格、24小时最高/最低价、24小时涨跌幅、24小时成交量/成交额
+                    <div class="explanation-info-box">
+                        <strong style="color: var(--text-primary);">采集种类：</strong><span style="color: var(--text-primary);">实时价格、24小时最高/最低价、24小时涨跌幅、24小时成交量/成交额</span>
                     </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 10px;">
-                        <strong style="color: var(--text-primary);">监控标的：</strong>币安所有 USDT 交易对，动态获取活跃交易对列表
+                    <div class="explanation-info-box">
+                        <strong style="color: var(--text-primary);">监控标的：</strong><span style="color: var(--text-primary);">币安所有 USDT 交易对，动态获取活跃交易对列表</span>
                     </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md);">
-                        <strong style="color: var(--text-primary);">采集频率：</strong>每30秒自动刷新一次，页面显示倒计时和最后更新时间
+                    <div class="explanation-info-box">
+                        <strong style="color: var(--text-primary);">采集频率：</strong><span style="color: var(--text-primary);">每30秒自动刷新一次，页面显示倒计时和最后更新时间</span>
                     </div>
                 </div>
             </div>
 
-            <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--success-green);">🔬 分析逻辑</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
+            <div class="explanation-section">
+                <h3 class="explanation-section-title">🔬 分析逻辑</h3>
+                <div style="font-size: 13px; color: var(--text-primary); line-height: 1.8;">
                     <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">1. 数据处理</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>价格格式化：</strong>根据价格大小自动调整精度
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>价格 ≥ 1000：保留2位小数（如 12,345.67）</li>
-                                <li>价格 1-1000：保留4位小数（如 123.4567）</li>
-                                <li>价格 < 1：保留6位小数（如 0.012345）</li>
+                    <ul style="margin-left: 20px; margin-bottom: 12px; color: var(--text-primary);">
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">价格格式化：</strong>根据价格大小自动调整精度
+                            <ul style="margin-left: 20px; margin-top: 4px; color: var(--text-primary);">
+                                <li style="color: var(--text-primary);">价格 ≥ 1000：保留2位小数（如 12,345.67）</li>
+                                <li style="color: var(--text-primary);">价格 1-1000：保留4位小数（如 123.4567）</li>
+                                <li style="color: var(--text-primary);">价格 < 1：保留6位小数（如 0.012345）</li>
                             </ul>
                         </li>
-                        <li><strong>涨跌幅计算：</strong>((当前价 - 24h前价格) / 24h前价格) × 100%</li>
-                        <li><strong>成交量格式化：</strong>自动转换为 B(十亿)、M(百万)、K(千) 单位</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">涨跌幅计算：</strong>((当前价 - 24h前价格) / 24h前价格) × 100%</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">成交量格式化：</strong>自动转换为 B(十亿)、M(百万)、K(千) 单位</li>
                     </ul>
                     <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">2. 排序功能</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li>点击表头可切换升序/降序排序</li>
-                        <li><strong>交易对：</strong>按字母顺序排序</li>
-                        <li><strong>价格：</strong>按数值大小排序</li>
-                        <li><strong>24h涨跌：</strong>按涨跌幅百分比排序（默认）</li>
-                        <li><strong>24h交易量：</strong>按成交额排序</li>
-                        <li>当前排序列显示排序图标（↑↓）</li>
+                    <ul style="margin-left: 20px; margin-bottom: 12px; color: var(--text-primary);">
+                        <li style="color: var(--text-primary);">点击表头可切换升序/降序排序</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">交易对：</strong>按字母顺序排序</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">价格：</strong>按数值大小排序</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">24h涨跌：</strong>按涨跌幅百分比排序（默认）</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">24h交易量：</strong>按成交额排序</li>
+                        <li style="color: var(--text-primary);">当前排序列显示排序图标（↑↓）</li>
                     </ul>
                     <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">3. 数据过滤</strong></p>
-                    <ul style="margin-left: 20px;">
-                        <li>过滤交易量过小的冷门币种（24h成交额 < $100,000）</li>
-                        <li>优先显示主流币种（BTC、ETH、BNB 等）</li>
-                        <li>自动去除异常数据和测试交易对</li>
+                    <ul style="margin-left: 20px; color: var(--text-primary);">
+                        <li style="color: var(--text-primary);">过滤交易量过小的冷门币种（24h成交额 < $100,000）</li>
+                        <li style="color: var(--text-primary);">优先显示主流币种（BTC、ETH、BNB 等）</li>
+                        <li style="color: var(--text-primary);">自动去除异常数据和测试交易对</li>
                     </ul>
                 </div>
             </div>
 
-            <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--warning-yellow);">📈 结果展示</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
+            <div class="explanation-section">
+                <h3 class="explanation-section-title">📈 结果展示</h3>
+                <div style="font-size: 13px; color: var(--text-primary); line-height: 1.8;">
                     <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">表格列说明：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>交易对：</strong>币种符号，如 BTCUSDT、ETHUSDT</li>
-                        <li><strong>价格(USDT)：</strong>当前最新成交价，使用等宽字体便于阅读</li>
-                        <li><strong>24h涨跌：</strong>24小时涨跌幅百分比，绿色上涨、红色下跌</li>
-                        <li><strong>24h交易量：</strong>24小时成交总额，单位为USDT，自动格式化</li>
+                    <ul style="margin-left: 20px; margin-bottom: 12px; color: var(--text-primary);">
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">交易对：</strong>币种符号，如 BTCUSDT、ETHUSDT</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">价格(USDT)：</strong>当前最新成交价，使用等宽字体便于阅读</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">24h涨跌：</strong>24小时涨跌幅百分比，绿色上涨、红色下跌</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">24h交易量：</strong>24小时成交总额，单位为USDT，自动格式化</li>
                     </ul>
                     <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">交互功能：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>表头排序：</strong>点击列标题切换升/降序，支持四列排序</li>
-                        <li><strong>滚动浏览：</strong>表格最大高度600px，超出部分可滚动查看</li>
-                        <li><strong>粘性表头：</strong>滚动时表头固定，方便查看列名</li>
-                        <li><strong>行悬停：</strong>鼠标悬停行时背景高亮，提升可读性</li>
+                    <ul style="margin-left: 20px; margin-bottom: 12px; color: var(--text-primary);">
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">表头排序：</strong>点击列标题切换升/降序，支持四列排序</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">滚动浏览：</strong>表格最大高度600px，超出部分可滚动查看</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">粘性表头：</strong>滚动时表头固定，方便查看列名</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">行悬停：</strong>鼠标悬停行时背景高亮，提升可读性</li>
                     </ul>
                     <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">状态显示：</strong></p>
-                    <ul style="margin-left: 20px;">
-                        <li><strong>最后更新：</strong>页面右上角显示最后数据更新时间</li>
-                        <li><strong>刷新倒计时：</strong>显示下次自动刷新剩余秒数</li>
-                        <li><strong>手动刷新：</strong>点击刷新按钮立即更新数据</li>
-                        <li><strong>加载状态：</strong>数据加载时显示"加载中..."提示</li>
+                    <ul style="margin-left: 20px; color: var(--text-primary);">
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">最后更新：</strong>页面右上角显示最后数据更新时间</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">刷新倒计时：</strong>显示下次自动刷新剩余秒数</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">手动刷新：</strong>点击刷新按钮立即更新数据</li>
+                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">加载状态：</strong>数据加载时显示"加载中..."提示</li>
                     </ul>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--info-blue);">
-                        <strong>💡 使用建议：</strong>
-                        <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
-                            <li>关注涨跌幅榜首尾，发现市场热点和异常波动</li>
-                            <li>观察成交量排名，判断市场活跃度和资金流向</li>
-                            <li>配合其他技术指标，制定交易策略</li>
-                            <li>价格仅供参考，实际交易以交易所报价为准</li>
+                    <div class="explanation-info-box" style="border-left-color: var(--info-blue);">
+                        <strong style="color: var(--text-primary);">💡 使用建议：</strong>
+                        <ul style="margin: 8px 0 0 20px; line-height: 1.8; color: var(--text-primary);">
+                            <li style="color: var(--text-primary);">关注涨跌幅榜首尾，发现市场热点和异常波动</li>
+                            <li style="color: var(--text-primary);">观察成交量排名，判断市场活跃度和资金流向</li>
+                            <li style="color: var(--text-primary);">配合其他技术指标，制定交易策略</li>
+                            <li style="color: var(--text-primary);">价格仅供参考，实际交易以交易所报价为准</li>
                         </ul>
                     </div>
                 </div>
             </div>
 
-            <div style="background: var(--info-blue); opacity: 0.1; padding: 16px; border-radius: var(--radius-lg); border-left: 4px solid var(--info-blue); margin-bottom: 20px;">
-                <div style="opacity: 10;">
-                    <strong style="color: var(--info-blue);">ℹ️ 数据说明</strong>
-                    <ul style="margin: 8px 0 0 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                        <li>价格数据来源于币安交易所，具有权威性和实时性</li>
-                        <li>网络延迟可能导致轻微数据滞后（通常<1秒）</li>
-                        <li>极端行情下交易所可能限流，数据更新频率会降低</li>
-                    </ul>
-                </div>
+            <div class="explanation-info-box" style="background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--info-blue); margin-bottom: 20px;">
+                <strong style="color: var(--info-blue); font-size: 14px;">ℹ️ 数据说明</strong>
+                <ul style="margin: 8px 0 0 20px; font-size: 13px; color: var(--text-primary); line-height: 1.8;">
+                    <li style="color: var(--text-primary);">价格数据来源于币安交易所，具有权威性和实时性</li>
+                    <li style="color: var(--text-primary);">网络延迟可能导致轻微数据滞后（通常<1秒）</li>
+                    <li style="color: var(--text-primary);">极端行情下交易所可能限流，数据更新频率会降低</li>
+                </ul>
             </div>
 
             <div class="explanation-action-btn">
