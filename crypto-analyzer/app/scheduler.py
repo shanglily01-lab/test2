@@ -10,7 +10,6 @@
 - Hyperliquid 排行榜: 每天一次
 - 资金费率 (Binance + Gate.io): 每5分钟
 - 新闻数据: 每15分钟
-- ETF 数据 (SoSoValue/CoinGlass API): 每天 13:17
 
 缓存更新频率（性能优化）：
 - 价格统计缓存: 每30秒
@@ -40,7 +39,6 @@ from app.collectors.news_collector import NewsAggregator
 from app.collectors.enhanced_news_collector import EnhancedNewsAggregator
 from app.collectors.smart_money_collector import SmartMoneyCollector
 from app.collectors.hyperliquid_collector import HyperliquidCollector
-from app.collectors.crypto_etf_collector import CryptoETFCollector
 from app.database.db_service import DatabaseService
 from app.trading.futures_monitor_service import FuturesMonitorService
 from app.trading.auto_futures_trader import AutoFuturesTrader
@@ -64,7 +62,7 @@ class UnifiedDataScheduler:
         # 获取监控币种列表
         self.symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
 
-        # 初始化数据库服务（必须在采集器之前，因为 ETF collector 需要它）
+        # 初始化数据库服务
         logger.info("初始化数据库服务...")
         db_config = self.config.get('database', {})
         self.db_service = DatabaseService(db_config)
@@ -163,14 +161,6 @@ class UnifiedDataScheduler:
             self.auto_trader = None
             logger.warning(f"  ⊗ 自动合约交易服务初始化失败: {e}")
 
-        # 7. ETF 数据采集器
-        etf_config = self.config.get('etf_collector', {})
-        if etf_config.get('enabled', True):  # 默认启用
-            self.etf_collector = CryptoETFCollector(self.db_service)
-            logger.info("  ✓ ETF 数据采集器 (SoSoValue + CoinGlass)")
-        else:
-            self.etf_collector = None
-            logger.info("  ⊗ ETF 数据采集器 (未启用)")
 
     def _init_ema_monitor(self):
         """初始化 EMA 信号监控服务"""
@@ -978,47 +968,6 @@ class UnifiedDataScheduler:
             logger.error(f"Hyperliquid 钱包监控任务失败: {e}")
             self.task_stats[task_name]['last_error'] = str(e)
 
-    # ==================== ETF 数据采集任务 ====================
-
-    async def collect_etf_data(self):
-        """采集 ETF 数据 (每天13:17执行)"""
-        if not self.etf_collector:
-            return
-
-        task_name = 'etf_daily'
-        try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始采集 ETF 数据...")
-
-            # 采集 BTC 和 ETH ETF 数据
-            target_date = date.today()
-            results = self.etf_collector.collect_daily_data(
-                target_date=target_date,
-                asset_types=['BTC', 'ETH']
-            )
-
-            # 统计结果
-            btc_saved = results.get('BTC', {}).get('saved', 0)
-            btc_failed = results.get('BTC', {}).get('failed', 0)
-            eth_saved = results.get('ETH', {}).get('saved', 0)
-            eth_failed = results.get('ETH', {}).get('failed', 0)
-
-            total_saved = btc_saved + eth_saved
-            total_failed = btc_failed + eth_failed
-
-            logger.info(
-                f"  ✓ ETF数据采集完成: "
-                f"BTC ({btc_saved}/{btc_saved+btc_failed}), "
-                f"ETH ({eth_saved}/{eth_saved+eth_failed}), "
-                f"总计 {total_saved} 条"
-            )
-
-            # 更新统计
-            self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
-
-        except Exception as e:
-            logger.error(f"ETF 数据采集任务失败: {e}")
-            self.task_stats[task_name]['last_error'] = str(e)
 
     # ==================== 调度器控制 ====================
 
@@ -1130,13 +1079,6 @@ class UnifiedDataScheduler:
             lambda: asyncio.run(self.cleanup_old_ema_signals())
         )
         logger.info("  ✓ EMA信号数据清理 (保留30天) - 每天 03:00")
-
-        # 5.6 ETF 数据采集
-        if self.etf_collector:
-            schedule.every().day.at("13:17").do(
-                lambda: asyncio.run(self.collect_etf_data())
-            )
-            logger.info("  ✓ ETF 数据采集 (SoSoValue + CoinGlass BTC & ETH) - 每天 13:17")
 
         # 6. Hyperliquid 钱包监控 - 分级监控策略
         if self.hyperliquid_collector:

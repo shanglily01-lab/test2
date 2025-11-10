@@ -514,9 +514,9 @@
                 
                 if (result.success && result.data) {
                     container.innerHTML = result.data.map(item => {
-                        // 企业金库数据是手动导入的，状态显示需要特殊处理
+                        // 企业金库数据和ETF数据是手动导入的，状态显示需要特殊处理
                         let statusBadge = '';
-                        if (item.type === '企业金库数据') {
+                        if (item.type === '企业金库数据' || item.type === 'ETF数据') {
                             statusBadge = item.status === 'active' 
                                 ? '<span class="badge badge-success">已导入</span>'
                                 : item.status === 'warning'
