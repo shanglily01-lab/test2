@@ -465,12 +465,23 @@ class EnhancedDashboardCached:
                     t.coin,
                     t.side,
                     MAX(t.price) as price,
+                    MAX(t.size) as size,
                     ROUND(t.notional_usd, 2) as notional_usd,
                     MAX(t.closed_pnl) as closed_pnl,
                     t.trade_time,
-                    MAX(w.label) as wallet_label
+                    MAX(w.label) as wallet_label,
+                    COALESCE(MAX(p.leverage), 1) as leverage
                 FROM hyperliquid_wallet_trades t
                 LEFT JOIN hyperliquid_monitored_wallets w ON t.address = w.address
+                LEFT JOIN (
+                    SELECT trader_id, coin, leverage, snapshot_time,
+                           ROW_NUMBER() OVER (PARTITION BY trader_id, coin ORDER BY snapshot_time DESC) as rn
+                    FROM hyperliquid_wallet_positions
+                ) p ON t.address = (SELECT address FROM hyperliquid_traders WHERE id = p.trader_id LIMIT 1)
+                    AND t.coin = p.coin
+                    AND p.rn = 1
+                    AND p.snapshot_time <= t.trade_time
+                    AND p.snapshot_time >= DATE_SUB(t.trade_time, INTERVAL 1 HOUR)
                 WHERE t.trade_time >= :cutoff_time
                     AND w.is_monitoring = 1
                 GROUP BY t.address, t.coin, t.side, t.trade_time, ROUND(t.notional_usd, 2)
@@ -497,7 +508,9 @@ class EnhancedDashboardCached:
                     'coin': coin_display,
                     'coin_raw': trade_dict['coin'],
                     'side': trade_dict['side'],
-                    'notional_usd': float(trade_dict['notional_usd']),
+                    'size': float(trade_dict.get('size', 0)),  # 下单数量
+                    'leverage': float(trade_dict.get('leverage', 1)),  # 合约倍数
+                    'notional_usd': float(trade_dict['notional_usd']),  # 持仓金额
                     'price': float(trade_dict['price']),
                     'closed_pnl': float(trade_dict['closed_pnl']),
                     'trade_time': trade_dict['trade_time'].strftime('%Y-%m-%d %H:%M')
