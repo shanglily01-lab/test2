@@ -803,6 +803,124 @@ async def get_collection_status():
                 'error': str(e)
             })
         
+        # 7. Hyperliquid聪明钱数据情况
+        try:
+            # 检查hyperliquid_wallet_trades表
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as count,
+                    MAX(trade_time) as latest_time,
+                    MIN(trade_time) as oldest_time,
+                    COUNT(DISTINCT address) as wallet_count,
+                    COUNT(DISTINCT coin) as coin_count
+                FROM hyperliquid_wallet_trades
+            """)
+            hyperliquid_trades_result = cursor.fetchone()
+            
+            # 检查hyperliquid_traders表
+            cursor.execute("""
+                SELECT COUNT(*) as trader_count
+                FROM hyperliquid_traders
+            """)
+            hyperliquid_traders_result = cursor.fetchone()
+            
+            # 检查hyperliquid_monitored_wallets表
+            cursor.execute("""
+                SELECT COUNT(*) as monitored_count
+                FROM hyperliquid_monitored_wallets
+                WHERE is_monitoring = TRUE
+            """)
+            hyperliquid_monitored_result = cursor.fetchone()
+            
+            collection_status.append({
+                'type': 'Hyperliquid聪明钱',
+                'category': 'smart_money',
+                'icon': 'bi-lightning-charge',
+                'description': 'Hyperliquid平台聪明钱交易数据',
+                'count': hyperliquid_trades_result['count'] if hyperliquid_trades_result else 0,
+                'latest_time': hyperliquid_trades_result['latest_time'].isoformat() if hyperliquid_trades_result and hyperliquid_trades_result['latest_time'] else None,
+                'oldest_time': hyperliquid_trades_result['oldest_time'].isoformat() if hyperliquid_trades_result and hyperliquid_trades_result['oldest_time'] else None,
+                'wallet_count': hyperliquid_trades_result['wallet_count'] if hyperliquid_trades_result else 0,
+                'trader_count': hyperliquid_traders_result['trader_count'] if hyperliquid_traders_result else 0,
+                'monitored_count': hyperliquid_monitored_result['monitored_count'] if hyperliquid_monitored_result else 0,
+                'coin_count': hyperliquid_trades_result['coin_count'] if hyperliquid_trades_result else 0,
+                'status': _check_status_active(hyperliquid_trades_result['latest_time'], 86400) if hyperliquid_trades_result and hyperliquid_trades_result['latest_time'] else 'inactive'  # 24小时阈值
+            })
+        except Exception as e:
+            logger.error(f"获取Hyperliquid聪明钱数据情况失败: {e}")
+            import traceback
+            traceback.print_exc()
+            collection_status.append({
+                'type': 'Hyperliquid聪明钱',
+                'category': 'smart_money',
+                'icon': 'bi-lightning-charge',
+                'description': 'Hyperliquid平台聪明钱交易数据',
+                'status': 'error',
+                'error': str(e)
+            })
+        
+        # 8. 链上聪明钱数据情况
+        try:
+            # 检查smart_money_transactions表
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as count,
+                    MAX(timestamp) as latest_time,
+                    MIN(timestamp) as oldest_time,
+                    COUNT(DISTINCT address) as wallet_count,
+                    COUNT(DISTINCT token_symbol) as token_count,
+                    COUNT(DISTINCT blockchain) as blockchain_count
+                FROM smart_money_transactions
+            """)
+            smart_money_tx_result = cursor.fetchone()
+            
+            # 检查smart_money_signals表
+            cursor.execute("""
+                SELECT 
+                    COUNT(*) as signal_count,
+                    MAX(timestamp) as latest_signal_time,
+                    COUNT(DISTINCT token_symbol) as signal_token_count
+                FROM smart_money_signals
+                WHERE is_active = TRUE
+            """)
+            smart_money_signal_result = cursor.fetchone()
+            
+            # 检查smart_money_addresses表
+            cursor.execute("""
+                SELECT COUNT(*) as address_count
+                FROM smart_money_addresses
+            """)
+            smart_money_address_result = cursor.fetchone()
+            
+            collection_status.append({
+                'type': '链上聪明钱',
+                'category': 'smart_money',
+                'icon': 'bi-wallet2',
+                'description': '链上聪明钱交易和信号数据',
+                'count': smart_money_tx_result['count'] if smart_money_tx_result else 0,
+                'latest_time': smart_money_tx_result['latest_time'].isoformat() if smart_money_tx_result and smart_money_tx_result['latest_time'] else None,
+                'oldest_time': smart_money_tx_result['oldest_time'].isoformat() if smart_money_tx_result and smart_money_tx_result['oldest_time'] else None,
+                'wallet_count': smart_money_tx_result['wallet_count'] if smart_money_tx_result else 0,
+                'address_count': smart_money_address_result['address_count'] if smart_money_address_result else 0,
+                'token_count': smart_money_tx_result['token_count'] if smart_money_tx_result else 0,
+                'blockchain_count': smart_money_tx_result['blockchain_count'] if smart_money_tx_result else 0,
+                'signal_count': smart_money_signal_result['signal_count'] if smart_money_signal_result else 0,
+                'latest_signal_time': smart_money_signal_result['latest_signal_time'].isoformat() if smart_money_signal_result and smart_money_signal_result['latest_signal_time'] else None,
+                'status': _check_status_active(smart_money_tx_result['latest_time'], 86400) if smart_money_tx_result and smart_money_tx_result['latest_time'] else 'inactive'  # 24小时阈值
+            })
+        except Exception as e:
+            logger.error(f"获取链上聪明钱数据情况失败: {e}")
+            import traceback
+            traceback.print_exc()
+            collection_status.append({
+                'type': '链上聪明钱',
+                'category': 'smart_money',
+                'icon': 'bi-wallet2',
+                'description': '链上聪明钱交易和信号数据',
+                'status': 'error',
+                'error': str(e)
+            })
+        
         cursor.close()
         conn.close()
         

@@ -530,6 +530,17 @@
                         if (item.exchange_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">交易所: ${item.exchange_count}</div>`;
                         if (item.etf_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">ETF数量: ${item.etf_count}</div>`;
                         if (item.company_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">公司数量: ${item.company_count}</div>`;
+                        // Hyperliquid聪明钱统计
+                        if (item.wallet_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">钱包: ${item.wallet_count}</div>`;
+                        if (item.trader_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">交易者: ${item.trader_count}</div>`;
+                        if (item.monitored_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">监控中: ${item.monitored_count}</div>`;
+                        if (item.coin_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">币种: ${item.coin_count}</div>`;
+                        // 链上聪明钱统计
+                        if (item.address_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">地址: ${item.address_count}</div>`;
+                        if (item.token_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">代币: ${item.token_count}</div>`;
+                        if (item.blockchain_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">链: ${item.blockchain_count}</div>`;
+                        if (item.signal_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">活跃信号: ${item.signal_count}</div>`;
+                        if (item.latest_signal_time) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">最新信号: ${formatDateTime(item.latest_signal_time)}</div>`;
                         
                         return `
                             <div class="stat-card">
