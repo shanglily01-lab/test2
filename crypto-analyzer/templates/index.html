@@ -172,33 +172,67 @@
 
         <!-- Market Overview -->
         <div class="card">
-            <div class="card-header">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h2 class="card-title">
                     <i class="bi bi-graph-up"></i>
                     市场概览
                 </h2>
+                <div style="font-size: 12px; color: var(--text-secondary);">
+                    <i class="bi bi-arrow-clockwise"></i> 
+                    <span id="marketUpdateTime">加载中...</span>
+                </div>
             </div>
             <div class="card-body">
-                <div class="stats-grid" id="marketStats">
-                    <div class="stat-card">
-                        <div class="stat-label">比特币价格</div>
+                <div class="stats-grid" id="marketStats" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                    <div class="stat-card" onclick="window.location.href='/dashboard'">
+                        <div class="stat-label">
+                            <i class="bi bi-currency-bitcoin" style="color: var(--warning-yellow); margin-right: 4px;"></i>
+                            比特币 (BTC)
+                        </div>
                         <div class="stat-value" id="btcPrice">-</div>
                         <div class="stat-change" id="btcChange">-</div>
+                        <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;" id="btcVolume">-</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-label">以太坊价格</div>
+                    <div class="stat-card" onclick="window.location.href='/dashboard'">
+                        <div class="stat-label">
+                            <i class="bi bi-currency-ethereum" style="color: var(--info-blue); margin-right: 4px;"></i>
+                            以太坊 (ETH)
+                        </div>
                         <div class="stat-value" id="ethPrice">-</div>
                         <div class="stat-change" id="ethChange">-</div>
+                        <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;" id="ethVolume">-</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-label">总市值</div>
+                    <div class="stat-card" onclick="window.location.href='/dashboard'">
+                        <div class="stat-label">
+                            <i class="bi bi-graph-up-arrow" style="color: var(--success-green); margin-right: 4px;"></i>
+                            24H涨跌比
+                        </div>
+                        <div class="stat-value" id="bullishRatio" style="font-size: 28px;">-</div>
+                        <div class="stat-change" id="bullishCount">-</div>
+                    </div>
+                    <div class="stat-card" onclick="window.location.href='/dashboard'">
+                        <div class="stat-label">
+                            <i class="bi bi-bar-chart" style="color: var(--primary-blue); margin-right: 4px;"></i>
+                            总市值
+                        </div>
                         <div class="stat-value" id="totalMarketCap">-</div>
-                        <div class="stat-change" id="marketCapChange">-</div>
+                        <div class="stat-change" id="marketCapChange" style="display: none;">-</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-label">24H交易量</div>
+                    <div class="stat-card" onclick="window.location.href='/dashboard'">
+                        <div class="stat-label">
+                            <i class="bi bi-activity" style="color: var(--secondary-purple); margin-right: 4px;"></i>
+                            24H交易量
+                        </div>
                         <div class="stat-value" id="totalVolume">-</div>
-                        <div class="stat-change" id="volumeChange">-</div>
+                        <div class="stat-change" id="volumeChange" style="display: none;">-</div>
+                    </div>
+                    <div class="stat-card" onclick="window.location.href='/dashboard'">
+                        <div class="stat-label">
+                            <i class="bi bi-list-stars" style="color: var(--secondary-orange); margin-right: 4px;"></i>
+                            监控币种
+                        </div>
+                        <div class="stat-value" id="totalSymbols" style="font-size: 28px;">-</div>
+                        <div class="stat-change" id="symbolsInfo">-</div>
                     </div>
                 </div>
             </div>
@@ -214,36 +248,60 @@
             </div>
             <div class="card-body">
                 <div class="features-grid">
-                    <div class="feature-card">
+                    <a href="/dashboard" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">📊</div>
                         <h3 class="feature-title">实时数据分析</h3>
-                        <p class="feature-description">多维度数据采集与分析，覆盖主流交易所，提供毫秒级市场数据更新</p>
-                    </div>
-                    <div class="feature-card">
+                        <p class="feature-description">多维度数据采集与分析，覆盖主流交易所，提供毫秒级市场数据更新。支持K线、价格、交易量等多维度数据实时监控。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                    <a href="/futures_trading" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">📈</div>
                         <h3 class="feature-title">合约交易监控</h3>
-                        <p class="feature-description">永续合约、交割合约全方位监控，资金费率、持仓分析一目了然</p>
-                    </div>
-                    <div class="feature-card">
+                        <p class="feature-description">永续合约、交割合约全方位监控，资金费率、持仓分析、多空比等关键指标一目了然，助力合约交易决策。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                    <a href="/etf_data" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">💼</div>
                         <h3 class="feature-title">ETF数据追踪</h3>
-                        <p class="feature-description">全球加密货币ETF实时监控，资金流向、机构持仓变化尽在掌握</p>
-                    </div>
-                    <div class="feature-card">
+                        <p class="feature-description">全球加密货币ETF实时监控，资金流向、机构持仓变化、净流入流出等数据尽在掌握，把握机构资金动向。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                    <a href="/strategies" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">🎯</div>
                         <h3 class="feature-title">投资策略系统</h3>
-                        <p class="feature-description">量化策略回测、信号生成、风险管理，助您构建专业投资组合</p>
-                    </div>
-                    <div class="feature-card">
+                        <p class="feature-description">量化策略回测、信号生成、风险管理，助您构建专业投资组合。支持EMA、MACD、RSI等多种技术指标分析。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                    <a href="/corporate_treasury" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">🏢</div>
                         <h3 class="feature-title">企业金库分析</h3>
-                        <p class="feature-description">追踪上市公司加密资产配置，洞察机构投资趋势与持仓动向</p>
-                    </div>
-                    <div class="feature-card">
+                        <p class="feature-description">追踪上市公司加密资产配置，洞察机构投资趋势与持仓动向。监控MicroStrategy、Tesla等知名企业持仓变化。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                    <a href="/data_management" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">⚡</div>
-                        <h3 class="feature-title">智能告警系统</h3>
-                        <p class="feature-description">自定义价格、资金费率、交易量告警，重要市场变化实时推送</p>
-                    </div>
+                        <h3 class="feature-title">智能数据管理</h3>
+                        <p class="feature-description">数据采集、存储、分析一体化管理。支持历史数据导入、实时数据采集、数据质量监控等功能。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
                 </div>
             </div>
         </div>
@@ -281,17 +339,27 @@
         // 加载市场数据
         async function loadMarketData() {
             try {
-                const response = await fetch('/api/prices');
+                const response = await fetch('/api/prices?limit=50');
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const data = await response.json();
 
-                if (data.success && data.prices) {
-                    updateMarketCards(data.prices);
+                if (data.success) {
+                    // 兼容不同的API响应格式
+                    const prices = data.prices || data.data || [];
+                    if (prices.length > 0) {
+                        updateMarketCards(prices);
+                    }
                 }
             } catch (error) {
                 console.error('加载市场数据失败:', error);
+                // 显示错误状态
+                const updateTimeEl = document.getElementById('marketUpdateTime');
+                if (updateTimeEl) {
+                    updateTimeEl.textContent = '加载失败';
+                    updateTimeEl.style.color = 'var(--danger-red)';
+                }
             }
         }
 
@@ -300,10 +368,11 @@
             if (!prices || prices.length === 0) return;
 
             // 更新BTC
-            const btc = prices.find(p => p.symbol === 'BTC/USDT' || p.symbol === 'BTCUSDT');
+            const btc = prices.find(p => p.symbol === 'BTC/USDT' || p.symbol === 'BTCUSDT' || (p.symbol && p.symbol.includes('BTC')));
             if (btc) {
                 const btcPriceEl = document.getElementById('btcPrice');
                 const btcChangeEl = document.getElementById('btcChange');
+                const btcVolumeEl = document.getElementById('btcVolume');
                 if (btcPriceEl) {
                     btcPriceEl.textContent = formatPrice(btc.price);
                 }
@@ -311,13 +380,17 @@
                     btcChangeEl.textContent = `${formatPercent(btc.change_24h || 0)} (24h)`;
                     btcChangeEl.className = 'stat-change ' + ((btc.change_24h || 0) >= 0 ? 'positive' : 'negative');
                 }
+                if (btcVolumeEl && btc.volume_24h) {
+                    btcVolumeEl.textContent = `24h量: ${formatLargeNumber(btc.volume_24h)}`;
+                }
             }
 
             // 更新ETH
-            const eth = prices.find(p => p.symbol === 'ETH/USDT' || p.symbol === 'ETHUSDT');
+            const eth = prices.find(p => p.symbol === 'ETH/USDT' || p.symbol === 'ETHUSDT' || (p.symbol && p.symbol.includes('ETH')));
             if (eth) {
                 const ethPriceEl = document.getElementById('ethPrice');
                 const ethChangeEl = document.getElementById('ethChange');
+                const ethVolumeEl = document.getElementById('ethVolume');
                 if (ethPriceEl) {
                     ethPriceEl.textContent = formatPrice(eth.price);
                 }
@@ -325,23 +398,68 @@
                     ethChangeEl.textContent = `${formatPercent(eth.change_24h || 0)} (24h)`;
                     ethChangeEl.className = 'stat-change ' + ((eth.change_24h || 0) >= 0 ? 'positive' : 'negative');
                 }
+                if (ethVolumeEl && eth.volume_24h) {
+                    ethVolumeEl.textContent = `24h量: ${formatLargeNumber(eth.volume_24h)}`;
+                }
             }
 
-            // 计算总市值和交易量（简化计算）
+            // 计算涨跌比
+            let bullishCount = 0;
+            let bearishCount = 0;
             let totalMarketCap = 0;
             let totalVolume = 0;
+            
             prices.forEach(p => {
+                if (p.change_24h > 0) bullishCount++;
+                else if (p.change_24h < 0) bearishCount++;
                 if (p.market_cap) totalMarketCap += p.market_cap;
-                if (p.volume) totalVolume += p.volume;
+                if (p.volume_24h) totalVolume += p.volume_24h;
+                else if (p.volume) totalVolume += p.volume;
             });
 
+            const totalCount = bullishCount + bearishCount;
+            const bullishRatioEl = document.getElementById('bullishRatio');
+            const bullishCountEl = document.getElementById('bullishCount');
+            if (bullishRatioEl && totalCount > 0) {
+                const ratio = ((bullishCount / totalCount) * 100).toFixed(1);
+                bullishRatioEl.textContent = `${ratio}%`;
+                bullishRatioEl.style.color = ratio >= 50 ? 'var(--success-green)' : 'var(--danger-red)';
+            }
+            if (bullishCountEl) {
+                bullishCountEl.textContent = `上涨: ${bullishCount} | 下跌: ${bearishCount}`;
+                bullishCountEl.className = 'stat-change';
+            }
+
+            // 更新总市值和交易量
             const totalMarketCapEl = document.getElementById('totalMarketCap');
             const totalVolumeEl = document.getElementById('totalVolume');
             if (totalMarketCapEl && totalMarketCap > 0) {
                 totalMarketCapEl.textContent = formatLargeNumber(totalMarketCap);
+            } else if (totalMarketCapEl) {
+                totalMarketCapEl.textContent = '-';
             }
             if (totalVolumeEl && totalVolume > 0) {
                 totalVolumeEl.textContent = formatLargeNumber(totalVolume);
+            } else if (totalVolumeEl) {
+                totalVolumeEl.textContent = '-';
+            }
+
+            // 更新监控币种数
+            const totalSymbolsEl = document.getElementById('totalSymbols');
+            const symbolsInfoEl = document.getElementById('symbolsInfo');
+            if (totalSymbolsEl) {
+                totalSymbolsEl.textContent = prices.length;
+            }
+            if (symbolsInfoEl) {
+                symbolsInfoEl.textContent = `实时监控中`;
+                symbolsInfoEl.className = 'stat-change positive';
+            }
+
+            // 更新最后更新时间
+            const updateTimeEl = document.getElementById('marketUpdateTime');
+            if (updateTimeEl) {
+                const now = new Date();
+                updateTimeEl.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             }
         }
 
