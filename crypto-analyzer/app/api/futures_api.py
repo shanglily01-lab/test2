@@ -786,6 +786,26 @@ async def get_futures_price(symbol: str):
 
 # ==================== 健康检查 ====================
 
+@router.get('/symbols')
+async def get_symbols():
+    """
+    获取可交易的币种列表（从配置文件读取）
+
+    Returns:
+        交易对列表
+    """
+    try:
+        symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
+        return {
+            "success": True,
+            "symbols": symbols,
+            "total": len(symbols)
+        }
+    except Exception as e:
+        logger.error(f"获取交易对列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get('/health')
 async def health():
     """健康检查"""

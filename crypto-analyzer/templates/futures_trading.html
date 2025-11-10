@@ -596,26 +596,38 @@
         // 加载交易对列表
         async function loadSymbols() {
             try {
-                // 从config.yaml中获取交易对，这里使用硬编码的主要交易对
-                symbols = [
-                    'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
-                    'ADA/USDT', 'DOGE/USDT', 'DOT/USDT', 'MATIC/USDT', 'LTC/USDT',
-                    'AVAX/USDT', 'LINK/USDT', 'UNI/USDT', 'ATOM/USDT', 'ETC/USDT',
-                    'FIL/USDT', 'TRX/USDT', 'NEAR/USDT', 'APT/USDT', 'ORDI/USDT'
-                ];
+                // 从API获取交易对列表（从配置文件读取）
+                const response = await fetch('/api/futures/symbols');
+                const data = await response.json();
                 
-                const symbolSelect = document.getElementById('symbol');
-                symbolSelect.innerHTML = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
-                
-                // 设置默认交易对
-                if (symbols.length > 0) {
+                if (data.success && data.symbols && data.symbols.length > 0) {
+                    symbols = data.symbols;
+                    
+                    const symbolSelect = document.getElementById('symbol');
+                    symbolSelect.innerHTML = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+                    
+                    // 设置默认交易对
+                    currentSymbol = symbols[0];
+                    symbolSelect.value = currentSymbol;
+                    await refreshPrice();
+                } else {
+                    console.warn('未获取到交易对列表，使用默认值');
+                    symbols = ['BTC/USDT', 'ETH/USDT'];
+                    const symbolSelect = document.getElementById('symbol');
+                    symbolSelect.innerHTML = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
                     currentSymbol = symbols[0];
                     symbolSelect.value = currentSymbol;
                     await refreshPrice();
                 }
             } catch (error) {
                 console.error('加载交易对失败:', error);
-                showToast('加载交易对失败', 'error');
+                // 失败时使用默认值
+                symbols = ['BTC/USDT', 'ETH/USDT'];
+                const symbolSelect = document.getElementById('symbol');
+                symbolSelect.innerHTML = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+                currentSymbol = symbols[0];
+                symbolSelect.value = currentSymbol;
+                showToast('加载交易对失败，使用默认值', 'warning');
             }
         }
 
