@@ -4,7 +4,7 @@
 提供数据统计、查询和维护功能
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta, date
@@ -16,6 +16,7 @@ import csv
 import io
 import asyncio
 import pandas as pd
+from app.services.data_collection_task_manager import task_manager, TaskStatus
 
 router = APIRouter(prefix="/api/data-management", tags=["数据管理"])
 
@@ -1504,35 +1505,50 @@ async def import_corporate_treasury_data(
 
 
 @router.get("/template/etf")
-async def download_etf_template():
+async def download_etf_template(asset_type: str = "BTC"):
     """
     下载ETF数据导入模板CSV文件
     
-    参考 btc_etf_2025-11-08.csv 的格式
-    格式：Date, Ticker, NetInflow, BTC_Holdings
+    支持BTC和ETH两种资产类型
+    
+    Args:
+        asset_type: 资产类型，BTC 或 ETH，默认为 BTC
+    
+    参考格式：
+    - BTC: Date, Ticker, NetInflow, BTC_Holdings
+    - ETH: Date, Ticker, NetInflow, ETH_Holdings
     """
     try:
-        # 创建模板内容（参考 btc_etf_2025-11-08.csv 的格式）
-        # 格式：Date, Ticker, NetInflow, BTC_Holdings
-        # NetInflow 是美元金额（不是百万美元），BTC_Holdings 是持仓量
+        asset_type = asset_type.upper()
+        if asset_type not in ['BTC', 'ETH']:
+            asset_type = 'BTC'
+        
+        # 创建模板内容
+        # NetInflow 是美元金额（不是百万美元），Holdings 是持仓量
         from datetime import date, timedelta
         yesterday = (date.today() - timedelta(days=1)).strftime('%Y-%m-%d')
         
-        template_content = "Date,Ticker,NetInflow,BTC_Holdings\n"
-        template_content += f"{yesterday},IBIT,0,0\n"
-        template_content += f"{yesterday},FBTC,0,0\n"
-        template_content += f"{yesterday},BITB,0,0\n"
-        template_content += f"{yesterday},ARKB,0,0\n"
-        template_content += f"{yesterday},BTCO,0,0\n"
-        template_content += f"{yesterday},EZBC,0,0\n"
-        template_content += f"{yesterday},BRRR,0,0\n"
-        template_content += f"{yesterday},HODL,0,0\n"
-        template_content += f"{yesterday},BTCW,0,0\n"
-        template_content += f"{yesterday},GBTC,0,0\n"
-        template_content += f"{yesterday},DEFI,0,0\n"
+        if asset_type == 'BTC':
+            # BTC ETF 模板
+            holdings_column = "BTC_Holdings"
+            template_content = f"Date,Ticker,NetInflow,{holdings_column}\n"
+            # 常见的BTC ETF tickers
+            btc_tickers = ['IBIT', 'FBTC', 'BITB', 'ARKB', 'BTCO', 'EZBC', 'BRRR', 'HODL', 'BTCW', 'GBTC', 'DEFI']
+            for ticker in btc_tickers:
+                template_content += f"{yesterday},{ticker},0,0\n"
+            filename = "etf_btc_import_template.csv"
+        else:
+            # ETH ETF 模板
+            holdings_column = "ETH_Holdings"
+            template_content = f"Date,Ticker,NetInflow,{holdings_column}\n"
+            # 常见的ETH ETF tickers（来自数据库schema）
+            eth_tickers = ['ETHA', 'FETH', 'ETHW', 'ETHV', 'QETH', 'EZET', 'CETH', 'ETHE', 'ETH']
+            for ticker in eth_tickers:
+                template_content += f"{yesterday},{ticker},0,0\n"
+            filename = "etf_eth_import_template.csv"
         
         # 创建临时文件
-        template_path = Path(__file__).parent.parent.parent / "templates" / "etf_import_template.csv"
+        template_path = Path(__file__).parent.parent.parent / "templates" / filename
         template_path.parent.mkdir(parents=True, exist_ok=True)
         
         with open(template_path, 'w', encoding='utf-8-sig', newline='') as f:
@@ -1540,7 +1556,7 @@ async def download_etf_template():
         
         return FileResponse(
             path=str(template_path),
-            filename="etf_import_template.csv",
+            filename=filename,
             media_type="text/csv"
         )
         
@@ -1646,10 +1662,457 @@ async def download_corporate_treasury_financing_template():
         raise HTTPException(status_code=500, detail=f"生成企业金库融资模板失败: {str(e)}")
 
 
+async def _execute_collection_task(task_id: str, request_data: Dict):
+    """
+    后台执行数据采集任务
+    
+    Args:
+        task_id: 任务ID
+        request_data: 采集请求数据
+    """
+    try:
+        task_manager.set_task_status(task_id, TaskStatus.RUNNING)
+        
+        symbols = request_data.get('symbols', [])
+        data_type = request_data.get('data_type', 'price')
+        start_time_str = request_data.get('start_time')
+        end_time_str = request_data.get('end_time')
+        timeframes = request_data.get('timeframes', None)
+        if not timeframes:
+            timeframe = request_data.get('timeframe', '1h')
+            timeframes = [timeframe] if data_type == 'kline' else []
+        collect_futures = request_data.get('collect_futures', False)
+        save_to_config = request_data.get('save_to_config', False)
+        
+        # 解析时间
+        start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+        end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+        
+        # 计算总步骤数
+        collect_price = data_type in ['price', 'both']
+        collect_kline = data_type in ['kline', 'both']
+        total_steps = len(symbols) * (
+            (1 if collect_price else 0) + 
+            (len(timeframes) if collect_kline else 0) + 
+            (len(timeframes) if collect_futures else 0)
+        )
+        task = task_manager.get_task(task_id)
+        if task:
+            task.total_steps = total_steps
+        
+        # 导入采集器
+        from app.collectors.price_collector import MultiExchangeCollector
+        
+        # 加载配置
+        config_path = Path(__file__).parent.parent.parent / "config.yaml"
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        
+        # 初始化采集器
+        collector = MultiExchangeCollector(config)
+        
+        # 初始化合约采集器
+        futures_collector = None
+        if collect_futures:
+            try:
+                from app.collectors.binance_futures_collector import BinanceFuturesCollector
+                binance_config = config.get('exchanges', {}).get('binance', {})
+                futures_collector = BinanceFuturesCollector(binance_config)
+            except Exception as e:
+                logger.warning(f"合约数据采集器初始化失败: {e}")
+                collect_futures = False
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        total_saved = 0
+        errors = []
+        completed_steps = 0
+        
+        # 遍历每个交易对
+        for symbol_idx, symbol in enumerate(symbols):
+            try:
+                symbol = symbol.strip()
+                if not symbol:
+                    continue
+                
+                task_manager.update_task_progress(
+                    task_id,
+                    current_step=f"正在采集 {symbol}...",
+                    progress=(symbol_idx / len(symbols)) * 100
+                )
+                
+                if collect_price:
+                    task_manager.update_task_progress(
+                        task_id,
+                        current_step=f"正在采集 {symbol} 价格数据..."
+                    )
+                    df = await collector.fetch_historical_data(
+                        symbol=symbol,
+                        timeframe='1m',
+                        days=int((end_time - start_time).total_seconds() / 86400) + 1
+                    )
+                    
+                    if df is not None and len(df) > 0:
+                        df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+                        saved_count = 0
+                        for _, row in df.iterrows():
+                            try:
+                                created_at = datetime.now()
+                                cursor.execute("""
+                                    INSERT INTO price_data
+                                    (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    ON DUPLICATE KEY UPDATE
+                                        price = VALUES(price),
+                                        open_price = VALUES(open_price),
+                                        high_price = VALUES(high_price),
+                                        low_price = VALUES(low_price),
+                                        close_price = VALUES(close_price),
+                                        volume = VALUES(volume),
+                                        quote_volume = VALUES(quote_volume),
+                                        bid_price = VALUES(bid_price),
+                                        ask_price = VALUES(ask_price),
+                                        change_24h = VALUES(change_24h),
+                                        created_at = VALUES(created_at)
+                                """, (
+                                    symbol, 'binance', row['timestamp'],
+                                    float(row['close']), float(row['open']),
+                                    float(row['high']), float(row['low']),
+                                    float(row['close']), float(row['volume']),
+                                    float(row.get('quote_volume', 0)), 0, 0, 0, created_at
+                                ))
+                                saved_count += 1
+                            except Exception as e:
+                                logger.error(f"保存价格数据失败: {e}")
+                                continue
+                        
+                        total_saved += saved_count
+                        completed_steps += 1
+                        task_manager.update_task_progress(
+                            task_id,
+                            completed_steps=completed_steps,
+                            total_saved=total_saved
+                        )
+                    else:
+                        errors.append(f"{symbol}: 未获取到价格数据")
+                
+                if collect_kline:
+                    if not timeframes:
+                        timeframes = ['1m', '5m', '15m', '1h', '1d']
+                    
+                    symbol_saved = 0
+                    for timeframe in timeframes:
+                        try:
+                            task_manager.update_task_progress(
+                                task_id,
+                                current_step=f"正在采集 {symbol} {timeframe} K线数据..."
+                            )
+                            df = await collector.fetch_historical_data(
+                                symbol=symbol,
+                                timeframe=timeframe,
+                                days=int((end_time - start_time).total_seconds() / 86400) + 1
+                            )
+                            
+                            if df is not None and len(df) > 0:
+                                df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+                                timeframe_saved = 0
+                                for _, row in df.iterrows():
+                                    try:
+                                        timestamp = row['timestamp']
+                                        if isinstance(timestamp, pd.Timestamp):
+                                            timestamp_dt = timestamp.to_pydatetime()
+                                            open_time_ms = int(timestamp.timestamp() * 1000)
+                                        elif isinstance(timestamp, datetime):
+                                            timestamp_dt = timestamp
+                                            open_time_ms = int(timestamp.timestamp() * 1000)
+                                        else:
+                                            timestamp_dt = pd.to_datetime(timestamp).to_pydatetime()
+                                            open_time_ms = int(pd.to_datetime(timestamp).timestamp() * 1000)
+                                        
+                                        timeframe_minutes = {
+                                            '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+                                            '1h': 60, '4h': 240, '1d': 1440
+                                        }.get(timeframe, 60)
+                                        close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
+                                        created_at = datetime.now()
+                                        
+                                        cursor.execute("""
+                                            INSERT INTO kline_data
+                                            (symbol, exchange, timeframe, open_time, close_time, timestamp, open_price, high_price, low_price, close_price, volume, quote_volume, created_at)
+                                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                            ON DUPLICATE KEY UPDATE
+                                                open_price = VALUES(open_price),
+                                                high_price = VALUES(high_price),
+                                                low_price = VALUES(low_price),
+                                                close_price = VALUES(close_price),
+                                                volume = VALUES(volume),
+                                                quote_volume = VALUES(quote_volume),
+                                                created_at = VALUES(created_at)
+                                        """, (
+                                            symbol, 'binance', timeframe, open_time_ms, close_time_ms,
+                                            timestamp_dt, float(row['open']), float(row['high']),
+                                            float(row['low']), float(row['close']), float(row['volume']),
+                                            float(row.get('quote_volume', 0)), created_at
+                                        ))
+                                        timeframe_saved += 1
+                                    except Exception as e:
+                                        logger.error(f"保存K线数据失败: {e}")
+                                        continue
+                                
+                                symbol_saved += timeframe_saved
+                                completed_steps += 1
+                                task_manager.update_task_progress(
+                                    task_id,
+                                    completed_steps=completed_steps,
+                                    total_saved=total_saved + symbol_saved,
+                                    progress=min(100, (completed_steps / total_steps) * 100) if total_steps > 0 else 0
+                                )
+                        except Exception as e:
+                            error_msg = f"{symbol} {timeframe}: {str(e)}"
+                            errors.append(error_msg)
+                            logger.error(f"采集 {symbol} {timeframe} K线数据失败: {e}")
+                    
+                    total_saved += symbol_saved
+                    if symbol_saved == 0:
+                        errors.append(f"{symbol}: 所有周期均未获取到K线数据")
+                
+                # 采集合约数据
+                if collect_futures and futures_collector:
+                    try:
+                        task_manager.update_task_progress(
+                            task_id,
+                            current_step=f"正在采集 {symbol} 合约数据..."
+                        )
+                        futures_saved = 0
+                        
+                        if not timeframes:
+                            timeframes = ['1m', '5m', '15m', '1h', '1d']
+                        
+                        for timeframe in timeframes:
+                            try:
+                                task_manager.update_task_progress(
+                                    task_id,
+                                    current_step=f"正在采集 {symbol} 合约 {timeframe} K线数据..."
+                                )
+                                
+                                days = int((end_time - start_time).total_seconds() / 86400) + 1
+                                timeframe_minutes = {
+                                    '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+                                    '1h': 60, '4h': 240, '1d': 1440
+                                }.get(timeframe, 60)
+                                klines_needed = int(days * 1440 / timeframe_minutes)
+                                limit = min(klines_needed, 1500)
+                                
+                                df = await futures_collector.fetch_futures_klines(
+                                    symbol=symbol,
+                                    timeframe=timeframe,
+                                    limit=limit
+                                )
+                                
+                                if df is not None and len(df) > 0:
+                                    df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+                                    timeframe_saved = 0
+                                    for _, row in df.iterrows():
+                                        try:
+                                            timestamp = row['timestamp']
+                                            if isinstance(timestamp, pd.Timestamp):
+                                                timestamp_dt = timestamp.to_pydatetime()
+                                                open_time_ms = int(timestamp.timestamp() * 1000)
+                                            elif isinstance(timestamp, datetime):
+                                                timestamp_dt = timestamp
+                                                open_time_ms = int(timestamp.timestamp() * 1000)
+                                            else:
+                                                timestamp_dt = pd.to_datetime(timestamp).to_pydatetime()
+                                                open_time_ms = int(pd.to_datetime(timestamp).timestamp() * 1000)
+                                            
+                                            timeframe_minutes = {
+                                                '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+                                                '1h': 60, '4h': 240, '1d': 1440
+                                            }.get(timeframe, 60)
+                                            close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
+                                            created_at = datetime.now()
+                                            
+                                            cursor.execute("""
+                                                INSERT INTO kline_data
+                                                (symbol, exchange, timeframe, open_time, close_time, timestamp, open_price, high_price, low_price, close_price, volume, quote_volume, created_at)
+                                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                                ON DUPLICATE KEY UPDATE
+                                                    open_price = VALUES(open_price),
+                                                    high_price = VALUES(high_price),
+                                                    low_price = VALUES(low_price),
+                                                    close_price = VALUES(close_price),
+                                                    volume = VALUES(volume),
+                                                    quote_volume = VALUES(quote_volume),
+                                                    created_at = VALUES(created_at)
+                                            """, (
+                                                symbol, 'binance_futures', timeframe, open_time_ms, close_time_ms,
+                                                timestamp_dt, float(row['open']), float(row['high']),
+                                                float(row['low']), float(row['close']), float(row['volume']),
+                                                float(row.get('quote_volume', 0)), created_at
+                                            ))
+                                            timeframe_saved += 1
+                                        except Exception as e:
+                                            logger.error(f"保存合约K线数据失败: {e}")
+                                            continue
+                                    
+                                    futures_saved += timeframe_saved
+                                    completed_steps += 1
+                                    task_manager.update_task_progress(
+                                        task_id,
+                                        completed_steps=completed_steps,
+                                        total_saved=total_saved + futures_saved,
+                                        progress=min(100, (completed_steps / total_steps) * 100) if total_steps > 0 else 0
+                                    )
+                                
+                                await asyncio.sleep(0.3)  # 延迟避免API限流
+                                
+                            except Exception as e:
+                                error_msg = f"{symbol} 合约 {timeframe}: {str(e)}"
+                                errors.append(error_msg)
+                                logger.error(f"采集 {symbol} 合约 {timeframe} K线数据失败: {e}")
+                        
+                        total_saved += futures_saved
+                        if futures_saved == 0:
+                            errors.append(f"{symbol}: 所有周期均未获取到合约数据")
+                            
+                    except Exception as e:
+                        error_msg = f"{symbol} 合约数据: {str(e)}"
+                        errors.append(error_msg)
+                        logger.error(f"采集 {symbol} 合约数据失败: {e}")
+                
+            except Exception as e:
+                error_msg = f"{symbol}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(f"采集 {symbol} 数据失败: {e}")
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # 更新配置文件
+        config_updated = False
+        if save_to_config:
+            try:
+                price_updated = _update_config_file(config_path, symbols, 'price', None)
+                if price_updated:
+                    config_updated = True
+                if collect_kline and timeframes:
+                    for tf in timeframes:
+                        updated = _update_config_file(config_path, symbols, 'kline', tf)
+                        if updated:
+                            config_updated = True
+            except Exception as e:
+                logger.error(f"更新配置文件失败: {e}")
+        
+        result = {
+            'success': True,
+            'total_saved': total_saved,
+            'errors': errors,
+            'config_updated': config_updated,
+            'collect_futures': collect_futures,
+            'message': f'成功采集 {total_saved} 条数据' + (f'，{len(errors)} 个错误' if errors else '')
+        }
+        
+        task_manager.set_task_status(task_id, TaskStatus.COMPLETED, result)
+        task_manager.update_task_progress(task_id, progress=100.0, current_step="采集完成")
+        
+    except Exception as e:
+        logger.error(f"数据采集任务执行失败: {e}")
+        import traceback
+        traceback.print_exc()
+        task_manager.set_task_status(
+            task_id,
+            TaskStatus.FAILED,
+            {'success': False, 'error': str(e)}
+        )
+
+
 @router.post("/collect")
-async def collect_historical_data(request: Dict):
+async def collect_historical_data(request: Dict, background_tasks: BackgroundTasks):
     """
     采集历史数据
+    
+    Args:
+        request: 包含以下字段的字典
+            - symbols: 交易对列表，如 ["BTC/USDT", "ETH/USDT"]
+            - data_type: 数据类型，'price'、'kline' 或 'both'（同时采集价格和K线数据）
+            - start_time: 开始时间 (ISO格式字符串)
+            - end_time: 结束时间 (ISO格式字符串)
+            - timeframes: 时间周期列表（仅K线数据需要），如 ['1m', '5m', '1h']，默认 ['1m', '5m', '15m', '1h', '1d']
+            - timeframe: 单个时间周期（向后兼容，如果timeframes不存在则使用此字段）
+            - collect_futures: 是否采集合约数据 (bool)
+            - save_to_config: 是否保存到配置文件 (bool)
+    """
+    try:
+        symbols = request.get('symbols', [])
+        data_type = request.get('data_type', 'price')
+        start_time_str = request.get('start_time')
+        end_time_str = request.get('end_time')
+        # 支持多个时间周期，默认所有周期
+        timeframes = request.get('timeframes', None)
+        if not timeframes:
+            # 向后兼容：如果只有单个timeframe，转换为列表
+            timeframe = request.get('timeframe', '1h')
+            timeframes = [timeframe] if data_type == 'kline' else []
+        collect_futures = request.get('collect_futures', False)
+        save_to_config = request.get('save_to_config', False)
+        
+        if not symbols:
+            raise HTTPException(status_code=400, detail="交易对列表不能为空")
+        
+        if not start_time_str or not end_time_str:
+            raise HTTPException(status_code=400, detail="开始时间和结束时间不能为空")
+        
+        # 解析时间
+        try:
+            start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+            end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"时间格式错误: {str(e)}")
+        
+        if start_time >= end_time:
+            raise HTTPException(status_code=400, detail="结束时间必须晚于开始时间")
+        
+        # 创建后台任务
+        task_id = task_manager.create_task(request)
+        
+        # 在后台执行采集任务
+        background_tasks.add_task(_execute_collection_task, task_id, request)
+        
+        return {
+            'success': True,
+            'task_id': task_id,
+            'message': '数据采集任务已提交，正在后台执行'
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"创建数据采集任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"创建数据采集任务失败: {str(e)}")
+
+
+@router.get("/collect/task/{task_id}")
+async def get_collection_task_status(task_id: str):
+    """获取数据采集任务状态"""
+    try:
+        task = task_manager.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        
+        return task.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取任务状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取任务状态失败: {str(e)}")
+
+
+@router.post("/collect-sync")
+async def collect_historical_data_sync(request: Dict):
+    """
+    同步采集历史数据（保留向后兼容）
     
     Args:
         request: 包含以下字段的字典

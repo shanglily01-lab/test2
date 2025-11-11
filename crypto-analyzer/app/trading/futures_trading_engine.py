@@ -18,9 +18,10 @@ class FuturesTradingEngine:
         """初始化合约交易引擎"""
         self.db_config = db_config
         self.connection = None
+        self._is_first_connection = True  # 标记是否是首次连接
         self._connect_db()
 
-    def _connect_db(self):
+    def _connect_db(self, is_reconnect=False):
         """连接数据库"""
         try:
             self.connection = pymysql.connect(
@@ -32,7 +33,12 @@ class FuturesTradingEngine:
                 charset='utf8mb4',
                 cursorclass=pymysql.cursors.DictCursor
             )
-            logger.info("合约交易引擎数据库连接成功")
+            if self._is_first_connection:
+                logger.info("合约交易引擎数据库连接成功")
+                self._is_first_connection = False
+            elif is_reconnect:
+                # 重连时使用DEBUG级别，避免频繁打印
+                logger.debug("合约交易引擎数据库连接已重新建立")
         except Exception as e:
             logger.error(f"数据库连接失败: {e}")
             raise
@@ -41,11 +47,22 @@ class FuturesTradingEngine:
         """获取数据库游标"""
         try:
             if not self.connection or not self.connection.open:
-                self._connect_db()
+                # 静默检查连接，如果断开则重连
+                try:
+                    if self.connection:
+                        self.connection.ping(reconnect=True)
+                except:
+                    # 如果ping失败，重新连接
+                    self._connect_db(is_reconnect=True)
             return self.connection.cursor()
         except Exception as e:
             logger.error(f"获取数据库游标失败: {e}")
-            raise
+            # 如果获取游标失败，尝试重新连接
+            try:
+                self._connect_db(is_reconnect=True)
+                return self.connection.cursor()
+            except:
+                raise
 
     def get_current_price(self, symbol: str) -> Decimal:
         """
@@ -528,7 +545,8 @@ class FuturesTradingEngine:
         self,
         position_id: int,
         close_quantity: Optional[Decimal] = None,
-        reason: str = 'manual'
+        reason: str = 'manual',
+        close_price: Optional[Decimal] = None
     ) -> Dict:
         """
         平仓
@@ -572,10 +590,15 @@ class FuturesTradingEngine:
             if close_quantity > quantity:
                 raise ValueError(f"平仓数量{close_quantity}大于持仓数量{quantity}")
 
-            # 2. 获取当前价格
-            current_price = self.get_current_price(symbol)
-            if not current_price or current_price <= 0:
-                raise ValueError(f"无法获取{symbol}的有效价格")
+            # 2. 获取平仓价格
+            # 如果指定了平仓价格（如止盈止损触发），使用指定价格；否则使用当前市场价格
+            if close_price and close_price > 0:
+                current_price = close_price
+                logger.info(f"使用指定平仓价格: {close_price:.8f} (原因: {reason})")
+            else:
+                current_price = self.get_current_price(symbol)
+                if not current_price or current_price <= 0:
+                    raise ValueError(f"无法获取{symbol}的有效价格")
 
             # 3. 计算盈亏
             close_value = current_price * close_quantity

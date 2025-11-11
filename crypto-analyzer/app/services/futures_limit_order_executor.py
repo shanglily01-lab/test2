@@ -28,21 +28,58 @@ class FuturesLimitOrderExecutor:
         self.price_cache_service = price_cache_service
         self.running = False
         self.task = None
+        self.connection = None  # 持久数据库连接
         
     def _get_connection(self):
-        """获取数据库连接"""
-        return pymysql.connect(
-            host=self.db_config.get('host', 'localhost'),
-            port=self.db_config.get('port', 3306),
-            user=self.db_config.get('user', 'root'),
-            password=self.db_config.get('password', ''),
-            database=self.db_config.get('database', 'binance-data'),
-            charset='utf8mb4',
-            cursorclass=pymysql.cursors.DictCursor,
-            connect_timeout=5,
-            read_timeout=10,
-            write_timeout=10
-        )
+        """获取数据库连接（复用持久连接）"""
+        # 如果连接不存在或已断开，创建新连接
+        if self.connection is None or not self.connection.open:
+            try:
+                self.connection = pymysql.connect(
+                    host=self.db_config.get('host', 'localhost'),
+                    port=self.db_config.get('port', 3306),
+                    user=self.db_config.get('user', 'root'),
+                    password=self.db_config.get('password', ''),
+                    database=self.db_config.get('database', 'binance-data'),
+                    charset='utf8mb4',
+                    cursorclass=pymysql.cursors.DictCursor,
+                    connect_timeout=5,
+                    read_timeout=10,
+                    write_timeout=10,
+                    autocommit=True  # 自动提交，避免事务问题
+                )
+                # 只在首次创建连接时记录（DEBUG级别）
+                logger.debug("创建数据库连接（合约限价单执行器）")
+            except Exception as e:
+                logger.error(f"❌ 创建数据库连接失败: {e}")
+                raise
+        else:
+            # 静默检查连接是否还活着（不打印日志）
+            try:
+                self.connection.ping(reconnect=True)
+            except Exception as e:
+                # 只有在连接真正断开需要重连时才记录
+                logger.warning(f"数据库连接已断开，尝试重连: {e}")
+                try:
+                    self.connection = pymysql.connect(
+                        host=self.db_config.get('host', 'localhost'),
+                        port=self.db_config.get('port', 3306),
+                        user=self.db_config.get('user', 'root'),
+                        password=self.db_config.get('password', ''),
+                        database=self.db_config.get('database', 'binance-data'),
+                        charset='utf8mb4',
+                        cursorclass=pymysql.cursors.DictCursor,
+                        connect_timeout=5,
+                        read_timeout=10,
+                        write_timeout=10,
+                        autocommit=True
+                    )
+                    logger.info("✅ 数据库连接已重新建立（合约限价单执行器）")
+                except Exception as e2:
+                    logger.error(f"❌ 重连数据库失败: {e2}")
+                    raise
+        
+        return self.connection
     
     def get_current_price(self, symbol: str) -> Decimal:
         """
@@ -77,162 +114,159 @@ class FuturesLimitOrderExecutor:
             return
             
         try:
-            conn = self._get_connection()
-            try:
-                with conn.cursor() as cursor:
-                    # 获取所有待成交的限价单（只处理开仓订单）
-                    cursor.execute(
-                        """SELECT * FROM futures_orders
-                        WHERE status = 'PENDING' 
-                        AND order_type = 'LIMIT'
-                        AND side IN ('OPEN_LONG', 'OPEN_SHORT')
-                        ORDER BY created_at ASC"""
-                    )
-                    pending_orders = cursor.fetchall()
-                    
-                    if not pending_orders:
-                        logger.debug("📋 当前没有合约限价单需要检查")
-                        return
-                    
-                    logger.info(f"📋 检查 {len(pending_orders)} 个合约限价单")
-                    
-                    for order in pending_orders:
-                        try:
-                            order_id = order['order_id']
-                            account_id = order['account_id']
-                            symbol = order['symbol']
-                            side = order['side']  # OPEN_LONG 或 OPEN_SHORT
-                            limit_price = Decimal(str(order['price']))
-                            quantity = Decimal(str(order['quantity']))
-                            leverage = order.get('leverage', 1)
-                            stop_loss_price = Decimal(str(order['stop_loss_price'])) if order.get('stop_loss_price') else None
-                            take_profit_price = Decimal(str(order['take_profit_price'])) if order.get('take_profit_price') else None
-                            
-                            # 获取当前价格
-                            current_price = self.get_current_price(symbol)
-                            
-                            if current_price == 0:
-                                logger.warning(f"无法获取 {symbol} 的价格，跳过订单 {order_id}")
-                                continue
-                            
-                            # 检查是否达到触发条件
-                            should_execute = False
-                            position_side = 'LONG' if side == 'OPEN_LONG' else 'SHORT'
-                            
-                            logger.debug(f"🔍 检查限价单 {order_id}: {symbol} {position_side} {quantity} @ 限价 {limit_price}, 当前价 {current_price}")
-                            
-                            if side == 'OPEN_LONG':
-                                # 做多：当前价格 <= 限价时触发
-                                if current_price <= limit_price:
-                                    should_execute = True
-                                    logger.info(f"✅ 做多限价单触发: {symbol} 当前价格 {current_price} <= 限价 {limit_price}")
-                            elif side == 'OPEN_SHORT':
-                                # 做空：当前价格 >= 限价时触发
-                                if current_price >= limit_price:
-                                    should_execute = True
-                                    logger.info(f"✅ 做空限价单触发: {symbol} 当前价格 {current_price} >= 限价 {limit_price}")
-                            
-                            if should_execute:
+            conn = self._get_connection()  # 复用持久连接
+            with conn.cursor() as cursor:
+                # 获取所有待成交的限价单（只处理开仓订单）
+                cursor.execute(
+                    """SELECT * FROM futures_orders
+                    WHERE status = 'PENDING' 
+                    AND order_type = 'LIMIT'
+                    AND side IN ('OPEN_LONG', 'OPEN_SHORT')
+                    ORDER BY created_at ASC"""
+                )
+                pending_orders = cursor.fetchall()
+                
+                if not pending_orders:
+                    logger.debug("📋 当前没有合约限价单需要检查")
+                    return
+                
+                logger.info(f"📋 检查 {len(pending_orders)} 个合约限价单")
+                
+                for order in pending_orders:
+                    try:
+                        order_id = order['order_id']
+                        account_id = order['account_id']
+                        symbol = order['symbol']
+                        side = order['side']  # OPEN_LONG 或 OPEN_SHORT
+                        limit_price = Decimal(str(order['price']))
+                        quantity = Decimal(str(order['quantity']))
+                        leverage = order.get('leverage', 1)
+                        stop_loss_price = Decimal(str(order['stop_loss_price'])) if order.get('stop_loss_price') else None
+                        take_profit_price = Decimal(str(order['take_profit_price'])) if order.get('take_profit_price') else None
+                        
+                        # 获取当前价格
+                        current_price = self.get_current_price(symbol)
+                        
+                        if current_price == 0:
+                            logger.warning(f"无法获取 {symbol} 的价格，跳过订单 {order_id}")
+                            continue
+                        
+                        # 检查是否达到触发条件
+                        should_execute = False
+                        position_side = 'LONG' if side == 'OPEN_LONG' else 'SHORT'
+                        
+                        logger.debug(f"🔍 检查限价单 {order_id}: {symbol} {position_side} {quantity} @ 限价 {limit_price}, 当前价 {current_price}")
+                        
+                        if side == 'OPEN_LONG':
+                            # 做多：当前价格 <= 限价时触发
+                            if current_price <= limit_price:
+                                should_execute = True
+                                logger.info(f"✅ 做多限价单触发: {symbol} 当前价格 {current_price} <= 限价 {limit_price}")
+                        elif side == 'OPEN_SHORT':
+                            # 做空：当前价格 >= 限价时触发
+                            if current_price >= limit_price:
+                                should_execute = True
+                                logger.info(f"✅ 做空限价单触发: {symbol} 当前价格 {current_price} >= 限价 {limit_price}")
+                        
+                        if should_execute:
+                            # 执行开仓（使用限价作为成交价）
+                            try:
+                                # 先解冻保证金（因为限价单创建时已经冻结了保证金）
+                                # 开仓时会重新冻结，所以这里先解冻避免重复冻结
+                                frozen_margin = Decimal(str(order.get('margin', 0)))
+                                if frozen_margin > 0:
+                                    cursor.execute(
+                                        """UPDATE paper_trading_accounts
+                                        SET current_balance = current_balance + %s,
+                                            frozen_balance = frozen_balance - %s
+                                        WHERE id = %s""",
+                                        (float(frozen_margin), float(frozen_margin), account_id)
+                                    )
+                                
+                                # 提交解冻操作
+                                conn.commit()
+                                
                                 # 执行开仓（使用限价作为成交价）
+                                # 注意：由于价格已经达到限价，open_position 会立即成交
+                                result = self.trading_engine.open_position(
+                                    account_id=account_id,
+                                    symbol=symbol,
+                                    position_side=position_side,
+                                    quantity=quantity,
+                                    leverage=leverage,
+                                    limit_price=limit_price,  # 使用限价作为成交价
+                                    stop_loss_price=stop_loss_price,
+                                    take_profit_price=take_profit_price,
+                                    source='limit_order'
+                                )
+                                
+                                if result.get('success'):
+                                    # 从结果中获取实际的 symbol（确保一致性）
+                                    actual_symbol = result.get('symbol', symbol)
+                                    
+                                    # 验证 symbol 是否匹配
+                                    if actual_symbol != symbol:
+                                        logger.warning(f"⚠️  限价单 {order_id} symbol 不匹配: 订单中为 {symbol}, 开仓结果为 {actual_symbol}")
+                                    
+                                    # 计算已成交价值
+                                    executed_value = float(limit_price * quantity)
+                                    
+                                    # 更新订单状态为已成交（不更新 symbol，保持原订单的 symbol）
+                                    cursor.execute(
+                                        """UPDATE futures_orders
+                                        SET status = 'FILLED',
+                                            executed_quantity = %s,
+                                            executed_value = %s,
+                                            avg_fill_price = %s,
+                                            fill_time = NOW()
+                                        WHERE order_id = %s""",
+                                        (float(quantity), executed_value, float(limit_price), order_id)
+                                    )
+                                    
+                                    conn.commit()
+                                    
+                                    logger.info(f"✅ 限价单 {order_id} 执行成功: {symbol} {position_side} {quantity} @ {limit_price}, 持仓ID: {result.get('position_id')}, {result.get('message', '')}")
+                                else:
+                                    # 如果开仓失败，恢复冻结的保证金
+                                    if frozen_margin > 0:
+                                        cursor.execute(
+                                            """UPDATE paper_trading_accounts
+                                            SET current_balance = current_balance - %s,
+                                                frozen_balance = frozen_balance + %s
+                                            WHERE id = %s""",
+                                            (float(frozen_margin), float(frozen_margin), account_id)
+                                        )
+                                        conn.commit()
+                                    logger.error(f"❌ 限价单 {order_id} 执行失败: {result.get('message', '未知错误')}")
+                                    
+                            except Exception as e:
+                                logger.error(f"执行限价单 {order_id} 时出错: {e}")
+                                import traceback
+                                traceback.print_exc()
+                                # 如果出错，尝试恢复冻结的保证金
                                 try:
-                                    # 先解冻保证金（因为限价单创建时已经冻结了保证金）
-                                    # 开仓时会重新冻结，所以这里先解冻避免重复冻结
                                     frozen_margin = Decimal(str(order.get('margin', 0)))
                                     if frozen_margin > 0:
                                         cursor.execute(
                                             """UPDATE paper_trading_accounts
-                                            SET current_balance = current_balance + %s,
-                                                frozen_balance = frozen_balance - %s
+                                            SET current_balance = current_balance - %s,
+                                                frozen_balance = frozen_balance + %s
                                             WHERE id = %s""",
                                             (float(frozen_margin), float(frozen_margin), account_id)
                                         )
-                                    
-                                    # 提交解冻操作
-                                    conn.commit()
-                                    
-                                    # 执行开仓（使用限价作为成交价）
-                                    # 注意：由于价格已经达到限价，open_position 会立即成交
-                                    result = self.trading_engine.open_position(
-                                        account_id=account_id,
-                                        symbol=symbol,
-                                        position_side=position_side,
-                                        quantity=quantity,
-                                        leverage=leverage,
-                                        limit_price=limit_price,  # 使用限价作为成交价
-                                        stop_loss_price=stop_loss_price,
-                                        take_profit_price=take_profit_price,
-                                        source='limit_order'
-                                    )
-                                    
-                                    if result.get('success'):
-                                        # 从结果中获取实际的 symbol（确保一致性）
-                                        actual_symbol = result.get('symbol', symbol)
-                                        
-                                        # 验证 symbol 是否匹配
-                                        if actual_symbol != symbol:
-                                            logger.warning(f"⚠️  限价单 {order_id} symbol 不匹配: 订单中为 {symbol}, 开仓结果为 {actual_symbol}")
-                                        
-                                        # 计算已成交价值
-                                        executed_value = float(limit_price * quantity)
-                                        
-                                        # 更新订单状态为已成交（不更新 symbol，保持原订单的 symbol）
-                                        cursor.execute(
-                                            """UPDATE futures_orders
-                                            SET status = 'FILLED',
-                                                executed_quantity = %s,
-                                                executed_value = %s,
-                                                avg_fill_price = %s,
-                                                fill_time = NOW()
-                                            WHERE order_id = %s""",
-                                            (float(quantity), executed_value, float(limit_price), order_id)
-                                        )
-                                        
                                         conn.commit()
-                                        
-                                        logger.info(f"✅ 限价单 {order_id} 执行成功: {symbol} {position_side} {quantity} @ {limit_price}, 持仓ID: {result.get('position_id')}, {result.get('message', '')}")
-                                    else:
-                                        # 如果开仓失败，恢复冻结的保证金
-                                        if frozen_margin > 0:
-                                            cursor.execute(
-                                                """UPDATE paper_trading_accounts
-                                                SET current_balance = current_balance - %s,
-                                                    frozen_balance = frozen_balance + %s
-                                                WHERE id = %s""",
-                                                (float(frozen_margin), float(frozen_margin), account_id)
-                                            )
-                                            conn.commit()
-                                        logger.error(f"❌ 限价单 {order_id} 执行失败: {result.get('message', '未知错误')}")
-                                        
-                                except Exception as e:
-                                    logger.error(f"执行限价单 {order_id} 时出错: {e}")
-                                    import traceback
-                                    traceback.print_exc()
-                                    # 如果出错，尝试恢复冻结的保证金
-                                    try:
-                                        frozen_margin = Decimal(str(order.get('margin', 0)))
-                                        if frozen_margin > 0:
-                                            cursor.execute(
-                                                """UPDATE paper_trading_accounts
-                                                SET current_balance = current_balance - %s,
-                                                    frozen_balance = frozen_balance + %s
-                                                WHERE id = %s""",
-                                                (float(frozen_margin), float(frozen_margin), account_id)
-                                            )
-                                            conn.commit()
-                                    except:
-                                        pass
-                                    continue
-                            else:
-                                logger.debug(f"⏳ 限价单未触发: {symbol} {position_side} 当前价 {current_price} vs 限价 {limit_price}")
-                                
-                        except Exception as e:
-                            logger.error(f"处理限价单 {order.get('order_id', 'unknown')} 时出错: {e}")
-                            import traceback
-                            traceback.print_exc()
-                            continue
+                                except:
+                                    pass
+                                continue
+                        else:
+                            logger.debug(f"⏳ 限价单未触发: {symbol} {position_side} 当前价 {current_price} vs 限价 {limit_price}")
                             
-            finally:
-                conn.close()
+                    except Exception as e:
+                        logger.error(f"处理限价单 {order.get('order_id', 'unknown')} 时出错: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        continue
+            # 注意：不再关闭连接，使用持久连接
                 
         except Exception as e:
             logger.error(f"检查合约限价单时出错: {e}")
@@ -293,4 +327,14 @@ class FuturesLimitOrderExecutor:
         if self.task and not self.task.done():
             self.task.cancel()
             logger.info("⏹️  合约限价单自动执行服务已停止")
+        
+        # 关闭数据库连接
+        if self.connection and self.connection.open:
+            try:
+                self.connection.close()
+                # 静默关闭，不打印日志
+            except Exception as e:
+                logger.warning(f"关闭数据库连接时出错: {e}")
+            finally:
+                self.connection = None
 

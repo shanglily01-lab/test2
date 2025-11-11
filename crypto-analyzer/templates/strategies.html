@@ -42,17 +42,59 @@
         .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
         .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
         .card-body { padding: 0; }
-        .strategy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: var(--spacing-xl); margin-bottom: var(--spacing-xl); }
-        .strategy-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); transition: all var(--transition-base); position: relative; overflow: hidden; }
-        .strategy-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
-        .strategy-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
-        .strategy-card:hover::before { opacity: 1; }
-        .strategy-card.active { border-color: var(--success-green); }
-        .strategy-card.active::before { opacity: 1; background: linear-gradient(90deg, var(--success-green), var(--primary-blue)); }
-        .strategy-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: var(--spacing-lg); }
-        .strategy-name { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); }
-        .strategy-description { color: var(--text-secondary); font-size: 13px; line-height: 1.6; margin-bottom: var(--spacing-lg); }
-        .strategy-meta { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); }
+        /* 左右分栏布局 */
+        .main-layout { display: flex; gap: var(--spacing-xl); margin-bottom: var(--spacing-xl); min-height: 600px; }
+        .strategy-list-panel { flex: 0 0 350px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-lg); display: flex; flex-direction: column; }
+        .strategy-list-header { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-lg); padding-bottom: var(--spacing-md); border-bottom: 1px solid var(--border-default); }
+        .strategy-list-items { flex: 1; overflow-y: auto; }
+        .strategy-list-item { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-md); margin-bottom: var(--spacing-sm); cursor: pointer; transition: all var(--transition-base); }
+        .strategy-list-item:hover { background: var(--bg-hover); border-color: var(--primary-blue); transform: translateX(4px); }
+        .strategy-list-item.selected { background: var(--bg-hover); border-color: var(--primary-blue); border-left: 4px solid var(--primary-blue); }
+        .strategy-list-item.active { border-left: 4px solid var(--success-green); }
+        .strategy-item-name { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-xs); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .strategy-item-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.4; margin-bottom: var(--spacing-sm); }
+        .strategy-item-meta { display: flex; gap: var(--spacing-xs); flex-wrap: wrap; }
+        .strategy-detail-panel { flex: 1; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); display: flex; flex-direction: column; }
+        .strategy-detail-header { margin-bottom: var(--spacing-xl); padding-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); }
+        .strategy-detail-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-md); display: flex; align-items: center; gap: var(--spacing-md); }
+        .strategy-detail-description { font-size: 15px; color: var(--text-secondary); line-height: 1.8; margin-bottom: var(--spacing-lg); }
+        .strategy-detail-content { flex: 1; overflow-y: auto; }
+        .strategy-detail-section { margin-bottom: var(--spacing-xl); }
+        .strategy-detail-section-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-sm); border-bottom: 1px solid var(--border-default); }
+        .strategy-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-md); }
+        .strategy-detail-card { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-md); }
+        .strategy-detail-card-label { font-size: 12px; color: var(--text-secondary); margin-bottom: var(--spacing-xs); }
+        .strategy-detail-card-value { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+        .strategy-actions-panel { margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default); display: flex; gap: var(--spacing-md); flex-wrap: wrap; }
+        
+        /* 表单样式 */
+        .form-group { margin-bottom: var(--spacing-lg); }
+        .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--spacing-xs); }
+        .form-input, .form-select, .form-textarea { width: 100%; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; font-family: var(--font-family); transition: all var(--transition-base); }
+        .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(43, 111, 237, 0.1); }
+        .form-input:disabled { opacity: 0.5; cursor: not-allowed; }
+        .form-textarea { min-height: 80px; resize: vertical; }
+        .form-checkbox { width: 18px; height: 18px; cursor: pointer; }
+        .form-checkbox-label { display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); }
+        .form-section { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+        .form-section-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-sm); border-bottom: 1px solid var(--border-default); }
+        .form-help-text { font-size: 12px; color: var(--text-tertiary); margin-top: var(--spacing-xs); }
+        .edit-mode-toggle { display: flex; justify-content: flex-end; margin-bottom: var(--spacing-lg); }
+        .save-actions { display: flex; gap: var(--spacing-md); justify-content: flex-end; margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default); }
+        .readonly-field { background: var(--bg-secondary); color: var(--text-secondary); }
+        
+        /* 模态框样式 */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); z-index: 1000; display: none; align-items: center; justify-content: center; }
+        .modal-overlay.active { display: flex; }
+        .modal-dialog { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 0; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-xl); animation: slideUp var(--transition-slow) ease-out; }
+        .modal-header { padding: var(--spacing-xl); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
+        .modal-title { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+        .modal-close { background: transparent; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-md); transition: all var(--transition-base); }
+        .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .modal-body { padding: var(--spacing-xl); }
+        .modal-footer { padding: var(--spacing-xl); border-top: 1px solid var(--border-default); display: flex; justify-content: flex-end; gap: var(--spacing-md); }
+        
         .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
         .badge-success { background: var(--success-green-bg); color: var(--success-green); }
         .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
@@ -91,6 +133,13 @@
         .detail-row { display: flex; justify-content: space-between; padding: var(--spacing-sm) 0; font-size: 13px; }
         .detail-label { color: var(--text-secondary); }
         .detail-value { color: var(--text-primary); font-weight: 500; }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .main-layout { flex-direction: column; }
+            .strategy-list-panel { flex: 1; max-height: 300px; }
+            .strategy-detail-panel { min-height: 400px; }
+        }
     </style>
 </head>
 <body>
@@ -113,9 +162,6 @@
                 <div class="header-actions">
                     <button class="btn btn-ghost" onclick="loadStrategies()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
-                    </button>
-                    <button class="btn btn-primary" onclick="showCreateStrategyModal()">
-                        <i class="bi bi-plus-circle"></i> 创建策略
                     </button>
                 </div>
             </div>
@@ -159,9 +205,655 @@
 
         <!-- Main Content -->
         <div id="mainContent" style="display: none;">
-            <!-- Strategies Grid -->
-            <div class="strategy-grid" id="strategiesGrid">
-                <!-- 策略卡片将通过JavaScript动态生成 -->
+            <div class="main-layout">
+                <!-- 左侧：策略列表 -->
+                <div class="strategy-list-panel">
+                    <div class="strategy-list-header">
+                        <i class="bi bi-list-ul"></i> 策略列表
+                    </div>
+                    <div style="margin-bottom: var(--spacing-md); display: flex; flex-direction: column; gap: var(--spacing-sm);">
+                        <button class="btn btn-primary" onclick="showCreateStrategyModal()" style="width: 100%; justify-content: center;">
+                            <i class="bi bi-plus-circle"></i> 创建策略
+                        </button>
+                        <button class="btn btn-primary" onclick="showBacktestModal()" style="width: 100%; justify-content: center;" title="策略回测">
+                            <i class="bi bi-graph-up"></i> 回测
+                        </button>
+                        <button class="btn btn-success" onclick="showAutoGenerateModal()" style="width: 100%; justify-content: center;" title="AI自动生成策略">
+                            <i class="bi bi-magic"></i> AI生成策略
+                        </button>
+                    </div>
+                    <div class="strategy-list-items" id="strategyListItems">
+                        <!-- 策略列表项将通过JavaScript动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 右侧：策略详细描述 -->
+                <div class="strategy-detail-panel" id="strategyDetailPanel">
+                    <div class="empty-state" id="emptyDetailState">
+                        <i class="bi bi-info-circle" style="font-size: 48px; color: var(--text-tertiary); margin-bottom: var(--spacing-md);"></i>
+                        <div style="color: var(--text-secondary);">请从左侧选择一个策略查看详细信息</div>
+                    </div>
+                    <div id="strategyDetailContent" style="display: none;">
+                        <div class="strategy-detail-header">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                                <div class="strategy-detail-title" id="detailTitle">
+                                    <!-- 策略名称 -->
+                                </div>
+                                <div style="display: flex; gap: var(--spacing-md); align-items: center;">
+                                    <div class="edit-mode-toggle" id="editModeToggle">
+                                        <button class="btn btn-secondary" id="editModeBtn" onclick="toggleEditMode()">
+                                            <i class="bi bi-pencil"></i> 编辑配置
+                                        </button>
+                                    </div>
+                                    <button class="btn btn-primary" id="backtestBtn" onclick="showBacktestModal()">
+                                        <i class="bi bi-graph-up"></i> 策略回测
+                                    </button>
+                                    <button class="btn btn-info" id="optimalPointsBtn" onclick="showOptimalPointsModal()">
+                                        <i class="bi bi-bullseye"></i> AI找买卖点
+                                    </button>
+                                    <button class="btn btn-warning" id="pricePredictionBtn" onclick="showPricePredictionModal()">
+                                        <i class="bi bi-crystal-ball"></i> 预测走势
+                                    </button>
+                                    <button class="btn btn-secondary" id="tradeDiagnosticBtn" onclick="showTradeDiagnosticModal()">
+                                        <i class="bi bi-clipboard-check"></i> 交易诊断
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="strategy-detail-content" id="detailContent">
+                            <!-- 详细内容 - 可编辑表单 -->
+                        </div>
+                        <div class="save-actions" id="saveActions" style="display: none;">
+                            <button class="btn btn-secondary" onclick="cancelEdit()">
+                                <i class="bi bi-x-circle"></i> 取消
+                            </button>
+                            <button class="btn btn-primary" onclick="saveStrategyConfig()">
+                                <i class="bi bi-check-circle"></i> 保存配置
+                            </button>
+                        </div>
+                        <div class="strategy-actions-panel" id="detailActions">
+                            <!-- 操作按钮 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 策略回测模态框 -->
+    <div id="backtestModal" class="modal-overlay" onclick="if(event.target === this) hideBacktestModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()" style="max-width: 800px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="bi bi-graph-up"></i> 策略回测
+                </div>
+                <button class="modal-close" onclick="hideBacktestModal()">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">策略名称 <span style="color: var(--danger-red);">*</span></label>
+                    <select class="form-select" id="backtestStrategyName" required>
+                        <option value="">请选择策略</option>
+                    </select>
+                    <div class="form-help-text">选择要回测的策略</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">交易对 <span style="color: var(--danger-red);">*</span></label>
+                    <input type="text" class="form-input" id="backtestSymbol" placeholder="BNB/USDT" required>
+                    <div class="form-help-text">例如: BNB/USDT, BTC/USDT, ETH/USDT</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">市场类型</label>
+                    <select class="form-select" id="backtestMarketType">
+                        <option value="spot" selected>现货</option>
+                        <option value="futures">合约</option>
+                    </select>
+                    <div class="form-help-text">选择回测的市场类型</div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">开始日期 <span style="color: var(--danger-red);">*</span></label>
+                        <input type="date" class="form-input" id="backtestStartDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">结束日期 <span style="color: var(--danger-red);">*</span></label>
+                        <input type="date" class="form-input" id="backtestEndDate" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">初始资金 (USDT)</label>
+                    <input type="number" class="form-input" id="backtestInitialBalance" value="10000" step="100" min="1000">
+                </div>
+                <div id="backtestResult" style="display: none; margin-top: var(--spacing-xl);">
+                    <div class="form-section">
+                        <div class="form-section-title">回测结果</div>
+                        <div class="strategy-detail-grid" id="backtestMetrics">
+                            <!-- 回测指标 -->
+                        </div>
+                        <div style="margin-top: var(--spacing-lg);">
+                            <div class="form-section-title" style="font-size: 14px;">交易记录</div>
+                            <div style="max-height: 300px; overflow-y: auto; margin-top: var(--spacing-md);">
+                                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid var(--border-default);">
+                                            <th style="padding: var(--spacing-sm); text-align: left;">时间</th>
+                                            <th style="padding: var(--spacing-sm); text-align: left;">操作</th>
+                                            <th style="padding: var(--spacing-sm); text-align: right;">价格</th>
+                                            <th style="padding: var(--spacing-sm); text-align: right;">盈亏</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="backtestTrades">
+                                        <!-- 交易记录 -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="backtestLoading" style="display: none; text-align: center; padding: var(--spacing-xl);">
+                    <div class="loading">正在回测中，请稍候...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideBacktestModal()">
+                    <i class="bi bi-x-circle"></i> 关闭
+                </button>
+                <button class="btn btn-primary" onclick="runBacktest()">
+                    <i class="bi bi-play-circle"></i> 开始回测
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI自动生成策略模态框 -->
+    <div id="autoGenerateModal" class="modal-overlay" onclick="if(event.target === this) hideAutoGenerateModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()" style="max-width: 700px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="bi bi-magic"></i> AI自动生成策略
+                </div>
+                <button class="modal-close" onclick="hideAutoGenerateModal()">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
+                    <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm);">
+                        <i class="bi bi-info-circle" style="color: var(--primary-blue);"></i>
+                        <strong>功能说明</strong>
+                    </div>
+                    <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                        系统将使用遗传算法分析历史数据，自动优化策略参数（维度权重、风险配置、交易规则等），生成表现优秀的交易策略。
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">基础策略（可选）</label>
+                    <select class="form-select" id="autoGenBaseStrategy">
+                        <option value="">从头开始生成</option>
+                    </select>
+                    <div class="form-help-text">选择基础策略将基于该策略进行优化，否则完全随机生成</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">交易对 <span style="color: var(--danger-red);">*</span></label>
+                    <input type="text" class="form-input" id="autoGenSymbol" placeholder="BNB/USDT" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">训练开始日期 <span style="color: var(--danger-red);">*</span></label>
+                        <input type="date" class="form-input" id="autoGenStartDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">训练结束日期 <span style="color: var(--danger-red);">*</span></label>
+                        <input type="date" class="form-input" id="autoGenEndDate" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">市场类型</label>
+                    <select class="form-select" id="autoGenMarketType">
+                        <option value="spot" selected>现货</option>
+                        <option value="futures">合约</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">种群大小</label>
+                        <input type="number" class="form-input" id="autoGenPopulationSize" value="20" min="10" max="50">
+                        <div class="form-help-text">每代策略数量（越大越慢但效果可能更好）</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">迭代代数</label>
+                        <input type="number" class="form-input" id="autoGenGenerations" value="10" min="5" max="20">
+                        <div class="form-help-text">优化迭代次数（越多越慢但效果可能更好）</div>
+                    </div>
+                </div>
+                <div id="autoGenResult" style="display: none; margin-top: var(--spacing-xl);">
+                    <div class="form-section">
+                        <div class="form-section-title">生成结果</div>
+                        <div id="autoGenResultContent">
+                            <!-- 结果内容 -->
+                        </div>
+                    </div>
+                </div>
+                <div id="autoGenLoading" style="display: none; text-align: center; padding: var(--spacing-xl);">
+                    <div class="loading">正在生成策略，这可能需要几分钟时间...</div>
+                    <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--text-secondary);">
+                        <div id="autoGenProgress">准备中...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideAutoGenerateModal()">
+                    <i class="bi bi-x-circle"></i> 取消
+                </button>
+                <button class="btn btn-success" onclick="startAutoGenerate()">
+                    <i class="bi bi-play-circle"></i> 开始生成
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI找买卖点模态框 -->
+    <div id="optimalPointsModal" class="modal-overlay" onclick="if(event.target === this) hideOptimalPointsModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()" style="max-width: 900px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="bi bi-bullseye"></i> AI寻找最佳买卖点
+                </div>
+                <button class="modal-close" onclick="hideOptimalPointsModal()">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
+                    <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm);">
+                        <i class="bi bi-info-circle" style="color: var(--primary-blue);"></i>
+                        <strong>功能说明</strong>
+                    </div>
+                    <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                        系统将分析历史数据，使用技术分析、局部极值识别、支撑阻力位等方法，找出最佳的买入和卖出时机。
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">交易对 <span style="color: var(--danger-red);">*</span></label>
+                    <input type="text" class="form-input" id="optimalPointsSymbol" placeholder="BNB/USDT" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">开始日期 <span style="color: var(--danger-red);">*</span></label>
+                        <input type="date" class="form-input" id="optimalPointsStartDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">结束日期 <span style="color: var(--danger-red);">*</span></label>
+                        <input type="date" class="form-input" id="optimalPointsEndDate" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">市场类型</label>
+                    <select class="form-select" id="optimalPointsMarketType">
+                        <option value="spot" selected>现货</option>
+                        <option value="futures">合约</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">回看周期</label>
+                        <input type="number" class="form-input" id="optimalPointsLookback" value="20" min="10" max="50">
+                        <div class="form-help-text">用于识别局部极值的周期</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">最小盈利 (%)</label>
+                        <input type="number" class="form-input" id="optimalPointsMinProfit" value="5" step="0.5" min="1" max="50">
+                        <div class="form-help-text">过滤盈利太小的交易对</div>
+                    </div>
+                </div>
+                <div id="optimalPointsResult" style="display: none; margin-top: var(--spacing-xl);">
+                    <div class="form-section">
+                        <div class="form-section-title">分析结果</div>
+                        <div style="margin-bottom: var(--spacing-md);">
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-md);">
+                                    <div>
+                                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">最佳买点</div>
+                                        <div style="font-size: 18px; font-weight: 600; color: var(--success-green);" id="optimalBuyCount">0</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">最佳卖点</div>
+                                        <div style="font-size: 18px; font-weight: 600; color: var(--danger-red);" id="optimalSellCount">0</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">交易机会</div>
+                                        <div style="font-size: 18px; font-weight: 600; color: var(--primary-blue);" id="optimalPairsCount">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg);">
+                            <div>
+                                <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-md);">最佳买点 (前10个)</div>
+                                <div style="max-height: 400px; overflow-y: auto;">
+                                    <div id="optimalBuyPointsList">
+                                        <!-- 买点列表 -->
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-md);">最佳卖点 (前10个)</div>
+                                <div style="max-height: 400px; overflow-y: auto;">
+                                    <div id="optimalSellPointsList">
+                                        <!-- 卖点列表 -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: var(--spacing-lg);">
+                            <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-md);">最佳交易对 (前10个)</div>
+                            <div style="max-height: 400px; overflow-y: auto;">
+                                <div id="optimalPairsList">
+                                    <!-- 交易对列表 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="optimalPointsLoading" style="display: none; text-align: center; padding: var(--spacing-xl);">
+                    <div class="loading">正在分析历史数据，寻找最佳买卖点...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideOptimalPointsModal()">
+                    <i class="bi bi-x-circle"></i> 关闭
+                </button>
+                <button class="btn btn-info" onclick="startOptimalPointsAnalysis()">
+                    <i class="bi bi-search"></i> 开始分析
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 价格走势预测模态框 -->
+    <div id="pricePredictionModal" class="modal-overlay" onclick="if(event.target === this) hidePricePredictionModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()" style="max-width: 800px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="bi bi-crystal-ball"></i> 价格走势预测
+                </div>
+                <button class="modal-close" onclick="hidePricePredictionModal()">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
+                    <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm);">
+                        <i class="bi bi-info-circle" style="color: var(--primary-blue);"></i>
+                        <strong>功能说明</strong>
+                    </div>
+                    <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                        系统将分析过去7天的价格走势，使用趋势分析、技术指标、价格模式识别等方法，预测未来3天的价格走势。
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">交易对 <span style="color: var(--danger-red);">*</span></label>
+                    <input type="text" class="form-input" id="predictionSymbol" placeholder="BNB/USDT" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">市场类型</label>
+                    <select class="form-select" id="predictionMarketType">
+                        <option value="spot" selected>现货</option>
+                        <option value="futures">合约</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">预测天数</label>
+                    <select class="form-select" id="predictionDaysAhead">
+                        <option value="1">1天</option>
+                        <option value="2">2天</option>
+                        <option value="3" selected>3天</option>
+                        <option value="5">5天</option>
+                        <option value="7">7天</option>
+                    </select>
+                    <div class="form-help-text">预测未来多少天的走势</div>
+                </div>
+                <div id="predictionResult" style="display: none; margin-top: var(--spacing-xl);">
+                    <div class="form-section">
+                        <div class="form-section-title">预测结果</div>
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-md);">
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当前价格</div>
+                                    <div style="font-size: 18px; font-weight: 600; color: var(--text-primary); font-family: var(--font-mono);" id="predictionCurrentPrice">$0.00</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">预测价格</div>
+                                    <div style="font-size: 18px; font-weight: 600; color: var(--primary-blue); font-family: var(--font-mono);" id="predictionFuturePrice">$0.00</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">预测变化</div>
+                                    <div style="font-size: 18px; font-weight: 600; font-family: var(--font-mono);" id="predictionChange">0%</div>
+                                </div>
+                            </div>
+                            <div style="margin-top: var(--spacing-md); padding-top: var(--spacing-md); border-top: 1px solid var(--border-muted);">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">预测方向</div>
+                                        <div style="font-size: 16px; font-weight: 600;" id="predictionDirection">-</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">置信度</div>
+                                        <div style="font-size: 16px; font-weight: 600; color: var(--primary-blue);" id="predictionConfidence">-</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当前趋势</div>
+                                        <div style="font-size: 16px; font-weight: 600;" id="predictionTrend">-</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                            <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm);">交易建议</div>
+                            <div id="predictionRecommendation">
+                                <!-- 建议内容 -->
+                            </div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                            <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm);">未来价格预测点</div>
+                            <div id="predictionPointsList">
+                                <!-- 预测点列表 -->
+                            </div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                            <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm);">关键价位</div>
+                            <div id="predictionKeyLevels">
+                                <!-- 关键价位 -->
+                            </div>
+                        </div>
+                        <div id="predictionRisks" style="display: none;">
+                            <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm); color: var(--danger-red);">⚠️ 风险提示</div>
+                            <div id="predictionRisksList">
+                                <!-- 风险列表 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="predictionLoading" style="display: none; text-align: center; padding: var(--spacing-xl);">
+                    <div class="loading">正在分析过去7天的价格走势，预测未来走势...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hidePricePredictionModal()">
+                    <i class="bi bi-x-circle"></i> 关闭
+                </button>
+                <button class="btn btn-warning" onclick="startPricePrediction()">
+                    <i class="bi bi-search"></i> 开始预测
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 交易诊断模态框 -->
+    <div id="tradeDiagnosticModal" class="modal-overlay" onclick="if(event.target === this) hideTradeDiagnosticModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()" style="max-width: 900px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="bi bi-clipboard-check"></i> 交易诊断
+                </div>
+                <button class="modal-close" onclick="hideTradeDiagnosticModal()">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
+                    <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm);">
+                        <i class="bi bi-info-circle" style="color: var(--primary-blue);"></i>
+                        <strong>功能说明</strong>
+                    </div>
+                    <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                        系统将分析您指定时间的交易操作，评估买入/卖出时机的合理性，包括技术指标、市场环境、价格位置等多个维度的分析。
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">交易对 <span style="color: var(--danger-red);">*</span></label>
+                    <input type="text" class="form-input" id="diagnosticSymbol" placeholder="ORDI/USDT" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">交易日期 <span style="color: var(--danger-red);">*</span></label>
+                        <input type="date" class="form-input" id="diagnosticDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">交易时间 <span style="color: var(--danger-red);">*</span></label>
+                        <input type="time" class="form-input" id="diagnosticTime" value="12:00" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">交易类型</label>
+                    <select class="form-select" id="diagnosticTradeType">
+                        <option value="buy" selected>买入</option>
+                        <option value="sell">卖出</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">市场类型</label>
+                    <select class="form-select" id="diagnosticMarketType">
+                        <option value="spot" selected>现货</option>
+                        <option value="futures">合约</option>
+                    </select>
+                </div>
+                <div id="diagnosticResult" style="display: none; margin-top: var(--spacing-xl);">
+                    <div class="form-section">
+                        <div class="form-section-title">诊断结果</div>
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-md); margin-bottom: var(--spacing-md);">
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">交易价格</div>
+                                    <div style="font-size: 18px; font-weight: 600; color: var(--text-primary); font-family: var(--font-mono);" id="diagnosticTradePrice">$0.00</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">综合评分</div>
+                                    <div style="font-size: 18px; font-weight: 600; color: var(--primary-blue);" id="diagnosticScore">0</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">诊断结论</div>
+                                    <div style="font-size: 18px; font-weight: 600;" id="diagnosticConclusion">-</div>
+                                </div>
+                            </div>
+                            <div style="padding-top: var(--spacing-md); border-top: 1px solid var(--border-muted);">
+                                <div style="font-size: 14px; color: var(--text-primary);" id="diagnosticDescription">-</div>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); margin-bottom: var(--spacing-md);">
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
+                                <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm);">时机分析</div>
+                                <div id="diagnosticTiming">-</div>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
+                                <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm);">市场环境</div>
+                                <div id="diagnosticMarket">-</div>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); margin-bottom: var(--spacing-md);">
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
+                                <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm);">技术指标</div>
+                                <div id="diagnosticIndicators">-</div>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
+                                <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm);">价格位置</div>
+                                <div id="diagnosticPricePosition">-</div>
+                            </div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                            <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm);">后续表现</div>
+                            <div id="diagnosticPerformance">-</div>
+                        </div>
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                            <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm);">诊断建议</div>
+                            <div id="diagnosticRecommendations">-</div>
+                        </div>
+                        <div id="diagnosticIssues" style="display: none;">
+                            <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm); color: var(--danger-red);">⚠️ 主要问题</div>
+                            <div id="diagnosticIssuesList">-</div>
+                        </div>
+                        <div id="diagnosticAdvantages" style="display: none;">
+                            <div class="form-section-title" style="font-size: 14px; margin-bottom: var(--spacing-sm); color: var(--success-green);">✅ 主要优点</div>
+                            <div id="diagnosticAdvantagesList">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div id="diagnosticLoading" style="display: none; text-align: center; padding: var(--spacing-xl);">
+                    <div class="loading">正在分析交易操作...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideTradeDiagnosticModal()">
+                    <i class="bi bi-x-circle"></i> 关闭
+                </button>
+                <button class="btn btn-primary" onclick="startTradeDiagnostic()">
+                    <i class="bi bi-search"></i> 开始诊断
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建策略模态框 -->
+    <div id="createStrategyModal" class="modal-overlay" onclick="if(event.target === this) hideCreateStrategyModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="bi bi-plus-circle"></i> 创建新策略
+                </div>
+                <button class="modal-close" onclick="hideCreateStrategyModal()">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">策略名称 <span style="color: var(--danger-red);">*</span></label>
+                    <input type="text" class="form-input" id="newStrategyName" placeholder="my_strategy" required>
+                    <div class="form-help-text">只能包含字母、数字和下划线</div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">策略描述</label>
+                    <textarea class="form-textarea" id="newStrategyDesc" placeholder="输入策略描述..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">基于模板</label>
+                    <select class="form-select" id="newStrategyTemplate">
+                        <option value="">从头创建（使用默认配置）</option>
+                        <option value="balanced" selected>平衡策略 (推荐)</option>
+                        <option value="conservative">保守策略</option>
+                        <option value="aggressive">激进策略</option>
+                    </select>
+                    <div class="form-help-text">选择模板将复制该策略的所有配置，然后可以进一步编辑</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideCreateStrategyModal()">
+                    <i class="bi bi-x-circle"></i> 取消
+                </button>
+                <button class="btn btn-primary" onclick="createStrategy()">
+                    <i class="bi bi-check-circle"></i> 创建策略
+                </button>
             </div>
         </div>
     </div>
@@ -243,7 +935,11 @@
                 if (data.success) {
                     allStrategies = data.strategies || [];
                     activeStrategyName = data.active_strategy || null;
-                    updateStrategiesGrid(allStrategies);
+                    updateStrategiesList(allStrategies);
+                    // 如果有策略，默认选择第一个
+                    if (allStrategies.length > 0 && !selectedStrategyName) {
+                        selectStrategy(allStrategies[0].name);
+                    }
                     showContent();
                 } else {
                     throw new Error(data.message || '获取策略列表失败');
@@ -254,81 +950,408 @@
             }
         }
 
-        // 更新策略网格
-        function updateStrategiesGrid(strategies) {
-            const grid = document.getElementById('strategiesGrid');
-            if (!grid) return;
+        let selectedStrategyName = null;
+
+        // 更新策略列表（左侧）
+        function updateStrategiesList(strategies) {
+            const listContainer = document.getElementById('strategyListItems');
+            if (!listContainer) return;
 
             if (!strategies || strategies.length === 0) {
-                grid.innerHTML = '<div class="empty-state">暂无策略，点击"创建策略"按钮创建新策略</div>';
+                listContainer.innerHTML = '<div class="empty-state" style="text-align: center; padding: var(--spacing-xl);">暂无策略，点击"创建策略"按钮创建新策略</div>';
                 return;
             }
 
-            grid.innerHTML = strategies.map(strategy => {
+            listContainer.innerHTML = strategies.map(strategy => {
                 const isActive = strategy.is_active || strategy.name === activeStrategyName;
+                const isSelected = strategy.name === selectedStrategyName;
                 const riskClass = getRiskClass(strategy.risk_level);
                 const riskLabel = getRiskLabel(strategy.risk_level);
 
                 return `
-                    <div class="strategy-card ${isActive ? 'active' : ''}">
-                        <div class="strategy-header">
-                            <div style="flex: 1;">
-                                <div class="strategy-name">
-                                    ${strategy.name}
-                                    ${isActive ? '<span class="badge badge-success" style="margin-left: var(--spacing-sm);">已激活</span>' : ''}
-                                </div>
-                                <div class="strategy-description">${strategy.description || '暂无描述'}</div>
-                                <div class="strategy-meta">
-                                    <span class="badge ${riskClass}">${riskLabel}</span>
-                                    ${(strategy.tags || []).map(tag => `<span class="badge badge-neutral">${tag}</span>`).join('')}
-                                </div>
-                            </div>
+                    <div class="strategy-list-item ${isSelected ? 'selected' : ''} ${isActive ? 'active' : ''}" 
+                         onclick="selectStrategy('${strategy.name}')">
+                        <div class="strategy-item-name">
+                            ${strategy.name}
+                            ${isActive ? '<span class="badge badge-success" style="margin-left: auto;">已激活</span>' : ''}
                         </div>
-                        <div class="strategy-detail">
-                            <div class="detail-row">
-                                <span class="detail-label">创建时间:</span>
-                                <span class="detail-value">${formatDate(strategy.created_at)}</span>
-                            </div>
-                            <div class="detail-row">
-                                <span class="detail-label">更新时间:</span>
-                                <span class="detail-value">${formatDate(strategy.updated_at)}</span>
-                            </div>
-                        </div>
-                        <div class="strategy-actions">
-                            ${!isActive ? `
-                                <button class="btn btn-success btn-sm" onclick="activateStrategy('${strategy.name}')">
-                                    <i class="bi bi-play-circle"></i> 激活
-                                </button>
-                            ` : `
-                                <button class="btn btn-secondary btn-sm" onclick="deactivateStrategy('${strategy.name}')" title="当前已激活">
-                                    <i class="bi bi-pause-circle"></i> 已激活
-                                </button>
-                            `}
-                            <button class="btn btn-secondary btn-sm" onclick="viewStrategy('${strategy.name}')">
-                                <i class="bi bi-eye"></i> 查看详情
-                            </button>
-                            ${['conservative', 'balanced', 'aggressive'].includes(strategy.name) ? `
-                                <button class="btn btn-secondary btn-sm" disabled title="默认策略不可编辑">
-                                    <i class="bi bi-lock"></i> 默认策略
-                                </button>
-                            ` : `
-                                <button class="btn btn-secondary btn-sm" onclick="editStrategy('${strategy.name}')">
-                                    <i class="bi bi-pencil"></i> 编辑
-                                </button>
-                            `}
-                            ${['conservative', 'balanced', 'aggressive'].includes(strategy.name) ? `
-                                <button class="btn btn-secondary btn-sm" disabled title="默认策略不可删除">
-                                    <i class="bi bi-lock"></i> 受保护
-                                </button>
-                            ` : `
-                                <button class="btn btn-danger btn-sm" onclick="deleteStrategy('${strategy.name}')">
-                                    <i class="bi bi-trash"></i> 删除
-                                </button>
-                            `}
+                        <div class="strategy-item-desc">${strategy.description || '暂无描述'}</div>
+                        <div class="strategy-item-meta">
+                            <span class="badge ${riskClass}">${riskLabel}</span>
                         </div>
                     </div>
                 `;
             }).join('');
+        }
+
+        // 选择策略并显示详情
+        async function selectStrategy(name) {
+            selectedStrategyName = name;
+            // 更新列表选中状态
+            updateStrategiesList(allStrategies);
+            
+            // 加载并显示策略详情
+            await loadStrategyDetail(name);
+        }
+
+        // 加载策略详情
+        async function loadStrategyDetail(name) {
+            try {
+                const response = await fetch(`/api/strategies/detail/${name}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const strategy = data.strategy;
+                    displayStrategyDetail(strategy);
+                } else {
+                    showToast(data.message || '获取策略详情失败', 'error');
+                }
+            } catch (error) {
+                console.error('获取策略详情失败:', error);
+                showToast('获取策略详情失败', 'error');
+            }
+        }
+
+        let isEditMode = false;
+        let currentStrategyData = null;
+
+        // 显示策略详情
+        function displayStrategyDetail(strategy) {
+            currentStrategyData = strategy;
+            isEditMode = false;
+            
+            const emptyState = document.getElementById('emptyDetailState');
+            const detailContent = document.getElementById('strategyDetailContent');
+            const detailTitle = document.getElementById('detailTitle');
+            const detailContentArea = document.getElementById('detailContent');
+            const detailActions = document.getElementById('detailActions');
+            const editModeBtn = document.getElementById('editModeBtn');
+            const saveActions = document.getElementById('saveActions');
+
+            if (emptyState) emptyState.style.display = 'none';
+            if (detailContent) detailContent.style.display = 'block';
+            if (saveActions) saveActions.style.display = 'none';
+
+            const isActive = strategy.is_active || strategy.name === activeStrategyName;
+            const isDefault = ['conservative', 'balanced', 'aggressive'].includes(strategy.name);
+            const riskClass = getRiskClass(strategy.risk_profile?.level || strategy.risk_level);
+            const riskLabel = getRiskLabel(strategy.risk_profile?.level || strategy.risk_level);
+
+            // 标题
+            if (detailTitle) {
+                detailTitle.innerHTML = `
+                    ${strategy.name}
+                    ${isActive ? '<span class="badge badge-success" style="margin-left: var(--spacing-md);">已激活</span>' : ''}
+                `;
+            }
+
+            // 编辑按钮
+            if (editModeBtn) {
+                if (isDefault) {
+                    editModeBtn.disabled = true;
+                    editModeBtn.title = '默认策略不可编辑';
+                    editModeBtn.innerHTML = '<i class="bi bi-lock"></i> 默认策略（受保护）';
+                } else {
+                    editModeBtn.disabled = false;
+                    editModeBtn.title = '';
+                    editModeBtn.innerHTML = '<i class="bi bi-pencil"></i> 编辑配置';
+                }
+            }
+
+            // 生成表单内容
+            if (detailContentArea) {
+                detailContentArea.innerHTML = generateStrategyForm(strategy, isEditMode, isDefault);
+            }
+
+            // 操作按钮
+            if (detailActions) {
+                let actionsHtml = '';
+                
+                if (!isActive) {
+                    actionsHtml += `
+                        <button class="btn btn-success" onclick="activateStrategy('${strategy.name}')">
+                            <i class="bi bi-play-circle"></i> 激活策略
+                        </button>
+                    `;
+                } else {
+                    actionsHtml += `
+                        <button class="btn btn-secondary" onclick="deactivateStrategy('${strategy.name}')" title="当前已激活">
+                            <i class="bi bi-pause-circle"></i> 已激活
+                        </button>
+                    `;
+                }
+
+                if (!isDefault) {
+                    actionsHtml += `
+                        <button class="btn btn-danger" onclick="deleteStrategy('${strategy.name}')">
+                            <i class="bi bi-trash"></i> 删除策略
+                        </button>
+                    `;
+                }
+
+                detailActions.innerHTML = actionsHtml;
+            }
+        }
+
+        // 生成策略配置表单
+        function generateStrategyForm(strategy, editMode, isDefault) {
+            const dw = strategy.dimension_weights || {};
+            const rp = strategy.risk_profile || {};
+            const tr = strategy.trading_rules || {};
+            const tc = strategy.technical_config || {};
+            const tags = strategy.tags || [];
+            const description = strategy.description || '';
+
+            let html = '';
+
+            // 描述
+            html += `
+                <div class="form-section">
+                    <div class="form-section-title">策略描述</div>
+                    <div class="form-group">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-textarea" id="strategy_description" ${editMode && !isDefault ? '' : 'readonly'} placeholder="输入策略描述...">${escapeHtml(description)}</textarea>
+                    </div>
+                </div>
+            `;
+
+            // 维度权重
+            html += `
+                <div class="form-section">
+                    <div class="form-section-title">维度权重配置</div>
+                    <div class="form-help-text">各维度权重总和应为100%</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">技术指标权重 (%)</label>
+                            <input type="number" class="form-input" id="dw_technical" value="${dw.technical || 40}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'} oninput="updateWeightTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Hyperliquid权重 (%)</label>
+                            <input type="number" class="form-input" id="dw_hyperliquid" value="${dw.hyperliquid || 20}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'} oninput="updateWeightTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">新闻情绪权重 (%)</label>
+                            <input type="number" class="form-input" id="dw_news" value="${dw.news || 15}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'} oninput="updateWeightTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">资金费率权重 (%)</label>
+                            <input type="number" class="form-input" id="dw_funding_rate" value="${dw.funding_rate || 15}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'} oninput="updateWeightTotal()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">以太坊链上数据权重 (%)</label>
+                            <input type="number" class="form-input" id="dw_ethereum" value="${dw.ethereum || 10}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'} oninput="updateWeightTotal()">
+                        </div>
+                    </div>
+                    <div class="form-help-text" id="weightTotal">权重总和: <span id="weightTotalValue">100.0</span>%</div>
+                </div>
+            `;
+
+            // 风险配置
+            html += `
+                <div class="form-section">
+                    <div class="form-section-title">风险配置</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">风险等级</label>
+                            <select class="form-select" id="rp_level" ${editMode && !isDefault ? '' : 'disabled'}>
+                                <option value="conservative" ${(rp.level || 'balanced') === 'conservative' ? 'selected' : ''}>保守</option>
+                                <option value="balanced" ${(rp.level || 'balanced') === 'balanced' ? 'selected' : ''}>平衡</option>
+                                <option value="aggressive" ${(rp.level || 'balanced') === 'aggressive' ? 'selected' : ''}>激进</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">最大仓位比例 (%)</label>
+                            <input type="number" class="form-input" id="rp_max_position_size" value="${rp.max_position_size || 20}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">止损比例 (%)</label>
+                            <input type="number" class="form-input" id="rp_stop_loss" value="${rp.stop_loss || 5}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">止盈比例 (%)</label>
+                            <input type="number" class="form-input" id="rp_take_profit" value="${rp.take_profit || 15}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">最小信号强度 (0-100)</label>
+                            <input type="number" class="form-input" id="rp_min_signal_strength" value="${rp.min_signal_strength || 60}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">最大杠杆倍数</label>
+                            <input type="number" class="form-input" id="rp_max_leverage" value="${rp.max_leverage || 1}" step="0.1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-checkbox-label">
+                            <input type="checkbox" class="form-checkbox" id="rp_allow_short" ${rp.allow_short ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                            <span>允许做空</span>
+                        </label>
+                    </div>
+                </div>
+            `;
+
+            // 交易规则
+            html += `
+                <div class="form-section">
+                    <div class="form-section-title">交易规则</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Hyperliquid最少钱包数</label>
+                            <input type="number" class="form-input" id="tr_hyperliquid_min_wallets" value="${tr.hyperliquid_min_wallets || 3}" step="1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Hyperliquid最小金额 (USD)</label>
+                            <input type="number" class="form-input" id="tr_hyperliquid_min_amount" value="${tr.hyperliquid_min_amount || 50000}" step="1000" min="0" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Hyperliquid最小净流入 (USD)</label>
+                            <input type="number" class="form-input" id="tr_hyperliquid_min_net_flow" value="${tr.hyperliquid_min_net_flow || 100000}" step="1000" min="0" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">RSI超卖阈值</label>
+                            <input type="number" class="form-input" id="tr_rsi_oversold" value="${tr.rsi_oversold || 30}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">RSI超买阈值</label>
+                            <input type="number" class="form-input" id="tr_rsi_overbought" value="${tr.rsi_overbought || 70}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">新闻情绪阈值</label>
+                            <input type="number" class="form-input" id="tr_news_sentiment_threshold" value="${tr.news_sentiment_threshold || 0.6}" step="0.01" min="0" max="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">最少新闻数量</label>
+                            <input type="number" class="form-input" id="tr_news_min_count" value="${tr.news_min_count || 3}" step="1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">极端资金费率阈值</label>
+                            <input type="number" class="form-input" id="tr_funding_rate_extreme" value="${tr.funding_rate_extreme || 0.01}" step="0.001" min="0" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">最少同意维度数</label>
+                            <input type="number" class="form-input" id="tr_min_dimensions_agree" value="${tr.min_dimensions_agree || 3}" step="1" min="1" max="5" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 技术指标配置
+            if (tc && Object.keys(tc).length > 0) {
+                html += `
+                    <div class="form-section">
+                        <div class="form-section-title">技术指标配置</div>
+                        <div class="form-help-text">技术指标权重总和应为100%</div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">RSI权重 (%)</label>
+                                <input type="number" class="form-input" id="tc_rsi_weight" value="${tc.rsi_weight || 25}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">MACD权重 (%)</label>
+                                <input type="number" class="form-input" id="tc_macd_weight" value="${tc.macd_weight || 25}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">布林带权重 (%)</label>
+                                <input type="number" class="form-input" id="tc_bollinger_weight" value="${tc.bollinger_weight || 20}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">EMA权重 (%)</label>
+                                <input type="number" class="form-input" id="tc_ema_weight" value="${tc.ema_weight || 15}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">成交量权重 (%)</label>
+                                <input type="number" class="form-input" id="tc_volume_weight" value="${tc.volume_weight || 15}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">RSI周期</label>
+                                <input type="number" class="form-input" id="tc_rsi_period" value="${tc.rsi_period || 14}" step="1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">MACD快线</label>
+                                <input type="number" class="form-input" id="tc_macd_fast" value="${tc.macd_fast || 12}" step="1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">MACD慢线</label>
+                                <input type="number" class="form-input" id="tc_macd_slow" value="${tc.macd_slow || 26}" step="1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">MACD信号线</label>
+                                <input type="number" class="form-input" id="tc_macd_signal" value="${tc.macd_signal || 9}" step="1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">EMA短期</label>
+                                <input type="number" class="form-input" id="tc_ema_short" value="${tc.ema_short || 20}" step="1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">EMA长期</label>
+                                <input type="number" class="form-input" id="tc_ema_long" value="${tc.ema_long || 50}" step="1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">布林带周期</label>
+                                <input type="number" class="form-input" id="tc_bb_period" value="${tc.bb_period || 20}" step="1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">布林带标准差</label>
+                                <input type="number" class="form-input" id="tc_bb_std" value="${tc.bb_std || 2}" step="0.1" min="0.1" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 标签
+            html += `
+                <div class="form-section">
+                    <div class="form-section-title">标签</div>
+                    <div class="form-group">
+                        <label class="form-label">标签（用逗号分隔）</label>
+                        <input type="text" class="form-input" id="strategy_tags" value="${tags.join(', ')}" ${editMode && !isDefault ? '' : 'readonly'} placeholder="例如: 平衡, 中等风险, 推荐">
+                    </div>
+                </div>
+            `;
+
+            // 基本信息（只读）
+            html += `
+                <div class="form-section">
+                    <div class="form-section-title">基本信息</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">创建时间</label>
+                            <input type="text" class="form-input readonly-field" value="${formatDate(strategy.created_at)}" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">更新时间</label>
+                            <input type="text" class="form-input readonly-field" value="${formatDate(strategy.updated_at)}" readonly>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            return html;
+        }
+
+        // 转义HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 更新权重总和
+        function updateWeightTotal() {
+            const technical = parseFloat(document.getElementById('dw_technical')?.value || 0);
+            const hyperliquid = parseFloat(document.getElementById('dw_hyperliquid')?.value || 0);
+            const news = parseFloat(document.getElementById('dw_news')?.value || 0);
+            const funding_rate = parseFloat(document.getElementById('dw_funding_rate')?.value || 0);
+            const ethereum = parseFloat(document.getElementById('dw_ethereum')?.value || 0);
+            
+            const total = technical + hyperliquid + news + funding_rate + ethereum;
+            const totalElement = document.getElementById('weightTotalValue');
+            if (totalElement) {
+                totalElement.textContent = total.toFixed(1);
+                totalElement.style.color = Math.abs(total - 100) < 0.1 ? 'var(--success-green)' : 'var(--danger-red)';
+            }
         }
 
         // 激活策略
@@ -340,7 +1363,12 @@
                 const data = await response.json();
                 if (data.success) {
                     showToast(`策略 "${name}" 已激活`, 'success');
+                    activeStrategyName = name;
                     loadStrategies();
+                    // 如果当前选中的是这个策略，刷新详情
+                    if (selectedStrategyName === name) {
+                        loadStrategyDetail(name);
+                    }
                 } else {
                     showToast(data.message || '激活失败', 'error');
                 }
@@ -350,28 +1378,179 @@
             }
         }
 
-        // 查看策略详情
+        // 查看策略详情（已废弃，使用selectStrategy代替）
         async function viewStrategy(name) {
-            try {
-                const response = await fetch(`/api/strategies/detail/${name}`);
-                const data = await response.json();
-                if (data.success) {
-                    const strategy = data.strategy;
-                    alert(`策略详情:\n\n名称: ${strategy.name}\n描述: ${strategy.description}\n风险等级: ${getRiskLabel(strategy.risk_profile?.level || 'balanced')}\n\n详细配置请查看控制台`);
-                    console.log('策略详情:', strategy);
-                } else {
-                    showToast(data.message || '获取策略详情失败', 'error');
+            selectStrategy(name);
+        }
+
+        // 切换编辑模式
+        function toggleEditMode() {
+            if (!currentStrategyData) return;
+            
+            const isDefault = ['conservative', 'balanced', 'aggressive'].includes(currentStrategyData.name);
+            if (isDefault) {
+                showToast('默认策略不可编辑', 'error');
+                return;
+            }
+
+            isEditMode = !isEditMode;
+            const editModeBtn = document.getElementById('editModeBtn');
+            const saveActions = document.getElementById('saveActions');
+            const detailContentArea = document.getElementById('detailContent');
+
+            if (isEditMode) {
+                // 进入编辑模式
+                if (editModeBtn) {
+                    editModeBtn.innerHTML = '<i class="bi bi-eye"></i> 查看模式';
+                    editModeBtn.classList.remove('btn-secondary');
+                    editModeBtn.classList.add('btn-primary');
                 }
-            } catch (error) {
-                console.error('获取策略详情失败:', error);
-                showToast('获取策略详情失败', 'error');
+                if (saveActions) saveActions.style.display = 'flex';
+                // 重新生成表单（可编辑）
+                if (detailContentArea && currentStrategyData) {
+                    detailContentArea.innerHTML = generateStrategyForm(currentStrategyData, true, false);
+                    updateWeightTotal(); // 初始化权重总和显示
+                }
+            } else {
+                // 退出编辑模式
+                if (editModeBtn) {
+                    editModeBtn.innerHTML = '<i class="bi bi-pencil"></i> 编辑配置';
+                    editModeBtn.classList.remove('btn-primary');
+                    editModeBtn.classList.add('btn-secondary');
+                }
+                if (saveActions) saveActions.style.display = 'none';
+                // 重新加载策略数据
+                loadStrategyDetail(currentStrategyData.name);
             }
         }
 
-        // 编辑策略
+        // 取消编辑
+        function cancelEdit() {
+            isEditMode = false;
+            const editModeBtn = document.getElementById('editModeBtn');
+            const saveActions = document.getElementById('saveActions');
+
+            if (editModeBtn) {
+                editModeBtn.innerHTML = '<i class="bi bi-pencil"></i> 编辑配置';
+                editModeBtn.classList.remove('btn-primary');
+                editModeBtn.classList.add('btn-secondary');
+            }
+            if (saveActions) saveActions.style.display = 'none';
+            
+            // 重新加载策略数据
+            if (currentStrategyData) {
+                loadStrategyDetail(currentStrategyData.name);
+            }
+        }
+
+        // 保存策略配置
+        async function saveStrategyConfig() {
+            if (!currentStrategyData) return;
+
+            const isDefault = ['conservative', 'balanced', 'aggressive'].includes(currentStrategyData.name);
+            if (isDefault) {
+                showToast('默认策略不可编辑', 'error');
+                return;
+            }
+
+            try {
+                // 收集表单数据
+                const updateData = {
+                    description: document.getElementById('strategy_description')?.value || '',
+                    dimension_weights: {
+                        technical: parseFloat(document.getElementById('dw_technical')?.value || 0),
+                        hyperliquid: parseFloat(document.getElementById('dw_hyperliquid')?.value || 0),
+                        news: parseFloat(document.getElementById('dw_news')?.value || 0),
+                        funding_rate: parseFloat(document.getElementById('dw_funding_rate')?.value || 0),
+                        ethereum: parseFloat(document.getElementById('dw_ethereum')?.value || 0)
+                    },
+                    risk_profile: {
+                        level: document.getElementById('rp_level')?.value || 'balanced',
+                        max_position_size: parseFloat(document.getElementById('rp_max_position_size')?.value || 20),
+                        stop_loss: parseFloat(document.getElementById('rp_stop_loss')?.value || 5),
+                        take_profit: parseFloat(document.getElementById('rp_take_profit')?.value || 15),
+                        min_signal_strength: parseFloat(document.getElementById('rp_min_signal_strength')?.value || 60),
+                        allow_short: document.getElementById('rp_allow_short')?.checked || false,
+                        max_leverage: parseFloat(document.getElementById('rp_max_leverage')?.value || 1)
+                    },
+                    trading_rules: {
+                        hyperliquid_min_wallets: parseInt(document.getElementById('tr_hyperliquid_min_wallets')?.value || 3),
+                        hyperliquid_min_amount: parseFloat(document.getElementById('tr_hyperliquid_min_amount')?.value || 50000),
+                        hyperliquid_min_net_flow: parseFloat(document.getElementById('tr_hyperliquid_min_net_flow')?.value || 100000),
+                        rsi_oversold: parseFloat(document.getElementById('tr_rsi_oversold')?.value || 30),
+                        rsi_overbought: parseFloat(document.getElementById('tr_rsi_overbought')?.value || 70),
+                        news_sentiment_threshold: parseFloat(document.getElementById('tr_news_sentiment_threshold')?.value || 0.6),
+                        news_min_count: parseInt(document.getElementById('tr_news_min_count')?.value || 3),
+                        funding_rate_extreme: parseFloat(document.getElementById('tr_funding_rate_extreme')?.value || 0.01),
+                        min_dimensions_agree: parseInt(document.getElementById('tr_min_dimensions_agree')?.value || 3)
+                    },
+                    tags: (document.getElementById('strategy_tags')?.value || '').split(',').map(t => t.trim()).filter(t => t.length > 0)
+                };
+
+                // 验证维度权重总和
+                const weightTotal = updateData.dimension_weights.technical + 
+                                  updateData.dimension_weights.hyperliquid + 
+                                  updateData.dimension_weights.news + 
+                                  updateData.dimension_weights.funding_rate + 
+                                  updateData.dimension_weights.ethereum;
+                
+                if (Math.abs(weightTotal - 100) > 0.1) {
+                    if (!confirm(`维度权重总和为 ${weightTotal.toFixed(1)}%，不等于100%。是否继续保存？系统会自动标准化。`)) {
+                        return;
+                    }
+                }
+
+                // 如果有技术指标配置，也收集
+                const tc_rsi_weight = document.getElementById('tc_rsi_weight');
+                if (tc_rsi_weight && !tc_rsi_weight.disabled) {
+                    updateData.technical_config = {
+                        rsi_weight: parseFloat(document.getElementById('tc_rsi_weight')?.value || 25),
+                        macd_weight: parseFloat(document.getElementById('tc_macd_weight')?.value || 25),
+                        bollinger_weight: parseFloat(document.getElementById('tc_bollinger_weight')?.value || 20),
+                        ema_weight: parseFloat(document.getElementById('tc_ema_weight')?.value || 15),
+                        volume_weight: parseFloat(document.getElementById('tc_volume_weight')?.value || 15),
+                        rsi_period: parseInt(document.getElementById('tc_rsi_period')?.value || 14),
+                        macd_fast: parseInt(document.getElementById('tc_macd_fast')?.value || 12),
+                        macd_slow: parseInt(document.getElementById('tc_macd_slow')?.value || 26),
+                        macd_signal: parseInt(document.getElementById('tc_macd_signal')?.value || 9),
+                        ema_short: parseInt(document.getElementById('tc_ema_short')?.value || 20),
+                        ema_long: parseInt(document.getElementById('tc_ema_long')?.value || 50),
+                        bb_period: parseInt(document.getElementById('tc_bb_period')?.value || 20),
+                        bb_std: parseFloat(document.getElementById('tc_bb_std')?.value || 2)
+                    };
+                }
+
+                // 发送更新请求
+                const response = await fetch(`/api/strategies/update/${currentStrategyData.name}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updateData)
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast(`策略 "${currentStrategyData.name}" 配置已保存`, 'success');
+                    // 退出编辑模式并刷新
+                    isEditMode = false;
+                    await loadStrategyDetail(currentStrategyData.name);
+                    // 刷新列表
+                    loadStrategies();
+                } else {
+                    showToast(data.detail || data.message || '保存失败', 'error');
+                }
+            } catch (error) {
+                console.error('保存策略配置失败:', error);
+                showToast('保存策略配置失败: ' + error.message, 'error');
+            }
+        }
+
+        // 编辑策略（已废弃，使用toggleEditMode代替）
         function editStrategy(name) {
-            showToast('编辑功能开发中...', 'error');
-            // TODO: 实现编辑功能
+            selectStrategy(name);
+            setTimeout(() => toggleEditMode(), 100);
         }
 
         // 停用策略
@@ -397,6 +1576,12 @@
                 const data = await response.json();
                 if (data.success) {
                     showToast(`策略 "${name}" 已删除`, 'success');
+                    // 如果删除的是当前选中的策略，清空详情
+                    if (selectedStrategyName === name) {
+                        selectedStrategyName = null;
+                        document.getElementById('emptyDetailState').style.display = 'block';
+                        document.getElementById('strategyDetailContent').style.display = 'none';
+                    }
                     loadStrategies();
                 } else {
                     showToast(data.message || '删除失败', 'error');
@@ -409,15 +1594,1188 @@
 
         // 显示创建策略模态框
         function showCreateStrategyModal() {
-            showToast('创建策略功能开发中...', 'error');
-            // TODO: 实现创建策略模态框
+            const modal = document.getElementById('createStrategyModal');
+            if (modal) {
+                // 清空表单
+                document.getElementById('newStrategyName').value = '';
+                document.getElementById('newStrategyDesc').value = '';
+                document.getElementById('newStrategyTemplate').value = 'balanced';
+                modal.classList.add('active');
+            }
+        }
+
+        // 隐藏创建策略模态框
+        function hideCreateStrategyModal() {
+            const modal = document.getElementById('createStrategyModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        // 创建策略
+        async function createStrategy() {
+            const name = document.getElementById('newStrategyName').value.trim();
+            const description = document.getElementById('newStrategyDesc').value.trim();
+            const template = document.getElementById('newStrategyTemplate').value;
+
+            // 验证策略名称
+            if (!name) {
+                showToast('请输入策略名称', 'error');
+                return;
+            }
+
+            // 验证名称格式（只能包含字母、数字和下划线）
+            if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+                showToast('策略名称只能包含字母、数字和下划线', 'error');
+                return;
+            }
+
+            try {
+                if (template) {
+                    // 从模板复制策略
+                    const response = await fetch('/api/strategies/copy', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            source: template,
+                            dest: name,
+                            description: description || `基于 ${template} 的策略`
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showToast(`策略 "${name}" 创建成功`, 'success');
+                        hideCreateStrategyModal();
+                        // 刷新策略列表
+                        await loadStrategies();
+                        // 自动选中新创建的策略
+                        setTimeout(() => {
+                            selectStrategy(name);
+                        }, 300);
+                    } else {
+                        showToast(data.detail || data.message || '创建策略失败', 'error');
+                    }
+                } else {
+                    // 从头创建策略（使用默认配置）
+                    const defaultConfig = {
+                        dimension_weights: {
+                            technical: 40.0,
+                            hyperliquid: 20.0,
+                            news: 15.0,
+                            funding_rate: 15.0,
+                            ethereum: 10.0
+                        },
+                        risk_profile: {
+                            level: 'balanced',
+                            max_position_size: 20.0,
+                            stop_loss: 5.0,
+                            take_profit: 15.0,
+                            min_signal_strength: 60.0,
+                            allow_short: false,
+                            max_leverage: 1.0
+                        },
+                        trading_rules: {
+                            hyperliquid_min_wallets: 3,
+                            hyperliquid_min_amount: 50000.0,
+                            hyperliquid_min_net_flow: 100000.0,
+                            rsi_oversold: 30.0,
+                            rsi_overbought: 70.0,
+                            news_sentiment_threshold: 0.6,
+                            news_min_count: 3,
+                            funding_rate_extreme: 0.01,
+                            min_dimensions_agree: 3
+                        }
+                    };
+
+                    const response = await fetch('/api/strategies/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            name: name,
+                            description: description || '我的自定义策略',
+                            dimension_weights: defaultConfig.dimension_weights,
+                            risk_profile: defaultConfig.risk_profile,
+                            trading_rules: defaultConfig.trading_rules,
+                            tags: []
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showToast(`策略 "${name}" 创建成功`, 'success');
+                        hideCreateStrategyModal();
+                        // 刷新策略列表
+                        await loadStrategies();
+                        // 自动选中新创建的策略
+                        setTimeout(() => {
+                            selectStrategy(name);
+                        }, 300);
+                    } else {
+                        showToast(data.detail || data.message || '创建策略失败', 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('创建策略失败:', error);
+                showToast('创建策略失败: ' + error.message, 'error');
+            }
+        }
+
+        // 按ESC键关闭模态框
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                const modal = document.getElementById('createStrategyModal');
+                if (modal && modal.classList.contains('active')) {
+                    hideCreateStrategyModal();
+                }
+            }
+        });
+
+        // 显示回测模态框
+        function showBacktestModal() {
+            const modal = document.getElementById('backtestModal');
+            const strategySelect = document.getElementById('backtestStrategyName');
+            const resultDiv = document.getElementById('backtestResult');
+            const loadingDiv = document.getElementById('backtestLoading');
+            
+            if (modal) {
+                // 加载策略列表到下拉框
+                if (strategySelect && allStrategies) {
+                    strategySelect.innerHTML = '<option value="">请选择策略</option>';
+                    allStrategies.forEach(strategy => {
+                        const option = document.createElement('option');
+                        option.value = strategy.name;
+                        option.textContent = `${strategy.name}${strategy.active ? ' (激活中)' : ''}`;
+                        if (currentStrategyData && strategy.name === currentStrategyData.name) {
+                            option.selected = true;
+                        }
+                        strategySelect.appendChild(option);
+                    });
+                }
+                
+                // 如果当前有选中的策略，自动选择
+                if (currentStrategyData && strategySelect) {
+                    strategySelect.value = currentStrategyData.name;
+                }
+                
+                // 设置默认日期（最近一个月）
+                const endDate = new Date();
+                const startDate = new Date();
+                startDate.setMonth(startDate.getMonth() - 1);
+                
+                document.getElementById('backtestEndDate').value = endDate.toISOString().split('T')[0];
+                document.getElementById('backtestStartDate').value = startDate.toISOString().split('T')[0];
+                
+                // 清空结果
+                if (resultDiv) resultDiv.style.display = 'none';
+                if (loadingDiv) loadingDiv.style.display = 'none';
+                
+                modal.classList.add('active');
+            }
+        }
+
+        // 隐藏回测模态框
+        function hideBacktestModal() {
+            const modal = document.getElementById('backtestModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        // 执行回测
+        async function runBacktest() {
+            const strategyName = document.getElementById('backtestStrategyName').value.trim();
+            const symbol = document.getElementById('backtestSymbol').value.trim();
+            const startDate = document.getElementById('backtestStartDate').value;
+            const endDate = document.getElementById('backtestEndDate').value;
+            const initialBalance = parseFloat(document.getElementById('backtestInitialBalance').value) || 10000;
+            const marketType = document.getElementById('backtestMarketType').value || 'spot';
+
+            // 验证输入
+            if (!strategyName) {
+                showToast('请选择策略', 'error');
+                return;
+            }
+
+            if (!symbol) {
+                showToast('请输入交易对', 'error');
+                return;
+            }
+            if (!startDate || !endDate) {
+                showToast('请选择日期范围', 'error');
+                return;
+            }
+            if (new Date(endDate) <= new Date(startDate)) {
+                showToast('结束日期必须晚于开始日期', 'error');
+                return;
+            }
+            
+            // 检查日期范围（不能超过365天）
+            const daysDiff = (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24);
+            if (daysDiff > 365) {
+                showToast('回测时间范围不能超过365天', 'error');
+                return;
+            }
+
+            const resultDiv = document.getElementById('backtestResult');
+            const loadingDiv = document.getElementById('backtestLoading');
+            const backtestBtn = document.querySelector('#backtestModal .modal-footer .btn-primary');
+
+            // 显示加载状态
+            if (loadingDiv) loadingDiv.style.display = 'block';
+            if (resultDiv) resultDiv.style.display = 'none';
+            if (backtestBtn) backtestBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/strategies/backtest', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        strategy_name: strategyName,
+                        symbol: symbol,
+                        start_date: startDate,
+                        end_date: endDate,
+                        initial_balance: initialBalance,
+                        market_type: marketType
+                    })
+                });
+
+                const data = await response.json();
+
+                if (loadingDiv) loadingDiv.style.display = 'none';
+
+                if (data.success && data.backtest_result) {
+                    const result = data.backtest_result;
+                    
+                    // 显示指标
+                    const metricsDiv = document.getElementById('backtestMetrics');
+                    if (metricsDiv) {
+                        metricsDiv.innerHTML = `
+                            <div class="strategy-detail-card">
+                                <div class="strategy-detail-card-label">总收益率</div>
+                                <div class="strategy-detail-card-value" style="color: ${result.total_return >= 0 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                    ${result.total_return >= 0 ? '+' : ''}${result.total_return}%
+                                </div>
+                            </div>
+                            <div class="strategy-detail-card">
+                                <div class="strategy-detail-card-label">最终权益</div>
+                                <div class="strategy-detail-card-value">${result.final_equity.toFixed(2)} USDT</div>
+                            </div>
+                            <div class="strategy-detail-card">
+                                <div class="strategy-detail-card-label">总交易次数</div>
+                                <div class="strategy-detail-card-value">${result.total_trades}</div>
+                            </div>
+                            <div class="strategy-detail-card">
+                                <div class="strategy-detail-card-label">胜率</div>
+                                <div class="strategy-detail-card-value" style="color: ${result.win_rate >= 50 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                    ${result.win_rate}%
+                                </div>
+                            </div>
+                            <div class="strategy-detail-card">
+                                <div class="strategy-detail-card-label">最大回撤</div>
+                                <div class="strategy-detail-card-value" style="color: var(--danger-red);">
+                                    -${result.max_drawdown}%
+                                </div>
+                            </div>
+                            <div class="strategy-detail-card">
+                                <div class="strategy-detail-card-label">盈亏比</div>
+                                <div class="strategy-detail-card-value">${result.profit_factor}</div>
+                            </div>
+                        `;
+                    }
+
+                    // 显示交易记录
+                    const tradesTbody = document.getElementById('backtestTrades');
+                    if (tradesTbody && result.trades) {
+                        tradesTbody.innerHTML = result.trades.map(trade => {
+                            const pnl = trade.pnl || 0;
+                            const pnlPct = trade.pnl_pct || 0;
+                            return `
+                                <tr style="border-bottom: 1px solid var(--border-muted);">
+                                    <td style="padding: var(--spacing-sm); color: var(--text-secondary);">
+                                        ${new Date(trade.timestamp).toLocaleString('zh-CN')}
+                                    </td>
+                                    <td style="padding: var(--spacing-sm);">${trade.action}</td>
+                                    <td style="padding: var(--spacing-sm); text-align: right; font-family: var(--font-mono);">
+                                        ${trade.price.toFixed(4)}
+                                    </td>
+                                    <td style="padding: var(--spacing-sm); text-align: right; font-family: var(--font-mono); color: ${pnl >= 0 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                        ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%)
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+
+                    if (resultDiv) resultDiv.style.display = 'block';
+                } else {
+                    showToast(data.detail || data.message || '回测失败', 'error');
+                }
+            } catch (error) {
+                console.error('回测失败:', error);
+                showToast('回测失败: ' + error.message, 'error');
+                if (loadingDiv) loadingDiv.style.display = 'none';
+            } finally {
+                if (backtestBtn) backtestBtn.disabled = false;
+            }
+        }
+
+        // 显示AI生成策略模态框
+        function showAutoGenerateModal() {
+            const modal = document.getElementById('autoGenerateModal');
+            const baseStrategySelect = document.getElementById('autoGenBaseStrategy');
+            const resultDiv = document.getElementById('autoGenResult');
+            const loadingDiv = document.getElementById('autoGenLoading');
+            
+            if (modal) {
+                // 加载策略列表
+                if (baseStrategySelect && allStrategies) {
+                    baseStrategySelect.innerHTML = '<option value="">从头开始生成</option>';
+                    allStrategies.forEach(strategy => {
+                        const option = document.createElement('option');
+                        option.value = strategy.name;
+                        option.textContent = `${strategy.name}${strategy.active ? ' (激活中)' : ''}`;
+                        baseStrategySelect.appendChild(option);
+                    });
+                }
+                
+                // 设置默认日期（最近3个月）
+                const endDate = new Date();
+                const startDate = new Date();
+                startDate.setMonth(startDate.getMonth() - 3);
+                
+                document.getElementById('autoGenEndDate').value = endDate.toISOString().split('T')[0];
+                document.getElementById('autoGenStartDate').value = startDate.toISOString().split('T')[0];
+                
+                // 清空结果
+                if (resultDiv) resultDiv.style.display = 'none';
+                if (loadingDiv) loadingDiv.style.display = 'none';
+                
+                modal.classList.add('active');
+            }
+        }
+
+        // 隐藏AI生成策略模态框
+        function hideAutoGenerateModal() {
+            const modal = document.getElementById('autoGenerateModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        // 开始自动生成策略
+        async function startAutoGenerate() {
+            const baseStrategy = document.getElementById('autoGenBaseStrategy').value.trim();
+            const symbol = document.getElementById('autoGenSymbol').value.trim();
+            const startDate = document.getElementById('autoGenStartDate').value;
+            const endDate = document.getElementById('autoGenEndDate').value;
+            const marketType = document.getElementById('autoGenMarketType').value || 'spot';
+            const populationSize = parseInt(document.getElementById('autoGenPopulationSize').value) || 20;
+            const generations = parseInt(document.getElementById('autoGenGenerations').value) || 10;
+
+            // 验证输入
+            if (!symbol) {
+                showToast('请输入交易对', 'error');
+                return;
+            }
+            if (!startDate || !endDate) {
+                showToast('请选择日期范围', 'error');
+                return;
+            }
+            if (new Date(endDate) <= new Date(startDate)) {
+                showToast('结束日期必须晚于开始日期', 'error');
+                return;
+            }
+            
+            const daysDiff = (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24);
+            if (daysDiff < 30) {
+                showToast('训练数据至少需要30天', 'error');
+                return;
+            }
+            if (daysDiff > 365) {
+                showToast('训练数据不能超过365天', 'error');
+                return;
+            }
+
+            const resultDiv = document.getElementById('autoGenResult');
+            const loadingDiv = document.getElementById('autoGenLoading');
+            const progressDiv = document.getElementById('autoGenProgress');
+            const generateBtn = document.querySelector('#autoGenerateModal .modal-footer .btn-success');
+
+            // 显示加载状态
+            if (loadingDiv) loadingDiv.style.display = 'block';
+            if (resultDiv) resultDiv.style.display = 'none';
+            if (generateBtn) generateBtn.disabled = true;
+
+            try {
+                // 更新进度
+                if (progressDiv) {
+                    progressDiv.textContent = '正在初始化优化器...';
+                }
+
+                const response = await fetch('/api/strategies/auto-generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        base_strategy_name: baseStrategy || null,
+                        symbol: symbol,
+                        start_date: startDate,
+                        end_date: endDate,
+                        initial_balance: 10000,
+                        market_type: marketType,
+                        population_size: populationSize,
+                        generations: generations
+                    })
+                });
+
+                const data = await response.json();
+
+                if (loadingDiv) loadingDiv.style.display = 'none';
+
+                if (data.success) {
+                    // 显示结果
+                    const resultContent = document.getElementById('autoGenResultContent');
+                    if (resultContent) {
+                        const metrics = data.metrics || {};
+                        resultContent.innerHTML = `
+                            <div style="background: var(--success-green); color: white; padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <div style="font-size: 18px; font-weight: 600; margin-bottom: var(--spacing-sm);">
+                                    <i class="bi bi-check-circle"></i> 策略生成成功！
+                                </div>
+                                <div style="font-size: 14px;">策略名称: <strong>${data.strategy_name}</strong></div>
+                                <div style="font-size: 14px;">优化分数: <strong>${data.score.toFixed(2)}</strong></div>
+                                <div style="font-size: 14px;">迭代代数: <strong>${data.generation + 1}</strong></div>
+                            </div>
+                            <div class="strategy-detail-grid">
+                                <div class="strategy-detail-card">
+                                    <div class="strategy-detail-card-label">总收益率</div>
+                                    <div class="strategy-detail-card-value" style="color: ${metrics.total_return >= 0 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                        ${metrics.total_return >= 0 ? '+' : ''}${metrics.total_return || 0}%
+                                    </div>
+                                </div>
+                                <div class="strategy-detail-card">
+                                    <div class="strategy-detail-card-label">胜率</div>
+                                    <div class="strategy-detail-card-value" style="color: ${metrics.win_rate >= 50 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                        ${metrics.win_rate || 0}%
+                                    </div>
+                                </div>
+                                <div class="strategy-detail-card">
+                                    <div class="strategy-detail-card-label">最大回撤</div>
+                                    <div class="strategy-detail-card-value" style="color: var(--danger-red);">
+                                        -${metrics.max_drawdown || 0}%
+                                    </div>
+                                </div>
+                                <div class="strategy-detail-card">
+                                    <div class="strategy-detail-card-label">盈亏比</div>
+                                    <div class="strategy-detail-card-value">${metrics.profit_factor || 0}</div>
+                                </div>
+                            </div>
+                            <div style="margin-top: var(--spacing-md);">
+                                <button class="btn btn-primary" onclick="hideAutoGenerateModal(); loadStrategies(); setTimeout(() => { selectStrategy('${data.strategy_name}'); }, 300);" style="width: 100%;">
+                                    <i class="bi bi-eye"></i> 查看生成的策略
+                                </button>
+                            </div>
+                        `;
+                    }
+                    if (resultDiv) resultDiv.style.display = 'block';
+                    showToast('策略生成成功！', 'success');
+                } else {
+                    showToast(data.detail || data.message || '生成策略失败', 'error');
+                }
+            } catch (error) {
+                console.error('生成策略失败:', error);
+                showToast('生成策略失败: ' + error.message, 'error');
+                if (loadingDiv) loadingDiv.style.display = 'none';
+            } finally {
+                if (generateBtn) generateBtn.disabled = false;
+            }
+        }
+
+        // 显示AI找买卖点模态框
+        function showOptimalPointsModal() {
+            const modal = document.getElementById('optimalPointsModal');
+            const resultDiv = document.getElementById('optimalPointsResult');
+            const loadingDiv = document.getElementById('optimalPointsLoading');
+            
+            if (modal) {
+                // 设置默认日期（最近3个月）
+                const endDate = new Date();
+                const startDate = new Date();
+                startDate.setMonth(startDate.getMonth() - 3);
+                
+                document.getElementById('optimalPointsEndDate').value = endDate.toISOString().split('T')[0];
+                document.getElementById('optimalPointsStartDate').value = startDate.toISOString().split('T')[0];
+                
+                // 清空结果
+                if (resultDiv) resultDiv.style.display = 'none';
+                if (loadingDiv) loadingDiv.style.display = 'none';
+                
+                modal.classList.add('active');
+            }
+        }
+
+        // 隐藏AI找买卖点模态框
+        function hideOptimalPointsModal() {
+            const modal = document.getElementById('optimalPointsModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        // 开始分析最佳买卖点
+        async function startOptimalPointsAnalysis() {
+            const symbol = document.getElementById('optimalPointsSymbol').value.trim();
+            const startDate = document.getElementById('optimalPointsStartDate').value;
+            const endDate = document.getElementById('optimalPointsEndDate').value;
+            const marketType = document.getElementById('optimalPointsMarketType').value || 'spot';
+            const lookback = parseInt(document.getElementById('optimalPointsLookback').value) || 20;
+            const minProfit = parseFloat(document.getElementById('optimalPointsMinProfit').value) || 5;
+
+            // 验证输入
+            if (!symbol) {
+                showToast('请输入交易对', 'error');
+                return;
+            }
+            if (!startDate || !endDate) {
+                showToast('请选择日期范围', 'error');
+                return;
+            }
+            if (new Date(endDate) <= new Date(startDate)) {
+                showToast('结束日期必须晚于开始日期', 'error');
+                return;
+            }
+            
+            const daysDiff = (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24);
+            if (daysDiff < 7) {
+                showToast('分析时间范围至少需要7天', 'error');
+                return;
+            }
+            if (daysDiff > 365) {
+                showToast('分析时间范围不能超过365天', 'error');
+                return;
+            }
+
+            const resultDiv = document.getElementById('optimalPointsResult');
+            const loadingDiv = document.getElementById('optimalPointsLoading');
+            const analyzeBtn = document.querySelector('#optimalPointsModal .modal-footer .btn-info');
+
+            // 显示加载状态
+            if (loadingDiv) loadingDiv.style.display = 'block';
+            if (resultDiv) resultDiv.style.display = 'none';
+            if (analyzeBtn) analyzeBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/strategies/optimal-points', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        start_date: startDate,
+                        end_date: endDate,
+                        market_type: marketType,
+                        lookback_period: lookback,
+                        min_profit_pct: minProfit
+                    })
+                });
+
+                const data = await response.json();
+
+                if (loadingDiv) loadingDiv.style.display = 'none';
+
+                if (data.success) {
+                    // 更新统计
+                    document.getElementById('optimalBuyCount').textContent = data.buy_points.length;
+                    document.getElementById('optimalSellCount').textContent = data.sell_points.length;
+                    document.getElementById('optimalPairsCount').textContent = data.total_opportunities;
+
+                    // 显示买点列表（包含对应的卖点和收益）
+                    const buyPointsList = document.getElementById('optimalBuyPointsList');
+                    if (buyPointsList && data.buy_points) {
+                        buyPointsList.innerHTML = data.buy_points.slice(0, 10).map((point, idx) => {
+                            const timestamp = new Date(point.timestamp).toLocaleString('zh-CN');
+                            const hasSell = point.optimal_sell && point.expected_profit_pct > 0;
+                            return `
+                                <div style="background: var(--bg-tertiary); padding: var(--spacing-sm); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); border-left: 3px solid var(--success-green);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                        <div style="font-weight: 600; color: var(--success-green);">买点 #${idx + 1}</div>
+                                        <div style="font-size: 12px; color: var(--text-secondary);">评分: ${point.score}</div>
+                                    </div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">${timestamp}</div>
+                                    <div style="font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">$${point.price.toFixed(4)}</div>
+                                    ${point.reasons ? `<div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px;">${point.reasons.join(', ')}</div>` : ''}
+                                    ${hasSell ? `
+                                        <div style="border-top: 1px solid var(--border-muted); padding-top: 6px; margin-top: 6px;">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                <div style="font-size: 11px; color: var(--text-secondary);">最佳卖点:</div>
+                                                <div style="font-size: 14px; font-weight: 700; color: var(--success-green);">+${point.expected_profit_pct}%</div>
+                                            </div>
+                                            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">${new Date(point.optimal_sell.timestamp).toLocaleString('zh-CN')}</div>
+                                            <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--danger-red);">$${point.optimal_sell.price.toFixed(4)}</div>
+                                            ${point.duration_days ? `<div style="font-size: 10px; color: var(--text-tertiary); margin-top: 2px;">持仓: ${point.duration_days} 天</div>` : ''}
+                                        </div>
+                                    ` : `
+                                        <div style="border-top: 1px solid var(--border-muted); padding-top: 6px; margin-top: 6px;">
+                                            <div style="font-size: 11px; color: var(--text-tertiary);">暂无匹配的卖点</div>
+                                        </div>
+                                    `}
+                                </div>
+                            `;
+                        }).join('');
+                    }
+
+                    // 显示卖点列表（包含对应的买点和收益）
+                    const sellPointsList = document.getElementById('optimalSellPointsList');
+                    if (sellPointsList && data.sell_points) {
+                        sellPointsList.innerHTML = data.sell_points.slice(0, 10).map((point, idx) => {
+                            const timestamp = new Date(point.timestamp).toLocaleString('zh-CN');
+                            const hasBuy = point.optimal_buy && point.expected_profit_pct > 0;
+                            return `
+                                <div style="background: var(--bg-tertiary); padding: var(--spacing-sm); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); border-left: 3px solid var(--danger-red);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                        <div style="font-weight: 600; color: var(--danger-red);">卖点 #${idx + 1}</div>
+                                        <div style="font-size: 12px; color: var(--text-secondary);">评分: ${point.score}</div>
+                                    </div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">${timestamp}</div>
+                                    <div style="font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">$${point.price.toFixed(4)}</div>
+                                    ${point.reasons ? `<div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px;">${point.reasons.join(', ')}</div>` : ''}
+                                    ${hasBuy ? `
+                                        <div style="border-top: 1px solid var(--border-muted); padding-top: 6px; margin-top: 6px;">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                <div style="font-size: 11px; color: var(--text-secondary);">对应买点:</div>
+                                                <div style="font-size: 14px; font-weight: 700; color: var(--success-green);">+${point.expected_profit_pct}%</div>
+                                            </div>
+                                            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">${new Date(point.optimal_buy.timestamp).toLocaleString('zh-CN')}</div>
+                                            <div style="font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--success-green);">$${point.optimal_buy.price.toFixed(4)}</div>
+                                            ${point.duration_days ? `<div style="font-size: 10px; color: var(--text-tertiary); margin-top: 2px;">持仓: ${point.duration_days} 天</div>` : ''}
+                                        </div>
+                                    ` : `
+                                        <div style="border-top: 1px solid var(--border-muted); padding-top: 6px; margin-top: 6px;">
+                                            <div style="font-size: 11px; color: var(--text-tertiary);">暂无匹配的买点</div>
+                                        </div>
+                                    `}
+                                </div>
+                            `;
+                        }).join('');
+                    }
+
+                    // 显示交易对列表
+                    const pairsList = document.getElementById('optimalPairsList');
+                    if (pairsList && data.optimal_pairs) {
+                        pairsList.innerHTML = data.optimal_pairs.map((pair, idx) => {
+                            const buyTime = new Date(pair.buy.timestamp).toLocaleString('zh-CN');
+                            const sellTime = new Date(pair.sell.timestamp).toLocaleString('zh-CN');
+                            return `
+                                <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm);">
+                                        <div style="font-weight: 600;">交易对 #${idx + 1}</div>
+                                        <div style="font-size: 18px; font-weight: 700; color: var(--success-green);">+${pair.profit_pct}%</div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+                                        <div style="border-left: 3px solid var(--success-green); padding-left: var(--spacing-sm);">
+                                            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">买入</div>
+                                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">${buyTime}</div>
+                                            <div style="font-family: var(--font-mono); font-weight: 600; color: var(--success-green);">$${pair.buy.price.toFixed(4)}</div>
+                                        </div>
+                                        <div style="border-left: 3px solid var(--danger-red); padding-left: var(--spacing-sm);">
+                                            <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">卖出</div>
+                                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">${sellTime}</div>
+                                            <div style="font-family: var(--font-mono); font-weight: 600; color: var(--danger-red);">$${pair.sell.price.toFixed(4)}</div>
+                                        </div>
+                                    </div>
+                                    ${pair.duration_days ? `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: var(--spacing-sm);">持仓时长: ${pair.duration_days} 天</div>` : ''}
+                                </div>
+                            `;
+                        }).join('');
+                    }
+
+                    if (resultDiv) resultDiv.style.display = 'block';
+                } else {
+                    showToast(data.detail || data.message || '分析失败', 'error');
+                }
+            } catch (error) {
+                console.error('分析失败:', error);
+                showToast('分析失败: ' + error.message, 'error');
+                if (loadingDiv) loadingDiv.style.display = 'none';
+            } finally {
+                if (analyzeBtn) analyzeBtn.disabled = false;
+            }
+        }
+
+        // 显示价格预测模态框
+        function showPricePredictionModal() {
+            const modal = document.getElementById('pricePredictionModal');
+            const resultDiv = document.getElementById('predictionResult');
+            const loadingDiv = document.getElementById('predictionLoading');
+            
+            if (modal) {
+                // 清空结果
+                if (resultDiv) resultDiv.style.display = 'none';
+                if (loadingDiv) loadingDiv.style.display = 'none';
+                
+                modal.classList.add('active');
+            }
+        }
+
+        // 隐藏价格预测模态框
+        function hidePricePredictionModal() {
+            const modal = document.getElementById('pricePredictionModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        // 开始价格预测
+        async function startPricePrediction() {
+            const symbol = document.getElementById('predictionSymbol').value.trim();
+            const marketType = document.getElementById('predictionMarketType').value || 'spot';
+            const daysAheadInput = document.getElementById('predictionDaysAhead').value;
+            const daysAhead = parseInt(daysAheadInput) || 3;
+
+            // 验证输入
+            if (!symbol) {
+                showToast('请输入交易对', 'error');
+                return;
+            }
+            
+            // 验证days_ahead
+            if (isNaN(daysAhead) || daysAhead < 1 || daysAhead > 7) {
+                showToast('预测天数必须在1-7天之间', 'error');
+                return;
+            }
+
+            const resultDiv = document.getElementById('predictionResult');
+            const loadingDiv = document.getElementById('predictionLoading');
+            const predictBtn = document.querySelector('#pricePredictionModal .modal-footer .btn-warning');
+
+            // 显示加载状态
+            if (loadingDiv) loadingDiv.style.display = 'block';
+            if (resultDiv) resultDiv.style.display = 'none';
+            if (predictBtn) predictBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/strategies/price-prediction', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        market_type: marketType,
+                        days_ahead: daysAhead
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: '请求失败' }));
+                    console.error('API错误:', errorData);
+                    
+                    if (loadingDiv) loadingDiv.style.display = 'none';
+                    
+                    // 显示详细的错误信息
+                    let errorMsg = '预测失败';
+                    if (errorData.detail) {
+                        if (Array.isArray(errorData.detail)) {
+                            errorMsg = errorData.detail.map(e => {
+                                const field = e.loc ? e.loc.slice(1).join('.') : '未知字段';
+                                return `${field}: ${e.msg}`;
+                            }).join('; ');
+                        } else if (typeof errorData.detail === 'string') {
+                            errorMsg = errorData.detail;
+                        } else {
+                            errorMsg = JSON.stringify(errorData.detail);
+                        }
+                    }
+                    showToast(errorMsg, 'error');
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (loadingDiv) loadingDiv.style.display = 'none';
+
+                if (data.success) {
+                    // 更新主要指标
+                    document.getElementById('predictionCurrentPrice').textContent = `$${data.current_price.toFixed(4)}`;
+                    document.getElementById('predictionFuturePrice').textContent = `$${data.prediction.predicted_price.toFixed(4)}`;
+                    
+                    const changePct = data.prediction.price_change_pct;
+                    const changeEl = document.getElementById('predictionChange');
+                    changeEl.textContent = `${changePct >= 0 ? '+' : ''}${changePct}%`;
+                    changeEl.style.color = changePct >= 0 ? 'var(--success-green)' : 'var(--danger-red)';
+                    
+                    // 预测方向
+                    const directionMap = {
+                        'upward': { text: '📈 上涨', color: 'var(--success-green)' },
+                        'downward': { text: '📉 下跌', color: 'var(--danger-red)' },
+                        'neutral': { text: '➡️ 震荡', color: 'var(--text-secondary)' }
+                    };
+                    const direction = directionMap[data.prediction.direction] || directionMap['neutral'];
+                    const directionEl = document.getElementById('predictionDirection');
+                    directionEl.textContent = direction.text;
+                    directionEl.style.color = direction.color;
+                    
+                    // 置信度
+                    document.getElementById('predictionConfidence').textContent = `${data.confidence}%`;
+                    
+                    // 当前趋势
+                    const trend = data.current_trend;
+                    const trendText = trend.direction === 'upward' ? '📈 上升' : trend.direction === 'downward' ? '📉 下降' : '➡️ 中性';
+                    document.getElementById('predictionTrend').textContent = trendText;
+                    
+                    // 交易建议
+                    const rec = data.recommendation;
+                    const recEl = document.getElementById('predictionRecommendation');
+                    const actionColors = {
+                        'BUY': 'var(--success-green)',
+                        'SELL': 'var(--danger-red)',
+                        'HOLD': 'var(--text-secondary)',
+                        'HOLD_BUY': 'var(--success-green)',
+                        'HOLD_SELL': 'var(--danger-red)'
+                    };
+                    recEl.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm);">
+                            <div style="font-size: 16px; font-weight: 600; color: ${actionColors[rec.action] || 'var(--text-primary)'};">
+                                ${rec.action === 'BUY' ? '🟢 买入' : rec.action === 'SELL' ? '🔴 卖出' : rec.action === 'HOLD_BUY' ? '🟡 轻仓买入' : rec.action === 'HOLD_SELL' ? '🟡 谨慎观望' : '⚪ 观望'}
+                            </div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">风险等级: ${rec.risk_level}</div>
+                        </div>
+                        <div style="font-size: 14px; color: var(--text-primary); line-height: 1.6;">${rec.advice}</div>
+                    `;
+                    
+                    // 预测点列表
+                    const pointsList = document.getElementById('predictionPointsList');
+                    if (pointsList && data.prediction_points) {
+                        pointsList.innerHTML = data.prediction_points.map(point => {
+                            const timestamp = new Date(point.timestamp).toLocaleString('zh-CN');
+                            return `
+                                <div style="background: var(--bg-secondary); padding: var(--spacing-sm); border-radius: var(--radius-sm); margin-bottom: var(--spacing-sm); border-left: 3px solid var(--primary-blue);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="font-size: 12px; color: var(--text-secondary);">第${point.day}天</div>
+                                            <div style="font-size: 11px; color: var(--text-tertiary);">${timestamp}</div>
+                                        </div>
+                                        <div style="text-align: right;">
+                                            <div style="font-family: var(--font-mono); font-weight: 600; color: var(--text-primary);">$${point.predicted_price.toFixed(4)}</div>
+                                            <div style="font-size: 12px; color: ${point.price_change_pct >= 0 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                                ${point.price_change_pct >= 0 ? '+' : ''}${point.price_change_pct}%
+                                            </div>
+                                            <div style="font-size: 10px; color: var(--text-tertiary);">置信度: ${point.confidence}%</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                    
+                    // 关键价位
+                    const keyLevels = data.key_levels;
+                    const keyLevelsEl = document.getElementById('predictionKeyLevels');
+                    if (keyLevelsEl) {
+                        keyLevelsEl.innerHTML = `
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-md);">
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">支撑位</div>
+                                    <div style="font-family: var(--font-mono); font-weight: 600; color: var(--success-green);">$${keyLevels.support.toFixed(4)}</div>
+                                    <div style="font-size: 11px; color: var(--text-tertiary);">距离: ${keyLevels.support_distance_pct}%</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当前价</div>
+                                    <div style="font-family: var(--font-mono); font-weight: 600; color: var(--text-primary);">$${keyLevels.current_price.toFixed(4)}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">阻力位</div>
+                                    <div style="font-family: var(--font-mono); font-weight: 600; color: var(--danger-red);">$${keyLevels.resistance.toFixed(4)}</div>
+                                    <div style="font-size: 11px; color: var(--text-tertiary);">距离: ${keyLevels.resistance_distance_pct}%</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    // 风险提示
+                    if (data.risk_factors && data.risk_factors.length > 0) {
+                        const risksEl = document.getElementById('predictionRisks');
+                        const risksListEl = document.getElementById('predictionRisksList');
+                        if (risksEl && risksListEl) {
+                            risksListEl.innerHTML = data.risk_factors.map(risk => `
+                                <div style="padding: var(--spacing-sm); margin-bottom: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--danger-red);">
+                                    <div style="font-size: 13px; color: var(--text-primary);">${risk}</div>
+                                </div>
+                            `).join('');
+                            risksEl.style.display = 'block';
+                        }
+                    } else {
+                        const risksEl = document.getElementById('predictionRisks');
+                        if (risksEl) risksEl.style.display = 'none';
+                    }
+
+                    if (resultDiv) resultDiv.style.display = 'block';
+                } else {
+                    showToast(data.detail || data.message || '预测失败', 'error');
+                }
+            } catch (error) {
+                console.error('预测失败:', error);
+                showToast('预测失败: ' + error.message, 'error');
+                if (loadingDiv) loadingDiv.style.display = 'none';
+            } finally {
+                if (predictBtn) predictBtn.disabled = false;
+            }
+        }
+
+        // 显示交易诊断模态框
+        function showTradeDiagnosticModal() {
+            const modal = document.getElementById('tradeDiagnosticModal');
+            const resultDiv = document.getElementById('diagnosticResult');
+            const loadingDiv = document.getElementById('diagnosticLoading');
+            
+            if (modal) {
+                // 清空结果
+                if (resultDiv) resultDiv.style.display = 'none';
+                if (loadingDiv) loadingDiv.style.display = 'none';
+                
+                // 设置默认日期为前天
+                const dateInput = document.getElementById('diagnosticDate');
+                if (dateInput) {
+                    const twoDaysAgo = new Date();
+                    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+                    dateInput.value = twoDaysAgo.toISOString().split('T')[0];
+                }
+                
+                modal.classList.add('active');
+            }
+        }
+
+        // 隐藏交易诊断模态框
+        function hideTradeDiagnosticModal() {
+            const modal = document.getElementById('tradeDiagnosticModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        // 开始交易诊断
+        async function startTradeDiagnostic() {
+            const symbol = document.getElementById('diagnosticSymbol').value.trim();
+            const date = document.getElementById('diagnosticDate').value;
+            const time = document.getElementById('diagnosticTime').value;
+            const tradeType = document.getElementById('diagnosticTradeType').value || 'buy';
+            const marketType = document.getElementById('diagnosticMarketType').value || 'spot';
+
+            // 验证输入
+            if (!symbol) {
+                showToast('请输入交易对', 'error');
+                return;
+            }
+            if (!date || !time) {
+                showToast('请选择交易日期和时间', 'error');
+                return;
+            }
+
+            // 构建时间字符串
+            const tradeTime = `${date}T${time}:00`;
+
+            const resultDiv = document.getElementById('diagnosticResult');
+            const loadingDiv = document.getElementById('diagnosticLoading');
+            const diagnosticBtn = document.querySelector('#tradeDiagnosticModal .modal-footer .btn-primary');
+
+            // 显示加载状态
+            if (loadingDiv) loadingDiv.style.display = 'block';
+            if (resultDiv) resultDiv.style.display = 'none';
+            if (diagnosticBtn) diagnosticBtn.disabled = true;
+
+            try {
+                const response = await fetch('/api/strategies/trade-diagnostic', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        trade_time: tradeTime,
+                        trade_type: tradeType,
+                        market_type: marketType
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ detail: '请求失败' }));
+                    console.error('API错误:', errorData);
+                    
+                    if (loadingDiv) loadingDiv.style.display = 'none';
+                    
+                    let errorMsg = '诊断失败';
+                    if (errorData.detail) {
+                        if (Array.isArray(errorData.detail)) {
+                            errorMsg = errorData.detail.map(e => {
+                                const field = e.loc ? e.loc.slice(1).join('.') : '未知字段';
+                                return `${field}: ${e.msg}`;
+                            }).join('; ');
+                        } else if (typeof errorData.detail === 'string') {
+                            errorMsg = errorData.detail;
+                        }
+                    }
+                    showToast(errorMsg, 'error');
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (loadingDiv) loadingDiv.style.display = 'none';
+
+                if (data.success) {
+                    // 更新主要指标
+                    document.getElementById('diagnosticTradePrice').textContent = `$${data.trade_price.toFixed(4)}`;
+                    document.getElementById('diagnosticScore').textContent = `${data.diagnosis.overall_score}分`;
+                    document.getElementById('diagnosticConclusion').textContent = data.diagnosis.conclusion;
+                    document.getElementById('diagnosticDescription').textContent = data.diagnosis.description;
+                    
+                    // 时机分析
+                    const timing = data.timing_analysis;
+                    document.getElementById('diagnosticTiming').innerHTML = `
+                        <div style="font-size: 13px; color: var(--text-primary); margin-bottom: var(--spacing-sm);">
+                            ${timing.assessment}
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">
+                            买入前24h: <span style="color: ${timing.price_change_before_24h_pct >= 0 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                ${timing.price_change_before_24h_pct >= 0 ? '+' : ''}${timing.price_change_before_24h_pct}%
+                            </span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">
+                            买入后24h: <span style="color: ${timing.price_change_after_24h_pct >= 0 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                ${timing.price_change_after_24h_pct >= 0 ? '+' : ''}${timing.price_change_after_24h_pct}%
+                            </span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: var(--spacing-sm);">
+                            时机评分: <strong style="color: var(--primary-blue);">${timing.score}分</strong>
+                        </div>
+                    `;
+                    
+                    // 市场环境
+                    const market = data.market_analysis;
+                    document.getElementById('diagnosticMarket').innerHTML = `
+                        <div style="font-size: 13px; color: var(--text-primary); margin-bottom: var(--spacing-sm);">
+                            趋势: <strong>${market.trend === 'uptrend' ? '📈 上涨' : market.trend === 'downtrend' ? '📉 下跌' : '➡️ 震荡'}</strong>
+                            <span style="font-size: 11px; color: var(--text-secondary);">(${market.trend_strength})</span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">
+                            波动率: ${market.volatility}% <span style="font-size: 11px;">(${market.volatility_level})</span>
+                        </div>
+                    `;
+                    
+                    // 技术指标
+                    const indicators = data.indicator_analysis;
+                    document.getElementById('diagnosticIndicators').innerHTML = `
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: var(--spacing-sm);">
+                            指标评分: <strong style="color: var(--primary-blue);">${indicators.score}分</strong>
+                        </div>
+                        ${indicators.signals.length > 0 ? `
+                            <div style="font-size: 12px; color: var(--text-primary);">
+                                ${indicators.signals.map(s => `<div style="margin-bottom: 4px;">• ${s}</div>`).join('')}
+                            </div>
+                        ` : '<div style="font-size: 12px; color: var(--text-tertiary);">无明确信号</div>'}
+                        ${indicators.rsi ? `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: var(--spacing-sm);">RSI: ${indicators.rsi}</div>` : ''}
+                    `;
+                    
+                    // 价格位置
+                    const pricePos = data.price_position_analysis;
+                    document.getElementById('diagnosticPricePosition').innerHTML = `
+                        <div style="font-size: 13px; color: var(--text-primary); margin-bottom: var(--spacing-sm);">
+                            位置: <strong>${pricePos.position}</strong>
+                            <span style="font-size: 11px; color: var(--text-secondary);">(${pricePos.position_pct}%)</span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">
+                            近期高点: $${pricePos.recent_high.toFixed(4)}
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">
+                            近期低点: $${pricePos.recent_low.toFixed(4)}
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: var(--spacing-sm);">
+                            位置评分: <strong style="color: var(--primary-blue);">${pricePos.score}分</strong>
+                        </div>
+                    `;
+                    
+                    // 后续表现
+                    const performance = data.performance_analysis;
+                    if (performance.available) {
+                        const perf = performance.performance;
+                        document.getElementById('diagnosticPerformance').innerHTML = `
+                            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--spacing-sm);">
+                                ${Object.entries(perf).map(([period, data]) => `
+                                    <div style="text-align: center; padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm);">
+                                        <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">${period}</div>
+                                        <div style="font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px;">
+                                            $${data.price.toFixed(4)}
+                                        </div>
+                                        <div style="font-size: 12px; color: ${data.profit ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                            ${data.change_pct >= 0 ? '+' : ''}${data.change_pct}%
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `;
+                    } else {
+                        document.getElementById('diagnosticPerformance').innerHTML = `
+                            <div style="font-size: 13px; color: var(--text-tertiary);">${performance.message || '数据不足，无法分析后续表现'}</div>
+                        `;
+                    }
+                    
+                    // 建议
+                    document.getElementById('diagnosticRecommendations').innerHTML = `
+                        <div style="font-size: 13px; color: var(--text-primary); line-height: 1.8;">
+                            ${data.recommendations.map(rec => `<div style="margin-bottom: var(--spacing-sm);">• ${rec}</div>`).join('')}
+                        </div>
+                    `;
+                    
+                    // 问题和优点
+                    if (data.diagnosis.issues && data.diagnosis.issues.length > 0) {
+                        document.getElementById('diagnosticIssuesList').innerHTML = `
+                            <div style="font-size: 13px; color: var(--text-primary);">
+                                ${data.diagnosis.issues.map(issue => `<div style="margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--danger-red);">• ${issue}</div>`).join('')}
+                            </div>
+                        `;
+                        document.getElementById('diagnosticIssues').style.display = 'block';
+                    } else {
+                        document.getElementById('diagnosticIssues').style.display = 'none';
+                    }
+                    
+                    if (data.diagnosis.advantages && data.diagnosis.advantages.length > 0) {
+                        document.getElementById('diagnosticAdvantagesList').innerHTML = `
+                            <div style="font-size: 13px; color: var(--text-primary);">
+                                ${data.diagnosis.advantages.map(adv => `<div style="margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border-left: 3px solid var(--success-green);">• ${adv}</div>`).join('')}
+                            </div>
+                        `;
+                        document.getElementById('diagnosticAdvantages').style.display = 'block';
+                    } else {
+                        document.getElementById('diagnosticAdvantages').style.display = 'none';
+                    }
+
+                    if (resultDiv) resultDiv.style.display = 'block';
+                } else {
+                    showToast(data.detail || data.message || '诊断失败', 'error');
+                }
+            } catch (error) {
+                console.error('诊断失败:', error);
+                showToast('诊断失败: ' + error.message, 'error');
+                if (loadingDiv) loadingDiv.style.display = 'none';
+            } finally {
+                if (diagnosticBtn) diagnosticBtn.disabled = false;
+            }
         }
 
         // 页面加载时执行
         document.addEventListener('DOMContentLoaded', function() {
             loadStrategies();
-            // 每60秒更新一次
-            setInterval(loadStrategies, 60000);
         });
     </script>
 </body>

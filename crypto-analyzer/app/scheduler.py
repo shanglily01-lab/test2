@@ -40,7 +40,7 @@ from app.collectors.enhanced_news_collector import EnhancedNewsAggregator
 from app.collectors.smart_money_collector import SmartMoneyCollector
 from app.collectors.hyperliquid_collector import HyperliquidCollector
 from app.database.db_service import DatabaseService
-from app.trading.futures_monitor_service import FuturesMonitorService
+# 合约监控服务已移至 main.py，不再在此导入
 from app.trading.auto_futures_trader import AutoFuturesTrader
 from app.services.cache_update_service import CacheUpdateService
 
@@ -144,14 +144,8 @@ class UnifiedDataScheduler:
             self.hyperliquid_collector = None
             logger.info("  ⊗ Hyperliquid 采集器 (未启用)")
 
-        # 5. 合约监控服务
-        try:
-            # FuturesMonitorService 需要配置文件路径，不是配置字典
-            self.futures_monitor = FuturesMonitorService(config_path='config.yaml')
-            logger.info("  ✓ 合约监控服务")
-        except Exception as e:
-            self.futures_monitor = None
-            logger.warning(f"  ⊗ 合约监控服务初始化失败: {e}")
+        # 5. 合约监控服务（已移至 main.py，由 FastAPI 生命周期管理，此处不再初始化）
+        self.futures_monitor = None
 
         # 6. 自动合约交易服务
         try:
@@ -727,44 +721,8 @@ class UnifiedDataScheduler:
             logger.error(f"清理EMA信号数据失败: {e}")
 
     # ==================== 合约监控任务 ====================
-
-    async def monitor_futures_positions(self):
-        """监控合约持仓 - 止盈止损触发 (每1分钟)"""
-        if not self.futures_monitor:
-            return
-
-        task_name = 'futures_monitor'
-        try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始监控合约持仓...")
-
-            # 执行监控
-            results = self.futures_monitor.monitor_positions()
-
-            if results:
-                total = results['total_positions']
-                monitoring = results['monitoring']
-                stop_loss = results['stop_loss']
-                take_profit = results['take_profit']
-                liquidated = results['liquidated']
-
-                logger.info(f"  ✓ 合约监控: 总持仓 {total}, 监控中 {monitoring}, "
-                          f"止损 {stop_loss}, 止盈 {take_profit}, 强平 {liquidated}")
-
-                # 重要事件通知
-                if liquidated > 0:
-                    logger.warning(f"  ⚠️  {liquidated} 个持仓被强制平仓！")
-                if stop_loss > 0:
-                    logger.info(f"  🛑 {stop_loss} 个持仓触发止损")
-                if take_profit > 0:
-                    logger.info(f"  ✅ {take_profit} 个持仓触发止盈")
-
-            # 更新统计
-            self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
-
-        except Exception as e:
-            logger.error(f"合约监控任务失败: {e}")
-            self.task_stats[task_name]['last_error'] = str(e)
+    # 合约止盈止损监控已移至 main.py，由 FastAPI 生命周期管理
+    # 与现货限价单执行器保持一致，都在 main.py 中启动
 
     # ==================== Hyperliquid 数据采集任务 ====================
 
@@ -1035,12 +993,8 @@ class UnifiedDataScheduler:
             )
             logger.info("  ✓ 自动合约交易 (BTC, ETH, SOL, BNB) - 每 30 分钟")
 
-        # 3.6 合约持仓监控
-        if self.futures_monitor:
-            schedule.every(1).minutes.do(
-                lambda: asyncio.run(self.monitor_futures_positions())
-            )
-            logger.info("  ✓ 合约持仓监控 (止盈止损) - 每 1 分钟")
+        # 3.6 合约持仓监控（已移至 main.py，由 FastAPI 生命周期管理）
+        # 合约止盈止损监控现在在 main.py 中启动，与现货限价单执行器保持一致
 
         # 3.7 EMA 买入信号监控
         if self.ema_monitor:

@@ -17,15 +17,17 @@ logger = logging.getLogger(__name__)
 class EnhancedDashboardCached:
     """增强版仪表盘数据服务（使用缓存）"""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, price_collector=None):
         """
         初始化
 
         Args:
             config: 系统配置
+            price_collector: 价格采集器（可选，用于实时价格获取）
         """
         self.config = config
         self.db_service = DatabaseService(config.get('database', {}))
+        self.price_collector = price_collector
 
     async def get_dashboard_data(self, symbols: List[str] = None) -> Dict:
         """
@@ -103,10 +105,13 @@ class EnhancedDashboardCached:
     async def _get_prices_from_cache(self, symbols: List[str]) -> List[Dict]:
         """
         从价格统计缓存表读取价格数据（超快）
+        如果缓存数据超过30秒，则从实时价格源获取最新价格
 
         Returns:
             价格列表
         """
+        from datetime import datetime, timedelta
+        
         prices = []
         session = None
 
@@ -135,13 +140,69 @@ class EnhancedDashboardCached:
             params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
             results = session.execute(sql, params).fetchall()
 
+            # 检查哪些价格需要实时更新（超过30秒）
+            now = datetime.now()
+            symbols_need_realtime = []
+            
             for row in results:
                 row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                updated_at = row_dict.get('updated_at')
+                
+                if updated_at:
+                    # 如果updated_at是datetime对象，直接比较
+                    if isinstance(updated_at, datetime):
+                        age_seconds = (now - updated_at).total_seconds()
+                    else:
+                        # 如果是字符串，转换为datetime
+                        if isinstance(updated_at, str):
+                            updated_at = datetime.strptime(updated_at, '%Y-%m-%d %H:%M:%S')
+                        age_seconds = (now - updated_at).total_seconds()
+                    
+                    # 如果缓存超过30秒，标记为需要实时更新
+                    if age_seconds > 30:
+                        symbols_need_realtime.append(row_dict['symbol'])
+
+            # 从实时价格源获取需要更新的价格
+            realtime_prices = {}
+            if symbols_need_realtime:
+                # 优先使用 price_collector，如果没有则从数据库获取最新K线价格
+                if hasattr(self, 'price_collector') and self.price_collector:
+                    try:
+                        for symbol in symbols_need_realtime:
+                            try:
+                                price_info = await self.price_collector.fetch_best_price(symbol)
+                                if price_info:
+                                    realtime_prices[symbol] = float(price_info.get('price', 0))
+                                    logger.debug(f"🔄 实时更新 {symbol} 价格: {realtime_prices[symbol]}")
+                            except Exception as e:
+                                logger.warning(f"获取 {symbol} 实时价格失败: {e}")
+                                continue
+                    except Exception as e:
+                        logger.warning(f"批量获取实时价格失败: {e}")
+                else:
+                    # 从数据库获取最新1分钟K线价格作为实时价格
+                    try:
+                        for symbol in symbols_need_realtime:
+                            latest_kline = self.db_service.get_latest_kline(symbol, '1m')
+                            if latest_kline:
+                                realtime_prices[symbol] = float(latest_kline.close)
+                                logger.debug(f"🔄 从数据库实时更新 {symbol} 价格: {realtime_prices[symbol]}")
+                    except Exception as e:
+                        logger.warning(f"从数据库获取实时价格失败: {e}")
+
+            for row in results:
+                row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                symbol = row_dict['symbol']
+                
+                # 如果从实时源获取到了新价格，使用实时价格
+                current_price = float(row_dict['current_price'])
+                if symbol in realtime_prices:
+                    current_price = realtime_prices[symbol]
 
                 price_data = {
-                    'symbol': row_dict['symbol'].replace('/USDT', ''),
-                    'full_symbol': row_dict['symbol'],
-                    'price': float(row_dict['current_price']),
+                    'symbol': symbol.replace('/USDT', ''),
+                    'full_symbol': symbol,
+                    'price': current_price,
                     'change_24h': float(row_dict['change_24h']) if row_dict['change_24h'] else 0,
                     'volume_24h': float(row_dict['volume_24h']) if row_dict['volume_24h'] else 0,
                     'quote_volume_24h': float(row_dict['quote_volume_24h']) if row_dict['quote_volume_24h'] else 0,
@@ -150,10 +211,6 @@ class EnhancedDashboardCached:
                     'trend': row_dict['trend'],
                     'timestamp': row_dict['updated_at'].strftime('%Y-%m-%d %H:%M:%S') if row_dict['updated_at'] else ''
                 }
-
-                # 调试日志已移除 - 数据已验证正确
-                # if row_dict['symbol'] == 'BTC/USDT':
-                #     logger.info(f"🔍 BTC数据构建: volume_24h={price_data['volume_24h']}, quote_volume_24h={price_data['quote_volume_24h']}")
 
                 prices.append(price_data)
 
@@ -230,6 +287,14 @@ class EnhancedDashboardCached:
                 symbol = row_dict['symbol']
                 cached_symbols.add(symbol)
 
+                # 格式化信号生成时间
+                signal_time = ''
+                if row_dict.get('updated_at'):
+                    if isinstance(row_dict['updated_at'], datetime):
+                        signal_time = row_dict['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        signal_time = str(row_dict['updated_at'])
+                
                 recommendations.append({
                     'symbol': symbol.replace('/USDT', ''),
                     'full_symbol': symbol,
@@ -260,7 +325,8 @@ class EnhancedDashboardCached:
                         'etf': bool(row_dict.get('has_etf')),
                     },
                     'data_completeness': float(row_dict['data_completeness']) if row_dict['data_completeness'] else 0,
-                    'funding_rate': funding_rates.get(symbol)
+                    'funding_rate': funding_rates.get(symbol),
+                    'signal_time': signal_time  # 信号生成时间
                 })
 
             # 为没有缓存数据的交易对创建默认建议
@@ -470,26 +536,43 @@ class EnhancedDashboardCached:
                     MAX(t.closed_pnl) as closed_pnl,
                     t.trade_time,
                     MAX(w.label) as wallet_label,
-                    COALESCE(MAX(p.leverage), 1) as leverage
+                    COALESCE(
+                        (SELECT p.leverage 
+                         FROM hyperliquid_wallet_positions p
+                         WHERE p.trader_id = t.trader_id
+                           AND p.coin = t.coin
+                           AND p.snapshot_time <= t.trade_time
+                           AND p.snapshot_time >= DATE_SUB(t.trade_time, INTERVAL 24 HOUR)
+                         ORDER BY ABS(TIMESTAMPDIFF(SECOND, p.snapshot_time, t.trade_time)) ASC
+                         LIMIT 1),
+                        COALESCE(
+                            (SELECT p.leverage 
+                             FROM hyperliquid_wallet_positions p
+                             WHERE p.trader_id = t.trader_id
+                               AND p.coin = t.coin
+                               AND p.snapshot_time > t.trade_time
+                               AND p.snapshot_time <= DATE_ADD(t.trade_time, INTERVAL 1 HOUR)
+                             ORDER BY ABS(TIMESTAMPDIFF(SECOND, p.snapshot_time, t.trade_time)) ASC
+                             LIMIT 1),
+                            1
+                        )
+                    ) as leverage
                 FROM hyperliquid_wallet_trades t
                 LEFT JOIN hyperliquid_monitored_wallets w ON t.address = w.address
-                LEFT JOIN (
-                    SELECT p.trader_id, p.coin, p.leverage, p.snapshot_time,
-                           ROW_NUMBER() OVER (PARTITION BY p.trader_id, p.coin ORDER BY p.snapshot_time DESC) as rn
-                    FROM hyperliquid_wallet_positions p
-                ) p ON t.trader_id = p.trader_id
-                    AND t.coin = p.coin
-                    AND p.rn = 1
-                    AND p.snapshot_time <= t.trade_time
-                    AND p.snapshot_time >= DATE_SUB(t.trade_time, INTERVAL 1 HOUR)
                 WHERE t.trade_time >= :cutoff_time
                     AND w.is_monitoring = 1
-                GROUP BY t.address, t.coin, t.side, t.trade_time, ROUND(t.notional_usd, 2)
+                GROUP BY t.address, t.coin, t.side, t.trade_time, ROUND(t.notional_usd, 2), t.trader_id
                 ORDER BY t.trade_time DESC
                 LIMIT 50
             """), {"cutoff_time": cutoff_time})
 
             trades_data = result.fetchall()
+            
+            # 调试：检查杠杆数据
+            if trades_data:
+                logger.debug(f"获取到 {len(trades_data)} 条交易记录")
+                sample_trade = dict(trades_data[0]._mapping) if hasattr(trades_data[0], '_mapping') else dict(trades_data[0])
+                logger.debug(f"示例交易杠杆: {sample_trade.get('leverage', 'N/A')}")
 
             # 格式化数据
             recent_trades = []

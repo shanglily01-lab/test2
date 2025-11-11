@@ -27,21 +27,58 @@ class PendingOrderExecutor:
         self.price_cache_service = price_cache_service
         self.running = False
         self.task = None
+        self.connection = None  # 持久数据库连接
         
     def _get_connection(self):
-        """获取数据库连接"""
-        return pymysql.connect(
-            host=self.db_config.get('host', 'localhost'),
-            port=self.db_config.get('port', 3306),
-            user=self.db_config.get('user', 'root'),
-            password=self.db_config.get('password', ''),
-            database=self.db_config.get('database', 'binance-data'),
-            charset='utf8mb4',
-            cursorclass=pymysql.cursors.DictCursor,
-            connect_timeout=5,
-            read_timeout=10,
-            write_timeout=10
-        )
+        """获取数据库连接（复用持久连接）"""
+        # 如果连接不存在或已断开，创建新连接
+        if self.connection is None or not self.connection.open:
+            try:
+                self.connection = pymysql.connect(
+                    host=self.db_config.get('host', 'localhost'),
+                    port=self.db_config.get('port', 3306),
+                    user=self.db_config.get('user', 'root'),
+                    password=self.db_config.get('password', ''),
+                    database=self.db_config.get('database', 'binance-data'),
+                    charset='utf8mb4',
+                    cursorclass=pymysql.cursors.DictCursor,
+                    connect_timeout=5,
+                    read_timeout=10,
+                    write_timeout=10,
+                    autocommit=True  # 自动提交，避免事务问题
+                )
+                # 只在首次创建连接时记录（DEBUG级别）
+                logger.debug("创建数据库连接（现货限价单执行器）")
+            except Exception as e:
+                logger.error(f"❌ 创建数据库连接失败: {e}")
+                raise
+        else:
+            # 静默检查连接是否还活着（不打印日志）
+            try:
+                self.connection.ping(reconnect=True)
+            except Exception as e:
+                # 只有在连接真正断开需要重连时才记录
+                logger.warning(f"数据库连接已断开，尝试重连: {e}")
+                try:
+                    self.connection = pymysql.connect(
+                        host=self.db_config.get('host', 'localhost'),
+                        port=self.db_config.get('port', 3306),
+                        user=self.db_config.get('user', 'root'),
+                        password=self.db_config.get('password', ''),
+                        database=self.db_config.get('database', 'binance-data'),
+                        charset='utf8mb4',
+                        cursorclass=pymysql.cursors.DictCursor,
+                        connect_timeout=5,
+                        read_timeout=10,
+                        write_timeout=10,
+                        autocommit=True
+                    )
+                    logger.info("✅ 数据库连接已重新建立（现货限价单执行器）")
+                except Exception as e2:
+                    logger.error(f"❌ 重连数据库失败: {e2}")
+                    raise
+        
+        return self.connection
     
     def get_current_price(self, symbol: str) -> Decimal:
         """
@@ -76,75 +113,72 @@ class PendingOrderExecutor:
             return
             
         try:
-            conn = self._get_connection()
-            try:
-                with conn.cursor() as cursor:
-                    # 获取所有未执行的待成交订单
-                    cursor.execute(
-                        """SELECT * FROM paper_trading_pending_orders
-                        WHERE executed = FALSE AND status = 'PENDING'
-                        ORDER BY created_at ASC"""
-                    )
-                    pending_orders = cursor.fetchall()
-                    
-                    if not pending_orders:
-                        logger.info("📋 当前没有待成交订单需要检查")
-                        return
-                    
-                    logger.info(f"📋 检查 {len(pending_orders)} 个待成交订单")
-                    
-                    for order in pending_orders:
-                        try:
-                            account_id = order['account_id']
-                            order_id = order['order_id']
-                            symbol = order['symbol']
-                            side = order['side']
-                            quantity = Decimal(str(order['quantity']))
-                            trigger_price = Decimal(str(order['trigger_price']))
-                            
-                            # 获取当前价格
-                            current_price = self.get_current_price(symbol)
-                            
-                            if current_price == 0:
-                                logger.warning(f"无法获取 {symbol} 的价格，跳过订单 {order_id}")
-                                continue
-                            
-                            # 检查是否达到触发条件
-                            should_execute = False
-                            logger.info(f"🔍 检查订单 {order_id}: {symbol} {side} {quantity} @ 触发价 {trigger_price}, 当前价 {current_price}")
-                            
-                            if side == 'BUY' and current_price <= trigger_price:
-                                should_execute = True
-                                logger.info(f"✅ 买入订单触发: {symbol} 当前价格 {current_price} <= 触发价格 {trigger_price}")
-                            elif side == 'SELL' and current_price >= trigger_price:
-                                should_execute = True
-                                logger.info(f"✅ 卖出订单触发: {symbol} 当前价格 {current_price} >= 触发价格 {trigger_price}")
-                            else:
-                                logger.debug(f"⏳ 订单未触发: {symbol} {side} 当前价 {current_price} vs 触发价 {trigger_price}")
-                            
-                            if should_execute:
-                                # 执行订单
-                                success, message, executed_order_id = self.trading_engine.place_order(
-                                    account_id=account_id,
-                                    symbol=symbol,
-                                    side=side,
-                                    quantity=quantity,
-                                    order_type='MARKET',
-                                    order_source='auto',
-                                    pending_order_id=order_id  # 传递待成交订单ID，用于精确匹配
-                                )
-                                
-                                if success:
-                                    logger.info(f"✅ 待成交订单 {order_id} 执行成功: {message}")
-                                else:
-                                    logger.error(f"❌ 待成交订单 {order_id} 执行失败: {message}")
-                                    
-                        except Exception as e:
-                            logger.error(f"处理待成交订单 {order.get('order_id', 'unknown')} 时出错: {e}")
+            conn = self._get_connection()  # 复用持久连接
+            with conn.cursor() as cursor:
+                # 获取所有未执行的待成交订单
+                cursor.execute(
+                    """SELECT * FROM paper_trading_pending_orders
+                    WHERE executed = FALSE AND status = 'PENDING'
+                    ORDER BY created_at ASC"""
+                )
+                pending_orders = cursor.fetchall()
+                
+                if not pending_orders:
+                    logger.debug("📋 当前没有待成交订单需要检查")
+                    return
+                
+                logger.debug(f"📋 检查 {len(pending_orders)} 个待成交订单")
+                
+                for order in pending_orders:
+                    try:
+                        account_id = order['account_id']
+                        order_id = order['order_id']
+                        symbol = order['symbol']
+                        side = order['side']
+                        quantity = Decimal(str(order['quantity']))
+                        trigger_price = Decimal(str(order['trigger_price']))
+                        
+                        # 获取当前价格
+                        current_price = self.get_current_price(symbol)
+                        
+                        if current_price == 0:
+                            logger.warning(f"无法获取 {symbol} 的价格，跳过订单 {order_id}")
                             continue
+                        
+                        # 检查是否达到触发条件
+                        should_execute = False
+                        logger.info(f"🔍 检查订单 {order_id}: {symbol} {side} {quantity} @ 触发价 {trigger_price}, 当前价 {current_price}")
+                        
+                        if side == 'BUY' and current_price <= trigger_price:
+                            should_execute = True
+                            logger.info(f"✅ 买入订单触发: {symbol} 当前价格 {current_price} <= 触发价格 {trigger_price}")
+                        elif side == 'SELL' and current_price >= trigger_price:
+                            should_execute = True
+                            logger.info(f"✅ 卖出订单触发: {symbol} 当前价格 {current_price} >= 触发价格 {trigger_price}")
+                        else:
+                            logger.debug(f"⏳ 订单未触发: {symbol} {side} 当前价 {current_price} vs 触发价 {trigger_price}")
+                        
+                        if should_execute:
+                            # 执行订单
+                            success, message, executed_order_id = self.trading_engine.place_order(
+                                account_id=account_id,
+                                symbol=symbol,
+                                side=side,
+                                quantity=quantity,
+                                order_type='MARKET',
+                                order_source='auto',
+                                pending_order_id=order_id  # 传递待成交订单ID，用于精确匹配
+                            )
                             
-            finally:
-                conn.close()
+                            if success:
+                                logger.info(f"✅ 待成交订单 {order_id} 执行成功: {message}")
+                            else:
+                                logger.error(f"❌ 待成交订单 {order_id} 执行失败: {message}")
+                                
+                    except Exception as e:
+                        logger.error(f"处理待成交订单 {order.get('order_id', 'unknown')} 时出错: {e}")
+                        continue
+            # 注意：不再关闭连接，使用持久连接
                 
         except Exception as e:
             logger.error(f"检查待成交订单时出错: {e}")

@@ -1135,6 +1135,7 @@
                                     <div>建仓价: <span class="font-mono" style="color: var(--text-primary);">$${formatPrice(rec.entry_price)}</span></div>
                                     <div>止损价: <span class="font-mono" style="color: var(--danger-red);">$${formatPrice(rec.stop_loss)}</span></div>
                                     <div>止盈价: <span class="font-mono" style="color: var(--success-green);">$${formatPrice(rec.take_profit)}</span></div>
+                                    ${rec.signal_time ? `<div style="margin-top: 4px; font-size: 11px; color: var(--text-tertiary);">信号生成: <span style="color: var(--text-secondary);">${rec.signal_time}</span></div>` : ''}
                                 </div>
                             </div>
 
@@ -1636,6 +1637,12 @@
                                 <span style="color: var(--text-secondary);">止盈价格：</span>
                                 <span style="font-family: var(--font-mono); font-weight: 600; color: var(--success-green);">$${formatPrice(rec.take_profit)}</span>
                             </div>
+                            ${rec.signal_time ? `
+                            <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-muted);">
+                                <span style="color: var(--text-secondary);">信号生成时间：</span>
+                                <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary);">${rec.signal_time}</span>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
 

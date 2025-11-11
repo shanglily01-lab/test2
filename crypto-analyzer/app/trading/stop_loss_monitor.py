@@ -41,13 +41,41 @@ class StopLossMonitor:
 
         logger.info("StopLossMonitor initialized")
 
-    def get_open_positions(self) -> List[Dict]:
+    def _ensure_connection(self):
+        """确保数据库连接有效（静默检查，不打印日志）"""
+        if self.connection is None or not self.connection.open:
+            try:
+                self.connection = pymysql.connect(**self.db_config)
+                # 只在首次创建连接时记录（DEBUG级别）
+                logger.debug("创建数据库连接（止损监控）")
+            except Exception as e:
+                logger.error(f"❌ 创建数据库连接失败: {e}")
+                raise
+        else:
+            # 静默检查连接是否还活着（不打印日志）
+            try:
+                self.connection.ping(reconnect=True)
+            except Exception as e:
+                # 只有在连接真正断开需要重连时才记录
+                logger.warning(f"数据库连接已断开，尝试重连: {e}")
+                try:
+                    self.connection = pymysql.connect(**self.db_config)
+                    logger.info("✅ 数据库连接已重新建立（止损监控）")
+                except Exception as e2:
+                    logger.error(f"❌ 重连数据库失败: {e2}")
+                    raise
+
+    def get_open_positions(self, account_id: Optional[int] = None) -> List[Dict]:
         """
         获取所有持仓中的合约
+
+        Args:
+            account_id: 账户ID（可选，如果为None则获取所有账户的持仓）
 
         Returns:
             持仓列表
         """
+        self._ensure_connection()
         cursor = self.connection.cursor(pymysql.cursors.DictCursor)
 
         sql = """
@@ -67,10 +95,16 @@ class StopLossMonitor:
             open_time
         FROM futures_positions
         WHERE status = 'open'
-        ORDER BY open_time ASC
         """
+        
+        params = []
+        if account_id is not None:
+            sql += " AND account_id = %s"
+            params.append(account_id)
+        
+        sql += " ORDER BY open_time ASC"
 
-        cursor.execute(sql)
+        cursor.execute(sql, tuple(params) if params else None)
         positions = cursor.fetchall()
         cursor.close()
 
@@ -78,7 +112,7 @@ class StopLossMonitor:
 
     def get_current_price(self, symbol: str) -> Optional[Decimal]:
         """
-        获取当前市场价格（从K线数据）
+        获取当前市场价格（从K线数据，优先使用1分钟K线）
 
         Args:
             symbol: 交易对（如 BTC/USDT）
@@ -86,14 +120,16 @@ class StopLossMonitor:
         Returns:
             当前价格，如果没有数据返回 None
         """
+        self._ensure_connection()
         cursor = self.connection.cursor(pymysql.cursors.DictCursor)
 
         # kline_data 表中的 symbol 格式是 BTC/USDT（带斜杠）
+        # 优先使用1分钟K线（更及时），如果没有则使用5分钟K线
         sql = """
         SELECT close_price
         FROM kline_data
         WHERE symbol = %s
-        AND timeframe = '1h'
+        AND timeframe = '1m'
         AND exchange = 'binance'
         ORDER BY open_time DESC
         LIMIT 1
@@ -101,6 +137,35 @@ class StopLossMonitor:
 
         cursor.execute(sql, (symbol,))
         result = cursor.fetchone()
+        
+        # 如果1分钟K线没有数据，尝试5分钟K线
+        if not result:
+            sql = """
+            SELECT close_price
+            FROM kline_data
+            WHERE symbol = %s
+            AND timeframe = '5m'
+            AND exchange = 'binance'
+            ORDER BY open_time DESC
+            LIMIT 1
+            """
+            cursor.execute(sql, (symbol,))
+            result = cursor.fetchone()
+        
+        # 如果5分钟K线也没有数据，尝试1小时K线（最后回退）
+        if not result:
+            sql = """
+            SELECT close_price
+            FROM kline_data
+            WHERE symbol = %s
+            AND timeframe = '1h'
+            AND exchange = 'binance'
+            ORDER BY open_time DESC
+            LIMIT 1
+            """
+            cursor.execute(sql, (symbol,))
+            result = cursor.fetchone()
+        
         cursor.close()
 
         if result:
@@ -120,24 +185,44 @@ class StopLossMonitor:
         Returns:
             是否触发止损
         """
-        if not position['stop_loss_price']:
+        # 检查是否有止损价格
+        stop_loss_price = position.get('stop_loss_price')
+        if not stop_loss_price or stop_loss_price == 0:
+            logger.debug(f"Position #{position['id']} {position['symbol']}: 未设置止损价格")
             return False
 
-        stop_loss_price = Decimal(str(position['stop_loss_price']))
+        try:
+            stop_loss_price = Decimal(str(stop_loss_price))
+        except (ValueError, TypeError):
+            logger.warning(f"Position #{position['id']} has invalid stop_loss_price: {position.get('stop_loss_price')}")
+            return False
+
         position_side = position['position_side']
+        symbol = position['symbol']
+        position_id = position['id']
 
         if position_side == 'LONG':
-            # 多头：当前价格 <= 止损价
-            if current_price <= stop_loss_price:
-                logger.info(f"Stop-loss triggered for LONG position #{position['id']}: "
-                          f"current={current_price:.2f}, stop_loss={stop_loss_price:.2f}")
+            # 多头：当前价格 <= 止损价（价格跌破止损价）
+            should_trigger = current_price <= stop_loss_price
+            if should_trigger:
+                logger.info(f"🛑 Stop-loss triggered for LONG position #{position_id} {symbol}: "
+                          f"current={current_price:.8f}, stop_loss={stop_loss_price:.8f}")
                 return True
+            else:
+                # 添加调试日志，帮助诊断为什么没有触发
+                logger.debug(f"LONG #{position_id} {symbol}: 价格={current_price:.8f}, 止损={stop_loss_price:.8f}, "
+                           f"差值={float(current_price - stop_loss_price):.8f}, 未触发")
         else:  # SHORT
-            # 空头：当前价格 >= 止损价
-            if current_price >= stop_loss_price:
-                logger.info(f"Stop-loss triggered for SHORT position #{position['id']}: "
-                          f"current={current_price:.2f}, stop_loss={stop_loss_price:.2f}")
+            # 空头：当前价格 >= 止损价（价格涨破止损价）
+            should_trigger = current_price >= stop_loss_price
+            if should_trigger:
+                logger.info(f"🛑 Stop-loss triggered for SHORT position #{position_id} {symbol}: "
+                          f"current={current_price:.8f}, stop_loss={stop_loss_price:.8f}")
                 return True
+            else:
+                # 添加调试日志，帮助诊断为什么没有触发
+                logger.debug(f"SHORT #{position_id} {symbol}: 价格={current_price:.8f}, 止损={stop_loss_price:.8f}, "
+                           f"差值={float(current_price - stop_loss_price):.8f}, 未触发")
 
         return False
 
@@ -152,23 +237,30 @@ class StopLossMonitor:
         Returns:
             是否触发止盈
         """
-        if not position['take_profit_price']:
+        # 检查是否有止盈价格
+        take_profit_price = position.get('take_profit_price')
+        if not take_profit_price or take_profit_price == 0:
             return False
 
-        take_profit_price = Decimal(str(position['take_profit_price']))
+        try:
+            take_profit_price = Decimal(str(take_profit_price))
+        except (ValueError, TypeError):
+            logger.warning(f"Position #{position['id']} has invalid take_profit_price: {position.get('take_profit_price')}")
+            return False
+
         position_side = position['position_side']
 
         if position_side == 'LONG':
             # 多头：当前价格 >= 止盈价
             if current_price >= take_profit_price:
-                logger.info(f"Take-profit triggered for LONG position #{position['id']}: "
-                          f"current={current_price:.2f}, take_profit={take_profit_price:.2f}")
+                logger.info(f"✅ Take-profit triggered for LONG position #{position['id']} {position['symbol']}: "
+                          f"current={current_price:.8f}, take_profit={take_profit_price:.8f}")
                 return True
         else:  # SHORT
             # 空头：当前价格 <= 止盈价
             if current_price <= take_profit_price:
-                logger.info(f"Take-profit triggered for SHORT position #{position['id']}: "
-                          f"current={current_price:.2f}, take_profit={take_profit_price:.2f}")
+                logger.info(f"✅ Take-profit triggered for SHORT position #{position['id']} {position['symbol']}: "
+                          f"current={current_price:.8f}, take_profit={take_profit_price:.8f}")
                 return True
 
         return False
@@ -270,12 +362,36 @@ class StopLossMonitor:
         current_price = self.get_current_price(symbol)
 
         if not current_price:
+            logger.warning(f"Position #{position_id} {symbol}: 无法获取当前价格")
             return {
                 'position_id': position_id,
                 'symbol': symbol,
                 'status': 'no_price',
                 'message': 'No price data available'
             }
+        
+        # 添加调试日志：显示持仓信息和价格对比
+        stop_loss_price = position.get('stop_loss_price')
+        take_profit_price = position.get('take_profit_price')
+        position_side = position.get('position_side', 'UNKNOWN')
+        entry_price = position.get('entry_price', 0)
+        
+        # 计算价格与止损价的关系
+        if stop_loss_price:
+            if position_side == 'LONG':
+                # 多头：止损价应该低于开仓价，如果当前价低于止损价，应该触发
+                price_to_stop_loss = float(current_price - Decimal(str(stop_loss_price)))
+                logger.debug(f"监控持仓 #{position_id} {symbol} {position_side}: "
+                           f"当前价={current_price:.8f}, 开仓价={entry_price}, 止损={stop_loss_price:.8f}, "
+                           f"当前价-止损价={price_to_stop_loss:.8f} "
+                           f"{'✅应触发止损' if price_to_stop_loss <= 0 else '❌未触发'}")
+            else:  # SHORT
+                # 空头：止损价应该高于开仓价，如果当前价高于止损价，应该触发
+                price_to_stop_loss = float(current_price - Decimal(str(stop_loss_price)))
+                logger.debug(f"监控持仓 #{position_id} {symbol} {position_side}: "
+                           f"当前价={current_price:.8f}, 开仓价={entry_price}, 止损={stop_loss_price:.8f}, "
+                           f"当前价-止损价={price_to_stop_loss:.8f} "
+                           f"{'✅应触发止损' if price_to_stop_loss >= 0 else '❌未触发'}")
 
         # 更新未实现盈亏
         self.update_unrealized_pnl(position, current_price)
@@ -295,33 +411,39 @@ class StopLossMonitor:
                 'result': result
             }
 
-        # 优先级2: 检查止损
+        # 优先级2: 检查止损（使用持仓中保存的止损价格）
         if self.should_trigger_stop_loss(position, current_price):
-            logger.info(f"🛑 Stop-loss triggered for position #{position_id} {symbol}")
+            stop_loss_price = Decimal(str(position.get('stop_loss_price', 0)))
+            logger.info(f"🛑 Stop-loss triggered for position #{position_id} {symbol} @ {current_price:.8f} (stop_loss={stop_loss_price:.8f})")
             result = self.engine.close_position(
                 position_id=position_id,
-                reason='stop_loss'
+                reason='stop_loss',
+                close_price=stop_loss_price  # 使用止损价格平仓
             )
             return {
                 'position_id': position_id,
                 'symbol': symbol,
                 'status': 'stop_loss',
                 'current_price': float(current_price),
+                'stop_loss_price': float(stop_loss_price),
                 'result': result
             }
 
-        # 优先级3: 检查止盈
+        # 优先级3: 检查止盈（使用持仓中保存的止盈价格）
         if self.should_trigger_take_profit(position, current_price):
-            logger.info(f"✅ Take-profit triggered for position #{position_id} {symbol}")
+            take_profit_price = Decimal(str(position.get('take_profit_price', 0)))
+            logger.info(f"✅ Take-profit triggered for position #{position_id} {symbol} @ {current_price:.8f} (take_profit={take_profit_price:.8f})")
             result = self.engine.close_position(
                 position_id=position_id,
-                reason='take_profit'
+                reason='take_profit',
+                close_price=take_profit_price  # 使用止盈价格平仓
             )
             return {
                 'position_id': position_id,
                 'symbol': symbol,
                 'status': 'take_profit',
                 'current_price': float(current_price),
+                'take_profit_price': float(take_profit_price),
                 'result': result
             }
 
@@ -341,15 +463,16 @@ class StopLossMonitor:
         Returns:
             监控结果统计
         """
-        logger.info("=" * 60)
-        logger.info("Starting position monitoring cycle")
-        logger.info("=" * 60)
+        # 使用DEBUG级别，避免频繁打印
+        logger.debug("=" * 60)
+        logger.debug("Starting position monitoring cycle")
+        logger.debug("=" * 60)
 
         # 获取所有持仓
         positions = self.get_open_positions()
 
         if not positions:
-            logger.info("No open positions to monitor")
+            logger.debug("No open positions to monitor")
             return {
                 'total_positions': 0,
                 'monitoring': 0,
@@ -359,7 +482,7 @@ class StopLossMonitor:
                 'no_price': 0
             }
 
-        logger.info(f"Found {len(positions)} open positions")
+        logger.debug(f"Found {len(positions)} open positions")
 
         # 监控每个持仓
         results = {
@@ -381,16 +504,33 @@ class StopLossMonitor:
             if status in results:
                 results[status] += 1
 
-        # 输出统计
-        logger.info("=" * 60)
-        logger.info(f"Monitoring cycle completed:")
-        logger.info(f"  Total positions: {results['total_positions']}")
-        logger.info(f"  Still monitoring: {results['monitoring']}")
-        logger.info(f"  Stop-loss triggered: {results['stop_loss']}")
-        logger.info(f"  Take-profit triggered: {results['take_profit']}")
-        logger.info(f"  Liquidated: {results['liquidated']}")
-        logger.info(f"  No price data: {results['no_price']}")
-        logger.info("=" * 60)
+        # 只在有重要事件时打印INFO，否则使用DEBUG
+        has_important_events = (
+            results['stop_loss'] > 0 or 
+            results['take_profit'] > 0 or 
+            results['liquidated'] > 0
+        )
+        
+        if has_important_events:
+            logger.info("=" * 60)
+            logger.info(f"监控周期完成（有重要事件）:")
+            logger.info(f"  总持仓: {results['total_positions']}")
+            logger.info(f"  监控中: {results['monitoring']}")
+            if results['stop_loss'] > 0:
+                logger.info(f"  🛑 止损触发: {results['stop_loss']}")
+            if results['take_profit'] > 0:
+                logger.info(f"  ✅ 止盈触发: {results['take_profit']}")
+            if results['liquidated'] > 0:
+                logger.warning(f"  ⚠️  强平触发: {results['liquidated']}")
+            logger.info("=" * 60)
+        else:
+            # 无重要事件时使用DEBUG级别
+            logger.debug("=" * 60)
+            logger.debug(f"监控周期完成:")
+            logger.debug(f"  总持仓: {results['total_positions']}, 监控中: {results['monitoring']}, "
+                        f"止损: {results['stop_loss']}, 止盈: {results['take_profit']}, "
+                        f"强平: {results['liquidated']}, 无价格数据: {results['no_price']}")
+            logger.debug("=" * 60)
 
         return results
 
@@ -423,10 +563,11 @@ class StopLossMonitor:
         """关闭数据库连接"""
         if hasattr(self, 'connection') and self.connection:
             self.connection.close()
-            logger.info("Database connection closed")
+            # 静默关闭，不打印日志
 
         if hasattr(self, 'engine'):
-            self.engine.close()
+            # FuturesTradingEngine 没有 close 方法，不需要调用
+            pass
 
 
 def main():

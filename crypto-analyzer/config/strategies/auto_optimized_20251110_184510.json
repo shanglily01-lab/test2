@@ -1,0 +1,52 @@
+{
+  "name": "auto_optimized_20251110_184510",
+  "description": "自动优化生成的策略（基于BNB/USDT 2025-10-01至2025-11-10的数据）",
+  "created_at": "2025-11-10T18:43:45.275049",
+  "updated_at": "2025-11-10T18:45:10.190379",
+  "dimension_weights": {
+    "technical": 36.376532423221555,
+    "hyperliquid": 15.72854871363435,
+    "news": 16.45547789666521,
+    "funding_rate": 18.161576112133794,
+    "ethereum": 13.277864854345104
+  },
+  "risk_profile": {
+    "level": "conservative",
+    "max_position_size": 14.089277566306768,
+    "stop_loss": 7.158347422033859,
+    "take_profit": 15.37113066949992,
+    "min_signal_strength": 72.19065904957385,
+    "allow_short": false,
+    "max_leverage": 1.0
+  },
+  "trading_rules": {
+    "hyperliquid_min_wallets": 4,
+    "hyperliquid_min_amount": 56567.539066360456,
+    "hyperliquid_min_net_flow": 112306.61681916774,
+    "rsi_oversold": 28.25747067622955,
+    "rsi_overbought": 68.81590893653684,
+    "news_sentiment_threshold": 0.519781348086662,
+    "news_min_count": 4,
+    "funding_rate_extreme": 0.011651533528742958,
+    "min_dimensions_agree": 3
+  },
+  "technical_config": {
+    "rsi_weight": 30.000444468707844,
+    "macd_weight": 15.751534398599002,
+    "bollinger_weight": 14.804819608946662,
+    "ema_weight": 20.06719595616003,
+    "volume_weight": 19.37600556758646,
+    "rsi_period": 10,
+    "macd_fast": 11,
+    "macd_slow": 25,
+    "macd_signal": 7,
+    "ema_short": 24,
+    "ema_long": 41,
+    "bb_period": 20,
+    "bb_std": 2.3579910290885415
+  },
+  "tags": [
+    "auto-generated",
+    "optimized"
+  ]
+}

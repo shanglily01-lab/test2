@@ -373,7 +373,8 @@
                     <div class="form-group">
                         <div class="d-flex justify-between align-center" style="margin-bottom: var(--spacing-sm);">
                             <label class="form-label" style="margin-bottom: 0;">
-                                当前价格: <span id="current-price-display" class="font-mono" style="color: var(--primary-blue); font-weight: 600; margin-left: 8px;">--</span>
+                                当前价格: <span id="current-price-display" class="font-mono" style="color: var(--primary-blue); font-weight: 600; margin-left: 8px; display: inline-block; transition: all 0.3s ease;">--</span>
+                                <span id="price-change-indicator" style="margin-left: 8px; font-size: 12px; font-weight: 600; opacity: 0; transition: opacity 0.3s ease;"></span>
                             </label>
                             <button type="button" class="btn btn-sm btn-ghost" onclick="refreshPrice()" style="padding: 4px 8px; min-width: auto;">
                                 <i class="bi bi-arrow-clockwise"></i>
@@ -591,6 +592,7 @@
         const API_BASE = '/api/futures';
         let currentSymbol = 'BTC/USDT';
         let currentPrice = 0;
+        let previousPrice = 0; // 用于价格变化检测
         let symbols = [];
 
         // 加载交易对列表
@@ -696,7 +698,8 @@
                         
                         if (data.success && data.prices && data.prices[symbol]) {
                             price = parseFloat(data.prices[symbol]);
-                            console.log(`✅ 从本地API获取 ${symbol} 价格（现货）: ${price}`);
+                            // 减少日志输出，只在调试时启用
+                            // console.log(`✅ 从本地API获取 ${symbol} 价格（现货）: ${price}`);
                         }
                     } catch (e) {
                         console.warn('从本地价格API获取失败:', e);
@@ -704,14 +707,65 @@
                 }
                 
                 if (price && price > 0) {
+                    // 价格变化检测和动画
+                    const priceChangeIndicator = document.getElementById('price-change-indicator');
+                    if (previousPrice > 0 && previousPrice !== price) {
+                        const priceChange = price - previousPrice;
+                        const changePercent = ((priceChange / previousPrice) * 100).toFixed(4);
+                        
+                        // 添加价格变化动画
+                        priceDisplay.style.transition = 'all 0.3s ease';
+                        
+                        if (priceChange > 0) {
+                            // 价格上涨：绿色闪烁
+                            priceDisplay.style.color = 'var(--success-green)';
+                            priceDisplay.style.transform = 'scale(1.1)';
+                            if (priceChangeIndicator) {
+                                priceChangeIndicator.textContent = `↑ +${changePercent}%`;
+                                priceChangeIndicator.style.color = 'var(--success-green)';
+                                priceChangeIndicator.style.opacity = '1';
+                                setTimeout(() => {
+                                    priceChangeIndicator.style.opacity = '0';
+                                }, 2000);
+                            }
+                            setTimeout(() => {
+                                priceDisplay.style.transform = 'scale(1)';
+                                priceDisplay.style.color = 'var(--primary-blue)';
+                            }, 300);
+                        } else {
+                            // 价格下跌：红色闪烁
+                            priceDisplay.style.color = 'var(--danger-red)';
+                            priceDisplay.style.transform = 'scale(0.95)';
+                            if (priceChangeIndicator) {
+                                priceChangeIndicator.textContent = `↓ ${changePercent}%`;
+                                priceChangeIndicator.style.color = 'var(--danger-red)';
+                                priceChangeIndicator.style.opacity = '1';
+                                setTimeout(() => {
+                                    priceChangeIndicator.style.opacity = '0';
+                                }, 2000);
+                            }
+                            setTimeout(() => {
+                                priceDisplay.style.transform = 'scale(1)';
+                                priceDisplay.style.color = 'var(--primary-blue)';
+                            }, 300);
+                        }
+                    } else if (previousPrice === 0) {
+                        // 首次加载，正常显示
+                        priceDisplay.style.color = 'var(--primary-blue)';
+                        if (priceChangeIndicator) {
+                            priceChangeIndicator.style.opacity = '0';
+                        }
+                    }
+                    
                     currentPrice = price;
+                    previousPrice = price;
                     priceDisplay.textContent = formatPrice(currentPrice);
-                    priceDisplay.style.color = 'var(--primary-blue)'; // 恢复成功颜色
                     updateEstimatedMargin();
                 } else {
                     priceDisplay.textContent = '获取失败';
                     priceDisplay.style.color = 'var(--danger-red)';
                     currentPrice = 0;
+                    previousPrice = 0;
                     showToast(`无法获取 ${symbol} 的合约价格，请检查网络连接或稍后重试`, 'error');
                 }
             } catch (error) {
@@ -1050,15 +1104,25 @@
             if (tab === 'positions') {
                 positionsTab.style.display = 'block';
                 ordersTab.style.display = 'none';
+                // 切换按钮样式：持仓中为激活状态
+                positionsTitle.className = 'btn btn-primary';
                 positionsTitle.style.opacity = '1';
-                ordersTitle.style.opacity = '0.6';
+                positionsTitle.style.boxShadow = 'var(--shadow-md)';
+                ordersTitle.className = 'btn btn-secondary';
+                ordersTitle.style.opacity = '0.7';
+                ordersTitle.style.boxShadow = 'var(--shadow-sm)';
                 document.getElementById('positionCount').style.display = 'inline-flex';
                 document.getElementById('orderCount').style.display = 'none';
             } else {
                 positionsTab.style.display = 'none';
                 ordersTab.style.display = 'block';
-                positionsTitle.style.opacity = '0.6';
+                // 切换按钮样式：未成交订单为激活状态
+                positionsTitle.className = 'btn btn-secondary';
+                positionsTitle.style.opacity = '0.7';
+                positionsTitle.style.boxShadow = 'var(--shadow-sm)';
+                ordersTitle.className = 'btn btn-primary';
                 ordersTitle.style.opacity = '1';
+                ordersTitle.style.boxShadow = 'var(--shadow-md)';
                 document.getElementById('positionCount').style.display = 'none';
                 document.getElementById('orderCount').style.display = 'inline-flex';
                 loadOrders();
@@ -1675,10 +1739,10 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadSymbols();
             loadData();
-            // 每30秒自动刷新
-            setInterval(loadData, 30000);
-            // 每10秒刷新价格
-            setInterval(refreshPrice, 10000);
+            // 每5秒自动刷新持仓、订单等信息
+            setInterval(loadData, 5000);
+            // 每2秒刷新价格（快速响应价格变化）
+            setInterval(refreshPrice, 2000);
         });
     </script>
 </body>

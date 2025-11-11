@@ -16,6 +16,10 @@ from .models import Base, PriceData, KlineData, TradeData, OrderBookData, NewsDa
 
 class DatabaseService:
     """数据库服务类"""
+    
+    # 类级别的标记，用于避免重复打印连接日志
+    _connection_logged = False
+    _tables_created_logged = False
 
     def __init__(self, config: dict):
         """
@@ -56,13 +60,24 @@ class DatabaseService:
                     echo=False  # 设为True可以看到SQL语句
                 )
 
-                logger.info(f"MySQL数据库连接成功: {host}:{port}/{database}")
+                # 只在首次连接时打印日志，避免重复打印
+                if not DatabaseService._connection_logged:
+                    logger.info(f"MySQL数据库连接成功: {host}:{port}/{database}")
+                    DatabaseService._connection_logged = True
+                else:
+                    logger.debug(f"MySQL数据库连接池已创建: {host}:{port}/{database}")
 
             elif db_type == 'sqlite':
                 sqlite_path = self.config.get('sqlite', {}).get('path', './data/crypto.db')
                 db_uri = f"sqlite:///{sqlite_path}"
                 self.engine = create_engine(db_uri, echo=False)
-                logger.info(f"SQLite数据库连接成功: {sqlite_path}")
+                
+                # 只在首次连接时打印日志
+                if not DatabaseService._connection_logged:
+                    logger.info(f"SQLite数据库连接成功: {sqlite_path}")
+                    DatabaseService._connection_logged = True
+                else:
+                    logger.debug(f"SQLite数据库连接已创建: {sqlite_path}")
 
             else:
                 raise ValueError(f"不支持的数据库类型: {db_type}")
@@ -72,7 +87,13 @@ class DatabaseService:
 
             # 创建所有表
             Base.metadata.create_all(self.engine)
-            logger.info("数据库表创建/检查完成")
+            
+            # 只在首次创建表时打印日志
+            if not hasattr(DatabaseService, '_tables_created_logged'):
+                logger.info("数据库表创建/检查完成")
+                DatabaseService._tables_created_logged = True
+            else:
+                logger.debug("数据库表检查完成")
 
         except Exception as e:
             logger.error(f"数据库初始化失败: {e}")

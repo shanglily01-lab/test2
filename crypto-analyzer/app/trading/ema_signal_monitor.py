@@ -257,30 +257,49 @@ class EMASignalMonitor:
         self,
         price_change_pct: float,
         volume_ratio: float,
-        ema_distance_pct: float
+        ema_distance_pct: float,
+        signal_type: str = 'BUY'
     ) -> str:
         """
         计算信号强度
 
         Args:
-            price_change_pct: 价格涨幅百分比
+            price_change_pct: 价格变化百分比（买入时为正值，卖出时为负值）
             volume_ratio: 成交量比率
             ema_distance_pct: EMA 之间的距离百分比
+            signal_type: 信号类型 'BUY' 或 'SELL'
 
         Returns:
             信号强度：'strong', 'medium', 'weak'
         """
         score = 0
 
-        # 价格涨幅
-        if price_change_pct > 2:
-            score += 3
-        elif price_change_pct > 1:
-            score += 2
-        elif price_change_pct > 0.5:
-            score += 1
+        # 价格变化评估（区分买入和卖出）
+        if signal_type == 'SELL':
+            # 卖出信号：价格下跌幅度越大，信号越强
+            price_change_abs = abs(price_change_pct)
+            if price_change_abs > 2:
+                score += 3
+            elif price_change_abs > 1:
+                score += 2
+            elif price_change_abs > 0.5:
+                score += 1
+            # 额外加分：如果价格大幅下跌（>3%），说明下跌动能很强
+            if price_change_abs > 3:
+                score += 1  # 额外奖励分
+        else:
+            # 买入信号：价格上涨幅度越大，信号越强
+            if price_change_pct > 2:
+                score += 3
+            elif price_change_pct > 1:
+                score += 2
+            elif price_change_pct > 0.5:
+                score += 1
+            # 额外加分：如果价格大幅上涨（>3%），说明上涨动能很强
+            if price_change_pct > 3:
+                score += 1  # 额外奖励分
 
-        # 成交量
+        # 成交量评估（买入和卖出逻辑相同）
         if volume_ratio > 3:
             score += 3
         elif volume_ratio > 2:
@@ -288,18 +307,29 @@ class EMASignalMonitor:
         elif volume_ratio >= self.volume_threshold:
             score += 1
 
-        # EMA 距离（越接近越强）
+        # EMA 距离评估（越接近越强，买入和卖出逻辑相同）
         if ema_distance_pct < 0.5:
             score += 2
         elif ema_distance_pct < 1:
             score += 1
 
-        if score >= 6:
-            return 'strong'
-        elif score >= 4:
-            return 'medium'
+        # 强度等级判定（卖出信号可能需要更严格的判定）
+        if signal_type == 'SELL':
+            # 卖出信号：稍微提高阈值，因为卖出信号需要更谨慎
+            if score >= 7:
+                return 'strong'
+            elif score >= 5:
+                return 'medium'
+            else:
+                return 'weak'
         else:
-            return 'weak'
+            # 买入信号：保持原有阈值
+            if score >= 6:
+                return 'strong'
+            elif score >= 4:
+                return 'medium'
+            else:
+                return 'weak'
 
     async def check_symbol(self, symbol: str) -> Optional[Dict]:
         """
@@ -387,10 +417,12 @@ class EMASignalMonitor:
             price_change_pct = ((closes[-1] - closes[-2]) / closes[-2]) * 100
             ema_distance_pct = abs((short_ema_values[-1] - long_ema_values[-1]) / long_ema_values[-1]) * 100
 
+            # 计算信号强度（传入信号类型，区分买入和卖出）
             signal_strength = self.calculate_signal_strength(
-                abs(price_change_pct),  # 使用绝对值，卖出信号可能是负数
+                price_change_pct,  # 保持原始值（买入为正，卖出为负）
                 volume_ratio,
-                ema_distance_pct
+                ema_distance_pct,
+                signal_type  # 传入信号类型，用于区分评估逻辑
             )
 
             # 构建信号（使用 UTC+8 北京时间）

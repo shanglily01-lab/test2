@@ -289,9 +289,16 @@
                             <span style="font-size: 11px; color: var(--text-tertiary);">参考 scripts/etf/interactive_input.py 的简化格式</span>
                         </p>
                         <div style="margin-bottom: var(--spacing-md);">
-                            <button class="btn btn-secondary btn-sm" onclick="downloadETFTemplate()" style="width: 100%;">
+                            <div class="input-group" style="margin-bottom: var(--spacing-sm);">
+                                <label class="input-label">资产类型</label>
+                                <select id="etfAssetType" class="input-field" style="padding: var(--spacing-sm);" onchange="updateETFTemplateButton()">
+                                    <option value="BTC">BTC (比特币)</option>
+                                    <option value="ETH">ETH (以太坊)</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" id="etfTemplateButton" onclick="downloadETFTemplate()" style="width: 100%;">
                                 <i class="bi bi-download"></i>
-                                下载模板文件
+                                下载BTC模板文件
                             </button>
                         </div>
                         <form id="etfImportForm" onsubmit="importETFData(event)">
@@ -788,9 +795,20 @@
             loadStatistics();
         }
 
+        // 更新ETF模板按钮文本
+        function updateETFTemplateButton() {
+            const assetType = document.getElementById('etfAssetType').value;
+            const button = document.getElementById('etfTemplateButton');
+            if (button) {
+                const assetName = assetType === 'BTC' ? 'BTC (比特币)' : 'ETH (以太坊)';
+                button.innerHTML = `<i class="bi bi-download"></i> 下载${assetName}模板文件`;
+            }
+        }
+
         // 下载ETF模板
         function downloadETFTemplate() {
-            window.location.href = '/api/data-management/template/etf';
+            const assetType = document.getElementById('etfAssetType').value;
+            window.location.href = `/api/data-management/template/etf?asset_type=${assetType}`;
         }
 
         // 下载企业金库持仓模板（文本格式）
@@ -808,6 +826,7 @@
             event.preventDefault();
             const fileInput = document.getElementById('etfFile');
             const resultDiv = document.getElementById('etfImportResult');
+            const assetType = document.getElementById('etfAssetType').value;
             
             if (!fileInput.files || !fileInput.files[0]) {
                 showToast('请选择文件', 'error');
@@ -816,7 +835,7 @@
             
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
-            formData.append('asset_type', 'BTC');
+            formData.append('asset_type', assetType);
             
             resultDiv.innerHTML = '<div class="spinner"></div> <span>导入中...</span>';
             
@@ -944,6 +963,9 @@
             }
         }
 
+        // 任务轮询间隔ID
+        let collectionPollInterval = null;
+        
         // 开始数据采集
         async function startDataCollection(event) {
             event.preventDefault();
@@ -973,13 +995,19 @@
                 return;
             }
             
+            // 停止之前的轮询
+            if (collectionPollInterval) {
+                clearInterval(collectionPollInterval);
+                collectionPollInterval = null;
+            }
+            
             // 禁用提交按钮
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div> 采集中...';
+            submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div> 提交中...';
             
             // 显示进度条
             progressDiv.style.display = 'block';
-            updateCollectionProgress(0, '准备开始采集...');
+            updateCollectionProgress(0, '正在提交任务...');
             
             resultDiv.innerHTML = '';
             
@@ -1006,80 +1034,135 @@
                 
                 const result = await response.json();
                 
-                if (result.success) {
-                    updateCollectionProgress(100, '采集完成！');
-                    const configMsg = result.config_updated ? 
-                        '<div style="margin-top: var(--spacing-xs); color: var(--success-green); font-weight: 500;"><i class="bi bi-file-earmark-check"></i> 配置文件已更新</div>' : '';
-                    const futuresMsg = result.collect_futures ? ' + 合约数据' : '';
-                    const timeframeMsg = `<div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">采集内容: 价格数据 + K线数据（1m, 5m, 15m, 1h, 1d）${futuresMsg}</div>`;
-                    resultDiv.innerHTML = `
-                        <div style="background: var(--success-green-bg); border: 1px solid var(--success-green); border-radius: var(--radius-md); padding: var(--spacing-md);">
-                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--success-green);">
-                                <i class="bi bi-check-circle"></i>
-                                <strong>采集成功</strong>
-                            </div>
-                            <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
-                                <div>成功采集 ${result.total_saved || 0} 条数据</div>
-                                <div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">
-                                    交易对: ${symbolList.join(', ')}<br>
-                                    时间范围: ${formatDateTime(startTime)} - ${formatDateTime(endTime)}
-                                </div>
-                                ${timeframeMsg}
-                                ${configMsg}
-                            </div>
-                        </div>
-                    `;
-                    const toastMsg = result.config_updated ? '数据采集成功，配置文件已更新' : '数据采集成功';
-                    showToast(toastMsg, 'success');
-                    // 刷新采集情况
-                    setTimeout(() => loadCollectionStatus(), 2000);
+                if (result.success && result.task_id) {
+                    // 任务已提交，开始轮询进度
+                    submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div> 采集中...';
+                    pollCollectionTask(result.task_id, symbolList, startTime, endTime, collectFutures);
                 } else {
-                    updateCollectionProgress(0, '采集失败');
-                    resultDiv.innerHTML = `
-                        <div style="background: var(--danger-red-bg); border: 1px solid var(--danger-red); border-radius: var(--radius-md); padding: var(--spacing-md);">
-                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--danger-red);">
-                                <i class="bi bi-exclamation-circle"></i>
-                                <strong>采集失败</strong>
-                            </div>
-                            <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
-                                ${result.message || '未知错误'}
-                            </div>
-                        </div>
-                    `;
-                    showToast('数据采集失败', 'error');
+                    throw new Error(result.message || '任务提交失败');
                 }
             } catch (error) {
                 console.error('数据采集失败:', error);
-                updateCollectionProgress(0, '采集失败');
+                updateCollectionProgress(0, '任务提交失败');
                 resultDiv.innerHTML = `
                     <div style="background: var(--danger-red-bg); border: 1px solid var(--danger-red); border-radius: var(--radius-md); padding: var(--spacing-md);">
                         <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--danger-red);">
                             <i class="bi bi-exclamation-circle"></i>
-                            <strong>采集失败</strong>
+                            <strong>任务提交失败</strong>
                         </div>
                         <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
                             ${error.message}
                         </div>
                     </div>
                 `;
-                showToast('数据采集失败: ' + error.message, 'error');
-            } finally {
-                // 恢复提交按钮
+                showToast('任务提交失败: ' + error.message, 'error');
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="bi bi-play-circle"></i> 开始采集';
             }
         }
         
+        // 轮询任务进度
+        async function pollCollectionTask(taskId, symbolList, startTime, endTime, collectFutures) {
+            const resultDiv = document.getElementById('collectionResult');
+            const submitBtn = document.getElementById('collectionSubmitBtn');
+            
+            collectionPollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/data-management/collect/task/${taskId}`);
+                    const task = await response.json();
+                    
+                    // 更新进度
+                    updateCollectionProgress(
+                        task.progress || 0,
+                        task.current_step || '处理中...',
+                        task.total_saved || 0,
+                        task.completed_steps || 0,
+                        task.total_steps || 0
+                    );
+                    
+                    // 检查任务状态
+                    if (task.status === 'completed') {
+                        clearInterval(collectionPollInterval);
+                        collectionPollInterval = null;
+                        
+                        const result = task.result || {};
+                        const configMsg = result.config_updated ? 
+                            '<div style="margin-top: var(--spacing-xs); color: var(--success-green); font-weight: 500;"><i class="bi bi-file-earmark-check"></i> 配置文件已更新</div>' : '';
+                        const futuresMsg = result.collect_futures ? ' + 合约数据' : '';
+                        const timeframeMsg = `<div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">采集内容: 价格数据 + K线数据（1m, 5m, 15m, 1h, 1d）${futuresMsg}</div>`;
+                        const errorsMsg = result.errors && result.errors.length > 0 ? 
+                            `<div style="margin-top: var(--spacing-xs); color: var(--warning-yellow); font-size: 12px;">警告: ${result.errors.length} 个错误</div>` : '';
+                        
+                        resultDiv.innerHTML = `
+                            <div style="background: var(--success-green-bg); border: 1px solid var(--success-green); border-radius: var(--radius-md); padding: var(--spacing-md);">
+                                <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--success-green);">
+                                    <i class="bi bi-check-circle"></i>
+                                    <strong>采集成功</strong>
+                                </div>
+                                <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
+                                    <div>成功采集 ${result.total_saved || 0} 条数据</div>
+                                    <div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">
+                                        交易对: ${symbolList.join(', ')}<br>
+                                        时间范围: ${formatDateTime(startTime)} - ${formatDateTime(endTime)}
+                                    </div>
+                                    ${timeframeMsg}
+                                    ${configMsg}
+                                    ${errorsMsg}
+                                </div>
+                            </div>
+                        `;
+                        const toastMsg = result.config_updated ? '数据采集成功，配置文件已更新' : '数据采集成功';
+                        showToast(toastMsg, 'success');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="bi bi-play-circle"></i> 开始采集';
+                        // 刷新采集情况
+                        setTimeout(() => loadCollectionStatus(), 2000);
+                    } else if (task.status === 'failed') {
+                        clearInterval(collectionPollInterval);
+                        collectionPollInterval = null;
+                        
+                        const result = task.result || {};
+                        updateCollectionProgress(0, '采集失败');
+                        resultDiv.innerHTML = `
+                            <div style="background: var(--danger-red-bg); border: 1px solid var(--danger-red); border-radius: var(--radius-md); padding: var(--spacing-md);">
+                                <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--danger-red);">
+                                    <i class="bi bi-exclamation-circle"></i>
+                                    <strong>采集失败</strong>
+                                </div>
+                                <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
+                                    ${result.error || result.message || '未知错误'}
+                                </div>
+                            </div>
+                        `;
+                        showToast('数据采集失败', 'error');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="bi bi-play-circle"></i> 开始采集';
+                    }
+                } catch (error) {
+                    console.error('查询任务状态失败:', error);
+                }
+            }, 1000);  // 每1秒轮询一次
+        }
+        
         // 更新采集进度
-        function updateCollectionProgress(percent, statusText) {
+        function updateCollectionProgress(percent, statusText, totalSaved = 0, completedSteps = 0, totalSteps = 0) {
             const progressBar = document.getElementById('collectionProgressBar');
             const progressText = document.getElementById('collectionProgressText');
             const statusTextEl = document.getElementById('collectionStatusText');
             
             progressBar.style.width = percent + '%';
-            progressText.textContent = percent + '%';
+            progressText.textContent = Math.round(percent) + '%';
+            
+            let statusHtml = statusText || '';
+            if (totalSteps > 0) {
+                statusHtml += ` (${completedSteps}/${totalSteps})`;
+            }
+            if (totalSaved > 0) {
+                statusHtml += ` · 已保存 ${totalSaved} 条`;
+            }
+            
             if (statusTextEl) {
-                statusTextEl.textContent = statusText || '';
+                statusTextEl.textContent = statusHtml;
             }
         }
         
