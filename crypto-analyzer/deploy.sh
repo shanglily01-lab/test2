@@ -2,7 +2,7 @@
 
 ###############################################################################
 # Crypto Analyzer 一键部署脚本
-# 适用系统: Ubuntu 20.04/22.04, Debian 11/12, CentOS 7/8
+# 适用系统: Ubuntu 20.04/22.04, Debian 11/12, CentOS 7/8, Amazon Linux 2/2023
 # 功能: 自动安装所有依赖并部署系统
 ###############################################################################
 
@@ -40,6 +40,12 @@ detect_os() {
         . /etc/os-release
         OS=$ID
         OS_VERSION=$VERSION_ID
+
+        # Amazon Linux 特殊处理
+        if [ "$OS" = "amzn" ]; then
+            OS="amazon"
+            log_info "检测到 Amazon Linux $OS_VERSION"
+        fi
     else
         log_error "无法检测操作系统类型"
         exit 1
@@ -100,6 +106,9 @@ elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ]; then
     yum update -y
     yum install -y epel-release
     yum install -y curl wget git vim net-tools
+elif [ "$OS" = "amazon" ]; then
+    yum update -y
+    yum install -y curl wget git vim net-tools tar gzip
 else
     log_error "不支持的操作系统: $OS"
     exit 1
@@ -126,10 +135,10 @@ else
         # 设置python3.11为默认python3（可选）
         update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
-    elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ]; then
-        # CentOS/RHEL - 从源码编译
-        yum groupinstall -y "Development Tools"
-        yum install -y openssl-devel bzip2-devel libffi-devel zlib-devel
+    elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ] || [ "$OS" = "amazon" ]; then
+        # CentOS/RHEL/Amazon Linux - 从源码编译
+        yum groupinstall -y "Development Tools" || yum install -y gcc gcc-c++ make
+        yum install -y openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel
 
         cd /tmp
         wget https://www.python.org/ftp/python/3.11.8/Python-3.11.8.tgz
@@ -179,6 +188,19 @@ else
 
         # 获取临时密码
         TEMP_PASSWORD=$(grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}')
+
+    elif [ "$OS" = "amazon" ]; then
+        # Amazon Linux
+        # 安装 MySQL 8.0
+        yum install -y https://dev.mysql.com/get/mysql80-community-release-el7-7.noarch.rpm || true
+        yum install -y mysql-community-server
+
+        # 启动MySQL
+        systemctl start mysqld
+        systemctl enable mysqld
+
+        # 获取临时密码
+        TEMP_PASSWORD=$(grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}' 2>/dev/null || echo "")
     fi
 fi
 
@@ -239,7 +261,8 @@ else
 
     if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
         apt-get install -y nginx
-    elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ]; then
+    elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ] || [ "$OS" = "amazon" ]; then
+        # Amazon Linux 2023 使用 nginx
         yum install -y nginx
     fi
 
@@ -416,8 +439,9 @@ if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
     ln -sf /etc/nginx/sites-available/crypto-analyzer /etc/nginx/sites-enabled/
     # 删除默认站点
     rm -f /etc/nginx/sites-enabled/default
-elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ]; then
-    # CentOS没有sites-available目录
+elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ] || [ "$OS" = "amazon" ]; then
+    # CentOS/Amazon Linux没有sites-available目录
+    mkdir -p /etc/nginx/conf.d
     cp /etc/nginx/sites-available/crypto-analyzer /etc/nginx/conf.d/crypto-analyzer.conf
 fi
 
@@ -443,7 +467,7 @@ if command -v ufw &> /dev/null; then
     ufw --force enable
 
 elif command -v firewall-cmd &> /dev/null; then
-    # CentOS - Firewalld
+    # CentOS/Amazon Linux - Firewalld
     log_info "配置Firewalld防火墙..."
     firewall-cmd --permanent --add-port=$NGINX_PORT/tcp
     firewall-cmd --permanent --add-service=ssh
@@ -451,6 +475,7 @@ elif command -v firewall-cmd &> /dev/null; then
 
 else
     log_warn "未检测到防火墙，请手动配置"
+    log_info "Amazon Linux 2023 默认使用 Security Groups，请在 AWS 控制台配置"
 fi
 
 ###############################################################################
