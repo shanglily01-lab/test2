@@ -389,18 +389,69 @@ async def get_orders(account_id: Optional[int] = None, limit: int = 100, status:
 
 
 @router.get("/price")
-async def get_current_price(symbol: str, engine: PaperTradingEngine = Depends(get_engine)):
+async def get_current_price(symbol: str, force_refresh: bool = False, engine: PaperTradingEngine = Depends(get_engine)):
     """
     获取当前市场价格
 
     Args:
         symbol: 交易对（查询参数，如 ?symbol=BTC/USDT）
+        force_refresh: 是否强制从实时API获取（不使用缓存）
         engine: 自动注入的 Engine 实例
 
     Returns:
         当前价格
     """
     try:
+        # 如果强制刷新，直接从实时API获取
+        if force_refresh:
+            import aiohttp
+            from aiohttp import ClientTimeout
+            
+            price = None
+            timeout = ClientTimeout(total=3)  # 3秒超时，更快响应
+            
+            # 尝试从Binance现货API获取
+            try:
+                symbol_clean = symbol.replace('/', '').upper()
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(
+                        'https://api.binance.com/api/v3/ticker/price',
+                        params={'symbol': symbol_clean}
+                    ) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data and 'price' in data:
+                                price = float(data['price'])
+                                logger.debug(f"从Binance实时API获取 {symbol} 价格: {price}")
+            except Exception as e:
+                logger.debug(f"Binance实时API获取失败: {e}")
+            
+            # 如果Binance失败，尝试从Gate.io获取
+            if not price:
+                try:
+                    gate_symbol = symbol.replace('/', '_').upper()
+                    async with aiohttp.ClientSession(timeout=timeout) as session:
+                        async with session.get(
+                            'https://api.gateio.ws/api/v4/spot/tickers',
+                            params={'currency_pair': gate_symbol}
+                        ) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                if data and len(data) > 0 and 'last' in data[0]:
+                                    price = float(data[0]['last'])
+                                    logger.debug(f"从Gate.io实时API获取 {symbol} 价格: {price}")
+                except Exception as e:
+                    logger.debug(f"Gate.io实时API获取失败: {e}")
+            
+            if price and price > 0:
+                return {
+                    "symbol": symbol,
+                    "price": price,
+                    "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "source": "realtime_api"
+                }
+        
+        # 默认使用引擎的价格获取（使用缓存或数据库）
         price = engine.get_current_price(symbol)
 
         if price == 0:
@@ -412,7 +463,8 @@ async def get_current_price(symbol: str, engine: PaperTradingEngine = Depends(ge
         return {
             "symbol": symbol,
             "price": float(price),
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "source": "cache_or_database"
         }
     except HTTPException:
         raise

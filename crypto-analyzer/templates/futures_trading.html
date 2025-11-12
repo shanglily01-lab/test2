@@ -636,10 +636,16 @@
         // 选择交易对
         document.getElementById('symbol').addEventListener('change', async function(e) {
             currentSymbol = e.target.value;
-            // 切换交易对时立即刷新价格
+            // 切换交易对时立即刷新价格（显示加载状态）
             const priceDisplay = document.getElementById('current-price-display');
             priceDisplay.textContent = '加载中...';
-            await refreshPrice();
+            priceDisplay.style.color = 'var(--text-secondary)';
+            // 立即刷新，不等待
+            refreshPrice().catch(err => {
+                console.error('刷新价格失败:', err);
+                priceDisplay.textContent = '加载失败';
+                priceDisplay.style.color = 'var(--danger-red)';
+            });
         });
 
         // 选择方向
@@ -675,34 +681,56 @@
             
             try {
                 let price = null;
+                let priceSource = null;
                 
                 // 使用后端API获取合约价格（避免CORS问题）
+                // 使用AbortController设置超时，避免长时间等待
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 4000); // 4秒超时，给后端更多时间
+                
                 try {
-                    const response = await fetch(`/api/futures/price/${encodeURIComponent(symbol)}`);
+                    const response = await fetch(`/api/futures/price/${encodeURIComponent(symbol)}`, {
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    
                     if (response.ok) {
                         const data = await response.json();
                         if (data.success && data.price) {
                             price = parseFloat(data.price);
-                            console.log(`✅ 从后端API获取 ${symbol} 合约价格 (${data.source}): ${price}`);
+                            priceSource = data.source || 'unknown';
+                            // 只在调试时输出日志
+                            // console.log(`✅ 从后端API获取 ${symbol} 合约价格 (${priceSource}): ${price}`);
                         }
                     }
                 } catch (e) {
-                    console.warn('从后端合约API获取失败，尝试现货价格API:', e);
+                    clearTimeout(timeoutId);
+                    // 静默处理超时，不输出警告（因为会自动回退到现货价格）
+                    if (e.name !== 'AbortError') {
+                        console.warn('从后端合约API获取失败，尝试现货价格API:', e);
+                    }
                 }
                 
-                // 如果合约价格获取失败，回退到现货价格API
+                // 如果合约价格获取失败，回退到现货价格API（也使用实时API）
                 if (!price || price === 0) {
                     try {
-                        const response = await fetch(`/api/prices?symbol=${encodeURIComponent(symbol)}`);
-                        const data = await response.json();
+                        const controller2 = new AbortController();
+                        const timeoutId2 = setTimeout(() => controller2.abort(), 2000); // 2秒超时
                         
-                        if (data.success && data.prices && data.prices[symbol]) {
-                            price = parseFloat(data.prices[symbol]);
-                            // 减少日志输出，只在调试时启用
-                            // console.log(`✅ 从本地API获取 ${symbol} 价格（现货）: ${price}`);
+                        const response = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}&force_refresh=true`, {
+                            signal: controller2.signal
+                        });
+                        clearTimeout(timeoutId2);
+                        
+                        const data = await response.json();
+                        if (data.price && data.price > 0) {
+                            price = parseFloat(data.price);
+                            priceSource = data.source || 'spot_realtime';
                         }
                     } catch (e) {
-                        console.warn('从本地价格API获取失败:', e);
+                        if (e.name !== 'AbortError') {
+                            console.warn('从现货实时API获取失败:', e);
+                        }
                     }
                 }
                 

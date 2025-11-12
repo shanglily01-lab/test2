@@ -135,10 +135,7 @@ function updatePrices(prices) {
                     ${changeIcon} ${formatPercent(p.change_24h)}
                 </td>
                 <td class="text-end text-muted">
-                    ${formatLargeNumber(p.volume_24h)}
-                </td>
-                <td class="text-end text-muted">
-                    $${formatLargeNumber(p.quote_volume_24h)}
+                    $${formatLargeNumber(p.quote_volume_24h || p.volume_24h)}
                 </td>
             </tr>
         `;

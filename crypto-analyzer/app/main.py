@@ -920,12 +920,13 @@ async def get_dashboard():
     try:
         # 如果 enhanced_dashboard 已初始化，使用缓存版本
         if enhanced_dashboard:
-            logger.info("🚀 使用缓存版Dashboard获取数据...")
+            # 减少日志输出，提升性能
+            # logger.debug("🚀 使用缓存版Dashboard获取数据...")
             symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'])
 
             # 从缓存获取数据（超快速）
             data = await enhanced_dashboard.get_dashboard_data(symbols)
-            logger.info("✅ 缓存版Dashboard数据获取成功")
+            # logger.debug("✅ 缓存版Dashboard数据获取成功")
             return data
 
         # 降级方案：enhanced_dashboard 未初始化时使用简化版本

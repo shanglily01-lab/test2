@@ -203,22 +203,6 @@
                     </div>
                     <div class="stat-card" onclick="window.location.href='/dashboard'">
                         <div class="stat-label">
-                            <i class="bi bi-graph-up-arrow" style="color: var(--success-green); margin-right: 4px;"></i>
-                            24H涨跌比
-                        </div>
-                        <div class="stat-value" id="bullishRatio" style="font-size: 28px;">-</div>
-                        <div class="stat-change" id="bullishCount">-</div>
-                    </div>
-                    <div class="stat-card" onclick="window.location.href='/dashboard'">
-                        <div class="stat-label">
-                            <i class="bi bi-bar-chart" style="color: var(--primary-blue); margin-right: 4px;"></i>
-                            总市值
-                        </div>
-                        <div class="stat-value" id="totalMarketCap">-</div>
-                        <div class="stat-change" id="marketCapChange" style="display: none;">-</div>
-                    </div>
-                    <div class="stat-card" onclick="window.location.href='/dashboard'">
-                        <div class="stat-label">
                             <i class="bi bi-activity" style="color: var(--secondary-purple); margin-right: 4px;"></i>
                             24H交易量
                         </div>
@@ -402,41 +386,16 @@
                 }
             }
 
-            // 计算涨跌比
-            let bullishCount = 0;
-            let bearishCount = 0;
-            let totalMarketCap = 0;
+            // 计算总交易量
             let totalVolume = 0;
             
             prices.forEach(p => {
-                if (p.change_24h > 0) bullishCount++;
-                else if (p.change_24h < 0) bearishCount++;
-                if (p.market_cap) totalMarketCap += p.market_cap;
                 if (p.volume_24h) totalVolume += p.volume_24h;
                 else if (p.volume) totalVolume += p.volume;
             });
 
-            const totalCount = bullishCount + bearishCount;
-            const bullishRatioEl = document.getElementById('bullishRatio');
-            const bullishCountEl = document.getElementById('bullishCount');
-            if (bullishRatioEl && totalCount > 0) {
-                const ratio = ((bullishCount / totalCount) * 100).toFixed(1);
-                bullishRatioEl.textContent = `${ratio}%`;
-                bullishRatioEl.style.color = ratio >= 50 ? 'var(--success-green)' : 'var(--danger-red)';
-            }
-            if (bullishCountEl) {
-                bullishCountEl.textContent = `上涨: ${bullishCount} | 下跌: ${bearishCount}`;
-                bullishCountEl.className = 'stat-change';
-            }
-
-            // 更新总市值和交易量
-            const totalMarketCapEl = document.getElementById('totalMarketCap');
+            // 更新交易量
             const totalVolumeEl = document.getElementById('totalVolume');
-            if (totalMarketCapEl && totalMarketCap > 0) {
-                totalMarketCapEl.textContent = formatLargeNumber(totalMarketCap);
-            } else if (totalMarketCapEl) {
-                totalMarketCapEl.textContent = '-';
-            }
             if (totalVolumeEl && totalVolume > 0) {
                 totalVolumeEl.textContent = formatLargeNumber(totalVolume);
             } else if (totalVolumeEl) {

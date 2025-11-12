@@ -33,6 +33,7 @@ class DataCollectionTask:
         self.total_steps = 0  # 总步骤数
         self.completed_steps = 0  # 已完成步骤数
         self.total_saved = 0  # 总保存数据量
+        self.estimated_total_records = 0  # 预估总数据量（用于进度计算）
         self.errors = []  # 错误列表
         self.result = None  # 最终结果
         self.created_at = datetime.now()
@@ -45,11 +46,12 @@ class DataCollectionTask:
         return {
             'task_id': self.task_id,
             'status': self.status.value,
-            'progress': self.progress,
+            'progress': round(self.progress, 2),
             'current_step': self.current_step,
             'total_steps': self.total_steps,
             'completed_steps': self.completed_steps,
             'total_saved': self.total_saved,
+            'estimated_total_records': getattr(self, 'estimated_total_records', 0),
             'errors': self.errors,
             'result': self.result,
             'created_at': self.created_at.isoformat(),

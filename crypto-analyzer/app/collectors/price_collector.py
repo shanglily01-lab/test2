@@ -153,7 +153,13 @@ class PriceCollector:
             return df
 
         except Exception as e:
-            logger.error(f"{self.exchange_id} 获取 {symbol} K线数据失败: {e}")
+            error_msg = str(e)
+            # 如果是无效交易对错误，提供更友好的提示
+            if 'Invalid symbol' in error_msg or '-1121' in error_msg:
+                logger.error(f"{self.exchange_id} 获取 {symbol} K线数据失败: 交易对格式错误或不存在 (尝试的格式: {binance_symbol})")
+                logger.debug(f"提示: 币安API需要格式如 'BTCUSDT'，请确认交易对 {symbol} 在币安是否存在")
+            else:
+                logger.error(f"{self.exchange_id} 获取 {symbol} K线数据失败: {e}")
             return None
 
     async def fetch_order_book(self, symbol: str, limit: int = 20) -> Optional[Dict]:
@@ -312,7 +318,7 @@ class MultiExchangeCollector:
 
     async def fetch_price(self, symbol: str) -> List[Dict]:
         """
-        从所有交易所获取价格
+        从所有交易所获取价格（智能路由：HYPE/USDT 只从 Gate.io 获取）
 
         Args:
             symbol: 交易对
@@ -320,10 +326,30 @@ class MultiExchangeCollector:
         Returns:
             各交易所价格列表
         """
-        tasks = [
-            collector.fetch_ticker(symbol)
-            for collector in self.collectors.values()
-        ]
+        # 智能路由：某些交易对只从特定交易所获取
+        symbol_upper = symbol.upper()
+        
+        # HYPE/USDT 只从 Gate.io 获取
+        if symbol_upper == 'HYPE/USDT':
+            if 'gate' in self.collectors:
+                try:
+                    result = await self.collectors['gate'].fetch_ticker(symbol)
+                    return [result] if result else []
+                except Exception:
+                    return []
+            return []
+        
+        # 其他交易对只从 Binance 获取（跳过 Gate.io，避免速率限制）
+        # Gate.io 只用于 HYPE/USDT，其他交易对不需要从 Gate.io 获取
+        tasks = []
+        for exchange_id, collector in self.collectors.items():
+            # 跳过 Gate.io（只用于 HYPE/USDT）
+            if exchange_id == 'gate':
+                continue
+            tasks.append(collector.fetch_ticker(symbol))
+
+        if not tasks:
+            return []
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -376,16 +402,25 @@ class MultiExchangeCollector:
         exchange: str = None
     ) -> Optional[pd.DataFrame]:
         """
-        获取K线数据
+        获取K线数据（智能路由：HYPE/USDT 只从 Gate.io 获取）
 
         Args:
             symbol: 交易对
             timeframe: 时间周期
-            exchange: 指定交易所，不指定则使用第一个
+            exchange: 指定交易所，不指定则智能选择
 
         Returns:
             K线DataFrame
         """
+        # 智能路由：某些交易对只从特定交易所获取
+        symbol_upper = symbol.upper()
+        
+        # HYPE/USDT 只从 Gate.io 获取
+        if symbol_upper == 'HYPE/USDT':
+            if 'gate' in self.collectors:
+                return await self.collectors['gate'].fetch_ohlcv(symbol, timeframe)
+            return None
+        
         # 如果指定了交易所
         if exchange and exchange in self.collectors:
             return await self.collectors[exchange].fetch_ohlcv(
@@ -393,8 +428,10 @@ class MultiExchangeCollector:
                 timeframe
             )
 
-        # 使用第一个可用的交易所
-        if self.collectors:
+        # 使用第一个可用的交易所（优先 Binance）
+        if 'binance' in self.collectors:
+            return await self.collectors['binance'].fetch_ohlcv(symbol, timeframe)
+        elif self.collectors:
             first_exchange = list(self.collectors.values())[0]
             return await first_exchange.fetch_ohlcv(symbol, timeframe)
 
@@ -408,7 +445,7 @@ class MultiExchangeCollector:
         exchange: str = None
     ) -> Optional[pd.DataFrame]:
         """
-        获取历史数据
+        获取历史数据（智能路由：HYPE/USDT 只从 Gate.io 获取）
 
         Args:
             symbol: 交易对
@@ -419,12 +456,52 @@ class MultiExchangeCollector:
         Returns:
             历史K线DataFrame
         """
-        # 计算起始时间
+        # 智能路由：某些交易对只从特定交易所获取
+        symbol_upper = symbol.upper()
+        
+        # HYPE/USDT 只从 Gate.io 获取
+        if symbol_upper == 'HYPE/USDT':
+            if 'gate' in self.collectors:
+                # Gate.io 使用秒时间戳
+                since = int((datetime.now() - timedelta(days=days)).timestamp())
+                all_data = []
+                limit = 1000
+                
+                while True:
+                    df = await self.collectors['gate'].fetch_ohlcv(
+                        symbol,
+                        timeframe,
+                        limit=limit,
+                        since=since
+                    )
+                    
+                    if df is None or len(df) == 0:
+                        break
+                    
+                    all_data.append(df)
+                    last_timestamp = df['timestamp'].iloc[-1]
+                    since = int(last_timestamp.timestamp()) + 1
+                    
+                    if len(df) < limit:
+                        break
+                    
+                    await asyncio.sleep(0.5)
+                
+                if all_data:
+                    result = pd.concat(all_data, ignore_index=True)
+                    result = result.drop_duplicates(subset=['timestamp'])
+                    result = result.sort_values('timestamp').reset_index(drop=True)
+                    return result
+            return None
+        
+        # 计算起始时间（毫秒时间戳，用于 Binance）
         since = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
 
         # 选择交易所
         if exchange and exchange in self.collectors:
             collector = self.collectors[exchange]
+        elif 'binance' in self.collectors:
+            collector = self.collectors['binance']
         elif self.collectors:
             collector = list(self.collectors.values())[0]
         else:

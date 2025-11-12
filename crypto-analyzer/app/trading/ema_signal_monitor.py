@@ -313,20 +313,20 @@ class EMASignalMonitor:
         elif ema_distance_pct < 1:
             score += 1
 
-        # 强度等级判定（卖出信号可能需要更严格的判定）
+        # 强度等级判定（提高阈值，只保留高质量信号）
         if signal_type == 'SELL':
-            # 卖出信号：稍微提高阈值，因为卖出信号需要更谨慎
-            if score >= 7:
+            # 卖出信号：提高阈值，只保留高质量信号
+            if score >= 8:  # 提高strong阈值
                 return 'strong'
-            elif score >= 5:
+            elif score >= 6:  # 提高medium阈值
                 return 'medium'
             else:
                 return 'weak'
         else:
-            # 买入信号：保持原有阈值
-            if score >= 6:
+            # 买入信号：提高阈值，只保留高质量信号
+            if score >= 7:  # 提高strong阈值（从6提高到7）
                 return 'strong'
-            elif score >= 4:
+            elif score >= 5:  # 提高medium阈值（从4提高到5）
                 return 'medium'
             else:
                 return 'weak'
@@ -398,19 +398,9 @@ class EMASignalMonitor:
             volume_type = buy_volume_type if is_golden_cross else sell_volume_type
             signal_key = f"{symbol}_{signal_type}"
 
-            # 检查是否已经提醒过（避免重复提醒）
-            last_signal_time = self.signal_history.get(signal_key)
             # 使用 UTC+8 北京时间
             utc8_tz = timezone(timedelta(hours=8))
             current_time = datetime.now(utc8_tz)
-            if last_signal_time:
-                time_since_last = current_time - last_signal_time
-                if time_since_last < timedelta(hours=1):  # 1小时内不重复提醒
-                    logger.debug(f"{symbol}: {signal_type}信号已在 {time_since_last.seconds//60} 分钟前提醒过")
-                    return None
-
-            # 记录信号时间（使用 UTC+8 北京时间）
-            self.signal_history[signal_key] = current_time
 
             # 计算信号详细信息
             current_price = closes[-1]
@@ -424,6 +414,62 @@ class EMASignalMonitor:
                 ema_distance_pct,
                 signal_type  # 传入信号类型，用于区分评估逻辑
             )
+
+            # 过滤：只保留strong和medium信号，过滤掉weak信号
+            if signal_strength == 'weak':
+                logger.debug(f"{symbol}: {signal_type}信号强度为weak，已过滤")
+                return None
+
+            # 额外过滤条件：价格变化幅度太小或成交量不足的信号
+            price_change_abs = abs(price_change_pct)
+            if signal_type == 'BUY':
+                # 买入信号：价格涨幅太小（<0.3%）或成交量不足（<1.2倍）的信号过滤掉
+                if price_change_abs < 0.3 or volume_ratio < 1.2:
+                    logger.debug(f"{symbol}: {signal_type}信号价格变化({price_change_pct:.2f}%)或成交量({volume_ratio:.2f}x)不足，已过滤")
+                    return None
+            else:
+                # 卖出信号：价格跌幅太小（<0.3%）或成交量不足（<1.2倍）的信号过滤掉
+                if price_change_abs < 0.3 or volume_ratio < 1.2:
+                    logger.debug(f"{symbol}: {signal_type}信号价格变化({price_change_pct:.2f}%)或成交量({volume_ratio:.2f}x)不足，已过滤")
+                    return None
+
+            # 检查数据库中是否已有相同类型的信号（避免重复保存）
+            signal_key = f"{symbol}_{signal_type}"
+            last_signal_time = self.signal_history.get(signal_key)
+            if last_signal_time:
+                time_since_last = current_time - last_signal_time
+                if time_since_last < timedelta(hours=4):  # 4小时内不重复提醒（从1小时增加到4小时）
+                    logger.debug(f"{symbol}: {signal_type}信号已在 {time_since_last.seconds//3600} 小时前提醒过，已过滤")
+                    return None
+
+            # 检查数据库中最近的相同信号（更严格的去重）
+            try:
+                session = self.db_service.get_session()
+                try:
+                    check_sql = text("""
+                        SELECT timestamp FROM ema_signals
+                        WHERE symbol = :symbol
+                          AND signal_type = :signal_type
+                          AND timestamp >= DATE_SUB(:current_time, INTERVAL 4 HOUR)
+                        ORDER BY timestamp DESC
+                        LIMIT 1
+                    """)
+                    result = session.execute(check_sql, {
+                        'symbol': symbol,
+                        'signal_type': signal_type,
+                        'current_time': current_time
+                    })
+                    existing_signal = result.fetchone()
+                    if existing_signal:
+                        logger.debug(f"{symbol}: {signal_type}信号在数据库中4小时内已存在，已过滤")
+                        return None
+                finally:
+                    session.close()
+            except Exception as e:
+                logger.debug(f"检查数据库信号去重失败: {e}")
+
+            # 记录信号时间（使用 UTC+8 北京时间）
+            self.signal_history[signal_key] = current_time
 
             # 构建信号（使用 UTC+8 北京时间）
             signal = {

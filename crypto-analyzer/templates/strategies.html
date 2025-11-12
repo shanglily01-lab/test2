@@ -54,34 +54,37 @@
         .strategy-item-name { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-xs); display: flex; align-items: center; gap: var(--spacing-sm); }
         .strategy-item-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.4; margin-bottom: var(--spacing-sm); }
         .strategy-item-meta { display: flex; gap: var(--spacing-xs); flex-wrap: wrap; }
-        .strategy-detail-panel { flex: 1; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); display: flex; flex-direction: column; }
-        .strategy-detail-header { margin-bottom: var(--spacing-xl); padding-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); }
-        .strategy-detail-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-md); display: flex; align-items: center; gap: var(--spacing-md); }
-        .strategy-detail-description { font-size: 15px; color: var(--text-secondary); line-height: 1.8; margin-bottom: var(--spacing-lg); }
+        .strategy-detail-panel { flex: 1; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-lg); display: flex; flex-direction: column; }
+        .strategy-detail-header { margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-md); border-bottom: 1px solid var(--border-default); }
+        .strategy-detail-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .strategy-detail-description { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: var(--spacing-md); }
         .strategy-detail-content { flex: 1; overflow-y: auto; }
-        .strategy-detail-section { margin-bottom: var(--spacing-xl); }
-        .strategy-detail-section-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-sm); border-bottom: 1px solid var(--border-default); }
-        .strategy-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-md); }
-        .strategy-detail-card { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-md); }
-        .strategy-detail-card-label { font-size: 12px; color: var(--text-secondary); margin-bottom: var(--spacing-xs); }
-        .strategy-detail-card-value { font-size: 16px; font-weight: 600; color: var(--text-primary); }
-        .strategy-actions-panel { margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default); display: flex; gap: var(--spacing-md); flex-wrap: wrap; }
+        .strategy-detail-section { margin-bottom: var(--spacing-md); }
+        .strategy-detail-section-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-sm); padding-bottom: var(--spacing-xs); border-bottom: 1px solid var(--border-default); }
+        .strategy-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-sm); }
+        .strategy-detail-card { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-sm); }
+        .strategy-detail-card-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 2px; }
+        .strategy-detail-card-value { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+        .strategy-actions-panel { margin-top: var(--spacing-md); padding-top: var(--spacing-md); border-top: 1px solid var(--border-default); display: flex; gap: var(--spacing-sm); flex-wrap: wrap; }
+        .strategy-type-tab { transition: all var(--transition-base); }
+        .strategy-type-tab:hover { background: var(--bg-hover) !important; }
+        .strategy-type-tab.active { background: var(--primary-blue) !important; color: white !important; }
         
         /* 表单样式 */
-        .form-group { margin-bottom: var(--spacing-lg); }
-        .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--spacing-xs); }
-        .form-input, .form-select, .form-textarea { width: 100%; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; font-family: var(--font-family); transition: all var(--transition-base); }
+        .form-group { margin-bottom: var(--spacing-md); }
+        .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
+        .form-input, .form-select, .form-textarea { width: 100%; padding: var(--spacing-sm) var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 13px; font-family: var(--font-family); transition: all var(--transition-base); }
         .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(43, 111, 237, 0.1); }
         .form-input:disabled { opacity: 0.5; cursor: not-allowed; }
-        .form-textarea { min-height: 80px; resize: vertical; }
-        .form-checkbox { width: 18px; height: 18px; cursor: pointer; }
-        .form-checkbox-label { display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; }
-        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); }
-        .form-section { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
-        .form-section-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-sm); border-bottom: 1px solid var(--border-default); }
-        .form-help-text { font-size: 12px; color: var(--text-tertiary); margin-top: var(--spacing-xs); }
-        .edit-mode-toggle { display: flex; justify-content: flex-end; margin-bottom: var(--spacing-lg); }
-        .save-actions { display: flex; gap: var(--spacing-md); justify-content: flex-end; margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default); }
+        .form-textarea { min-height: 60px; resize: vertical; }
+        .form-checkbox { width: 16px; height: 16px; cursor: pointer; }
+        .form-checkbox-label { display: flex; align-items: center; gap: var(--spacing-xs); cursor: pointer; font-size: 13px; }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--spacing-sm); }
+        .form-section { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-md); margin-bottom: var(--spacing-md); }
+        .form-section-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-sm); padding-bottom: var(--spacing-xs); border-bottom: 1px solid var(--border-default); }
+        .form-help-text { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+        .edit-mode-toggle { display: flex; justify-content: flex-end; margin-bottom: var(--spacing-md); }
+        .save-actions { display: flex; gap: var(--spacing-sm); justify-content: flex-end; margin-top: var(--spacing-md); padding-top: var(--spacing-md); border-top: 1px solid var(--border-default); }
         .readonly-field { background: var(--bg-secondary); color: var(--text-secondary); }
         
         /* 模态框样式 */
@@ -105,7 +108,7 @@
         .risk-balanced { background: rgba(245, 158, 11, 0.2); color: var(--warning-yellow); }
         .risk-conservative { background: rgba(16, 185, 129, 0.2); color: var(--success-green); }
         .strategy-actions { display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-lg); }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-xs); padding: var(--spacing-sm) var(--spacing-md); font-size: 13px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
         .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
@@ -117,7 +120,11 @@
         .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-muted); }
         .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
         .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-        .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
+        .btn-sm { padding: var(--spacing-xs) var(--spacing-sm); font-size: 11px; }
+        .btn-info { background: var(--info-blue); color: white; }
+        .btn-info:hover:not(:disabled) { background: #2563EB; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-warning { background: var(--warning-yellow); color: white; }
+        .btn-warning:hover:not(:disabled) { background: #D97706; transform: translateY(-1px); box-shadow: var(--shadow-md); }
         .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
         .loading::after { content: '...'; animation: dots 1.5s steps(4, end) infinite; }
         @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
@@ -211,6 +218,15 @@
                     <div class="strategy-list-header">
                         <i class="bi bi-list-ul"></i> 策略列表
                     </div>
+                    <!-- 策略类型切换标签 -->
+                    <div style="margin-bottom: var(--spacing-md); display: flex; gap: var(--spacing-xs); background: var(--bg-tertiary); padding: var(--spacing-xs); border-radius: var(--radius-md);">
+                        <button class="strategy-type-tab active" id="spotTab" onclick="switchStrategyType('spot')" style="flex: 1; padding: var(--spacing-sm); background: var(--primary-blue); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; font-weight: 600;">
+                            <i class="bi bi-currency-exchange"></i> 现货策略
+                        </button>
+                        <button class="strategy-type-tab" id="futuresTab" onclick="switchStrategyType('futures')" style="flex: 1; padding: var(--spacing-sm); background: transparent; color: var(--text-secondary); border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 12px; font-weight: 600;">
+                            <i class="bi bi-graph-up-arrow"></i> 合约策略
+                        </button>
+                    </div>
                     <div style="margin-bottom: var(--spacing-md); display: flex; flex-direction: column; gap: var(--spacing-sm);">
                         <button class="btn btn-primary" onclick="showCreateStrategyModal()" style="width: 100%; justify-content: center;">
                             <i class="bi bi-plus-circle"></i> 创建策略
@@ -235,27 +251,27 @@
                     </div>
                     <div id="strategyDetailContent" style="display: none;">
                         <div class="strategy-detail-header">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm); flex-wrap: wrap; gap: var(--spacing-sm);">
                                 <div class="strategy-detail-title" id="detailTitle">
                                     <!-- 策略名称 -->
                                 </div>
-                                <div style="display: flex; gap: var(--spacing-md); align-items: center;">
-                                    <div class="edit-mode-toggle" id="editModeToggle">
-                                        <button class="btn btn-secondary" id="editModeBtn" onclick="toggleEditMode()">
-                                            <i class="bi bi-pencil"></i> 编辑配置
+                                <div style="display: flex; gap: var(--spacing-xs); align-items: center; flex-wrap: wrap;">
+                                    <div class="edit-mode-toggle" id="editModeToggle" style="margin-bottom: 0;">
+                                        <button class="btn btn-secondary btn-sm" id="editModeBtn" onclick="toggleEditMode()">
+                                            <i class="bi bi-pencil"></i> 编辑
                                         </button>
                                     </div>
-                                    <button class="btn btn-primary" id="backtestBtn" onclick="showBacktestModal()">
-                                        <i class="bi bi-graph-up"></i> 策略回测
+                                    <button class="btn btn-primary btn-sm" id="backtestBtn" onclick="showBacktestModal()">
+                                        <i class="bi bi-graph-up"></i> 回测
                                     </button>
-                                    <button class="btn btn-info" id="optimalPointsBtn" onclick="showOptimalPointsModal()">
-                                        <i class="bi bi-bullseye"></i> AI找买卖点
+                                    <button class="btn btn-info btn-sm" id="optimalPointsBtn" onclick="showOptimalPointsModal()">
+                                        <i class="bi bi-bullseye"></i> 买卖点
                                     </button>
-                                    <button class="btn btn-warning" id="pricePredictionBtn" onclick="showPricePredictionModal()">
-                                        <i class="bi bi-crystal-ball"></i> 预测走势
+                                    <button class="btn btn-warning btn-sm" id="pricePredictionBtn" onclick="showPricePredictionModal()">
+                                        <i class="bi bi-crystal-ball"></i> 预测
                                     </button>
-                                    <button class="btn btn-secondary" id="tradeDiagnosticBtn" onclick="showTradeDiagnosticModal()">
-                                        <i class="bi bi-clipboard-check"></i> 交易诊断
+                                    <button class="btn btn-secondary btn-sm" id="tradeDiagnosticBtn" onclick="showTradeDiagnosticModal()">
+                                        <i class="bi bi-clipboard-check"></i> 诊断
                                     </button>
                                 </div>
                             </div>
@@ -828,6 +844,14 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
+                    <label class="form-label">策略类型 <span style="color: var(--danger-red);">*</span></label>
+                    <select class="form-select" id="newStrategyType" required>
+                        <option value="spot" selected>现货策略</option>
+                        <option value="futures">合约策略</option>
+                    </select>
+                    <div class="form-help-text">选择策略适用的市场类型</div>
+                </div>
+                <div class="form-group">
                     <label class="form-label">策略名称 <span style="color: var(--danger-red);">*</span></label>
                     <input type="text" class="form-input" id="newStrategyName" placeholder="my_strategy" required>
                     <div class="form-help-text">只能包含字母、数字和下划线</div>
@@ -951,22 +975,80 @@
         }
 
         let selectedStrategyName = null;
+        let currentStrategyType = 'spot'; // 'spot' 或 'futures'
+
+        // 切换策略类型（现货/合约）
+        function switchStrategyType(type) {
+            currentStrategyType = type;
+            
+            // 更新标签样式
+            const spotTab = document.getElementById('spotTab');
+            const futuresTab = document.getElementById('futuresTab');
+            if (spotTab && futuresTab) {
+                if (type === 'spot') {
+                    spotTab.classList.add('active');
+                    futuresTab.classList.remove('active');
+                    spotTab.style.background = 'var(--primary-blue)';
+                    spotTab.style.color = 'white';
+                    futuresTab.style.background = 'transparent';
+                    futuresTab.style.color = 'var(--text-secondary)';
+                } else {
+                    futuresTab.classList.add('active');
+                    spotTab.classList.remove('active');
+                    futuresTab.style.background = 'var(--primary-blue)';
+                    futuresTab.style.color = 'white';
+                    spotTab.style.background = 'transparent';
+                    spotTab.style.color = 'var(--text-secondary)';
+                }
+            }
+            
+            // 更新策略列表显示
+            updateStrategiesList(allStrategies);
+            
+            // 如果当前选中的策略不属于当前类型，清空选择
+            if (selectedStrategyName) {
+                const selectedStrategy = allStrategies.find(s => s.name === selectedStrategyName);
+                if (selectedStrategy && !isStrategyOfType(selectedStrategy, type)) {
+                    selectedStrategyName = null;
+                    const emptyState = document.getElementById('emptyDetailState');
+                    const detailContent = document.getElementById('strategyDetailContent');
+                    if (emptyState) emptyState.style.display = 'block';
+                    if (detailContent) detailContent.style.display = 'none';
+                }
+            }
+        }
+
+        // 判断策略是否属于指定类型
+        function isStrategyOfType(strategy, type) {
+            const tags = strategy.tags || [];
+            if (type === 'futures') {
+                return tags.includes('futures') || tags.includes('合约') || strategy.name.toLowerCase().includes('futures') || strategy.name.toLowerCase().includes('合约');
+            } else {
+                return !tags.includes('futures') && !tags.includes('合约') && !strategy.name.toLowerCase().includes('futures') && !strategy.name.toLowerCase().includes('合约');
+            }
+        }
 
         // 更新策略列表（左侧）
         function updateStrategiesList(strategies) {
             const listContainer = document.getElementById('strategyListItems');
             if (!listContainer) return;
 
-            if (!strategies || strategies.length === 0) {
-                listContainer.innerHTML = '<div class="empty-state" style="text-align: center; padding: var(--spacing-xl);">暂无策略，点击"创建策略"按钮创建新策略</div>';
+            // 根据当前类型过滤策略
+            const filteredStrategies = strategies.filter(s => isStrategyOfType(s, currentStrategyType));
+
+            if (!filteredStrategies || filteredStrategies.length === 0) {
+                const typeLabel = currentStrategyType === 'futures' ? '合约' : '现货';
+                listContainer.innerHTML = `<div class="empty-state" style="text-align: center; padding: var(--spacing-xl);">暂无${typeLabel}策略，点击"创建策略"按钮创建新策略</div>`;
                 return;
             }
 
-            listContainer.innerHTML = strategies.map(strategy => {
+            listContainer.innerHTML = filteredStrategies.map(strategy => {
                 const isActive = strategy.is_active || strategy.name === activeStrategyName;
                 const isSelected = strategy.name === selectedStrategyName;
                 const riskClass = getRiskClass(strategy.risk_level);
                 const riskLabel = getRiskLabel(strategy.risk_level);
+                const tags = strategy.tags || [];
+                const marketType = tags.includes('futures') || tags.includes('合约') ? '合约' : '现货';
 
                 return `
                     <div class="strategy-list-item ${isSelected ? 'selected' : ''} ${isActive ? 'active' : ''}" 
@@ -978,6 +1060,7 @@
                         <div class="strategy-item-desc">${strategy.description || '暂无描述'}</div>
                         <div class="strategy-item-meta">
                             <span class="badge ${riskClass}">${riskLabel}</span>
+                            <span class="badge badge-info" style="margin-left: var(--spacing-xs);">${marketType}</span>
                         </div>
                     </div>
                 `;
@@ -1101,8 +1184,33 @@
             const tc = strategy.technical_config || {};
             const tags = strategy.tags || [];
             const description = strategy.description || '';
+            
+            // 判断是否为合约策略
+            const isFutures = tags.includes('futures') || tags.includes('合约') || 
+                             strategy.name.toLowerCase().includes('futures') || 
+                             strategy.name.toLowerCase().includes('合约');
 
             let html = '';
+
+            // 策略类型提示
+            if (isFutures) {
+                html += `
+                    <div class="form-section" style="background: rgba(43, 111, 237, 0.1); border-color: var(--primary-blue);">
+                        <div class="form-section-title" style="color: var(--primary-blue);">
+                            <i class="bi bi-graph-up-arrow"></i> 合约策略配置
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6; padding: var(--spacing-sm);">
+                            <p>此策略专为合约交易设计，已启用以下合约特性：</p>
+                            <ul style="margin: var(--spacing-sm) 0; padding-left: var(--spacing-lg);">
+                                <li>允许做空交易（${rp.allow_short ? '已启用' : '未启用'}）</li>
+                                <li>最大杠杆倍数：${rp.max_leverage || 1.0}x</li>
+                                <li>更关注资金费率指标（权重：${dw.funding_rate || 15.0}%）</li>
+                                <li>更严格的风险控制（止损：${rp.stop_loss || 5.0}%，仓位：${rp.max_position_size || 20.0}%）</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }
 
             // 描述
             html += `
@@ -1177,13 +1285,14 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label">最大杠杆倍数</label>
-                            <input type="number" class="form-input" id="rp_max_leverage" value="${rp.max_leverage || 1}" step="0.1" min="1" ${editMode && !isDefault ? '' : 'readonly'}>
+                            <input type="number" class="form-input" id="rp_max_leverage" value="${rp.max_leverage || 1}" step="0.1" min="1" max="${isFutures ? '10' : '1'}" ${editMode && !isDefault ? '' : 'readonly'}>
+                            <div class="form-help-text">${isFutures ? '合约策略建议使用3-5倍杠杆，现货策略为1倍（无杠杆）' : '现货策略固定为1倍（无杠杆）'}</div>
                         </div>
                     </div>
                     <div class="form-group">
                         <label class="form-checkbox-label">
                             <input type="checkbox" class="form-checkbox" id="rp_allow_short" ${rp.allow_short ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
-                            <span>允许做空</span>
+                            <span>允许做空${isFutures ? '（合约策略推荐启用）' : '（现货策略通常不启用）'}</span>
                         </label>
                     </div>
                 </div>
@@ -1600,6 +1709,11 @@
                 document.getElementById('newStrategyName').value = '';
                 document.getElementById('newStrategyDesc').value = '';
                 document.getElementById('newStrategyTemplate').value = 'balanced';
+                // 根据当前选中的策略类型设置默认值
+                const strategyType = document.getElementById('newStrategyType');
+                if (strategyType) {
+                    strategyType.value = currentStrategyType;
+                }
                 modal.classList.add('active');
             }
         }
@@ -1617,6 +1731,7 @@
             const name = document.getElementById('newStrategyName').value.trim();
             const description = document.getElementById('newStrategyDesc').value.trim();
             const template = document.getElementById('newStrategyTemplate').value;
+            const strategyType = document.getElementById('newStrategyType').value; // 'spot' 或 'futures'
 
             // 验证策略名称
             if (!name) {
@@ -1630,6 +1745,9 @@
                 return;
             }
 
+            // 根据策略类型设置tags
+            const tags = strategyType === 'futures' ? ['futures', '合约'] : ['spot', '现货'];
+
             try {
                 if (template) {
                     // 从模板复制策略
@@ -1641,7 +1759,8 @@
                         body: JSON.stringify({
                             source: template,
                             dest: name,
-                            description: description || `基于 ${template} 的策略`
+                            description: description || `基于 ${template} 的${strategyType === 'futures' ? '合约' : '现货'}策略`,
+                            tags: tags
                         })
                     });
 
@@ -1652,6 +1771,12 @@
                         hideCreateStrategyModal();
                         // 刷新策略列表
                         await loadStrategies();
+                        // 切换到对应的策略类型标签页
+                        if (strategyType === 'futures') {
+                            switchStrategyType('futures');
+                        } else {
+                            switchStrategyType('spot');
+                        }
                         // 自动选中新创建的策略
                         setTimeout(() => {
                             selectStrategy(name);
@@ -1660,23 +1785,25 @@
                         showToast(data.detail || data.message || '创建策略失败', 'error');
                     }
                 } else {
-                    // 从头创建策略（使用默认配置）
+                    // 从头创建策略（根据策略类型使用不同的默认配置）
+                    const isFutures = strategyType === 'futures';
                     const defaultConfig = {
                         dimension_weights: {
                             technical: 40.0,
                             hyperliquid: 20.0,
                             news: 15.0,
-                            funding_rate: 15.0,
-                            ethereum: 10.0
+                            // 合约策略更关注资金费率
+                            funding_rate: isFutures ? 20.0 : 15.0,
+                            ethereum: isFutures ? 5.0 : 10.0
                         },
                         risk_profile: {
                             level: 'balanced',
-                            max_position_size: 20.0,
-                            stop_loss: 5.0,
-                            take_profit: 15.0,
-                            min_signal_strength: 60.0,
-                            allow_short: false,
-                            max_leverage: 1.0
+                            max_position_size: isFutures ? 15.0 : 20.0, // 合约策略仓位更小
+                            stop_loss: isFutures ? 3.0 : 5.0, // 合约策略止损更严格
+                            take_profit: isFutures ? 10.0 : 15.0, // 合约策略止盈更保守
+                            min_signal_strength: isFutures ? 65.0 : 60.0, // 合约策略信号要求更高
+                            allow_short: isFutures, // 合约策略默认允许做空
+                            max_leverage: isFutures ? 3.0 : 1.0 // 合约策略默认3倍杠杆
                         },
                         trading_rules: {
                             hyperliquid_min_wallets: 3,
@@ -1686,10 +1813,27 @@
                             rsi_overbought: 70.0,
                             news_sentiment_threshold: 0.6,
                             news_min_count: 3,
-                            funding_rate_extreme: 0.01,
-                            min_dimensions_agree: 3
+                            // 合约策略对资金费率更敏感
+                            funding_rate_extreme: isFutures ? 0.005 : 0.01,
+                            min_dimensions_agree: isFutures ? 4 : 3 // 合约策略需要更多维度同意
                         }
                     };
+                    
+                    // 调整维度权重总和为100
+                    const weightTotal = defaultConfig.dimension_weights.technical + 
+                                      defaultConfig.dimension_weights.hyperliquid + 
+                                      defaultConfig.dimension_weights.news + 
+                                      defaultConfig.dimension_weights.funding_rate + 
+                                      defaultConfig.dimension_weights.ethereum;
+                    if (Math.abs(weightTotal - 100) > 0.01) {
+                        // 按比例调整
+                        const scale = 100 / weightTotal;
+                        defaultConfig.dimension_weights.technical *= scale;
+                        defaultConfig.dimension_weights.hyperliquid *= scale;
+                        defaultConfig.dimension_weights.news *= scale;
+                        defaultConfig.dimension_weights.funding_rate *= scale;
+                        defaultConfig.dimension_weights.ethereum *= scale;
+                    }
 
                     const response = await fetch('/api/strategies/create', {
                         method: 'POST',
@@ -1698,11 +1842,11 @@
                         },
                         body: JSON.stringify({
                             name: name,
-                            description: description || '我的自定义策略',
+                            description: description || `${strategyType === 'futures' ? '合约' : '现货'}策略`,
                             dimension_weights: defaultConfig.dimension_weights,
                             risk_profile: defaultConfig.risk_profile,
                             trading_rules: defaultConfig.trading_rules,
-                            tags: []
+                            tags: tags
                         })
                     });
 
@@ -1713,6 +1857,12 @@
                         hideCreateStrategyModal();
                         // 刷新策略列表
                         await loadStrategies();
+                        // 切换到对应的策略类型标签页
+                        if (strategyType === 'futures') {
+                            switchStrategyType('futures');
+                        } else {
+                            switchStrategyType('spot');
+                        }
                         // 自动选中新创建的策略
                         setTimeout(() => {
                             selectStrategy(name);

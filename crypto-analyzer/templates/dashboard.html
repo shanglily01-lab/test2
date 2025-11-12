@@ -730,7 +730,7 @@
                                     <th onclick="sortPrices('symbol')" style="padding: 12px 16px; text-align: left; cursor: pointer;">交易对 <i class="bi bi-arrow-down-up"></i></th>
                                     <th onclick="sortPrices('price')" style="padding: 12px 16px; text-align: left; cursor: pointer;">价格 (USDT) <i class="bi bi-arrow-down-up"></i></th>
                                     <th onclick="sortPrices('change_24h')" style="padding: 12px 16px; text-align: left; cursor: pointer;">24h涨跌 <i class="bi bi-arrow-down-up"></i></th>
-                                    <th onclick="sortPrices('volume_24h')" style="padding: 12px 16px; text-align: left; cursor: pointer;">24h交易量 <i class="bi bi-arrow-down-up"></i></th>
+                                    <th onclick="sortPrices('quote_volume_24h')" style="padding: 12px 16px; text-align: left; cursor: pointer;">24h交易额 (USDT) <i class="bi bi-arrow-down-up"></i></th>
                                 </tr>
                             </thead>
                             <tbody id="priceTableBody">
@@ -959,9 +959,14 @@
             }
 
             // 排序
+            let sortCol = sortColumn;
+            // 兼容旧的volume_24h排序，映射到quote_volume_24h
+            if (sortCol === 'volume_24h') {
+                sortCol = 'quote_volume_24h';
+            }
             const sorted = [...prices].sort((a, b) => {
-                const aVal = a[sortColumn] || 0;
-                const bVal = b[sortColumn] || 0;
+                const aVal = a[sortCol] || 0;
+                const bVal = b[sortCol] || 0;
                 return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
             });
 
@@ -973,7 +978,7 @@
                         <td class="${p.change_24h >= 0 ? 'pnl-positive' : 'pnl-negative'} font-bold">
                             ${p.change_24h >= 0 ? '+' : ''}${p.change_24h.toFixed(2)}%
                         </td>
-                        <td class="text-secondary">$${formatLargeNumber(p.volume_24h)}</td>
+                        <td class="text-secondary">$${formatLargeNumber(p.quote_volume_24h || p.volume_24h)}</td>
                     </tr>
                 `;
             }).join('');
@@ -986,6 +991,10 @@
             } else {
                 sortColumn = column;
                 sortDirection = 'desc';
+            }
+            // 兼容旧的volume_24h排序，映射到quote_volume_24h
+            if (sortColumn === 'volume_24h') {
+                sortColumn = 'quote_volume_24h';
             }
             if (currentData) {
                 updatePriceTable(currentData.prices);

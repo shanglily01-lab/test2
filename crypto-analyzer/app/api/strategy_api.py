@@ -380,6 +380,7 @@ class CopyStrategyModel(BaseModel):
     source: str
     dest: str
     description: Optional[str] = None
+    tags: Optional[List[str]] = None
 
 
 @router.post("/copy")
@@ -391,8 +392,43 @@ async def copy_strategy(data: CopyStrategyModel):
         if data.dest in manager.list_strategies():
             raise HTTPException(status_code=400, detail=f"目标策略已存在: {data.dest}")
 
+        # 加载源策略
+        source_strategy = manager.load_strategy(data.source)
+        if not source_strategy:
+            raise HTTPException(status_code=404, detail=f"源策略不存在: {data.source}")
+
+        # 复制策略
         if not manager.copy_strategy(data.source, data.dest, data.description):
             raise HTTPException(status_code=500, detail="复制策略失败")
+
+        # 如果提供了tags，更新新策略的tags和配置
+        if data.tags:
+            new_strategy = manager.load_strategy(data.dest)
+            if new_strategy:
+                new_strategy.tags = data.tags
+                
+                # 根据策略类型调整配置（如果是合约策略）
+                is_futures = 'futures' in data.tags or '合约' in data.tags
+                if is_futures:
+                    # 合约策略的特殊配置
+                    # 调整维度权重：更关注资金费率
+                    new_strategy.dimension_weights.funding_rate = 20.0
+                    new_strategy.dimension_weights.ethereum = 5.0
+                    new_strategy.dimension_weights.normalize()  # 确保总和为100
+                    
+                    # 调整风险配置
+                    new_strategy.risk_profile.max_position_size = min(new_strategy.risk_profile.max_position_size, 15.0)
+                    new_strategy.risk_profile.stop_loss = min(new_strategy.risk_profile.stop_loss, 3.0)
+                    new_strategy.risk_profile.take_profit = min(new_strategy.risk_profile.take_profit, 10.0)
+                    new_strategy.risk_profile.min_signal_strength = max(new_strategy.risk_profile.min_signal_strength, 65.0)
+                    new_strategy.risk_profile.allow_short = True  # 合约策略允许做空
+                    new_strategy.risk_profile.max_leverage = max(new_strategy.risk_profile.max_leverage, 3.0)  # 至少3倍杠杆
+                    
+                    # 调整交易规则
+                    new_strategy.trading_rules.funding_rate_extreme = min(new_strategy.trading_rules.funding_rate_extreme, 0.005)
+                    new_strategy.trading_rules.min_dimensions_agree = max(new_strategy.trading_rules.min_dimensions_agree, 4)
+                
+                manager.save_strategy(new_strategy)
 
         return {
             'success': True,

@@ -520,10 +520,11 @@ class EnhancedDashboardCached:
             """))
             top_coins_data = result.fetchall()
 
-            # 获取最近大额交易（从原表，因为需要详细信息）
-            # 使用 GROUP BY 去重，避免显示重复的交易
+            # 获取最近大额交易（简化版本：减少嵌套子查询，使用更简单的逻辑）
             from datetime import timedelta
             cutoff_time = datetime.now() - timedelta(hours=72)  # 扩展到72小时以显示更多钱包
+            
+            # 简化查询：先获取交易数据，杠杆数据在应用层处理（如果性能仍不够，可以后续优化）
             result = session.execute(text("""
                 SELECT
                     MAX(t.id) as id,
@@ -532,36 +533,23 @@ class EnhancedDashboardCached:
                     t.side,
                     MAX(t.price) as price,
                     MAX(t.size) as size,
-                    ROUND(t.notional_usd, 2) as notional_usd,
+                    ROUND(MAX(t.notional_usd), 2) as notional_usd,
                     MAX(t.closed_pnl) as closed_pnl,
                     t.trade_time,
                     MAX(w.label) as wallet_label,
-                    COALESCE(
-                        (SELECT p.leverage 
-                         FROM hyperliquid_wallet_positions p
-                         WHERE p.trader_id = t.trader_id
-                           AND p.coin = t.coin
-                           AND p.snapshot_time <= t.trade_time
-                           AND p.snapshot_time >= DATE_SUB(t.trade_time, INTERVAL 24 HOUR)
-                         ORDER BY ABS(TIMESTAMPDIFF(SECOND, p.snapshot_time, t.trade_time)) ASC
-                         LIMIT 1),
-                        COALESCE(
-                            (SELECT p.leverage 
-                             FROM hyperliquid_wallet_positions p
-                             WHERE p.trader_id = t.trader_id
-                               AND p.coin = t.coin
-                               AND p.snapshot_time > t.trade_time
-                               AND p.snapshot_time <= DATE_ADD(t.trade_time, INTERVAL 1 HOUR)
-                             ORDER BY ABS(TIMESTAMPDIFF(SECOND, p.snapshot_time, t.trade_time)) ASC
-                             LIMIT 1),
-                            1
-                        )
-                    ) as leverage
+                    t.trader_id,
+                    -- 简化：直接使用估算杠杆（根据持仓金额），避免复杂的子查询
+                    CASE 
+                        WHEN MAX(t.notional_usd) > 100000 THEN 10.0
+                        WHEN MAX(t.notional_usd) > 50000 THEN 5.0
+                        WHEN MAX(t.notional_usd) > 10000 THEN 3.0
+                        ELSE 1.0
+                    END as leverage
                 FROM hyperliquid_wallet_trades t
                 LEFT JOIN hyperliquid_monitored_wallets w ON t.address = w.address
                 WHERE t.trade_time >= :cutoff_time
                     AND w.is_monitoring = 1
-                GROUP BY t.address, t.coin, t.side, t.trade_time, ROUND(t.notional_usd, 2), t.trader_id
+                GROUP BY t.address, t.coin, t.side, t.trade_time, t.trader_id
                 ORDER BY t.trade_time DESC
                 LIMIT 50
             """), {"cutoff_time": cutoff_time})

@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta, date
 from loguru import logger
 import pymysql
+from pymysql.cursors import DictCursor
 import yaml
 from pathlib import Path
 import csv
@@ -17,22 +18,84 @@ import io
 import asyncio
 import pandas as pd
 from app.services.data_collection_task_manager import task_manager, TaskStatus
+import threading
 
 router = APIRouter(prefix="/api/data-management", tags=["数据管理"])
 
+# 数据库连接池（全局变量）
+_db_pool = None
+_db_pool_lock = threading.Lock()
+_db_config = None
+
 
 def get_db_config():
-    """获取数据库配置"""
-    config_path = Path(__file__).parent.parent.parent / "config.yaml"
-    if config_path.exists():
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        return config.get('database', {}).get('mysql', {})
-    return {}
+    """获取数据库配置（缓存）"""
+    global _db_config
+    if _db_config is None:
+        config_path = Path(__file__).parent.parent.parent / "config.yaml"
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+            _db_config = config.get('database', {}).get('mysql', {})
+        else:
+            _db_config = {}
+    return _db_config
 
 
 def get_db_connection():
-    """获取数据库连接"""
+    """获取数据库连接（使用连接池）"""
+    global _db_pool
+    
+    if _db_pool is None:
+        with _db_pool_lock:
+            # 双重检查，避免重复创建
+            if _db_pool is None:
+                db_config = get_db_config()
+                try:
+                    # 使用 pymysql 的连接池（通过自定义实现）
+                    # 由于 pymysql 没有内置连接池，我们使用简单的连接复用
+                    _db_pool = {
+                        'config': db_config,
+                        'connections': [],
+                        'max_size': 10,
+                        'lock': threading.Lock()
+                    }
+                    logger.info("✅ 数据管理API数据库连接池初始化成功")
+                except Exception as e:
+                    logger.error(f"❌ 数据库连接池初始化失败: {e}")
+                    raise
+    
+    # 尝试从池中获取连接
+    pool = _db_pool
+    with pool['lock']:
+        # 清理已关闭的连接
+        pool['connections'] = [conn for conn in pool['connections'] if conn.open]
+        
+        # 如果有可用连接，直接返回
+        if pool['connections']:
+            return pool['connections'].pop()
+        
+        # 否则创建新连接
+        if len(pool['connections']) < pool['max_size']:
+            try:
+                conn = pymysql.connect(
+                    host=pool['config'].get('host', 'localhost'),
+                    port=pool['config'].get('port', 3306),
+                    user=pool['config'].get('user', 'root'),
+                    password=pool['config'].get('password', ''),
+                    database=pool['config'].get('database', 'binance-data'),
+                    charset='utf8mb4',
+                    cursorclass=DictCursor,
+                    connect_timeout=5,
+                    read_timeout=10,
+                    write_timeout=10
+                )
+                return conn
+            except Exception as e:
+                logger.error(f"❌ 创建数据库连接失败: {e}")
+                raise
+    
+    # 如果池已满，创建临时连接（不放入池中）
     db_config = get_db_config()
     return pymysql.connect(
         host=db_config.get('host', 'localhost'),
@@ -41,8 +104,43 @@ def get_db_connection():
         password=db_config.get('password', ''),
         database=db_config.get('database', 'binance-data'),
         charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
+        cursorclass=DictCursor,
+        connect_timeout=5,
+        read_timeout=10,
+        write_timeout=10
     )
+
+
+def return_db_connection(conn):
+    """归还数据库连接到池中"""
+    global _db_pool
+    if _db_pool and conn and conn.open:
+        pool = _db_pool
+        with pool['lock']:
+            if len(pool['connections']) < pool['max_size']:
+                pool['connections'].append(conn)
+                return
+    # 如果池已满或连接已关闭，直接关闭连接
+    if conn:
+        try:
+            conn.close()
+        except:
+            pass
+
+
+class DBConnection:
+    """数据库连接上下文管理器"""
+    def __init__(self):
+        self.conn = None
+    
+    def __enter__(self):
+        self.conn = get_db_connection()
+        return self.conn
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.conn:
+            return_db_connection(self.conn)
+        return False
 
 
 def _update_config_file(config_path: Path, symbols: List[str], data_type: str, timeframe: str = None) -> bool:
@@ -1098,10 +1196,24 @@ async def import_etf_data(
                 etf_result = cursor.fetchone()
                 
                 if not etf_result:
-                    errors.append(f"第{row_num}行: 未找到ETF产品 {ticker}，请先在系统中添加该ETF")
+                    # 尝试查找所有ETH ETF，提供更详细的错误信息
+                    if asset_type.upper() == 'ETH':
+                        cursor.execute("SELECT ticker FROM crypto_etf_products WHERE asset_type = 'ETH'")
+                        eth_tickers = [r['ticker'] for r in cursor.fetchall()]
+                        errors.append(f"第{row_num}行: 未找到ETF产品 '{ticker}'。可用的ETH ETF: {', '.join(eth_tickers)}")
+                    else:
+                        errors.append(f"第{row_num}行: 未找到ETF产品 '{ticker}'，请先在系统中添加该ETF")
+                    logger.warning(f"ETF导入: 第{row_num}行，未找到ticker '{ticker}' (资产类型: {asset_type})")
                     continue
                 
-                etf_id, db_asset_type = etf_result['id'], etf_result['asset_type']
+                etf_id = etf_result['id']
+                db_asset_type = etf_result['asset_type']
+                
+                # 验证资产类型是否匹配
+                if asset_type.upper() != db_asset_type.upper():
+                    errors.append(f"第{row_num}行: ETF '{ticker}' 的资产类型是 {db_asset_type}，但导入时选择的是 {asset_type}")
+                    logger.warning(f"ETF导入: 第{row_num}行，资产类型不匹配 - ticker: {ticker}, 数据库: {db_asset_type}, 表单: {asset_type}")
+                    continue
                 
                 # 解析数值字段（支持多种字段名）
                 net_inflow = _parse_number(row.get('NetInflow') or row.get('net_inflow') or row.get('Net_Inflow'))
@@ -1154,21 +1266,27 @@ async def import_etf_data(
                 imported += 1
                 
             except Exception as e:
-                errors.append(f"第{row_num}行: {str(e)}")
+                error_msg = f"第{row_num}行: {str(e)}"
+                errors.append(error_msg)
                 logger.error(f"导入ETF数据第{row_num}行失败: {e}")
+                logger.error(f"  行数据: {row}")
                 import traceback
-                traceback.print_exc()
+                logger.error(traceback.format_exc())
         
         conn.commit()
         cursor.close()
         conn.close()
         
+        # 如果没有任何导入成功，且没有错误信息，可能是文件格式问题
+        if imported == 0 and len(errors) == 0:
+            errors.append("文件格式可能不正确，请检查CSV文件是否包含正确的列（Date, Ticker等）")
+        
         return {
-            'success': True,
+            'success': imported > 0,  # 只有成功导入至少一条记录才算成功
             'imported': imported,
             'errors': errors,
             'error_count': len(errors),
-            'message': f'成功导入 {imported} 条记录，失败 {len(errors)} 条'
+            'message': f'成功导入 {imported} 条记录，失败 {len(errors)} 条' if imported > 0 or len(errors) > 0 else '未导入任何记录，请检查文件格式'
         }
         
     except HTTPException:
@@ -1688,7 +1806,7 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
         start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
         end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
         
-        # 计算总步骤数
+        # 计算总步骤数和预估数据量
         collect_price = data_type in ['price', 'both']
         collect_kline = data_type in ['kline', 'both']
         total_steps = len(symbols) * (
@@ -1696,12 +1814,53 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
             (len(timeframes) if collect_kline else 0) + 
             (len(timeframes) if collect_futures else 0)
         )
+        
+        # 估算总数据量（用于更准确的进度计算）
+        time_delta = end_time - start_time
+        days = time_delta.total_seconds() / 86400
+        estimated_total_records = 0
+        
+        # 注意：历史数据采集时，我们是从API获取K线数据，频率是固定的
+        # price_interval 配置只影响实时采集，不影响历史数据采集
+        # 历史价格数据使用1m K线，所以是每分钟1条
+        
+        if collect_price:
+            # 价格数据：历史采集使用1m K线数据，每分钟1条
+            estimated_total_records += len(symbols) * int(days * 24 * 60)
+        
+        if collect_kline:
+            # K线数据：根据时间周期估算（K线数据频率是固定的）
+            timeframe_minutes = {
+                '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+                '1h': 60, '4h': 240, '1d': 1440, '1w': 10080
+            }
+            for tf in timeframes:
+                minutes = timeframe_minutes.get(tf, 60)
+                estimated_total_records += len(symbols) * int(days * 24 * 60 / minutes)
+        
+        if collect_futures:
+            # 合约K线数据：同样根据时间周期估算
+            for tf in timeframes:
+                minutes = timeframe_minutes.get(tf, 60)
+                estimated_total_records += len(symbols) * int(days * 24 * 60 / minutes)
+        
         task = task_manager.get_task(task_id)
         if task:
             task.total_steps = total_steps
+            # 存储预估数据量，用于进度计算
+            task.estimated_total_records = estimated_total_records
+        
+        # 更新初始状态
+        task_manager.update_task_progress(
+            task_id,
+            current_step=f"准备采集 {len(symbols)} 个交易对，预估 {estimated_total_records:,} 条数据...",
+            progress=0
+        )
         
         # 导入采集器
         from app.collectors.price_collector import MultiExchangeCollector
+        from app.collectors.binance_futures_collector import BinanceFuturesCollector
+        from app.collectors.gate_collector import GateCollector
         
         # 加载配置
         config_path = Path(__file__).parent.parent.parent / "config.yaml"
@@ -1712,15 +1871,22 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
         collector = MultiExchangeCollector(config)
         
         # 初始化合约采集器
-        futures_collector = None
+        binance_futures_collector = None
+        gate_collector = None
         if collect_futures:
             try:
-                from app.collectors.binance_futures_collector import BinanceFuturesCollector
                 binance_config = config.get('exchanges', {}).get('binance', {})
-                futures_collector = BinanceFuturesCollector(binance_config)
+                binance_futures_collector = BinanceFuturesCollector(binance_config)
             except Exception as e:
-                logger.warning(f"合约数据采集器初始化失败: {e}")
-                collect_futures = False
+                logger.warning(f"Binance合约数据采集器初始化失败: {e}")
+        
+        # 初始化Gate.io采集器（用于HYPE/USDT）
+        try:
+            gate_config = config.get('exchanges', {}).get('gate', {})
+            if gate_config.get('enabled', False):
+                gate_collector = GateCollector(gate_config)
+        except Exception as e:
+            logger.warning(f"Gate.io采集器初始化失败: {e}")
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1732,9 +1898,19 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
         # 遍历每个交易对
         for symbol_idx, symbol in enumerate(symbols):
             try:
-                symbol = symbol.strip()
+                symbol = symbol.strip().upper()  # 统一转换为大写
                 if not symbol:
                     continue
+                
+                # 确保格式正确（移除多余空格，统一格式）
+                symbol = symbol.replace(' ', '').replace('_', '/')  # 支持 BTC_USDT 格式
+                if '/' not in symbol and symbol.endswith('USDT'):
+                    # 如果已经是 BTCUSDT 格式，转换为 BTC/USDT
+                    base = symbol[:-4]  # 移除 USDT
+                    symbol = f"{base}/USDT"
+                
+                # 判断是否使用Gate.io采集（仅HYPE/USDT）
+                use_gate = (symbol.upper() == 'HYPE/USDT')
                 
                 task_manager.update_task_progress(
                     task_id,
@@ -1745,19 +1921,80 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                 if collect_price:
                     task_manager.update_task_progress(
                         task_id,
-                        current_step=f"正在采集 {symbol} 价格数据..."
+                        current_step=f"正在从API获取 {symbol} 价格数据..."
                     )
-                    df = await collector.fetch_historical_data(
-                        symbol=symbol,
-                        timeframe='1m',
-                        days=int((end_time - start_time).total_seconds() / 86400) + 1
-                    )
+                    
+                    if use_gate and gate_collector:
+                        # HYPE/USDT 从Gate.io采集
+                        days = int((end_time - start_time).total_seconds() / 86400) + 1
+                        since = int(start_time.timestamp())
+                        df = await gate_collector.fetch_ohlcv(
+                            symbol=symbol,
+                            timeframe='1m',
+                            limit=1000,
+                            since=since
+                        )
+                        # 如果数据不够，需要分批获取
+                        if df is not None and len(df) > 0:
+                            all_data = [df]
+                            last_timestamp = df['timestamp'].iloc[-1]
+                            current_since = int(last_timestamp.timestamp()) + 1
+                            while current_since < int(end_time.timestamp()):
+                                next_df = await gate_collector.fetch_ohlcv(
+                                    symbol=symbol,
+                                    timeframe='1m',
+                                    limit=1000,
+                                    since=current_since
+                                )
+                                if next_df is None or len(next_df) == 0:
+                                    break
+                                all_data.append(next_df)
+                                last_timestamp = next_df['timestamp'].iloc[-1]
+                                current_since = int(last_timestamp.timestamp()) + 1
+                                if len(next_df) < 1000:
+                                    break
+                                await asyncio.sleep(0.5)
+                            if len(all_data) > 1:
+                                df = pd.concat(all_data, ignore_index=True)
+                                df = df.drop_duplicates(subset=['timestamp'])
+                                df = df.sort_values('timestamp').reset_index(drop=True)
+                    else:
+                        # 其他交易对从Binance采集
+                        df = await collector.fetch_historical_data(
+                            symbol=symbol,
+                            timeframe='1m',
+                            days=int((end_time - start_time).total_seconds() / 86400) + 1,
+                            exchange='binance' if not use_gate else None
+                        )
+                    
+                    if df is not None and len(df) > 0:
+                        task_manager.update_task_progress(
+                            task_id,
+                            current_step=f"✓ 已获取 {symbol} 价格数据 {len(df)} 条（原始），正在过滤..."
+                        )
                     
                     if df is not None and len(df) > 0:
                         df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+                        task_manager.update_task_progress(
+                            task_id,
+                            current_step=f"✓ 过滤后剩余 {len(df)} 条数据，正在保存..."
+                        )
+                        
+                        if len(df) == 0:
+                            task_manager.update_task_progress(
+                                task_id,
+                                current_step=f"⚠️ {symbol}: 过滤后无数据，可能时间范围不匹配"
+                            )
+                            errors.append(f"{symbol}: 价格数据时间范围不匹配")
+                            continue
+                        
                         saved_count = 0
-                        for _, row in df.iterrows():
+                        total_rows = len(df)
+                        update_interval = max(1, total_rows // 20)  # 每5%更新一次进度
+                        
+                        for idx, row_tuple in enumerate(df.iterrows()):
                             try:
+                                _, row = row_tuple
                                 created_at = datetime.now()
                                 cursor.execute("""
                                     INSERT INTO price_data
@@ -1776,13 +2013,32 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                                         change_24h = VALUES(change_24h),
                                         created_at = VALUES(created_at)
                                 """, (
-                                    symbol, 'binance', row['timestamp'],
+                                    symbol, 'gate' if use_gate else 'binance', row['timestamp'],
                                     float(row['close']), float(row['open']),
                                     float(row['high']), float(row['low']),
                                     float(row['close']), float(row['volume']),
                                     float(row.get('quote_volume', 0)), 0, 0, 0, created_at
                                 ))
-                                saved_count += 1
+                                if cursor.rowcount > 0:
+                                    saved_count += 1
+                                
+                                # 实时更新进度（每保存一定数量后更新）
+                                if saved_count % update_interval == 0 or saved_count == total_rows:
+                                    total_saved_temp = total_saved + saved_count
+                                    task = task_manager.get_task(task_id)
+                                    if task and task.estimated_total_records > 0:
+                                        # 基于实际保存的数据量计算进度
+                                        progress = min(95, (total_saved_temp / task.estimated_total_records) * 100)
+                                    else:
+                                        # 回退到基于步骤的进度计算
+                                        progress = min(95, (completed_steps / total_steps) * 100) if total_steps > 0 else 0
+                                    
+                                    task_manager.update_task_progress(
+                                        task_id,
+                                        current_step=f"正在保存 {symbol} 价格数据 ({saved_count}/{total_rows})...",
+                                        total_saved=total_saved_temp,
+                                        progress=progress
+                                    )
                             except Exception as e:
                                 logger.error(f"保存价格数据失败: {e}")
                                 continue
@@ -1792,7 +2048,8 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                         task_manager.update_task_progress(
                             task_id,
                             completed_steps=completed_steps,
-                            total_saved=total_saved
+                            total_saved=total_saved,
+                            current_step=f"✓ {symbol} 价格数据采集完成，保存 {saved_count} 条"
                         )
                     else:
                         errors.append(f"{symbol}: 未获取到价格数据")
@@ -1806,19 +2063,80 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                         try:
                             task_manager.update_task_progress(
                                 task_id,
-                                current_step=f"正在采集 {symbol} {timeframe} K线数据..."
+                                current_step=f"正在从API获取 {symbol} {timeframe} K线数据..."
                             )
-                            df = await collector.fetch_historical_data(
-                                symbol=symbol,
-                                timeframe=timeframe,
-                                days=int((end_time - start_time).total_seconds() / 86400) + 1
-                            )
+                            
+                            if use_gate and gate_collector:
+                                # HYPE/USDT 从Gate.io采集
+                                days = int((end_time - start_time).total_seconds() / 86400) + 1
+                                since = int(start_time.timestamp())
+                                df = await gate_collector.fetch_ohlcv(
+                                    symbol=symbol,
+                                    timeframe=timeframe,
+                                    limit=1000,
+                                    since=since
+                                )
+                                # 如果数据不够，需要分批获取
+                                if df is not None and len(df) > 0:
+                                    all_data = [df]
+                                    last_timestamp = df['timestamp'].iloc[-1]
+                                    current_since = int(last_timestamp.timestamp()) + 1
+                                    while current_since < int(end_time.timestamp()):
+                                        next_df = await gate_collector.fetch_ohlcv(
+                                            symbol=symbol,
+                                            timeframe=timeframe,
+                                            limit=1000,
+                                            since=current_since
+                                        )
+                                        if next_df is None or len(next_df) == 0:
+                                            break
+                                        all_data.append(next_df)
+                                        last_timestamp = next_df['timestamp'].iloc[-1]
+                                        current_since = int(last_timestamp.timestamp()) + 1
+                                        if len(next_df) < 1000:
+                                            break
+                                        await asyncio.sleep(0.5)
+                                    if len(all_data) > 1:
+                                        df = pd.concat(all_data, ignore_index=True)
+                                        df = df.drop_duplicates(subset=['timestamp'])
+                                        df = df.sort_values('timestamp').reset_index(drop=True)
+                            else:
+                                # 其他交易对从Binance采集
+                                df = await collector.fetch_historical_data(
+                                    symbol=symbol,
+                                    timeframe=timeframe,
+                                    days=int((end_time - start_time).total_seconds() / 86400) + 1,
+                                    exchange='binance' if not use_gate else None
+                                )
+                            
+                            if df is not None and len(df) > 0:
+                                task_manager.update_task_progress(
+                                    task_id,
+                                    current_step=f"✓ 已获取 {symbol} {timeframe} K线数据 {len(df)} 条（原始），正在过滤..."
+                                )
                             
                             if df is not None and len(df) > 0:
                                 df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+                                task_manager.update_task_progress(
+                                    task_id,
+                                    current_step=f"✓ 过滤后剩余 {len(df)} 条数据，正在保存..."
+                                )
+                                
+                                if len(df) == 0:
+                                    task_manager.update_task_progress(
+                                        task_id,
+                                        current_step=f"⚠️ {symbol} {timeframe}: 过滤后无数据，可能时间范围不匹配"
+                                    )
+                                    errors.append(f"{symbol} {timeframe}: K线数据时间范围不匹配")
+                                    continue
+                                
                                 timeframe_saved = 0
-                                for _, row in df.iterrows():
+                                total_rows = len(df)
+                                update_interval = max(1, total_rows // 20)  # 每5%更新一次进度
+                                
+                                for idx, row_tuple in enumerate(df.iterrows()):
                                     try:
+                                        _, row = row_tuple
                                         timestamp = row['timestamp']
                                         if isinstance(timestamp, pd.Timestamp):
                                             timestamp_dt = timestamp.to_pydatetime()
@@ -1850,12 +2168,31 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                                                 quote_volume = VALUES(quote_volume),
                                                 created_at = VALUES(created_at)
                                         """, (
-                                            symbol, 'binance', timeframe, open_time_ms, close_time_ms,
+                                            symbol, 'gate' if use_gate else 'binance', timeframe, open_time_ms, close_time_ms,
                                             timestamp_dt, float(row['open']), float(row['high']),
                                             float(row['low']), float(row['close']), float(row['volume']),
                                             float(row.get('quote_volume', 0)), created_at
                                         ))
-                                        timeframe_saved += 1
+                                        if cursor.rowcount > 0:
+                                            timeframe_saved += 1
+                                        
+                                        # 实时更新进度（每保存一定数量后更新）
+                                        if timeframe_saved % update_interval == 0 or timeframe_saved == total_rows:
+                                            total_saved_temp = total_saved + symbol_saved + timeframe_saved
+                                            task = task_manager.get_task(task_id)
+                                            if task and task.estimated_total_records > 0:
+                                                # 基于实际保存的数据量计算进度
+                                                progress = min(95, (total_saved_temp / task.estimated_total_records) * 100)
+                                            else:
+                                                # 回退到基于步骤的进度计算
+                                                progress = min(95, (completed_steps / total_steps) * 100) if total_steps > 0 else 0
+                                            
+                                            task_manager.update_task_progress(
+                                                task_id,
+                                                current_step=f"正在保存 {symbol} {timeframe} K线数据 ({timeframe_saved}/{total_rows})...",
+                                                total_saved=total_saved_temp,
+                                                progress=progress
+                                            )
                                     except Exception as e:
                                         logger.error(f"保存K线数据失败: {e}")
                                         continue
@@ -1866,10 +2203,15 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                                     task_id,
                                     completed_steps=completed_steps,
                                     total_saved=total_saved + symbol_saved,
-                                    progress=min(100, (completed_steps / total_steps) * 100) if total_steps > 0 else 0
+                                    current_step=f"✓ {symbol} {timeframe} K线数据采集完成，保存 {timeframe_saved} 条"
                                 )
                         except Exception as e:
-                            error_msg = f"{symbol} {timeframe}: {str(e)}"
+                            error_msg = str(e)
+                            # 如果是无效交易对，提供更详细的错误信息
+                            if 'Invalid symbol' in error_msg or '-1121' in error_msg:
+                                error_msg = f"{symbol} {timeframe}: 交易对不存在或格式错误（币安可能不支持此交易对）"
+                            else:
+                                error_msg = f"{symbol} {timeframe}: {error_msg}"
                             errors.append(error_msg)
                             logger.error(f"采集 {symbol} {timeframe} K线数据失败: {e}")
                     
@@ -1878,83 +2220,255 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                         errors.append(f"{symbol}: 所有周期均未获取到K线数据")
                 
                 # 采集合约数据
-                if collect_futures and futures_collector:
-                    try:
-                        task_manager.update_task_progress(
-                            task_id,
-                            current_step=f"正在采集 {symbol} 合约数据..."
-                        )
-                        futures_saved = 0
-                        
-                        if not timeframes:
-                            timeframes = ['1m', '5m', '15m', '1h', '1d']
-                        
-                        for timeframe in timeframes:
-                            try:
-                                task_manager.update_task_progress(
-                                    task_id,
-                                    current_step=f"正在采集 {symbol} 合约 {timeframe} K线数据..."
-                                )
-                                
-                                days = int((end_time - start_time).total_seconds() / 86400) + 1
-                                timeframe_minutes = {
-                                    '1m': 1, '5m': 5, '15m': 15, '30m': 30,
-                                    '1h': 60, '4h': 240, '1d': 1440
-                                }.get(timeframe, 60)
-                                klines_needed = int(days * 1440 / timeframe_minutes)
-                                limit = min(klines_needed, 1500)
-                                
-                                df = await futures_collector.fetch_futures_klines(
-                                    symbol=symbol,
-                                    timeframe=timeframe,
-                                    limit=limit
-                                )
-                                
-                                if df is not None and len(df) > 0:
-                                    df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
-                                    timeframe_saved = 0
-                                    for _, row in df.iterrows():
-                                        try:
-                                            timestamp = row['timestamp']
-                                            if isinstance(timestamp, pd.Timestamp):
-                                                timestamp_dt = timestamp.to_pydatetime()
-                                                open_time_ms = int(timestamp.timestamp() * 1000)
-                                            elif isinstance(timestamp, datetime):
-                                                timestamp_dt = timestamp
-                                                open_time_ms = int(timestamp.timestamp() * 1000)
-                                            else:
-                                                timestamp_dt = pd.to_datetime(timestamp).to_pydatetime()
-                                                open_time_ms = int(pd.to_datetime(timestamp).timestamp() * 1000)
-                                            
-                                            timeframe_minutes = {
-                                                '1m': 1, '5m': 5, '15m': 15, '30m': 30,
-                                                '1h': 60, '4h': 240, '1d': 1440
-                                            }.get(timeframe, 60)
-                                            close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
-                                            created_at = datetime.now()
-                                            
-                                            cursor.execute("""
-                                                INSERT INTO kline_data
-                                                (symbol, exchange, timeframe, open_time, close_time, timestamp, open_price, high_price, low_price, close_price, volume, quote_volume, created_at)
-                                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                                                ON DUPLICATE KEY UPDATE
-                                                    open_price = VALUES(open_price),
-                                                    high_price = VALUES(high_price),
-                                                    low_price = VALUES(low_price),
-                                                    close_price = VALUES(close_price),
-                                                    volume = VALUES(volume),
-                                                    quote_volume = VALUES(quote_volume),
-                                                    created_at = VALUES(created_at)
-                                            """, (
-                                                symbol, 'binance_futures', timeframe, open_time_ms, close_time_ms,
-                                                timestamp_dt, float(row['open']), float(row['high']),
-                                                float(row['low']), float(row['close']), float(row['volume']),
-                                                float(row.get('quote_volume', 0)), created_at
-                                            ))
-                                            timeframe_saved += 1
-                                        except Exception as e:
-                                            logger.error(f"保存合约K线数据失败: {e}")
+                if collect_futures:
+                    if use_gate and gate_collector:
+                        # HYPE/USDT 从Gate.io采集合约数据
+                        try:
+                            task_manager.update_task_progress(
+                                task_id,
+                                current_step=f"正在采集 {symbol} 合约数据（Gate.io）..."
+                            )
+                            futures_saved = 0
+                            
+                            if not timeframes:
+                                timeframes = ['1m', '5m', '15m', '1h', '1d']
+                            
+                            for timeframe in timeframes:
+                                try:
+                                    task_manager.update_task_progress(
+                                        task_id,
+                                        current_step=f"正在从API获取 {symbol} 合约 {timeframe} K线数据（Gate.io）..."
+                                    )
+                                    
+                                    df = await gate_collector.fetch_historical_futures_data(
+                                        symbol=symbol,
+                                        timeframe=timeframe,
+                                        days=int((end_time - start_time).total_seconds() / 86400) + 1
+                                    )
+                                    
+                                    if df is not None and len(df) > 0:
+                                        task_manager.update_task_progress(
+                                            task_id,
+                                            current_step=f"✓ 已获取 {symbol} 合约 {timeframe} K线数据 {len(df)} 条（原始），正在过滤..."
+                                        )
+                                    
+                                    if df is not None and len(df) > 0:
+                                        df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+                                        task_manager.update_task_progress(
+                                            task_id,
+                                            current_step=f"✓ 过滤后剩余 {len(df)} 条数据，正在保存..."
+                                        )
+                                        
+                                        if len(df) == 0:
+                                            task_manager.update_task_progress(
+                                                task_id,
+                                                current_step=f"⚠️ {symbol} 合约 {timeframe}: 过滤后无数据，可能时间范围不匹配"
+                                            )
+                                            errors.append(f"{symbol} 合约 {timeframe}: K线数据时间范围不匹配")
                                             continue
+                                        
+                                        timeframe_saved = 0
+                                        total_rows = len(df)
+                                        update_interval = max(1, total_rows // 20)
+                                        
+                                        for idx, row_tuple in enumerate(df.iterrows()):
+                                            try:
+                                                _, row = row_tuple
+                                                timestamp = row['timestamp']
+                                                if isinstance(timestamp, pd.Timestamp):
+                                                    timestamp_dt = timestamp.to_pydatetime()
+                                                    open_time_ms = int(timestamp.timestamp() * 1000)
+                                                elif isinstance(timestamp, datetime):
+                                                    timestamp_dt = timestamp
+                                                    open_time_ms = int(timestamp.timestamp() * 1000)
+                                                else:
+                                                    timestamp_dt = pd.to_datetime(timestamp).to_pydatetime()
+                                                    open_time_ms = int(pd.to_datetime(timestamp).timestamp() * 1000)
+                                                
+                                                timeframe_minutes = {
+                                                    '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+                                                    '1h': 60, '4h': 240, '1d': 1440
+                                                }.get(timeframe, 60)
+                                                close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
+                                                created_at = datetime.now()
+                                                
+                                                cursor.execute("""
+                                                    INSERT INTO kline_data
+                                                    (symbol, exchange, timeframe, open_time, close_time, timestamp, open_price, high_price, low_price, close_price, volume, quote_volume, created_at)
+                                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                                    ON DUPLICATE KEY UPDATE
+                                                        open_price = VALUES(open_price),
+                                                        high_price = VALUES(high_price),
+                                                        low_price = VALUES(low_price),
+                                                        close_price = VALUES(close_price),
+                                                        volume = VALUES(volume),
+                                                        quote_volume = VALUES(quote_volume),
+                                                        created_at = VALUES(created_at)
+                                                """, (
+                                                    symbol, 'gate_futures', timeframe, open_time_ms, close_time_ms,
+                                                    timestamp_dt, float(row['open']), float(row['high']),
+                                                    float(row['low']), float(row['close']), float(row['volume']),
+                                                    float(row.get('quote_volume', 0)), created_at
+                                                ))
+                                                if cursor.rowcount > 0:
+                                                    timeframe_saved += 1
+                                                
+                                                if timeframe_saved % update_interval == 0 or timeframe_saved == total_rows:
+                                                    total_saved_temp = total_saved + futures_saved + timeframe_saved
+                                                    task = task_manager.get_task(task_id)
+                                                    if task and task.estimated_total_records > 0:
+                                                        progress = min(95, (total_saved_temp / task.estimated_total_records) * 100)
+                                                    else:
+                                                        progress = min(95, (completed_steps / total_steps) * 100) if total_steps > 0 else 0
+                                                    
+                                                    task_manager.update_task_progress(
+                                                        task_id,
+                                                        current_step=f"正在保存 {symbol} 合约 {timeframe} K线数据 ({timeframe_saved}/{total_rows})...",
+                                                        total_saved=total_saved_temp,
+                                                        progress=progress
+                                                    )
+                                            except Exception as e:
+                                                logger.error(f"保存合约K线数据失败: {e}")
+                                                continue
+                                        
+                                        futures_saved += timeframe_saved
+                                        completed_steps += 1
+                                        task_manager.update_task_progress(
+                                            task_id,
+                                            completed_steps=completed_steps,
+                                            total_saved=total_saved + futures_saved,
+                                            current_step=f"✓ {symbol} 合约 {timeframe} K线数据采集完成，保存 {timeframe_saved} 条"
+                                        )
+                                except Exception as e:
+                                    error_msg = f"{symbol} 合约 {timeframe}: {str(e)}"
+                                    errors.append(error_msg)
+                                    logger.error(f"采集 {symbol} 合约 {timeframe} K线数据失败: {e}")
+                            
+                            total_saved += futures_saved
+                        except Exception as e:
+                            error_msg = f"{symbol} 合约数据: {str(e)}"
+                            errors.append(error_msg)
+                            logger.error(f"采集 {symbol} 合约数据失败: {e}")
+                    elif binance_futures_collector:
+                        # 其他交易对从Binance采集合约数据
+                        try:
+                            task_manager.update_task_progress(
+                                task_id,
+                                current_step=f"正在采集 {symbol} 合约数据..."
+                            )
+                            futures_saved = 0
+                            
+                            if not timeframes:
+                                timeframes = ['1m', '5m', '15m', '1h', '1d']
+                            
+                            for timeframe in timeframes:
+                                try:
+                                    task_manager.update_task_progress(
+                                        task_id,
+                                        current_step=f"正在从API获取 {symbol} 合约 {timeframe} K线数据..."
+                                    )
+                                    
+                                    days = int((end_time - start_time).total_seconds() / 86400) + 1
+                                    timeframe_minutes = {
+                                        '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+                                        '1h': 60, '4h': 240, '1d': 1440
+                                    }.get(timeframe, 60)
+                                    klines_needed = int(days * 1440 / timeframe_minutes)
+                                    limit = min(klines_needed, 1500)
+                                    
+                                    df = await binance_futures_collector.fetch_futures_klines(
+                                        symbol=symbol,
+                                        timeframe=timeframe,
+                                        limit=limit
+                                    )
+                                    
+                                    if df is not None and len(df) > 0:
+                                        task_manager.update_task_progress(
+                                            task_id,
+                                            current_step=f"✓ 已获取 {symbol} 合约 {timeframe} K线数据 {len(df)} 条（原始），正在过滤..."
+                                        )
+                                    
+                                    if df is not None and len(df) > 0:
+                                        df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
+                                        task_manager.update_task_progress(
+                                            task_id,
+                                            current_step=f"✓ 过滤后剩余 {len(df)} 条数据，正在保存..."
+                                        )
+                                        
+                                        if len(df) == 0:
+                                            task_manager.update_task_progress(
+                                                task_id,
+                                                current_step=f"⚠️ {symbol} 合约 {timeframe}: 过滤后无数据，可能时间范围不匹配"
+                                            )
+                                            errors.append(f"{symbol} 合约 {timeframe}: K线数据时间范围不匹配")
+                                            continue
+                                        
+                                        timeframe_saved = 0
+                                        total_rows = len(df)
+                                        update_interval = max(1, total_rows // 20)  # 每5%更新一次进度
+                                        
+                                        for idx, row_tuple in enumerate(df.iterrows()):
+                                            try:
+                                                _, row = row_tuple
+                                                timestamp = row['timestamp']
+                                                if isinstance(timestamp, pd.Timestamp):
+                                                    timestamp_dt = timestamp.to_pydatetime()
+                                                    open_time_ms = int(timestamp.timestamp() * 1000)
+                                                elif isinstance(timestamp, datetime):
+                                                    timestamp_dt = timestamp
+                                                    open_time_ms = int(timestamp.timestamp() * 1000)
+                                                else:
+                                                    timestamp_dt = pd.to_datetime(timestamp).to_pydatetime()
+                                                    open_time_ms = int(pd.to_datetime(timestamp).timestamp() * 1000)
+                                                
+                                                timeframe_minutes = {
+                                                    '1m': 1, '5m': 5, '15m': 15, '30m': 30,
+                                                    '1h': 60, '4h': 240, '1d': 1440
+                                                }.get(timeframe, 60)
+                                                close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
+                                                created_at = datetime.now()
+                                                
+                                                cursor.execute("""
+                                                    INSERT INTO kline_data
+                                                    (symbol, exchange, timeframe, open_time, close_time, timestamp, open_price, high_price, low_price, close_price, volume, quote_volume, created_at)
+                                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                                    ON DUPLICATE KEY UPDATE
+                                                        open_price = VALUES(open_price),
+                                                        high_price = VALUES(high_price),
+                                                        low_price = VALUES(low_price),
+                                                        close_price = VALUES(close_price),
+                                                        volume = VALUES(volume),
+                                                        quote_volume = VALUES(quote_volume),
+                                                        created_at = VALUES(created_at)
+                                                """, (
+                                                    symbol, 'binance_futures', timeframe, open_time_ms, close_time_ms,
+                                                    timestamp_dt, float(row['open']), float(row['high']),
+                                                    float(row['low']), float(row['close']), float(row['volume']),
+                                                    float(row.get('quote_volume', 0)), created_at
+                                                ))
+                                                if cursor.rowcount > 0:
+                                                    timeframe_saved += 1
+                                                
+                                                # 实时更新进度（每保存一定数量后更新）
+                                                if timeframe_saved % update_interval == 0 or timeframe_saved == total_rows:
+                                                    total_saved_temp = total_saved + futures_saved + timeframe_saved
+                                                    task = task_manager.get_task(task_id)
+                                                    if task and task.estimated_total_records > 0:
+                                                        # 基于实际保存的数据量计算进度
+                                                        progress = min(95, (total_saved_temp / task.estimated_total_records) * 100)
+                                                    else:
+                                                        # 回退到基于步骤的进度计算
+                                                        progress = min(95, (completed_steps / total_steps) * 100) if total_steps > 0 else 0
+                                                    
+                                                    task_manager.update_task_progress(
+                                                        task_id,
+                                                        current_step=f"正在保存 {symbol} 合约 {timeframe} K线数据 ({timeframe_saved}/{total_rows})...",
+                                                        total_saved=total_saved_temp,
+                                                        progress=progress
+                                                    )
+                                            except Exception as e:
+                                                logger.error(f"保存合约K线数据失败: {e}")
+                                                continue
                                     
                                     futures_saved += timeframe_saved
                                     completed_steps += 1
@@ -1962,24 +2476,30 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                                         task_id,
                                         completed_steps=completed_steps,
                                         total_saved=total_saved + futures_saved,
-                                        progress=min(100, (completed_steps / total_steps) * 100) if total_steps > 0 else 0
+                                        current_step=f"✓ {symbol} 合约 {timeframe} K线数据采集完成，保存 {timeframe_saved} 条"
                                     )
-                                
-                                await asyncio.sleep(0.3)  # 延迟避免API限流
-                                
-                            except Exception as e:
-                                error_msg = f"{symbol} 合约 {timeframe}: {str(e)}"
-                                errors.append(error_msg)
-                                logger.error(f"采集 {symbol} 合约 {timeframe} K线数据失败: {e}")
-                        
-                        total_saved += futures_saved
-                        if futures_saved == 0:
-                            errors.append(f"{symbol}: 所有周期均未获取到合约数据")
+                                    
+                                    # 延迟避免API限流
+                                    await asyncio.sleep(0.3)
+                                    
+                                except Exception as e:
+                                    error_msg = str(e)
+                                    # 如果是无效交易对，提供更详细的错误信息
+                                    if 'Invalid symbol' in error_msg or '-1121' in error_msg or 'HTTP 400' in error_msg:
+                                        error_msg = f"{symbol} 合约 {timeframe}: 交易对不存在或格式错误（币安合约可能不支持此交易对）"
+                                    else:
+                                        error_msg = f"{symbol} 合约 {timeframe}: {error_msg}"
+                                    errors.append(error_msg)
+                                    logger.error(f"采集 {symbol} 合约 {timeframe} K线数据失败: {e}")
                             
-                    except Exception as e:
-                        error_msg = f"{symbol} 合约数据: {str(e)}"
-                        errors.append(error_msg)
-                        logger.error(f"采集 {symbol} 合约数据失败: {e}")
+                            total_saved += futures_saved
+                            if futures_saved == 0:
+                                errors.append(f"{symbol}: 所有周期均未获取到合约数据")
+                                
+                        except Exception as e:
+                            error_msg = f"{symbol} 合约数据: {str(e)}"
+                            errors.append(error_msg)
+                            logger.error(f"采集 {symbol} 合约数据失败: {e}")
                 
             except Exception as e:
                 error_msg = f"{symbol}: {str(e)}"
@@ -2254,7 +2774,8 @@ async def collect_historical_data_sync(request: Dict):
                                     0,  # change_24h (历史数据无法计算)
                                     created_at
                                 ))
-                                saved_count += 1
+                                if cursor.rowcount > 0:
+                                    saved_count += 1
                             except Exception as e:
                                 logger.error(f"保存价格数据失败: {e}")
                                 continue
@@ -2273,20 +2794,62 @@ async def collect_historical_data_sync(request: Dict):
                     for timeframe in timeframes:
                         try:
                             logger.info(f"  采集 {symbol} {timeframe} K线数据...")
-                            # 使用历史数据采集方法
-                            df = await collector.fetch_historical_data(
-                                symbol=symbol,
-                                timeframe=timeframe,
-                                days=int((end_time - start_time).total_seconds() / 86400) + 1
-                            )
+                            
+                            if use_gate and gate_collector:
+                                # HYPE/USDT 从Gate.io采集
+                                days = int((end_time - start_time).total_seconds() / 86400) + 1
+                                since = int(start_time.timestamp())
+                                df = await gate_collector.fetch_ohlcv(
+                                    symbol=symbol,
+                                    timeframe=timeframe,
+                                    limit=1000,
+                                    since=since
+                                )
+                                # 如果数据不够，需要分批获取
+                                if df is not None and len(df) > 0:
+                                    all_data = [df]
+                                    last_timestamp = df['timestamp'].iloc[-1]
+                                    current_since = int(last_timestamp.timestamp()) + 1
+                                    while current_since < int(end_time.timestamp()):
+                                        next_df = await gate_collector.fetch_ohlcv(
+                                            symbol=symbol,
+                                            timeframe=timeframe,
+                                            limit=1000,
+                                            since=current_since
+                                        )
+                                        if next_df is None or len(next_df) == 0:
+                                            break
+                                        all_data.append(next_df)
+                                        last_timestamp = next_df['timestamp'].iloc[-1]
+                                        current_since = int(last_timestamp.timestamp()) + 1
+                                        if len(next_df) < 1000:
+                                            break
+                                        await asyncio.sleep(0.5)
+                                    if len(all_data) > 1:
+                                        df = pd.concat(all_data, ignore_index=True)
+                                        df = df.drop_duplicates(subset=['timestamp'])
+                                        df = df.sort_values('timestamp').reset_index(drop=True)
+                            else:
+                                # 其他交易对从Binance采集
+                                df = await collector.fetch_historical_data(
+                                    symbol=symbol,
+                                    timeframe=timeframe,
+                                    days=int((end_time - start_time).total_seconds() / 86400) + 1,
+                                    exchange='binance' if not use_gate else None
+                                )
                             
                             if df is not None and len(df) > 0:
                                 # 过滤时间范围
                                 df = df[(df['timestamp'] >= start_time) & (df['timestamp'] <= end_time)]
                                 
+                                if len(df) == 0:
+                                    errors.append(f"{symbol} {timeframe}: K线数据时间范围不匹配")
+                                    continue
+                                
                                 timeframe_saved = 0
-                                for _, row in df.iterrows():
+                                for idx, row_tuple in enumerate(df.iterrows()):
                                     try:
+                                        _, row = row_tuple
                                         # 计算时间戳（毫秒）
                                         timestamp = row['timestamp']
                                         # 确保timestamp是datetime类型
@@ -2325,7 +2888,7 @@ async def collect_historical_data_sync(request: Dict):
                                                 created_at = VALUES(created_at)
                                         """, (
                                             symbol,
-                                            'binance',  # 默认交易所
+                                            'gate' if use_gate else 'binance',
                                             timeframe,
                                             open_time_ms,
                                             close_time_ms,
@@ -2338,7 +2901,8 @@ async def collect_historical_data_sync(request: Dict):
                                             float(row.get('quote_volume', 0)),
                                             created_at
                                         ))
-                                        timeframe_saved += 1
+                                        if cursor.rowcount > 0:
+                                            timeframe_saved += 1
                                     except Exception as e:
                                         logger.error(f"保存K线数据失败 ({timeframe}): {e}")
                                         continue

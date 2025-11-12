@@ -27,7 +27,7 @@ exchanges:
     options:
       defaultType: spot
   gate:
-    enabled: false
+    enabled: true
     api_key: 4808622a3af8bda94a5ee270193db5d5
     api_secret: 560cd4fcc044a7c5ad7a3a136c77e038536fa983d6c3eb9492763502750303f3
     options:

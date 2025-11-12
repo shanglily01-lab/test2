@@ -99,11 +99,13 @@
         .toast.success { border-left: 4px solid var(--success-green); }
         .toast.error { border-left: 4px solid var(--danger-red); }
         @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .collection-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); }
         @media (max-width: 768px) {
             .container { padding: var(--spacing-md); }
             .stats-grid { grid-template-columns: 1fr; }
             .nav-links { flex-direction: column; }
             th, td { padding: var(--spacing-sm); font-size: 12px; }
+            .collection-form-grid { grid-template-columns: 1fr !important; }
         }
     </style>
 </head>
@@ -186,63 +188,71 @@
             </div>
             <div class="card-body">
                 <form id="dataCollectionForm" onsubmit="startDataCollection(event)">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--spacing-lg);">
-                        <div class="input-group">
-                            <label class="input-label">
-                                <i class="bi bi-currency-exchange"></i> 交易对
-                            </label>
-                            <input type="text" id="collectionSymbols" class="input-field" 
-                                   placeholder="例如: BTC/USDT,ETH/USDT (多个用逗号分隔)" 
-                                   required>
-                            <p style="margin-top: var(--spacing-xs); color: var(--text-secondary); font-size: 11px;">
-                                支持多个交易对，用逗号分隔
-                            </p>
-                        </div>
-                        <div class="input-group">
-                            <label class="input-label">
-                                <i class="bi bi-info-circle"></i> 采集说明
-                            </label>
-                            <div style="padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-md); color: var(--text-secondary); font-size: 13px;">
-                                <i class="bi bi-check-circle"></i> 将自动采集：价格数据 + K线数据（1m, 5m, 15m, 1h, 1d）
+                    <!-- 紧凑布局：两列设计（响应式） -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); margin-bottom: var(--spacing-md);" class="collection-form-grid">
+                        <!-- 左列：基本信息 -->
+                        <div>
+                            <div class="input-group" style="margin-bottom: var(--spacing-md);">
+                                <label class="input-label" style="font-size: 13px; margin-bottom: var(--spacing-xs);">
+                                    <i class="bi bi-currency-exchange"></i> 交易对
+                                </label>
+                                <input type="text" id="collectionSymbols" class="input-field" 
+                                       placeholder="BTC/USDT,ETH/USDT" 
+                                       required>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-sm);">
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <label class="input-label" style="font-size: 13px; margin-bottom: var(--spacing-xs);">
+                                        <i class="bi bi-calendar-event"></i> 开始时间
+                                    </label>
+                                    <input type="datetime-local" id="collectionStartTime" class="input-field" required>
+                                </div>
+                                <div class="input-group" style="margin-bottom: 0;">
+                                    <label class="input-label" style="font-size: 13px; margin-bottom: var(--spacing-xs);">
+                                        <i class="bi bi-calendar-check"></i> 结束时间
+                                    </label>
+                                    <input type="datetime-local" id="collectionEndTime" class="input-field" required>
+                                </div>
                             </div>
                         </div>
-                        <div class="input-group">
-                            <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
-                                <input type="checkbox" id="collectFutures" style="width: 18px; height: 18px; cursor: pointer;">
-                                <span style="color: var(--text-primary); font-size: 14px;">
-                                    <i class="bi bi-graph-up-arrow"></i> 同时采集合约数据
-                                </span>
-                            </label>
-                            <p style="margin-top: var(--spacing-xs); color: var(--text-secondary); font-size: 11px; margin-left: 26px;">
-                                勾选后将同时采集币安合约数据（价格、K线、资金费率、持仓量、多空比）
-                            </p>
-                        </div>
-                        <div class="input-group">
-                            <label class="input-label">
-                                <i class="bi bi-calendar-range"></i> 开始时间
-                            </label>
-                            <input type="datetime-local" id="collectionStartTime" class="input-field" required>
-                        </div>
-                        <div class="input-group">
-                            <label class="input-label">
-                                <i class="bi bi-calendar-range"></i> 结束时间
-                            </label>
-                            <input type="datetime-local" id="collectionEndTime" class="input-field" required>
+
+                        <!-- 右列：选项 -->
+                        <div>
+                            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border-left: 2px solid var(--info-blue);">
+                                <i class="bi bi-info-circle"></i> 默认采集：价格数据 + K线数据（1m, 5m, 15m, 1h, 1d）
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: var(--spacing-sm);">
+                                <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); transition: all var(--transition-base);">
+                                    <input type="checkbox" id="collectFutures" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
+                                            <i class="bi bi-graph-up-arrow" style="color: var(--secondary-purple); font-size: 14px;"></i>
+                                            <span style="color: var(--text-primary); font-size: 13px;">同时采集合约数据</span>
+                                        </div>
+                                        <p style="color: var(--text-secondary); font-size: 11px; margin: var(--spacing-xs) 0 0 0; line-height: 1.4;">
+                                            币安合约数据（价格、K线、资金费率等）
+                                        </p>
+                                    </div>
+                                </label>
+                                <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); transition: all var(--transition-base);">
+                                    <input type="checkbox" id="saveToConfig" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
+                                            <i class="bi bi-file-earmark-text" style="color: var(--success-green); font-size: 14px;"></i>
+                                            <span style="color: var(--text-primary); font-size: 13px;">保存到配置文件</span>
+                                        </div>
+                                        <p style="color: var(--text-secondary); font-size: 11px; margin: var(--spacing-xs) 0 0 0; line-height: 1.4;">
+                                            自动更新 config.yaml
+                                        </p>
+                                    </div>
+                                </label>
+                            </div>
                         </div>
                     </div>
-                    <div style="margin-top: var(--spacing-md);">
-                        <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer;">
-                            <input type="checkbox" id="saveToConfig" style="width: 18px; height: 18px; cursor: pointer;">
-                            <span style="color: var(--text-primary); font-size: 14px;">
-                                <i class="bi bi-file-earmark-text"></i> 保存到配置文件
-                            </span>
-                        </label>
-                        <p style="margin-top: var(--spacing-xs); color: var(--text-secondary); font-size: 11px; margin-left: 26px;">
-                            勾选后将自动更新 config.yaml 文件，添加新的交易对和时间周期
-                        </p>
-                    </div>
-                    <div style="margin-top: var(--spacing-lg); display: flex; gap: var(--spacing-md);">
-                        <button type="submit" class="btn btn-primary" id="collectionSubmitBtn">
+
+                    <!-- 操作按钮 -->
+                    <div style="display: flex; gap: var(--spacing-sm); padding-top: var(--spacing-md); border-top: 1px solid var(--border-default);">
+                        <button type="submit" class="btn btn-primary" id="collectionSubmitBtn" style="flex: 1;">
                             <i class="bi bi-play-circle"></i>
                             开始采集
                         </button>
@@ -251,19 +261,26 @@
                             重置
                         </button>
                     </div>
-                    <div id="collectionResult" style="margin-top: var(--spacing-lg);"></div>
+
+                    <!-- 进度显示区域（紧凑版） -->
                     <div id="collectionProgress" style="margin-top: var(--spacing-md); display: none;">
-                        <div style="background: var(--bg-tertiary); border-radius: var(--radius-md); padding: var(--spacing-md);">
+                        <div style="background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-md);">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm);">
-                                <span style="font-size: 13px; color: var(--text-secondary);">采集进度</span>
-                                <span id="collectionProgressText" style="font-size: 13px; color: var(--text-secondary);">0%</span>
+                                <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
+                                    <i class="bi bi-activity" style="color: var(--primary-blue); font-size: 14px;"></i>
+                                    <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">采集进度</span>
+                                </div>
+                                <span id="collectionProgressText" style="font-size: 14px; font-weight: 700; color: var(--primary-blue); font-family: var(--font-mono);">0%</span>
                             </div>
-                            <div style="background: var(--bg-secondary); border-radius: var(--radius-full); height: 8px; overflow: hidden;">
-                                <div id="collectionProgressBar" style="background: var(--primary-blue); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+                            <div style="background: var(--bg-primary); border-radius: var(--radius-full); height: 8px; overflow: hidden; margin-bottom: var(--spacing-sm);">
+                                <div id="collectionProgressBar" style="background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
                             </div>
-                            <div id="collectionStatusText" style="margin-top: var(--spacing-sm); font-size: 12px; color: var(--text-secondary);"></div>
+                            <div id="collectionStatusText" style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; min-height: 18px;"></div>
                         </div>
                     </div>
+
+                    <!-- 结果显示区域 -->
+                    <div id="collectionResult" style="margin-top: var(--spacing-md);"></div>
                 </form>
             </div>
         </div>
@@ -868,8 +885,25 @@
                     // 刷新采集情况
                     setTimeout(() => loadCollectionStatus(), 1000);
                 } else {
-                    resultDiv.innerHTML = `<div style="color: var(--danger-red);">导入失败: ${result.message || '未知错误'}</div>`;
-                    showToast('导入失败', 'error');
+                    let errorHtml = `<div style="color: var(--danger-red);">
+                        <i class="bi bi-x-circle"></i>
+                        ${result.message || '导入失败'}
+                    </div>`;
+                    if (result.errors && result.errors.length > 0) {
+                        errorHtml += `
+                            <div style="margin-top: var(--spacing-sm); font-size: 12px;">
+                                <details style="cursor: pointer;">
+                                    <summary style="color: var(--warning-orange);">查看错误详情 (${result.error_count}条)</summary>
+                                    <ul style="margin-top: var(--spacing-sm); padding-left: var(--spacing-lg); max-height: 200px; overflow-y: auto;">
+                                        ${result.errors.slice(0, 20).map(e => `<li style="color: var(--text-secondary); margin: 4px 0;">${e}</li>`).join('')}
+                                        ${result.errors.length > 20 ? `<li style="color: var(--text-tertiary);">... 还有 ${result.errors.length - 20} 个错误</li>` : ''}
+                                    </ul>
+                                </details>
+                            </div>
+                        `;
+                    }
+                    resultDiv.innerHTML = errorHtml;
+                    showToast(result.message || '导入失败', 'error');
                 }
             } catch (error) {
                 console.error('导入ETF数据失败:', error);

@@ -325,6 +325,161 @@ class GateCollector:
             logger.error(f"Gate.io 获取 {symbol} 资金费率失败: {e}")
             return None
 
+    async def fetch_futures_klines(
+        self,
+        symbol: str,
+        timeframe: str = '1m',
+        limit: int = 100,
+        since: Optional[int] = None
+    ) -> Optional[pd.DataFrame]:
+        """
+        获取合约K线数据 (OHLCV)
+
+        Args:
+            symbol: 交易对
+            timeframe: 时间周期 (1m, 5m, 15m, 1h, 1d等)
+            limit: 获取数量
+            since: 起始时间戳(秒)
+
+        Returns:
+            DataFrame包含 [timestamp, open, high, low, close, volume]
+        """
+        try:
+            # 转换交易对格式
+            gate_symbol = symbol.replace('/', '_')
+
+            # Gate.io interval 格式
+            interval_map = {
+                '1m': '1m',
+                '5m': '5m',
+                '15m': '15m',
+                '30m': '30m',
+                '1h': '1h',
+                '4h': '4h',
+                '1d': '1d',
+                '1w': '7d',
+            }
+
+            interval = interval_map.get(timeframe, '1h')
+
+            # Gate.io 期货 API 使用 settle 参数区分结算货币
+            # USDT 永续合约使用 settle=usdt
+            settle = 'usdt'
+
+            # 构建请求参数
+            url = f"{self.base_url.replace('/v4', '/v4/futures')}/{settle}/candlesticks"
+            params = {
+                'contract': gate_symbol,
+                'interval': interval,
+                'limit': limit
+            }
+
+            if since:
+                params['from'] = since
+
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url, params=params) as response:
+                    if response.status == 200:
+                        klines = await response.json()
+
+                        if not klines:
+                            return None
+
+                        # 转换为DataFrame
+                        # Gate.io 期货格式: [timestamp, quote_volume, close, high, low, open, base_volume, is_complete]
+                        df = pd.DataFrame(klines, columns=[
+                            'timestamp', 'quote_volume', 'close', 'high', 'low', 'open', 'volume', 'is_complete'
+                        ])
+
+                        # 重新排列列顺序 (保留 quote_volume)
+                        df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume', 'quote_volume']].copy()
+
+                        # 转换类型
+                        df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='s')
+                        df['open'] = df['open'].astype(float)
+                        df['high'] = df['high'].astype(float)
+                        df['low'] = df['low'].astype(float)
+                        df['close'] = df['close'].astype(float)
+                        df['volume'] = df['volume'].astype(float)
+                        df['quote_volume'] = df['quote_volume'].astype(float)
+
+                        # 添加元数据
+                        df['symbol'] = symbol
+                        df['exchange'] = self.exchange_id
+                        df['timeframe'] = timeframe
+
+                        return df
+                    else:
+                        logger.error(f"Gate.io 获取 {symbol} 合约K线失败: HTTP {response.status}")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Gate.io 获取 {symbol} 合约K线数据失败: {e}")
+            return None
+
+    async def fetch_historical_futures_data(
+        self,
+        symbol: str,
+        timeframe: str = '1h',
+        days: int = 30
+    ) -> Optional[pd.DataFrame]:
+        """
+        获取历史合约数据（分批获取）
+
+        Args:
+            symbol: 交易对
+            timeframe: 时间周期
+            days: 历史天数
+
+        Returns:
+            历史K线DataFrame
+        """
+        from datetime import timedelta
+        
+        # 计算起始时间（秒时间戳）
+        since = int((datetime.now() - timedelta(days=days)).timestamp())
+        
+        all_data = []
+        limit = 1000  # 每次获取1000条
+        
+        try:
+            while True:
+                df = await self.fetch_futures_klines(
+                    symbol,
+                    timeframe,
+                    limit=limit,
+                    since=since
+                )
+
+                if df is None or len(df) == 0:
+                    break
+
+                all_data.append(df)
+
+                # 更新since为最后一条数据的时间
+                last_timestamp = df['timestamp'].iloc[-1]
+                since = int(last_timestamp.timestamp()) + 1
+
+                # 如果获取到的数据少于limit，说明已经到最新了
+                if len(df) < limit:
+                    break
+
+                # 避免请求过快
+                await asyncio.sleep(0.5)
+
+            if all_data:
+                result = pd.concat(all_data, ignore_index=True)
+                result = result.drop_duplicates(subset=['timestamp'])
+                result = result.sort_values('timestamp').reset_index(drop=True)
+                logger.info(f"获取 {symbol} {timeframe} 合约历史数据: {len(result)} 条")
+                return result
+
+        except Exception as e:
+            logger.error(f"获取合约历史数据失败: {e}")
+
+        return None
+
 
 # 使用示例
 async def main():

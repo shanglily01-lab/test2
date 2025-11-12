@@ -226,7 +226,13 @@ class BinanceFuturesCollector:
             return df
 
         except Exception as e:
-            logger.error(f"获取 {symbol} 合约K线失败: {e}")
+            error_msg = str(e)
+            # 如果是无效交易对错误，提供更友好的提示
+            if 'Invalid symbol' in error_msg or '-1121' in error_msg or 'HTTP 400' in error_msg:
+                logger.error(f"获取 {symbol} 合约K线失败: 交易对格式错误或不存在 (尝试的格式: {binance_symbol})")
+                logger.debug(f"提示: 币安合约API需要格式如 'BTCUSDT'，请确认交易对 {symbol} 在币安合约市场是否存在")
+            else:
+                logger.error(f"获取 {symbol} 合约K线失败: {e}")
             return None
 
     async def fetch_funding_rate(self, symbol: str) -> Optional[Dict]:

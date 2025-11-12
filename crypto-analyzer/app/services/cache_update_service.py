@@ -84,52 +84,73 @@ class CacheUpdateService:
 
         for symbol in symbols:
             try:
+                # 优先从实时ticker API获取24h统计数据（更准确）
+                ticker_data = None
+                try:
+                    from app.collectors.price_collector import PriceCollector
+                    collector_config = self.config.get('exchanges', {}).get('binance', {})
+                    if collector_config.get('enabled', False):
+                        collector = PriceCollector('binance', collector_config)
+                        ticker_data = await collector.fetch_ticker(symbol)
+                except Exception as e:
+                    logger.debug(f"从ticker API获取{symbol}数据失败，将使用K线数据: {e}")
+                
                 # 获取当前价格
                 latest_kline = self.db_service.get_latest_kline(symbol, '1m')
                 if not latest_kline:
                     continue
 
                 current_price = float(latest_kline.close)
-
-                # 获取24小时前的价格
-                past_time = datetime.now() - timedelta(hours=24)
-                past_kline = self.db_service.get_kline_at_time(symbol, '5m', past_time)
-                price_24h_ago = float(past_kline.close) if past_kline else current_price
-
-                # 获取24小时K线数据
-                # 注意：数据库存储的是本地时间（UTC+8），不是UTC时间
-                klines_24h = self.db_service.get_klines(
-                    symbol, '5m',  # 使用5分钟K线
-                    start_time=datetime.now() - timedelta(hours=24),  # 使用本地时间
-                    limit=288  # 5分钟 * 288 = 24小时
-                )
-
-                # 如果24小时内数据不足，尝试获取所有可用的5分钟K线数据（最多24小时）
-                if not klines_24h or len(klines_24h) < 10:
-                    # 尝试获取更多历史数据
-                    klines_24h = self.db_service.get_klines(
-                        symbol, '5m',
-                        start_time=None,  # 不限制开始时间
-                        limit=288
-                    )
-                    # 只取最近24小时的数据
-                    if klines_24h:
-                        cutoff_time = datetime.now() - timedelta(hours=24)
-                        klines_24h = [k for k in klines_24h if k.timestamp >= cutoff_time]
                 
-                # 如果仍然没有数据，使用最新价格作为默认值
-                if not klines_24h:
-                    logger.warning(f"{symbol}: 没有足够的24小时K线数据，使用当前价格作为默认值")
-                    high_24h = current_price
-                    low_24h = current_price
-                    volume_24h = 0
-                    quote_volume_24h = 0
+                # 如果从ticker获取到数据，优先使用ticker的24h统计数据
+                if ticker_data:
+                    # 使用ticker API提供的24h统计数据（最准确）
+                    high_24h = float(ticker_data.get('high', current_price))
+                    low_24h = float(ticker_data.get('low', current_price))
+                    volume_24h = float(ticker_data.get('volume', 0))  # 基础货币交易量
+                    quote_volume_24h = float(ticker_data.get('quote_volume', 0))  # USDT交易量
+                    price_24h_ago = float(ticker_data.get('open', current_price))
                 else:
-                    # 计算统计数据
-                    high_24h = max(float(k.high) for k in klines_24h)
-                    low_24h = min(float(k.low) for k in klines_24h)
-                    volume_24h = sum(float(k.volume) for k in klines_24h)
-                    quote_volume_24h = sum(float(k.quote_volume) for k in klines_24h if k.quote_volume)
+                    # 回退到从K线数据计算
+                    # 获取24小时前的价格
+                    past_time = datetime.now() - timedelta(hours=24)
+                    past_kline = self.db_service.get_kline_at_time(symbol, '5m', past_time)
+                    price_24h_ago = float(past_kline.close) if past_kline else current_price
+
+                    # 获取24小时K线数据
+                    # 注意：数据库存储的是本地时间（UTC+8），不是UTC时间
+                    klines_24h = self.db_service.get_klines(
+                        symbol, '5m',  # 使用5分钟K线
+                        start_time=datetime.now() - timedelta(hours=24),  # 使用本地时间
+                        limit=288  # 5分钟 * 288 = 24小时
+                    )
+
+                    # 如果24小时内数据不足，尝试获取所有可用的5分钟K线数据（最多24小时）
+                    if not klines_24h or len(klines_24h) < 10:
+                        # 尝试获取更多历史数据
+                        klines_24h = self.db_service.get_klines(
+                            symbol, '5m',
+                            start_time=None,  # 不限制开始时间
+                            limit=288
+                        )
+                        # 只取最近24小时的数据
+                        if klines_24h:
+                            cutoff_time = datetime.now() - timedelta(hours=24)
+                            klines_24h = [k for k in klines_24h if k.timestamp >= cutoff_time]
+                    
+                    # 如果仍然没有数据，使用最新价格作为默认值
+                    if not klines_24h:
+                        logger.warning(f"{symbol}: 没有足够的24小时K线数据，使用当前价格作为默认值")
+                        high_24h = current_price
+                        low_24h = current_price
+                        volume_24h = 0
+                        quote_volume_24h = 0
+                    else:
+                        # 计算统计数据
+                        high_24h = max(float(k.high) for k in klines_24h)
+                        low_24h = min(float(k.low) for k in klines_24h)
+                        volume_24h = sum(float(k.volume) for k in klines_24h)
+                        quote_volume_24h = sum(float(k.quote_volume) for k in klines_24h if k.quote_volume)
 
                 change_24h = ((current_price - price_24h_ago) / price_24h_ago) * 100 if price_24h_ago > 0 else 0
                 change_24h_abs = current_price - price_24h_ago

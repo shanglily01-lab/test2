@@ -831,11 +831,12 @@ async def get_futures_price(symbol: str):
         price = None
         source = None
         
-        timeout = ClientTimeout(total=5)
+        # 使用较短的超时时间，快速失败并回退
+        quick_timeout = ClientTimeout(total=2)  # 2秒快速超时
         
-        # 1. 优先从Binance合约API获取
+        # 1. 优先从Binance合约API获取（快速）
         try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with aiohttp.ClientSession(timeout=quick_timeout) as session:
                 async with session.get(
                     'https://fapi.binance.com/fapi/v1/ticker/price',
                     params={'symbol': symbol_clean}
@@ -846,14 +847,23 @@ async def get_futures_price(symbol: str):
                             price = float(data['price'])
                             source = 'binance_futures'
                             logger.debug(f"从Binance合约API获取 {symbol} 价格: {price}")
+                            # 成功获取，直接返回
+                            return {
+                                'success': True,
+                                'symbol': symbol,
+                                'price': price,
+                                'source': source
+                            }
+        except (aiohttp.ClientError, aiohttp.ServerTimeoutError, TimeoutError) as e:
+            logger.debug(f"Binance合约API超时或失败: {symbol}, {e}")
         except Exception as e:
             logger.debug(f"Binance合约API获取失败: {e}")
         
-        # 2. 如果Binance失败，尝试从Gate.io合约API获取
-        if not price:
+        # 2. 如果Binance失败，尝试从Gate.io合约API获取（仅对HYPE/USDT）
+        if not price and symbol.upper() == 'HYPE/USDT':
             try:
                 gate_symbol = symbol.replace('/', '_')
-                async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with aiohttp.ClientSession(timeout=quick_timeout) as session:
                     async with session.get(
                         'https://api.gateio.ws/api/v4/futures/usdt/tickers',
                         params={'contract': gate_symbol}
@@ -864,14 +874,21 @@ async def get_futures_price(symbol: str):
                                 price = float(data[0]['last'])
                                 source = 'gateio_futures'
                                 logger.debug(f"从Gate.io合约API获取 {symbol} 价格: {price}")
+                                return {
+                                    'success': True,
+                                    'symbol': symbol,
+                                    'price': price,
+                                    'source': source
+                                }
+            except (aiohttp.ClientError, aiohttp.ServerTimeoutError, TimeoutError) as e:
+                logger.debug(f"Gate.io合约API超时或失败: {symbol}, {e}")
             except Exception as e:
                 logger.debug(f"Gate.io合约API获取失败: {e}")
         
-        # 3. 如果都失败，尝试从数据库获取最新价格（现货价格作为fallback）
+        # 3. 快速回退：从数据库获取最新价格（现货价格作为fallback，更快）
         if not price:
             try:
                 from app.database.db_service import DatabaseService
-                # DatabaseService 需要完整的 database 配置，包含 type 和 mysql 子字典
                 db_service = DatabaseService(config.get('database', {}))
                 latest_kline = db_service.get_latest_kline(symbol, '1m')
                 if latest_kline:
