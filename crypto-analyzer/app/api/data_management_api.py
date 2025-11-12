@@ -284,11 +284,11 @@ async def get_data_statistics():
     包括记录数、最新数据时间、数据范围等
     """
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # 定义所有数据表及其描述
-        tables = [
+        with DBConnection() as conn:
+            cursor = conn.cursor()
+            
+            # 定义所有数据表及其描述
+            tables = [
             {'name': 'price_data', 'label': '实时价格数据', 'description': '存储各交易所的实时价格数据'},
             {'name': 'kline_data', 'label': 'K线数据', 'description': '存储不同时间周期的K线数据'},
             {'name': 'news_data', 'label': '新闻数据', 'description': '存储加密货币相关新闻'},
@@ -335,18 +335,46 @@ async def get_data_statistics():
                 latest_time = None
                 oldest_time = None
                 
-                # 尝试不同的时间字段
-                time_fields = ['timestamp', 'created_at', 'updated_at', 'open_time', 'trade_time', 'date']
-                for field in time_fields:
+                # 特殊处理：kline_data 表的 open_time 是毫秒时间戳，需要转换
+                if table['name'] == 'kline_data':
                     try:
-                        cursor.execute(f"SELECT MAX({field}) as max_time, MIN({field}) as min_time FROM {table['name']}")
+                        # 使用 FROM_UNIXTIME 将毫秒时间戳转换为 datetime
+                        cursor.execute("""
+                            SELECT 
+                                FROM_UNIXTIME(MAX(open_time)/1000) as max_time,
+                                FROM_UNIXTIME(MIN(open_time)/1000) as min_time
+                            FROM kline_data
+                        """)
                         time_result = cursor.fetchone()
                         if time_result and time_result.get('max_time'):
                             latest_time = time_result['max_time'].isoformat() if hasattr(time_result['max_time'], 'isoformat') else str(time_result['max_time'])
                             oldest_time = time_result['min_time'].isoformat() if hasattr(time_result['min_time'], 'isoformat') else str(time_result['min_time'])
-                            break
-                    except:
-                        continue
+                    except Exception as e:
+                        logger.debug(f"获取kline_data时间失败，尝试其他字段: {e}")
+                        # 如果失败，尝试使用 timestamp 或 created_at 字段
+                        for field in ['timestamp', 'created_at']:
+                            try:
+                                cursor.execute(f"SELECT MAX({field}) as max_time, MIN({field}) as min_time FROM {table['name']}")
+                                time_result = cursor.fetchone()
+                                if time_result and time_result.get('max_time'):
+                                    latest_time = time_result['max_time'].isoformat() if hasattr(time_result['max_time'], 'isoformat') else str(time_result['max_time'])
+                                    oldest_time = time_result['min_time'].isoformat() if hasattr(time_result['min_time'], 'isoformat') else str(time_result['min_time'])
+                                    break
+                            except:
+                                continue
+                else:
+                    # 其他表使用标准时间字段
+                    time_fields = ['timestamp', 'created_at', 'updated_at', 'open_time', 'trade_time', 'date']
+                    for field in time_fields:
+                        try:
+                            cursor.execute(f"SELECT MAX({field}) as max_time, MIN({field}) as min_time FROM {table['name']}")
+                            time_result = cursor.fetchone()
+                            if time_result and time_result.get('max_time'):
+                                latest_time = time_result['max_time'].isoformat() if hasattr(time_result['max_time'], 'isoformat') else str(time_result['max_time'])
+                                oldest_time = time_result['min_time'].isoformat() if hasattr(time_result['min_time'], 'isoformat') else str(time_result['min_time'])
+                                break
+                        except:
+                            continue
                 
                 # 获取表大小（MB）
                 cursor.execute(f"""
@@ -379,25 +407,22 @@ async def get_data_statistics():
                     'size_mb': 0,
                     'error': str(e)
                 })
-        
-        cursor.close()
-        conn.close()
-        
-        # 计算总计
-        total_count = sum(s['count'] for s in statistics)
-        total_size = sum(s['size_mb'] for s in statistics)
-        
-        return {
-            'success': True,
-            'data': {
-                'tables': statistics,
-                'summary': {
-                    'total_tables': len(statistics),
-                    'total_records': total_count,
-                    'total_size_mb': round(total_size, 2)
+            
+            # 计算总计
+            total_count = sum(s['count'] for s in statistics)
+            total_size = sum(s['size_mb'] for s in statistics)
+            
+            return {
+                'success': True,
+                'data': {
+                    'tables': statistics,
+                    'summary': {
+                        'total_tables': len(statistics),
+                        'total_records': total_count,
+                        'total_size_mb': round(total_size, 2)
+                    }
                 }
             }
-        }
         
     except Exception as e:
         logger.error(f"获取数据统计失败: {e}")
@@ -414,12 +439,12 @@ async def get_table_sample(table_name: str, limit: int = 10):
         limit: 返回记录数限制
     """
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # 安全检查：只允许查询白名单中的表
-        allowed_tables = [
-            'price_data', 'kline_data', 'news_data', 'funding_rate_data',
+        with DBConnection() as conn:
+            cursor = conn.cursor()
+            
+            # 安全检查：只允许查询白名单中的表
+            allowed_tables = [
+                'price_data', 'kline_data', 'news_data', 'funding_rate_data',
             'futures_open_interest', 'futures_long_short_ratio',
             'smart_money_transactions', 'smart_money_signals', 'ema_signals',
             'investment_recommendations', 'futures_positions', 'futures_orders',
@@ -465,16 +490,13 @@ async def get_table_sample(table_name: str, limit: int = 10):
                 else:
                     row_dict[key] = str(value) if value is not None else None
             sample_data.append(row_dict)
-        
-        cursor.close()
-        conn.close()
-        
-        return {
-            'success': True,
-            'table_name': table_name,
-            'count': len(sample_data),
-            'data': sample_data
-        }
+            
+            return {
+                'success': True,
+                'table_name': table_name,
+                'count': len(sample_data),
+                'data': sample_data
+            }
         
     except HTTPException:
         raise

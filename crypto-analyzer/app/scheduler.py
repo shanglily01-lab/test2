@@ -846,6 +846,7 @@ class UnifiedDataScheduler:
 
                 total_trades = 0
                 total_positions = 0
+                wallet_updates = []
 
                 for address, result in results.items():
                     try:
@@ -884,15 +885,16 @@ class UnifiedDataScheduler:
                             db.save_wallet_position(address, position_data, snapshot_time)
                             total_positions += 1
 
-                        # 更新检查时间
+                        # 更新检查时间（需要先获取trader_id）
+                        trader_id = db.get_or_create_trader(address)
                         last_trade_time = recent_trades[0]['timestamp'] if recent_trades else None
-                        db.update_wallet_check_time(wallet['trader_id'], last_trade_time)
+                        db.update_wallet_check_time(trader_id, last_trade_time)
 
                         # 记录有活动的钱包
                         if recent_trades or positions:
                             stats = result.get('statistics', {})
                             wallet_updates.append({
-                                'label': label,
+                                'address': address[:10] + '...',
                                 'trades': len(recent_trades),
                                 'positions': len(positions),
                                 'net_flow': stats.get('net_flow_usd', 0),
@@ -903,8 +905,12 @@ class UnifiedDataScheduler:
                         await asyncio.sleep(2)
 
                     except Exception as e:
-                        logger.error(f"  监控钱包 {label} 失败: {e}")
-                        db.update_wallet_check_time(wallet['trader_id'])
+                        logger.error(f"  监控钱包 {address[:10]}... 失败: {e}")
+                        try:
+                            trader_id = db.get_or_create_trader(address)
+                            db.update_wallet_check_time(trader_id)
+                        except:
+                            pass
 
                 # 汇总报告
                 logger.info(f"  ✓ 监控完成: 检查 {len(monitored_wallets)} 个钱包, "
@@ -916,7 +922,7 @@ class UnifiedDataScheduler:
                     for w in wallet_updates[:5]:
                         pnl_str = f"PnL: ${w['total_pnl']:,.0f}" if w['total_pnl'] != 0 else ""
                         flow_str = f"净流: ${w['net_flow']:,.0f}" if w['net_flow'] != 0 else ""
-                        logger.info(f"    • {w['label']}: {w['trades']}笔交易, {w['positions']}个持仓 {pnl_str} {flow_str}")
+                        logger.info(f"    • {w.get('address', w.get('label', 'Unknown'))}: {w['trades']}笔交易, {w['positions']}个持仓 {pnl_str} {flow_str}")
 
             # 更新统计
             self.task_stats[task_name]['count'] += 1
@@ -1034,25 +1040,11 @@ class UnifiedDataScheduler:
         )
         logger.info("  ✓ EMA信号数据清理 (保留30天) - 每天 03:00")
 
-        # 6. Hyperliquid 钱包监控 - 分级监控策略
+        # 6. Hyperliquid 钱包监控 - 已移至独立的 hyperliquid_scheduler.py
+        # 注意: Hyperliquid 监控任务现在由独立的调度器运行，避免阻塞主调度器
         if self.hyperliquid_collector:
-            # 高优先级钱包: 每5分钟监控 (PnL>10K, ROI>50%, 7天内活跃, 限200个)
-            schedule.every(5).minutes.do(
-                lambda: asyncio.run(self.monitor_hyperliquid_wallets(priority='high'))
-            )
-            logger.info("  ✓ Hyperliquid 高优先级钱包 (200个) - 每 5 分钟")
-
-            # 中优先级钱包: 每1小时监控 (PnL>5K, ROI>30%, 30天内活跃, 限500个)
-            schedule.every(1).hours.do(
-                lambda: asyncio.run(self.monitor_hyperliquid_wallets(priority='medium'))
-            )
-            logger.info("  ✓ Hyperliquid 中优先级钱包 (500个) - 每 1 小时")
-
-            # 全量扫描: 每6小时监控所有活跃钱包
-            schedule.every(6).hours.do(
-                lambda: asyncio.run(self.monitor_hyperliquid_wallets(priority='all'))
-            )
-            logger.info("  ✓ Hyperliquid 全量扫描 (8000+个) - 每 6 小时")
+            logger.info("  ℹ️  Hyperliquid 钱包监控已移至独立调度器 (app/hyperliquid_scheduler.py)")
+            logger.info("     请单独运行: python app/hyperliquid_scheduler.py")
 
         # 7. 缓存更新任务
         logger.info("\n  🚀 性能优化: 缓存自动更新")

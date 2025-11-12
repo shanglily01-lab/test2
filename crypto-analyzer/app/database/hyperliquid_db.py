@@ -516,7 +516,7 @@ class HyperliquidDB:
 
     def save_wallet_trade(self, address: str, trade_data: Dict):
         """
-        保存钱包交易记录
+        保存钱包交易记录（自动去重）
 
         Args:
             address: 钱包地址
@@ -526,27 +526,68 @@ class HyperliquidDB:
 
         import json
 
-        self.cursor.execute(
-            """INSERT INTO hyperliquid_wallet_trades
-               (trader_id, address, coin, side, action, price, size,
-                notional_usd, closed_pnl, trade_time, detected_at, raw_data)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (
-                trader_id,
-                address,
-                trade_data.get('coin', ''),
-                trade_data.get('side', ''),
-                trade_data.get('action', 'UNKNOWN'),
-                trade_data.get('price', 0),
-                trade_data.get('size', 0),
-                trade_data.get('notional_usd', 0),
-                trade_data.get('closed_pnl', 0),
-                trade_data.get('trade_time'),
-                datetime.now(),
-                json.dumps(trade_data.get('raw_data', {}))
+        # 检查是否已存在相同的交易（基于唯一键：address, coin, side, trade_time, notional_usd）
+        trade_time = trade_data.get('trade_time')
+        notional_usd = trade_data.get('notional_usd', 0)
+        
+        if trade_time:
+            # 将trade_time转换为datetime（如果还不是）
+            if isinstance(trade_time, str):
+                try:
+                    trade_time = datetime.fromisoformat(trade_time.replace('Z', '+00:00'))
+                except:
+                    try:
+                        trade_time = datetime.strptime(trade_time, '%Y-%m-%d %H:%M:%S')
+                    except:
+                        trade_time = None
+            
+            if trade_time:
+                # 检查是否存在相同的交易（基于唯一键定义：address, coin, side, trade_time, notional_usd）
+                # 注意：notional_usd 在唯一键中使用 ROUND(notional_usd, 2)，所以我们也使用相同的精度
+                self.cursor.execute(
+                    """SELECT id FROM hyperliquid_wallet_trades
+                       WHERE address = %s AND coin = %s AND side = %s
+                       AND trade_time = %s
+                       AND ROUND(notional_usd, 2) = ROUND(%s, 2)
+                       LIMIT 1""",
+                    (address, trade_data.get('coin', ''), trade_data.get('side', ''), trade_time, notional_usd)
+                )
+                existing = self.cursor.fetchone()
+                
+                if existing:
+                    # 交易已存在，跳过
+                    return
+
+        # 插入新交易记录
+        try:
+            self.cursor.execute(
+                """INSERT INTO hyperliquid_wallet_trades
+                   (trader_id, address, coin, side, action, price, size,
+                    notional_usd, closed_pnl, trade_time, detected_at, raw_data)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    trader_id,
+                    address,
+                    trade_data.get('coin', ''),
+                    trade_data.get('side', ''),
+                    trade_data.get('action', 'UNKNOWN'),
+                    trade_data.get('price', 0),
+                    trade_data.get('size', 0),
+                    trade_data.get('notional_usd', 0),
+                    trade_data.get('closed_pnl', 0),
+                    trade_time if trade_time else trade_data.get('trade_time'),
+                    datetime.now(),
+                    json.dumps(trade_data.get('raw_data', {}))
+                )
             )
-        )
-        self.conn.commit()
+            self.conn.commit()
+        except Exception as e:
+            # 如果是重复键错误，忽略（可能是在检查后到插入前有并发插入）
+            if 'Duplicate entry' in str(e) or '1062' in str(e):
+                self.conn.rollback()
+                return
+            else:
+                raise
 
     def save_wallet_position(self, address: str, position_data: Dict, snapshot_time: datetime):
         """
