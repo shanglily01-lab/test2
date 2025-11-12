@@ -177,9 +177,9 @@ database:
   mysql:
     host: localhost
     port: 3306
-    user: root
-    password: Tonny@1000
-    database: binance-data
+    user: crypto_user
+    password: crypto_pass_2024
+    database: crypto_analyzer
   sqlite:
     path: ./data/crypto.db
   postgresql:
