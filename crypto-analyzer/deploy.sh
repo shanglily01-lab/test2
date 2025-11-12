@@ -76,6 +76,12 @@ MYSQL_PASSWORD="crypto_pass_2024"  # 可修改
 APP_PORT="9020"
 NGINX_PORT="80"
 
+# 检查root权限
+check_root
+
+# 检测操作系统
+detect_os
+
 # 提示用户确认
 echo -e "\n${YELLOW}===== 部署配置确认 =====${NC}"
 echo "项目目录: $PROJECT_DIR"
