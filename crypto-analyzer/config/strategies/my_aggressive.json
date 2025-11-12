@@ -1,0 +1,54 @@
+{
+  "name": "my_aggressive",
+  "description": "定制激进策略 - 高收益平衡版，跟随聪明钱，快速响应市场",
+  "created_at": "2025-11-11T10:00:00.000000",
+  "updated_at": "2025-11-11T10:00:00.000000",
+  "dimension_weights": {
+    "technical": 25.0,
+    "hyperliquid": 40.0,
+    "news": 8.0,
+    "funding_rate": 12.0,
+    "ethereum": 15.0
+  },
+  "risk_profile": {
+    "level": "aggressive",
+    "max_position_size": 40.0,
+    "stop_loss": 10.0,
+    "take_profit": 35.0,
+    "min_signal_strength": 45.0,
+    "allow_short": true,
+    "max_leverage": 8.0
+  },
+  "trading_rules": {
+    "hyperliquid_min_wallets": 1,
+    "hyperliquid_min_amount": 10000.0,
+    "hyperliquid_min_net_flow": 20000.0,
+    "rsi_oversold": 35.0,
+    "rsi_overbought": 65.0,
+    "news_sentiment_threshold": 0.5,
+    "news_min_count": 2,
+    "funding_rate_extreme": 0.008,
+    "min_dimensions_agree": 2
+  },
+  "technical_config": {
+    "rsi_weight": 25.0,
+    "macd_weight": 25.0,
+    "bollinger_weight": 20.0,
+    "ema_weight": 15.0,
+    "volume_weight": 15.0,
+    "rsi_period": 12,
+    "macd_fast": 10,
+    "macd_slow": 21,
+    "macd_signal": 7,
+    "ema_short": 15,
+    "ema_long": 35,
+    "bb_period": 18,
+    "bb_std": 2.0
+  },
+  "tags": [
+    "激进",
+    "高收益",
+    "跟随聪明钱",
+    "定制化"
+  ]
+}
