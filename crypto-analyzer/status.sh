@@ -5,8 +5,8 @@ sudo systemctl status crypto-analyzer
 echo -e "\n===== 端口监听 ====="
 sudo netstat -tlnp | grep -E ':(9020|80)'
 
-echo -e "\n===== MySQL状态 ====="
-sudo systemctl status mysql | head -5
+echo -e "\n===== MySQL/MariaDB状态 ====="
+sudo systemctl status mysql 2>/dev/null | head -5 || sudo systemctl status mariadb 2>/dev/null | head -5 || echo "MySQL/MariaDB service not found"
 
 echo -e "\n===== Nginx状态 ====="
 sudo systemctl status nginx | head -5

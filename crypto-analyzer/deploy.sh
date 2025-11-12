@@ -197,17 +197,18 @@ else
         TEMP_PASSWORD=$(grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}')
 
     elif [ "$OS" = "amazon" ]; then
-        # Amazon Linux
-        # 安装 MySQL 8.0
-        yum install -y https://dev.mysql.com/get/mysql80-community-release-el7-7.noarch.rpm || true
-        yum install -y mysql-community-server
+        # Amazon Linux 2023
+        log_info "Amazon Linux 2023 使用 MariaDB (MySQL 兼容)"
 
-        # 启动MySQL
-        systemctl start mysqld
-        systemctl enable mysqld
+        # Amazon Linux 2023 推荐使用 MariaDB
+        yum install -y mariadb105-server mariadb105
 
-        # 获取临时密码
-        TEMP_PASSWORD=$(grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}' 2>/dev/null || echo "")
+        # 启动MariaDB
+        systemctl start mariadb
+        systemctl enable mariadb
+
+        # MariaDB 默认没有密码，直接设置
+        TEMP_PASSWORD=""
     fi
 fi
 
