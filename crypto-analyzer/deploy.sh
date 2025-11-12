@@ -113,8 +113,9 @@ elif [ "$OS" = "centos" ] || [ "$OS" = "rhel" ]; then
     yum install -y epel-release
     yum install -y curl wget git vim net-tools
 elif [ "$OS" = "amazon" ]; then
-    yum update -y
-    yum install -y curl wget git vim net-tools tar gzip
+    yum update -y --skip-broken || yum update -y --nobest
+    # curl 已预装，跳过安装避免冲突
+    yum install -y wget git vim net-tools tar gzip || true
 else
     log_error "不支持的操作系统: $OS"
     exit 1
