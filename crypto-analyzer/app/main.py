@@ -346,6 +346,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 挂载静态文件目录（必须在这里挂载，因为通过 uvicorn -m 启动时 if __name__ == "__main__" 不会执行）
+try:
+    static_dir = project_root / "static"
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    logger.info(f"✅ 静态文件目录已挂载: /static -> {static_dir}")
+except Exception as e:
+    logger.error(f"❌ 静态文件挂载失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册策略管理API路由
 try:
     from app.api.strategy_api import router as strategy_router
