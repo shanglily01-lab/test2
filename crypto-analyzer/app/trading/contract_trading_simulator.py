@@ -106,7 +106,8 @@ class Account:
     margin_used: float = 0  # 已用保证金
     margin_available: float = 0  # 可用保证金
     margin_ratio: float = 0  # 保证金率 = 权益 / 已用保证金
-    total_pnl: float = 0  # 总盈亏
+    total_pnl: float = 0  # 总盈亏（已实现盈亏）
+    unrealized_pnl: float = 0  # 未实现盈亏总和
     total_fee: float = 0  # 总手续费
     created_at: datetime = field(default_factory=datetime.now)
 
@@ -266,7 +267,8 @@ class ContractTradingSimulator:
                 position.unrealized_pnl = unrealized_pnl
                 total_unrealized_pnl += unrealized_pnl
 
-        # 更新账户权益
+        # 更新账户权益和未实现盈亏
+        self.account.unrealized_pnl = total_unrealized_pnl
         self.account.equity = self.account.balance + total_unrealized_pnl
         self.account.margin_available = self.account.equity - self.account.margin_used
 
@@ -664,14 +666,19 @@ class ContractTradingSimulator:
 
     def get_account_info(self) -> Dict:
         """获取账户信息"""
+        # 计算当前持仓的未实现盈亏总和（从持仓中汇总，确保实时性）
+        # 如果已经通过 _update_account_equity 更新过，这里会使用最新的值
+        total_unrealized_pnl = sum(pos.unrealized_pnl for pos in self.positions.values())
+        
         return {
             'account_id': self.account.account_id,
             'balance': self.account.balance,
-            'equity': self.account.equity,
+            'equity': self.account.balance + total_unrealized_pnl,  # 权益 = 余额 + 未实现盈亏
             'margin_used': self.account.margin_used,
-            'margin_available': self.account.margin_available,
-            'margin_ratio': self.account.margin_ratio,
-            'total_pnl': self.account.total_pnl,
+            'margin_available': (self.account.balance + total_unrealized_pnl) - self.account.margin_used,
+            'margin_ratio': (self.account.balance + total_unrealized_pnl) / self.account.margin_used if self.account.margin_used > 0 else float('inf'),
+            'total_pnl': self.account.total_pnl,  # 已实现盈亏
+            'unrealized_pnl': total_unrealized_pnl,  # 未实现盈亏总和（所有持仓的盈亏总和）
             'total_fee': self.account.total_fee,
             'positions_count': len(self.positions),
             'orders_count': len([o for o in self.orders.values() if o.status == OrderStatus.PENDING])

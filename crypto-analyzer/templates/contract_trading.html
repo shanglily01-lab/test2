@@ -184,9 +184,14 @@
                 <div class="stat-change">USDT</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">总盈亏</div>
+                <div class="stat-label">已实现盈亏</div>
                 <div class="stat-value pnl" id="totalPnl">0.00</div>
                 <div class="stat-change" id="totalPnlPct">(0.00%)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">未实现盈亏</div>
+                <div class="stat-value pnl" id="unrealizedPnl">0.00</div>
+                <div class="stat-change">持仓盈亏总和</div>
             </div>
         </div>
 
@@ -515,12 +520,57 @@
 
         // 刷新所有数据
         async function refreshAll() {
+            // 先更新价格，以便计算未实现盈亏
+            await updatePrices();
             await Promise.all([
                 refreshAccount(),
                 refreshPositions(),
                 refreshHistory(),
                 refreshStatistics()
             ]);
+        }
+
+        // 更新价格
+        async function updatePrices() {
+            try {
+                // 获取当前所有交易对的价格
+                const response = await fetch('/api/prices?limit=100');
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    const prices = {};
+                    data.data.forEach(item => {
+                        // 处理symbol格式：可能是 "BTC" 或 "BTC/USDT"
+                        let symbol = item.symbol;
+                        // 如果没有斜杠，添加 /USDT
+                        if (!symbol.includes('/')) {
+                            symbol = symbol + '/USDT';
+                        }
+                        prices[symbol] = item.price;
+                    });
+                    
+                    // 调用后端API更新价格并计算未实现盈亏
+                    const updateResponse = await fetch('/api/contract-trading/prices/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prices })
+                    });
+                    
+                    // 等待价格更新完成
+                    const updateResult = await updateResponse.json();
+                    if (updateResult.success) {
+                        const unrealizedPnl = updateResult.data.account.unrealized_pnl || 0;
+                        const positionsCount = updateResult.data.account.positions_count || 0;
+                        console.log(`[未实现盈亏] 持仓: ${positionsCount}个, 盈亏: ${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)} USDT`);
+                    } else {
+                        console.error('[价格更新失败]', updateResult.detail || updateResult);
+                    }
+                } else {
+                    console.warn('[价格更新] 价格数据格式不正确');
+                }
+            } catch (error) {
+                console.error('[价格更新错误]', error.message);
+            }
         }
 
         // 刷新账户
@@ -530,17 +580,32 @@
                 const data = await response.json();
                 if (data.success) {
                     const acc = data.data;
-                    document.getElementById('accountBalance').textContent = acc.balance.toLocaleString();
-                    document.getElementById('accountEquity').textContent = acc.equity.toLocaleString();
-                    document.getElementById('marginAvailable').textContent = acc.margin_available.toLocaleString();
+                    
+                    document.getElementById('accountBalance').textContent = acc.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    document.getElementById('accountEquity').textContent = acc.equity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    document.getElementById('marginAvailable').textContent = acc.margin_available.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-                    const pnl = acc.total_pnl;
-                    const pnlEl = document.getElementById('totalPnl');
-                    pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toLocaleString();
-                    pnlEl.className = 'stat-value pnl ' + (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                    // 已实现盈亏
+                    const realizedPnl = acc.total_pnl || 0;
+                    const realizedPnlEl = document.getElementById('totalPnl');
+                    realizedPnlEl.textContent = (realizedPnl >= 0 ? '+' : '') + realizedPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    realizedPnlEl.className = 'stat-value pnl ' + (realizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                    
+                    // 未实现盈亏
+                    const unrealizedPnl = acc.unrealized_pnl || 0;
+                    const unrealizedPnlEl = document.getElementById('unrealizedPnl');
+                    unrealizedPnlEl.textContent = (unrealizedPnl >= 0 ? '+' : '') + unrealizedPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    unrealizedPnlEl.className = 'stat-value pnl ' + (unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+                    
+                    // 只在有持仓时输出调试信息
+                    if (acc.positions_count > 0) {
+                        console.log(`[账户刷新] 持仓: ${acc.positions_count}个, 未实现盈亏: ${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)} USDT`);
+                    }
+                } else {
+                    console.error('[账户刷新失败]', data.detail || data);
                 }
             } catch (error) {
-                console.error('刷新账户失败:', error);
+                console.error('[账户刷新错误]', error.message);
             }
         }
 
@@ -597,7 +662,7 @@
                     container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无持仓</div></div>';
                 }
             } catch (error) {
-                console.error('刷新持仓失败:', error);
+                console.error('[持仓刷新错误]', error.message);
             }
         }
 
@@ -636,7 +701,7 @@
                     container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无交易记录</div></div>';
                 }
             } catch (error) {
-                console.error('刷新历史失败:', error);
+                // 静默处理历史刷新错误
             }
         }
 
@@ -653,7 +718,7 @@
                     document.getElementById('statTotalFee').textContent = '$' + stats.total_fee.toFixed(2);
                 }
             } catch (error) {
-                console.error('刷新统计失败:', error);
+                // 静默处理统计刷新错误
             }
         }
 
