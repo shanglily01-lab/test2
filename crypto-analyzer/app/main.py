@@ -982,24 +982,38 @@ async def get_dashboard():
     except Exception as e:
         logger.error(f"Dashboard数据获取失败: {e}")
         import traceback
-        traceback.print_exc()
-        return {
-            "success": False,
-            "data": {
-                "prices": [],
-                "futures": [],
-                "recommendations": [],
-                "news": [],
-                "hyperliquid": {},
-                "stats": {
-                    "total_symbols": 0,
-                    "bullish_count": 0,
-                    "bearish_count": 0
+        logger.error(traceback.format_exc())
+        # 确保总是返回有效的响应
+        try:
+            return {
+                "success": False,
+                "data": {
+                    "prices": [],
+                    "futures": [],
+                    "recommendations": [],
+                    "news": [],
+                    "hyperliquid": {},
+                    "stats": {
+                        "total_symbols": 0,
+                        "bullish_count": 0,
+                        "bearish_count": 0
+                    },
+                    "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 },
-                "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            },
-            "error": str(e)
-        }
+                "error": str(e),
+                "message": "数据加载失败，请稍后重试"
+            }
+        except Exception as e2:
+            # 如果连返回响应都失败，记录错误并返回最小响应
+            logger.error(f"返回错误响应失败: {e2}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "error": "服务器内部错误",
+                    "message": "数据加载失败"
+                }
+            )
 
     # 以下代码暂时不执行
     """

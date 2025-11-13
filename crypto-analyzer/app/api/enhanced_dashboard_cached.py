@@ -55,28 +55,47 @@ class EnhancedDashboardCached:
             self._get_futures_from_cache(symbols),  # 合约数据
         ]
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        except Exception as e:
+            logger.error(f"Dashboard数据获取异常: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # 如果gather失败，返回空数据
+            results = [[], [], [], {}, {}, []]
 
         prices, recommendations, news, hyperliquid, stats, futures = results
 
         # 处理异常
         if isinstance(prices, Exception):
             logger.error(f"获取价格失败: {prices}")
+            import traceback
+            logger.error(traceback.format_exc())
             prices = []
         if isinstance(recommendations, Exception):
             logger.error(f"获取建议失败: {recommendations}")
+            import traceback
+            logger.error(traceback.format_exc())
             recommendations = []
         if isinstance(news, Exception):
             logger.error(f"获取新闻失败: {news}")
+            import traceback
+            logger.error(traceback.format_exc())
             news = []
         if isinstance(hyperliquid, Exception):
             logger.error(f"获取Hyperliquid数据失败: {hyperliquid}")
+            import traceback
+            logger.error(traceback.format_exc())
             hyperliquid = {}
         if isinstance(stats, Exception):
             logger.error(f"获取统计失败: {stats}")
+            import traceback
+            logger.error(traceback.format_exc())
             stats = {}
         if isinstance(futures, Exception):
             logger.error(f"获取合约数据失败: {futures}")
+            import traceback
+            logger.error(traceback.format_exc())
             futures = []
 
         # 统计信号
@@ -85,22 +104,48 @@ class EnhancedDashboardCached:
         elapsed = (datetime.now() - start_time).total_seconds()
         # logger.info(f"✅ Dashboard数据获取完成，耗时: {elapsed:.3f}秒（从缓存）")  # 减少日志输出
 
-        return {
-            'success': True,
-            'data': {
-                'prices': prices,
-                'recommendations': recommendations,
-                'news': news,
-                'hyperliquid': hyperliquid,
-                'futures': futures,  # 合约数据
-                'stats': {
-                    **stats,
-                    **signal_stats
-                },
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'from_cache': True  # 标记数据来源于缓存
+        # 确保所有数据都是可序列化的
+        try:
+            # 确保stats是字典
+            if not isinstance(stats, dict):
+                stats = {}
+            if not isinstance(signal_stats, dict):
+                signal_stats = {}
+            
+            return {
+                'success': True,
+                'data': {
+                    'prices': prices or [],
+                    'recommendations': recommendations or [],
+                    'news': news or [],
+                    'hyperliquid': hyperliquid or {},
+                    'futures': futures or [],  # 合约数据
+                    'stats': {
+                        **stats,
+                        **signal_stats
+                    },
+                    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'from_cache': True  # 标记数据来源于缓存
+                }
             }
-        }
+        except Exception as e:
+            logger.error(f"构建Dashboard响应失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # 返回最小有效响应
+            return {
+                'success': False,
+                'data': {
+                    'prices': [],
+                    'recommendations': [],
+                    'news': [],
+                    'hyperliquid': {},
+                    'futures': [],
+                    'stats': {},
+                    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                },
+                'error': str(e)
+            }
 
     async def _get_prices_from_cache(self, symbols: List[str]) -> List[Dict]:
         """
