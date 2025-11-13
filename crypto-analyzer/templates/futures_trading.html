@@ -667,12 +667,29 @@
             }
         }
 
-        // 刷新价格
+        // 价格缓存（避免重复请求）
+        let futuresPriceCache = {};
+        let futuresPriceCacheTime = {};
+        const FUTURES_PRICE_CACHE_DURATION = 3000; // 3秒缓存
+
+        // 刷新价格（优化：使用缓存和更短的超时）
         async function refreshPrice() {
             const symbol = document.getElementById('symbol').value;
             if (!symbol) {
                 document.getElementById('current-price-display').textContent = '--';
                 currentPrice = 0;
+                updateEstimatedMargin();
+                return;
+            }
+
+            // 检查缓存
+            const now = Date.now();
+            if (futuresPriceCache[symbol] && futuresPriceCacheTime[symbol] && (now - futuresPriceCacheTime[symbol]) < FUTURES_PRICE_CACHE_DURATION) {
+                const cachedPrice = futuresPriceCache[symbol];
+                currentPrice = cachedPrice;
+                previousPrice = cachedPrice;
+                document.getElementById('current-price-display').textContent = formatPrice(cachedPrice);
+                document.getElementById('current-price-display').style.color = 'var(--primary-blue)';
                 updateEstimatedMargin();
                 return;
             }
@@ -686,7 +703,7 @@
                 // 使用后端API获取合约价格（避免CORS问题）
                 // 使用AbortController设置超时，避免长时间等待
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 4000); // 4秒超时，给后端更多时间
+                const timeoutId = setTimeout(() => controller.abort(), 2000); // 缩短到2秒超时
                 
                 try {
                     const response = await fetch(`/api/futures/price/${encodeURIComponent(symbol)}`, {
@@ -711,13 +728,13 @@
                     }
                 }
                 
-                // 如果合约价格获取失败，回退到现货价格API（也使用实时API）
+                // 如果合约价格获取失败，回退到现货价格API（不使用force_refresh，使用缓存）
                 if (!price || price === 0) {
                     try {
                         const controller2 = new AbortController();
-                        const timeoutId2 = setTimeout(() => controller2.abort(), 2000); // 2秒超时
+                        const timeoutId2 = setTimeout(() => controller2.abort(), 1500); // 缩短到1.5秒超时
                         
-                        const response = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}&force_refresh=true`, {
+                        const response = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}`, {
                             signal: controller2.signal
                         });
                         clearTimeout(timeoutId2);
@@ -725,7 +742,7 @@
                         const data = await response.json();
                         if (data.price && data.price > 0) {
                             price = parseFloat(data.price);
-                            priceSource = data.source || 'spot_realtime';
+                            priceSource = data.source || 'spot_cache';
                         }
                     } catch (e) {
                         if (e.name !== 'AbortError') {
@@ -735,6 +752,9 @@
                 }
                 
                 if (price && price > 0) {
+                    // 更新缓存
+                    futuresPriceCache[symbol] = price;
+                    futuresPriceCacheTime[symbol] = now;
                     // 价格变化检测和动画
                     const priceChangeIndicator = document.getElementById('price-change-indicator');
                     if (previousPrice > 0 && previousPrice !== price) {

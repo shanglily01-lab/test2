@@ -853,6 +853,7 @@
                                 <th>钱包</th>
                                 <th>币种</th>
                                 <th>方向</th>
+                                <th>下单价格</th>
                                 <th>下单数量</th>
                                 <th>合约倍数</th>
                                 <th>持仓金额</th>
@@ -862,7 +863,7 @@
                         </thead>
                         <tbody id="hlTradesBody">
                             <tr>
-                                <td colspan="8" class="empty-state">
+                                <td colspan="9" class="empty-state">
                                     <div class="empty-state-text">加载中...</div>
                                 </td>
                             </tr>
@@ -1221,7 +1222,7 @@
             const tbody = document.getElementById('hlTradesBody');
 
             if (trades.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><div class="empty-state-text">暂无交易</div></td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">暂无交易</div></td></tr>';
                 return;
             }
 
@@ -1239,6 +1240,7 @@
                             ${t.side === 'LONG' ? '做多' : '做空'}
                         </span>
                     </td>
+                    <td class="font-mono">$${formatPrice(t.price || 0)}</td>
                     <td class="font-mono">${formatLargeNumber(t.size || 0)}</td>
                     <td class="font-mono"><span class="badge badge-info">${(t.leverage || 1).toFixed(1)}x</span></td>
                     <td class="font-mono">$${formatLargeNumber(t.notional_usd)}</td>

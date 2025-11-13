@@ -796,7 +796,8 @@
 
             document.getElementById('symbol').addEventListener('change', function() {
                 currentSymbol = this.value;
-                refreshPrice(true);
+                // 切换交易对时不强制刷新，优先使用缓存，提升响应速度
+                refreshPrice(false);
                 // 如果该交易对有持仓，自动填充数量
                 fillQuantityFromPosition();
                 // 切换交易对时重置自动买入和自动卖出状态
@@ -1481,11 +1482,31 @@
             }
         }
 
-        // 刷新价格
+        // 价格缓存（避免重复请求）
+        let paperPriceCache = {};
+        let paperPriceCacheTime = {};
+        const PAPER_PRICE_CACHE_DURATION = 5000; // 5秒缓存
+
+        // 刷新价格（优化：使用缓存）
         async function refreshPrice(forceRefresh = false) {
             if (!currentSymbol || currentSymbol === '') return;
 
             const priceInput = document.getElementById('current-price');
+            
+            // 检查缓存（除非强制刷新）
+            if (!forceRefresh) {
+                const now = Date.now();
+                if (paperPriceCache[currentSymbol] && paperPriceCacheTime[currentSymbol] && (now - paperPriceCacheTime[currentSymbol]) < PAPER_PRICE_CACHE_DURATION) {
+                    const cachedPrice = paperPriceCache[currentSymbol];
+                    currentPrice = cachedPrice;
+                    priceInput.value = formatPrice(cachedPrice);
+                    
+                    const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+                    document.getElementById('estimated-amount').textContent = (quantity * cachedPrice).toFixed(2);
+                    return;
+                }
+            }
+
             priceInput.value = '加载中...';
 
             try {
@@ -1499,6 +1520,11 @@
 
                 const oldPrice = currentPrice;
                 currentPrice = data.price;
+                
+                // 更新缓存
+                paperPriceCache[currentSymbol] = currentPrice;
+                paperPriceCacheTime[currentSymbol] = Date.now();
+                
                 priceInput.value = formatPrice(currentPrice);
 
                 const quantity = parseFloat(document.getElementById('quantity').value) || 0;

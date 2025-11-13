@@ -413,27 +413,57 @@
             }
         }
 
-        // 获取价格
+        // 价格缓存（避免重复请求）
+        let priceCache = {};
+        let priceCacheTime = {};
+        const PRICE_CACHE_DURATION = 5000; // 5秒缓存
+
+        // 获取价格（优化：使用缓存和直接API）
         async function fetchPrice() {
             const symbol = document.getElementById('orderSymbol').value;
+            if (!symbol) return;
+
+            // 检查缓存
+            const now = Date.now();
+            if (priceCache[symbol] && priceCacheTime[symbol] && (now - priceCacheTime[symbol]) < PRICE_CACHE_DURATION) {
+                const price = priceCache[symbol].price;
+                const change = priceCache[symbol].change_24h || 0;
+                document.getElementById('orderPrice').value = price;
+                document.getElementById('currentPrice').textContent = '$' + formatPrice(price);
+                const changeEl = document.getElementById('priceChange');
+                changeEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
+                changeEl.className = change >= 0 ? 'pnl-positive' : 'pnl-negative';
+                return;
+            }
+
             try {
-                const response = await fetch('/api/prices?limit=100');
+                // 优先使用直接的价格API，更快
+                const response = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}`);
                 const data = await response.json();
 
-                if (data.success && data.data) {
-                    const symbolData = data.data.find(item => item.symbol === symbol);
-                    if (symbolData) {
-                        const price = symbolData.price;
-                        document.getElementById('orderPrice').value = price;
-                        document.getElementById('currentPrice').textContent = '$' + formatPrice(price);
-
-                        const change = symbolData.change_24h || 0;
-                        const changeEl = document.getElementById('priceChange');
-                        changeEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
-                        changeEl.className = change >= 0 ? 'pnl-positive' : 'pnl-negative';
-
-                        showMessage('价格已更新: $' + formatPrice(price), 'success');
-                    }
+                if (data.price && data.price > 0) {
+                    const price = data.price;
+                    // 更新缓存
+                    priceCache[symbol] = { price: price, change_24h: 0 };
+                    priceCacheTime[symbol] = now;
+                    
+                    document.getElementById('orderPrice').value = price;
+                    document.getElementById('currentPrice').textContent = '$' + formatPrice(price);
+                    
+                    // 尝试从价格列表获取24h变化（可选，不阻塞）
+                    fetch(`/api/prices?limit=100`).then(res => res.json()).then(priceData => {
+                        if (priceData.success && priceData.data) {
+                            const symbolData = priceData.data.find(item => item.symbol === symbol || item.symbol === symbol.replace('/USDT', ''));
+                            if (symbolData && symbolData.change_24h !== undefined) {
+                                priceCache[symbol].change_24h = symbolData.change_24h;
+                                const changeEl = document.getElementById('priceChange');
+                                changeEl.textContent = (symbolData.change_24h >= 0 ? '+' : '') + symbolData.change_24h.toFixed(2) + '%';
+                                changeEl.className = symbolData.change_24h >= 0 ? 'pnl-positive' : 'pnl-negative';
+                            }
+                        }
+                    }).catch(() => {}); // 静默失败
+                } else {
+                    throw new Error('价格数据无效');
                 }
             } catch (error) {
                 showMessage('获取价格失败', 'danger');
