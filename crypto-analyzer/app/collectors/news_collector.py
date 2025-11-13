@@ -531,18 +531,14 @@ class NewsAggregator:
         try:
             # ISO格式
             dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            # 转换为naive datetime (移除时区信息)
-            if dt.tzinfo is not None:
-                dt = dt.replace(tzinfo=None)
+            # 直接返回datetime，不做时区处理
             return dt
         except:
             try:
                 # RSS格式
                 from email.utils import parsedate_to_datetime
                 dt = parsedate_to_datetime(date_str)
-                # 转换为naive datetime
-                if dt.tzinfo is not None:
-                    dt = dt.replace(tzinfo=None)
+                # 直接返回datetime，不做时区处理
                 return dt
             except:
                 return datetime.min

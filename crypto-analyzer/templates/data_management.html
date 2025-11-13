@@ -980,17 +980,43 @@
             return num.toLocaleString();
         }
 
-        // 格式化日期时间
+        // 格式化日期时间（根据时区信息显示）
+        // 规则：
+        // - 包含 +08:00：本地时间（UTC+8），直接显示
+        // - 包含 Z：Binance数据（UTC时间），显示本地时间和UTC时间
         function formatDateTime(dateStr) {
             if (!dateStr) return '-';
             try {
-                const date = new Date(dateStr);
+                // 统一处理：所有时间都按数据库存储的时间显示（本地时间UTC+8）
+                // 如果包含+08:00，直接使用；如果包含Z，转换为本地时间；否则假设是本地时间
+                let date;
+                if (dateStr.includes('+08:00')) {
+                    // 本地时间（UTC+8）
+                    date = new Date(dateStr);
+                } else if (dateStr.includes('Z')) {
+                    // UTC时间，转换为本地时间显示
+                    date = new Date(dateStr);
+                } else if (!dateStr.includes('+') && !dateStr.includes('-', 10)) {
+                    // 没有时区信息，假设是本地时间
+                    date = new Date(dateStr);
+                } else {
+                    // 其他时区格式
+                    date = new Date(dateStr);
+                }
+                
+                if (isNaN(date.getTime())) {
+                    return dateStr;
+                }
+                
+                // 统一显示本地时间（UTC+8），不显示UTC时间
                 return date.toLocaleString('zh-CN', {
                     year: 'numeric',
                     month: '2-digit',
                     day: '2-digit',
                     hour: '2-digit',
-                    minute: '2-digit'
+                    minute: '2-digit',
+                    second: '2-digit',
+                    timeZone: 'Asia/Shanghai'
                 });
             } catch {
                 return dateStr;
@@ -1137,7 +1163,7 @@
                                     <div>成功采集 ${result.total_saved || 0} 条数据</div>
                                     <div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">
                                         交易对: ${symbolList.join(', ')}<br>
-                                        时间范围: ${formatDateTime(startTime)} - ${formatDateTime(endTime)}
+                                        时间范围: ${formatDateTime(startTimeISO)} - ${formatDateTime(endTimeISO)}
                                     </div>
                                     ${timeframeMsg}
                                     ${configMsg}

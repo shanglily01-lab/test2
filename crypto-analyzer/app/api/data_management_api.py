@@ -280,42 +280,94 @@ def _check_status_active(latest_time, threshold_seconds):
 @router.get("/statistics")
 async def get_data_statistics():
     """
-    获取所有数据表的统计信息
+    获取所有数据表的统计信息（优化版本）
     包括记录数、最新数据时间、数据范围等
+    对于大表使用近似计数和索引优化查询
     """
     try:
         with DBConnection() as conn:
             cursor = conn.cursor()
             
             # 定义所有数据表及其描述
+            # 大表列表：使用近似计数和优化查询
+            large_tables = {'price_data', 'kline_data'}
+            
+            # 时区说明：
+            # - Binance数据（price_data, kline_data, funding_rate_data等）：UTC时间（UTC+0）
+            # - 其他数据（ETF、企业金库、新闻、信号等）：本地时间（UTC+8）
             tables = [
-            {'name': 'price_data', 'label': '实时价格数据', 'description': '存储各交易所的实时价格数据'},
-            {'name': 'kline_data', 'label': 'K线数据', 'description': '存储不同时间周期的K线数据'},
-            {'name': 'news_data', 'label': '新闻数据', 'description': '存储加密货币相关新闻'},
-            {'name': 'funding_rate_data', 'label': '资金费率数据', 'description': '存储合约资金费率数据'},
-            {'name': 'futures_open_interest', 'label': '持仓量数据', 'description': '存储合约持仓量数据'},
-            {'name': 'futures_long_short_ratio', 'label': '多空比数据', 'description': '存储合约多空比数据'},
-            {'name': 'smart_money_transactions', 'label': '聪明钱交易', 'description': '存储聪明钱包的交易记录'},
-            {'name': 'smart_money_signals', 'label': '聪明钱信号', 'description': '存储聪明钱交易信号'},
-            {'name': 'ema_signals', 'label': 'EMA信号', 'description': '存储EMA技术指标信号'},
-            {'name': 'investment_recommendations', 'label': '投资建议', 'description': '存储AI生成的投资建议'},
-            {'name': 'futures_positions', 'label': '合约持仓', 'description': '存储合约交易持仓记录'},
-            {'name': 'futures_orders', 'label': '合约订单', 'description': '存储合约交易订单记录'},
-            {'name': 'futures_trades', 'label': '合约交易', 'description': '存储合约交易记录'},
-            {'name': 'paper_trading_accounts', 'label': '模拟账户', 'description': '存储模拟交易账户信息'},
-            {'name': 'paper_trading_orders', 'label': '模拟订单', 'description': '存储模拟交易订单记录'},
-            {'name': 'paper_trading_positions', 'label': '模拟持仓', 'description': '存储模拟交易持仓记录'},
-            {'name': 'crypto_etf_flows', 'label': 'ETF数据', 'description': '存储加密货币ETF资金流向数据'},
-            {'name': 'corporate_treasury_financing', 'label': '企业融资', 'description': '存储企业金库融资数据'},
+            {'name': 'price_data', 'label': '实时价格数据', 'description': '存储各交易所的实时价格数据', 'time_field': 'timestamp', 'is_binance': True},
+            {'name': 'kline_data', 'label': 'K线数据', 'description': '存储不同时间周期的K线数据', 'time_field': 'open_time', 'is_timestamp_ms': True, 'is_binance': True},
+            {'name': 'news_data', 'label': '新闻数据', 'description': '存储加密货币相关新闻', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'funding_rate_data', 'label': '资金费率数据', 'description': '存储合约资金费率数据', 'time_field': 'timestamp', 'is_binance': True},
+            {'name': 'futures_open_interest', 'label': '持仓量数据', 'description': '存储合约持仓量数据', 'time_field': 'timestamp', 'is_binance': True},
+            {'name': 'futures_long_short_ratio', 'label': '多空比数据', 'description': '存储合约多空比数据', 'time_field': 'timestamp', 'is_binance': True},
+            {'name': 'smart_money_transactions', 'label': '聪明钱交易', 'description': '存储聪明钱包的交易记录', 'time_field': 'timestamp', 'is_binance': False},
+            {'name': 'smart_money_signals', 'label': '聪明钱信号', 'description': '存储聪明钱交易信号', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'ema_signals', 'label': 'EMA信号', 'description': '存储EMA技术指标信号', 'time_field': 'timestamp', 'is_binance': False},
+            {'name': 'investment_recommendations', 'label': '投资建议', 'description': '存储AI生成的投资建议', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'futures_positions', 'label': '合约持仓', 'description': '存储合约交易持仓记录', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'futures_orders', 'label': '合约订单', 'description': '存储合约交易订单记录', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'futures_trades', 'label': '合约交易', 'description': '存储合约交易记录', 'time_field': 'timestamp', 'is_binance': False},
+            {'name': 'paper_trading_accounts', 'label': '模拟账户', 'description': '存储模拟交易账户信息', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'paper_trading_orders', 'label': '模拟订单', 'description': '存储模拟交易订单记录', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'paper_trading_positions', 'label': '模拟持仓', 'description': '存储模拟交易持仓记录', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'crypto_etf_flows', 'label': 'ETF数据', 'description': '存储加密货币ETF资金流向数据', 'time_field': 'date', 'is_binance': False},
+            {'name': 'corporate_treasury_financing', 'label': '企业融资', 'description': '存储企业金库融资数据', 'time_field': 'date', 'is_binance': False},
         ]
+        
+        # 先一次性获取所有表的大小和行数估算（从 information_schema）
+        table_names = [f"'{t['name']}'" for t in tables]
+        if not table_names:
+            return {
+                'success': True,
+                'data': {
+                    'tables': [],
+                    'summary': {
+                        'total_tables': 0,
+                        'total_records': 0,
+                        'total_size_mb': 0
+                    }
+                }
+            }
+        
+        cursor.execute("""
+            SELECT 
+                table_name,
+                ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb,
+                table_rows as estimated_rows
+            FROM information_schema.TABLES 
+            WHERE table_schema = DATABASE()
+            AND table_name IN ({})
+        """.format(','.join(table_names)))
+        
+        table_info_map = {}
+        for row in cursor.fetchall():
+            # 确保使用字典访问方式（DictCursor）
+            if isinstance(row, dict):
+                table_name = row.get('table_name')
+                size_mb = row.get('size_mb', 0)
+                estimated_rows = row.get('estimated_rows', 0)
+            else:
+                # 如果是元组，按位置访问
+                table_name = row[0] if len(row) > 0 else None
+                size_mb = row[1] if len(row) > 1 else 0
+                estimated_rows = row[2] if len(row) > 2 else 0
+            
+            if table_name:
+                table_info_map[table_name] = {
+                    'size_mb': float(size_mb) if size_mb else 0,
+                    'estimated_rows': int(estimated_rows) if estimated_rows else 0
+                }
         
         statistics = []
         
         for table in tables:
             try:
+                table_name = table['name']
+                
                 # 检查表是否存在
-                cursor.execute(f"SHOW TABLES LIKE '{table['name']}'")
-                if not cursor.fetchone():
+                if table_name not in table_info_map:
                     statistics.append({
                         **table,
                         'exists': False,
@@ -326,48 +378,100 @@ async def get_data_statistics():
                     })
                     continue
                 
-                # 获取记录数
-                cursor.execute(f"SELECT COUNT(*) as count FROM {table['name']}")
-                count_result = cursor.fetchone()
-                count = count_result['count'] if count_result else 0
+                table_info = table_info_map[table_name]
+                size_mb = table_info['size_mb']
                 
-                # 获取最新和最早的时间戳
+                # 对于大表，使用估算行数；对于小表，使用精确计数
+                if table_name in large_tables:
+                    # 大表：使用估算值（更快）
+                    count = table_info['estimated_rows']
+                    count_approx = True
+                else:
+                    # 小表：使用精确计数
+                    try:
+                        cursor.execute(f"SELECT COUNT(*) as count FROM {table_name}")
+                        count_result = cursor.fetchone()
+                        count = count_result['count'] if count_result else 0
+                        count_approx = False
+                    except:
+                        count = table_info['estimated_rows']
+                        count_approx = True
+                
+                # 获取最新和最早的时间戳（使用索引字段）
                 latest_time = None
                 oldest_time = None
+                time_field = table.get('time_field', 'timestamp')
+                is_timestamp_ms = table.get('is_timestamp_ms', False)
+                is_binance = table.get('is_binance', False)  # 是否是Binance数据（UTC时间）
                 
-                # 特殊处理：kline_data 表的 open_time 是毫秒时间戳，需要转换
-                if table['name'] == 'kline_data':
-                    try:
-                        # 使用 FROM_UNIXTIME 将毫秒时间戳转换为 datetime
+                try:
+                    if is_timestamp_ms and time_field == 'open_time':
+                        # kline_data 表的 open_time 是毫秒时间戳
                         cursor.execute("""
                             SELECT 
                                 FROM_UNIXTIME(MAX(open_time)/1000) as max_time,
                                 FROM_UNIXTIME(MIN(open_time)/1000) as min_time
                             FROM kline_data
+                            WHERE open_time IS NOT NULL
                         """)
-                        time_result = cursor.fetchone()
-                        if time_result and time_result.get('max_time'):
-                            latest_time = time_result['max_time'].isoformat() if hasattr(time_result['max_time'], 'isoformat') else str(time_result['max_time'])
-                            oldest_time = time_result['min_time'].isoformat() if hasattr(time_result['min_time'], 'isoformat') else str(time_result['min_time'])
-                    except Exception as e:
-                        logger.debug(f"获取kline_data时间失败，尝试其他字段: {e}")
-                        # 如果失败，尝试使用 timestamp 或 created_at 字段
-                        for field in ['timestamp', 'created_at']:
-                            try:
-                                cursor.execute(f"SELECT MAX({field}) as max_time, MIN({field}) as min_time FROM {table['name']}")
-                                time_result = cursor.fetchone()
-                                if time_result and time_result.get('max_time'):
-                                    latest_time = time_result['max_time'].isoformat() if hasattr(time_result['max_time'], 'isoformat') else str(time_result['max_time'])
-                                    oldest_time = time_result['min_time'].isoformat() if hasattr(time_result['min_time'], 'isoformat') else str(time_result['min_time'])
-                                    break
-                            except:
-                                continue
-                else:
-                    # 其他表使用标准时间字段
-                    time_fields = ['timestamp', 'created_at', 'updated_at', 'open_time', 'trade_time', 'date']
-                    for field in time_fields:
+                    else:
+                        # 其他表使用标准时间字段，使用索引优化
+                        cursor.execute(f"""
+                            SELECT 
+                                MAX({time_field}) as max_time,
+                                MIN({time_field}) as min_time
+                            FROM {table_name}
+                            WHERE {time_field} IS NOT NULL
+                        """)
+                    
+                    time_result = cursor.fetchone()
+                    if time_result and time_result.get('max_time'):
+                        max_time = time_result['max_time']
+                        min_time = time_result['min_time']
+                        
+                        # 格式化时间戳，统一使用数据库存储的时间（本地时间UTC+8）
+                        # 所有数据统一标记为本地时间（+08:00），不再区分Binance和其他数据
+                        if hasattr(max_time, 'isoformat'):
+                            # 统一标记为本地时间（UTC+8）
+                            latest_time = max_time.isoformat()
+                            if not latest_time.endswith(('Z', '+', '-')):
+                                latest_time = latest_time + '+08:00'
+                            elif latest_time.endswith('Z'):
+                                # 如果是UTC时间，转换为本地时间标记
+                                latest_time = latest_time.replace('Z', '+08:00')
+                            
+                            if min_time:
+                                oldest_time = min_time.isoformat()
+                                if not oldest_time.endswith(('Z', '+', '-')):
+                                    oldest_time = oldest_time + '+08:00'
+                                elif oldest_time.endswith('Z'):
+                                    oldest_time = oldest_time.replace('Z', '+08:00')
+                            else:
+                                oldest_time = None
+                        else:
+                            # 字符串格式（DATE类型）
+                            latest_time = str(max_time)
+                            if not latest_time.endswith(('Z', '+', '-', 'T')):
+                                latest_time = latest_time + 'T00:00:00+08:00'
+                            elif latest_time.endswith('Z'):
+                                latest_time = latest_time.replace('Z', '+08:00')
+                            
+                            if min_time:
+                                oldest_time = str(min_time)
+                                if not oldest_time.endswith(('Z', '+', '-', 'T')):
+                                    oldest_time = oldest_time + 'T00:00:00+08:00'
+                                elif oldest_time.endswith('Z'):
+                                    oldest_time = oldest_time.replace('Z', '+08:00')
+                            else:
+                                oldest_time = None
+                except Exception as e:
+                    logger.debug(f"获取 {table_name} 时间失败: {e}")
+                    # 尝试其他时间字段
+                    for field in ['timestamp', 'created_at', 'updated_at', 'open_time', 'trade_time', 'date']:
+                        if field == time_field:
+                            continue
                         try:
-                            cursor.execute(f"SELECT MAX({field}) as max_time, MIN({field}) as min_time FROM {table['name']}")
+                            cursor.execute(f"SELECT MAX({field}) as max_time, MIN({field}) as min_time FROM {table_name} WHERE {field} IS NOT NULL")
                             time_result = cursor.fetchone()
                             if time_result and time_result.get('max_time'):
                                 latest_time = time_result['max_time'].isoformat() if hasattr(time_result['max_time'], 'isoformat') else str(time_result['max_time'])
@@ -376,24 +480,14 @@ async def get_data_statistics():
                         except:
                             continue
                 
-                # 获取表大小（MB）
-                cursor.execute(f"""
-                    SELECT 
-                        ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb
-                    FROM information_schema.TABLES 
-                    WHERE table_schema = DATABASE()
-                    AND table_name = '{table['name']}'
-                """)
-                size_result = cursor.fetchone()
-                size_mb = size_result['size_mb'] if size_result and size_result.get('size_mb') else 0
-                
                 statistics.append({
                     **table,
                     'exists': True,
                     'count': count,
+                    'count_approx': count_approx if table_name in large_tables else False,
                     'latest_time': latest_time,
                     'oldest_time': oldest_time,
-                    'size_mb': float(size_mb) if size_mb else 0
+                    'size_mb': size_mb
                 })
                 
             except Exception as e:
@@ -407,22 +501,22 @@ async def get_data_statistics():
                     'size_mb': 0,
                     'error': str(e)
                 })
-            
-            # 计算总计
-            total_count = sum(s['count'] for s in statistics)
-            total_size = sum(s['size_mb'] for s in statistics)
-            
-            return {
-                'success': True,
-                'data': {
-                    'tables': statistics,
-                    'summary': {
-                        'total_tables': len(statistics),
-                        'total_records': total_count,
-                        'total_size_mb': round(total_size, 2)
-                    }
+        
+        # 计算总计
+        total_count = sum(s['count'] for s in statistics)
+        total_size = sum(s['size_mb'] for s in statistics)
+        
+        return {
+            'success': True,
+            'data': {
+                'tables': statistics,
+                'summary': {
+                    'total_tables': len(statistics),
+                    'total_records': total_count,
+                    'total_size_mb': round(total_size, 2)
                 }
             }
+        }
         
     except Exception as e:
         logger.error(f"获取数据统计失败: {e}")
@@ -1824,9 +1918,40 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
         collect_futures = request_data.get('collect_futures', False)
         save_to_config = request_data.get('save_to_config', False)
         
-        # 解析时间
-        start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
-        end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+        # 解析时间（与 /collect 端点相同的逻辑）
+        # 前端发送的时间可能是本地时间（UTC+8）或UTC时间
+        # 对于Binance数据采集，需要将本地时间转换为UTC时间
+        try:
+            if '+08:00' in start_time_str:
+                # 本地时间（UTC+8），需要转换为UTC时间
+                start_time = datetime.fromisoformat(start_time_str)
+                start_time = start_time.replace(tzinfo=None) - timedelta(hours=8)
+            elif 'Z' in start_time_str or '+00:00' in start_time_str:
+                # UTC时间
+                start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                if start_time.tzinfo:
+                    start_time = start_time.replace(tzinfo=None)
+            else:
+                # 没有时区信息，假设是本地时间（UTC+8）
+                start_time = datetime.fromisoformat(start_time_str)
+                start_time = start_time - timedelta(hours=8)
+            
+            if '+08:00' in end_time_str:
+                # 本地时间（UTC+8），需要转换为UTC时间
+                end_time = datetime.fromisoformat(end_time_str)
+                end_time = end_time.replace(tzinfo=None) - timedelta(hours=8)
+            elif 'Z' in end_time_str or '+00:00' in end_time_str:
+                # UTC时间
+                end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+                if end_time.tzinfo:
+                    end_time = end_time.replace(tzinfo=None)
+            else:
+                # 没有时区信息，假设是本地时间（UTC+8）
+                end_time = datetime.fromisoformat(end_time_str)
+                end_time = end_time - timedelta(hours=8)
+        except Exception as e:
+            logger.error(f"解析时间失败: {e}")
+            raise
         
         # 计算总步骤数和预估数据量
         collect_price = data_type in ['price', 'both']

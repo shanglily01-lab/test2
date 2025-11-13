@@ -814,7 +814,11 @@ class FuturesTradingEngine:
                 current_price = self.get_current_price(pos['symbol'])
                 entry_price = Decimal(str(pos['entry_price']))
                 quantity = Decimal(str(pos['quantity']))
+                leverage = Decimal(str(pos.get('leverage', 1)))
+                margin = Decimal(str(pos.get('margin', 0)))
 
+                # 计算未实现盈亏（基于名义价值，不乘以杠杆）
+                # 杠杆只影响保证金，不影响盈亏本身
                 if pos['position_side'] == 'LONG':
                     unrealized_pnl = (current_price - entry_price) * quantity
                 else:
@@ -822,8 +826,20 @@ class FuturesTradingEngine:
 
                 pos['current_price'] = float(current_price)
                 pos['unrealized_pnl'] = float(unrealized_pnl)
-                pos['unrealized_pnl_pct'] = float((unrealized_pnl / (entry_price * quantity)) * 100)
-            except:
+                
+                # 盈亏百分比基于保证金计算（杠杆收益率）
+                # 因为使用了杠杆，所以盈亏百分比 = 盈亏 / 保证金 × 100%
+                if margin > 0:
+                    pos['unrealized_pnl_pct'] = float((unrealized_pnl / margin) * 100)
+                else:
+                    # 如果没有保证金信息，回退到基于名义价值的计算
+                    notional_value = entry_price * quantity
+                    if notional_value > 0:
+                        pos['unrealized_pnl_pct'] = float((unrealized_pnl / notional_value) * 100)
+                    else:
+                        pos['unrealized_pnl_pct'] = 0.0
+            except Exception as e:
+                logger.warning(f"计算持仓 {pos.get('symbol', 'unknown')} 盈亏失败: {e}")
                 pass
 
         return positions

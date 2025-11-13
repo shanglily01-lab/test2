@@ -25,7 +25,7 @@ import asyncio
 import yaml
 import pymysql
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 from typing import List
 
@@ -74,42 +74,55 @@ async def collect_backfill_data(start_hour: int = 13):
         print("❌ 配置文件中没有找到交易对列表")
         sys.exit(1)
     
-    # 计算时间范围
+    # 计算时间范围（本地时间）
     now = datetime.now()
     today_start = now.replace(hour=start_hour, minute=0, second=0, microsecond=0)
     
     # 如果今天13:00还没到，使用昨天13:00
     if today_start > now:
-        start_time = (now - timedelta(days=1)).replace(hour=start_hour, minute=0, second=0, microsecond=0)
+        start_time_local = (now - timedelta(days=1)).replace(hour=start_hour, minute=0, second=0, microsecond=0)
     else:
-        start_time = today_start
+        start_time_local = today_start
     
-    end_time = now
+    end_time_local = now
     
     # 确保开始时间不早于现在24小时前（避免采集过多数据）
     max_start = now - timedelta(hours=24)
-    if start_time < max_start:
-        start_time = max_start
-        print(f"⚠️  开始时间已调整为24小时前: {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    if start_time_local < max_start:
+        start_time_local = max_start
+        print(f"⚠️  开始时间已调整为24小时前: {start_time_local.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # 转换为UTC时间（Binance API返回的是UTC时间）
+    # 假设本地时间是UTC+8（中国时间）
+    local_tz = timezone(timedelta(hours=8))
+    start_time_utc = start_time_local.replace(tzinfo=local_tz).astimezone(timezone.utc).replace(tzinfo=None)
+    end_time_utc = end_time_local.replace(tzinfo=local_tz).astimezone(timezone.utc).replace(tzinfo=None)
     
     print(f"\n{'='*80}")
     print(f"📊 开始补采数据")
     print(f"交易对数量: {len(symbols)}")
-    print(f"时间范围: {start_time.strftime('%Y-%m-%d %H:%M:%S')} 至 {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"时长: {(end_time - start_time).total_seconds() / 3600:.1f} 小时")
+    print(f"本地时间范围: {start_time_local.strftime('%Y-%m-%d %H:%M:%S')} 至 {end_time_local.strftime('%Y-%m-%d %H:%M:%S')} (UTC+8)")
+    print(f"UTC时间范围: {start_time_utc.strftime('%Y-%m-%d %H:%M:%S')} 至 {end_time_utc.strftime('%Y-%m-%d %H:%M:%S')} (UTC)")
+    print(f"时长: {(end_time_local - start_time_local).total_seconds() / 3600:.1f} 小时")
     print(f"{'='*80}\n")
     
     # 导入采集器
-    from app.collectors.price_collector import MultiExchangeCollector
+    from app.collectors.price_collector import PriceCollector
     from app.collectors.binance_futures_collector import BinanceFuturesCollector
     from app.collectors.gate_collector import GateCollector
     
-    # 初始化采集器
-    collector = MultiExchangeCollector(config)
+    # 初始化Binance现货采集器
+    binance_collector = None
+    try:
+        binance_config = config.get('exchanges', {}).get('binance', {})
+        if binance_config.get('enabled', True):
+            binance_collector = PriceCollector('binance', binance_config)
+            print("✅ Binance现货数据采集器初始化成功")
+    except Exception as e:
+        print(f"⚠️  Binance现货数据采集器初始化失败: {e}")
     
     # 初始化合约采集器
     binance_futures_collector = None
-    gate_collector = None
     try:
         binance_config = config.get('exchanges', {}).get('binance', {})
         binance_futures_collector = BinanceFuturesCollector(binance_config)
@@ -118,6 +131,7 @@ async def collect_backfill_data(start_hour: int = 13):
         print(f"⚠️  Binance合约数据采集器初始化失败: {e}，将跳过Binance合约数据采集")
     
     # 初始化Gate.io采集器（用于HYPE/USDT）
+    gate_collector = None
     try:
         gate_config = config.get('exchanges', {}).get('gate', {})
         if gate_config.get('enabled', False):
@@ -158,30 +172,49 @@ async def collect_backfill_data(start_hour: int = 13):
             # 1. 采集价格数据（使用1m K线）
             try:
                 print(f"  📈 采集价格数据...")
+                df = None
                 if use_gate and gate_collector:
-                    # HYPE/USDT 从Gate.io采集
-                    since = int(start_time.timestamp())
+                    # HYPE/USDT 从Gate.io采集（Gate.io使用秒时间戳，UTC时间）
+                    since = int(start_time_utc.timestamp())
+                    print(f"    ℹ️  使用Gate.io采集，起始时间戳: {since} (UTC: {start_time_utc})")
                     df = await gate_collector.fetch_ohlcv(
                         symbol=symbol,
                         timeframe='1m',
                         limit=1000,
-                        since=since * 1000
+                        since=since
                     )
-                else:
-                    # 其他交易对从Binance采集
-                    since = int(start_time.timestamp())
-                    df = await collector.fetch_ohlcv(
+                elif binance_collector:
+                    # 其他交易对从Binance采集（Binance使用毫秒时间戳，UTC时间）
+                    since = int(start_time_utc.timestamp() * 1000)
+                    print(f"    ℹ️  使用Binance采集，起始时间戳: {since} (UTC: {start_time_utc})")
+                    df = await binance_collector.fetch_ohlcv(
                         symbol=symbol,
                         timeframe='1m',
-                        exchange='binance',
                         limit=1000,
-                        since=since * 1000
+                        since=since
                     )
+                else:
+                    print(f"    ⚠️  采集器未初始化（use_gate={use_gate}, gate_collector={gate_collector is not None}, binance_collector={binance_collector is not None}）")
+                
+                # 检查API返回结果
+                if df is None:
+                    print(f"    ⚠️  API调用返回None，可能API调用失败或交易对不存在")
+                elif len(df) == 0:
+                    print(f"    ⚠️  API返回空数据（DataFrame长度为0）")
                 
                 if df is not None and len(df) > 0:
-                    # 过滤时间范围
-                    df = df[df['timestamp'] >= start_time]
-                    df = df[df['timestamp'] <= end_time]
+                    print(f"    ℹ️  获取到 {len(df)} 条原始数据")
+                    # 显示数据时间范围
+                    if len(df) > 0:
+                        first_time = df['timestamp'].iloc[0]
+                        last_time = df['timestamp'].iloc[-1]
+                        print(f"    ℹ️  数据时间范围: {first_time} 至 {last_time}")
+                    
+                    # 过滤时间范围（使用UTC时间，因为API返回的是UTC时间）
+                    df = df[df['timestamp'] >= start_time_utc]
+                    df = df[df['timestamp'] <= end_time_utc]
+                    
+                    print(f"    ℹ️  过滤后剩余 {len(df)} 条数据")
                     
                     if len(df) > 0:
                         saved_count = 0
@@ -236,43 +269,46 @@ async def collect_backfill_data(start_hour: int = 13):
                         '1h': 60, '4h': 240, '1d': 1440
                     }.get(timeframe, 60)
                     
-                    # 计算需要采集的K线数量
-                    total_minutes = int((end_time - start_time).total_seconds() / 60)
+                    # 计算需要采集的K线数量（使用UTC时间）
+                    total_minutes = int((end_time_utc - start_time_utc).total_seconds() / 60)
                     needed_klines = (total_minutes // timeframe_minutes) + 1
                     
                     # Binance API限制，每次最多1000条
                     all_klines = []
-                    current_start = start_time
+                    current_start = start_time_utc  # 使用UTC时间
                     
-                    while current_start < end_time:
+                    while current_start < end_time_utc:
                         try:
                             if use_gate and gate_collector:
-                                # HYPE/USDT 从Gate.io采集
+                                # HYPE/USDT 从Gate.io采集（Gate.io使用秒时间戳）
                                 since = int(current_start.timestamp())
                                 df = await gate_collector.fetch_ohlcv(
                                     symbol=symbol,
                                     timeframe=timeframe,
                                     limit=1000,
-                                    since=since * 1000
+                                    since=since
                                 )
                             else:
                                 # 其他交易对从Binance采集
-                                since = int(current_start.timestamp())
-                                df = await collector.fetch_ohlcv(
-                                    symbol=symbol,
-                                    timeframe=timeframe,
-                                    exchange='binance',
-                                    limit=1000,
-                                    since=since * 1000
-                                )
+                                if binance_collector:
+                                    since = int(current_start.timestamp() * 1000)  # Binance使用毫秒时间戳
+                                    df = await binance_collector.fetch_ohlcv(
+                                        symbol=symbol,
+                                        timeframe=timeframe,
+                                        limit=1000,
+                                        since=since
+                                    )
+                                else:
+                                    df = None
                             
                             if df is not None and len(df) > 0:
-                                # 过滤时间范围
-                                df = df[df['timestamp'] >= start_time]
-                                df = df[df['timestamp'] <= end_time]
+                                print(f"      ℹ️  获取到 {len(df)} 条K线数据")
+                                # 过滤时间范围（使用UTC时间，因为API返回的是UTC时间）
+                                df_filtered = df[df['timestamp'] >= start_time_utc]
+                                df_filtered = df_filtered[df_filtered['timestamp'] <= end_time_utc]
                                 
-                                if len(df) > 0:
-                                    all_klines.append(df)
+                                if len(df_filtered) > 0:
+                                    all_klines.append(df_filtered)
                                     
                                     # 更新起始时间（使用最后一条K线的时间）
                                     last_time = df['timestamp'].iloc[-1]
@@ -288,8 +324,17 @@ async def collect_backfill_data(start_hour: int = 13):
                                     if len(df) < 1000:
                                         break
                                 else:
+                                    # 如果过滤后没有数据，但原始数据存在，说明时间范围不匹配
+                                    if len(df) > 0:
+                                        first_time = df['timestamp'].iloc[0]
+                                        last_time = df['timestamp'].iloc[-1]
+                                        print(f"      ⚠️  数据时间范围 ({first_time} 至 {last_time}) 不在目标范围内 (UTC: {start_time_utc} 至 {end_time_utc})")
                                     break
                             else:
+                                if df is None:
+                                    print(f"      ⚠️  API返回None")
+                                else:
+                                    print(f"      ⚠️  API返回空数据")
                                 break
                             
                             # 避免请求过快

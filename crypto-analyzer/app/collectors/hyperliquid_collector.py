@@ -289,7 +289,7 @@ class HyperliquidCollector:
                 action = 'UNKNOWN'
                 action_cn = '未知'
 
-            # 时间转换
+            # 时间转换（时间戳转换为datetime）
             timestamp = datetime.fromtimestamp(time_ms / 1000)
 
             # 构建交易数据

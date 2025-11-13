@@ -233,8 +233,10 @@ class UnifiedDataScheduler:
                 for price_data in prices:
                     self.db_service.save_price_data(price_data)
                     exchange = price_data.get('exchange', 'unknown')
-                    logger.debug(f"    ✓ [{exchange}] {symbol} 价格: ${price_data['price']:,.2f} "
+                    logger.info(f"    ✓ [{exchange}] {symbol} 价格: ${price_data['price']:,.2f} "
                                f"(24h: {price_data['change_24h']:+.2f}%)")
+            else:
+                logger.warning(f"    ⊗ {symbol}: 未获取到价格数据")
 
         except Exception as e:
             logger.error(f"    采集 {symbol} 实时价格失败: {e}")
