@@ -217,6 +217,26 @@ async def get_companies_list(
     cursor = conn.cursor(dictionary=True)
 
     try:
+        # 获取当前 BTC 实时价格（从价格缓存服务）
+        price_cache = get_global_price_cache()
+        if price_cache:
+            btc_price_decimal = price_cache.get_price('BTC/USDT')
+            current_btc_price = float(btc_price_decimal) if btc_price_decimal > 0 else None
+        else:
+            current_btc_price = None
+
+        # 如果价格缓存服务不可用，从历史记录获取
+        if not current_btc_price:
+            cursor.execute("""
+                SELECT average_price
+                FROM corporate_treasury_purchases
+                WHERE average_price > 0
+                ORDER BY purchase_date DESC
+                LIMIT 1
+            """)
+            btc_price_result = cursor.fetchone()
+            current_btc_price = btc_price_result['average_price'] if btc_price_result else 100000
+
         # 构建查询
         where_clause = "WHERE c.is_active = 1"
         params = []
@@ -232,6 +252,7 @@ async def get_companies_list(
                 c.ticker_symbol,
                 c.category,
                 COALESCE(latest.cumulative_holdings, 0) as current_btc_holdings,
+                COALESCE(latest.cumulative_holdings, 0) * %s as value_usd,
                 latest.purchase_date as last_update,
                 prev.cumulative_holdings as previous_holdings,
                 latest.quantity as last_change,
@@ -261,6 +282,7 @@ async def get_companies_list(
             ORDER BY latest.cumulative_holdings DESC
             LIMIT %s
         """
+        params.insert(0, current_btc_price)  # 将BTC价格插入到参数列表开头
         params.append(limit)
 
         cursor.execute(query, tuple(params))
@@ -269,6 +291,7 @@ async def get_companies_list(
         # 格式化数据
         for company in companies:
             company['current_btc_holdings'] = float(company['current_btc_holdings'] or 0)
+            company['value_usd'] = float(company['value_usd'] or 0)
             company['previous_holdings'] = float(company['previous_holdings'] or 0)
             company['last_change'] = float(company['last_change'] or 0)
             company['last_update'] = company['last_update'].strftime('%Y-%m-%d') if company['last_update'] else None

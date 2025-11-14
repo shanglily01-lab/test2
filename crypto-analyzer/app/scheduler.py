@@ -994,6 +994,24 @@ class UnifiedDataScheduler:
         )
         logger.info("  ✓ 新闻数据 - 每 15 分钟")
 
+        # 4. 区块链Gas统计 (每天采集昨天的数据)
+        try:
+            from app.collectors.blockchain_gas_collector import BlockchainGasCollector
+            gas_collector = BlockchainGasCollector()
+            schedule.every().day.at("01:00").do(
+                lambda: asyncio.run(gas_collector.collect_all_chains())
+            )
+            logger.info("  ✓ 区块链Gas统计 - 每天 01:00")
+        except Exception as e:
+            logger.warning(f"  ⚠️  区块链Gas统计任务注册失败: {e}")
+
+        # 5. Hyperliquid 排行榜
+        if self.hyperliquid_collector:
+            schedule.every().day.at("02:00").do(
+                lambda: asyncio.run(self.collect_hyperliquid_leaderboard())
+            )
+            logger.info("  ✓ Hyperliquid 排行榜 - 每天 02:00")
+
         # 3.5 自动合约交易
         if self.auto_trader:
             schedule.every(30).minutes.do(

@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>区块链Gas统计 - AlphaFlow</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
+        :root {
+            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
+            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
+            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
+            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
+            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
+            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
+            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
+            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
+            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
+            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
+        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
+        .header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-lg); }
+        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-md); }
+        .header-subtitle { color: var(--text-secondary); font-size: 13px; margin-top: var(--spacing-xs); }
+        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; }
+        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
+        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
+        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
+        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
+        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
+        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
+        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .card-body { padding: 0; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
+        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; cursor: pointer; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
+        .stat-card:hover::before { opacity: 1; }
+        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
+        .stat-change { font-size: 13px; color: var(--text-secondary); }
+        .stat-change.positive { color: var(--success-green); }
+        .stat-change.negative { color: var(--danger-red); }
+        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
+        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
+        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
+        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
+        tr:last-child td { border-bottom: none; }
+        tbody tr { transition: background-color var(--transition-fast); }
+        tbody tr:hover { background: var(--bg-hover); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
+        .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+        .positive { color: var(--success-green); }
+        .negative { color: var(--danger-red); }
+        .chain-logo { width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--primary-blue), var(--secondary-purple)); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: white; }
+        .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
+        .loading::after { content: '...'; animation: dots 1.5s steps(4, end) infinite; }
+        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
+        .error-message { background: var(--danger-red-bg); color: var(--danger-red); padding: var(--spacing-lg); border-radius: var(--radius-md); margin: var(--spacing-xl) 0; border: 1px solid var(--danger-red); }
+        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
+        .chart-container { position: relative; height: 400px; margin-top: var(--spacing-lg); }
+        .last-update { color: var(--text-tertiary); font-size: 12px; }
+        .filter-bar { display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); flex-wrap: wrap; align-items: center; }
+        .select-input { padding: var(--spacing-md) var(--spacing-lg); border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-tertiary); color: var(--text-primary); font-size: 14px; }
+        .select-input:focus { outline: none; border-color: var(--primary-blue); }
+        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .badge { display: inline-flex; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
+        .badge-primary { background: var(--primary-blue-light); color: var(--primary-blue); }
+        @media (max-width: 1024px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+            .nav-links { flex-direction: column; }
+            .stats-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div>
+                    <div style="display: flex; align-items: center; gap: var(--spacing-md);">
+                        <img src="/static/images/logo/alphaflow-logo-icon.svg" alt="AlphaFlow" style="height: 36px; width: auto;">
+                        <div>
+                            <h1 class="header-title" style="margin: 0;">
+                                <i class="bi bi-lightning-charge"></i>
+                                区块链Gas统计
+                            </h1>
+                            <p class="header-subtitle">追踪六大主链每日Gas消耗量与价值 · 实时更新 · 链上活动分析</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-ghost" onclick="loadGasData()">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-container slide-up">
+            <div class="nav-links">
+                <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+                <a href="/paper_trading" class="nav-link">
+                    <i class="bi bi-journals"></i> 模拟现货
+                </a>
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 模拟合约
+                </a>
+                <a href="/strategies" class="nav-link">
+                    <i class="bi bi-diagram-3"></i> 策略管理
+                </a>
+                <a href="/etf_data" class="nav-link">
+                    <i class="bi bi-pie-chart"></i> ETF 数据
+                </a>
+                <a href="/corporate_treasury" class="nav-link">
+                    <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/blockchain_gas" class="nav-link active">
+                    <i class="bi bi-lightning-charge"></i> Gas统计
+                </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
+                </a>
+            </div>
+        </nav>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading">正在加载Gas统计数据</div>
+
+        <!-- Error State -->
+        <div id="errorState" class="error-message" style="display: none;"></div>
+
+        <!-- Main Content -->
+        <div id="mainContent" style="display: none;">
+            <!-- Summary Statistics -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">总Gas价值 (USD)</div>
+                    <div class="stat-value" id="statTotalValue">-</div>
+                    <div class="stat-change" id="statTotalValueChange">最近7天</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">总交易笔数</div>
+                    <div class="stat-value" id="statTotalTransactions">-</div>
+                    <div class="stat-change" id="statTotalTransactionsChange">最近7天</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">平均Gas价值</div>
+                    <div class="stat-value" id="statAvgGasValue">-</div>
+                    <div class="stat-change" id="statAvgGasValueChange">每笔交易</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">监控链数量</div>
+                    <div class="stat-value" id="statChainCount">-</div>
+                    <div class="stat-change" id="statChainCountChange">六大主链</div>
+                </div>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="card">
+                <div class="filter-bar">
+                    <select id="chainFilter" class="select-input" onchange="loadGasData()">
+                        <option value="">所有链</option>
+                    </select>
+                    <select id="daysFilter" class="select-input" onchange="loadGasData()">
+                        <option value="7">最近7天</option>
+                        <option value="14">最近14天</option>
+                        <option value="30">最近30天</option>
+                        <option value="90">最近90天</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Chains Summary Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-list-ol"></i>
+                        <span>各链Gas消耗统计</span>
+                    </h2>
+                    <div class="last-update" id="tableUpdate">-</div>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>排名</th>
+                                    <th>链名称</th>
+                                    <th>原生代币</th>
+                                    <th>总Gas消耗</th>
+                                    <th>总交易数</th>
+                                    <th>平均Gas/交易</th>
+                                    <th>平均Gas价格</th>
+                                    <th>总Gas价值 (USD)</th>
+                                    <th>平均Gas价值 (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="chainsTableBody">
+                                <tr>
+                                    <td colspan="9" class="empty-state">加载中...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Gas Chart -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-graph-up"></i>
+                        <span>每日Gas价值趋势</span>
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="gasValueChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Daily Data Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-calendar-week"></i>
+                        <span>每日详细数据</span>
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>日期</th>
+                                    <th>链名称</th>
+                                    <th>总Gas消耗</th>
+                                    <th>总交易数</th>
+                                    <th>平均Gas/交易</th>
+                                    <th>平均Gas价格</th>
+                                    <th>原生代币价格 (USD)</th>
+                                    <th>总Gas价值 (USD)</th>
+                                    <th>平均Gas价值 (USD)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dailyTableBody">
+                                <tr>
+                                    <td colspan="9" class="empty-state">加载中...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let gasValueChart = null;
+
+        // 格式化数字
+        function formatNumber(num, decimals = 2) {
+            if (num === null || num === undefined || isNaN(num)) return '-';
+            return parseFloat(num).toLocaleString('en-US', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+
+        // 格式化大额数字
+        function formatLargeNumber(num) {
+            if (num === null || num === undefined || isNaN(num) || num === 0) return '$0';
+            const absNum = Math.abs(num);
+            if (absNum >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+            if (absNum >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+            if (absNum >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
+            return `$${num.toFixed(2)}`;
+        }
+
+        // 格式化Gas数量
+        function formatGas(num) {
+            if (num === null || num === undefined || isNaN(num) || num === 0) return '0';
+            const absNum = Math.abs(num);
+            if (absNum >= 1e18) return `${(num / 1e18).toFixed(4)} ETH`;
+            if (absNum >= 1e15) return `${(num / 1e15).toFixed(2)} P`;
+            if (absNum >= 1e12) return `${(num / 1e12).toFixed(2)} T`;
+            if (absNum >= 1e9) return `${(num / 1e9).toFixed(2)} G`;
+            return formatNumber(num, 0);
+        }
+
+        // 显示加载状态
+        function showLoading() {
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('errorState').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'none';
+        }
+
+        // 显示错误
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'block';
+            document.getElementById('errorState').textContent = `错误: ${message}`;
+            document.getElementById('mainContent').style.display = 'none';
+        }
+
+        // 显示内容
+        function showContent() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+        }
+
+        // 获取链显示名称
+        function getChainDisplayName(chainName) {
+            const chainMap = {
+                'ethereum': 'Ethereum',
+                'bsc': 'BSC',
+                'polygon': 'Polygon',
+                'arbitrum': 'Arbitrum',
+                'optimism': 'Optimism',
+                'avalanche': 'Avalanche'
+            };
+            return chainMap[chainName] || chainName;
+        }
+
+        // 获取链原生代币
+        function getChainNativeToken(chainName) {
+            const tokenMap = {
+                'ethereum': 'ETH',
+                'bsc': 'BNB',
+                'polygon': 'MATIC',
+                'arbitrum': 'ETH',
+                'optimism': 'ETH',
+                'avalanche': 'AVAX'
+            };
+            return tokenMap[chainName] || '-';
+        }
+
+        // 加载Gas数据
+        async function loadGasData() {
+            showLoading();
+            try {
+                const days = document.getElementById('daysFilter').value || 7;
+                const chainName = document.getElementById('chainFilter').value || '';
+
+                // 加载汇总数据
+                const summaryResponse = await fetch(`/api/blockchain-gas/summary?days=${days}`);
+                if (!summaryResponse.ok) {
+                    throw new Error(`HTTP error! status: ${summaryResponse.status}`);
+                }
+                const summaryData = await summaryResponse.json();
+
+                // 加载每日数据
+                let dailyUrl = `/api/blockchain-gas/daily?limit=${days * 10}`;
+                if (chainName) {
+                    dailyUrl += `&chain_name=${chainName}`;
+                }
+                const dailyResponse = await fetch(dailyUrl);
+                if (!dailyResponse.ok) {
+                    throw new Error(`HTTP error! status: ${dailyResponse.status}`);
+                }
+                const dailyData = await dailyResponse.json();
+
+                // 加载链列表
+                const chainsResponse = await fetch('/api/blockchain-gas/chains');
+                const chainsData = await chainsResponse.json();
+
+                if (summaryData.success && dailyData.success && chainsData.success) {
+                    updateSummary(summaryData.data);
+                    updateChainsTable(summaryData.data.chains);
+                    updateDailyTable(dailyData.data);
+                    updateChart(dailyData.data);
+                    updateChainFilter(chainsData.data);
+                    showContent();
+                } else {
+                    throw new Error('获取数据失败');
+                }
+            } catch (error) {
+                console.error('加载Gas数据失败:', error);
+                showError(error.message || '加载Gas统计数据失败，请稍后重试');
+            }
+        }
+
+        // 更新汇总统计
+        function updateSummary(data) {
+            const summary = data.summary;
+            document.getElementById('statTotalValue').textContent = formatLargeNumber(summary.total_gas_value_usd);
+            document.getElementById('statTotalTransactions').textContent = formatNumber(summary.total_transactions, 0);
+            document.getElementById('statAvgGasValue').textContent = formatLargeNumber(summary.avg_gas_value_usd);
+            document.getElementById('statChainCount').textContent = summary.total_chains || 0;
+        }
+
+        // 更新链汇总表格
+        function updateChainsTable(chains) {
+            const tbody = document.getElementById('chainsTableBody');
+            if (!chains || chains.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无数据</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = chains.map((chain, index) => {
+                const chainInitial = getChainDisplayName(chain.chain_name)[0];
+                return `
+                    <tr>
+                        <td><strong>${index + 1}</strong></td>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: var(--spacing-md);">
+                                <div class="chain-logo">${chainInitial}</div>
+                                <div>
+                                    <div style="font-weight: 600;">${chain.chain_display_name}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="badge badge-primary">${getChainNativeToken(chain.chain_name)}</span></td>
+                        <td class="font-mono">${formatGas(chain.total_gas_used)}</td>
+                        <td class="font-mono">${formatNumber(chain.total_transactions, 0)}</td>
+                        <td class="font-mono">${formatGas(chain.avg_gas_per_tx)}</td>
+                        <td class="font-mono">${formatGas(chain.avg_gas_price)}</td>
+                        <td class="font-mono" style="color: var(--success-green);">${formatLargeNumber(chain.total_gas_value_usd)}</td>
+                        <td class="font-mono">${formatLargeNumber(chain.avg_gas_value_usd)}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('tableUpdate').textContent = `更新时间: ${new Date().toLocaleString('zh-CN')}`;
+        }
+
+        // 更新每日数据表格
+        function updateDailyTable(dailyData) {
+            const tbody = document.getElementById('dailyTableBody');
+            if (!dailyData || dailyData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无数据</td></tr>';
+                return;
+            }
+
+            // 按日期和链排序
+            dailyData.sort((a, b) => {
+                if (a.date !== b.date) {
+                    return new Date(b.date) - new Date(a.date);
+                }
+                return a.chain_name.localeCompare(b.chain_name);
+            });
+
+            tbody.innerHTML = dailyData.map(item => {
+                return `
+                    <tr>
+                        <td>${item.date}</td>
+                        <td><strong>${item.chain_display_name}</strong></td>
+                        <td class="font-mono">${formatGas(item.total_gas_used)}</td>
+                        <td class="font-mono">${formatNumber(item.total_transactions, 0)}</td>
+                        <td class="font-mono">${formatGas(item.avg_gas_per_tx)}</td>
+                        <td class="font-mono">${formatGas(item.avg_gas_price)}</td>
+                        <td class="font-mono">${item.native_token_price_usd ? formatLargeNumber(item.native_token_price_usd) : '-'}</td>
+                        <td class="font-mono" style="color: var(--success-green);">${formatLargeNumber(item.total_gas_value_usd)}</td>
+                        <td class="font-mono">${formatLargeNumber(item.avg_gas_value_usd)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 更新图表
+        function updateChart(dailyData) {
+            if (!dailyData || dailyData.length === 0) return;
+
+            // 按日期分组
+            const dateMap = {};
+            dailyData.forEach(item => {
+                if (!dateMap[item.date]) {
+                    dateMap[item.date] = {};
+                }
+                dateMap[item.date][item.chain_name] = item.total_gas_value_usd;
+            });
+
+            const dates = Object.keys(dateMap).sort();
+            const chains = [...new Set(dailyData.map(d => d.chain_name))];
+
+            const datasets = chains.map(chainName => {
+                const data = dates.map(date => dateMap[date][chainName] || 0);
+                const colors = [
+                    'rgba(43, 111, 237, 0.8)',   // Ethereum - Blue
+                    'rgba(243, 186, 47, 0.8)',   // BSC - Yellow
+                    'rgba(130, 71, 229, 0.8)',   // Polygon - Purple
+                    'rgba(40, 160, 240, 0.8)',   // Arbitrum - Cyan
+                    'rgba(255, 4, 32, 0.8)',     // Optimism - Red
+                    'rgba(232, 65, 66, 0.8)'     // Avalanche - Red-Orange
+                ];
+                return {
+                    label: getChainDisplayName(chainName),
+                    data: data,
+                    borderColor: colors[chains.indexOf(chainName) % colors.length],
+                    backgroundColor: colors[chains.indexOf(chainName) % colors.length].replace('0.8', '0.2'),
+                    tension: 0.4,
+                    fill: true
+                };
+            });
+
+            const ctx = document.getElementById('gasValueChart').getContext('2d');
+            
+            if (gasValueChart) {
+                gasValueChart.destroy();
+            }
+
+            gasValueChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                color: 'var(--text-primary)'
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + formatLargeNumber(context.parsed.y);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: 'var(--text-secondary)'
+                            },
+                            grid: {
+                                color: 'var(--border-default)'
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                color: 'var(--text-secondary)',
+                                callback: function(value) {
+                                    return formatLargeNumber(value);
+                                }
+                            },
+                            grid: {
+                                color: 'var(--border-default)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 更新链筛选器
+        function updateChainFilter(chains) {
+            const select = document.getElementById('chainFilter');
+            const currentValue = select.value;
+            
+            // 保留"所有链"选项，添加其他链
+            select.innerHTML = '<option value="">所有链</option>';
+            chains.forEach(chain => {
+                const option = document.createElement('option');
+                option.value = chain.name;
+                option.textContent = chain.display_name;
+                select.appendChild(option);
+            });
+            
+            // 恢复之前的选择
+            if (currentValue) {
+                select.value = currentValue;
+            }
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadGasData();
+        });
+    </script>
+</body>
+</html>
+

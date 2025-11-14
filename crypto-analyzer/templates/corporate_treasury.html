@@ -149,6 +149,9 @@
                 <a href="/corporate_treasury" class="nav-link active">
                     <i class="bi bi-building"></i> 企业金库
                 </a>
+                <a href="/blockchain_gas" class="nav-link">
+                    <i class="bi bi-lightning-charge"></i> Gas统计
+                </a>
                 <a href="/data_management" class="nav-link">
                     <i class="bi bi-database"></i> 数据管理
                 </a>
@@ -305,7 +308,7 @@
 
         // 格式化大额数字 (B/M)
         function formatLargeNumber(num) {
-            if (!num || isNaN(num)) return '-';
+            if (num === null || num === undefined || isNaN(num) || num === 0) return '$0';
             const absNum = Math.abs(num);
             if (absNum >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
             if (absNum >= 1e6) return `$${(num / 1e6).toFixed(0)}M`;
@@ -457,14 +460,19 @@
             // 计算总持仓用于计算占比
             const totalHoldings = companies.reduce((sum, c) => sum + (c.current_btc_holdings || c.btc_holdings || 0), 0);
             
-            // 保存summary数据供后续使用
-            window.summaryData = null;
+            // 获取BTC价格（从summaryData或从后端返回的数据）
+            const btcPrice = window.summaryData?.data?.summary?.current_btc_price || 0;
 
             tbody.innerHTML = companies.map((company, index) => {
                 // 使用current_btc_holdings或btc_holdings
-                const holdings = company.current_btc_holdings || company.btc_holdings || 0;
-                const btcPrice = window.summaryData?.data?.summary?.current_btc_price || 0;
-                const marketValue = company.value_usd || (holdings * btcPrice);
+                const holdings = parseFloat(company.current_btc_holdings || company.btc_holdings || 0);
+                // 计算市值：优先使用后端返回的value_usd，否则用持仓*BTC价格计算
+                let marketValue = 0;
+                if (company.value_usd && parseFloat(company.value_usd) > 0) {
+                    marketValue = parseFloat(company.value_usd);
+                } else if (holdings > 0 && btcPrice > 0) {
+                    marketValue = holdings * btcPrice;
+                }
                 const holdingsPct = totalHoldings > 0 ? ((holdings / totalHoldings) * 100).toFixed(2) : '0.00';
                 const companyInitial = (company.company_name || '?')[0].toUpperCase();
                 const lastUpdate = company.last_update ? new Date(company.last_update).toLocaleDateString('zh-CN') : '-';

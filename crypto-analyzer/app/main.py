@@ -409,6 +409,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册区块链Gas统计API路由
+try:
+    from app.api.blockchain_gas_api import router as blockchain_gas_router
+    app.include_router(blockchain_gas_router)
+    logger.info("✅ 区块链Gas统计API路由已注册")
+except Exception as e:
+    logger.warning(f"⚠️  区块链Gas统计API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册数据管理API路由
 try:
     from app.api.data_management_api import router as data_management_router
@@ -503,6 +513,15 @@ async def corporate_treasury_page():
     treasury_path = project_root / "templates" / "corporate_treasury.html"
     if treasury_path.exists():
         return FileResponse(str(treasury_path))
+    return {"error": "Page not found"}
+
+@app.get("/blockchain-gas")
+@app.get("/blockchain_gas")
+async def blockchain_gas_page():
+    """区块链Gas统计页面"""
+    gas_path = project_root / "templates" / "blockchain_gas.html"
+    if gas_path.exists():
+        return FileResponse(str(gas_path))
     return {"error": "Page not found"}
 
 @app.get("/contract-trading")
