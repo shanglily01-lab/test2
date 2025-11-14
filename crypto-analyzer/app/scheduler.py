@@ -28,6 +28,7 @@ if str(project_root) not in sys.path:
 import asyncio
 import schedule
 import time
+import threading
 import yaml
 from datetime import datetime, date, timedelta
 from loguru import logger
@@ -994,14 +995,36 @@ class UnifiedDataScheduler:
         )
         logger.info("  ✓ 新闻数据 - 每 15 分钟")
 
-        # 4. 区块链Gas统计 (每天采集昨天的数据)
+        # 4. 区块链Gas统计 (每天采集昨天的数据，使用线程避免阻塞主调度器)
         try:
             from app.collectors.blockchain_gas_collector import BlockchainGasCollector
-            gas_collector = BlockchainGasCollector()
-            schedule.every().day.at("01:00").do(
-                lambda: asyncio.run(gas_collector.collect_all_chains())
-            )
-            logger.info("  ✓ 区块链Gas统计 - 每天 01:00")
+            
+            def run_gas_collection_in_thread():
+                """在独立线程中运行Gas采集，避免阻塞主调度器"""
+                def collect_gas():
+                    try:
+                        logger.info("开始执行Gas采集任务（后台线程）...")
+                        gas_collector = BlockchainGasCollector()
+                        # 使用asyncio.run在独立线程中运行异步任务
+                        # 注意：每个线程需要自己的事件循环
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(gas_collector.collect_all_chains())
+                            logger.info("Gas采集任务完成（后台线程）")
+                        finally:
+                            loop.close()
+                    except Exception as e:
+                        logger.error(f"Gas采集任务执行失败: {e}", exc_info=True)
+                
+                # 在独立线程中运行，daemon=True确保主程序退出时线程也会退出
+                # 这样即使Gas采集任务执行时间很长，也不会阻塞主调度器的其他任务
+                thread = threading.Thread(target=collect_gas, daemon=True, name="GasCollector")
+                thread.start()
+                logger.debug("Gas采集任务已在后台线程启动")
+            
+            schedule.every().day.at("01:00").do(run_gas_collection_in_thread)
+            logger.info("  ✓ 区块链Gas统计 - 每天 01:00 (后台线程执行，不阻塞主调度器)")
         except Exception as e:
             logger.warning(f"  ⚠️  区块链Gas统计任务注册失败: {e}")
 
