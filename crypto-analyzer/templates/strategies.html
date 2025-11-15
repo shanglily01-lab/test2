@@ -167,6 +167,9 @@
                     </div>
                 </div>
                 <div class="header-actions">
+                    <button class="btn btn-info" onclick="showMungerQuotes()" title="查看查理·芒格投资智慧">
+                        <i class="bi bi-quote"></i> 芒格名言
+                    </button>
                     <button class="btn btn-ghost" onclick="loadStrategies()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -2926,10 +2929,158 @@
             }
         }
 
+        // 查理·芒格名言数据
+        const mungerQuotes = [
+            {
+                quote: "我只是想知道我将来会死在哪里，这样我就永远不去那个地方。",
+                strategy: "避免错误比追求正确更重要。在投资中，识别并避开高风险信号，设置严格止损，保护本金是第一要务。"
+            },
+            {
+                quote: "在生活中，避免愚蠢比追求聪明更重要。",
+                strategy: "避免常见的投资错误：不要追涨杀跌、不要FOMO、不要频繁交易、不要过度杠杆。冷静思考，理性决策。"
+            },
+            {
+                quote: "耐心是投资者的美德。",
+                strategy: "长期持有优质资产，避免因短期波动而做出冲动决策。设置最小持仓时间，需要多个时间周期确认趋势后再行动。"
+            },
+            {
+                quote: "多元化是无知的保护伞。",
+                strategy: "适度多元化，但不要过度分散。只持有3-5个最优质的币种，避免持有高度相关的资产，对最有把握的机会加大仓位。"
+            },
+            {
+                quote: "如果你想得到某样东西，最可靠的办法是让自己配得上它。",
+                strategy: "不断提升投资能力，只投资自己理解的领域。专注于主流币种，记录和分析每次交易，根据历史表现持续优化策略。"
+            },
+            {
+                quote: "在别人贪婪时恐惧，在别人恐惧时贪婪。",
+                strategy: "逆向思维，市场情绪极端时反向操作。恐慌指数极低且技术指标超卖时买入，贪婪指数极高且技术指标超买时卖出。"
+            },
+            {
+                quote: "复利是世界第八大奇迹。",
+                strategy: "长期复利增长，避免频繁交易损耗。将利润再投资，降低交易频率，控制交易成本，追求稳健的长期收益。"
+            }
+        ];
+        let currentMungerQuoteIndex = 0;
+
+        // 显示芒格名言模态框
+        function showMungerQuotes() {
+            const modal = document.getElementById('mungerQuotesModal');
+            if (!modal) return;
+            
+            // 重置到第一条
+            currentMungerQuoteIndex = 0;
+            displayMungerQuote(0);
+            
+            modal.classList.add('active');
+        }
+
+        // 关闭芒格名言模态框
+        function hideMungerQuotes() {
+            const modal = document.getElementById('mungerQuotesModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        // 显示芒格名言
+        function displayMungerQuote(index) {
+            if (index < 0) index = mungerQuotes.length - 1;
+            if (index >= mungerQuotes.length) index = 0;
+            currentMungerQuoteIndex = index;
+
+            const quote = mungerQuotes[index];
+            const quoteElement = document.getElementById('mungerQuote');
+            const strategyElement = document.getElementById('mungerQuoteStrategyText');
+            
+            if (quoteElement) {
+                // 淡出效果
+                quoteElement.style.opacity = '0';
+                setTimeout(() => {
+                    quoteElement.innerHTML = `"${quote.quote}"`;
+                    if (strategyElement) {
+                        strategyElement.textContent = quote.strategy;
+                    }
+                    const indexElement = document.getElementById('mungerQuoteIndex');
+                    if (indexElement) {
+                        indexElement.textContent = `${index + 1} / ${mungerQuotes.length}`;
+                    }
+                    // 淡入效果
+                    quoteElement.style.opacity = '1';
+                }, 150);
+            }
+        }
+
+        // 上一条名言
+        function previousMungerQuote() {
+            displayMungerQuote(currentMungerQuoteIndex - 1);
+        }
+
+        // 下一条名言
+        function nextMungerQuote() {
+            displayMungerQuote(currentMungerQuoteIndex + 1);
+        }
+
+        // 刷新名言（随机显示）
+        function refreshMungerQuote() {
+            const randomIndex = Math.floor(Math.random() * mungerQuotes.length);
+            displayMungerQuote(randomIndex);
+        }
+
         // 页面加载时执行
         document.addEventListener('DOMContentLoaded', function() {
             loadStrategies();
         });
     </script>
+
+    <!-- 芒格名言模态框 -->
+    <div id="mungerQuotesModal" class="modal-overlay" onclick="if(event.target === this) hideMungerQuotes()">
+        <div class="modal-dialog" style="max-width: 700px;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="background: linear-gradient(135deg, rgba(43, 111, 237, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%); border-bottom: 1px solid rgba(43, 111, 237, 0.2);">
+                <div class="modal-title" style="display: flex; align-items: center; gap: 12px;">
+                    <i class="bi bi-quote" style="color: var(--primary-blue); font-size: 24px;"></i>
+                    <span>查理·芒格投资智慧</span>
+                </div>
+                <button class="modal-close" onclick="hideMungerQuotes()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="padding: 32px;">
+                <div id="mungerQuoteContainer" style="position: relative; min-height: 200px;">
+                    <div id="mungerQuote" style="font-size: 18px; line-height: 1.8; color: var(--text-primary); margin-bottom: 24px; font-style: italic; text-align: center; padding: 24px; background: rgba(43, 111, 237, 0.05); border-radius: var(--radius-lg); border-left: 4px solid var(--primary-blue); transition: opacity 0.3s ease-in-out;">
+                        "加载中..."
+                    </div>
+                    <div id="mungerQuoteAuthor" style="text-align: right; color: var(--text-secondary); font-size: 14px; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(43, 111, 237, 0.2);">
+                        <span style="font-weight: 600;">— 查理·芒格 (Charlie Munger)</span>
+                    </div>
+                    <div id="mungerQuoteStrategy" style="margin-top: 24px; padding: 16px; background: rgba(43, 111, 237, 0.05); border-radius: var(--radius-md); border-left: 3px solid var(--primary-blue);">
+                        <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                            <i class="bi bi-lightbulb" style="color: var(--warning-yellow);"></i>
+                            策略启示：
+                        </div>
+                        <div id="mungerQuoteStrategyText" style="font-size: 14px; color: var(--text-primary); line-height: 1.8;"></div>
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-default);">
+                    <button class="btn btn-ghost" onclick="previousMungerQuote()" title="上一条">
+                        <i class="bi bi-chevron-left"></i> 上一条
+                    </button>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <span id="mungerQuoteIndex" style="font-size: 13px; color: var(--text-secondary); font-weight: 500;">1 / 7</span>
+                        <button class="btn btn-ghost btn-sm" onclick="refreshMungerQuote()" title="随机刷新">
+                            <i class="bi bi-shuffle"></i>
+                        </button>
+                    </div>
+                    <button class="btn btn-ghost" onclick="nextMungerQuote()" title="下一条">
+                        下一条 <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid var(--border-default);">
+                <button class="btn btn-primary" onclick="hideMungerQuotes()">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

@@ -910,6 +910,12 @@
             return num.toFixed(2);
         }
 
+        // 格式化下单数量（8位小数）
+        function formatSize(num) {
+            if (num === null || num === undefined || isNaN(num)) return '-';
+            return parseFloat(num).toFixed(8);
+        }
+
         // 加载数据
         async function loadData() {
             try {
@@ -1244,7 +1250,7 @@
                         </span>
                     </td>
                     <td class="font-mono">$${formatPrice(t.price || 0)}</td>
-                    <td class="font-mono">${formatLargeNumber(t.size || 0)}</td>
+                    <td class="font-mono">${formatSize(t.size || 0)}</td>
                     <td class="font-mono"><span class="badge badge-info">${(t.leverage || 1).toFixed(1)}x</span></td>
                     <td class="font-mono">$${formatLargeNumber(t.notional_usd)}</td>
                     <td class="${t.closed_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'} font-mono">
@@ -1560,6 +1566,7 @@
             loadData();
             load24hEmaSignals(); // 加载24h EMA信号
             resetRefreshCountdown();
+            
         });
 
         // 页面可见性变化时停止/恢复刷新

@@ -10,7 +10,7 @@
 """
 
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ class EnhancedInvestmentAnalyzer:
 
         return {
             'symbol': symbol,
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'signal': signal,
             'confidence': round(confidence, 1),
             'score': {

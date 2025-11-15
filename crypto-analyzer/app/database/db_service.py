@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 from urllib.parse import quote_plus
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 
 from .models import Base, PriceData, KlineData, TradeData, OrderBookData, NewsData, FundingRateData, FuturesOpenInterest, FuturesLongShortRatio, SmartMoneyAddress, SmartMoneyTransaction, SmartMoneySignal
@@ -54,10 +54,16 @@ class DatabaseService:
 
                 self.engine = create_engine(
                     db_uri,
-                    pool_size=10,
-                    max_overflow=20,
+                    pool_size=20,  # 增加连接池大小
+                    max_overflow=30,  # 增加溢出连接数
                     pool_pre_ping=True,  # 自动检测连接是否有效
-                    echo=False  # 设为True可以看到SQL语句
+                    pool_recycle=3600,  # 1小时后回收连接，避免长时间连接失效
+                    echo=False,  # 设为True可以看到SQL语句
+                    connect_args={
+                        'connect_timeout': 5,
+                        'read_timeout': 10,
+                        'write_timeout': 10
+                    }
                 )
 
                 # 只在首次连接时打印日志，避免重复打印
@@ -621,26 +627,38 @@ class DatabaseService:
         return success_count
 
     def _parse_news_datetime(self, date_str: str) -> datetime:
-        """解析新闻发布时间"""
+        """
+        解析新闻发布时间（统一转换为UTC时间的naive datetime）
+        
+        注意：数据库存储的是UTC时间的naive datetime，以便统一时区处理
+        """
         if not date_str:
-            return datetime.now()
+            # 如果没有时间字符串，使用当前UTC时间
+            return datetime.now(timezone.utc).replace(tzinfo=None)
 
         try:
             # ISO格式
             dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            # 如果有时区信息，转换为UTC时间
             if dt.tzinfo is not None:
-                dt = dt.replace(tzinfo=None)
+                dt = dt.astimezone(timezone.utc)
+            # 转换为naive datetime（UTC时间）
+            dt = dt.replace(tzinfo=None)
             return dt
         except:
             try:
                 # RSS格式
                 from email.utils import parsedate_to_datetime
                 dt = parsedate_to_datetime(date_str)
+                # 如果有时区信息，转换为UTC时间
                 if dt.tzinfo is not None:
-                    dt = dt.replace(tzinfo=None)
+                    dt = dt.astimezone(timezone.utc)
+                # 转换为naive datetime（UTC时间）
+                dt = dt.replace(tzinfo=None)
                 return dt
             except:
-                return datetime.now()
+                # 解析失败，使用当前UTC时间
+                return datetime.now(timezone.utc).replace(tzinfo=None)
 
     def cleanup_old_data(self, days: int = 90):
         """
@@ -1189,7 +1207,7 @@ class DatabaseService:
 
     def get_recent_news(self, hours: int = 24, symbols: str = None, limit: int = 50):
         """
-        获取最近的新闻（返回对象列表）
+        获取最近的新闻（返回对象列表，使用UTC时间）
 
         Args:
             hours: 时间范围(小时)
@@ -1204,7 +1222,10 @@ class DatabaseService:
             from datetime import timedelta
             from sqlalchemy import desc, or_
 
-            cutoff_time = datetime.now() - timedelta(hours=hours)
+            # 使用UTC时间计算24小时范围
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+            # 转换为naive datetime以便与数据库中的时间比较（数据库存储的是UTC时间的naive datetime）
+            cutoff_time = cutoff_time.replace(tzinfo=None)
 
             query = session.query(NewsData).filter(
                 NewsData.published_datetime >= cutoff_time

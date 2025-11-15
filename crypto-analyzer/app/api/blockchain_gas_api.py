@@ -4,7 +4,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List, Dict
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import mysql.connector
 from mysql.connector import pooling
 import yaml
@@ -48,7 +48,7 @@ def get_db_connection():
                 "password": mysql_config.get('password', ''),
                 "database": mysql_config.get('database', 'crypto_analyzer'),
                 "pool_name": "blockchain_gas_pool",
-                "pool_size": 5,
+                "pool_size": 10,  # 增加连接池大小
                 "pool_reset_session": True,
                 "autocommit": True
             }
@@ -184,7 +184,7 @@ async def get_daily_gas_stats(
             "success": True,
             "data": results,
             "count": len(results),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:
@@ -267,7 +267,7 @@ async def get_gas_summary(
                     "period_days": days
                 }
             },
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:

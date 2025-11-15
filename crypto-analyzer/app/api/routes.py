@@ -145,13 +145,16 @@ async def get_news(
     limit: int = 50,
     session: Session = Depends(get_db_session)
 ):
-    """获取新闻列表"""
+    """获取新闻列表（使用UTC时间）"""
     try:
         from app.database.models import NewsData
         from sqlalchemy import desc
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
-        cutoff_time = datetime.now() - timedelta(hours=hours)
+        # 使用UTC时间计算24小时范围
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+        # 转换为naive datetime以便与数据库中的时间比较（数据库存储的是UTC时间的naive datetime）
+        cutoff_time = cutoff_time.replace(tzinfo=None)
         query = session.query(NewsData).filter(
             NewsData.published_datetime >= cutoff_time
         )
@@ -167,7 +170,7 @@ async def get_news(
             'source': n.source,
             'sentiment': n.sentiment,
             'symbols': n.symbols,
-            'published_at': n.published_datetime.strftime('%Y-%m-%d %H:%M') if n.published_datetime else '',
+            'published_at': n.published_datetime.strftime('%Y-%m-%d %H:%M UTC') if n.published_datetime else '',
             'url': n.url,
             'description': n.description
         } for n in news_list]
@@ -469,9 +472,11 @@ async def get_ema_signals(
         result = session.execute(text(query), params)
         signals = []
         
-        # 获取当前时间（用于前端过滤）
-        from datetime import datetime, timedelta
-        cutoff_time = datetime.now() - timedelta(hours=hours if hours is not None else (days * 24))
+        # 获取当前时间（用于前端过滤，使用UTC时间）
+        from datetime import datetime, timedelta, timezone
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours if hours is not None else (days * 24))
+        # 转换为naive datetime以便与数据库中的时间比较
+        cutoff_time = cutoff_time.replace(tzinfo=None)
 
         for row in result:
             volume_ratio = float(row.volume_ratio) if row.volume_ratio else 0.0

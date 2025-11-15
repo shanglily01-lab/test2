@@ -47,7 +47,7 @@ def get_db_connection():
                 "password": mysql_config.get('password', ''),
                 "database": mysql_config.get('database', 'binance-data'),
                 "pool_name": "etf_api_pool",
-                "pool_size": 5,
+                "pool_size": 10,  # 增加连接池大小
                 "pool_reset_session": True,
                 "autocommit": True
             }

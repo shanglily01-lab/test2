@@ -565,36 +565,49 @@ class EnhancedDashboardCached:
             """))
             top_coins_data = result.fetchall()
 
-            # 获取最近大额交易（简化版本：减少嵌套子查询，使用更简单的逻辑）
+            # 获取最近大额交易（优化版本：减少时间范围，添加索引提示）
             from datetime import timedelta
-            cutoff_time = datetime.now() - timedelta(hours=72)  # 扩展到72小时以显示更多钱包
+            cutoff_time = datetime.now() - timedelta(hours=24)  # 减少到24小时以提高性能
             
-            # 简化查询：先获取交易数据，杠杆数据在应用层处理（如果性能仍不够，可以后续优化）
+            # 先统计24小时内有交易的钱包数（活跃钱包）
+            active_wallets_result = session.execute(text("""
+                SELECT COUNT(DISTINCT t.address) as active_count
+                FROM hyperliquid_wallet_trades t
+                INNER JOIN (
+                    SELECT address FROM hyperliquid_monitored_wallets WHERE is_monitoring = 1
+                ) w_filter ON t.address = w_filter.address
+                WHERE t.trade_time >= :cutoff_time
+            """), {"cutoff_time": cutoff_time})
+            active_wallets_row = active_wallets_result.fetchone()
+            active_wallets_count = active_wallets_row[0] if active_wallets_row else 0
+            
+            # 优化查询：使用子查询先过滤监控钱包，减少JOIN数据量
             result = session.execute(text("""
                 SELECT
-                    MAX(t.id) as id,
+                    t.id,
                     t.address,
                     t.coin,
                     t.side,
-                    MAX(t.price) as price,
-                    MAX(t.size) as size,
-                    ROUND(MAX(t.notional_usd), 2) as notional_usd,
-                    MAX(t.closed_pnl) as closed_pnl,
+                    t.price,
+                    t.size,
+                    ROUND(t.notional_usd, 2) as notional_usd,
+                    t.closed_pnl,
                     t.trade_time,
-                    MAX(w.label) as wallet_label,
+                    w.label as wallet_label,
                     t.trader_id,
                     -- 简化：直接使用估算杠杆（根据持仓金额），避免复杂的子查询
                     CASE 
-                        WHEN MAX(t.notional_usd) > 100000 THEN 10.0
-                        WHEN MAX(t.notional_usd) > 50000 THEN 5.0
-                        WHEN MAX(t.notional_usd) > 10000 THEN 3.0
+                        WHEN t.notional_usd > 100000 THEN 10.0
+                        WHEN t.notional_usd > 50000 THEN 5.0
+                        WHEN t.notional_usd > 10000 THEN 3.0
                         ELSE 1.0
                     END as leverage
                 FROM hyperliquid_wallet_trades t
+                INNER JOIN (
+                    SELECT address FROM hyperliquid_monitored_wallets WHERE is_monitoring = 1
+                ) w_filter ON t.address = w_filter.address
                 LEFT JOIN hyperliquid_monitored_wallets w ON t.address = w.address
                 WHERE t.trade_time >= :cutoff_time
-                    AND w.is_monitoring = 1
-                GROUP BY t.address, t.coin, t.side, t.trade_time, t.trader_id
                 ORDER BY t.trade_time DESC
                 LIMIT 50
             """), {"cutoff_time": cutoff_time})
@@ -603,7 +616,7 @@ class EnhancedDashboardCached:
             
             # 调试：检查杠杆数据
             if trades_data:
-                logger.debug(f"获取到 {len(trades_data)} 条交易记录")
+                logger.debug(f"获取到 {len(trades_data)} 条交易记录，活跃钱包: {active_wallets_count} 个")
                 sample_trade = dict(trades_data[0]._mapping) if hasattr(trades_data[0], '_mapping') else dict(trades_data[0])
                 logger.debug(f"示例交易杠杆: {sample_trade.get('leverage', 'N/A')}")
 
@@ -647,6 +660,7 @@ class EnhancedDashboardCached:
 
             result = {
                 'monitored_wallets': monitored_count,
+                'active_wallets': active_wallets_count,  # 24小时内有交易的钱包数
                 'total_volume_24h': total_volume,
                 'recent_trades': recent_trades[:50],
                 'top_coins': top_coins
@@ -661,6 +675,7 @@ class EnhancedDashboardCached:
             traceback.print_exc()
             return {
                 'monitored_wallets': 0,
+                'active_wallets': 0,  # 24小时内有交易的钱包数
                 'total_volume_24h': 0,
                 'recent_trades': [],
                 'top_coins': []
@@ -677,9 +692,26 @@ class EnhancedDashboardCached:
             统计数据
         """
         try:
+            # 优化：不查询所有新闻，只统计数量（避免加载大量数据）
+            try:
+                session = self.db_service.get_session()
+                try:
+                    from datetime import timedelta, timezone
+                    from sqlalchemy import func
+                    from app.database.models import NewsData
+                    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
+                    cutoff_time = cutoff_time.replace(tzinfo=None)
+                    news_count = session.query(func.count(NewsData.id)).filter(
+                        NewsData.published_datetime >= cutoff_time
+                    ).scalar() or 0
+                finally:
+                    session.close()
+            except:
+                news_count = 0
+            
             stats = {
                 'total_symbols': len(self.config.get('symbols', [])),
-                'news_24h': len(self.db_service.get_recent_news(hours=24, limit=1000)),
+                'news_24h': news_count,
             }
 
             return stats

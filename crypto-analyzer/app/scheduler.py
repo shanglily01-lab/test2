@@ -1024,7 +1024,10 @@ class UnifiedDataScheduler:
                 logger.debug("Gas采集任务已在后台线程启动")
             
             schedule.every().day.at("01:00").do(run_gas_collection_in_thread)
-            logger.info("  ✓ 区块链Gas统计 - 每天 01:00 (后台线程执行，不阻塞主调度器)")
+            # schedule库默认使用本地时间（系统时区），不是UTC时间
+            import time
+            local_tz = time.tzname[0] if time.daylight == 0 else time.tzname[1]
+            logger.info(f"  ✓ 区块链Gas统计 - 每天 01:00 本地时间 ({local_tz}) (后台线程执行，不阻塞主调度器)")
         except Exception as e:
             logger.warning(f"  ⚠️  区块链Gas统计任务注册失败: {e}")
 
@@ -1206,6 +1209,10 @@ class UnifiedDataScheduler:
         logger.info("=" * 80)
         logger.info(f"监控币种: {', '.join(self.symbols)}")
         logger.info(f"数据库类型: {self.config.get('database', {}).get('type', 'mysql')}")
+        # 显示时区信息：schedule库默认使用本地时间（系统时区），不是UTC时间
+        import time
+        local_tz = time.tzname[0] if time.daylight == 0 else time.tzname[1]
+        logger.info(f"时区: 本地时间 ({local_tz}) - 所有定时任务使用系统本地时区")
         logger.info("=" * 80 + "\n")
 
         # 设置定时任务

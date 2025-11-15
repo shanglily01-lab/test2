@@ -7,7 +7,7 @@ import asyncio
 import aiohttp
 import feedparser
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 
 
@@ -481,7 +481,7 @@ class NewsAggregator:
 
     async def get_symbol_sentiment(self, symbol: str, hours: int = 24) -> Dict:
         """
-        获取指定币种的新闻情绪汇总
+        获取指定币种的新闻情绪汇总（使用UTC时间）
 
         Args:
             symbol: 币种代码，如 'BTC'
@@ -493,8 +493,8 @@ class NewsAggregator:
         # 采集新闻
         all_news = await self.collect_all([symbol])
 
-        # 过滤时间范围
-        cutoff_time = datetime.now() - timedelta(hours=hours)
+        # 过滤时间范围（使用UTC时间）
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
         recent_news = [
             news for news in all_news
             if self._parse_datetime(news.get('published_at', '')) > cutoff_time
@@ -524,21 +524,33 @@ class NewsAggregator:
         }
 
     def _parse_datetime(self, date_str: str) -> datetime:
-        """解析各种格式的日期时间（返回naive datetime以便比较）"""
+        """
+        解析各种格式的日期时间（统一转换为UTC时间的naive datetime以便比较）
+        
+        注意：返回的是UTC时间的naive datetime，以便与数据库存储的时间格式一致
+        """
         if not date_str:
             return datetime.min
 
         try:
             # ISO格式
             dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            # 直接返回datetime，不做时区处理
+            # 如果有时区信息，转换为UTC时间
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(timezone.utc)
+            # 转换为naive datetime（UTC时间）
+            dt = dt.replace(tzinfo=None)
             return dt
         except:
             try:
                 # RSS格式
                 from email.utils import parsedate_to_datetime
                 dt = parsedate_to_datetime(date_str)
-                # 直接返回datetime，不做时区处理
+                # 如果有时区信息，转换为UTC时间
+                if dt.tzinfo is not None:
+                    dt = dt.astimezone(timezone.utc)
+                # 转换为naive datetime（UTC时间）
+                dt = dt.replace(tzinfo=None)
                 return dt
             except:
                 return datetime.min

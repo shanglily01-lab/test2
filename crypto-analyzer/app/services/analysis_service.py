@@ -6,7 +6,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 import pandas as pd
 import math
@@ -124,8 +124,9 @@ class AnalysisService:
             if funding_rate.next_funding_time:
                 try:
                     next_funding_dt = datetime.fromtimestamp(funding_rate.next_funding_time / 1000)
-                    hours_until = (next_funding_dt - datetime.now()).total_seconds() / 3600
-                    next_funding_time_str = next_funding_dt.strftime('%Y-%m-%d %H:%M:%S')
+                    # 使用UTC时间计算
+                    hours_until = (next_funding_dt - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 3600
+                    next_funding_time_str = next_funding_dt.strftime('%Y-%m-%d %H:%M:%S UTC')
                 except:
                     pass
 
@@ -186,9 +187,12 @@ class AnalysisService:
             return None
 
     def get_news_sentiment(self, symbol: str = None, hours: int = 24) -> Dict:
-        """获取新闻情绪分析"""
+        """获取新闻情绪分析（使用UTC时间）"""
         try:
-            cutoff_time = datetime.now() - timedelta(hours=hours)
+            # 使用UTC时间计算24小时范围
+            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours)
+            # 转换为naive datetime以便与数据库中的时间比较（数据库存储的是UTC时间的naive datetime）
+            cutoff_time = cutoff_time.replace(tzinfo=None)
 
             query = self.session.query(NewsData).filter(
                 NewsData.published_datetime >= cutoff_time
@@ -644,7 +648,7 @@ class AnalysisService:
                 'prices': latest_prices,
                 'recommendations': recommendations,
                 'news': news_list,
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                'last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
             }
 
         except Exception as e:
@@ -653,5 +657,5 @@ class AnalysisService:
                 'prices': [],
                 'recommendations': [],
                 'news': [],
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                'last_updated': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
             }

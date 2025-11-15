@@ -57,7 +57,7 @@ def get_db_connection():
                     _db_pool = {
                         'config': db_config,
                         'connections': [],
-                        'max_size': 10,
+                        'max_size': 20,  # 增加连接池大小
                         'lock': threading.Lock()
                     }
                     logger.info("✅ 数据管理API数据库连接池初始化成功")
@@ -331,23 +331,28 @@ async def get_data_statistics():
                 }
             }
         
+        # 获取当前数据库名（从配置中读取，更可靠）
+        db_config = get_db_config()
+        database_name = db_config.get('database', 'binance-data')
+        
         cursor.execute("""
             SELECT 
-                table_name,
-                ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb,
-                table_rows as estimated_rows
+                TABLE_NAME as table_name,
+                ROUND(((DATA_LENGTH + INDEX_LENGTH) / 1024 / 1024), 2) AS size_mb,
+                TABLE_ROWS as estimated_rows
             FROM information_schema.TABLES 
-            WHERE table_schema = DATABASE()
-            AND table_name IN ({})
-        """.format(','.join(table_names)))
+            WHERE TABLE_SCHEMA = %s
+            AND TABLE_NAME IN ({})
+        """.format(','.join(table_names)), (database_name,))
         
         table_info_map = {}
         for row in cursor.fetchall():
             # 确保使用字典访问方式（DictCursor）
             if isinstance(row, dict):
-                table_name = row.get('table_name')
-                size_mb = row.get('size_mb', 0)
-                estimated_rows = row.get('estimated_rows', 0)
+                # 处理可能的字段名大小写问题（DictCursor 会使用别名）
+                table_name = row.get('table_name') or row.get('TABLE_NAME')
+                size_mb = row.get('size_mb') or row.get('SIZE_MB') or 0
+                estimated_rows = row.get('estimated_rows') or row.get('ESTIMATED_ROWS') or 0
             else:
                 # 如果是元组，按位置访问
                 table_name = row[0] if len(row) > 0 else None
