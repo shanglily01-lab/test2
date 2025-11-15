@@ -341,6 +341,99 @@ async def get_statistics():
     }
 
 
+@router.get("/api/contract-trading/orders")
+async def get_orders(status: str = Query("PENDING", description="订单状态: PENDING, FILLED, REJECTED, all")):
+    """
+    获取订单列表
+
+    Args:
+        status: 订单状态过滤
+
+    Returns:
+        订单列表
+    """
+    if not simulator:
+        raise HTTPException(status_code=400, detail="交易模拟器未初始化")
+
+    try:
+        from app.trading.contract_trading_simulator import OrderStatus
+
+        orders = []
+        for order in simulator.orders.values():
+            if status == "all" or order.status.value == status:
+                orders.append({
+                    "order_id": order.order_id,
+                    "symbol": order.symbol,
+                    "side": order.side.value,
+                    "order_type": order.order_type.value,
+                    "quantity": order.quantity,
+                    "price": order.price,
+                    "leverage": order.leverage,
+                    "status": order.status.value,
+                    "created_at": order.created_at.isoformat(),
+                    "filled_at": order.filled_at.isoformat() if order.filled_at else None,
+                    "filled_price": order.filled_price,
+                    "fee": order.fee
+                })
+
+        # 按创建时间倒序排列
+        orders.sort(key=lambda x: x["created_at"], reverse=True)
+
+        return {
+            "success": True,
+            "data": {
+                "orders": orders,
+                "count": len(orders)
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取订单列表失败: {str(e)}")
+
+
+@router.delete("/api/contract-trading/order/{order_id}")
+async def cancel_order(order_id: str):
+    """
+    取消订单
+
+    Args:
+        order_id: 订单ID
+
+    Returns:
+        取消结果
+    """
+    if not simulator:
+        raise HTTPException(status_code=400, detail="交易模拟器未初始化")
+
+    try:
+        from app.trading.contract_trading_simulator import OrderStatus
+
+        if order_id not in simulator.orders:
+            raise HTTPException(status_code=404, detail="订单不存在")
+
+        order = simulator.orders[order_id]
+
+        if order.status != OrderStatus.PENDING:
+            raise HTTPException(status_code=400, detail=f"订单状态为 {order.status.value}，无法取消")
+
+        # 取消订单
+        order.status = OrderStatus.CANCELLED
+
+        return {
+            "success": True,
+            "message": "订单已取消",
+            "data": {
+                "order_id": order_id,
+                "status": order.status.value
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"取消订单失败: {str(e)}")
+
+
 @router.delete("/api/contract-trading/reset")
 async def reset_simulator():
     """

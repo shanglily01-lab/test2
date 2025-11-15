@@ -296,14 +296,23 @@
             });
         }
 
-        // 格式化大额数字
+        // 格式化大额数字（保留6位小数）
         function formatLargeNumber(num) {
-            if (num === null || num === undefined || isNaN(num) || num === 0) return '$0';
+            if (num === null || num === undefined || isNaN(num)) return '-';
+            if (num === 0) return '$0.000000';
             const absNum = Math.abs(num);
-            if (absNum >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-            if (absNum >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
-            if (absNum >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
-            return `$${num.toFixed(2)}`;
+            // 对于Gas价值，始终保留6位小数
+            if (absNum >= 1e9) return `$${(num / 1e9).toFixed(6)}B`;
+            if (absNum >= 1e6) return `$${(num / 1e6).toFixed(6)}M`;
+            if (absNum >= 1e3) return `$${(num / 1e3).toFixed(6)}K`;
+            return `$${num.toFixed(6)}`;
+        }
+        
+        // 格式化Gas价值（专门用于Gas价值显示，保留6位小数）
+        function formatGasValue(num) {
+            if (num === null || num === undefined || isNaN(num)) return '-';
+            if (num === 0) return '$0.000000';
+            return `$${parseFloat(num).toFixed(6)}`;
         }
 
         // 格式化Gas数量
@@ -413,9 +422,9 @@
         // 更新汇总统计
         function updateSummary(data) {
             const summary = data.summary;
-            document.getElementById('statTotalValue').textContent = formatLargeNumber(summary.total_gas_value_usd);
+            document.getElementById('statTotalValue').textContent = formatGasValue(summary.total_gas_value_usd);
             document.getElementById('statTotalTransactions').textContent = formatNumber(summary.total_transactions, 0);
-            document.getElementById('statAvgGasValue').textContent = formatLargeNumber(summary.avg_gas_value_usd);
+            document.getElementById('statAvgGasValue').textContent = formatGasValue(summary.avg_gas_value_usd);
             document.getElementById('statChainCount').textContent = summary.total_chains || 0;
         }
 
@@ -445,8 +454,8 @@
                         <td class="font-mono">${formatNumber(chain.total_transactions, 0)}</td>
                         <td class="font-mono">${formatGas(chain.avg_gas_per_tx)}</td>
                         <td class="font-mono">${formatGas(chain.avg_gas_price)}</td>
-                        <td class="font-mono" style="color: var(--success-green);">${formatLargeNumber(chain.total_gas_value_usd)}</td>
-                        <td class="font-mono">${formatLargeNumber(chain.avg_gas_value_usd)}</td>
+                        <td class="font-mono" style="color: var(--success-green);">${formatGasValue(chain.total_gas_value_usd)}</td>
+                        <td class="font-mono">${formatGasValue(chain.avg_gas_value_usd)}</td>
                     </tr>
                 `;
             }).join('');
@@ -480,8 +489,8 @@
                         <td class="font-mono">${formatGas(item.avg_gas_per_tx)}</td>
                         <td class="font-mono">${formatGas(item.avg_gas_price)}</td>
                         <td class="font-mono">${item.native_token_price_usd ? formatLargeNumber(item.native_token_price_usd) : '-'}</td>
-                        <td class="font-mono" style="color: var(--success-green);">${formatLargeNumber(item.total_gas_value_usd)}</td>
-                        <td class="font-mono">${formatLargeNumber(item.avg_gas_value_usd)}</td>
+                        <td class="font-mono" style="color: var(--success-green);">${formatGasValue(item.total_gas_value_usd)}</td>
+                        <td class="font-mono">${formatGasValue(item.avg_gas_value_usd)}</td>
                     </tr>
                 `;
             }).join('');

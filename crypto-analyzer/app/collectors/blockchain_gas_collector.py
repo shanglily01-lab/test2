@@ -22,7 +22,8 @@ CHAIN_CONFIGS = {
         'display_name': 'Ethereum',
         'native_token': 'ETH',
         'rpc_url': 'https://eth.llamarpc.com',
-        'explorer_api': 'https://api.etherscan.io/api',
+        'explorer_api': 'https://api.etherscan.io/api',  # V1 API (deprecated)
+        'explorer_api_v2': 'https://api.etherscan.io/v2',  # V2 API
         'explorer_api_key': None,  # 从config.yaml读取
         'chain_id': 1,
         'decimals': 18
@@ -172,18 +173,105 @@ class BlockchainGasCollector:
         native_token = chain_config['native_token']
         symbol = f"{native_token}/USDT"
         
+        # 首先尝试从价格缓存服务获取价格
         try:
-            # 从价格缓存服务获取价格
             from app.services.price_cache_service import get_global_price_cache
             price_cache = get_global_price_cache()
             if price_cache:
                 price = price_cache.get_price(symbol)
                 if price and price > 0:
+                    logger.debug(f"从价格缓存获取 {symbol} 价格: {price}")
                     return float(price)
         except Exception as e:
             logger.debug(f"从价格缓存获取 {symbol} 价格失败: {e}")
         
-        # 如果价格缓存不可用，返回None，后续可以从其他API获取
+        # 如果价格缓存不可用，尝试从多个数据源获取
+        # 1. 首先尝试 CoinGecko API
+        try:
+            # CoinGecko 代币 ID 映射
+            token_id_map = {
+                'ETH': 'ethereum',
+                'BNB': 'binancecoin',
+                'MATIC': 'matic-network',
+                'AVAX': 'avalanche-2'
+            }
+            
+            token_id = token_id_map.get(native_token)
+            if token_id:
+                api_url = 'https://api.coingecko.com/api/v3/simple/price'
+                params = {
+                    'ids': token_id,
+                    'vs_currencies': 'usd'
+                }
+                
+                # 添加重试机制，避免 HTTP 429 错误
+                max_retries = 2  # 减少重试次数，快速切换到备用源
+                for attempt in range(max_retries):
+                    try:
+                        # 添加延迟，避免请求过快
+                        if attempt > 0:
+                            await asyncio.sleep(5 * (attempt + 1))  # 延迟：5秒, 10秒
+                        
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(
+                                api_url,
+                                params=params,
+                                timeout=aiohttp.ClientTimeout(total=15)
+                            ) as resp:
+                                if resp.status == 200:
+                                    data = await resp.json()
+                                    price = data.get(token_id, {}).get('usd')
+                                    if price:
+                                        logger.info(f"从 CoinGecko 获取 {native_token} 价格: ${price}")
+                                        return float(price)
+                                    else:
+                                        logger.debug(f"CoinGecko 返回数据中未找到 {native_token} 价格")
+                                        break  # 数据格式问题，切换到备用源
+                                elif resp.status == 429:
+                                    logger.debug(f"CoinGecko API 请求过多 (HTTP 429)，切换到备用数据源")
+                                    break  # 限流，切换到备用源
+                                else:
+                                    logger.debug(f"CoinGecko API 请求失败: HTTP {resp.status}，切换到备用数据源")
+                                    break  # 其他错误，切换到备用源
+                    except asyncio.TimeoutError:
+                        logger.debug(f"从 CoinGecko 获取 {native_token} 价格超时，切换到备用数据源")
+                        break
+                    except Exception as e:
+                        logger.debug(f"从 CoinGecko 获取 {native_token} 价格失败: {e}，切换到备用数据源")
+                        break
+        except Exception as e:
+            logger.debug(f"CoinGecko 价格获取异常: {e}，尝试备用数据源")
+        
+        # 2. 备用方案：从 Binance API 获取价格
+        try:
+            # Binance 交易对映射
+            binance_symbol_map = {
+                'ETH': 'ETHUSDT',
+                'BNB': 'BNBUSDT',
+                'MATIC': 'MATICUSDT',
+                'AVAX': 'AVAXUSDT'
+            }
+            
+            binance_symbol = binance_symbol_map.get(native_token)
+            if binance_symbol:
+                binance_url = f'https://api.binance.com/api/v3/ticker/price'
+                params = {'symbol': binance_symbol}
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        binance_url,
+                        params=params,
+                        timeout=aiohttp.ClientTimeout(total=10)
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            price = data.get('price')
+                            if price:
+                                logger.info(f"从 Binance 获取 {native_token} 价格: ${price}")
+                                return float(price)
+        except Exception as e:
+            logger.debug(f"从 Binance 获取 {native_token} 价格失败: {e}")
+        
         return None
     
     async def fetch_gas_stats_from_explorer(
@@ -269,13 +357,41 @@ class BlockchainGasCollector:
         
         return None
     
+    async def _rpc_call(self, rpc_url: str, method: str, params: List) -> Optional[Dict]:
+        """执行 RPC 调用"""
+        try:
+            payload = {
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": params,
+                "id": 1
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    rpc_url,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=30)
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if 'result' in data:
+                            return data['result']
+                        elif 'error' in data:
+                            logger.warning(f"RPC调用失败: {data['error']}")
+                            return None
+                    return None
+        except Exception as e:
+            logger.debug(f"RPC调用异常: {e}")
+            return None
+    
     async def fetch_gas_stats_from_rpc(
         self,
         chain_name: str,
         target_date: date
     ) -> Optional[Dict]:
         """
-        从RPC节点获取Gas统计数据（使用公开API和估算方法）
+        从RPC节点获取Gas统计数据
         
         Args:
             chain_name: 链名称
@@ -290,128 +406,170 @@ class BlockchainGasCollector:
         
         try:
             # 获取原生代币价格
-            native_price = await self.get_native_token_price(chain_name)
-            if not native_price:
-                native_price = 0.0
+            # 优先使用预获取的价格缓存
+            native_price = None
+            if hasattr(self, '_price_cache') and chain_name in self._price_cache:
+                native_price = self._price_cache[chain_name]
+                logger.debug(f"{chain_name} 使用预获取的价格: ${native_price:.2f}")
             
-            # 使用公开API获取Gas价格和基础统计
-            # 这里使用简化方法：从当前区块估算
+            # 如果缓存中没有，则获取价格（带重试机制）
+            if not native_price or native_price <= 0:
+                native_price = await self.get_native_token_price(chain_name)
+                if not native_price or native_price <= 0:
+                    logger.warning(f"{chain_name} 无法获取原生代币价格，Gas价值将无法计算")
+                    # 如果价格获取失败，尝试再次获取（最多重试2次）
+                    for retry in range(2):
+                        await asyncio.sleep(3)  # 等待3秒后重试
+                        native_price = await self.get_native_token_price(chain_name)
+                        if native_price and native_price > 0:
+                            logger.info(f"{chain_name} 重试获取价格成功: ${native_price:.2f}")
+                            break
+                    
+                    if not native_price or native_price <= 0:
+                        logger.error(f"{chain_name} 多次尝试后仍无法获取原生代币价格")
+                        native_price = 0.0
+            
             rpc_url = chain_config['rpc_url']
-            explorer_api = chain_config['explorer_api']
-            api_key = chain_config.get('explorer_api_key')
             
-            async with aiohttp.ClientSession() as session:
-                # 尝试从浏览器API获取基础统计
-                if api_key and explorer_api:
+            # 1. 获取当前 Gas 价格
+            gas_price_hex = await self._rpc_call(rpc_url, "eth_gasPrice", [])
+            if not gas_price_hex:
+                logger.warning(f"{chain_name} 无法从RPC获取Gas价格")
+                return None
+            
+            # 转换为十进制（Wei）
+            avg_gas_price = int(gas_price_hex, 16)
+            avg_gas_price_gwei = avg_gas_price / (10 ** 9)
+            
+            # 估算 Gas 价格范围（基于当前价格）
+            max_gas_price = int(avg_gas_price * 1.5)
+            min_gas_price = int(avg_gas_price * 0.5)
+            
+            # 2. 获取最新区块信息
+            latest_block_hex = await self._rpc_call(rpc_url, "eth_blockNumber", [])
+            if not latest_block_hex:
+                logger.warning(f"{chain_name} 无法从RPC获取最新区块号")
+                return None
+            
+            latest_block_num = int(latest_block_hex, 16)
+            
+            # 3. 采样最近的区块来计算平均 Gas 使用量
+            # 采样最近 100 个区块（约1-2小时的数据）
+            sample_blocks = min(100, latest_block_num)
+            total_gas_used = 0
+            total_transactions = 0
+            gas_prices = []
+            
+            # 计算目标日期对应的区块范围（估算）
+            # 由于是历史数据，我们使用当前区块和估算的区块时间来计算
+            blocks_per_day = {
+                'ethereum': 7200,   # 12秒/块
+                'bsc': 28800,       # 3秒/块
+                'polygon': 43200,   # 2秒/块
+                'arbitrum': 7200,   # 12秒/块
+                'optimism': 7200,   # 12秒/块
+                'avalanche': 28800  # 1秒/块
+            }.get(chain_name, 7200)
+            
+            # 采样最近的区块
+            sample_count = min(50, latest_block_num)  # 采样50个区块
+            successful_samples = 0
+            for i in range(sample_count):
+                block_num = latest_block_num - i
+                block_hex = hex(block_num)
+                
+                block_data = await self._rpc_call(rpc_url, "eth_getBlockByNumber", [block_hex, False])
+                if block_data and 'gasUsed' in block_data and 'transactions' in block_data:
                     try:
-                        # 获取当前Gas价格
-                        gas_price_url = f"{explorer_api}?module=gastracker&action=gasoracle&apikey={api_key}"
-                        async with session.get(gas_price_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                            if resp.status == 200:
-                                data = await resp.json()
-                                if data.get('status') == '1' and data.get('result'):
-                                    result = data['result']
-                                    # 获取Gas价格（Gwei）
-                                    safe_gas_price = int(result.get('SafeGasPrice', 0))
-                                    propose_gas_price = int(result.get('ProposeGasPrice', 0))
-                                    fast_gas_price = int(result.get('FastGasPrice', 0))
-                                    
-                                    # 使用建议Gas价格作为平均值
-                                    avg_gas_price_gwei = propose_gas_price if propose_gas_price > 0 else safe_gas_price
-                                    max_gas_price_gwei = fast_gas_price if fast_gas_price > 0 else avg_gas_price_gwei
-                                    min_gas_price_gwei = safe_gas_price if safe_gas_price > 0 else avg_gas_price_gwei
-                                    
-                                    # 转换为Wei (1 Gwei = 10^9 Wei)
-                                    avg_gas_price = avg_gas_price_gwei * (10 ** 9)
-                                    max_gas_price = max_gas_price_gwei * (10 ** 9)
-                                    min_gas_price = min_gas_price_gwei * (10 ** 9)
-                                    
-                                    # 估算每日交易数（基于链的典型值）
-                                    # 这些是估算值，实际应该从区块浏览器获取
-                                    estimated_tx_per_day = {
-                                        'ethereum': 1000000,
-                                        'bsc': 3000000,
-                                        'polygon': 5000000,
-                                        'arbitrum': 800000,
-                                        'optimism': 400000,
-                                        'avalanche': 600000
-                                    }.get(chain_name, 500000)
-                                    
-                                    # 估算平均每笔交易Gas消耗
-                                    avg_gas_per_tx = {
-                                        'ethereum': 21000,
-                                        'bsc': 21000,
-                                        'polygon': 21000,
-                                        'arbitrum': 21000,
-                                        'optimism': 21000,
-                                        'avalanche': 21000
-                                    }.get(chain_name, 21000)
-                                    
-                                    total_gas_used = estimated_tx_per_day * avg_gas_per_tx
-                                    
-                                    # 计算Gas价值（USD）
-                                    # Gas价格(Wei) * Gas消耗量 / 10^18 * 代币价格(USD)
-                                    total_gas_value_usd = (total_gas_used * avg_gas_price / (10 ** 18)) * native_price
-                                    avg_gas_value_usd = (avg_gas_per_tx * avg_gas_price / (10 ** 18)) * native_price
-                                    
-                                    # 估算区块数（基于平均出块时间）
-                                    blocks_per_day = {
-                                        'ethereum': 7200,  # 12秒/块
-                                        'bsc': 28800,      # 3秒/块
-                                        'polygon': 43200,  # 2秒/块
-                                        'arbitrum': 7200,  # 12秒/块
-                                        'optimism': 7200,  # 12秒/块
-                                        'avalanche': 28800 # 1秒/块
-                                    }.get(chain_name, 7200)
-                                    
-                                    logger.info(f"[SUCCESS] 成功获取 {chain_name} {target_date} 的Gas数据（估算值）")
-                                    
-                                    return {
-                                        'chain_name': chain_name,
-                                        'date': target_date,
-                                        'total_gas_used': total_gas_used,
-                                        'total_transactions': estimated_tx_per_day,
-                                        'avg_gas_per_tx': avg_gas_per_tx,
-                                        'avg_gas_price': avg_gas_price,
-                                        'max_gas_price': max_gas_price,
-                                        'min_gas_price': min_gas_price,
-                                        'native_token_price_usd': native_price,
-                                        'total_gas_value_usd': total_gas_value_usd,
-                                        'avg_gas_value_usd': avg_gas_value_usd,
-                                        'total_blocks': blocks_per_day,
-                                        'data_source': 'explorer_api_estimated'
-                                    }
-                    except Exception as e:
-                        logger.debug(f"从浏览器API获取 {chain_name} Gas价格失败: {e}")
+                        gas_used = int(block_data['gasUsed'], 16) if block_data.get('gasUsed') else 0
+                        tx_count = len(block_data.get('transactions', []))
+                        
+                        if gas_used > 0:  # 只统计有效的区块
+                            total_gas_used += gas_used
+                            total_transactions += tx_count
+                            successful_samples += 1
+                            
+                            # 获取区块的 baseFeePerGas（如果支持 EIP-1559）
+                            if 'baseFeePerGas' in block_data and block_data['baseFeePerGas']:
+                                base_fee = int(block_data['baseFeePerGas'], 16)
+                                gas_prices.append(base_fee)
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"{chain_name} 区块 {block_num} 数据解析失败: {e}")
+                        continue
                 
-                # 如果API失败，返回基础估算数据
-                logger.warning(f"{chain_name} 使用基础估算数据（建议配置API密钥获取更准确数据）")
+                # 避免请求过快
+                if i % 10 == 0:
+                    await asyncio.sleep(0.1)
+            
+            # 更新实际采样成功的区块数
+            if successful_samples > 0:
+                sample_count = successful_samples
+            
+            # 计算平均值
+            if total_transactions > 0 and sample_count > 0:
+                avg_gas_per_tx = total_gas_used / total_transactions
+                # 估算每日数据（基于采样区块的平均值）
+                avg_gas_per_block = total_gas_used / sample_count
+                estimated_total_gas_used = int(avg_gas_per_block * blocks_per_day)
+                estimated_total_transactions = int((total_transactions / sample_count) * blocks_per_day)
+                logger.info(f"{chain_name} 采样成功: {sample_count}个区块, {total_transactions}笔交易, 平均Gas/交易: {avg_gas_per_tx:.0f}")
+            else:
+                # 如果采样失败，使用典型值
+                logger.warning(f"{chain_name} 区块采样失败（total_transactions=0），使用典型值估算")
+                estimated_total_transactions = {
+                    'ethereum': 1000000,
+                    'bsc': 3000000,
+                    'polygon': 5000000,
+                    'arbitrum': 800000,
+                    'optimism': 400000,
+                    'avalanche': 600000
+                }.get(chain_name, 500000)
                 
-                # 基础估算值
-                estimated_tx_per_day = 500000
-                avg_gas_per_tx = 21000
-                total_gas_used = estimated_tx_per_day * avg_gas_per_tx
-                avg_gas_price = 20 * (10 ** 9)  # 20 Gwei
-                blocks_per_day = 7200
+                avg_gas_per_tx = {
+                    'ethereum': 21000,
+                    'bsc': 21000,
+                    'polygon': 21000,
+                    'arbitrum': 21000,
+                    'optimism': 21000,
+                    'avalanche': 21000
+                }.get(chain_name, 21000)
                 
-                total_gas_value_usd = (total_gas_used * avg_gas_price / (10 ** 18)) * native_price if native_price > 0 else 0
-                avg_gas_value_usd = (avg_gas_per_tx * avg_gas_price / (10 ** 18)) * native_price if native_price > 0 else 0
+                estimated_total_gas_used = estimated_total_transactions * avg_gas_per_tx
+            
+            # 计算 Gas 价值（USD）
+            # 使用 Decimal 确保精度
+            from decimal import Decimal, ROUND_DOWN
+            
+            if native_price and native_price > 0:
+                # 总Gas价值 = (总Gas消耗量 * Gas价格(Wei) / 10^18) * 代币价格(USD)
+                total_gas_value_usd = float(Decimal(str(estimated_total_gas_used)) * Decimal(str(avg_gas_price)) / Decimal('1000000000000000000') * Decimal(str(native_price)))
                 
-                return {
-                    'chain_name': chain_name,
-                    'date': target_date,
-                    'total_gas_used': total_gas_used,
-                    'total_transactions': estimated_tx_per_day,
-                    'avg_gas_per_tx': avg_gas_per_tx,
-                    'avg_gas_price': avg_gas_price,
-                    'max_gas_price': avg_gas_price * 1.5,
-                    'min_gas_price': avg_gas_price * 0.5,
-                    'native_token_price_usd': native_price,
-                    'total_gas_value_usd': total_gas_value_usd,
-                    'avg_gas_value_usd': avg_gas_value_usd,
-                    'total_blocks': blocks_per_day,
-                    'data_source': 'estimated'
-                }
+                # 平均Gas价值 = (平均Gas/交易 * Gas价格(Wei) / 10^18) * 代币价格(USD)
+                avg_gas_value_usd = float(Decimal(str(avg_gas_per_tx)) * Decimal(str(avg_gas_price)) / Decimal('1000000000000000000') * Decimal(str(native_price)))
+                
+                logger.info(f"[SUCCESS] 成功从RPC获取 {chain_name} {target_date} 的Gas数据")
+                logger.info(f"  总Gas消耗: {estimated_total_gas_used}, Gas价格: {avg_gas_price_gwei:.2f} Gwei, 代币价格: ${native_price:.2f}")
+                logger.info(f"  总Gas价值: ${total_gas_value_usd:.6f}, 平均Gas价值: ${avg_gas_value_usd:.6f}")
+            else:
+                logger.warning(f"{chain_name} 原生代币价格为0或未获取，Gas价值无法计算")
+                total_gas_value_usd = 0.0
+                avg_gas_value_usd = 0.0
+            
+            return {
+                'chain_name': chain_name,
+                'date': target_date,
+                'total_gas_used': estimated_total_gas_used,
+                'total_transactions': estimated_total_transactions,
+                'avg_gas_per_tx': int(avg_gas_per_tx),
+                'avg_gas_price': avg_gas_price,
+                'max_gas_price': max_gas_price,
+                'min_gas_price': min_gas_price,
+                'native_token_price_usd': native_price,
+                'total_gas_value_usd': total_gas_value_usd,
+                'avg_gas_value_usd': avg_gas_value_usd,
+                'total_blocks': blocks_per_day,
+                'data_source': 'rpc_node'
+            }
             
         except Exception as e:
             logger.error(f"从RPC获取 {chain_name} Gas数据失败: {e}", exc_info=True)
@@ -449,7 +607,13 @@ class BlockchainGasCollector:
             stats = await self.fetch_gas_stats_from_rpc(chain_name, target_date)
         
         if not stats:
-            logger.warning(f"无法获取 {chain_name} {target_date} 的Gas数据")
+            logger.warning(f"无法获取 {chain_name} {target_date} 的Gas数据（API调用失败，跳过保存）")
+            return False
+        
+        # 如果数据源是估算数据，且 API 密钥已配置，说明 API 调用失败，不保存估算数据
+        if stats.get('data_source') == 'estimated' and chain_config.get('explorer_api_key'):
+            logger.warning(f"{chain_name} API调用失败，跳过保存估算数据（避免产生测试数据）")
+            logger.info(f"提示：Etherscan V1 API 已废弃，需要迁移到 V2 API 或使用其他数据源")
             return False
         
         # 保存到数据库
@@ -474,9 +638,8 @@ class BlockchainGasCollector:
             display_name = chain_config['display_name'] if chain_config else stats['chain_name']
             
             # 计算平均Gas价值
-            avg_gas_value_usd = 0
-            if stats.get('total_transactions', 0) > 0:
-                avg_gas_value_usd = stats.get('total_gas_value_usd', 0) / stats['total_transactions']
+            # 使用已计算好的平均Gas价值，不要重新计算
+            avg_gas_value_usd = stats.get('avg_gas_value_usd', 0)
             
             sql = """
                 INSERT INTO blockchain_gas_daily (
@@ -542,7 +705,7 @@ class BlockchainGasCollector:
     
     async def collect_all_chains(self, target_date: Optional[date] = None):
         """
-        采集所有链的Gas数据
+        采集所有链的Gas数据（顺序执行，避免API限流）
         
         Args:
             target_date: 目标日期，默认为昨天
@@ -552,13 +715,44 @@ class BlockchainGasCollector:
         
         logger.info(f"开始采集所有链 {target_date} 的Gas数据...")
         
-        tasks = []
-        for chain_name in CHAIN_CONFIGS.keys():
-            tasks.append(self.collect_daily_gas_stats(chain_name, target_date))
+        # 顺序执行，避免同时请求CoinGecko API导致429错误
+        success_count = 0
+        chain_list = list(CHAIN_CONFIGS.keys())
         
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # 先批量获取所有链的价格，避免在采集过程中频繁请求导致 HTTP 429
+        logger.info("预获取所有链的原生代币价格...")
+        price_cache = {}
+        for chain_name in chain_list:
+            try:
+                price = await self.get_native_token_price(chain_name)
+                if price and price > 0:
+                    price_cache[chain_name] = price
+                    logger.info(f"  {chain_name}: ${price:.2f}")
+                else:
+                    logger.warning(f"  {chain_name}: 价格获取失败，将在采集时重试")
+                # 每个价格请求之间添加延迟，避免 HTTP 429
+                await asyncio.sleep(5)  # 增加到 5 秒延迟，避免限流
+            except Exception as e:
+                logger.warning(f"  {chain_name}: 价格获取异常: {e}")
         
-        success_count = sum(1 for r in results if r is True)
+        logger.info(f"价格预获取完成，成功获取 {len(price_cache)}/{len(chain_list)} 个链的价格")
+        
+        # 将预获取的价格存储到实例变量中，供后续使用
+        self._price_cache = price_cache
+        
+        # 采集每个链的 Gas 数据
+        for i, chain_name in enumerate(chain_list):
+            try:
+                result = await self.collect_daily_gas_stats(chain_name, target_date)
+                if result:
+                    success_count += 1
+                
+                # 在链之间添加延迟，避免 API 限流
+                if i < len(chain_list) - 1:
+                    await asyncio.sleep(2)  # 每个链之间延迟 2 秒
+            except Exception as e:
+                logger.error(f"采集 {chain_name} 失败: {e}", exc_info=True)
+        
         logger.info(f"完成采集: {success_count}/{len(CHAIN_CONFIGS)} 条链成功")
 
 

@@ -315,6 +315,24 @@
                                 </small>
                             </div>
                             <div class="form-group">
+                                <label class="form-label">订单类型</label>
+                                <div class="d-flex gap-sm" style="margin-bottom: var(--spacing-sm);">
+                                    <button type="button" class="btn btn-primary w-full" id="btnMarket" onclick="selectOrderType('MARKET')">
+                                        <i class="bi bi-lightning-charge"></i> 市价单
+                                    </button>
+                                    <button type="button" class="btn btn-ghost w-full" id="btnLimit" onclick="selectOrderType('LIMIT')">
+                                        <i class="bi bi-clock"></i> 限价单
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-group" id="limitPriceGroup" style="display: none;">
+                                <label class="form-label">限价</label>
+                                <input type="number" class="form-control" id="limitPrice" step="0.00000001" placeholder="请输入限价">
+                                <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
+                                    限价单将在价格达到设定价格时自动成交
+                                </small>
+                            </div>
+                            <div class="form-group">
                                 <label class="form-label">数量</label>
                                 <input type="number" class="form-control" id="quantity" step="0.00000001" required>
                                 <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
@@ -417,6 +435,7 @@
     <script>
         let currentSymbol = 'BTC/USDT';
         let currentPrice = 0;
+        let selectedOrderType = 'MARKET';  // MARKET 或 LIMIT
         let autoBuyEnabled = false;
         let autoBuyTriggerPrice = 0;
         let autoBuyExecuted = false; // 防止重复执行
@@ -1719,7 +1738,7 @@
                 // 如果当前价格 >= 触发价格，继续执行下面的立即卖出逻辑
             }
 
-            // 价格满足条件或未设置触发价格，立即执行交易
+            // 价格满足条件或未设置触发价格，立即执行交易（市价单）
             try {
                 const response = await fetch('/api/paper-trading/order', {
                     method: 'POST',

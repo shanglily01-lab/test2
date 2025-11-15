@@ -235,15 +235,28 @@
                         </select>
                     </div>
 
+                    <!-- Order Type -->
+                    <div class="form-group">
+                        <label class="form-label">订单类型</label>
+                        <div class="d-flex gap-sm">
+                            <button class="btn btn-primary w-full" id="btnMarket" onclick="selectOrderType('MARKET')">
+                                <i class="bi bi-lightning-charge"></i> 市价单
+                            </button>
+                            <button class="btn btn-ghost w-full" id="btnLimit" onclick="selectOrderType('LIMIT')">
+                                <i class="bi bi-clock"></i> 限价单
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Price -->
                     <div class="form-group">
                         <label class="form-label">
-                            价格
+                            <span id="priceLabel">市价</span>
                             <button class="btn btn-sm btn-ghost" onclick="fetchPrice()" style="float: right;">
                                 <i class="bi bi-arrow-clockwise"></i> 刷新
                             </button>
                         </label>
-                        <input type="number" class="form-control" id="orderPrice" value="0" step="0.01">
+                        <input type="number" class="form-control" id="orderPrice" value="0" step="0.01" placeholder="限价单请输入价格">
                         <small class="text-secondary text-sm">
                             当前价: <span id="currentPrice" class="text-primary">--</span>
                             <span id="priceChange" class="ms-2">--</span>
@@ -286,7 +299,7 @@
 
                     <!-- Submit Button -->
                     <button class="btn btn-primary w-full btn-lg" onclick="createOrder()">
-                        <i class="bi bi-lightning-charge"></i> 立即开仓
+                        <i class="bi bi-lightning-charge" id="submitIcon"></i> <span id="submitText">立即开仓</span>
                     </button>
 
                     <!-- Result Message -->
@@ -329,6 +342,9 @@
                     <button class="btn btn-secondary" id="tabPositions" onclick="showTab('positions')">
                         <i class="bi bi-briefcase"></i> 持仓
                     </button>
+                    <button class="btn btn-ghost" id="tabOrders" onclick="showTab('orders')">
+                        <i class="bi bi-list-check"></i> 待成交 <span class="badge badge-info" id="pendingOrderCount">0</span>
+                    </button>
                     <button class="btn btn-ghost" id="tabHistory" onclick="showTab('history')">
                         <i class="bi bi-clock-history"></i> 历史
                     </button>
@@ -350,10 +366,25 @@
                     </div>
                 </div>
 
+                <!-- Pending Orders Tab -->
+                <div class="card" id="ordersTab" style="display: none;">
+                    <div class="card-header">
+                        <h2 class="card-title">待成交订单</h2>
+                    </div>
+                    <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                        <div id="pendingOrdersList">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📋</div>
+                                <div class="empty-state-text">暂无待成交订单</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- History Tab -->
                 <div class="card" id="historyTab" style="display: none;">
                     <div class="card-header">
-                        <h2 class="card-title">交易历史</h2>
+                        <h2 class="card-title">交易历史 <span class="badge badge-info" id="tradeHistoryCount">0</span></h2>
                     </div>
                     <div class="card-body" style="max-height: 600px; overflow-y: auto;">
                         <div id="tradeHistory">
@@ -370,6 +401,7 @@
 
     <script>
         let selectedSide = 'LONG';
+        let selectedOrderType = 'MARKET';  // MARKET 或 LIMIT
         let initialized = false;
 
         // 格式化价格
@@ -396,20 +428,66 @@
             }
         }
 
+        // 选择订单类型
+        function selectOrderType(orderType) {
+            selectedOrderType = orderType;
+            const btnMarket = document.getElementById('btnMarket');
+            const btnLimit = document.getElementById('btnLimit');
+            const priceLabel = document.getElementById('priceLabel');
+            const orderPrice = document.getElementById('orderPrice');
+            const submitIcon = document.getElementById('submitIcon');
+            const submitText = document.getElementById('submitText');
+
+            if (orderType === 'MARKET') {
+                btnMarket.className = 'btn btn-primary w-full';
+                btnLimit.className = 'btn btn-ghost w-full';
+                priceLabel.textContent = '市价';
+                orderPrice.placeholder = '市价单将按当前价格成交';
+                orderPrice.disabled = true;
+                submitIcon.className = 'bi bi-lightning-charge';
+                submitText.textContent = '立即开仓';
+            } else {
+                btnLimit.className = 'btn btn-primary w-full';
+                btnMarket.className = 'btn btn-ghost w-full';
+                priceLabel.textContent = '限价';
+                orderPrice.placeholder = '限价单请输入价格';
+                orderPrice.disabled = false;
+                submitIcon.className = 'bi bi-clock';
+                submitText.textContent = '创建限价单';
+            }
+        }
+
         // 切换标签页
         function showTab(tab) {
-            const tabPositions = document.getElementById('tabPositions');
-            const tabHistory = document.getElementById('tabHistory');
             const positionsTab = document.getElementById('positionsTab');
+            const ordersTab = document.getElementById('ordersTab');
             const historyTab = document.getElementById('historyTab');
+            const tabPositions = document.getElementById('tabPositions');
+            const tabOrders = document.getElementById('tabOrders');
+            const tabHistory = document.getElementById('tabHistory');
+
+            // 隐藏所有标签页
+            positionsTab.style.display = 'none';
+            ordersTab.style.display = 'none';
+            historyTab.style.display = 'none';
+            
+            // 重置所有按钮样式
+            tabPositions.className = 'btn btn-ghost';
+            tabOrders.className = 'btn btn-ghost';
+            tabHistory.className = 'btn btn-ghost';
 
             if (tab === 'positions') {
-                tabPositions.className = 'btn btn-secondary';
-                tabHistory.className = 'btn btn-ghost';
                 positionsTab.style.display = 'block';
-                historyTab.style.display = 'none';
+                tabPositions.className = 'btn btn-secondary';
+            } else if (tab === 'orders') {
+                ordersTab.style.display = 'block';
+                tabOrders.className = 'btn btn-secondary';
+                refreshPendingOrders();
             } else {
-                tabPositions.className = 'btn btn-ghost';
+                historyTab.style.display = 'block';
+                tabHistory.className = 'btn btn-secondary';
+            }
+        }
                 tabHistory.className = 'btn btn-secondary';
                 positionsTab.style.display = 'none';
                 historyTab.style.display = 'block';
@@ -485,19 +563,43 @@
             const symbol = document.getElementById('orderSymbol').value;
             const quantity = parseFloat(document.getElementById('orderQuantity').value);
             const leverage = parseInt(document.getElementById('orderLeverage').value);
-            const price = parseFloat(document.getElementById('orderPrice').value);
+            const priceInput = document.getElementById('orderPrice').value;
             const stopLoss = document.getElementById('orderStopLoss').value;
             const takeProfit = document.getElementById('orderTakeProfit').value;
 
-            if (!quantity || !price) {
-                showMessage('请填写完整信息', 'danger');
+            if (!quantity) {
+                showMessage('请填写数量', 'danger');
+                return;
+            }
+
+            // 限价单必须填写价格
+            if (selectedOrderType === 'LIMIT' && (!priceInput || parseFloat(priceInput) <= 0)) {
+                showMessage('限价单必须填写价格', 'danger');
                 return;
             }
 
             try {
+                // 获取当前价格（用于市价单）
+                let currentPrice = 0;
+                if (selectedOrderType === 'MARKET') {
+                    const priceData = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}`).then(r => r.json());
+                    if (priceData.price) {
+                        currentPrice = parseFloat(priceData.price);
+                    } else if (priceData.data && priceData.data.price) {
+                        currentPrice = parseFloat(priceData.data.price);
+                    }
+                    if (currentPrice <= 0) {
+                        showMessage('无法获取当前价格，请稍后重试', 'danger');
+                        return;
+                    }
+                }
+
+                const orderPrice = selectedOrderType === 'LIMIT' ? parseFloat(priceInput) : currentPrice;
+
                 const orderData = {
                     symbol, side: selectedSide, quantity,
-                    order_type: 'MARKET', leverage,
+                    order_type: selectedOrderType, leverage,
+                    price: selectedOrderType === 'LIMIT' ? orderPrice : null,
                     stop_loss: stopLoss ? parseFloat(stopLoss) : null,
                     take_profit: takeProfit ? parseFloat(takeProfit) : null
                 };
@@ -514,21 +616,30 @@
                     return;
                 }
 
-                const executeResponse = await fetch('/api/contract-trading/order/execute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        order_id: createResult.data.order_id,
-                        current_price: price
-                    })
-                });
+                // 如果是市价单，立即执行
+                if (selectedOrderType === 'MARKET') {
+                    const executeResponse = await fetch('/api/contract-trading/order/execute', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            order_id: createResult.data.order_id,
+                            current_price: currentPrice
+                        })
+                    });
 
-                const executeResult = await executeResponse.json();
-                if (executeResult.success) {
-                    showMessage(`${selectedSide === 'LONG' ? '做多' : '做空'}开仓成功！`, 'success');
-                    await refreshAll();
+                    const executeResult = await executeResponse.json();
+                    if (executeResult.success) {
+                        showMessage(`${selectedSide === 'LONG' ? '做多' : '做空'}开仓成功！`, 'success');
+                        await refreshAll();
+                    } else {
+                        showMessage(executeResult.detail || '执行订单失败', 'danger');
+                    }
                 } else {
-                    showMessage(executeResult.detail || '执行订单失败', 'danger');
+                    // 限价单，不立即执行，保持在 PENDING 状态
+                    showMessage(`限价单创建成功！价格达到 $${formatPrice(orderPrice)} 时将自动成交`, 'success');
+                    await refreshAll();
+                    // 切换到待成交订单标签页
+                    showTab('orders');
                 }
             } catch (error) {
                 showMessage('交易失败: ' + error.message, 'danger');
@@ -705,9 +816,20 @@
                 const response = await fetch('/api/contract-trading/trades?limit=50');
                 const data = await response.json();
                 const container = document.getElementById('tradeHistory');
+                const countBadge = document.getElementById('tradeHistoryCount');
 
                 if (data.success && data.data.trades.length > 0) {
-                    container.innerHTML = data.data.trades.reverse().map(trade => `
+                    // 只显示有盈亏的交易（平仓交易），并按时间倒序
+                    const closedTrades = data.data.trades
+                        .filter(trade => trade.pnl !== 0)  // 只显示有盈亏的交易（平仓交易）
+                        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));  // 按时间倒序
+                    
+                    const tradeCount = closedTrades.length;
+                    if (countBadge) {
+                        countBadge.textContent = tradeCount;
+                    }
+
+                    container.innerHTML = closedTrades.map(trade => `
                         <div style="padding: 12px; border-bottom: 1px solid var(--border-default);">
                             <div class="d-flex justify-between align-center">
                                 <div>
@@ -724,6 +846,7 @@
                                     ${trade.pnl !== 0 ? `
                                         <div class="pnl ${trade.pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
                                             ${trade.pnl >= 0 ? '+' : ''}$${trade.pnl.toFixed(2)}
+                                            ${trade.roi !== undefined && trade.roi !== 0 ? ` (${trade.roi >= 0 ? '+' : ''}${trade.roi.toFixed(2)}%)` : ''}
                                         </div>
                                     ` : ''}
                                 </div>
@@ -731,6 +854,9 @@
                         </div>
                     `).join('');
                 } else {
+                    if (countBadge) {
+                        countBadge.textContent = '0';
+                    }
                     container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无交易记录</div></div>';
                 }
             } catch (error) {
@@ -757,25 +883,70 @@
 
         // 平仓
         async function closePosition(symbol) {
-            const price = prompt(`请输入平仓价格 (${symbol}):`);
-            if (!price) return;
-
             try {
+                // 强制获取最新实时价格（不使用缓存）
+                let currentPrice = null;
+                
+                try {
+                    // 使用 force_refresh=true 强制从实时API获取最新价格
+                    const priceResponse = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}&force_refresh=true`);
+                    const priceData = await priceResponse.json();
+                    
+                    // 处理不同的API返回格式
+                    if (priceData.price && priceData.price > 0) {
+                        // 格式1: { price: 123.45 }
+                        currentPrice = parseFloat(priceData.price);
+                    } else if (priceData.success && priceData.data && priceData.data.price) {
+                        // 格式2: { success: true, data: { price: 123.45 } }
+                        currentPrice = parseFloat(priceData.data.price);
+                    } else if (priceData.data && priceData.data.price) {
+                        // 格式3: { data: { price: 123.45 } }
+                        currentPrice = parseFloat(priceData.data.price);
+                    }
+                    
+                    if (currentPrice && currentPrice > 0) {
+                        // 更新缓存
+                        priceCache[symbol] = { price: currentPrice, change_24h: 0 };
+                        priceCacheTime[symbol] = Date.now();
+                    }
+                } catch (error) {
+                    console.error('[获取价格失败]', error);
+                    // 如果实时API失败，尝试使用缓存
+                    if (priceCache[symbol] && priceCacheTime[symbol]) {
+                        const cacheAge = Date.now() - priceCacheTime[symbol];
+                        if (cacheAge < PRICE_CACHE_DURATION * 2) { // 允许使用稍旧的缓存
+                            currentPrice = priceCache[symbol].price;
+                        }
+                    }
+                }
+                
+                // 如果仍然没有价格，提示用户
+                if (!currentPrice || isNaN(currentPrice)) {
+                    showMessage(`无法获取 ${symbol} 的实时价格，请稍后重试`, 'danger');
+                    return;
+                }
+                
+                // 确认平仓
+                const confirmMsg = `确认平仓 ${symbol}？\n当前价格: $${formatPrice(currentPrice)}`;
+                if (!confirm(confirmMsg)) {
+                    return;
+                }
+
                 const response = await fetch('/api/contract-trading/position/close', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ symbol, current_price: parseFloat(price) })
+                    body: JSON.stringify({ symbol, current_price: currentPrice })
                 });
 
                 const data = await response.json();
                 if (data.success) {
-                    showMessage('平仓成功', 'success');
+                    showMessage(`平仓成功 (价格: $${formatPrice(currentPrice)})`, 'success');
                     await refreshAll();
                 } else {
                     showMessage(data.detail || '平仓失败', 'danger');
                 }
             } catch (error) {
-                showMessage('平仓失败', 'danger');
+                showMessage('平仓失败: ' + error.message, 'danger');
             }
         }
 

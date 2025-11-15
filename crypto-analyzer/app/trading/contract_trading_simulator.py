@@ -94,6 +94,8 @@ class Trade:
     price: float
     fee: float
     pnl: float = 0  # 已实现盈亏
+    margin: float = 0  # 使用的保证金（平仓时）
+    roi: float = 0  # 投资回报率（基于保证金，%）
     timestamp: datetime = field(default_factory=datetime.now)
 
 
@@ -439,16 +441,21 @@ class ContractTradingSimulator:
                 logger.info(f"📈 加仓成功")
             else:
                 # 平仓（反向订单）
-                realized_pnl = self._calculate_unrealized_pnl(
+                # 计算价格差带来的盈亏（未扣除手续费）
+                gross_pnl = self._calculate_unrealized_pnl(
                     position.side,
                     min(order.quantity, position.quantity),
                     position.entry_price,
                     execution_price
                 )
+                
+                # 计算扣除手续费后的净盈亏（平仓时的手续费已经在第405行扣除）
+                # 所以实际盈亏 = 价格差盈亏 - 平仓手续费
+                realized_pnl = gross_pnl - fee
 
-                # 更新账户余额
-                self.account.balance += realized_pnl
-                self.account.total_pnl += realized_pnl
+                # 更新账户余额（注意：手续费已经在第405行从余额中扣除了，所以这里只需要加上价格差盈亏）
+                self.account.balance += gross_pnl
+                self.account.total_pnl += realized_pnl  # 总盈亏使用净盈亏
 
                 if order.quantity >= position.quantity:
                     # 完全平仓
@@ -456,7 +463,7 @@ class ContractTradingSimulator:
                     self.account.margin_used -= released_margin
 
                     logger.info(f"✅ 平仓成功")
-                    logger.info(f"   已实现盈亏: ${realized_pnl:+,.2f}")
+                    logger.info(f"   已实现盈亏: ${realized_pnl:+,.2f} (扣除手续费 ${fee:,.2f})")
 
                     del self.positions[order.symbol]
                 else:
@@ -469,8 +476,12 @@ class ContractTradingSimulator:
                     position.margin -= released_margin
 
                     logger.info(f"📉 部分平仓")
-                    logger.info(f"   已实现盈亏: ${realized_pnl:+,.2f}")
+                    logger.info(f"   已实现盈亏: ${realized_pnl:+,.2f} (扣除手续费 ${fee:,.2f})")
                     logger.info(f"   剩余持仓: {position.quantity} 张")
+
+                # 计算ROI（基于保证金，使用扣除手续费后的净盈亏）
+                # ROI = (净盈亏 / 保证金) * 100%
+                roi = (realized_pnl / released_margin * 100) if released_margin > 0 else 0
 
                 # 记录成交
                 trade = Trade(
@@ -481,7 +492,9 @@ class ContractTradingSimulator:
                     quantity=order.quantity,
                     price=execution_price,
                     fee=fee,
-                    pnl=realized_pnl
+                    pnl=realized_pnl,  # 存储扣除手续费后的净盈亏
+                    margin=released_margin,
+                    roi=roi
                 )
                 self.trades.append(trade)
 
@@ -577,9 +590,28 @@ class ContractTradingSimulator:
                 # 扣除保证金（全部损失）
                 self.account.balance += realized_pnl
                 self.account.total_pnl += realized_pnl
-                self.account.margin_used -= position.margin
+                released_margin = position.margin
+                self.account.margin_used -= released_margin
+
+                # 计算ROI（基于保证金）
+                roi = (realized_pnl / released_margin * 100) if released_margin > 0 else 0
 
                 logger.warning(f"   损失: ${realized_pnl:,.2f}")
+
+                # 记录强制平仓成交
+                trade = Trade(
+                    trade_id=self._generate_trade_id(),
+                    order_id=f"LIQUIDATION_{symbol}",
+                    symbol=symbol,
+                    side=OrderSide.LONG if position.side == PositionSide.SHORT else OrderSide.SHORT,  # 反向平仓
+                    quantity=position.quantity,
+                    price=position.liquidation_price,
+                    fee=0,  # 强制平仓通常不收手续费
+                    pnl=realized_pnl,
+                    margin=released_margin,
+                    roi=roi
+                )
+                self.trades.append(trade)
 
                 # 移除持仓
                 del self.positions[symbol]

@@ -189,18 +189,85 @@ class PaperTradingEngine:
                 return False, "账户未激活", None
 
             # 2. 获取当前价格
-            if order_type == 'MARKET':
-                exec_price = self.get_current_price(symbol)
-                if exec_price == 0:
-                    return False, f"无法获取 {symbol} 的市场价格", None
-            else:
-                exec_price = price
+            current_price = self.get_current_price(symbol)
+            if current_price == 0:
+                return False, f"无法获取 {symbol} 的市场价格", None
 
-            # 3. 计算交易金额和手续费
+            # 3. 限价单价格检查
+            if order_type == 'LIMIT':
+                if not price or price <= 0:
+                    return False, "限价单必须指定价格", None
+                
+                # 检查限价单价格条件
+                if side == 'BUY':
+                    # 买单：当前价格必须 <= 限价（价格下跌到限价或以下时成交）
+                    if current_price > price:
+                        # 价格未达到限价，创建 PENDING 订单
+                        order_id = f"ORDER_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+                        with conn.cursor() as cursor:
+                            # 计算所需金额（基于限价）
+                            total_amount = price * quantity
+                            fee = total_amount * self.fee_rate
+                            
+                            # 检查余额是否足够
+                            required_balance = total_amount + fee
+                            if account['current_balance'] < required_balance:
+                                return False, f"余额不足，需要 {required_balance:.2f} USDT，当前余额 {account['current_balance']:.2f} USDT", None
+                            
+                            # 创建 PENDING 状态的限价单
+                            cursor.execute(
+                                """INSERT INTO paper_trading_orders
+                                (account_id, order_id, symbol, side, order_type, price, quantity,
+                                 executed_quantity, total_amount, executed_amount, fee, status,
+                                 avg_fill_price, fill_time, order_source, signal_id)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                (account_id, order_id, symbol, side, order_type, price, quantity,
+                                 0, total_amount, 0, fee, 'PENDING',
+                                 None, None, order_source, signal_id)
+                            )
+                            conn.commit()
+                            return True, f"限价买单已创建，当前价格 {current_price:.2f}，限价 {price:.2f}，价格达到限价时将自动成交", order_id
+                else:  # SELL
+                    # 卖单：当前价格必须 >= 限价（价格上涨到限价或以上时成交）
+                    if current_price < price:
+                        # 价格未达到限价，创建 PENDING 订单
+                        order_id = f"ORDER_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+                        with conn.cursor() as cursor:
+                            # 检查持仓
+                            position = self._get_position(account_id, symbol)
+                            if not position or position['available_quantity'] < quantity:
+                                available = position['available_quantity'] if position else 0
+                                return False, f"持仓不足，需要 {quantity} 个，当前可用 {available} 个", None
+                            
+                            # 计算交易金额和手续费（基于限价）
+                            total_amount = price * quantity
+                            fee = total_amount * self.fee_rate
+                            
+                            # 创建 PENDING 状态的限价单
+                            cursor.execute(
+                                """INSERT INTO paper_trading_orders
+                                (account_id, order_id, symbol, side, order_type, price, quantity,
+                                 executed_quantity, total_amount, executed_amount, fee, status,
+                                 avg_fill_price, fill_time, order_source, signal_id)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                (account_id, order_id, symbol, side, order_type, price, quantity,
+                                 0, total_amount, 0, fee, 'PENDING',
+                                 None, None, order_source, signal_id)
+                            )
+                            conn.commit()
+                            return True, f"限价卖单已创建，当前价格 {current_price:.2f}，限价 {price:.2f}，价格达到限价时将自动成交", order_id
+                
+                # 价格满足条件，继续执行（使用限价作为执行价格）
+                exec_price = price
+            else:
+                # 市价单，使用当前价格
+                exec_price = current_price
+
+            # 4. 计算交易金额和手续费
             total_amount = exec_price * quantity
             fee = total_amount * self.fee_rate
 
-            # 4. 检查资金和持仓
+            # 5. 检查资金和持仓
             if side == 'BUY':
                 # 买入：检查余额
                 required_balance = total_amount + fee
@@ -214,12 +281,12 @@ class PaperTradingEngine:
                     available = position['available_quantity'] if position else 0
                     return False, f"持仓不足，需要 {quantity} 个，当前可用 {available} 个", None
 
-            # 5. 生成订单ID
+            # 6. 生成订单ID
             order_id = f"ORDER_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
             trade_id = f"TRADE_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
             with conn.cursor() as cursor:
-                # 6. 创建订单记录
+                # 7. 创建订单记录
                 cursor.execute(
                     """INSERT INTO paper_trading_orders
                     (account_id, order_id, symbol, side, order_type, price, quantity,
