@@ -841,6 +841,11 @@ class FuturesTradingEngine:
             except Exception as e:
                 logger.warning(f"计算持仓 {pos.get('symbol', 'unknown')} 盈亏失败: {e}")
                 pass
+            
+            # 转换 Decimal 类型为 float，确保所有数值字段都能正确序列化
+            for key, value in pos.items():
+                if isinstance(value, Decimal):
+                    pos[key] = float(value)
 
         return positions
 
