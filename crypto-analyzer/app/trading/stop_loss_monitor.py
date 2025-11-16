@@ -67,7 +67,7 @@ class StopLossMonitor:
 
     def get_open_positions(self, account_id: Optional[int] = None) -> List[Dict]:
         """
-        获取所有持仓中的合约
+        获取所有持仓中的合约（每次查询都创建新连接，确保获取最新数据）
 
         Args:
             account_id: 账户ID（可选，如果为None则获取所有账户的持仓）
@@ -75,44 +75,58 @@ class StopLossMonitor:
         Returns:
             持仓列表
         """
-        self._ensure_connection()
-        cursor = self.connection.cursor(pymysql.cursors.DictCursor)
-
-        sql = """
-        SELECT
-            id,
-            account_id,
-            symbol,
-            position_side,
-            quantity,
-            entry_price,
-            leverage,
-            margin,
-            stop_loss_price,
-            take_profit_price,
-            liquidation_price,
-            unrealized_pnl,
-            open_time
-        FROM futures_positions
-        WHERE status = 'open'
-        """
+        # 每次查询都创建新连接，确保获取最新数据
+        connection = pymysql.connect(
+            **self.db_config,
+            autocommit=True
+        )
         
-        params = []
-        if account_id is not None:
-            sql += " AND account_id = %s"
-            params.append(account_id)
-        
-        sql += " ORDER BY open_time ASC"
+        try:
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
 
-        cursor.execute(sql, tuple(params) if params else None)
-        positions = cursor.fetchall()
-        cursor.close()
+            sql = """
+            SELECT
+                id,
+                account_id,
+                symbol,
+                position_side,
+                quantity,
+                entry_price,
+                leverage,
+                margin,
+                stop_loss_price,
+                take_profit_price,
+                liquidation_price,
+                unrealized_pnl,
+                open_time
+            FROM futures_positions
+            WHERE status = 'open'
+            """
+            
+            params = []
+            if account_id is not None:
+                sql += " AND account_id = %s"
+                params.append(account_id)
+            
+            sql += " ORDER BY open_time ASC"
 
-        return positions
+            cursor.execute(sql, tuple(params) if params else None)
+            positions = cursor.fetchall()
+            cursor.close()
+            
+            # 转换 Decimal 类型为 float，确保所有数值字段都能正确序列化
+            for pos in positions:
+                for key, value in pos.items():
+                    if isinstance(value, Decimal):
+                        pos[key] = float(value)
+            
+            return positions
+        finally:
+            connection.close()
 
     def get_current_price(self, symbol: str) -> Optional[Decimal]:
         """
-        获取当前市场价格（从K线数据，优先使用1分钟K线）
+        获取当前市场价格（每次查询都创建新连接，确保获取最新数据）
 
         Args:
             symbol: 交易对（如 BTC/USDT）
@@ -120,59 +134,67 @@ class StopLossMonitor:
         Returns:
             当前价格，如果没有数据返回 None
         """
-        self._ensure_connection()
-        cursor = self.connection.cursor(pymysql.cursors.DictCursor)
-
-        # kline_data 表中的 symbol 格式是 BTC/USDT（带斜杠）
-        # 优先使用1分钟K线（更及时），如果没有则使用5分钟K线
-        sql = """
-        SELECT close_price
-        FROM kline_data
-        WHERE symbol = %s
-        AND timeframe = '1m'
-        AND exchange = 'binance'
-        ORDER BY open_time DESC
-        LIMIT 1
-        """
-
-        cursor.execute(sql, (symbol,))
-        result = cursor.fetchone()
+        # 每次查询都创建新连接，确保获取最新价格
+        connection = pymysql.connect(
+            **self.db_config,
+            autocommit=True
+        )
         
-        # 如果1分钟K线没有数据，尝试5分钟K线
-        if not result:
+        try:
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+            # kline_data 表中的 symbol 格式是 BTC/USDT（带斜杠）
+            # 优先使用1分钟K线（更及时），如果没有则使用5分钟K线
             sql = """
             SELECT close_price
             FROM kline_data
             WHERE symbol = %s
-            AND timeframe = '5m'
+            AND timeframe = '1m'
             AND exchange = 'binance'
             ORDER BY open_time DESC
             LIMIT 1
             """
-            cursor.execute(sql, (symbol,))
-            result = cursor.fetchone()
-        
-        # 如果5分钟K线也没有数据，尝试1小时K线（最后回退）
-        if not result:
-            sql = """
-            SELECT close_price
-            FROM kline_data
-            WHERE symbol = %s
-            AND timeframe = '1h'
-            AND exchange = 'binance'
-            ORDER BY open_time DESC
-            LIMIT 1
-            """
-            cursor.execute(sql, (symbol,))
-            result = cursor.fetchone()
-        
-        cursor.close()
 
-        if result:
-            return Decimal(str(result['close_price']))
-        else:
-            logger.warning(f"No price data found for {symbol}")
-            return None
+            cursor.execute(sql, (symbol,))
+            result = cursor.fetchone()
+            
+            # 如果1分钟K线没有数据，尝试5分钟K线
+            if not result:
+                sql = """
+                SELECT close_price
+                FROM kline_data
+                WHERE symbol = %s
+                AND timeframe = '5m'
+                AND exchange = 'binance'
+                ORDER BY open_time DESC
+                LIMIT 1
+                """
+                cursor.execute(sql, (symbol,))
+                result = cursor.fetchone()
+            
+            # 如果5分钟K线也没有数据，尝试1小时K线（最后回退）
+            if not result:
+                sql = """
+                SELECT close_price
+                FROM kline_data
+                WHERE symbol = %s
+                AND timeframe = '1h'
+                AND exchange = 'binance'
+                ORDER BY open_time DESC
+                LIMIT 1
+                """
+                cursor.execute(sql, (symbol,))
+                result = cursor.fetchone()
+            
+            cursor.close()
+            
+            if result:
+                return Decimal(str(result['close_price']))
+            else:
+                logger.warning(f"No price data found for {symbol}")
+                return None
+        finally:
+            connection.close()
 
     def should_trigger_stop_loss(self, position: Dict, current_price: Decimal) -> bool:
         """

@@ -110,7 +110,12 @@ async def get_account(account_id: Optional[int] = None, engine: PaperTradingEngi
             "positions_count": len(summary['positions']),
             "recent_trades_count": len(summary['recent_trades'])
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -177,7 +182,12 @@ async def get_account_summary(account_id: Optional[int] = None, engine: PaperTra
             "positions": positions,
             "recent_trades": recent_trades
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -199,7 +209,12 @@ async def create_account(request: CreateAccountRequest, engine: PaperTradingEngi
             "account_id": account_id,
             "message": f"账户 {request.account_name} 创建成功"
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -236,7 +251,12 @@ async def place_order(request: PlaceOrderRequest, engine: PaperTradingEngine = D
 
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -254,7 +274,7 @@ async def get_positions(account_id: Optional[int] = None, engine: PaperTradingEn
             raise HTTPException(status_code=404, detail="账户不存在")
 
         positions = []
-        for pos in summary['positions']:
+        for pos in summary.get('positions', []):
             positions.append({
                 "symbol": pos['symbol'],
                 "quantity": float(pos['quantity']),
@@ -275,7 +295,12 @@ async def get_positions(account_id: Optional[int] = None, engine: PaperTradingEn
             "positions": positions,
             "total_count": len(positions)
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -326,7 +351,12 @@ async def get_trades(account_id: Optional[int] = None, limit: int = 100, engine:
                 "trades": result,
                 "total_count": len(result)
             }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
@@ -392,7 +422,12 @@ async def get_orders(account_id: Optional[int] = None, limit: int = 100, status:
                 "orders": result,
                 "total_count": len(result)
             }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
@@ -478,7 +513,12 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
         }
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -496,7 +536,12 @@ async def update_positions(account_id: Optional[int] = None, engine: PaperTradin
             "success": True,
             "message": "持仓市值已更新"
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -669,7 +714,12 @@ async def cancel_pending_order(
             raise HTTPException(status_code=400, detail=message)
     except HTTPException:
         raise
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -688,7 +738,12 @@ async def get_symbols():
             "symbols": symbols,
             "total": len(symbols)
         }
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"获取账户信息失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

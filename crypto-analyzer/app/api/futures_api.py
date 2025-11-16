@@ -144,6 +144,169 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.put('/positions/{position_id}/stop-loss-take-profit')
+async def update_stop_loss_take_profit(
+    position_id: int,
+    request: UpdateStopLossTakeProfitRequest
+):
+    """
+    更新持仓的止损价和止盈价
+    
+    - **position_id**: 持仓ID
+    - **request**: 请求体，包含以下可选字段：
+        - **stop_loss_price**: 止损价格（可选，传入 null 表示清除）
+        - **take_profit_price**: 止盈价格（可选，传入 null 表示清除）
+        - **stop_loss_pct**: 止损百分比（可选，如果设置了价格则忽略）
+        - **take_profit_pct**: 止盈百分比（可选，如果设置了价格则忽略）
+    """
+    logger.info(f"收到止盈止损更新请求: position_id={position_id}, request={request.dict()}")
+    try:
+        # 从请求体中提取参数
+        stop_loss_price = request.stop_loss_price
+        take_profit_price = request.take_profit_price
+        stop_loss_pct = request.stop_loss_pct
+        take_profit_pct = request.take_profit_pct
+        
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        # 先获取持仓信息
+        cursor.execute("""
+            SELECT id, symbol, position_side, entry_price, stop_loss_price, take_profit_price
+            FROM futures_positions
+            WHERE id = %s AND status = 'open'
+        """, (position_id,))
+        
+        position = cursor.fetchone()
+        if not position:
+            cursor.close()
+            connection.close()
+            raise HTTPException(status_code=404, detail=f'持仓 {position_id} 不存在或已平仓')
+        
+        # 计算止损价和止盈价
+        entry_price = Decimal(str(position['entry_price']))
+        position_side = position['position_side']
+        
+        # 简化逻辑：直接更新数据库
+        logger.info(f"收到止盈止损更新请求: position_id={position_id}, stop_loss_price={stop_loss_price}, take_profit_price={take_profit_price}")
+        
+        # 获取请求中实际包含的字段（包括 None 值）
+        request_dict = request.dict(exclude_unset=False)
+        logger.info(f"请求字典内容: {request_dict}")
+        
+        # 构建更新字段
+        update_fields = []
+        params = []
+        
+        # 处理止损价：如果字段在请求中，就更新
+        if 'stop_loss_price' in request_dict:
+            logger.info(f"处理止损价: stop_loss_price={stop_loss_price}, 类型={type(stop_loss_price)}")
+            if stop_loss_price is not None and stop_loss_price > 0:
+                update_fields.append("stop_loss_price = %s")
+                params.append(float(stop_loss_price))
+                logger.info(f"添加止损价更新: {float(stop_loss_price)}")
+            else:
+                # None 或 <= 0 都视为清除
+                update_fields.append("stop_loss_price = NULL")
+                update_fields.append("stop_loss_pct = NULL")
+                logger.info("清除止损价")
+        else:
+            logger.warning("请求中未包含 stop_loss_price 字段")
+        
+        # 处理止盈价：如果字段在请求中，就更新
+        if 'take_profit_price' in request_dict:
+            logger.info(f"处理止盈价: take_profit_price={take_profit_price}, 类型={type(take_profit_price)}")
+            if take_profit_price is not None and take_profit_price > 0:
+                update_fields.append("take_profit_price = %s")
+                params.append(float(take_profit_price))
+                logger.info(f"添加止盈价更新: {float(take_profit_price)}")
+            else:
+                # None 或 <= 0 都视为清除
+                update_fields.append("take_profit_price = NULL")
+                update_fields.append("take_profit_pct = NULL")
+                logger.info("清除止盈价")
+        else:
+            logger.warning("请求中未包含 take_profit_price 字段")
+        
+        # 如果没有任何字段需要更新
+        if not update_fields:
+            cursor.close()
+            connection.close()
+            raise HTTPException(status_code=400, detail='至少需要提供止损价或止盈价')
+        
+        update_fields.append("last_update_time = NOW()")
+        params.append(position_id)
+        
+        # 构建 SQL 语句（单行，避免格式问题）
+        sql = f"UPDATE futures_positions SET {', '.join(update_fields)} WHERE id = %s"
+        
+        logger.info(f"更新止盈止损 SQL: {sql}")
+        logger.info(f"更新参数: {params}")
+        logger.info(f"更新字段数量: {len(update_fields)}, 参数数量: {len(params)}")
+        
+        try:
+            # 执行 SQL
+            affected_rows = cursor.execute(sql, params)
+            logger.info(f"SQL 执行完成，影响行数: {affected_rows}")
+            
+            if affected_rows == 0:
+                cursor.close()
+                connection.close()
+                logger.error(f"更新失败: 持仓 {position_id} 未找到或未更新任何行")
+                raise HTTPException(status_code=404, detail=f'持仓 {position_id} 未找到或更新失败')
+            
+            # 提交事务
+            connection.commit()
+            logger.info(f"事务已提交: 持仓 {position_id}")
+            
+            # 验证更新是否成功 - 重新查询数据库
+            verify_cursor = connection.cursor(pymysql.cursors.DictCursor)
+            verify_cursor.execute("""
+                SELECT stop_loss_price, take_profit_price 
+                FROM futures_positions 
+                WHERE id = %s
+            """, (position_id,))
+            updated_position = verify_cursor.fetchone()
+            verify_cursor.close()
+            
+            logger.info(f"验证查询结果: {updated_position}")
+            
+            # 转换 Decimal 为 float
+            if updated_position:
+                for key in ['stop_loss_price', 'take_profit_price']:
+                    if updated_position.get(key) is not None and isinstance(updated_position[key], Decimal):
+                        updated_position[key] = float(updated_position[key])
+            
+            logger.info(f"验证更新结果: 持仓 {position_id}, 止损价: {updated_position.get('stop_loss_price')}, 止盈价: {updated_position.get('take_profit_price')}")
+            
+        except Exception as e:
+            connection.rollback()
+            logger.error(f"更新止盈止损时发生错误: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            cursor.close()
+            connection.close()
+            raise HTTPException(status_code=500, detail=f'更新失败: {str(e)}')
+        
+        return {
+            'success': True,
+            'message': '止损止盈价更新成功',
+            'data': {
+                'position_id': position_id,
+                'stop_loss_price': float(updated_position['stop_loss_price']) if updated_position.get('stop_loss_price') else None,
+                'take_profit_price': float(updated_position['take_profit_price']) if updated_position.get('take_profit_price') else None
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新止损止盈价失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get('/positions/{position_id}')
 async def get_position(position_id: int):
     """获取单个持仓详情"""
@@ -340,142 +503,6 @@ async def get_orders(account_id: int = 2, status: str = 'PENDING'):
         
     except Exception as e:
         logger.error(f"获取订单列表失败: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.put('/positions/{position_id}/stop-loss-take-profit')
-async def update_stop_loss_take_profit(
-    position_id: int,
-    request: UpdateStopLossTakeProfitRequest
-):
-    """
-    更新持仓的止损价和止盈价
-    
-    - **position_id**: 持仓ID
-    - **request**: 请求体，包含以下可选字段：
-        - **stop_loss_price**: 止损价格（可选，传入 null 表示清除）
-        - **take_profit_price**: 止盈价格（可选，传入 null 表示清除）
-        - **stop_loss_pct**: 止损百分比（可选，如果设置了价格则忽略）
-        - **take_profit_pct**: 止盈百分比（可选，如果设置了价格则忽略）
-    """
-    try:
-        # 从请求体中提取参数
-        stop_loss_price = request.stop_loss_price
-        take_profit_price = request.take_profit_price
-        stop_loss_pct = request.stop_loss_pct
-        take_profit_pct = request.take_profit_pct
-        
-        connection = pymysql.connect(**db_config)
-        cursor = connection.cursor(pymysql.cursors.DictCursor)
-        
-        # 先获取持仓信息
-        cursor.execute("""
-            SELECT id, symbol, position_side, entry_price, stop_loss_price, take_profit_price
-            FROM futures_positions
-            WHERE id = %s AND status = 'open'
-        """, (position_id,))
-        
-        position = cursor.fetchone()
-        if not position:
-            cursor.close()
-            connection.close()
-            raise HTTPException(status_code=404, detail=f'持仓 {position_id} 不存在或已平仓')
-        
-        # 计算止损价和止盈价
-        entry_price = Decimal(str(position['entry_price']))
-        position_side = position['position_side']
-        
-        # 处理止损价
-        final_stop_loss_price = None
-        clear_stop_loss = False
-        # 如果请求中包含了 stop_loss_price 字段（即使值为 None），说明要更新
-        if stop_loss_price is not None and stop_loss_price > 0:
-            final_stop_loss_price = Decimal(str(stop_loss_price))
-        elif stop_loss_price is None and 'stop_loss_price' in request.dict(exclude_unset=True):
-            # 明确传入 None，表示要清除
-            clear_stop_loss = True
-        elif stop_loss_pct is not None:
-            if position_side == 'LONG':
-                final_stop_loss_price = entry_price * (1 - Decimal(str(stop_loss_pct)) / 100)
-            else:  # SHORT
-                final_stop_loss_price = entry_price * (1 + Decimal(str(stop_loss_pct)) / 100)
-        
-        # 处理止盈价
-        final_take_profit_price = None
-        clear_take_profit = False
-        # 如果请求中包含了 take_profit_price 字段（即使值为 None），说明要更新
-        if take_profit_price is not None and take_profit_price > 0:
-            final_take_profit_price = Decimal(str(take_profit_price))
-        elif take_profit_price is None and 'take_profit_price' in request.dict(exclude_unset=True):
-            # 明确传入 None，表示要清除
-            clear_take_profit = True
-        elif take_profit_pct is not None:
-            if position_side == 'LONG':
-                final_take_profit_price = entry_price * (1 + Decimal(str(take_profit_pct)) / 100)
-            else:  # SHORT
-                final_take_profit_price = entry_price * (1 - Decimal(str(take_profit_pct)) / 100)
-        
-        # 更新数据库
-        update_fields = []
-        params = []
-        
-        # 处理止损价更新或清除
-        if clear_stop_loss:
-            update_fields.append("stop_loss_price = NULL")
-            update_fields.append("stop_loss_pct = NULL")
-        elif final_stop_loss_price is not None:
-            update_fields.append("stop_loss_price = %s")
-            params.append(float(final_stop_loss_price))
-            if stop_loss_pct is not None:
-                update_fields.append("stop_loss_pct = %s")
-                params.append(float(stop_loss_pct))
-        
-        # 处理止盈价更新或清除
-        if clear_take_profit:
-            update_fields.append("take_profit_price = NULL")
-            update_fields.append("take_profit_pct = NULL")
-        elif final_take_profit_price is not None:
-            update_fields.append("take_profit_price = %s")
-            params.append(float(final_take_profit_price))
-            if take_profit_pct is not None:
-                update_fields.append("take_profit_pct = %s")
-                params.append(float(take_profit_pct))
-        
-        if not update_fields:
-            cursor.close()
-            connection.close()
-            raise HTTPException(status_code=400, detail='至少需要提供止损价或止盈价')
-        
-        update_fields.append("last_update_time = NOW()")
-        params.append(position_id)
-        
-        sql = f"""
-            UPDATE futures_positions
-            SET {', '.join(update_fields)}
-            WHERE id = %s
-        """
-        
-        cursor.execute(sql, params)
-        connection.commit()
-        cursor.close()
-        connection.close()
-        
-        return {
-            'success': True,
-            'message': '止损止盈价更新成功',
-            'data': {
-                'position_id': position_id,
-                'stop_loss_price': float(final_stop_loss_price) if final_stop_loss_price else None,
-                'take_profit_price': float(final_take_profit_price) if final_take_profit_price else None
-            }
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"更新止损止盈价失败: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

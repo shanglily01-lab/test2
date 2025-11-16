@@ -108,20 +108,32 @@ class PendingOrderExecutor:
             return Decimal('0')
     
     async def check_and_execute_pending_orders(self):
-        """检查并执行待成交订单"""
+        """检查并执行待成交订单（每次查询都创建新连接，确保获取最新数据）"""
         if not self.running:
             return
             
         try:
-            conn = self._get_connection()  # 复用持久连接
-            with conn.cursor() as cursor:
-                # 获取所有未执行的待成交订单
-                cursor.execute(
-                    """SELECT * FROM paper_trading_pending_orders
-                    WHERE executed = FALSE AND status = 'PENDING'
-                    ORDER BY created_at ASC"""
-                )
-                pending_orders = cursor.fetchall()
+            # 每次查询都创建新连接，确保获取最新订单数据
+            connection = pymysql.connect(
+                host=self.db_config.get('host', 'localhost'),
+                port=self.db_config.get('port', 3306),
+                user=self.db_config.get('user', 'root'),
+                password=self.db_config.get('password', ''),
+                database=self.db_config.get('database', 'binance-data'),
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True
+            )
+            
+            try:
+                with connection.cursor() as cursor:
+                    # 获取所有未执行的待成交订单
+                    cursor.execute(
+                        """SELECT * FROM paper_trading_pending_orders
+                        WHERE executed = FALSE AND status = 'PENDING'
+                        ORDER BY created_at ASC"""
+                    )
+                    pending_orders = cursor.fetchall()
                 
                 if not pending_orders:
                     logger.debug("📋 当前没有待成交订单需要检查")
@@ -178,7 +190,8 @@ class PendingOrderExecutor:
                     except Exception as e:
                         logger.error(f"处理待成交订单 {order.get('order_id', 'unknown')} 时出错: {e}")
                         continue
-            # 注意：不再关闭连接，使用持久连接
+            finally:
+                connection.close()
                 
         except Exception as e:
             logger.error(f"检查待成交订单时出错: {e}")

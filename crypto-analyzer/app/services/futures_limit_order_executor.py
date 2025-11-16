@@ -109,22 +109,34 @@ class FuturesLimitOrderExecutor:
             return Decimal('0')
     
     async def check_and_execute_limit_orders(self):
-        """检查并执行限价单"""
+        """检查并执行限价单（每次查询都创建新连接，确保获取最新数据）"""
         if not self.running:
             return
             
         try:
-            conn = self._get_connection()  # 复用持久连接
-            with conn.cursor() as cursor:
-                # 获取所有待成交的限价单（只处理开仓订单）
-                cursor.execute(
-                    """SELECT * FROM futures_orders
-                    WHERE status = 'PENDING' 
-                    AND order_type = 'LIMIT'
-                    AND side IN ('OPEN_LONG', 'OPEN_SHORT')
-                    ORDER BY created_at ASC"""
-                )
-                pending_orders = cursor.fetchall()
+            # 每次查询都创建新连接，确保获取最新数据
+            connection = pymysql.connect(
+                host=self.db_config.get('host', 'localhost'),
+                port=self.db_config.get('port', 3306),
+                user=self.db_config.get('user', 'root'),
+                password=self.db_config.get('password', ''),
+                database=self.db_config.get('database', 'binance-data'),
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True
+            )
+            
+            try:
+                with connection.cursor() as cursor:
+                    # 获取所有待成交的限价单（只处理开仓订单）
+                    cursor.execute(
+                        """SELECT * FROM futures_orders
+                        WHERE status = 'PENDING' 
+                        AND order_type = 'LIMIT'
+                        AND side IN ('OPEN_LONG', 'OPEN_SHORT')
+                        ORDER BY created_at ASC"""
+                    )
+                    pending_orders = cursor.fetchall()
                 
                 if not pending_orders:
                     logger.debug("📋 当前没有合约限价单需要检查")
@@ -175,16 +187,17 @@ class FuturesLimitOrderExecutor:
                                 # 开仓时会重新冻结，所以这里先解冻避免重复冻结
                                 frozen_margin = Decimal(str(order.get('margin', 0)))
                                 if frozen_margin > 0:
-                                    cursor.execute(
-                                        """UPDATE paper_trading_accounts
-                                        SET current_balance = current_balance + %s,
-                                            frozen_balance = frozen_balance - %s
-                                        WHERE id = %s""",
-                                        (float(frozen_margin), float(frozen_margin), account_id)
-                                    )
+                                    with connection.cursor() as update_cursor:
+                                        update_cursor.execute(
+                                            """UPDATE paper_trading_accounts
+                                            SET current_balance = current_balance + %s,
+                                                frozen_balance = frozen_balance - %s
+                                            WHERE id = %s""",
+                                            (float(frozen_margin), float(frozen_margin), account_id)
+                                        )
                                 
                                 # 提交解冻操作
-                                conn.commit()
+                                connection.commit()
                                 
                                 # 执行开仓（使用限价作为成交价）
                                 # 注意：由于价格已经达到限价，open_position 会立即成交
@@ -212,31 +225,33 @@ class FuturesLimitOrderExecutor:
                                     executed_value = float(limit_price * quantity)
                                     
                                     # 更新订单状态为已成交（不更新 symbol，保持原订单的 symbol）
-                                    cursor.execute(
-                                        """UPDATE futures_orders
-                                        SET status = 'FILLED',
-                                            executed_quantity = %s,
-                                            executed_value = %s,
-                                            avg_fill_price = %s,
-                                            fill_time = NOW()
-                                        WHERE order_id = %s""",
-                                        (float(quantity), executed_value, float(limit_price), order_id)
-                                    )
+                                    with connection.cursor() as update_cursor:
+                                        update_cursor.execute(
+                                            """UPDATE futures_orders
+                                            SET status = 'FILLED',
+                                                executed_quantity = %s,
+                                                executed_value = %s,
+                                                avg_fill_price = %s,
+                                                fill_time = NOW()
+                                            WHERE order_id = %s""",
+                                            (float(quantity), executed_value, float(limit_price), order_id)
+                                        )
                                     
-                                    conn.commit()
+                                    connection.commit()
                                     
                                     logger.info(f"✅ 限价单 {order_id} 执行成功: {symbol} {position_side} {quantity} @ {limit_price}, 持仓ID: {result.get('position_id')}, {result.get('message', '')}")
                                 else:
                                     # 如果开仓失败，恢复冻结的保证金
                                     if frozen_margin > 0:
-                                        cursor.execute(
-                                            """UPDATE paper_trading_accounts
-                                            SET current_balance = current_balance - %s,
-                                                frozen_balance = frozen_balance + %s
-                                            WHERE id = %s""",
-                                            (float(frozen_margin), float(frozen_margin), account_id)
-                                        )
-                                        conn.commit()
+                                        with connection.cursor() as update_cursor:
+                                            update_cursor.execute(
+                                                """UPDATE paper_trading_accounts
+                                                SET current_balance = current_balance - %s,
+                                                    frozen_balance = frozen_balance + %s
+                                                WHERE id = %s""",
+                                                (float(frozen_margin), float(frozen_margin), account_id)
+                                            )
+                                        connection.commit()
                                     logger.error(f"❌ 限价单 {order_id} 执行失败: {result.get('message', '未知错误')}")
                                     
                             except Exception as e:
@@ -247,14 +262,15 @@ class FuturesLimitOrderExecutor:
                                 try:
                                     frozen_margin = Decimal(str(order.get('margin', 0)))
                                     if frozen_margin > 0:
-                                        cursor.execute(
-                                            """UPDATE paper_trading_accounts
-                                            SET current_balance = current_balance - %s,
-                                                frozen_balance = frozen_balance + %s
-                                            WHERE id = %s""",
-                                            (float(frozen_margin), float(frozen_margin), account_id)
-                                        )
-                                        conn.commit()
+                                        with connection.cursor() as update_cursor:
+                                            update_cursor.execute(
+                                                """UPDATE paper_trading_accounts
+                                                SET current_balance = current_balance - %s,
+                                                    frozen_balance = frozen_balance + %s
+                                                WHERE id = %s""",
+                                                (float(frozen_margin), float(frozen_margin), account_id)
+                                            )
+                                        connection.commit()
                                 except:
                                     pass
                                 continue
@@ -266,7 +282,8 @@ class FuturesLimitOrderExecutor:
                         import traceback
                         traceback.print_exc()
                         continue
-            # 注意：不再关闭连接，使用持久连接
+            finally:
+                connection.close()
                 
         except Exception as e:
             logger.error(f"检查合约限价单时出错: {e}")

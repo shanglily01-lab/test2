@@ -51,9 +51,20 @@ class PaperTradingEngine:
         Returns:
             账户信息字典
         """
-        conn = self._get_connection()
+        # 每次查询都创建新连接，确保获取最新数据
+        connection = pymysql.connect(
+            host=self.db_config.get('host', 'localhost'),
+            port=self.db_config.get('port', 3306),
+            user=self.db_config.get('user', 'root'),
+            password=self.db_config.get('password', ''),
+            database=self.db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True
+        )
+        
         try:
-            with conn.cursor() as cursor:
+            with connection.cursor() as cursor:
                 if account_id:
                     cursor.execute(
                         "SELECT * FROM paper_trading_accounts WHERE id = %s",
@@ -63,9 +74,17 @@ class PaperTradingEngine:
                     cursor.execute(
                         "SELECT * FROM paper_trading_accounts WHERE is_default = TRUE LIMIT 1"
                     )
-                return cursor.fetchone()
+                account = cursor.fetchone()
+                
+                # 转换 Decimal 类型为 float，确保所有数值字段都能正确序列化
+                if account:
+                    for key, value in account.items():
+                        if isinstance(value, Decimal):
+                            account[key] = float(value)
+                
+                return account
         finally:
-            conn.close()
+            connection.close()
 
     def create_account(self, account_name: str, initial_balance: Decimal = Decimal('10000')) -> int:
         """
@@ -94,7 +113,7 @@ class PaperTradingEngine:
 
     def get_current_price(self, symbol: str) -> Decimal:
         """
-        获取当前市场价格（优化版：优先使用缓存）
+        获取当前市场价格（每次查询都创建新连接，确保获取最新数据）
 
         Args:
             symbol: 交易对
@@ -102,20 +121,20 @@ class PaperTradingEngine:
         Returns:
             当前价格
         """
-        # 优先使用价格缓存服务（避免数据库阻塞）
-        if self.price_cache_service:
-            price = self.price_cache_service.get_price(symbol)
-
-            if price > 0:
-                logger.debug(f"✅ {symbol} 从缓存获取价格: {price}")
-                return price
-            else:
-                logger.warning(f"⚠️  {symbol} 缓存未命中，回退到数据库查询")
-
-        # 回退到数据库查询（如果缓存不可用或未命中）
-        conn = self._get_connection()
+        # 每次查询都创建新连接，确保获取最新价格
+        connection = pymysql.connect(
+            host=self.db_config.get('host', 'localhost'),
+            port=self.db_config.get('port', 3306),
+            user=self.db_config.get('user', 'root'),
+            password=self.db_config.get('password', ''),
+            database=self.db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True
+        )
+        
         try:
-            with conn.cursor() as cursor:
+            with connection.cursor() as cursor:
                 # 从 price_data 表获取最新价格
                 cursor.execute(
                     """SELECT price FROM price_data
@@ -149,7 +168,7 @@ class PaperTradingEngine:
                 logger.warning(f"找不到 {symbol} 的价格数据")
                 return Decimal('0')
         finally:
-            conn.close()
+            connection.close()
 
     def place_order(self,
                    account_id: int,
@@ -545,14 +564,25 @@ class PaperTradingEngine:
 
     def update_positions_value(self, account_id: int):
         """
-        更新所有持仓的市值和盈亏
+        更新所有持仓的市值和盈亏（每次查询都创建新连接，确保获取最新数据）
 
         Args:
             account_id: 账户ID
         """
-        conn = self._get_connection()
+        # 每次查询都创建新连接，确保获取最新持仓数据（包括止盈止损）
+        connection = pymysql.connect(
+            host=self.db_config.get('host', 'localhost'),
+            port=self.db_config.get('port', 3306),
+            user=self.db_config.get('user', 'root'),
+            password=self.db_config.get('password', ''),
+            database=self.db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True
+        )
+        
         try:
-            with conn.cursor() as cursor:
+            with connection.cursor() as cursor:
                 # 获取所有持仓
                 cursor.execute(
                     "SELECT * FROM paper_trading_positions WHERE account_id = %s AND status = 'open'",
@@ -630,19 +660,17 @@ class PaperTradingEngine:
                             unrealized_pnl = %s,
                             unrealized_pnl_pct = %s
                         WHERE id = %s""",
-                        (current_price, market_value, unrealized_pnl, unrealized_pnl_pct, pos['id'])
+                        (float(current_price), float(market_value), float(unrealized_pnl), float(unrealized_pnl_pct), pos['id'])
                     )
 
                     total_unrealized_pnl += unrealized_pnl
 
-                # 更新账户
+                # 更新账户总盈亏
                 cursor.execute(
                     """UPDATE paper_trading_accounts
-                    SET unrealized_pnl = %s,
-                        total_profit_loss = realized_pnl + %s,
-                        total_profit_loss_pct = ((realized_pnl + %s) / initial_balance) * 100
+                    SET unrealized_pnl = %s
                     WHERE id = %s""",
-                    (total_unrealized_pnl, total_unrealized_pnl, total_unrealized_pnl, account_id)
+                    (float(total_unrealized_pnl), account_id)
                 )
 
                 # 计算总权益
@@ -661,13 +689,13 @@ class PaperTradingEngine:
                     total_equity = Decimal(str(result['current_balance'])) + Decimal(str(result['total_position_value'] or 0))
                     cursor.execute(
                         "UPDATE paper_trading_accounts SET total_equity = %s WHERE id = %s",
-                        (total_equity, account_id)
+                        (float(total_equity), account_id)
                     )
 
-                conn.commit()
+                connection.commit()
 
         finally:
-            conn.close()
+            connection.close()
 
     def update_position_stop_loss_take_profit(
         self,
@@ -792,16 +820,34 @@ class PaperTradingEngine:
         Returns:
             账户摘要信息
         """
-        # 更新持仓市值
-        self.update_positions_value(account_id)
+        try:
+            # 更新持仓市值
+            self.update_positions_value(account_id)
+        except Exception as e:
+            logger.error(f"更新持仓市值失败: {e}")
+            import traceback
+            traceback.print_exc()
+            # 继续执行，即使更新失败也返回账户信息
 
         account = self.get_account(account_id)
         if not account:
+            logger.warning(f"账户 {account_id} 不存在")
             return {}
 
-        conn = self._get_connection()
+        # 每次查询都创建新连接，确保获取最新持仓数据（包括止盈止损）
+        connection = pymysql.connect(
+            host=self.db_config.get('host', 'localhost'),
+            port=self.db_config.get('port', 3306),
+            user=self.db_config.get('user', 'root'),
+            password=self.db_config.get('password', ''),
+            database=self.db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True
+        )
+        
         try:
-            with conn.cursor() as cursor:
+            with connection.cursor() as cursor:
                 # 获取持仓列表
                 cursor.execute(
                     """SELECT * FROM paper_trading_positions
@@ -810,6 +856,12 @@ class PaperTradingEngine:
                     (account_id,)
                 )
                 positions = cursor.fetchall()
+                
+                # 转换 Decimal 类型为 float，确保所有数值字段都能正确序列化
+                for pos in positions:
+                    for key, value in pos.items():
+                        if isinstance(value, Decimal):
+                            pos[key] = float(value)
 
                 # 获取最近订单
                 cursor.execute(
@@ -836,7 +888,7 @@ class PaperTradingEngine:
                     'recent_trades': recent_trades
                 }
         finally:
-            conn.close()
+            connection.close()
 
     def get_pending_orders(self, account_id: int, executed: bool = False) -> List[Dict]:
         """

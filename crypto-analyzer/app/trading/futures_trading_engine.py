@@ -31,7 +31,8 @@ class FuturesTradingEngine:
                 password=self.db_config.get('password', ''),
                 database=self.db_config.get('database', 'binance-data'),
                 charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True  # 启用自动提交，确保每次操作立即生效
             )
             if self._is_first_connection:
                 logger.info("合约交易引擎数据库连接成功")
@@ -66,7 +67,7 @@ class FuturesTradingEngine:
 
     def get_current_price(self, symbol: str) -> Decimal:
         """
-        获取当前市场价格
+        获取当前市场价格（每次查询都使用新连接，确保获取最新数据）
 
         Args:
             symbol: 交易对
@@ -74,8 +75,20 @@ class FuturesTradingEngine:
         Returns:
             当前价格
         """
-        cursor = self._get_cursor()
+        # 每次查询都创建新连接，确保获取最新价格
+        connection = pymysql.connect(
+            host=self.db_config.get('host', 'localhost'),
+            port=self.db_config.get('port', 3306),
+            user=self.db_config.get('user', 'root'),
+            password=self.db_config.get('password', ''),
+            database=self.db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True
+        )
+        
         try:
+            cursor = connection.cursor()
             # 尝试从1分钟K线获取最新价格
             cursor.execute(
                 """SELECT close_price FROM kline_data
@@ -85,7 +98,9 @@ class FuturesTradingEngine:
             )
             result = cursor.fetchone()
             if result and result['close_price']:
-                return Decimal(str(result['close_price']))
+                price = Decimal(str(result['close_price']))
+                cursor.close()
+                return price
 
             # 回退到价格表
             cursor.execute(
@@ -95,14 +110,16 @@ class FuturesTradingEngine:
                 (symbol,)
             )
             result = cursor.fetchone()
+            cursor.close()
             if result and result['price']:
                 return Decimal(str(result['price']))
 
             raise ValueError(f"无法获取{symbol}的价格")
-
         except Exception as e:
             logger.error(f"获取价格失败: {e}")
             raise
+        finally:
+            connection.close()
 
     def calculate_liquidation_price(
         self,
@@ -559,10 +576,22 @@ class FuturesTradingEngine:
         Returns:
             平仓结果
         """
-        cursor = self._get_cursor()
+        # 每次操作都创建新连接，确保获取最新数据
+        connection = pymysql.connect(
+            host=self.db_config.get('host', 'localhost'),
+            port=self.db_config.get('port', 3306),
+            user=self.db_config.get('user', 'root'),
+            password=self.db_config.get('password', ''),
+            database=self.db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True
+        )
+        
+        cursor = connection.cursor()
 
         try:
-            # 1. 获取持仓信息
+            # 1. 获取持仓信息（使用新连接确保获取最新数据）
             cursor.execute(
                 """SELECT * FROM futures_positions WHERE id = %s AND status = 'open'""",
                 (position_id,)
@@ -753,7 +782,8 @@ class FuturesTradingEngine:
                 (account_id,)
             )
 
-            self.connection.commit()
+            connection.commit()
+            cursor.close()
 
             logger.info(
                 f"平仓成功: {symbol} {position_side} {close_quantity} @ {current_price}, "
@@ -777,9 +807,9 @@ class FuturesTradingEngine:
             }
 
         except Exception as e:
-            if self.connection:
+            if connection:
                 try:
-                    self.connection.rollback()
+                    connection.rollback()
                 except:
                     pass
             logger.error(f"平仓失败: {e}")
@@ -790,19 +820,46 @@ class FuturesTradingEngine:
                 'error': str(e),
                 'message': f"平仓失败: {str(e)}"
             }
+        finally:
+            if connection:
+                try:
+                    connection.close()
+                except:
+                    pass
 
     def get_open_positions(self, account_id: int) -> List[Dict]:
         """获取账户的所有持仓"""
-        cursor = self._get_cursor()
-
-        cursor.execute(
-            """SELECT * FROM futures_positions
-            WHERE account_id = %s AND status = 'open'
-            ORDER BY open_time DESC""",
-            (account_id,)
+        # 每次查询都创建新连接，避免连接池缓存问题
+        connection = pymysql.connect(
+            host=self.db_config.get('host', 'localhost'),
+            port=self.db_config.get('port', 3306),
+            user=self.db_config.get('user', 'root'),
+            password=self.db_config.get('password', ''),
+            database=self.db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True
         )
+        
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                """SELECT * FROM futures_positions
+                WHERE account_id = %s AND status = 'open'
+                ORDER BY open_time DESC""",
+                (account_id,)
+            )
 
-        positions = cursor.fetchall()
+            positions = cursor.fetchall()
+            
+            # 调试：打印从数据库读取的止盈止损数据
+            for pos in positions:
+                if pos.get('stop_loss_price') or pos.get('take_profit_price'):
+                    logger.info(f"[DEBUG] 从数据库读取持仓 {pos.get('symbol')} (ID: {pos.get('id')}): stop_loss_price={pos.get('stop_loss_price')}, take_profit_price={pos.get('take_profit_price')}")
+            
+            cursor.close()
+        finally:
+            connection.close()
 
         # 更新每个持仓的当前盈亏，并统一字段名
         for pos in positions:
