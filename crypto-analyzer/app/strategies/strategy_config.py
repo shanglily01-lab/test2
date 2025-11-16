@@ -7,7 +7,7 @@ import logging
 from typing import Dict, List, Optional
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +117,59 @@ class TechnicalIndicatorConfig:
         return abs(total - 100.0) < 0.01
 
 
+@dataclass
+class AutoStopLossConfig:
+    """自动止损配置"""
+    enabled: bool = True  # 是否启用自动止损
+    auto_set_on_buy: bool = True  # 买入时自动设置止损
+    use_percentage: bool = True  # 使用百分比止损（否则使用固定价格）
+    stop_loss_percentage: float = 5.0  # 止损百分比（如果use_percentage为True）
+    stop_loss_price: Optional[float] = None  # 固定止损价格（如果use_percentage为False）
+    trailing_stop: bool = False  # 是否使用移动止损
+    trailing_stop_percentage: float = 2.0  # 移动止损百分比
+    min_stop_loss_distance: float = 1.0  # 最小止损距离（%），防止止损设置过近
+
+
+@dataclass
+class DCAConfig:
+    """分批建仓（DCA）配置"""
+    enabled: bool = False  # 是否启用分批建仓
+    strategy_type: str = "pyramid"  # 建仓策略: pyramid(金字塔), grid(网格), dca(定投)
+    total_position_size: float = 20.0  # 总仓位大小（%）
+    num_batches: int = 3  # 分批次数
+    batch_weights: Optional[List[float]] = field(default=None)  # 每批权重（如[0.2, 0.3, 0.5]），如果为None则自动分配
+    price_intervals: Optional[List[float]] = field(default=None)  # 价格间隔（%），如[5, 10]表示每下跌5%和10%买入
+    time_intervals: Optional[List[int]] = field(default=None)  # 时间间隔（小时），用于定投策略
+    wait_for_confirmation: bool = True  # 是否等待趋势确认后再买入
+    confirmation_signal: str = "rsi_oversold"  # 确认信号类型: rsi_oversold, support_level, trend_reversal
+
+
+@dataclass
+class RiskAlertConfig:
+    """风险预警配置"""
+    enabled: bool = True  # 是否启用风险预警
+    loss_alert_threshold: float = 5.0  # 亏损预警阈值（%）
+    loss_critical_threshold: float = 10.0  # 严重亏损预警阈值（%）
+    position_size_alert: float = 25.0  # 仓位过大预警阈值（%）
+    max_daily_loss_alert: float = 5.0  # 单日最大亏损预警（%）
+    volatility_alert: bool = True  # 是否启用波动率预警
+    volatility_threshold: float = 10.0  # 波动率预警阈值（%）
+    notify_on_alert: bool = True  # 预警时是否通知
+
+
+@dataclass
+class TradingDisciplineConfig:
+    """交易纪律配置"""
+    enabled: bool = True  # 是否启用交易纪律检查
+    max_emotion_trades_per_day: int = 3  # 每天最大情绪化交易次数
+    min_time_between_trades: int = 60  # 两次交易之间的最小时间间隔（分钟）
+    require_plan_before_trade: bool = True  # 交易前是否需要制定计划
+    check_deviation_from_plan: bool = True  # 是否检查偏离交易计划
+    max_deviation_percentage: float = 10.0  # 最大偏离百分比
+    auto_lock_on_violation: bool = False  # 违反纪律时是否自动锁定交易
+    cooldown_period: int = 24  # 违反纪律后的冷却期（小时）
+
+
 class InvestmentStrategy:
     """投资策略类"""
 
@@ -144,6 +197,18 @@ class InvestmentStrategy:
         # 技术指标配置
         self.technical_config = TechnicalIndicatorConfig()
 
+        # 自动止损配置
+        self.auto_stop_loss = AutoStopLossConfig()
+
+        # 分批建仓配置
+        self.dca_config = DCAConfig()
+
+        # 风险预警配置
+        self.risk_alert = RiskAlertConfig()
+
+        # 交易纪律配置
+        self.discipline = TradingDisciplineConfig()
+
         # 自定义标签
         self.tags: List[str] = []
 
@@ -158,6 +223,10 @@ class InvestmentStrategy:
             'risk_profile': asdict(self.risk_profile),
             'trading_rules': asdict(self.trading_rules),
             'technical_config': asdict(self.technical_config),
+            'auto_stop_loss': asdict(self.auto_stop_loss),
+            'dca_config': asdict(self.dca_config),
+            'risk_alert': asdict(self.risk_alert),
+            'discipline': asdict(self.discipline),
             'tags': self.tags
         }
 
@@ -187,6 +256,30 @@ class InvestmentStrategy:
         # 加载技术指标配置
         if 'technical_config' in data:
             strategy.technical_config = TechnicalIndicatorConfig(**data['technical_config'])
+
+        # 加载自动止损配置
+        if 'auto_stop_loss' in data:
+            strategy.auto_stop_loss = AutoStopLossConfig(**data['auto_stop_loss'])
+        else:
+            strategy.auto_stop_loss = AutoStopLossConfig()
+
+        # 加载分批建仓配置
+        if 'dca_config' in data:
+            strategy.dca_config = DCAConfig(**data['dca_config'])
+        else:
+            strategy.dca_config = DCAConfig()
+
+        # 加载风险预警配置
+        if 'risk_alert' in data:
+            strategy.risk_alert = RiskAlertConfig(**data['risk_alert'])
+        else:
+            strategy.risk_alert = RiskAlertConfig()
+
+        # 加载交易纪律配置
+        if 'discipline' in data:
+            strategy.discipline = TradingDisciplineConfig(**data['discipline'])
+        else:
+            strategy.discipline = TradingDisciplineConfig()
 
         strategy.tags = data.get('tags', [])
 

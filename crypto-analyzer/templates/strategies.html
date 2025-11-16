@@ -82,6 +82,25 @@
         .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--spacing-sm); }
         .form-section { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-md); margin-bottom: var(--spacing-md); }
         .form-section-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-sm); padding-bottom: var(--spacing-xs); border-bottom: 1px solid var(--border-default); }
+        
+        /* 标签页样式 */
+        .config-tabs { display: flex; gap: var(--spacing-xs); border-bottom: 2px solid var(--border-default); margin-bottom: var(--spacing-lg); overflow-x: auto; }
+        .config-tab { padding: var(--spacing-sm) var(--spacing-md); background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap; transition: all var(--transition-base); margin-bottom: -2px; }
+        .config-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+        .config-tab.active { color: var(--primary-blue); border-bottom-color: var(--primary-blue); background: transparent; }
+        .config-tab-content { display: none; }
+        .config-tab-content.active { display: block; }
+        
+        /* 折叠面板样式 */
+        .collapsible-section { margin-bottom: var(--spacing-md); }
+        .collapsible-header { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); }
+        .collapsible-header:hover { background: var(--bg-hover); border-color: var(--primary-blue); }
+        .collapsible-header.active { border-color: var(--primary-blue); background: rgba(43, 111, 237, 0.05); }
+        .collapsible-title { font-size: 14px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .collapsible-icon { transition: transform var(--transition-base); }
+        .collapsible-header.active .collapsible-icon { transform: rotate(180deg); }
+        .collapsible-content { display: none; padding: var(--spacing-md); background: var(--bg-secondary); border: 1px solid var(--border-default); border-top: none; border-radius: 0 0 var(--radius-md) var(--radius-md); }
+        .collapsible-content.active { display: block; }
         .form-help-text { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
         .edit-mode-toggle { display: flex; justify-content: flex-end; margin-bottom: var(--spacing-md); }
         .save-actions { display: flex; gap: var(--spacing-sm); justify-content: flex-end; margin-top: var(--spacing-md); padding-top: var(--spacing-md); border-top: 1px solid var(--border-default); }
@@ -283,7 +302,23 @@
                             </div>
                         </div>
                         <div class="strategy-detail-content" id="detailContent">
-                            <!-- 详细内容 - 可编辑表单 -->
+                            <!-- 配置标签页 -->
+                            <div class="config-tabs" id="configTabs" style="display: none;">
+                                <button class="config-tab active" onclick="switchConfigTab('basic')" data-tab="basic">
+                                    <i class="bi bi-gear"></i> 基础配置
+                                </button>
+                                <button class="config-tab" onclick="switchConfigTab('risk')" data-tab="risk">
+                                    <i class="bi bi-shield-exclamation"></i> 风险控制
+                                </button>
+                                <button class="config-tab" onclick="switchConfigTab('advanced')" data-tab="advanced">
+                                    <i class="bi bi-sliders"></i> 高级功能
+                                </button>
+                            </div>
+                            
+                            <!-- 标签页内容 -->
+                            <div id="configTabContents">
+                                <!-- 详细内容 - 可编辑表单 -->
+                            </div>
                         </div>
                         <div class="save-actions" id="saveActions" style="display: none;">
                             <button class="btn btn-secondary" onclick="cancelEdit()">
@@ -1149,7 +1184,18 @@
 
             // 生成表单内容
             if (detailContentArea) {
-                detailContentArea.innerHTML = generateStrategyForm(strategy, isEditMode, isDefault);
+                const configTabContents = document.getElementById('configTabContents');
+                if (configTabContents) {
+                    configTabContents.innerHTML = generateStrategyForm(strategy, isEditMode, isDefault);
+                } else {
+                    detailContentArea.innerHTML = generateStrategyForm(strategy, isEditMode, isDefault);
+                }
+                
+                // 显示标签页
+                const configTabs = document.getElementById('configTabs');
+                if (configTabs) {
+                    configTabs.style.display = 'flex';
+                }
             }
 
             // 操作按钮
@@ -1218,8 +1264,22 @@
                 `;
             }
 
+
+            // 获取新配置数据
+            const autoStopLoss = strategy.auto_stop_loss || {};
+            const dcaConfig = strategy.dca_config || {};
+            const riskAlert = strategy.risk_alert || {};
+            const discipline = strategy.discipline || {};
+
+            // 使用标签页组织内容
+            let basicHtml = '';
+            let riskHtml = '';
+            let advancedHtml = '';
+
+            // ========== 基础配置标签页 ==========
+            
             // 描述
-            html += `
+            basicHtml += `
                 <div class="form-section">
                     <div class="form-section-title">策略描述</div>
                     <div class="form-group">
@@ -1230,7 +1290,7 @@
             `;
 
             // 维度权重
-            html += `
+            basicHtml += `
                 <div class="form-section">
                     <div class="form-section-title">维度权重配置</div>
                     <div class="form-help-text">各维度权重总和应为100%</div>
@@ -1260,52 +1320,8 @@
                 </div>
             `;
 
-            // 风险配置
-            html += `
-                <div class="form-section">
-                    <div class="form-section-title">风险配置</div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label class="form-label">风险等级</label>
-                            <select class="form-select" id="rp_level" ${editMode && !isDefault ? '' : 'disabled'}>
-                                <option value="conservative" ${(rp.level || 'balanced') === 'conservative' ? 'selected' : ''}>保守</option>
-                                <option value="balanced" ${(rp.level || 'balanced') === 'balanced' ? 'selected' : ''}>平衡</option>
-                                <option value="aggressive" ${(rp.level || 'balanced') === 'aggressive' ? 'selected' : ''}>激进</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">最大仓位比例 (%)</label>
-                            <input type="number" class="form-input" id="rp_max_position_size" value="${rp.max_position_size || 20}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">止损比例 (%)</label>
-                            <input type="number" class="form-input" id="rp_stop_loss" value="${rp.stop_loss || 5}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">止盈比例 (%)</label>
-                            <input type="number" class="form-input" id="rp_take_profit" value="${rp.take_profit || 15}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">最小信号强度 (0-100)</label>
-                            <input type="number" class="form-input" id="rp_min_signal_strength" value="${rp.min_signal_strength || 60}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">最大杠杆倍数</label>
-                            <input type="number" class="form-input" id="rp_max_leverage" value="${rp.max_leverage || 1}" step="0.1" min="1" max="${isFutures ? '10' : '1'}" ${editMode && !isDefault ? '' : 'readonly'}>
-                            <div class="form-help-text">${isFutures ? '合约策略建议使用3-5倍杠杆，现货策略为1倍（无杠杆）' : '现货策略固定为1倍（无杠杆）'}</div>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-checkbox-label">
-                            <input type="checkbox" class="form-checkbox" id="rp_allow_short" ${rp.allow_short ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
-                            <span>允许做空${isFutures ? '（合约策略推荐启用）' : '（现货策略通常不启用）'}</span>
-                        </label>
-                    </div>
-                </div>
-            `;
-
             // 交易规则
-            html += `
+            basicHtml += `
                 <div class="form-section">
                     <div class="form-section-title">交易规则</div>
                     <div class="form-row">
@@ -1351,7 +1367,7 @@
 
             // 技术指标配置
             if (tc && Object.keys(tc).length > 0) {
-                html += `
+                basicHtml += `
                     <div class="form-section">
                         <div class="form-section-title">技术指标配置</div>
                         <div class="form-help-text">技术指标权重总和应为100%</div>
@@ -1416,7 +1432,7 @@
             }
 
             // 标签
-            html += `
+            basicHtml += `
                 <div class="form-section">
                     <div class="form-section-title">标签</div>
                     <div class="form-group">
@@ -1426,8 +1442,313 @@
                 </div>
             `;
 
+            // ========== 风险控制标签页 ==========
+            
+            // 风险配置
+            riskHtml += `
+                <div class="form-section">
+                    <div class="form-section-title">风险配置</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">风险等级</label>
+                            <select class="form-select" id="rp_level" ${editMode && !isDefault ? '' : 'disabled'}>
+                                <option value="conservative" ${(rp.level || 'balanced') === 'conservative' ? 'selected' : ''}>保守</option>
+                                <option value="balanced" ${(rp.level || 'balanced') === 'balanced' ? 'selected' : ''}>平衡</option>
+                                <option value="aggressive" ${(rp.level || 'balanced') === 'aggressive' ? 'selected' : ''}>激进</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">最大仓位比例 (%)</label>
+                            <input type="number" class="form-input" id="rp_max_position_size" value="${rp.max_position_size || 20}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">止损比例 (%)</label>
+                            <input type="number" class="form-input" id="rp_stop_loss" value="${rp.stop_loss || 5}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">止盈比例 (%)</label>
+                            <input type="number" class="form-input" id="rp_take_profit" value="${rp.take_profit || 15}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">最小信号强度 (0-100)</label>
+                            <input type="number" class="form-input" id="rp_min_signal_strength" value="${rp.min_signal_strength || 60}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">最大杠杆倍数</label>
+                            <input type="number" class="form-input" id="rp_max_leverage" value="${rp.max_leverage || 1}" step="0.1" min="1" max="${isFutures ? '10' : '1'}" ${editMode && !isDefault ? '' : 'readonly'}>
+                            <div class="form-help-text">${isFutures ? '合约策略建议使用3-5倍杠杆，现货策略为1倍（无杠杆）' : '现货策略固定为1倍（无杠杆）'}</div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-checkbox-label">
+                            <input type="checkbox" class="form-checkbox" id="rp_allow_short" ${rp.allow_short ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                            <span>允许做空${isFutures ? '（合约策略推荐启用）' : '（现货策略通常不启用）'}</span>
+                        </label>
+                    </div>
+                </div>
+            `;
+
+            // 1. 自动止损配置（使用折叠面板）
+            riskHtml += `
+                <div class="collapsible-section">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        <div class="collapsible-title">
+                            <i class="bi bi-shield-exclamation"></i> 自动止损设置
+                            <span style="font-size: 11px; color: var(--text-tertiary); margin-left: var(--spacing-sm);">${isFutures ? '（合约策略）' : '（现货策略）'}</span>
+                        </div>
+                        <i class="bi bi-chevron-down collapsible-icon"></i>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="asl_enabled" ${autoStopLoss.enabled !== false ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>启用自动止损</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="asl_auto_set_on_buy" ${autoStopLoss.auto_set_on_buy !== false ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>买入时自动设置止损</span>
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">止损方式</label>
+                                <select class="form-select" id="asl_use_percentage" ${editMode && !isDefault ? '' : 'disabled'}>
+                                    <option value="true" ${autoStopLoss.use_percentage !== false ? 'selected' : ''}>百分比止损</option>
+                                    <option value="false" ${autoStopLoss.use_percentage === false ? 'selected' : ''}>固定价格止损</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">止损百分比 (%)</label>
+                                <input type="number" class="form-input" id="asl_stop_loss_percentage" value="${autoStopLoss.stop_loss_percentage || 5.0}" step="0.1" min="0.1" max="50" ${editMode && !isDefault ? '' : 'readonly'}>
+                                <div class="form-help-text">${isFutures ? '合约建议: 3-8%' : '现货建议: 5-10%'}</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">固定止损价格</label>
+                                <input type="number" class="form-input" id="asl_stop_loss_price" value="${autoStopLoss.stop_loss_price || ''}" step="0.01" min="0" ${editMode && !isDefault ? '' : 'readonly'} placeholder="留空则使用百分比">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="asl_trailing_stop" ${autoStopLoss.trailing_stop ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>启用移动止损（追踪止损）</span>
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">移动止损百分比 (%)</label>
+                                <input type="number" class="form-input" id="asl_trailing_stop_percentage" value="${autoStopLoss.trailing_stop_percentage || 2.0}" step="0.1" min="0.1" max="10" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">最小止损距离 (%)</label>
+                                <input type="number" class="form-input" id="asl_min_stop_loss_distance" value="${autoStopLoss.min_stop_loss_distance || 1.0}" step="0.1" min="0.1" max="5" ${editMode && !isDefault ? '' : 'readonly'}>
+                                <div class="form-help-text">防止止损设置过近</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 3. 风险预警配置（使用折叠面板）
+            riskHtml += `
+                <div class="collapsible-section">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        <div class="collapsible-title">
+                            <i class="bi bi-exclamation-triangle"></i> 风险预警系统
+                            <span style="font-size: 11px; color: var(--text-tertiary); margin-left: var(--spacing-sm);">${isFutures ? '（合约策略）' : '（现货策略）'}</span>
+                        </div>
+                        <i class="bi bi-chevron-down collapsible-icon"></i>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="ra_enabled" ${riskAlert.enabled !== false ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>启用风险预警</span>
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">亏损预警阈值 (%)</label>
+                                <input type="number" class="form-input" id="ra_loss_alert_threshold" value="${riskAlert.loss_alert_threshold || 5.0}" step="0.1" min="0" max="50" ${editMode && !isDefault ? '' : 'readonly'}>
+                                <div class="form-help-text">持仓亏损超过此值时预警</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">严重亏损阈值 (%)</label>
+                                <input type="number" class="form-input" id="ra_loss_critical_threshold" value="${riskAlert.loss_critical_threshold || 10.0}" step="0.1" min="0" max="50" ${editMode && !isDefault ? '' : 'readonly'}>
+                                <div class="form-help-text">持仓亏损超过此值时严重预警</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">仓位过大预警 (%)</label>
+                                <input type="number" class="form-input" id="ra_position_size_alert" value="${riskAlert.position_size_alert || 25.0}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">单日最大亏损预警 (%)</label>
+                                <input type="number" class="form-input" id="ra_max_daily_loss_alert" value="${riskAlert.max_daily_loss_alert || 5.0}" step="0.1" min="0" max="50" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">波动率预警阈值 (%)</label>
+                                <input type="number" class="form-input" id="ra_volatility_threshold" value="${riskAlert.volatility_threshold || 10.0}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="ra_volatility_alert" ${riskAlert.volatility_alert !== false ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>启用波动率预警</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="ra_notify_on_alert" ${riskAlert.notify_on_alert !== false ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>预警时发送通知</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // ========== 高级功能标签页 ==========
+            
+            // 2. 分批建仓配置（使用折叠面板）
+            advancedHtml += `
+                <div class="collapsible-section">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        <div class="collapsible-title">
+                            <i class="bi bi-layers"></i> 分批建仓助手
+                            <span style="font-size: 11px; color: var(--text-tertiary); margin-left: var(--spacing-sm);">${isFutures ? '（合约策略）' : '（现货策略）'}</span>
+                        </div>
+                        <i class="bi bi-chevron-down collapsible-icon"></i>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="dca_enabled" ${dcaConfig.enabled ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>启用分批建仓</span>
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">建仓策略</label>
+                                <select class="form-select" id="dca_strategy_type" ${editMode && !isDefault ? '' : 'disabled'}>
+                                    <option value="pyramid" ${(dcaConfig.strategy_type || 'pyramid') === 'pyramid' ? 'selected' : ''}>金字塔式（下跌时加仓）</option>
+                                    <option value="grid" ${dcaConfig.strategy_type === 'grid' ? 'selected' : ''}>网格交易（固定间隔）</option>
+                                    <option value="dca" ${dcaConfig.strategy_type === 'dca' ? 'selected' : ''}>定投策略（时间间隔）</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">总仓位大小 (%)</label>
+                                <input type="number" class="form-input" id="dca_total_position_size" value="${dcaConfig.total_position_size || 20.0}" step="0.1" min="1" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">分批次数</label>
+                                <input type="number" class="form-input" id="dca_num_batches" value="${dcaConfig.num_batches || 3}" step="1" min="2" max="10" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">价格间隔 (%) - 用逗号分隔，如: 5,10,15</label>
+                            <input type="text" class="form-input" id="dca_price_intervals" value="${(dcaConfig.price_intervals || []).join(',')}" ${editMode && !isDefault ? '' : 'readonly'} placeholder="例如: 5,10,15">
+                            <div class="form-help-text">每下跌指定百分比时买入一批（网格和金字塔策略）</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="dca_wait_for_confirmation" ${dcaConfig.wait_for_confirmation !== false ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>等待趋势确认后再买入</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">确认信号类型</label>
+                            <select class="form-select" id="dca_confirmation_signal" ${editMode && !isDefault ? '' : 'disabled'}>
+                                <option value="rsi_oversold" ${(dcaConfig.confirmation_signal || 'rsi_oversold') === 'rsi_oversold' ? 'selected' : ''}>RSI超卖</option>
+                                <option value="support_level" ${dcaConfig.confirmation_signal === 'support_level' ? 'selected' : ''}>支撑位确认</option>
+                                <option value="trend_reversal" ${dcaConfig.confirmation_signal === 'trend_reversal' ? 'selected' : ''}>趋势反转</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 4. 交易纪律配置（使用折叠面板）
+            advancedHtml += `
+                <div class="collapsible-section">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        <div class="collapsible-title">
+                            <i class="bi bi-shield-check"></i> 交易纪律检查
+                            <span style="font-size: 11px; color: var(--text-tertiary); margin-left: var(--spacing-sm);">${isFutures ? '（合约策略）' : '（现货策略）'}</span>
+                        </div>
+                        <i class="bi bi-chevron-down collapsible-icon"></i>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="td_enabled" ${discipline.enabled !== false ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>启用交易纪律检查</span>
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">每天最大情绪化交易次数</label>
+                                <input type="number" class="form-input" id="td_max_emotion_trades_per_day" value="${discipline.max_emotion_trades_per_day || 3}" step="1" min="0" max="20" ${editMode && !isDefault ? '' : 'readonly'}>
+                                <div class="form-help-text">超过此次数将触发警告</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">两次交易最小间隔 (分钟)</label>
+                                <input type="number" class="form-input" id="td_min_time_between_trades" value="${discipline.min_time_between_trades || 60}" step="1" min="0" max="1440" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="td_require_plan_before_trade" ${discipline.require_plan_before_trade !== false ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>交易前需要制定计划</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="td_check_deviation_from_plan" ${discipline.check_deviation_from_plan !== false ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>检查偏离交易计划</span>
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">最大偏离百分比 (%)</label>
+                                <input type="number" class="form-input" id="td_max_deviation_percentage" value="${discipline.max_deviation_percentage || 10.0}" step="0.1" min="0" max="100" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">违反纪律后冷却期 (小时)</label>
+                                <input type="number" class="form-input" id="td_cooldown_period" value="${discipline.cooldown_period || 24}" step="1" min="0" max="168" ${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="td_auto_lock_on_violation" ${discipline.auto_lock_on_violation ? 'checked' : ''} ${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>违反纪律时自动锁定交易</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 5. 策略回测
+            advancedHtml += `
+                <div class="form-section" style="background: rgba(43, 111, 237, 0.05); border-left: 3px solid var(--primary-blue);">
+                    <div class="form-section-title">
+                        <i class="bi bi-graph-up"></i> 策略回测
+                        <span style="font-size: 11px; color: var(--text-tertiary); margin-left: var(--spacing-sm);">${isFutures ? '（合约策略）' : '（现货策略）'}</span>
+                    </div>
+                    <div style="padding: var(--spacing-md);">
+                        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: var(--spacing-md);">
+                            使用历史数据回测策略表现，验证策略有效性。支持现货和合约策略的回测。
+                        </p>
+                        <button class="btn btn-primary" onclick="showBacktestModal()" style="width: 100%;">
+                            <i class="bi bi-play-circle"></i> 开始回测
+                        </button>
+                    </div>
+                </div>
+            `;
+
             // 基本信息（只读）
-            html += `
+            advancedHtml += `
                 <div class="form-section">
                     <div class="form-section-title">基本信息</div>
                     <div class="form-row">
@@ -1443,7 +1764,67 @@
                 </div>
             `;
 
+            // 组合所有标签页内容
+            html = `
+                <div class="config-tab-content active" id="tab-basic">
+                    ${basicHtml}
+                </div>
+                <div class="config-tab-content" id="tab-risk">
+                    ${riskHtml}
+                </div>
+                <div class="config-tab-content" id="tab-advanced">
+                    ${advancedHtml}
+                </div>
+            `;
+
             return html;
+        }
+
+        // 切换配置标签页
+        function switchConfigTab(tabName) {
+            // 隐藏所有标签页内容
+            document.querySelectorAll('.config-tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // 移除所有标签的active状态
+            document.querySelectorAll('.config-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // 显示选中的标签页内容
+            const targetContent = document.getElementById(`tab-${tabName}`);
+            if (targetContent) {
+                targetContent.classList.add('active');
+            }
+            
+            // 激活选中的标签
+            const targetTab = document.querySelector(`.config-tab[data-tab="${tabName}"]`);
+            if (targetTab) {
+                targetTab.classList.add('active');
+            }
+        }
+
+        // 切换折叠面板
+        function toggleCollapsible(header) {
+            const content = header.nextElementSibling;
+            const isActive = header.classList.contains('active');
+            
+            // 关闭所有其他折叠面板（可选，如果希望只打开一个）
+            // document.querySelectorAll('.collapsible-header').forEach(h => {
+            //     if (h !== header) {
+            //         h.classList.remove('active');
+            //         h.nextElementSibling.classList.remove('active');
+            //     }
+            // });
+            
+            if (isActive) {
+                header.classList.remove('active');
+                content.classList.remove('active');
+            } else {
+                header.classList.add('active');
+                content.classList.add('active');
+            }
         }
 
         // 转义HTML
@@ -1632,6 +2013,70 @@
                         ema_long: parseInt(document.getElementById('tc_ema_long')?.value || 50),
                         bb_period: parseInt(document.getElementById('tc_bb_period')?.value || 20),
                         bb_std: parseFloat(document.getElementById('tc_bb_std')?.value || 2)
+                    };
+                }
+
+                // 收集自动止损配置
+                const asl_enabled = document.getElementById('asl_enabled');
+                if (asl_enabled) {
+                    updateData.auto_stop_loss = {
+                        enabled: document.getElementById('asl_enabled')?.checked || false,
+                        auto_set_on_buy: document.getElementById('asl_auto_set_on_buy')?.checked || false,
+                        use_percentage: document.getElementById('asl_use_percentage')?.value === 'true',
+                        stop_loss_percentage: parseFloat(document.getElementById('asl_stop_loss_percentage')?.value || 5.0),
+                        stop_loss_price: document.getElementById('asl_stop_loss_price')?.value ? parseFloat(document.getElementById('asl_stop_loss_price').value) : null,
+                        trailing_stop: document.getElementById('asl_trailing_stop')?.checked || false,
+                        trailing_stop_percentage: parseFloat(document.getElementById('asl_trailing_stop_percentage')?.value || 2.0),
+                        min_stop_loss_distance: parseFloat(document.getElementById('asl_min_stop_loss_distance')?.value || 1.0)
+                    };
+                }
+
+                // 收集分批建仓配置
+                const dca_enabled = document.getElementById('dca_enabled');
+                if (dca_enabled) {
+                    const priceIntervalsStr = document.getElementById('dca_price_intervals')?.value || '';
+                    const priceIntervals = priceIntervalsStr.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
+                    
+                    updateData.dca_config = {
+                        enabled: document.getElementById('dca_enabled')?.checked || false,
+                        strategy_type: document.getElementById('dca_strategy_type')?.value || 'pyramid',
+                        total_position_size: parseFloat(document.getElementById('dca_total_position_size')?.value || 20.0),
+                        num_batches: parseInt(document.getElementById('dca_num_batches')?.value || 3),
+                        batch_weights: null, // 暂时不支持手动设置，使用自动分配
+                        price_intervals: priceIntervals.length > 0 ? priceIntervals : null,
+                        time_intervals: null, // 暂时不支持时间间隔
+                        wait_for_confirmation: document.getElementById('dca_wait_for_confirmation')?.checked !== false,
+                        confirmation_signal: document.getElementById('dca_confirmation_signal')?.value || 'rsi_oversold'
+                    };
+                }
+
+                // 收集风险预警配置
+                const ra_enabled = document.getElementById('ra_enabled');
+                if (ra_enabled) {
+                    updateData.risk_alert = {
+                        enabled: document.getElementById('ra_enabled')?.checked !== false,
+                        loss_alert_threshold: parseFloat(document.getElementById('ra_loss_alert_threshold')?.value || 5.0),
+                        loss_critical_threshold: parseFloat(document.getElementById('ra_loss_critical_threshold')?.value || 10.0),
+                        position_size_alert: parseFloat(document.getElementById('ra_position_size_alert')?.value || 25.0),
+                        max_daily_loss_alert: parseFloat(document.getElementById('ra_max_daily_loss_alert')?.value || 5.0),
+                        volatility_alert: document.getElementById('ra_volatility_alert')?.checked !== false,
+                        volatility_threshold: parseFloat(document.getElementById('ra_volatility_threshold')?.value || 10.0),
+                        notify_on_alert: document.getElementById('ra_notify_on_alert')?.checked !== false
+                    };
+                }
+
+                // 收集交易纪律配置
+                const td_enabled = document.getElementById('td_enabled');
+                if (td_enabled) {
+                    updateData.discipline = {
+                        enabled: document.getElementById('td_enabled')?.checked !== false,
+                        max_emotion_trades_per_day: parseInt(document.getElementById('td_max_emotion_trades_per_day')?.value || 3),
+                        min_time_between_trades: parseInt(document.getElementById('td_min_time_between_trades')?.value || 60),
+                        require_plan_before_trade: document.getElementById('td_require_plan_before_trade')?.checked !== false,
+                        check_deviation_from_plan: document.getElementById('td_check_deviation_from_plan')?.checked !== false,
+                        max_deviation_percentage: parseFloat(document.getElementById('td_max_deviation_percentage')?.value || 10.0),
+                        auto_lock_on_violation: document.getElementById('td_auto_lock_on_violation')?.checked || false,
+                        cooldown_period: parseInt(document.getElementById('td_cooldown_period')?.value || 24)
                     };
                 }
 

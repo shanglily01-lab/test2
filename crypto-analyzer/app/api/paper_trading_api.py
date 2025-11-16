@@ -60,6 +60,14 @@ class CreateAccountRequest(BaseModel):
     initial_balance: float = 10000.0
 
 
+class UpdateStopLossTakeProfitRequest(BaseModel):
+    """更新止盈止损请求"""
+    account_id: Optional[int] = None  # None表示使用默认账户
+    symbol: str  # 交易对
+    stop_loss_price: Optional[float] = None  # 止损价格（None表示清除）
+    take_profit_price: Optional[float] = None  # 止盈价格（None表示清除）
+
+
 # ==================== API 接口 ====================
 
 @router.get("/account")
@@ -257,6 +265,8 @@ async def get_positions(account_id: Optional[int] = None, engine: PaperTradingEn
                 "total_cost": float(pos['total_cost']),
                 "unrealized_pnl": float(pos['unrealized_pnl']) if pos['unrealized_pnl'] else 0,
                 "unrealized_pnl_pct": float(pos['unrealized_pnl_pct']) if pos['unrealized_pnl_pct'] else 0,
+                "stop_loss_price": float(pos['stop_loss_price']) if pos.get('stop_loss_price') else None,
+                "take_profit_price": float(pos['take_profit_price']) if pos.get('take_profit_price') else None,
                 "first_buy_time": pos['first_buy_time'].strftime('%Y-%m-%d %H:%M:%S') if pos['first_buy_time'] else None,
                 "last_update_time": pos['last_update_time'].strftime('%Y-%m-%d %H:%M:%S') if pos['last_update_time'] else None
             })
@@ -475,7 +485,7 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
 @router.post("/update-positions")
 async def update_positions(account_id: Optional[int] = None, engine: PaperTradingEngine = Depends(get_engine)):
     """
-    手动更新持仓市值和盈亏
+    手动更新持仓市值和盈亏（包括止盈止损检测）
 
     Returns:
         更新结果
@@ -488,6 +498,47 @@ async def update_positions(account_id: Optional[int] = None, engine: PaperTradin
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/position/update-stop-loss-take-profit")
+async def update_position_stop_loss_take_profit(
+    request: UpdateStopLossTakeProfitRequest,
+    engine: PaperTradingEngine = Depends(get_engine)
+):
+    """
+    更新持仓的止盈止损
+
+    Args:
+        request: 更新请求
+
+    Returns:
+        更新结果
+    """
+    try:
+        account_id = request.account_id or 1
+        
+        stop_loss = Decimal(str(request.stop_loss_price)) if request.stop_loss_price is not None else None
+        take_profit = Decimal(str(request.take_profit_price)) if request.take_profit_price is not None else None
+        
+        success, message = engine.update_position_stop_loss_take_profit(
+            account_id=account_id,
+            symbol=request.symbol,
+            stop_loss_price=stop_loss,
+            take_profit_price=take_profit
+        )
+        
+        if success:
+            return {
+                "success": True,
+                "message": message
+            }
+        else:
+            raise HTTPException(status_code=400, detail=message)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新止盈止损失败: {str(e)}")
 
 
 class CreatePendingOrderRequest(BaseModel):

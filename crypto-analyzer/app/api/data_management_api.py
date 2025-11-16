@@ -42,8 +42,8 @@ def get_db_config():
     return _db_config
 
 
-def get_db_connection():
-    """获取数据库连接（使用连接池）"""
+def get_db_connection(retry_count=3):
+    """获取数据库连接（使用连接池，带重试机制）"""
     global _db_pool
     
     if _db_pool is None:
@@ -68,47 +68,98 @@ def get_db_connection():
     # 尝试从池中获取连接
     pool = _db_pool
     with pool['lock']:
-        # 清理已关闭的连接
-        pool['connections'] = [conn for conn in pool['connections'] if conn.open]
+        # 清理已关闭或失效的连接
+        valid_connections = []
+        for conn in pool['connections']:
+            try:
+                # 检查连接是否有效
+                if conn.open:
+                    # 尝试ping数据库以验证连接
+                    conn.ping(reconnect=False)
+                    valid_connections.append(conn)
+                else:
+                    try:
+                        conn.close()
+                    except:
+                        pass
+            except:
+                # 连接已失效，关闭它
+                try:
+                    conn.close()
+                except:
+                    pass
+        pool['connections'] = valid_connections
         
         # 如果有可用连接，直接返回
         if pool['connections']:
-            return pool['connections'].pop()
+            conn = pool['connections'].pop()
+            try:
+                # 再次验证连接有效性
+                conn.ping(reconnect=False)
+                return conn
+            except:
+                # 连接失效，继续创建新连接
+                try:
+                    conn.close()
+                except:
+                    pass
         
         # 否则创建新连接
         if len(pool['connections']) < pool['max_size']:
-            try:
-                conn = pymysql.connect(
-                    host=pool['config'].get('host', 'localhost'),
-                    port=pool['config'].get('port', 3306),
-                    user=pool['config'].get('user', 'root'),
-                    password=pool['config'].get('password', ''),
-                    database=pool['config'].get('database', 'binance-data'),
-                    charset='utf8mb4',
-                    cursorclass=DictCursor,
-                    connect_timeout=5,
-                    read_timeout=10,
-                    write_timeout=10
-                )
-                return conn
-            except Exception as e:
-                logger.error(f"❌ 创建数据库连接失败: {e}")
-                raise
+            for attempt in range(retry_count):
+                try:
+                    conn = pymysql.connect(
+                        host=pool['config'].get('host', 'localhost'),
+                        port=pool['config'].get('port', 3306),
+                        user=pool['config'].get('user', 'root'),
+                        password=pool['config'].get('password', ''),
+                        database=pool['config'].get('database', 'binance-data'),
+                        charset='utf8mb4',
+                        cursorclass=DictCursor,
+                        connect_timeout=10,
+                        read_timeout=30,
+                        write_timeout=30,
+                        autocommit=False
+                    )
+                    # 验证连接
+                    conn.ping(reconnect=False)
+                    return conn
+                except Exception as e:
+                    if attempt < retry_count - 1:
+                        logger.warning(f"⚠️ 创建数据库连接失败（尝试 {attempt + 1}/{retry_count}）: {e}")
+                        import time
+                        time.sleep(0.5)  # 等待后重试
+                    else:
+                        logger.error(f"❌ 创建数据库连接失败（已重试 {retry_count} 次）: {e}")
+                        raise
     
     # 如果池已满，创建临时连接（不放入池中）
     db_config = get_db_config()
-    return pymysql.connect(
-        host=db_config.get('host', 'localhost'),
-        port=db_config.get('port', 3306),
-        user=db_config.get('user', 'root'),
-        password=db_config.get('password', ''),
-        database=db_config.get('database', 'binance-data'),
-        charset='utf8mb4',
-        cursorclass=DictCursor,
-        connect_timeout=5,
-        read_timeout=10,
-        write_timeout=10
-    )
+    for attempt in range(retry_count):
+        try:
+            conn = pymysql.connect(
+                host=db_config.get('host', 'localhost'),
+                port=db_config.get('port', 3306),
+                user=db_config.get('user', 'root'),
+                password=db_config.get('password', ''),
+                database=db_config.get('database', 'binance-data'),
+                charset='utf8mb4',
+                cursorclass=DictCursor,
+                connect_timeout=10,
+                read_timeout=30,
+                write_timeout=30,
+                autocommit=False
+            )
+            conn.ping(reconnect=False)
+            return conn
+        except Exception as e:
+            if attempt < retry_count - 1:
+                logger.warning(f"⚠️ 创建临时数据库连接失败（尝试 {attempt + 1}/{retry_count}）: {e}")
+                import time
+                time.sleep(0.5)
+            else:
+                logger.error(f"❌ 创建临时数据库连接失败（已重试 {retry_count} 次）: {e}")
+                raise
 
 
 def return_db_connection(conn):
@@ -686,20 +737,73 @@ async def cleanup_old_data(
         raise HTTPException(status_code=500, detail=f"清理数据失败: {str(e)}")
 
 
+def _execute_query_with_retry(conn, query, params=None, retry_count=2):
+    """执行查询，带重试机制"""
+    for attempt in range(retry_count):
+        try:
+            # 检查连接有效性
+            if not conn.open:
+                raise pymysql.err.InterfaceError("Connection is closed")
+            
+            # 尝试ping以验证连接
+            conn.ping(reconnect=False)
+            
+            cursor = conn.cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            result = cursor.fetchall()
+            cursor.close()
+            return result
+        except (pymysql.err.InterfaceError, pymysql.err.OperationalError) as e:
+            if attempt < retry_count - 1:
+                logger.warning(f"⚠️ 数据库连接失效，尝试重新连接（{attempt + 1}/{retry_count}）: {e}")
+                # 关闭旧连接
+                try:
+                    conn.close()
+                except:
+                    pass
+                # 重新获取连接
+                conn = get_db_connection()
+            else:
+                raise
+    return None
+
+
+def _ensure_connection(conn):
+    """确保连接有效，如果失效则重新获取"""
+    try:
+        if conn and conn.open:
+            conn.ping(reconnect=False)
+            return conn
+    except:
+        pass
+    # 连接失效，重新获取
+    try:
+        if conn:
+            conn.close()
+    except:
+        pass
+    return get_db_connection()
+
+
 @router.get("/collection-status")
 async def get_collection_status():
     """
     获取各类数据的采集情况
     包括实时数据、合约数据、新闻数据等的最新采集时间
     """
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
         collection_status = []
         
         # 1. 实时价格数据采集情况
         try:
+            conn = _ensure_connection(conn)
+            cursor = conn.cursor()
             cursor.execute("""
                 SELECT 
                     COUNT(*) as count,
@@ -735,6 +839,8 @@ async def get_collection_status():
         
         # 2. K线数据采集情况
         try:
+            conn = _ensure_connection(conn)
+            cursor = conn.cursor()
             # 尝试使用timestamp字段，如果失败则使用created_at
             try:
                 cursor.execute("""
@@ -881,6 +987,8 @@ async def get_collection_status():
         
         # 3. 合约数据采集情况
         try:
+            conn = _ensure_connection(conn)
+            cursor = conn.cursor()
             cursor.execute("""
                 SELECT 
                     COUNT(*) as count,
@@ -912,6 +1020,8 @@ async def get_collection_status():
         
         # 4. 新闻数据采集情况
         try:
+            conn = _ensure_connection(conn)
+            cursor = conn.cursor()
             # 新闻数据表使用published_datetime字段，如果没有则使用created_at
             try:
                 cursor.execute("""
@@ -959,6 +1069,8 @@ async def get_collection_status():
         
         # 5. ETF数据情况
         try:
+            conn = _ensure_connection(conn)
+            cursor = conn.cursor()
             cursor.execute("""
                 SELECT 
                     COUNT(*) as count,
@@ -1017,6 +1129,8 @@ async def get_collection_status():
         
         # 6. 企业金库数据情况
         try:
+            conn = _ensure_connection(conn)
+            cursor = conn.cursor()
             # 企业金库数据包括两个表：持仓记录(purchases)和融资记录(financing)
             # 检查持仓记录表（主要数据）
             cursor.execute("""
@@ -1103,6 +1217,8 @@ async def get_collection_status():
         
         # 7. Hyperliquid聪明钱数据情况
         try:
+            conn = _ensure_connection(conn)
+            cursor = conn.cursor()
             # 检查hyperliquid_wallet_trades表
             cursor.execute("""
                 SELECT 
@@ -1159,6 +1275,8 @@ async def get_collection_status():
         
         # 8. 链上聪明钱数据情况
         try:
+            conn = _ensure_connection(conn)
+            cursor = conn.cursor()
             # 检查smart_money_transactions表
             cursor.execute("""
                 SELECT 
@@ -1219,8 +1337,10 @@ async def get_collection_status():
                 'error': str(e)
             })
         
-        cursor.close()
-        conn.close()
+        # 关闭游标，归还连接到池中
+        if 'cursor' in locals() and cursor:
+            cursor.close()
+        return_db_connection(conn)
         
         return {
             'success': True,
@@ -1229,7 +1349,18 @@ async def get_collection_status():
         
     except Exception as e:
         logger.error(f"获取数据采集情况失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取数据采集情况失败: {str(e)}")
+    finally:
+        # 确保连接被正确归还或关闭
+        if conn:
+            try:
+                if 'cursor' in locals() and cursor:
+                    cursor.close()
+            except:
+                pass
+            return_db_connection(conn)
 
 
 def _parse_date(date_str: str):

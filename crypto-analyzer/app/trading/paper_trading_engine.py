@@ -577,6 +577,51 @@ class PaperTradingEngine:
                     unrealized_pnl = (current_price - avg_cost) * quantity
                     unrealized_pnl_pct = ((current_price - avg_cost) / avg_cost * 100)
 
+                    # 检查止盈止损
+                    stop_loss_price = pos.get('stop_loss_price')
+                    take_profit_price = pos.get('take_profit_price')
+                    should_close = False
+                    close_reason = None
+                    
+                    # 检查止损
+                    if stop_loss_price and Decimal(str(stop_loss_price)) > 0:
+                        if current_price <= Decimal(str(stop_loss_price)):
+                            should_close = True
+                            close_reason = 'stop_loss'
+                            logger.info(f"🛑 触发止损: {symbol} @ ${current_price:.8f} (止损价: ${stop_loss_price:.8f})")
+                    
+                    # 检查止盈
+                    if not should_close and take_profit_price and Decimal(str(take_profit_price)) > 0:
+                        if current_price >= Decimal(str(take_profit_price)):
+                            should_close = True
+                            close_reason = 'take_profit'
+                            logger.info(f"🎯 触发止盈: {symbol} @ ${current_price:.8f} (止盈价: ${take_profit_price:.8f})")
+                    
+                    # 如果触发止盈止损，自动平仓
+                    if should_close:
+                        try:
+                            # 获取持仓数量
+                            available_qty = Decimal(str(pos['available_quantity']))
+                            if available_qty > 0:
+                                # 执行卖出平仓（使用 place_order 方法）
+                                result = self.place_order(
+                                    account_id=account_id,
+                                    symbol=symbol,
+                                    side='SELL',
+                                    quantity=available_qty,
+                                    order_type='MARKET',
+                                    order_source=close_reason
+                                )
+                                if result[0]:
+                                    logger.info(f"✅ {close_reason} 自动平仓成功: {symbol} {available_qty} @ ${current_price:.8f}")
+                                else:
+                                    logger.error(f"❌ {close_reason} 自动平仓失败: {symbol} - {result[1]}")
+                        except Exception as e:
+                            logger.error(f"❌ {close_reason} 自动平仓异常: {symbol} - {e}")
+                            import traceback
+                            traceback.print_exc()
+                        continue  # 跳过更新，因为持仓已平仓
+                    
                     # 更新持仓
                     cursor.execute(
                         """UPDATE paper_trading_positions
@@ -621,6 +666,103 @@ class PaperTradingEngine:
 
                 conn.commit()
 
+        finally:
+            conn.close()
+
+    def update_position_stop_loss_take_profit(
+        self,
+        account_id: int,
+        symbol: str,
+        stop_loss_price: Optional[Decimal] = None,
+        take_profit_price: Optional[Decimal] = None
+    ) -> Tuple[bool, str]:
+        """
+        更新持仓的止盈止损
+        
+        Args:
+            account_id: 账户ID
+            symbol: 交易对
+            stop_loss_price: 止损价格（None表示清除）
+            take_profit_price: 止盈价格（None表示清除）
+            
+        Returns:
+            (是否成功, 消息)
+        """
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                # 获取持仓
+                position = self._get_position(account_id, symbol)
+                if not position:
+                    return False, f"持仓不存在: {symbol}"
+                
+                entry_price = Decimal(str(position['avg_entry_price']))
+                
+                # 验证止损价格
+                if stop_loss_price is not None:
+                    if stop_loss_price <= 0:
+                        return False, "止损价格必须大于0"
+                    # 现货只有做多，止损价格应该低于开仓价
+                    if stop_loss_price >= entry_price:
+                        return False, f"止损价格应该低于开仓价: {stop_loss_price} >= {entry_price}"
+                
+                # 验证止盈价格
+                if take_profit_price is not None:
+                    if take_profit_price <= 0:
+                        return False, "止盈价格必须大于0"
+                    # 现货只有做多，止盈价格应该高于开仓价
+                    if take_profit_price <= entry_price:
+                        return False, f"止盈价格应该高于开仓价: {take_profit_price} <= {entry_price}"
+                
+                # 更新止盈止损
+                update_fields = []
+                update_values = []
+                
+                if stop_loss_price is not None:
+                    update_fields.append("stop_loss_price = %s")
+                    update_values.append(stop_loss_price)
+                elif stop_loss_price is None:
+                    # 清除止损
+                    update_fields.append("stop_loss_price = NULL")
+                
+                if take_profit_price is not None:
+                    update_fields.append("take_profit_price = %s")
+                    update_values.append(take_profit_price)
+                elif take_profit_price is None:
+                    # 清除止盈
+                    update_fields.append("take_profit_price = NULL")
+                
+                if not update_fields:
+                    return False, "没有需要更新的字段"
+                
+                update_values.extend([account_id, symbol])
+                
+                cursor.execute(
+                    f"""UPDATE paper_trading_positions
+                    SET {', '.join(update_fields)}
+                    WHERE account_id = %s AND symbol = %s AND status = 'open'""",
+                    update_values
+                )
+                
+                conn.commit()
+                
+                msg_parts = []
+                if stop_loss_price is not None:
+                    msg_parts.append(f"止损: ${stop_loss_price:.8f}")
+                elif stop_loss_price is None and position.get('stop_loss_price'):
+                    msg_parts.append("止损已清除")
+                
+                if take_profit_price is not None:
+                    msg_parts.append(f"止盈: ${take_profit_price:.8f}")
+                elif take_profit_price is None and position.get('take_profit_price'):
+                    msg_parts.append("止盈已清除")
+                
+                logger.info(f"✅ 更新止盈止损: {symbol} - {', '.join(msg_parts)}")
+                return True, f"止盈止损更新成功: {', '.join(msg_parts)}"
+                
+        except Exception as e:
+            logger.error(f"❌ 更新止盈止损失败: {symbol} - {e}")
+            return False, f"更新失败: {str(e)}"
         finally:
             conn.close()
 

@@ -5,6 +5,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Optional
 from pydantic import BaseModel
+from dataclasses import asdict
 import logging
 
 from app.strategies.strategy_config import (
@@ -13,7 +14,11 @@ from app.strategies.strategy_config import (
     DimensionWeights,
     RiskProfile,
     TradingRules,
-    TechnicalIndicatorConfig
+    TechnicalIndicatorConfig,
+    AutoStopLossConfig,
+    DCAConfig,
+    RiskAlertConfig,
+    TradingDisciplineConfig
 )
 from app.strategies.strategy_analyzer import StrategyBasedAnalyzer
 
@@ -53,15 +58,6 @@ class TradingRulesModel(BaseModel):
     min_dimensions_agree: int = 3
 
 
-class StrategyCreateModel(BaseModel):
-    name: str
-    description: str = ""
-    dimension_weights: DimensionWeightsModel
-    risk_profile: RiskProfileModel
-    trading_rules: Optional[TradingRulesModel] = None
-    tags: List[str] = []
-
-
 class TechnicalIndicatorConfigModel(BaseModel):
     rsi_weight: float = 25.0
     macd_weight: float = 25.0
@@ -78,12 +74,75 @@ class TechnicalIndicatorConfigModel(BaseModel):
     bb_std: float = 2.0
 
 
+class AutoStopLossConfigModel(BaseModel):
+    enabled: bool = True
+    auto_set_on_buy: bool = True
+    use_percentage: bool = True
+    stop_loss_percentage: float = 5.0
+    stop_loss_price: Optional[float] = None
+    trailing_stop: bool = False
+    trailing_stop_percentage: float = 2.0
+    min_stop_loss_distance: float = 1.0
+
+
+class DCAConfigModel(BaseModel):
+    enabled: bool = False
+    strategy_type: str = "pyramid"  # pyramid, grid, dca
+    total_position_size: float = 20.0
+    num_batches: int = 3
+    batch_weights: Optional[List[float]] = None
+    price_intervals: Optional[List[float]] = None
+    time_intervals: Optional[List[int]] = None
+    wait_for_confirmation: bool = True
+    confirmation_signal: str = "rsi_oversold"
+
+
+class RiskAlertConfigModel(BaseModel):
+    enabled: bool = True
+    loss_alert_threshold: float = 5.0
+    loss_critical_threshold: float = 10.0
+    position_size_alert: float = 25.0
+    max_daily_loss_alert: float = 5.0
+    volatility_alert: bool = True
+    volatility_threshold: float = 10.0
+    notify_on_alert: bool = True
+
+
+class TradingDisciplineConfigModel(BaseModel):
+    enabled: bool = True
+    max_emotion_trades_per_day: int = 3
+    min_time_between_trades: int = 60
+    require_plan_before_trade: bool = True
+    check_deviation_from_plan: bool = True
+    max_deviation_percentage: float = 10.0
+    auto_lock_on_violation: bool = False
+    cooldown_period: int = 24
+
+
+class StrategyCreateModel(BaseModel):
+    name: str
+    description: str = ""
+    dimension_weights: DimensionWeightsModel
+    risk_profile: RiskProfileModel
+    trading_rules: Optional[TradingRulesModel] = None
+    technical_config: Optional[TechnicalIndicatorConfigModel] = None
+    auto_stop_loss: Optional[AutoStopLossConfigModel] = None
+    dca_config: Optional[DCAConfigModel] = None
+    risk_alert: Optional[RiskAlertConfigModel] = None
+    discipline: Optional[TradingDisciplineConfigModel] = None
+    tags: List[str] = []
+
+
 class StrategyUpdateModel(BaseModel):
     description: Optional[str] = None
     dimension_weights: Optional[DimensionWeightsModel] = None
     risk_profile: Optional[RiskProfileModel] = None
     trading_rules: Optional[TradingRulesModel] = None
     technical_config: Optional[TechnicalIndicatorConfigModel] = None
+    auto_stop_loss: Optional[AutoStopLossConfigModel] = None
+    dca_config: Optional[DCAConfigModel] = None
+    risk_alert: Optional[RiskAlertConfigModel] = None
+    discipline: Optional[TradingDisciplineConfigModel] = None
     tags: Optional[List[str]] = None
 
 
@@ -218,6 +277,22 @@ async def create_strategy(data: StrategyCreateModel):
                 bb_std=data.technical_config.bb_std
             )
 
+        # 设置自动止损配置
+        if data.auto_stop_loss:
+            strategy.auto_stop_loss = AutoStopLossConfig(**data.auto_stop_loss.dict())
+
+        # 设置分批建仓配置
+        if data.dca_config:
+            strategy.dca_config = DCAConfig(**data.dca_config.dict())
+
+        # 设置风险预警配置
+        if data.risk_alert:
+            strategy.risk_alert = RiskAlertConfig(**data.risk_alert.dict())
+
+        # 设置交易纪律配置
+        if data.discipline:
+            strategy.discipline = TradingDisciplineConfig(**data.discipline.dict())
+
         # 保存策略
         if not manager.save_strategy(strategy):
             raise HTTPException(status_code=500, detail="保存策略失败")
@@ -305,6 +380,22 @@ async def update_strategy(name: str, data: StrategyUpdateModel):
                 bb_period=data.technical_config.bb_period,
                 bb_std=data.technical_config.bb_std
             )
+
+        # 更新自动止损配置
+        if data.auto_stop_loss:
+            strategy.auto_stop_loss = AutoStopLossConfig(**data.auto_stop_loss.dict())
+
+        # 更新分批建仓配置
+        if data.dca_config:
+            strategy.dca_config = DCAConfig(**data.dca_config.dict())
+
+        # 更新风险预警配置
+        if data.risk_alert:
+            strategy.risk_alert = RiskAlertConfig(**data.risk_alert.dict())
+
+        # 更新交易纪律配置
+        if data.discipline:
+            strategy.discipline = TradingDisciplineConfig(**data.discipline.dict())
 
         if data.tags is not None:
             strategy.tags = data.tags
@@ -593,6 +684,117 @@ async def _backtest_strategy_internal(
     # 这里需要将原来的backtest_strategy函数逻辑移到这里
     # 为了简化，我们直接调用原来的函数，但传入strategy对象
     pass
+
+
+@router.get("/risk-alerts/{strategy_name}")
+async def get_risk_alerts(strategy_name: str):
+    """
+    获取策略的风险预警信息
+    
+    Args:
+        strategy_name: 策略名称
+        
+    Returns:
+        风险预警信息
+    """
+    try:
+        manager = get_strategy_manager()
+        strategy = manager.load_strategy(strategy_name)
+        
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"策略不存在: {strategy_name}")
+        
+        # TODO: 实现风险预警逻辑，检查当前持仓风险
+        # 这里先返回配置信息
+        return {
+            'success': True,
+            'strategy_name': strategy_name,
+            'risk_alert_config': asdict(strategy.risk_alert) if hasattr(strategy, 'risk_alert') else {},
+            'alerts': []  # 实际预警列表
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取风险预警失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/discipline-check/{strategy_name}")
+async def check_trading_discipline(strategy_name: str, days: int = 7):
+    """
+    检查交易纪律
+    
+    Args:
+        strategy_name: 策略名称
+        days: 检查最近N天的交易
+        
+    Returns:
+        交易纪律检查结果
+    """
+    try:
+        manager = get_strategy_manager()
+        strategy = manager.load_strategy(strategy_name)
+        
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"策略不存在: {strategy_name}")
+        
+        # TODO: 实现交易纪律检查逻辑
+        # 分析交易历史，识别情绪化交易
+        return {
+            'success': True,
+            'strategy_name': strategy_name,
+            'discipline_config': asdict(strategy.discipline) if hasattr(strategy, 'discipline') else {},
+            'violations': [],  # 违反纪律的记录
+            'emotion_trades_count': 0,  # 情绪化交易次数
+            'recommendations': []  # 改进建议
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"检查交易纪律失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/dca-plan")
+async def create_dca_plan(request: Dict):
+    """
+    创建分批建仓计划
+    
+    Args:
+        request: 包含策略名称、交易对、建仓配置等
+        
+    Returns:
+        分批建仓计划
+    """
+    try:
+        strategy_name = request.get('strategy_name')
+        symbol = request.get('symbol')
+        
+        if not strategy_name or not symbol:
+            raise HTTPException(status_code=400, detail="缺少必要参数: strategy_name, symbol")
+        
+        manager = get_strategy_manager()
+        strategy = manager.load_strategy(strategy_name)
+        
+        if not strategy:
+            raise HTTPException(status_code=404, detail=f"策略不存在: {strategy_name}")
+        
+        # TODO: 实现分批建仓计划生成逻辑
+        return {
+            'success': True,
+            'strategy_name': strategy_name,
+            'symbol': symbol,
+            'dca_plan': {
+                'batches': [],  # 分批买入计划
+                'total_position_size': 0,
+                'estimated_cost': 0
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"创建分批建仓计划失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/backtest")

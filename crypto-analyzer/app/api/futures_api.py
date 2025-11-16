@@ -53,6 +53,13 @@ class OpenPositionRequest(BaseModel):
     signal_id: Optional[int] = Field(None, description="信号ID")
 
 
+class UpdateStopLossTakeProfitRequest(BaseModel):
+    """更新止盈止损请求"""
+    stop_loss_price: Optional[float] = None
+    take_profit_price: Optional[float] = None
+    stop_loss_pct: Optional[float] = None
+    take_profit_pct: Optional[float] = None
+
 class ClosePositionRequest(BaseModel):
     """平仓请求"""
     close_quantity: Optional[float] = Field(None, description="平仓数量，不填则全部平仓")
@@ -341,21 +348,25 @@ async def get_orders(account_id: int = 2, status: str = 'PENDING'):
 @router.put('/positions/{position_id}/stop-loss-take-profit')
 async def update_stop_loss_take_profit(
     position_id: int,
-    stop_loss_price: Optional[float] = Body(None),
-    take_profit_price: Optional[float] = Body(None),
-    stop_loss_pct: Optional[float] = Body(None),
-    take_profit_pct: Optional[float] = Body(None)
+    request: UpdateStopLossTakeProfitRequest
 ):
     """
     更新持仓的止损价和止盈价
     
     - **position_id**: 持仓ID
-    - **stop_loss_price**: 止损价格（可选）
-    - **take_profit_price**: 止盈价格（可选）
-    - **stop_loss_pct**: 止损百分比（可选，如果设置了价格则忽略）
-    - **take_profit_pct**: 止盈百分比（可选，如果设置了价格则忽略）
+    - **request**: 请求体，包含以下可选字段：
+        - **stop_loss_price**: 止损价格（可选，传入 null 表示清除）
+        - **take_profit_price**: 止盈价格（可选，传入 null 表示清除）
+        - **stop_loss_pct**: 止损百分比（可选，如果设置了价格则忽略）
+        - **take_profit_pct**: 止盈百分比（可选，如果设置了价格则忽略）
     """
     try:
+        # 从请求体中提取参数
+        stop_loss_price = request.stop_loss_price
+        take_profit_price = request.take_profit_price
+        stop_loss_pct = request.stop_loss_pct
+        take_profit_pct = request.take_profit_pct
+        
         connection = pymysql.connect(**db_config)
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
@@ -378,8 +389,13 @@ async def update_stop_loss_take_profit(
         
         # 处理止损价
         final_stop_loss_price = None
-        if stop_loss_price is not None:
+        clear_stop_loss = False
+        # 如果请求中包含了 stop_loss_price 字段（即使值为 None），说明要更新
+        if stop_loss_price is not None and stop_loss_price > 0:
             final_stop_loss_price = Decimal(str(stop_loss_price))
+        elif stop_loss_price is None and 'stop_loss_price' in request.dict(exclude_unset=True):
+            # 明确传入 None，表示要清除
+            clear_stop_loss = True
         elif stop_loss_pct is not None:
             if position_side == 'LONG':
                 final_stop_loss_price = entry_price * (1 - Decimal(str(stop_loss_pct)) / 100)
@@ -388,8 +404,13 @@ async def update_stop_loss_take_profit(
         
         # 处理止盈价
         final_take_profit_price = None
-        if take_profit_price is not None:
+        clear_take_profit = False
+        # 如果请求中包含了 take_profit_price 字段（即使值为 None），说明要更新
+        if take_profit_price is not None and take_profit_price > 0:
             final_take_profit_price = Decimal(str(take_profit_price))
+        elif take_profit_price is None and 'take_profit_price' in request.dict(exclude_unset=True):
+            # 明确传入 None，表示要清除
+            clear_take_profit = True
         elif take_profit_pct is not None:
             if position_side == 'LONG':
                 final_take_profit_price = entry_price * (1 + Decimal(str(take_profit_pct)) / 100)
@@ -400,14 +421,22 @@ async def update_stop_loss_take_profit(
         update_fields = []
         params = []
         
-        if final_stop_loss_price is not None:
+        # 处理止损价更新或清除
+        if clear_stop_loss:
+            update_fields.append("stop_loss_price = NULL")
+            update_fields.append("stop_loss_pct = NULL")
+        elif final_stop_loss_price is not None:
             update_fields.append("stop_loss_price = %s")
             params.append(float(final_stop_loss_price))
             if stop_loss_pct is not None:
                 update_fields.append("stop_loss_pct = %s")
                 params.append(float(stop_loss_pct))
         
-        if final_take_profit_price is not None:
+        # 处理止盈价更新或清除
+        if clear_take_profit:
+            update_fields.append("take_profit_price = NULL")
+            update_fields.append("take_profit_pct = NULL")
+        elif final_take_profit_price is not None:
             update_fields.append("take_profit_price = %s")
             params.append(float(final_take_profit_price))
             if take_profit_pct is not None:
