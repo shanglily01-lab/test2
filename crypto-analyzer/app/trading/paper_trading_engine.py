@@ -819,8 +819,8 @@ class PaperTradingEngine:
             账户摘要信息
         """
         try:
-            # 更新持仓市值
-            self.update_positions_value(account_id)
+        # 更新持仓市值
+        self.update_positions_value(account_id)
         except Exception as e:
             logger.error(f"更新持仓市值失败: {e}")
             import traceback
@@ -903,19 +903,29 @@ class PaperTradingEngine:
         try:
             with conn.cursor() as cursor:
                 if executed:
-                    # 只获取已执行的订单
+                    # 只获取已执行的订单，关联持仓表获取止盈止损价格
                     cursor.execute(
-                        """SELECT * FROM paper_trading_pending_orders
-                        WHERE account_id = %s AND executed = TRUE
-                        ORDER BY executed_at DESC""",
+                        """SELECT 
+                            o.*,
+                            p.stop_loss_price,
+                            p.take_profit_price
+                        FROM paper_trading_pending_orders o
+                        LEFT JOIN paper_trading_positions p ON o.symbol = p.symbol AND o.account_id = p.account_id AND p.status = 'open'
+                        WHERE o.account_id = %s AND o.executed = TRUE
+                        ORDER BY o.executed_at DESC""",
                         (account_id,)
                     )
                 else:
-                    # 只获取未执行的订单，且状态不是DELETED
+                    # 只获取未执行的订单，且状态不是DELETED，关联持仓表获取止盈止损价格
                     cursor.execute(
-                        """SELECT * FROM paper_trading_pending_orders
-                        WHERE account_id = %s AND executed = FALSE AND status != 'DELETED'
-                        ORDER BY created_at DESC""",
+                        """SELECT 
+                            o.*,
+                            p.stop_loss_price,
+                            p.take_profit_price
+                        FROM paper_trading_pending_orders o
+                        LEFT JOIN paper_trading_positions p ON o.symbol = p.symbol AND o.account_id = p.account_id AND p.status = 'open'
+                        WHERE o.account_id = %s AND o.executed = FALSE AND o.status != 'DELETED'
+                        ORDER BY o.created_at DESC""",
                         (account_id,)
                     )
                 orders = cursor.fetchall()

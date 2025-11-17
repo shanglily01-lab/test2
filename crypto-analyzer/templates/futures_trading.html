@@ -1695,7 +1695,7 @@
                         }
                         return parts.join('<br>');
                     }
-                    
+
                     tradesBody.innerHTML = recentTrades.map(trade => {
                         const isLong = trade.side === 'CLOSE_LONG';
                         const sideText = isLong ? '多' : '空';

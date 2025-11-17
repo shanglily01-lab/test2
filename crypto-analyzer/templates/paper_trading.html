@@ -451,6 +451,8 @@
                         frozenQuantity: parseFloat(order.frozen_quantity) || 0,
                         status: order.status || 'PENDING',
                         executed: order.executed === true || order.executed === 1 || order.executed === 'true',
+                        stopLossPrice: order.stop_loss_price ? parseFloat(order.stop_loss_price) : null,
+                        takeProfitPrice: order.take_profit_price ? parseFloat(order.take_profit_price) : null,
                         createdAt: order.created_at
                     }));
                     // 自动买入/卖出功能已移除
@@ -1214,6 +1216,21 @@
                         container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无待成交订单</div></div>';
                         return;
                     }
+                    // 格式化止盈止损信息
+                    function formatStopLossTakeProfit(stopLossPrice, takeProfitPrice) {
+                        const parts = [];
+                        if (stopLossPrice && stopLossPrice > 0) {
+                            parts.push(`<span class="text-danger" title="止损价">止损: $${formatPrice(stopLossPrice)}</span>`);
+                        }
+                        if (takeProfitPrice && takeProfitPrice > 0) {
+                            parts.push(`<span class="text-success" title="止盈价">止盈: $${formatPrice(takeProfitPrice)}</span>`);
+                        }
+                        if (parts.length === 0) {
+                            return '<span class="text-secondary">-</span>';
+                        }
+                        return parts.join(' | ');
+                    }
+                    
                     container.innerHTML = orders.map(order => {
                         const sideClass = order.type === 'BUY' ? 'badge-success' : 'badge-danger';
                         const sideText = order.type === 'BUY' ? '待买入' : '待卖出';
@@ -1237,6 +1254,9 @@
                                 </div>
                                 <div class="text-sm text-secondary" style="margin-bottom: 3px;">
                                     数量: ${order.quantity} | 触发价格: ${formatPrice(order.triggerPrice)} | 当前价格: ${formatPrice(order.currentPrice)}
+                                </div>
+                                <div class="text-sm text-secondary" style="margin-bottom: 3px;">
+                                    止盈止损: ${formatStopLossTakeProfit(order.stopLossPrice, order.takeProfitPrice)}
                                 </div>
                                 <div class="text-sm text-secondary">
                                     ${frozenInfo}

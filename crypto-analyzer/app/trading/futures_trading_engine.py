@@ -882,14 +882,14 @@ class FuturesTradingEngine:
         
         try:
             cursor = connection.cursor()
-            cursor.execute(
-                """SELECT * FROM futures_positions
-                WHERE account_id = %s AND status = 'open'
-                ORDER BY open_time DESC""",
-                (account_id,)
-            )
+        cursor.execute(
+            """SELECT * FROM futures_positions
+            WHERE account_id = %s AND status = 'open'
+            ORDER BY open_time DESC""",
+            (account_id,)
+        )
 
-            positions = cursor.fetchall()
+        positions = cursor.fetchall()
             
             cursor.close()
         finally:

@@ -679,6 +679,8 @@ async def get_pending_orders(
                 "status": order.get('status', 'PENDING'),
                 "executed": bool(order.get('executed', False)),
                 "order_source": order.get('order_source', 'auto'),
+                "stop_loss_price": float(order.get('stop_loss_price', 0)) if order.get('stop_loss_price') else None,
+                "take_profit_price": float(order.get('take_profit_price', 0)) if order.get('take_profit_price') else None,
                 "created_at": order.get('created_at').strftime('%Y-%m-%d %H:%M:%S') if order.get('created_at') else None,
                 "executed_at": order.get('executed_at').strftime('%Y-%m-%d %H:%M:%S') if order.get('executed_at') else None
             })
