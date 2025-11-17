@@ -1280,10 +1280,8 @@
                 const data = await response.json();
                 
                 // 调试：打印原始数据
-                console.log('[DEBUG] 加载持仓数据:', data);
                 if (data.success && data.data) {
                     data.data.forEach(pos => {
-                        console.log(`[DEBUG] 持仓 ${pos.symbol} (ID: ${pos.position_id || pos.id}):`, {
                             id: pos.id,
                             position_id: pos.position_id,
                             symbol: pos.symbol,
@@ -1353,7 +1351,6 @@
                         let takeProfitPrice = null;
                         
                         // 直接转换数据库返回的值
-                        console.log(`[DEBUG] 处理止盈止损 - ${pos.symbol}:`, {
                             raw_stop_loss: pos.stop_loss_price,
                             raw_take_profit: pos.take_profit_price,
                             stop_loss_type: typeof pos.stop_loss_price,
@@ -1364,9 +1361,7 @@
                             const parsed = parseFloat(pos.stop_loss_price);
                             if (!isNaN(parsed) && parsed > 0) {
                                 stopLossPrice = parsed;
-                                console.log(`[DEBUG] 止损价格解析: ${pos.stop_loss_price} -> ${stopLossPrice}`);
                             } else {
-                                console.warn(`[WARN] 止损价格解析失败: ${pos.stop_loss_price} -> NaN`);
                             }
                         }
                         
@@ -1374,13 +1369,10 @@
                             const parsed = parseFloat(pos.take_profit_price);
                             if (!isNaN(parsed) && parsed > 0) {
                                 takeProfitPrice = parsed;
-                                console.log(`[DEBUG] 止盈价格解析: ${pos.take_profit_price} -> ${takeProfitPrice}`);
                             } else {
-                                console.warn(`[WARN] 止盈价格解析失败: ${pos.take_profit_price} -> NaN`);
                             }
                         }
                         
-                        console.log(`[DEBUG] 最终止盈止损值 - ${pos.symbol}:`, {
                             stopLossPrice,
                             takeProfitPrice
                         });
@@ -1422,7 +1414,6 @@
                     }
                     
                     // 使用卡片样式渲染持仓
-                    console.log('[DEBUG] 渲染持仓，止盈止损数据:', positionsWithPrices.map(p => ({
                         symbol: p.symbol,
                         stop_loss: p.stop_loss_price,
                         take_profit: p.take_profit_price
@@ -1437,7 +1428,6 @@
                         
                         // 确保使用正确的数据库ID
                         const dbId = pos.position_id || pos.id;
-                        console.log(`[DEBUG] 渲染持仓卡片: symbol=${pos.symbol}, position_id=${pos.position_id}, id=${pos.id}, 使用ID=${dbId}`);
                         
                         return `
                             <div class="position-card ${cardClass}" 
@@ -1502,8 +1492,8 @@
                                             </div>
                                         </div>
                                         <button class="btn btn-sm btn-danger" style="padding: 6px 12px; font-size: 12px; min-width: auto;" onclick="event.stopPropagation(); closePosition(${dbId})" title="平仓">
-                                            <i class="bi bi-x-circle"></i> 平仓
-                                        </button>
+                                    <i class="bi bi-x-circle"></i> 平仓
+                                </button>
                                     </div>
                                 </div>
                             </div>
@@ -2064,7 +2054,6 @@
                 }
                 
                 const url = `${API_BASE}/positions/${positionId}/stop-loss-take-profit`;
-                console.log(`[DEBUG] 更新止盈止损请求:`, { url, positionId, type, price, requestData });
                 
                 const response = await fetch(url, {
                     method: 'PUT',
@@ -2072,16 +2061,13 @@
                     body: JSON.stringify(requestData)
                 });
                 
-                console.log(`[DEBUG] 响应状态: ${response.status} ${response.statusText}`);
                 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error(`[ERROR] 请求失败:`, { status: response.status, statusText: response.statusText, errorText });
                     throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
                 }
                 
                 const data = await response.json();
-                console.log(`[DEBUG] 响应数据:`, data);
                 if (data.success) {
                     showToast(`${type === 'stop_loss' ? '止损' : '止盈'}设置成功`, 'success');
                     // 重新加载持仓数据，确保从数据库获取最新值
@@ -2295,7 +2281,6 @@
                         currentTakeProfit = positionData.data.take_profit_price;
                     }
                 } catch (e) {
-                    console.warn('获取当前持仓信息失败:', e);
                 }
                 
                 // 构建请求数据：总是同时传递两个字段，确保另一个字段被保留
@@ -2360,7 +2345,6 @@
                     showToast(`设置失败: ${data.detail || data.message || '未知错误'}`, 'error');
                 }
             } catch (error) {
-                console.error(`[ERROR] 保存止盈止损失败:`, error);
                 showToast(`设置失败: ${error.message}`, 'error');
             }
         }
@@ -2512,9 +2496,7 @@
         // 保存止盈止损设置 - 直接根据订单号保存到数据库
         async function saveStopLossTakeProfit(positionId, symbol, stopLossPrice, takeProfitPrice, closeCallback) {
             try {
-                console.log(`[DEBUG] 保存止盈止损 - 原始 positionId: ${positionId}, 类型: ${typeof positionId}`);
                 positionId = parseInt(positionId);
-                console.log(`[DEBUG] 保存止盈止损 - 转换后 positionId: ${positionId}`);
                 
                 if (isNaN(positionId) || positionId <= 0) {
                     showToast('持仓ID无效', 'error');
@@ -2526,22 +2508,17 @@
                 let currentTakeProfit = null;
                 
                 try {
-                    console.log(`[DEBUG] 获取持仓信息: ${API_BASE}/positions/${positionId}`);
                     const positionResponse = await fetch(`${API_BASE}/positions/${positionId}`);
                     const positionData = await positionResponse.json();
-                    console.log(`[DEBUG] 持仓信息响应:`, positionData);
                     
                     if (positionData.success && positionData.data) {
                         currentStopLoss = positionData.data.stop_loss_price;
                         currentTakeProfit = positionData.data.take_profit_price;
-                        console.log(`[DEBUG] 当前止盈止损: stop_loss=${currentStopLoss}, take_profit=${currentTakeProfit}`);
                     } else {
-                        console.error(`[ERROR] 获取持仓信息失败:`, positionData);
                         showToast(`获取持仓信息失败: ${positionData.detail || '未知错误'}`, 'error');
                         return;
                     }
                 } catch (e) {
-                    console.error('[ERROR] 获取当前持仓信息失败:', e);
                     showToast(`获取持仓信息失败: ${e.message}`, 'error');
                     return;
                 }
@@ -2552,7 +2529,6 @@
                     take_profit_price: takeProfitPrice !== undefined && takeProfitPrice !== null ? takeProfitPrice : (currentTakeProfit !== null && currentTakeProfit !== undefined ? currentTakeProfit : null)
                 };
                 
-                console.log(`[DEBUG] 保存止盈止损: position_id=${positionId}`, requestData);
                 
                 const url = `${API_BASE}/positions/${positionId}/stop-loss-take-profit`;
                 const response = await fetch(url, {
@@ -2567,24 +2543,20 @@
                 }
                 
                 const data = await response.json();
-                console.log(`[DEBUG] 保存成功:`, data);
                 
                 if (data.success) {
                     showToast('止盈止损设置成功', 'success');
                     if (closeCallback) closeCallback();
                     // 重新加载持仓数据，确保显示最新数据
-                    console.log('[DEBUG] 保存成功，重新加载持仓数据...');
                     await loadPositions();
-                    console.log('[DEBUG] 持仓数据重新加载完成');
                 } else {
                     showToast(`设置失败: ${data.detail || data.message || '未知错误'}`, 'error');
                 }
             } catch (error) {
-                console.error(`[ERROR] 保存止盈止损失败:`, error);
                 showToast(`设置失败: ${error.message}`, 'error');
             }
         }
-
+        
         // 更新持仓价格和盈亏（不重新加载整个持仓列表）
         async function updatePositionsPrices() {
             

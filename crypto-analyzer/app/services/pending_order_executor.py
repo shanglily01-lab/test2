@@ -48,7 +48,6 @@ class PendingOrderExecutor:
                     autocommit=True  # 自动提交，避免事务问题
                 )
                 # 只在首次创建连接时记录（DEBUG级别）
-                logger.debug("创建数据库连接（现货限价单执行器）")
             except Exception as e:
                 logger.error(f"❌ 创建数据库连接失败: {e}")
                 raise
@@ -73,7 +72,7 @@ class PendingOrderExecutor:
                         write_timeout=10,
                         autocommit=True
                     )
-                    logger.info("✅ 数据库连接已重新建立（现货限价单执行器）")
+                    logger.debug("✅ 数据库连接已重新建立（现货限价单执行器）")
                 except Exception as e2:
                     logger.error(f"❌ 重连数据库失败: {e2}")
                     raise
@@ -136,10 +135,7 @@ class PendingOrderExecutor:
                     pending_orders = cursor.fetchall()
                 
                 if not pending_orders:
-                    logger.debug("📋 当前没有待成交订单需要检查")
                     return
-                
-                logger.debug(f"📋 检查 {len(pending_orders)} 个待成交订单")
                 
                 for order in pending_orders:
                     try:
@@ -159,16 +155,14 @@ class PendingOrderExecutor:
                         
                         # 检查是否达到触发条件
                         should_execute = False
-                        logger.info(f"🔍 检查订单 {order_id}: {symbol} {side} {quantity} @ 触发价 {trigger_price}, 当前价 {current_price}")
                         
                         if side == 'BUY' and current_price <= trigger_price:
                             should_execute = True
-                            logger.info(f"✅ 买入订单触发: {symbol} 当前价格 {current_price} <= 触发价格 {trigger_price}")
+                            logger.info(f"✅ 买入订单触发: {symbol} @ {current_price} <= {trigger_price}")
                         elif side == 'SELL' and current_price >= trigger_price:
                             should_execute = True
-                            logger.info(f"✅ 卖出订单触发: {symbol} 当前价格 {current_price} >= 触发价格 {trigger_price}")
+                            logger.info(f"✅ 卖出订单触发: {symbol} @ {current_price} >= {trigger_price}")
                         else:
-                            logger.debug(f"⏳ 订单未触发: {symbol} {side} 当前价 {current_price} vs 触发价 {trigger_price}")
                         
                         if should_execute:
                             # 执行订单
@@ -183,9 +177,9 @@ class PendingOrderExecutor:
                             )
                             
                             if success:
-                                logger.info(f"✅ 待成交订单 {order_id} 执行成功: {message}")
+                                logger.info(f"✅ 待成交订单执行成功: {symbol} {side} {quantity}")
                             else:
-                                logger.error(f"❌ 待成交订单 {order_id} 执行失败: {message}")
+                                logger.error(f"❌ 待成交订单执行失败: {symbol} {side} - {message}")
                                 
                     except Exception as e:
                         logger.error(f"处理待成交订单 {order.get('order_id', 'unknown')} 时出错: {e}")
@@ -204,7 +198,7 @@ class PendingOrderExecutor:
             interval: 检查间隔（秒），默认5秒
         """
         self.running = True
-        logger.info(f"🔄 待成交订单自动执行服务已启动，检查间隔: {interval}秒")
+        logger.info(f"🔄 待成交订单自动执行服务已启动（间隔: {interval}秒）")
         
         try:
             while self.running:
@@ -242,12 +236,11 @@ class PendingOrderExecutor:
             asyncio.set_event_loop(loop)
         
         self.task = loop.create_task(self.run_loop(interval))
-        logger.info("✅ 待成交订单自动执行服务已启动")
     
     def stop(self):
         """停止后台任务"""
         self.running = False
         if self.task and not self.task.done():
             self.task.cancel()
-            logger.info("⏹️  待成交订单自动执行服务已停止")
+            logger.debug("⏹️  待成交订单自动执行服务已停止")
 

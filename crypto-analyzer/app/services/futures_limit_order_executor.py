@@ -49,7 +49,6 @@ class FuturesLimitOrderExecutor:
                     autocommit=True  # 自动提交，避免事务问题
                 )
                 # 只在首次创建连接时记录（DEBUG级别）
-                logger.debug("创建数据库连接（合约限价单执行器）")
             except Exception as e:
                 logger.error(f"❌ 创建数据库连接失败: {e}")
                 raise
@@ -74,7 +73,7 @@ class FuturesLimitOrderExecutor:
                         write_timeout=10,
                         autocommit=True
                     )
-                    logger.info("✅ 数据库连接已重新建立（合约限价单执行器）")
+                    logger.debug("✅ 数据库连接已重新建立（合约限价单执行器）")
                 except Exception as e2:
                     logger.error(f"❌ 重连数据库失败: {e2}")
                     raise
@@ -139,10 +138,7 @@ class FuturesLimitOrderExecutor:
                     pending_orders = cursor.fetchall()
                 
                 if not pending_orders:
-                    logger.debug("📋 当前没有合约限价单需要检查")
                     return
-                
-                logger.info(f"📋 检查 {len(pending_orders)} 个合约限价单")
                 
                 for order in pending_orders:
                     try:
@@ -167,18 +163,17 @@ class FuturesLimitOrderExecutor:
                         should_execute = False
                         position_side = 'LONG' if side == 'OPEN_LONG' else 'SHORT'
                         
-                        logger.debug(f"🔍 检查限价单 {order_id}: {symbol} {position_side} {quantity} @ 限价 {limit_price}, 当前价 {current_price}")
                         
                         if side == 'OPEN_LONG':
                             # 做多：当前价格 <= 限价时触发
                             if current_price <= limit_price:
                                 should_execute = True
-                                logger.info(f"✅ 做多限价单触发: {symbol} 当前价格 {current_price} <= 限价 {limit_price}")
+                                logger.info(f"✅ 做多限价单触发: {symbol} @ {current_price} <= {limit_price}")
                         elif side == 'OPEN_SHORT':
                             # 做空：当前价格 >= 限价时触发
                             if current_price >= limit_price:
                                 should_execute = True
-                                logger.info(f"✅ 做空限价单触发: {symbol} 当前价格 {current_price} >= 限价 {limit_price}")
+                                logger.info(f"✅ 做空限价单触发: {symbol} @ {current_price} >= {limit_price}")
                         
                         if should_execute:
                             # 执行开仓（使用限价作为成交价）
@@ -239,7 +234,7 @@ class FuturesLimitOrderExecutor:
                                     
                                     connection.commit()
                                     
-                                    logger.info(f"✅ 限价单 {order_id} 执行成功: {symbol} {position_side} {quantity} @ {limit_price}, 持仓ID: {result.get('position_id')}, {result.get('message', '')}")
+                                    logger.info(f"✅ 限价单执行成功: {symbol} {position_side} {quantity} @ {limit_price}")
                                 else:
                                     # 如果开仓失败，恢复冻结的保证金
                                     if frozen_margin > 0:
@@ -252,7 +247,7 @@ class FuturesLimitOrderExecutor:
                                                 (float(frozen_margin), float(frozen_margin), account_id)
                                             )
                                         connection.commit()
-                                    logger.error(f"❌ 限价单 {order_id} 执行失败: {result.get('message', '未知错误')}")
+                                    logger.error(f"❌ 限价单执行失败: {symbol} {position_side} - {result.get('message', '未知错误')}")
                                     
                             except Exception as e:
                                 logger.error(f"执行限价单 {order_id} 时出错: {e}")
@@ -275,7 +270,6 @@ class FuturesLimitOrderExecutor:
                                     pass
                                 continue
                         else:
-                            logger.debug(f"⏳ 限价单未触发: {symbol} {position_side} 当前价 {current_price} vs 限价 {limit_price}")
                             
                     except Exception as e:
                         logger.error(f"处理限价单 {order.get('order_id', 'unknown')} 时出错: {e}")
@@ -298,7 +292,7 @@ class FuturesLimitOrderExecutor:
             interval: 检查间隔（秒），默认5秒
         """
         self.running = True
-        logger.info(f"🔄 合约限价单自动执行服务已启动，检查间隔: {interval}秒")
+        logger.info(f"🔄 合约限价单自动执行服务已启动（间隔: {interval}秒）")
         
         try:
             while self.running:
@@ -336,14 +330,13 @@ class FuturesLimitOrderExecutor:
             asyncio.set_event_loop(loop)
         
         self.task = loop.create_task(self.run_loop(interval))
-        logger.info("✅ 合约限价单自动执行服务已启动")
     
     def stop(self):
         """停止后台任务"""
         self.running = False
         if self.task and not self.task.done():
             self.task.cancel()
-            logger.info("⏹️  合约限价单自动执行服务已停止")
+            logger.debug("⏹️  合约限价单自动执行服务已停止")
         
         # 关闭数据库连接
         if self.connection and self.connection.open:

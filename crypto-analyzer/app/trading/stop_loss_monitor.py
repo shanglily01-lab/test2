@@ -47,7 +47,6 @@ class StopLossMonitor:
             try:
                 self.connection = pymysql.connect(**self.db_config)
                 # 只在首次创建连接时记录（DEBUG级别）
-                logger.debug("创建数据库连接（止损监控）")
             except Exception as e:
                 logger.error(f"❌ 创建数据库连接失败: {e}")
                 raise
@@ -60,7 +59,7 @@ class StopLossMonitor:
                 logger.warning(f"数据库连接已断开，尝试重连: {e}")
                 try:
                     self.connection = pymysql.connect(**self.db_config)
-                    logger.info("✅ 数据库连接已重新建立（止损监控）")
+                    logger.debug("✅ 数据库连接已重新建立（止损监控）")
                 except Exception as e2:
                     logger.error(f"❌ 重连数据库失败: {e2}")
                     raise
@@ -210,7 +209,6 @@ class StopLossMonitor:
         # 检查是否有止损价格
         stop_loss_price = position.get('stop_loss_price')
         if not stop_loss_price or stop_loss_price == 0:
-            logger.debug(f"Position #{position['id']} {position['symbol']}: 未设置止损价格")
             return False
 
         try:
@@ -403,17 +401,9 @@ class StopLossMonitor:
             if position_side == 'LONG':
                 # 多头：止损价应该低于开仓价，如果当前价低于止损价，应该触发
                 price_to_stop_loss = float(current_price - Decimal(str(stop_loss_price)))
-                logger.debug(f"监控持仓 #{position_id} {symbol} {position_side}: "
-                           f"当前价={current_price:.8f}, 开仓价={entry_price}, 止损={stop_loss_price:.8f}, "
-                           f"当前价-止损价={price_to_stop_loss:.8f} "
-                           f"{'✅应触发止损' if price_to_stop_loss <= 0 else '❌未触发'}")
             else:  # SHORT
                 # 空头：止损价应该高于开仓价，如果当前价高于止损价，应该触发
                 price_to_stop_loss = float(current_price - Decimal(str(stop_loss_price)))
-                logger.debug(f"监控持仓 #{position_id} {symbol} {position_side}: "
-                           f"当前价={current_price:.8f}, 开仓价={entry_price}, 止损={stop_loss_price:.8f}, "
-                           f"当前价-止损价={price_to_stop_loss:.8f} "
-                           f"{'✅应触发止损' if price_to_stop_loss >= 0 else '❌未触发'}")
 
         # 更新未实现盈亏
         self.update_unrealized_pnl(position, current_price)
@@ -486,15 +476,11 @@ class StopLossMonitor:
             监控结果统计
         """
         # 使用DEBUG级别，避免频繁打印
-        logger.debug("=" * 60)
-        logger.debug("Starting position monitoring cycle")
-        logger.debug("=" * 60)
 
         # 获取所有持仓
         positions = self.get_open_positions()
 
         if not positions:
-            logger.debug("No open positions to monitor")
             return {
                 'total_positions': 0,
                 'monitoring': 0,
@@ -504,7 +490,6 @@ class StopLossMonitor:
                 'no_price': 0
             }
 
-        logger.debug(f"Found {len(positions)} open positions")
 
         # 监控每个持仓
         results = {
@@ -546,13 +531,6 @@ class StopLossMonitor:
                 logger.warning(f"  ⚠️  强平触发: {results['liquidated']}")
             logger.info("=" * 60)
         else:
-            # 无重要事件时使用DEBUG级别
-            logger.debug("=" * 60)
-            logger.debug(f"监控周期完成:")
-            logger.debug(f"  总持仓: {results['total_positions']}, 监控中: {results['monitoring']}, "
-                        f"止损: {results['stop_loss']}, 止盈: {results['take_profit']}, "
-                        f"强平: {results['liquidated']}, 无价格数据: {results['no_price']}")
-            logger.debug("=" * 60)
 
         return results
 

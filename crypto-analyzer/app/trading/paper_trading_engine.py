@@ -147,7 +147,6 @@ class PaperTradingEngine:
 
                 if result and result['price']:
                     price = Decimal(str(result['price']))
-                    logger.debug(f"{symbol} 从数据库获取价格: {price}")
                     return price
 
                 # 如果 price_data 没有数据，尝试从 kline_data 获取
@@ -162,7 +161,6 @@ class PaperTradingEngine:
 
                 if result and result['close_price']:
                     price = Decimal(str(result['close_price']))
-                    logger.debug(f"{symbol} 从K线获取价格: {price}")
                     return price
 
                 logger.warning(f"找不到 {symbol} 的价格数据")
@@ -921,7 +919,6 @@ class PaperTradingEngine:
                         (account_id,)
                     )
                 orders = cursor.fetchall()
-                logger.debug(f"获取待成交订单: account_id={account_id}, executed={executed}, 数量={len(orders)}")
                 return orders
         except Exception as e:
             logger.error(f"获取待成交订单失败: {e}")
@@ -1038,7 +1035,6 @@ class PaperTradingEngine:
         try:
             with conn.cursor() as cursor:
                 # 1. 获取待成交订单信息（排除已删除的）
-                logger.debug(f"尝试撤销订单: account_id={account_id}, order_id={order_id}")
                 cursor.execute(
                     """SELECT * FROM paper_trading_pending_orders
                     WHERE account_id = %s AND order_id = %s AND executed = FALSE AND status != 'DELETED'""",

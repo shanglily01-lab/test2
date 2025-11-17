@@ -63,3 +63,7 @@ debug_*.py
 *诊断*.md
 *问题*.md
 SQL*.txt
+
+# 文本文件（排除 requirements.txt）
+*.txt
+!requirements.txt

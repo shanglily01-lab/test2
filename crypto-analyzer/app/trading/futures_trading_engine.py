@@ -852,11 +852,6 @@ class FuturesTradingEngine:
 
             positions = cursor.fetchall()
             
-            # 调试：打印从数据库读取的止盈止损数据
-            for pos in positions:
-                if pos.get('stop_loss_price') or pos.get('take_profit_price'):
-                    logger.info(f"[DEBUG] 从数据库读取持仓 {pos.get('symbol')} (ID: {pos.get('id')}): stop_loss_price={pos.get('stop_loss_price')}, take_profit_price={pos.get('take_profit_price')}")
-            
             cursor.close()
         finally:
             connection.close()
