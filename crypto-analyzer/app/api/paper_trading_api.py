@@ -319,11 +319,18 @@ async def get_trades(account_id: Optional[int] = None, limit: int = 100, engine:
     conn = engine._get_connection()
     try:
         with conn.cursor() as cursor:
-            # 从数据库直接读取所有交易历史
+            # 从数据库读取交易历史，关联订单表和持仓表获取交易类型和止盈止损信息
             cursor.execute(
-                """SELECT * FROM paper_trading_trades
-                WHERE account_id = %s
-                ORDER BY trade_time DESC
+                """SELECT 
+                    t.*,
+                    o.order_source,
+                    p.stop_loss_price,
+                    p.take_profit_price
+                FROM paper_trading_trades t
+                LEFT JOIN paper_trading_orders o ON t.order_id = o.order_id
+                LEFT JOIN paper_trading_positions p ON t.symbol = p.symbol AND t.account_id = p.account_id AND p.status = 'open'
+                WHERE t.account_id = %s
+                ORDER BY t.trade_time DESC
                 LIMIT %s""",
                 (account_id or 1, limit)
             )
@@ -343,7 +350,10 @@ async def get_trades(account_id: Optional[int] = None, limit: int = 100, engine:
                     "realized_pnl": float(trade['realized_pnl']) if trade['realized_pnl'] else None,
                     "pnl_pct": float(trade['pnl_pct']) if trade['pnl_pct'] else None,
                     "cost_price": float(trade['cost_price']) if trade['cost_price'] else None,
-                    "trade_time": trade['trade_time'].strftime('%Y-%m-%d %H:%M:%S') if trade['trade_time'] else None
+                    "trade_time": trade['trade_time'].strftime('%Y-%m-%d %H:%M:%S') if trade['trade_time'] else None,
+                    "order_source": trade.get('order_source', 'manual'),
+                    "stop_loss_price": float(trade['stop_loss_price']) if trade.get('stop_loss_price') else None,
+                    "take_profit_price": float(trade['take_profit_price']) if trade.get('take_profit_price') else None
                 })
 
             return {
