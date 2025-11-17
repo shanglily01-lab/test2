@@ -45,6 +45,7 @@ data/*.xlsx
 *.db
 *.sqlite
 *.sqlite3
+*.sql
 
 # 系统文件
 .DS_Store
