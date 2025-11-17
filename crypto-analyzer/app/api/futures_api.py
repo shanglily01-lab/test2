@@ -993,6 +993,7 @@ async def get_trades(account_id: int = 2, limit: int = 50):
             t.id,
             t.trade_id,
             t.position_id,
+            t.order_id,
             t.symbol,
             t.side,
             t.price,
@@ -1005,8 +1006,13 @@ async def get_trades(account_id: int = 2, limit: int = 50):
             t.pnl_pct,
             t.roi,
             t.entry_price,
-            t.trade_time
+            t.trade_time,
+            o.order_source,
+            p.stop_loss_price,
+            p.take_profit_price
         FROM futures_trades t
+        LEFT JOIN futures_orders o ON t.order_id = o.order_id
+        LEFT JOIN futures_positions p ON t.position_id = p.id
         WHERE t.account_id = %s
         ORDER BY t.trade_time DESC
         LIMIT %s
