@@ -4,6 +4,7 @@
 """
 
 import uuid
+import time
 from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
@@ -19,11 +20,20 @@ class FuturesTradingEngine:
         self.db_config = db_config
         self.connection = None
         self._is_first_connection = True  # 标记是否是首次连接
+        self._connection_created_at = None  # 连接创建时间（Unix时间戳）
+        self._connection_max_age = 300  # 连接最大存活时间（秒），5分钟
         self._connect_db()
 
     def _connect_db(self, is_reconnect=False):
         """连接数据库"""
         try:
+            # 关闭旧连接
+            if self.connection and self.connection.open:
+                try:
+                    self.connection.close()
+                except:
+                    pass
+            
             self.connection = pymysql.connect(
                 host=self.db_config.get('host', 'localhost'),
                 port=self.db_config.get('port', 3306),
@@ -34,6 +44,8 @@ class FuturesTradingEngine:
                 cursorclass=pymysql.cursors.DictCursor,
                 autocommit=True  # 启用自动提交，确保每次操作立即生效
             )
+            self._connection_created_at = time.time()  # 记录连接创建时间
+            
             if self._is_first_connection:
                 logger.info("合约交易引擎数据库连接成功")
                 self._is_first_connection = False
@@ -44,9 +56,25 @@ class FuturesTradingEngine:
             logger.error(f"数据库连接失败: {e}")
             raise
 
+    def _should_refresh_connection(self):
+        """检查是否需要刷新连接（基于连接年龄）"""
+        if self._connection_created_at is None:
+            return True
+        
+        current_time = time.time()
+        connection_age = current_time - self._connection_created_at
+        
+        # 如果连接年龄超过最大存活时间，需要刷新
+        return connection_age > self._connection_max_age
+
     def _get_cursor(self):
         """获取数据库游标"""
         try:
+            # 检查连接年龄，如果超过最大存活时间则主动刷新
+            if self._should_refresh_connection():
+                logger.debug("连接已过期，主动刷新数据库连接")
+                self._connect_db(is_reconnect=True)
+            
             if not self.connection or not self.connection.open:
                 # 静默检查连接，如果断开则重连
                 try:
@@ -55,6 +83,15 @@ class FuturesTradingEngine:
                 except:
                     # 如果ping失败，重新连接
                     self._connect_db(is_reconnect=True)
+            else:
+                # 即使连接看起来正常，也尝试ping一下确保连接有效
+                try:
+                    self.connection.ping(reconnect=False)
+                except:
+                    # ping失败，重新连接
+                    logger.debug("连接ping失败，重新建立连接")
+                    self._connect_db(is_reconnect=True)
+            
             return self.connection.cursor()
         except Exception as e:
             logger.error(f"获取数据库游标失败: {e}")

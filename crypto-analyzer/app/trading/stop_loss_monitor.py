@@ -37,15 +37,45 @@ class StopLossMonitor:
         """
         self.db_config = db_config
         self.connection = pymysql.connect(**db_config)
+        self._connection_created_at = time.time()  # 连接创建时间（Unix时间戳）
+        self._connection_max_age = 300  # 连接最大存活时间（秒），5分钟
         self.engine = FuturesTradingEngine(db_config)
 
         logger.info("StopLossMonitor initialized")
 
+    def _should_refresh_connection(self):
+        """检查是否需要刷新连接（基于连接年龄）"""
+        if self._connection_created_at is None:
+            return True
+        
+        current_time = time.time()
+        connection_age = current_time - self._connection_created_at
+        
+        # 如果连接年龄超过最大存活时间，需要刷新
+        return connection_age > self._connection_max_age
+
     def _ensure_connection(self):
         """确保数据库连接有效（静默检查，不打印日志）"""
+        # 检查连接年龄，如果超过最大存活时间则主动刷新
+        if self._should_refresh_connection():
+            logger.debug("连接已过期，主动刷新数据库连接（止损监控）")
+            if self.connection and self.connection.open:
+                try:
+                    self.connection.close()
+                except:
+                    pass
+            try:
+                self.connection = pymysql.connect(**self.db_config)
+                self._connection_created_at = time.time()
+            except Exception as e:
+                logger.error(f"❌ 创建数据库连接失败: {e}")
+                raise
+            return
+        
         if self.connection is None or not self.connection.open:
             try:
                 self.connection = pymysql.connect(**self.db_config)
+                self._connection_created_at = time.time()
                 # 只在首次创建连接时记录（DEBUG级别）
             except Exception as e:
                 logger.error(f"❌ 创建数据库连接失败: {e}")
@@ -53,12 +83,15 @@ class StopLossMonitor:
         else:
             # 静默检查连接是否还活着（不打印日志）
             try:
-                self.connection.ping(reconnect=True)
+                self.connection.ping(reconnect=False)
             except Exception as e:
                 # 只有在连接真正断开需要重连时才记录
                 logger.warning(f"数据库连接已断开，尝试重连: {e}")
                 try:
+                    if self.connection and self.connection.open:
+                        self.connection.close()
                     self.connection = pymysql.connect(**self.db_config)
+                    self._connection_created_at = time.time()
                     logger.debug("✅ 数据库连接已重新建立（止损监控）")
                 except Exception as e2:
                     logger.error(f"❌ 重连数据库失败: {e2}")
