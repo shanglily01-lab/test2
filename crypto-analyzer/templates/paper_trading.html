@@ -1359,6 +1359,7 @@
                     
                     container.innerHTML = data.trades.map(trade => {
                         const sideClass = trade.side === 'BUY' ? 'badge-success' : 'badge-danger';
+                        const sideText = trade.side === 'BUY' ? '买入' : (trade.side === 'SELL' ? '卖出' : '未知');
                         const pnlHtml = trade.realized_pnl !== null && trade.realized_pnl !== undefined
                             ? `<div class="text-sm ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}" style="margin-top: 2px;">盈亏: ${trade.realized_pnl >= 0 ? '+' : ''}${(trade.realized_pnl || 0).toFixed(2)} USDT${trade.pnl_pct !== null && trade.pnl_pct !== undefined ? ` (${trade.pnl_pct >= 0 ? '+' : ''}${(trade.pnl_pct || 0).toFixed(2)}%)` : ''}</div>`
                             : '';
@@ -1367,14 +1368,14 @@
                             <div style="padding: 8px; border-bottom: 1px solid var(--border-default);">
                                 <div class="d-flex justify-between align-center">
                                     <div>
-                                        <span class="badge ${sideClass}">${trade.side || 'UNKNOWN'}</span>
+                                        <span class="badge ${sideClass}">${sideText}</span>
                                         <strong style="margin-left: 8px;">${trade.symbol || '-'}</strong>
                                         ${formatOrderSource(trade.order_source)}
                                     </div>
                                     <span class="text-sm text-secondary">${trade.trade_time || '-'}</span>
                                 </div>
                                 <div class="text-sm text-secondary" style="margin-top: 3px;">
-                                    ${trade.quantity || 0} @ ${formatPrice(trade.price)} = ${totalAmount} USDT
+                                    数量: ${trade.quantity || 0} | 价格: ${formatPrice(trade.price)} | 总额: ${totalAmount} USDT
                                 </div>
                                 <div class="text-sm text-secondary" style="margin-top: 3px;">
                                     ${formatStopLossTakeProfit(trade.stop_loss_price, trade.take_profit_price)}
@@ -1483,10 +1484,10 @@
                     return;
                 } catch (error) {
                     showResult('创建限价单失败: ' + error.message, 'danger');
-                    return;
-                }
+                        return;
+                    }
             }
-            
+
             // 价格满足条件或未设置触发价格，立即执行交易（市价单）
             try {
                 const response = await fetch('/api/paper-trading/order', {
@@ -1548,7 +1549,7 @@
                     symbol: symbol
                 };
                 
-                if (type === 'stop_loss') {
+                        if (type === 'stop_loss') {
                     requestData.stop_loss_price = price;
                     // 保留原有的止盈
                     if (currentTakeProfit !== null && currentTakeProfit !== undefined) {
