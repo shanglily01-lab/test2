@@ -547,13 +547,14 @@ class FuturesTradingEngine:
             ))
 
             # 9. 更新账户余额
-            # 减少当前余额，增加冻结余额（保证金）
-            new_balance = current_balance - margin_required - fee
+            # 减少当前余额，增加冻结余额（保证金和手续费）
+            total_frozen = margin_required + fee
+            new_balance = current_balance - total_frozen
             cursor.execute(
                 """UPDATE paper_trading_accounts
                 SET current_balance = %s, frozen_balance = frozen_balance + %s
                 WHERE id = %s""",
-                (float(new_balance), float(margin_required), account_id)
+                (float(new_balance), float(total_frozen), account_id)
             )
 
             self.connection.commit()
