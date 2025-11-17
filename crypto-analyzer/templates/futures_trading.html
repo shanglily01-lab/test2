@@ -1386,10 +1386,6 @@
                     }
                     
                     // 使用卡片样式渲染持仓
-                        symbol: p.symbol,
-                        stop_loss: p.stop_loss_price,
-                        take_profit: p.take_profit_price
-                    })));
                     positionsBody.innerHTML = positionsWithPrices.map(pos => {
                         const priceColor = pos.current_price > 0 && pos.entry_price > 0 
                             ? (pos.current_price > pos.entry_price ? 'var(--success-green)' : 
