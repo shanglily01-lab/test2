@@ -557,6 +557,12 @@
                         tooltip: {
                             mode: 'index',
                             intersect: false,
+                            backgroundColor: 'rgba(28, 33, 40, 0.95)',
+                            titleColor: 'var(--text-primary)',
+                            bodyColor: 'var(--text-primary)',
+                            borderColor: 'var(--border-default)',
+                            borderWidth: 1,
+                            padding: 12,
                             callbacks: {
                                 label: function(context) {
                                     return context.dataset.label + ': ' + formatLargeNumber(context.parsed.y);
@@ -567,7 +573,10 @@
                     scales: {
                         x: {
                             ticks: {
-                                color: 'var(--text-secondary)'
+                                color: 'var(--text-primary)',
+                                font: {
+                                    size: 12
+                                }
                             },
                             grid: {
                                 color: 'var(--border-default)'
@@ -575,7 +584,10 @@
                         },
                         y: {
                             ticks: {
-                                color: 'var(--text-secondary)',
+                                color: 'var(--text-primary)',
+                                font: {
+                                    size: 12
+                                },
                                 callback: function(value) {
                                     return formatLargeNumber(value);
                                 }

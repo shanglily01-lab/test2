@@ -408,7 +408,7 @@ class PaperTradingEngine:
             WHERE id = %s""",
             (total_cost, account_id)
         )
-
+        
         # 2. 更新或创建持仓
         cursor.execute(
             "SELECT * FROM paper_trading_positions WHERE account_id = %s AND symbol = %s AND status = 'open'",
@@ -423,6 +423,10 @@ class PaperTradingEngine:
             new_quantity = old_quantity + quantity
             new_cost = old_cost + total_cost
             new_avg_price = new_cost / new_quantity
+            # 计算市值和未实现盈亏（买入时当前价格等于买入价格，未实现盈亏为0）
+            market_value = price * new_quantity
+            unrealized_pnl = (price - new_avg_price) * new_quantity
+            unrealized_pnl_pct = ((price - new_avg_price) / new_avg_price * 100) if new_avg_price > 0 else 0
 
             cursor.execute(
                 """UPDATE paper_trading_positions
@@ -431,18 +435,29 @@ class PaperTradingEngine:
                     avg_entry_price = %s,
                     total_cost = %s,
                     current_price = %s,
+                    market_value = %s,
+                    unrealized_pnl = %s,
+                    unrealized_pnl_pct = %s,
                     last_update_time = %s
                 WHERE id = %s""",
-                (new_quantity, quantity, new_avg_price, new_cost, price, datetime.now(), position['id'])
+                (new_quantity, quantity, new_avg_price, new_cost, price, 
+                 float(market_value), float(unrealized_pnl), float(unrealized_pnl_pct), 
+                 datetime.now(), position['id'])
             )
         else:
-            # 新建持仓
+            # 新建持仓（买入时当前价格等于买入价格，未实现盈亏为0）
+            market_value = price * quantity
+            unrealized_pnl = Decimal('0')
+            unrealized_pnl_pct = Decimal('0')
+            
             cursor.execute(
                 """INSERT INTO paper_trading_positions
                 (account_id, symbol, quantity, available_quantity, avg_entry_price,
-                 total_cost, current_price, first_buy_time, last_update_time, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                 total_cost, current_price, market_value, unrealized_pnl, unrealized_pnl_pct,
+                 first_buy_time, last_update_time, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (account_id, symbol, quantity, quantity, price, total_cost, price,
+                 float(market_value), float(unrealized_pnl), float(unrealized_pnl_pct),
                  datetime.now(), datetime.now(), 'open')
             )
 
@@ -456,7 +471,41 @@ class PaperTradingEngine:
              price * quantity, fee, price, datetime.now())
         )
 
-        # 4. 记录资金变动
+        # 4. 更新账户未实现盈亏、总盈亏和总盈亏百分比
+        cursor.execute(
+            """UPDATE paper_trading_accounts
+            SET unrealized_pnl = COALESCE((
+                SELECT SUM(p.unrealized_pnl) 
+                FROM paper_trading_positions p 
+                WHERE p.account_id = %s AND p.status = 'open'
+            ), 0),
+                total_profit_loss = realized_pnl + COALESCE((
+                    SELECT SUM(p.unrealized_pnl) 
+                    FROM paper_trading_positions p 
+                    WHERE p.account_id = %s AND p.status = 'open'
+                ), 0),
+                total_profit_loss_pct = ((realized_pnl + COALESCE((
+                    SELECT SUM(p.unrealized_pnl) 
+                    FROM paper_trading_positions p 
+                    WHERE p.account_id = %s AND p.status = 'open'
+                ), 0)) / GREATEST(initial_balance, 1)) * 100
+            WHERE id = %s""",
+            (account_id, account_id, account_id, account_id)
+        )
+        
+        # 5. 更新总权益（余额 + 持仓市值）
+        cursor.execute(
+            """UPDATE paper_trading_accounts a
+            SET a.total_equity = a.current_balance + COALESCE((
+                SELECT SUM(p.market_value) 
+                FROM paper_trading_positions p 
+                WHERE p.account_id = a.id AND p.status = 'open'
+            ), 0)
+            WHERE a.id = %s""",
+            (account_id,)
+        )
+
+        # 6. 记录资金变动
         self._record_balance_change(cursor, account_id, 'trade', -total_cost, order_id,
                                     f"买入 {quantity} {symbol}")
 
@@ -487,28 +536,29 @@ class PaperTradingEngine:
         realized_pnl = sell_amount - cost_amount - fee
         pnl_pct = ((price - avg_cost) / avg_cost * 100)
 
-        # 3. 增加账户余额
+        # 3. 增加账户余额并更新统计
         cursor.execute(
             """UPDATE paper_trading_accounts
             SET current_balance = current_balance + %s,
                 realized_pnl = realized_pnl + %s,
-                total_profit_loss = total_profit_loss + %s,
+                total_profit_loss = realized_pnl + unrealized_pnl,
                 total_trades = total_trades + 1,
                 winning_trades = winning_trades + IF(%s > 0, 1, 0),
                 losing_trades = losing_trades + IF(%s < 0, 1, 0)
             WHERE id = %s""",
-            (sell_amount - fee, realized_pnl, realized_pnl, realized_pnl, realized_pnl, account_id)
+            (sell_amount - fee, realized_pnl, realized_pnl, realized_pnl, account_id)
         )
 
-        # 4. 更新胜率
+        # 4. 更新总盈亏百分比和胜率
         cursor.execute(
             """UPDATE paper_trading_accounts
-            SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+            SET total_profit_loss_pct = ((total_profit_loss / GREATEST(initial_balance, 1)) * 100),
+                win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
             WHERE id = %s""",
             (account_id,)
         )
 
-        # 5. 更新持仓
+        # 6. 更新持仓
         new_quantity = Decimal(str(position['quantity'])) - quantity
 
         if new_quantity <= 0:
@@ -518,20 +568,31 @@ class PaperTradingEngine:
                 (position['id'],)
             )
         else:
-            # 部分平仓
+            # 部分平仓，需要更新剩余持仓的市值和未实现盈亏
             new_total_cost = Decimal(str(position['total_cost'])) - cost_amount
+            new_avg_price = new_total_cost / new_quantity
+            market_value = price * new_quantity
+            unrealized_pnl = (price - new_avg_price) * new_quantity
+            unrealized_pnl_pct = ((price - new_avg_price) / new_avg_price * 100) if new_avg_price > 0 else 0
+            
             cursor.execute(
                 """UPDATE paper_trading_positions
                 SET quantity = %s,
                     available_quantity = available_quantity - %s,
+                    avg_entry_price = %s,
                     total_cost = %s,
                     current_price = %s,
+                    market_value = %s,
+                    unrealized_pnl = %s,
+                    unrealized_pnl_pct = %s,
                     last_update_time = %s
                 WHERE id = %s""",
-                (new_quantity, quantity, new_total_cost, price, datetime.now(), position['id'])
+                (new_quantity, quantity, new_avg_price, new_total_cost, price,
+                 float(market_value), float(unrealized_pnl), float(unrealized_pnl_pct),
+                 datetime.now(), position['id'])
             )
 
-        # 6. 创建交易记录
+        # 7. 创建交易记录
         cursor.execute(
             """INSERT INTO paper_trading_trades
             (account_id, order_id, trade_id, symbol, side, price, quantity,
@@ -541,7 +602,41 @@ class PaperTradingEngine:
              sell_amount, fee, avg_cost, realized_pnl, pnl_pct, datetime.now())
         )
 
-        # 7. 记录资金变动
+        # 7.1 更新账户未实现盈亏、总盈亏和总盈亏百分比（卖出后可能还有剩余持仓）
+        cursor.execute(
+            """UPDATE paper_trading_accounts
+            SET unrealized_pnl = COALESCE((
+                SELECT SUM(p.unrealized_pnl) 
+                FROM paper_trading_positions p 
+                WHERE p.account_id = %s AND p.status = 'open'
+            ), 0),
+                total_profit_loss = realized_pnl + COALESCE((
+                    SELECT SUM(p.unrealized_pnl) 
+                    FROM paper_trading_positions p 
+                    WHERE p.account_id = %s AND p.status = 'open'
+                ), 0),
+                total_profit_loss_pct = ((realized_pnl + COALESCE((
+                    SELECT SUM(p.unrealized_pnl) 
+                    FROM paper_trading_positions p 
+                    WHERE p.account_id = %s AND p.status = 'open'
+                ), 0)) / GREATEST(initial_balance, 1)) * 100
+            WHERE id = %s""",
+            (account_id, account_id, account_id, account_id)
+        )
+        
+        # 7.2 更新总权益（余额 + 持仓市值）
+        cursor.execute(
+            """UPDATE paper_trading_accounts a
+            SET a.total_equity = a.current_balance + COALESCE((
+                SELECT SUM(p.market_value) 
+                FROM paper_trading_positions p 
+                WHERE p.account_id = a.id AND p.status = 'open'
+            ), 0)
+            WHERE a.id = %s""",
+            (account_id,)
+        )
+
+        # 8. 记录资金变动
         self._record_balance_change(cursor, account_id, 'trade', sell_amount - fee, order_id,
                                     f"卖出 {quantity} {symbol}，盈亏: {realized_pnl:.2f} USDT")
 
@@ -663,32 +758,27 @@ class PaperTradingEngine:
 
                     total_unrealized_pnl += unrealized_pnl
 
-                # 更新账户总盈亏
+                # 更新账户未实现盈亏、总盈亏和总盈亏百分比
                 cursor.execute(
                     """UPDATE paper_trading_accounts
-                    SET unrealized_pnl = %s
+                    SET unrealized_pnl = %s,
+                        total_profit_loss = realized_pnl + %s,
+                        total_profit_loss_pct = ((realized_pnl + %s) / GREATEST(initial_balance, 1)) * 100
                     WHERE id = %s""",
-                    (float(total_unrealized_pnl), account_id)
+                    (float(total_unrealized_pnl), float(total_unrealized_pnl), float(total_unrealized_pnl), account_id)
                 )
 
-                # 计算总权益
+                # 计算总权益（余额 + 持仓市值）
                 cursor.execute(
-                    """SELECT
-                        current_balance,
-                        COALESCE(SUM(market_value), 0) as total_position_value
-                    FROM paper_trading_accounts a
-                    LEFT JOIN paper_trading_positions p ON a.id = p.account_id AND p.status = 'open'
-                    WHERE a.id = %s
-                    GROUP BY a.id, a.current_balance""",
+                    """UPDATE paper_trading_accounts a
+                    SET a.total_equity = a.current_balance + COALESCE((
+                        SELECT SUM(p.market_value) 
+                        FROM paper_trading_positions p 
+                        WHERE p.account_id = a.id AND p.status = 'open'
+                    ), 0)
+                    WHERE a.id = %s""",
                     (account_id,)
                 )
-                result = cursor.fetchone()
-                if result:
-                    total_equity = Decimal(str(result['current_balance'])) + Decimal(str(result['total_position_value'] or 0))
-                    cursor.execute(
-                        "UPDATE paper_trading_accounts SET total_equity = %s WHERE id = %s",
-                        (float(total_equity), account_id)
-                    )
 
                 connection.commit()
 
