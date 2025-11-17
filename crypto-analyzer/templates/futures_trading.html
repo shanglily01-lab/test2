@@ -1664,7 +1664,10 @@
 
                     // 格式化平仓原因
                     function formatCloseReason(orderSource) {
-                        if (!orderSource) return '<span class="text-secondary">手动</span>';
+                        // 如果 order_source 为空或未定义，默认为手动
+                        if (!orderSource || orderSource === null || orderSource === undefined || orderSource === '') {
+                            return '<span class="badge badge-info">手动</span>';
+                        }
                         const reasonMap = {
                             'manual': '<span class="badge badge-info">手动</span>',
                             'stop_loss': '<span class="badge badge-danger">止损</span>',
@@ -1673,7 +1676,9 @@
                             'signal': '<span class="badge badge-secondary">信号</span>',
                             'auto': '<span class="badge badge-secondary">自动</span>'
                         };
-                        return reasonMap[orderSource] || `<span class="text-secondary">${orderSource}</span>`;
+                        // 转换为小写进行比较，确保匹配
+                        const sourceLower = String(orderSource).toLowerCase().trim();
+                        return reasonMap[sourceLower] || `<span class="badge badge-info">${orderSource}</span>`;
                     }
                     
                     // 格式化止盈止损信息

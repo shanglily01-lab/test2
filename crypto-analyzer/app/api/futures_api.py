@@ -1027,7 +1027,7 @@ async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_s
             t.roi,
             t.entry_price,
             t.trade_time,
-            o.order_source,
+            COALESCE(o.order_source, 'manual') as order_source,
             p.stop_loss_price,
             p.take_profit_price
         FROM futures_trades t
