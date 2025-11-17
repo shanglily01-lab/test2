@@ -1278,21 +1278,6 @@
             try {
                 const response = await fetch(`${API_BASE}/positions?account_id=2&status=open`);
                 const data = await response.json();
-                
-                // 调试：打印原始数据
-                if (data.success && data.data) {
-                    data.data.forEach(pos => {
-                            id: pos.id,
-                            position_id: pos.position_id,
-                            symbol: pos.symbol,
-                            stop_loss_price: pos.stop_loss_price,
-                            stop_loss_price_type: typeof pos.stop_loss_price,
-                            take_profit_price: pos.take_profit_price,
-                            take_profit_price_type: typeof pos.take_profit_price,
-                            raw_data: pos
-                        });
-                    });
-                }
 
                 const positionsBody = document.getElementById('positionsBody');
                 const positionsTable = document.getElementById('positionsTable');

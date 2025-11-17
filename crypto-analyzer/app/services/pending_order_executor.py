@@ -163,6 +163,7 @@ class PendingOrderExecutor:
                             should_execute = True
                             logger.info(f"✅ 卖出订单触发: {symbol} @ {current_price} >= {trigger_price}")
                         else:
+                            pass
                         
                         if should_execute:
                             # 执行订单

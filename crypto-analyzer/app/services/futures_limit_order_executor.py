@@ -270,6 +270,7 @@ class FuturesLimitOrderExecutor:
                                     pass
                                 continue
                         else:
+                            pass
                             
                     except Exception as e:
                         logger.error(f"处理限价单 {order.get('order_id', 'unknown')} 时出错: {e}")

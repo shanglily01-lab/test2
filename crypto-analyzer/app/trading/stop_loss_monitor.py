@@ -564,6 +564,7 @@ class StopLossMonitor:
                 logger.warning(f"  ⚠️  强平触发: {results['liquidated']}")
             logger.info("=" * 60)
         else:
+            pass
 
         return results
 
