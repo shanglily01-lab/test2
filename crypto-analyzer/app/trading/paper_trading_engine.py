@@ -819,8 +819,8 @@ class PaperTradingEngine:
             账户摘要信息
         """
         try:
-        # 更新持仓市值
-        self.update_positions_value(account_id)
+            # 更新持仓市值
+            self.update_positions_value(account_id)
         except Exception as e:
             logger.error(f"更新持仓市值失败: {e}")
             import traceback
