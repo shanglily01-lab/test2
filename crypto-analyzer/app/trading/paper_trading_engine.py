@@ -944,7 +944,9 @@ class PaperTradingEngine:
         side: str,
         quantity: Decimal,
         trigger_price: Decimal,
-        order_source: str = 'auto'
+        order_source: str = 'auto',
+        stop_loss_price: Optional[Decimal] = None,
+        take_profit_price: Optional[Decimal] = None
     ) -> Tuple[bool, str]:
         """
         创建待成交订单
@@ -1013,10 +1015,12 @@ class PaperTradingEngine:
                 cursor.execute(
                     """INSERT INTO paper_trading_pending_orders
                     (account_id, order_id, symbol, side, quantity, trigger_price,
-                     frozen_amount, frozen_quantity, status, executed, order_source, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                     frozen_amount, frozen_quantity, status, executed, order_source, 
+                     stop_loss_price, take_profit_price, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (account_id, order_id, symbol, side, quantity, trigger_price,
-                     frozen_amount, frozen_quantity, 'PENDING', False, order_source, datetime.now())
+                     frozen_amount, frozen_quantity, 'PENDING', False, order_source,
+                     stop_loss_price, take_profit_price, datetime.now())
                 )
 
                 conn.commit()

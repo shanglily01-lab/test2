@@ -508,6 +508,87 @@ async def get_orders(account_id: int = 2, status: str = 'PENDING'):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class UpdateOrderStopLossTakeProfitRequest(BaseModel):
+    """更新订单止盈止损请求"""
+    order_id: str
+    stop_loss_price: Optional[float] = None
+    take_profit_price: Optional[float] = None
+
+
+@router.put('/orders/stop-loss-take-profit')
+async def update_order_stop_loss_take_profit(
+    request: UpdateOrderStopLossTakeProfitRequest = Body(...),
+    account_id: int = 2
+):
+    """
+    更新未成交订单的止盈止损价格
+    
+    - **order_id**: 订单ID
+    - **stop_loss_price**: 止损价格（可选）
+    - **take_profit_price**: 止盈价格（可选）
+    - **account_id**: 账户ID（默认2）
+    """
+    try:
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        # 检查订单是否存在且未成交
+        cursor.execute(
+            """SELECT order_id, status FROM futures_orders 
+            WHERE order_id = %s AND account_id = %s 
+            AND status IN ('PENDING', 'PARTIALLY_FILLED')""",
+            (request.order_id, account_id)
+        )
+        order = cursor.fetchone()
+        
+        if not order:
+            cursor.close()
+            connection.close()
+            raise HTTPException(status_code=404, detail="订单不存在或已成交")
+        
+        # 更新止盈止损价格
+        update_fields = []
+        params = []
+        
+        if request.stop_loss_price is not None:
+            update_fields.append("stop_loss_price = %s")
+            params.append(Decimal(str(request.stop_loss_price)) if request.stop_loss_price > 0 else None)
+        
+        if request.take_profit_price is not None:
+            update_fields.append("take_profit_price = %s")
+            params.append(Decimal(str(request.take_profit_price)) if request.take_profit_price > 0 else None)
+        
+        if not update_fields:
+            cursor.close()
+            connection.close()
+            raise HTTPException(status_code=400, detail="至少需要提供一个价格参数")
+        
+        params.extend([request.order_id, account_id])
+        cursor.execute(
+            f"""UPDATE futures_orders 
+            SET {', '.join(update_fields)}, updated_at = NOW()
+            WHERE order_id = %s AND account_id = %s""",
+            params
+        )
+        
+        connection.commit()
+        cursor.close()
+        connection.close()
+        
+        return {
+            'success': True,
+            'message': '止盈止损价格更新成功'
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新订单止盈止损失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete('/orders/{order_id}')
 async def cancel_order(order_id: str, account_id: int = 2):
     """

@@ -605,6 +605,8 @@ class CreatePendingOrderRequest(BaseModel):
     quantity: float
     trigger_price: float
     order_source: str = "auto"
+    stop_loss_price: Optional[float] = None
+    take_profit_price: Optional[float] = None
 
 
 @router.post("/pending-order")
@@ -627,7 +629,9 @@ async def create_pending_order(
             side=request.side.upper(),
             quantity=Decimal(str(request.quantity)),
             trigger_price=Decimal(str(request.trigger_price)),
-            order_source=request.order_source
+            order_source=request.order_source,
+            stop_loss_price=Decimal(str(request.stop_loss_price)) if request.stop_loss_price else None,
+            take_profit_price=Decimal(str(request.take_profit_price)) if request.take_profit_price else None
         )
         
         if success:
@@ -695,6 +699,80 @@ async def get_pending_orders(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class UpdatePendingOrderStopLossTakeProfitRequest(BaseModel):
+    """更新待成交订单止盈止损请求"""
+    order_id: str
+    stop_loss_price: Optional[float] = None
+    take_profit_price: Optional[float] = None
+
+
+@router.put("/pending-order/stop-loss-take-profit")
+async def update_pending_order_stop_loss_take_profit(
+    request: UpdatePendingOrderStopLossTakeProfitRequest = Body(...),
+    account_id: Optional[int] = None,
+    engine: PaperTradingEngine = Depends(get_engine)
+):
+    """
+    更新待成交订单的止盈止损价格
+
+    Args:
+        request: 更新请求
+        account_id: 账户ID
+
+    Returns:
+        更新结果
+    """
+    try:
+        conn = engine._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                # 检查订单是否存在
+                cursor.execute(
+                    """SELECT order_id FROM paper_trading_pending_orders 
+                    WHERE order_id = %s AND account_id = %s AND executed = FALSE AND status != 'DELETED'""",
+                    (request.order_id, account_id or 1)
+                )
+                if not cursor.fetchone():
+                    raise HTTPException(status_code=404, detail="待成交订单不存在或已执行")
+
+                # 更新止盈止损价格
+                update_fields = []
+                params = []
+                
+                if request.stop_loss_price is not None:
+                    update_fields.append("stop_loss_price = %s")
+                    params.append(Decimal(str(request.stop_loss_price)) if request.stop_loss_price > 0 else None)
+                
+                if request.take_profit_price is not None:
+                    update_fields.append("take_profit_price = %s")
+                    params.append(Decimal(str(request.take_profit_price)) if request.take_profit_price > 0 else None)
+                
+                if not update_fields:
+                    raise HTTPException(status_code=400, detail="至少需要提供一个价格参数")
+
+                params.extend([request.order_id, account_id or 1])
+                cursor.execute(
+                    f"""UPDATE paper_trading_pending_orders 
+                    SET {', '.join(update_fields)}, updated_at = NOW()
+                    WHERE order_id = %s AND account_id = %s""",
+                    params
+                )
+                conn.commit()
+                return {
+                    "success": True,
+                    "message": "止盈止损价格更新成功"
+                }
+        finally:
+            conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新待成交订单止盈止损失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"更新止盈止损失败: {str(e)}")
 
 
 @router.delete("/pending-order")

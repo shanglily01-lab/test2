@@ -1553,10 +1553,36 @@
                                     </td>
                                     <td>${formatLargeNumber(order.margin || 0)}</td>
                                     <td class="font-mono text-sm">
-                                        ${order.stop_loss_price ? '<span style="color: var(--danger-red);">$' + formatPrice(order.stop_loss_price) + '</span>' : '--'}
+                                        ${order.status === 'PENDING' || order.status === 'PARTIALLY_FILLED' ? `
+                                            <div style="display: flex; align-items: center; gap: 4px;">
+                                                <input type="number" 
+                                                       id="order_stop_loss_${order.order_id}" 
+                                                       value="${order.stop_loss_price || ''}" 
+                                                       placeholder="未设置"
+                                                       step="0.00000001"
+                                                       style="width: 100px; padding: 4px 6px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 11px;"
+                                                       onchange="updateOrderStopLossTakeProfit('${order.order_id}', 'stop_loss', this.value)">
+                                                <button class="btn btn-xs btn-ghost" onclick="clearOrderStopLoss('${order.order_id}')" title="清除止损" style="padding: 2px 6px; font-size: 10px;">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </div>
+                                        ` : (order.stop_loss_price ? '<span style="color: var(--danger-red);">$' + formatPrice(order.stop_loss_price) + '</span>' : '--')}
                                     </td>
                                     <td class="font-mono text-sm">
-                                        ${order.take_profit_price ? '<span style="color: var(--success-green);">$' + formatPrice(order.take_profit_price) + '</span>' : '--'}
+                                        ${order.status === 'PENDING' || order.status === 'PARTIALLY_FILLED' ? `
+                                            <div style="display: flex; align-items: center; gap: 4px;">
+                                                <input type="number" 
+                                                       id="order_take_profit_${order.order_id}" 
+                                                       value="${order.take_profit_price || ''}" 
+                                                       placeholder="未设置"
+                                                       step="0.00000001"
+                                                       style="width: 100px; padding: 4px 6px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 11px;"
+                                                       onchange="updateOrderStopLossTakeProfit('${order.order_id}', 'take_profit', this.value)">
+                                                <button class="btn btn-xs btn-ghost" onclick="clearOrderTakeProfit('${order.order_id}')" title="清除止盈" style="padding: 2px 6px; font-size: 10px;">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </div>
+                                        ` : (order.take_profit_price ? '<span style="color: var(--success-green);">$' + formatPrice(order.take_profit_price) + '</span>' : '--')}
                                     </td>
                                     <td><span class="badge ${statusClass}">${statusText}</span></td>
                                     <td class="text-sm text-secondary">${order.created_at ? new Date(order.created_at).toLocaleString('zh-CN') : '--'}</td>
@@ -1603,6 +1629,134 @@
         }
 
         // 撤销订单
+        // 更新订单止盈止损
+        async function updateOrderStopLossTakeProfit(orderId, type, price) {
+            const priceValue = price && price.trim() !== '' ? parseFloat(price) : null;
+            
+            const requestData = {
+                order_id: orderId
+            };
+            
+            // 获取当前订单的止盈止损值
+            const stopLossInput = document.getElementById(`order_stop_loss_${orderId}`);
+            const takeProfitInput = document.getElementById(`order_take_profit_${orderId}`);
+            
+            if (type === 'stop_loss') {
+                requestData.stop_loss_price = priceValue;
+                // 保留原有的止盈
+                if (takeProfitInput && takeProfitInput.value) {
+                    requestData.take_profit_price = parseFloat(takeProfitInput.value);
+                }
+            } else if (type === 'take_profit') {
+                requestData.take_profit_price = priceValue;
+                // 保留原有的止损
+                if (stopLossInput && stopLossInput.value) {
+                    requestData.stop_loss_price = parseFloat(stopLossInput.value);
+                }
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/orders/stop-loss-take-profit`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showToast(`${type === 'stop_loss' ? '止损' : '止盈'}已更新`, 'success');
+                    // 刷新订单列表
+                    setTimeout(() => {
+                        loadOrders();
+                    }, 300);
+                } else {
+                    showToast('更新失败: ' + (data.message || data.detail || '未知错误'), 'error');
+                    // 恢复原值
+                    if (type === 'stop_loss' && stopLossInput) {
+                        stopLossInput.value = stopLossInput.defaultValue || '';
+                    } else if (type === 'take_profit' && takeProfitInput) {
+                        takeProfitInput.value = takeProfitInput.defaultValue || '';
+                    }
+                }
+            } catch (error) {
+                showToast('更新失败: ' + error.message, 'error');
+                // 恢复原值
+                if (type === 'stop_loss' && stopLossInput) {
+                    stopLossInput.value = stopLossInput.defaultValue || '';
+                } else if (type === 'take_profit' && takeProfitInput) {
+                    takeProfitInput.value = takeProfitInput.defaultValue || '';
+                }
+            }
+        }
+        
+        // 清除订单止损
+        async function clearOrderStopLoss(orderId) {
+            const takeProfitInput = document.getElementById(`order_take_profit_${orderId}`);
+            const requestData = {
+                order_id: orderId,
+                stop_loss_price: null
+            };
+            
+            // 保留原有的止盈
+            if (takeProfitInput && takeProfitInput.value) {
+                requestData.take_profit_price = parseFloat(takeProfitInput.value);
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/orders/stop-loss-take-profit`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showToast('止损已清除', 'success');
+                    setTimeout(() => {
+                        loadOrders();
+                    }, 300);
+                } else {
+                    showToast('清除失败: ' + (data.message || data.detail || '未知错误'), 'error');
+                }
+            } catch (error) {
+                showToast('清除失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 清除订单止盈
+        async function clearOrderTakeProfit(orderId) {
+            const stopLossInput = document.getElementById(`order_stop_loss_${orderId}`);
+            const requestData = {
+                order_id: orderId,
+                take_profit_price: null
+            };
+            
+            // 保留原有的止损
+            if (stopLossInput && stopLossInput.value) {
+                requestData.stop_loss_price = parseFloat(stopLossInput.value);
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/orders/stop-loss-take-profit`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showToast('止盈已清除', 'success');
+                    setTimeout(() => {
+                        loadOrders();
+                    }, 300);
+                } else {
+                    showToast('清除失败: ' + (data.message || data.detail || '未知错误'), 'error');
+                }
+            } catch (error) {
+                showToast('清除失败: ' + error.message, 'error');
+            }
+        }
+
         async function cancelOrder(orderId) {
             // 使用自定义确认对话框
             const confirmed = await showConfirmDialog(
