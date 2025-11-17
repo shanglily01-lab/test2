@@ -546,23 +546,26 @@ async def cancel_order(order_id: str, account_id: int = 2):
             (order_id, account_id)
         )
         
-        # 释放冻结的保证金
+        # 释放冻结的保证金和手续费
         cursor.execute(
-            """SELECT margin FROM futures_orders 
+            """SELECT margin, fee FROM futures_orders 
             WHERE order_id = %s AND account_id = %s""",
             (order_id, account_id)
         )
         order_info = cursor.fetchone()
         
         if order_info and order_info['margin']:
-            # 释放保证金到可用余额（current_balance = current_balance + margin, frozen_balance = frozen_balance - margin）
+            # 计算总冻结金额（保证金 + 手续费）
+            total_frozen = float(order_info['margin']) + float(order_info.get('fee', 0) or 0)
+            
+            # 释放保证金和手续费到可用余额
             cursor.execute(
                 """UPDATE paper_trading_accounts 
                 SET current_balance = current_balance + %s,
                     frozen_balance = frozen_balance - %s,
                     updated_at = NOW()
                 WHERE id = %s""",
-                (order_info['margin'], order_info['margin'], account_id)
+                (total_frozen, total_frozen, account_id)
             )
         
         connection.commit()
