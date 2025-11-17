@@ -1720,14 +1720,24 @@
                     `;
                     }).join('');
 
-                    const count = closeTrades.length;
-                    tradesTitle.textContent = `最近交易记录 [${count}]`;
+                    // 更新分页信息
+                    document.getElementById('tradesPageInfo').textContent = `第 ${currentTradesPage} 页，共 ${totalTradesPages} 页（共 ${totalTradesCount} 条）`;
+                    
+                    // 更新分页按钮状态
+                    const prevBtn = document.getElementById('tradesPrevBtn');
+                    const nextBtn = document.getElementById('tradesNextBtn');
+                    prevBtn.disabled = currentTradesPage <= 1;
+                    nextBtn.disabled = currentTradesPage >= totalTradesPages;
+                    
+                    tradesTitle.textContent = `最近交易记录 [${totalTradesCount}]`;
                     tradesTable.style.display = 'block';
+                    tradesPagination.style.display = 'flex';
                     tradesEmpty.style.display = 'none';
                     document.getElementById('trades-update').textContent = new Date().toLocaleTimeString('zh-CN');
                 } else {
                     tradesTitle.textContent = '最近交易记录 [0]';
                     tradesTable.style.display = 'none';
+                    tradesPagination.style.display = 'none';
                     tradesEmpty.style.display = 'block';
                     document.getElementById('trades-update').textContent = new Date().toLocaleTimeString('zh-CN');
                 }
@@ -1736,6 +1746,11 @@
                 document.getElementById('tradesLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
                 showToast('加载交易记录失败', 'error');
             }
+        }
+
+        // 兼容旧函数名
+        function loadTrades() {
+            loadTradesPage(1);
         }
 
         // 平仓
