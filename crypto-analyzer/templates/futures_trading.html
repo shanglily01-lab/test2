@@ -1335,18 +1335,10 @@
                         let stopLossPrice = null;
                         let takeProfitPrice = null;
                         
-                        // 直接转换数据库返回的值
-                            raw_stop_loss: pos.stop_loss_price,
-                            raw_take_profit: pos.take_profit_price,
-                            stop_loss_type: typeof pos.stop_loss_price,
-                            take_profit_type: typeof pos.take_profit_price
-                        });
-                        
                         if (pos.stop_loss_price !== null && pos.stop_loss_price !== undefined && pos.stop_loss_price !== '') {
                             const parsed = parseFloat(pos.stop_loss_price);
                             if (!isNaN(parsed) && parsed > 0) {
                                 stopLossPrice = parsed;
-                            } else {
                             }
                         }
                         
@@ -1354,13 +1346,8 @@
                             const parsed = parseFloat(pos.take_profit_price);
                             if (!isNaN(parsed) && parsed > 0) {
                                 takeProfitPrice = parsed;
-                            } else {
                             }
                         }
-                        
-                            stopLossPrice,
-                            takeProfitPrice
-                        });
                         
                         const positionData = {
                             ...pos,
