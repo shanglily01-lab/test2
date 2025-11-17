@@ -60,9 +60,9 @@ class DatabaseService:
                     pool_recycle=3600,  # 1小时后回收连接，避免长时间连接失效
                     echo=False,  # 设为True可以看到SQL语句
                     connect_args={
-                        'connect_timeout': 5,
-                        'read_timeout': 10,
-                        'write_timeout': 10
+                        'connect_timeout': 10,
+                        'read_timeout': 60,  # 增加读取超时时间到60秒，处理复杂查询
+                        'write_timeout': 30
                     }
                 )
 

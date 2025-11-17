@@ -263,6 +263,9 @@
                 <a href="/dashboard" class="nav-link">
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
+                <a href="/technical-signals" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 技术信号
+                </a>
                 <a href="/paper_trading" class="nav-link active">
                     <i class="bi bi-journals"></i> 模拟现货
                 </a>
@@ -1668,18 +1671,42 @@
                     }
                     
                     // 格式化止盈止损信息
-                    function formatStopLossTakeProfit(stopLossPrice, takeProfitPrice) {
+                    function formatStopLossTakeProfit(stopLossPrice, takeProfitPrice, orderSource) {
                         const parts = [];
+                        
+                        // 如果是止损或止盈触发的交易，先显示触发信息
+                        if (orderSource === 'stop_loss' || orderSource === 'STOP_LOSS') {
+                            parts.push('<span class="text-danger" title="止损触发">止损触发</span>');
+                        } else if (orderSource === 'take_profit' || orderSource === 'TAKE_PROFIT') {
+                            parts.push('<span class="text-success" title="止盈触发">止盈触发</span>');
+                        }
+                        
+                        // 显示原来设置的止盈止损价格
+                        const priceParts = [];
                         if (stopLossPrice && stopLossPrice > 0) {
-                            parts.push(`<span class="text-danger" title="止损价格">止损: ${formatPrice(stopLossPrice)}</span>`);
+                            priceParts.push(`<span class="text-danger" title="止损价格">止损: ${formatPrice(stopLossPrice)}</span>`);
                         }
                         if (takeProfitPrice && takeProfitPrice > 0) {
-                            parts.push(`<span class="text-success" title="止盈价格">止盈: ${formatPrice(takeProfitPrice)}</span>`);
+                            priceParts.push(`<span class="text-success" title="止盈价格">止盈: ${formatPrice(takeProfitPrice)}</span>`);
                         }
-                        if (parts.length === 0) {
+                        
+                        // 如果既没有触发信息，也没有价格信息，显示未设置
+                        if (parts.length === 0 && priceParts.length === 0) {
                             return '<span class="text-secondary">止盈止损: 未设置</span>';
                         }
-                        return '<span class="text-secondary">止盈止损: </span>' + parts.join(' | ');
+                        
+                        // 组合显示：触发信息 + 价格信息
+                        let result = '';
+                        if (parts.length > 0) {
+                            result = parts.join(' | ');
+                            if (priceParts.length > 0) {
+                                result += ' | ' + priceParts.join(' | ');
+                            }
+                        } else {
+                            result = '<span class="text-secondary">止盈止损: </span>' + priceParts.join(' | ');
+                        }
+                        
+                        return result;
                     }
                     
                     container.innerHTML = data.trades.map(trade => {
@@ -1703,7 +1730,7 @@
                                     数量: ${trade.quantity || 0} | 价格: ${formatPrice(trade.price)} | 总额: ${totalAmount} USDT
                                 </div>
                                 <div class="text-sm text-secondary" style="margin-top: 3px;">
-                                    ${formatStopLossTakeProfit(trade.stop_loss_price, trade.take_profit_price)}
+                                    ${formatStopLossTakeProfit(trade.stop_loss_price, trade.take_profit_price, trade.order_source)}
                                 </div>
                                 ${pnlHtml}
                             </div>

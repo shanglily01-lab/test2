@@ -328,6 +328,9 @@
                 <a href="/dashboard" class="nav-link">
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
+                <a href="/technical-signals" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 技术信号
+                </a>
                 <a href="/paper_trading" class="nav-link">
                     <i class="bi bi-journals"></i> 模拟现货
                 </a>
@@ -1369,16 +1372,19 @@
                             take_profit_price: takeProfitPrice
                         };
                         
-                        // 保存到映射表，用于后续快速更新
-                        positionsDataMap[pos.symbol] = {
-                            entry_price: parseFloat(pos.entry_price) || 0,
-                            quantity: parseFloat(pos.quantity) || 0,
-                            margin: parseFloat(pos.margin) || 0,
-                            position_side: pos.position_side,
-                            current_price: currentPrice,
-                            unrealized_pnl: unrealizedPnl,
-                            unrealized_pnl_pct: unrealizedPnlPct
-                        };
+                        // 保存到映射表，用于后续快速更新（使用position_id作为键，而不是symbol）
+                        const dbId = pos.position_id || pos.id;
+                        if (dbId) {
+                            positionsDataMap[dbId] = {
+                                entry_price: parseFloat(pos.entry_price) || 0,
+                                quantity: parseFloat(pos.quantity) || 0,
+                                margin: parseFloat(pos.margin) || 0,
+                                position_side: pos.position_side,
+                                current_price: currentPrice,
+                                unrealized_pnl: unrealizedPnl,
+                                unrealized_pnl_pct: unrealizedPnlPct
+                            };
+                        }
                         
                         return positionData;
                     }));
@@ -1424,7 +1430,7 @@
                                                 </span>
                                                 <span class="badge badge-info" style="margin-left: 8px;">${pos.leverage || 1}x</span>
                                             </div>
-                                            <span class="${pnlClass} font-mono" style="font-size: 16px; font-weight: 600;" data-pnl="${pos.symbol}">
+                                            <span class="${pnlClass} font-mono" style="font-size: 16px; font-weight: 600;" data-pnl="${dbId}">
                                 ${pos.unrealized_pnl >= 0 ? '+' : ''}${formatLargeNumber(pos.unrealized_pnl || 0)}
                                             </span>
                                         </div>
@@ -1432,7 +1438,7 @@
                                             数量: ${pos.quantity || '--'} 张 | 开仓价: $${formatPrice(pos.entry_price)} | 现价: <span class="font-mono current-price-cell" data-symbol="${pos.symbol}" style="color: ${priceColor}; font-weight: 600;">$${pos.current_price ? formatPrice(pos.current_price) : '--'}</span>
                                         </div>
                                         <div class="text-sm text-secondary" style="margin-bottom: 6px;">
-                                            保证金: ${formatLargeNumber(pos.margin || 0)} | 收益率: <span class="${pnlClass}" data-pnl-pct="${pos.symbol}">${pos.unrealized_pnl_pct >= 0 ? '+' : ''}${(pos.unrealized_pnl_pct || 0).toFixed(2)}%</span>
+                                            保证金: ${formatLargeNumber(pos.margin || 0)} | 收益率: <span class="${pnlClass}" data-pnl-pct="${dbId}">${pos.unrealized_pnl_pct >= 0 ? '+' : ''}${(pos.unrealized_pnl_pct || 0).toFixed(2)}%</span>
                                         </div>
                                         ${(pos.stop_loss_price !== null && pos.stop_loss_price !== undefined && pos.stop_loss_price > 0) || (pos.take_profit_price !== null && pos.take_profit_price !== undefined && pos.take_profit_price > 0) ? `
                                         <div class="stop-loss-take-profit-display text-xs text-secondary" style="display: flex; gap: 12px; align-items: center; margin-top: 6px;">
@@ -1775,8 +1781,10 @@
 
                 if (data.success) {
                     showToast('订单已撤销', 'success');
-                    // 只更新价格和盈亏，不重新渲染整个表格
+                    // 刷新待成交订单列表和成交历史
                     setTimeout(() => {
+                        loadOrders();
+                        loadTrades();
                         updatePositionsPrices();
                     }, 500);
                 } else {
@@ -2148,8 +2156,7 @@
                         setTimeout(() => toast.remove(), 400);
                     }, 8000);
                     
-                    // 只更新价格和盈亏，不重新渲染整个表格
-                    // 平仓后，移除对应的持仓行（如果存在）
+                    // 平仓后，移除对应的持仓行（如果存在），并刷新待成交订单列表和成交历史
                     const positionsBody = document.getElementById('positionsBody');
                     if (positionsBody) {
                         const row = positionsBody.querySelector(`.position-card[data-position-id="${positionId}"]`);
@@ -2172,8 +2179,10 @@
                             }
                         }
                     }
-                    // 更新价格和盈亏
+                    // 刷新待成交订单列表和成交历史
                     setTimeout(() => {
+                        loadOrders();
+                        loadTrades();
                         updatePositionsPrices();
                     }, 500);
                 } else {
@@ -2762,7 +2771,8 @@
                 // 为每个持仓更新价格和盈亏
                 await Promise.all(Array.from(positionRows).map(async (row) => {
                     const symbol = row.getAttribute('data-symbol');
-                    if (!symbol) {
+                    const positionId = row.getAttribute('data-position-id');
+                    if (!symbol || !positionId) {
                         return;
                     }
                     
@@ -2774,8 +2784,8 @@
                             if (priceData.success && priceData.price) {
                                 const currentPrice = parseFloat(priceData.price);
                                 
-                                // 获取持仓数据（从映射表或卡片数据）
-                                let positionData = positionsDataMap[symbol];
+                                // 获取持仓数据（从映射表或卡片数据，使用position_id作为键）
+                                let positionData = positionsDataMap[positionId];
                                 if (!positionData) {
                                     // 从卡片文本中提取数据
                                     const cardText = row.textContent;
@@ -2795,7 +2805,7 @@
                                             margin: margin,
                                             position_side: positionSide
                                         };
-                                        positionsDataMap[symbol] = positionData;
+                                        positionsDataMap[positionId] = positionData;
                                     } else {
                                         return; // 无法获取持仓数据，跳过
                                     }
@@ -2864,8 +2874,8 @@
                                     }
                                 }
                                 
-                                // 更新未实现盈亏（卡片样式）
-                                let pnlCell = row.querySelector(`[data-pnl="${symbol}"]`);
+                                // 更新未实现盈亏（卡片样式，使用position_id作为唯一标识）
+                                let pnlCell = row.querySelector(`[data-pnl="${positionId}"]`);
                                 if (pnlCell) {
                                     const pnlClass = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
                                     pnlCell.className = `${pnlClass} font-mono`;
@@ -2874,8 +2884,8 @@
                                     pnlCell.textContent = newPnlText;
                                 }
                                 
-                                // 更新未实现盈亏百分比（卡片样式）
-                                let pnlPctCell = row.querySelector(`[data-pnl-pct="${symbol}"]`);
+                                // 更新未实现盈亏百分比（卡片样式，使用position_id作为唯一标识）
+                                let pnlPctCell = row.querySelector(`[data-pnl-pct="${positionId}"]`);
                                 if (pnlPctCell) {
                                     const pnlClass = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
                                     pnlPctCell.className = pnlClass;

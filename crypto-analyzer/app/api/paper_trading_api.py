@@ -324,11 +324,40 @@ async def get_trades(account_id: Optional[int] = None, limit: int = 100, engine:
                 """SELECT 
                     t.*,
                     o.order_source,
-                    p.stop_loss_price,
-                    p.take_profit_price
+                    COALESCE(
+                        (SELECT p_open.stop_loss_price 
+                         FROM paper_trading_positions p_open 
+                         WHERE p_open.symbol = t.symbol 
+                           AND p_open.account_id = t.account_id 
+                           AND p_open.status = 'open' 
+                         LIMIT 1),
+                        (SELECT p_closed.stop_loss_price 
+                         FROM paper_trading_positions p_closed 
+                         WHERE p_closed.symbol = t.symbol 
+                           AND p_closed.account_id = t.account_id 
+                           AND p_closed.status = 'closed'
+                           AND p_closed.last_update_time <= DATE_ADD(t.trade_time, INTERVAL 5 MINUTE)
+                         ORDER BY p_closed.last_update_time DESC
+                         LIMIT 1)
+                    ) as stop_loss_price,
+                    COALESCE(
+                        (SELECT p_open.take_profit_price 
+                         FROM paper_trading_positions p_open 
+                         WHERE p_open.symbol = t.symbol 
+                           AND p_open.account_id = t.account_id 
+                           AND p_open.status = 'open' 
+                         LIMIT 1),
+                        (SELECT p_closed.take_profit_price 
+                         FROM paper_trading_positions p_closed 
+                         WHERE p_closed.symbol = t.symbol 
+                           AND p_closed.account_id = t.account_id 
+                           AND p_closed.status = 'closed'
+                           AND p_closed.last_update_time <= DATE_ADD(t.trade_time, INTERVAL 5 MINUTE)
+                         ORDER BY p_closed.last_update_time DESC
+                         LIMIT 1)
+                    ) as take_profit_price
                 FROM paper_trading_trades t
                 LEFT JOIN paper_trading_orders o ON t.order_id = o.order_id
-                LEFT JOIN paper_trading_positions p ON t.symbol = p.symbol AND t.account_id = p.account_id AND p.status = 'open'
                 WHERE t.account_id = %s
                 ORDER BY t.trade_time DESC
                 LIMIT %s""",

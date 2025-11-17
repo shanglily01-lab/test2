@@ -127,6 +127,9 @@
                 <a href="/dashboard" class="nav-link">
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
+                <a href="/technical-signals" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 技术信号
+                </a>
                 <a href="/paper_trading" class="nav-link">
                     <i class="bi bi-journals"></i> 模拟现货
                 </a>
@@ -551,18 +554,31 @@
                         legend: {
                             position: 'top',
                             labels: {
-                                color: 'var(--text-primary)'
+                                color: '#E6EDF3',
+                                font: {
+                                    size: 13,
+                                    weight: '500'
+                                },
+                                padding: 15,
+                                usePointStyle: true
                             }
                         },
                         tooltip: {
                             mode: 'index',
                             intersect: false,
                             backgroundColor: 'rgba(28, 33, 40, 0.95)',
-                            titleColor: 'var(--text-primary)',
-                            bodyColor: 'var(--text-primary)',
-                            borderColor: 'var(--border-default)',
+                            titleColor: '#E6EDF3',
+                            bodyColor: '#E6EDF3',
+                            borderColor: '#30363D',
                             borderWidth: 1,
                             padding: 12,
+                            titleFont: {
+                                size: 13,
+                                weight: '600'
+                            },
+                            bodyFont: {
+                                size: 12
+                            },
                             callbacks: {
                                 label: function(context) {
                                     return context.dataset.label + ': ' + formatLargeNumber(context.parsed.y);
@@ -573,27 +589,39 @@
                     scales: {
                         x: {
                             ticks: {
-                                color: 'var(--text-primary)',
+                                color: '#E6EDF3',
                                 font: {
-                                    size: 12
-                                }
+                                    size: 12,
+                                    weight: '500'
+                                },
+                                padding: 8
                             },
                             grid: {
-                                color: 'var(--border-default)'
+                                color: '#30363D',
+                                drawBorder: false
+                            },
+                            title: {
+                                display: false
                             }
                         },
                         y: {
                             ticks: {
-                                color: 'var(--text-primary)',
+                                color: '#E6EDF3',
                                 font: {
-                                    size: 12
+                                    size: 12,
+                                    weight: '500'
                                 },
+                                padding: 8,
                                 callback: function(value) {
                                     return formatLargeNumber(value);
                                 }
                             },
                             grid: {
-                                color: 'var(--border-default)'
+                                color: '#30363D',
+                                drawBorder: false
+                            },
+                            title: {
+                                display: false
                             }
                         }
                     }

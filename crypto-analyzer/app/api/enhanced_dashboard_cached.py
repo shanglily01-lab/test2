@@ -8,6 +8,8 @@ import logging
 from typing import Dict, List
 from datetime import datetime
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, TimeoutError as SQLTimeoutError
+import pymysql
 
 from app.database.db_service import DatabaseService
 
@@ -669,20 +671,51 @@ class EnhancedDashboardCached:
             logger.debug(f"✅ 从缓存读取Hyperliquid数据")
             return result
 
+        except (OperationalError, SQLTimeoutError) as e:
+            # 处理数据库超时或连接错误
+            error_msg = str(e)
+            if 'timeout' in error_msg.lower() or 'Lost connection' in error_msg:
+                logger.warning(f"⚠️ Hyperliquid数据查询超时，返回空数据: {error_msg[:100]}")
+            else:
+                logger.error(f"从缓存读取Hyperliquid数据失败（数据库错误）: {error_msg[:100]}")
+            return {
+                'monitored_wallets': 0,
+                'active_wallets': 0,
+                'total_volume_24h': 0,
+                'recent_trades': [],
+                'top_coins': []
+            }
+        except pymysql.err.OperationalError as e:
+            # 处理PyMySQL特定的超时错误
+            error_code, error_msg = e.args
+            if error_code == 2013:  # Lost connection to MySQL server during query
+                logger.warning(f"⚠️ Hyperliquid数据查询超时（MySQL连接丢失），返回空数据")
+            else:
+                logger.error(f"从缓存读取Hyperliquid数据失败（PyMySQL错误 {error_code}）: {error_msg[:100]}")
+            return {
+                'monitored_wallets': 0,
+                'active_wallets': 0,
+                'total_volume_24h': 0,
+                'recent_trades': [],
+                'top_coins': []
+            }
         except Exception as e:
             logger.error(f"从缓存读取Hyperliquid数据失败: {e}")
             import traceback
             traceback.print_exc()
             return {
                 'monitored_wallets': 0,
-                'active_wallets': 0,  # 24小时内有交易的钱包数
+                'active_wallets': 0,
                 'total_volume_24h': 0,
                 'recent_trades': [],
                 'top_coins': []
             }
         finally:
             if session:
-                session.close()
+                try:
+                    session.close()
+                except Exception:
+                    pass  # 忽略关闭连接时的错误
 
     async def _get_system_stats(self) -> Dict:
         """

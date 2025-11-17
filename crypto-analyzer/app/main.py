@@ -659,6 +659,16 @@ async def strategy_manager_page():
         raise HTTPException(status_code=404, detail="Strategy manager page not found")
 
 
+@app.get("/technical-signals")
+async def technical_signals_page():
+    """技术信号页面"""
+    signals_path = project_root / "templates" / "technical_signals.html"
+    if signals_path.exists():
+        return FileResponse(str(signals_path))
+    else:
+        raise HTTPException(status_code=404, detail="Technical signals page not found")
+
+
 @app.get("/templates/dashboard.html")
 async def dashboard_page_alt():
     """
@@ -708,25 +718,32 @@ async def strategy_manager_page_alt():
         raise HTTPException(status_code=404, detail="Strategy manager page not found")
 
 
-@app.get("/api/price/{symbol}")
+@app.get("/api/price/{symbol:path}")
 async def get_price(symbol: str):
     """
     获取实时价格
 
     Args:
-        symbol: 交易对，如 BTC/USDT
+        symbol: 交易对，如 BTC/USDT 或 BTC-USDT（支持URL编码的斜杠）
     """
     try:
-        # 替换URL中的符号
+        # URL解码，然后替换URL中的符号
+        from urllib.parse import unquote
+        symbol = unquote(symbol)
         symbol = symbol.replace('-', '/')
+
+        if not price_collector:
+            raise HTTPException(status_code=503, detail="价格采集器未初始化")
 
         price_data = await price_collector.fetch_best_price(symbol)
 
         if not price_data:
-            raise HTTPException(status_code=404, detail="未找到价格数据")
+            raise HTTPException(status_code=404, detail=f"未找到价格数据: {symbol}")
 
         return price_data
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取价格失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -799,6 +816,37 @@ async def get_news_sentiment(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# 辅助函数：将numpy类型转换为Python原生类型
+def convert_numpy_types(obj):
+    """
+    递归地将numpy类型转换为Python原生类型，以便JSON序列化
+    
+    Args:
+        obj: 要转换的对象（可以是dict, list, 或基本类型）
+    
+    Returns:
+        转换后的对象
+    """
+    import numpy as np
+    
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_numpy_types(item) for item in obj]
+    elif hasattr(obj, 'isoformat'):  # datetime对象
+        return obj.isoformat()
+    else:
+        return obj
+
+
 # 辅助函数：生成单个交易信号（内部使用）
 async def _generate_trading_signal(symbol: str, timeframe: str = '1h'):
     """
@@ -841,6 +889,9 @@ async def _generate_trading_signal(symbol: str, timeframe: str = '1h'):
         current_price
     )
 
+    # 5. 转换numpy类型为Python原生类型，以便JSON序列化
+    final_signal = convert_numpy_types(final_signal)
+
     return final_signal
 
 
@@ -878,7 +929,7 @@ async def get_batch_signals(timeframe: str = '1h'):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/signals/{symbol}")
+@app.get("/api/signals/{symbol:path}")
 async def get_trading_signal(
     symbol: str,
     timeframe: str = '1h'
@@ -887,11 +938,13 @@ async def get_trading_signal(
     获取综合交易信号
 
     Args:
-        symbol: 交易对，支持格式: BTC-USDT 或 BTC/USDT
+        symbol: 交易对，支持格式: BTC-USDT 或 BTC/USDT（支持URL编码的斜杠）
         timeframe: 时间周期
     """
     try:
-        # 格式化交易对符号
+        # URL解码，然后格式化交易对符号
+        from urllib.parse import unquote
+        symbol = unquote(symbol)
         symbol = symbol.replace('-', '/').upper()
 
         # 如果只输入了币种代码（如BTC），自动添加/USDT
@@ -909,11 +962,236 @@ async def get_trading_signal(
 @app.get("/api/config")
 async def get_config():
     """获取当前配置"""
-    return {
-        "symbols": config.get('symbols', []),
-        "exchanges": list(config.get('exchanges', {}).keys()),
-        "news_sources": config.get('news', {}).keys()
-    }
+    try:
+        # 确保 symbols 是列表
+        symbols = config.get('symbols', [])
+        if not isinstance(symbols, list):
+            symbols = list(symbols) if symbols else []
+        
+        # 确保 exchanges 是字典
+        exchanges = config.get('exchanges', {})
+        if not isinstance(exchanges, dict):
+            exchanges = {}
+        exchange_list = list(exchanges.keys()) if exchanges else []
+        
+        # 确保 news 是字典
+        news = config.get('news', {})
+        if not isinstance(news, dict):
+            news = {}
+        news_sources = list(news.keys()) if news else []
+        
+        return {
+            "symbols": symbols,
+            "exchanges": exchange_list,
+            "news_sources": news_sources
+        }
+    except Exception as e:
+        logger.error(f"获取配置失败: {e}")
+        # 返回安全的默认值
+        return {
+            "symbols": [],
+            "exchanges": [],
+            "news_sources": []
+        }
+
+
+@app.get("/api/technical-indicators")
+async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
+    """
+    获取技术指标数据
+    
+    Args:
+        symbol: 交易对（可选，不指定则返回所有）
+        timeframe: 时间周期
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            if symbol:
+                # 格式化交易对符号
+                symbol = symbol.replace('-', '/').upper()
+                if '/' not in symbol:
+                    symbol = f"{symbol}/USDT"
+                
+                sql = """
+                    SELECT * FROM technical_indicators_cache 
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY updated_at DESC LIMIT 1
+                """
+                cursor.execute(sql, (symbol, timeframe))
+                result = cursor.fetchone()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的技术指标数据")
+                
+                return {
+                    "symbol": result['symbol'],
+                    "timeframe": result['timeframe'],
+                    "rsi": {
+                        "value": float(result['rsi_value']) if result.get('rsi_value') else None,
+                        "signal": result.get('rsi_signal')
+                    },
+                    "macd": {
+                        "value": float(result['macd_value']) if result.get('macd_value') else None,
+                        "signal_line": float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
+                        "histogram": float(result['macd_histogram']) if result.get('macd_histogram') else None,
+                        "trend": result.get('macd_trend')
+                    },
+                    "bollinger_bands": {
+                        "upper": float(result['bb_upper']) if result.get('bb_upper') else None,
+                        "middle": float(result['bb_middle']) if result.get('bb_middle') else None,
+                        "lower": float(result['bb_lower']) if result.get('bb_lower') else None,
+                        "position": result.get('bb_position'),
+                        "width": float(result['bb_width']) if result.get('bb_width') else None
+                    },
+                    "ema": {
+                        "short": float(result['ema_short']) if result.get('ema_short') else None,
+                        "long": float(result['ema_long']) if result.get('ema_long') else None,
+                        "trend": result.get('ema_trend')
+                    },
+                    "kdj": {
+                        "k": float(result['kdj_k']) if result.get('kdj_k') else None,
+                        "d": float(result['kdj_d']) if result.get('kdj_d') else None,
+                        "j": float(result['kdj_j']) if result.get('kdj_j') else None,
+                        "signal": result.get('kdj_signal')
+                    },
+                    "volume": {
+                        "volume_24h": float(result['volume_24h']) if result.get('volume_24h') else None,
+                        "volume_avg": float(result['volume_avg']) if result.get('volume_avg') else None,
+                        "volume_ratio": float(result['volume_ratio']) if result.get('volume_ratio') else None,
+                        "signal": result.get('volume_signal')
+                    },
+                    "technical_score": float(result['technical_score']) if result.get('technical_score') else None,
+                    "technical_signal": result.get('technical_signal'),
+                    "updated_at": result['updated_at'].isoformat() if result.get('updated_at') else None
+                }
+            else:
+                # 返回所有交易对的技术指标
+                sql = """
+                    SELECT t1.* FROM technical_indicators_cache t1
+                    INNER JOIN (
+                        SELECT symbol, MAX(updated_at) as max_updated_at
+                        FROM technical_indicators_cache
+                        WHERE timeframe = %s
+                        GROUP BY symbol
+                    ) t2 ON t1.symbol = t2.symbol AND t1.updated_at = t2.max_updated_at
+                    WHERE t1.timeframe = %s
+                    ORDER BY t1.technical_score DESC
+                """
+                cursor.execute(sql, (timeframe, timeframe))
+                results = cursor.fetchall()
+                
+                indicators_list = []
+                for result in results:
+                    indicators_list.append({
+                        "symbol": result['symbol'],
+                        "technical_score": float(result['technical_score']) if result.get('technical_score') else None,
+                        "technical_signal": result.get('technical_signal'),
+                        "rsi_value": float(result['rsi_value']) if result.get('rsi_value') else None,
+                        "macd_trend": result.get('macd_trend'),
+                        "ema_trend": result.get('ema_trend'),
+                        "updated_at": result['updated_at'].isoformat() if result.get('updated_at') else None
+                    })
+                
+                return {
+                    "timeframe": timeframe,
+                    "total": len(indicators_list),
+                    "indicators": indicators_list
+                }
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取技术指标失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ema-signals")
+async def get_ema_signals(symbol: str = None, signal_type: str = None, limit: int = 50):
+    """
+    获取EMA信号历史
+    
+    Args:
+        symbol: 交易对（可选）
+        signal_type: 信号类型 BUY/SELL（可选）
+        limit: 返回数量限制
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            where_clauses = []
+            params = []
+            
+            if symbol:
+                symbol = symbol.replace('-', '/').upper()
+                if '/' not in symbol:
+                    symbol = f"{symbol}/USDT"
+                where_clauses.append("symbol = %s")
+                params.append(symbol)
+            
+            if signal_type:
+                where_clauses.append("signal_type = %s")
+                params.append(signal_type.upper())
+            
+            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+            params.append(limit)
+            
+            sql = f"""
+                SELECT * FROM ema_signals
+                WHERE {where_sql}
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """
+            
+            cursor.execute(sql, params)
+            results = cursor.fetchall()
+            
+            signals = []
+            for result in results:
+                signals.append({
+                    "id": result['id'],
+                    "symbol": result['symbol'],
+                    "timeframe": result['timeframe'],
+                    "signal_type": result['signal_type'],
+                    "signal_strength": result['signal_strength'],
+                    "timestamp": result['timestamp'].isoformat() if result.get('timestamp') else None,
+                    "price": float(result['price']) if result.get('price') else None,
+                    "short_ema": float(result['short_ema']) if result.get('short_ema') else None,
+                    "long_ema": float(result['long_ema']) if result.get('long_ema') else None,
+                    "ema_config": result.get('ema_config'),
+                    "volume_ratio": float(result['volume_ratio']) if result.get('volume_ratio') else None,
+                    "price_change_pct": float(result['price_change_pct']) if result.get('price_change_pct') else None,
+                    "ema_distance_pct": float(result['ema_distance_pct']) if result.get('ema_distance_pct') else None
+                })
+            
+            return {
+                "total": len(signals),
+                "signals": signals
+            }
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"获取EMA信号失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Dashboard 数据缓存（全局变量）
