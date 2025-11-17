@@ -319,13 +319,14 @@ class FuturesTradingEngine:
                     order_id = f"FUT-{uuid.uuid4().hex[:16].upper()}"
                     side = f"OPEN_{position_side}"
                     
-                    # 冻结保证金
-                    new_balance = current_balance - limit_margin_required - limit_fee
+                    # 冻结保证金和手续费
+                    total_frozen = limit_margin_required + limit_fee
+                    new_balance = current_balance - total_frozen
                     cursor.execute(
                         """UPDATE paper_trading_accounts
                         SET current_balance = %s, frozen_balance = frozen_balance + %s
                         WHERE id = %s""",
-                        (float(new_balance), float(limit_margin_required), account_id)
+                        (float(new_balance), float(total_frozen), account_id)
                     )
                     
                     # 创建订单记录（包含止盈止损）
