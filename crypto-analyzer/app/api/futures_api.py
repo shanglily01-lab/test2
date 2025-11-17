@@ -977,16 +977,36 @@ async def get_futures_price(symbol: str):
 # ==================== 健康检查 ====================
 
 @router.get('/trades')
-async def get_trades(account_id: int = 2, limit: int = 50):
+async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_size: int = 10):
     """
     获取交易历史记录
 
     - **account_id**: 账户ID（默认2）
-    - **limit**: 返回记录数（默认50）
+    - **limit**: 返回记录数（默认50，用于兼容旧代码）
+    - **page**: 页码（默认1）
+    - **page_size**: 每页记录数（默认10）
     """
     try:
         connection = pymysql.connect(**db_config)
         cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+        # 先获取总数（只统计平仓交易）
+        count_sql = """
+        SELECT COUNT(*) as total
+        FROM futures_trades t
+        WHERE t.account_id = %s AND t.side IN ('CLOSE_LONG', 'CLOSE_SHORT')
+        """
+        cursor.execute(count_sql, (account_id,))
+        total_count = cursor.fetchone()['total']
+
+        # 计算分页
+        if page_size > 0:
+            offset = (page - 1) * page_size
+            actual_limit = page_size
+        else:
+            # 兼容旧代码，使用limit参数
+            offset = 0
+            actual_limit = limit
 
         sql = """
         SELECT
@@ -1013,12 +1033,12 @@ async def get_trades(account_id: int = 2, limit: int = 50):
         FROM futures_trades t
         LEFT JOIN futures_orders o ON t.order_id = o.order_id
         LEFT JOIN futures_positions p ON t.position_id = p.id
-        WHERE t.account_id = %s
+        WHERE t.account_id = %s AND t.side IN ('CLOSE_LONG', 'CLOSE_SHORT')
         ORDER BY t.trade_time DESC
-        LIMIT %s
+        LIMIT %s OFFSET %s
         """
 
-        cursor.execute(sql, (account_id, limit))
+        cursor.execute(sql, (account_id, actual_limit, offset))
         trades = cursor.fetchall()
         cursor.close()
         connection.close()
@@ -1029,10 +1049,17 @@ async def get_trades(account_id: int = 2, limit: int = 50):
                 if isinstance(value, Decimal):
                     trade[key] = float(value)
 
+        # 计算总页数
+        total_pages = (total_count + page_size - 1) // page_size if page_size > 0 else 1
+
         return {
             'success': True,
             'data': trades,
-            'count': len(trades)
+            'count': len(trades),
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size if page_size > 0 else limit,
+            'total_pages': total_pages
         }
 
     except Exception as e:

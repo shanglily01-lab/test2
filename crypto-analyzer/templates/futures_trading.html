@@ -556,9 +556,9 @@
                             <div class="spinner"></div>
                         </div>
                         <div id="tradesTable" style="display: none;">
-                            <div class="table-container">
+                            <div class="table-container" style="max-height: 500px; overflow-y: auto;">
                                 <table>
-                                    <thead>
+                                    <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 10;">
                                         <tr>
                                             <th>交易对</th>
                                             <th>方向</th>
@@ -577,6 +577,15 @@
                                         <!-- 动态加载 -->
                                     </tbody>
                                 </table>
+                            </div>
+                            <div id="tradesPagination" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-top: 1px solid var(--border-default); margin-top: 8px;">
+                                <div class="text-sm text-secondary">
+                                    <span id="tradesPageInfo">第 1 页，共 1 页</span>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button id="tradesPrevBtn" class="btn btn-secondary" onclick="loadTradesPage(currentTradesPage - 1)" disabled style="padding: 4px 12px; font-size: 12px;">上一页</button>
+                                    <button id="tradesNextBtn" class="btn btn-secondary" onclick="loadTradesPage(currentTradesPage + 1)" disabled style="padding: 4px 12px; font-size: 12px;">下一页</button>
+                                </div>
                             </div>
                         </div>
                         <div id="tradesEmpty" class="empty-state" style="display: none;">
@@ -1625,10 +1634,16 @@
             }
         }
 
-        // 加载交易记录（从futures_trades表获取）
-        async function loadTrades() {
+        // 分页相关变量
+        let currentTradesPage = 1;
+        const tradesPageSize = 10;
+        let totalTradesPages = 1;
+        let totalTradesCount = 0;
+
+        // 加载交易记录（从futures_trades表获取，支持分页）
+        async function loadTradesPage(page = 1) {
             try {
-                const response = await fetch(`${API_BASE}/trades?account_id=2&limit=50`);
+                const response = await fetch(`${API_BASE}/trades?account_id=2&page=${page}&page_size=${tradesPageSize}`);
                 const data = await response.json();
 
                 const tradesBody = document.getElementById('tradesBody');
@@ -1636,20 +1651,16 @@
                 const tradesEmpty = document.getElementById('tradesEmpty');
                 const tradesLoading = document.getElementById('tradesLoading');
                 const tradesTitle = document.getElementById('trades-title');
+                const tradesPagination = document.getElementById('tradesPagination');
 
                 tradesLoading.style.display = 'none';
 
                 if (data.success && data.data && data.data.length > 0) {
-                    // 只显示平仓交易（CLOSE_LONG 或 CLOSE_SHORT），并按时间倒序排列
-                    const closeTrades = data.data
-                        .filter(t => t.side && (t.side.includes('CLOSE')))
-                        .sort((a, b) => {
-                            // 按交易时间倒序排列（最新的在前）
-                            const timeA = new Date(a.trade_time).getTime();
-                            const timeB = new Date(b.trade_time).getTime();
-                            return timeB - timeA;
-                        });
-                    const recentTrades = closeTrades.slice(0, 20);
+                    currentTradesPage = data.page || page;
+                    totalTradesPages = data.total_pages || 1;
+                    totalTradesCount = data.total_count || 0;
+                    
+                    const recentTrades = data.data;
 
                     // 格式化平仓原因
                     function formatCloseReason(orderSource) {
