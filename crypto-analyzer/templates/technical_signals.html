@@ -1141,9 +1141,11 @@
                 
                 if (data.indicators && data.indicators.length > 0) {
                     // 筛选超卖超买信号
+                    // 注意：API返回所有交易对时，RSI值在rsi_value字段中，不在rsi.value中
                     let filtered = data.indicators.filter(indicator => {
-                        const rsi = indicator.rsi?.value;
-                        if (!rsi) return false;
+                        // 兼容两种数据结构：rsi_value（列表）或 rsi.value（详情）
+                        const rsi = indicator.rsi_value !== undefined ? indicator.rsi_value : (indicator.rsi?.value);
+                        if (rsi === null || rsi === undefined || isNaN(rsi)) return false;
                         
                         if (type === 'oversold') {
                             return rsi < 30; // RSI < 30 为超卖
@@ -1156,8 +1158,8 @@
                     
                     // 按RSI值排序（超卖从小到大，超买从大到小）
                     filtered.sort((a, b) => {
-                        const rsiA = a.rsi?.value || 50;
-                        const rsiB = b.rsi?.value || 50;
+                        const rsiA = (a.rsi_value !== undefined ? a.rsi_value : (a.rsi?.value)) || 50;
+                        const rsiB = (b.rsi_value !== undefined ? b.rsi_value : (b.rsi?.value)) || 50;
                         if (type === 'oversold') {
                             return rsiA - rsiB; // 超卖：从小到大
                         } else if (type === 'overbought') {
@@ -1175,7 +1177,8 @@
                     if (filtered.length > 0) {
                         let html = '';
                         filtered.forEach(indicator => {
-                            const rsi = indicator.rsi?.value;
+                            // 兼容两种数据结构：rsi_value（列表）或 rsi.value（详情）
+                            const rsi = indicator.rsi_value !== undefined ? indicator.rsi_value : (indicator.rsi?.value);
                             const isOversold = rsi < 30;
                             const isOverbought = rsi > 70;
                             const statusClass = isOversold ? 'badge-success' : 'badge-danger';
@@ -1184,7 +1187,7 @@
                             html += `
                                 <tr>
                                     <td><strong>${indicator.symbol}</strong></td>
-                                    <td>${indicator.timeframe}</td>
+                                    <td>${indicator.timeframe || timeframe}</td>
                                     <td class="${isOversold ? 'signal-buy' : 'signal-sell'}" style="font-weight: 600;">
                                         ${formatNumber(rsi, 2)}
                                     </td>

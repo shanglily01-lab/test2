@@ -156,16 +156,75 @@ class StopLossMonitor:
         finally:
             connection.close()
 
-    def get_current_price(self, symbol: str) -> Optional[Decimal]:
+    def get_current_price(self, symbol: str, use_realtime: bool = False) -> Optional[Decimal]:
         """
-        获取当前市场价格（每次查询都创建新连接，确保获取最新数据）
+        获取当前市场价格
 
         Args:
             symbol: 交易对（如 BTC/USDT）
+            use_realtime: 是否使用实时API价格（监控止盈止损时使用）
 
         Returns:
             当前价格，如果没有数据返回 None
         """
+        # 如果要求使用实时价格，尝试从交易所API获取
+        if use_realtime:
+            try:
+                import requests
+                from requests.adapters import HTTPAdapter
+                from urllib3.util.retry import Retry
+                
+                # 标准化交易对格式
+                symbol_clean = symbol.replace('/', '').upper()
+                
+                # 配置重试策略
+                session = requests.Session()
+                retry_strategy = Retry(
+                    total=2,
+                    backoff_factor=0.1,
+                    status_forcelist=[429, 500, 502, 503, 504],
+                )
+                adapter = HTTPAdapter(max_retries=retry_strategy)
+                session.mount("https://", adapter)
+                
+                # 优先从Binance合约API获取实时价格
+                try:
+                    response = session.get(
+                        'https://fapi.binance.com/fapi/v1/ticker/price',
+                        params={'symbol': symbol_clean},
+                        timeout=2
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data and 'price' in data:
+                            price = Decimal(str(data['price']))
+                            logger.debug(f"从Binance合约API获取实时价格: {symbol} = {price}")
+                            return price
+                except Exception as e:
+                    logger.debug(f"Binance合约API获取失败: {e}")
+                
+                # 如果Binance失败，尝试从Binance现货API获取
+                try:
+                    response = session.get(
+                        'https://api.binance.com/api/v3/ticker/price',
+                        params={'symbol': symbol_clean},
+                        timeout=2
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data and 'price' in data:
+                            price = Decimal(str(data['price']))
+                            logger.debug(f"从Binance现货API获取实时价格: {symbol} = {price}")
+                            return price
+                except Exception as e:
+                    logger.debug(f"Binance现货API获取失败: {e}")
+                
+                # 如果实时API都失败，回退到数据库缓存
+                logger.warning(f"实时API获取失败，回退到数据库缓存: {symbol}")
+            except Exception as e:
+                logger.warning(f"获取实时价格异常，回退到数据库缓存: {symbol}, {e}")
+        
+        # 从数据库获取缓存价格（默认行为）
         # 每次查询都创建新连接，确保获取最新价格
         connection = pymysql.connect(
             **self.db_config,
@@ -411,8 +470,8 @@ class StopLossMonitor:
         symbol = position['symbol']
         position_id = position['id']
 
-        # 获取当前价格
-        current_price = self.get_current_price(symbol)
+        # 获取当前价格（监控止盈止损时使用实时价格）
+        current_price = self.get_current_price(symbol, use_realtime=True)
 
         if not current_price:
             logger.warning(f"Position #{position_id} {symbol}: 无法获取当前价格")

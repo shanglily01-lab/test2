@@ -111,17 +111,77 @@ class PaperTradingEngine:
         finally:
             conn.close()
 
-    def get_current_price(self, symbol: str) -> Decimal:
+    def get_current_price(self, symbol: str, use_realtime: bool = False) -> Decimal:
         """
-        获取当前市场价格（每次查询都创建新连接，确保获取最新数据）
+        获取当前市场价格
 
         Args:
             symbol: 交易对
+            use_realtime: 是否使用实时API价格（市价单时使用）
 
         Returns:
             当前价格
         """
-        # 每次查询都创建新连接，确保获取最新价格
+        # 如果要求使用实时价格，尝试从交易所API获取
+        if use_realtime:
+            try:
+                import requests
+                from requests.adapters import HTTPAdapter
+                from urllib3.util.retry import Retry
+                
+                # 标准化交易对格式
+                symbol_clean = symbol.replace('/', '').upper()
+                
+                # 配置重试策略
+                session = requests.Session()
+                retry_strategy = Retry(
+                    total=2,
+                    backoff_factor=0.1,
+                    status_forcelist=[429, 500, 502, 503, 504],
+                )
+                adapter = HTTPAdapter(max_retries=retry_strategy)
+                session.mount("https://", adapter)
+                
+                # 优先从Binance现货API获取实时价格
+                try:
+                    response = session.get(
+                        'https://api.binance.com/api/v3/ticker/price',
+                        params={'symbol': symbol_clean},
+                        timeout=2
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data and 'price' in data:
+                            price = Decimal(str(data['price']))
+                            logger.debug(f"从Binance现货API获取实时价格: {symbol} = {price}")
+                            return price
+                except Exception as e:
+                    logger.debug(f"Binance现货API获取失败: {e}")
+                
+                # 如果Binance失败，尝试从Gate.io获取
+                try:
+                    gate_symbol = symbol.replace('/', '_').upper()
+                    response = session.get(
+                        'https://api.gateio.ws/api/v4/spot/tickers',
+                        params={'currency_pair': gate_symbol},
+                        timeout=2
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data and len(data) > 0 and 'last' in data[0]:
+                            price = Decimal(str(data[0]['last']))
+                            logger.debug(f"从Gate.io获取实时价格: {symbol} = {price}")
+                            return price
+                except Exception as e:
+                    logger.debug(f"Gate.io API获取失败: {e}")
+                
+                # 如果实时API都失败，回退到数据库缓存
+                logger.warning(f"实时API获取失败，回退到数据库缓存: {symbol}")
+            except Exception as e:
+                logger.warning(f"获取实时价格异常，回退到数据库缓存: {symbol}, {e}")
+        
+        # 从数据库获取缓存价格（默认行为）
+        # 每次查询都创建新连接，确保获取最新数据
         connection = pymysql.connect(
             host=self.db_config.get('host', 'localhost'),
             port=self.db_config.get('port', 3306),
@@ -206,7 +266,9 @@ class PaperTradingEngine:
                 return False, "账户未激活", None
 
             # 2. 获取当前价格
-            current_price = self.get_current_price(symbol)
+            # 限价单和市价单都使用实时价格（确保价格判断准确）
+            use_realtime_for_check = True
+            current_price = self.get_current_price(symbol, use_realtime=use_realtime_for_check)
             if current_price == 0:
                 return False, f"无法获取 {symbol} 的市场价格", None
 
@@ -277,8 +339,21 @@ class PaperTradingEngine:
                 # 价格满足条件，继续执行（使用限价作为执行价格）
                 exec_price = price
             else:
-                # 市价单，使用当前价格
-                exec_price = current_price
+                # 市价单（买入或卖出）：再次获取实时价格，确保使用最新价格成交
+                try:
+                    realtime_price = self.get_current_price(symbol, use_realtime=True)
+                    if realtime_price and realtime_price > 0:
+                        exec_price = realtime_price
+                        side_name = "买入" if side == 'BUY' else "卖出"
+                        logger.info(f"市价{side_name}使用实时价格成交: {symbol} {side} = {exec_price}")
+                    else:
+                        exec_price = current_price
+                        side_name = "买入" if side == 'BUY' else "卖出"
+                        logger.warning(f"市价{side_name}实时价格获取失败，使用缓存价格: {symbol} = {exec_price}")
+                except Exception as e:
+                    exec_price = current_price
+                    side_name = "买入" if side == 'BUY' else "卖出"
+                    logger.warning(f"市价{side_name}获取实时价格失败，使用之前获取的价格: {symbol}, {e}")
 
             # 4. 计算交易金额和手续费
             total_amount = exec_price * quantity
@@ -690,8 +765,8 @@ class PaperTradingEngine:
                     quantity = Decimal(str(pos['quantity']))
                     avg_cost = Decimal(str(pos['avg_entry_price']))
 
-                    # 获取当前价格
-                    current_price = self.get_current_price(symbol)
+                    # 获取当前价格（监控止盈止损时使用实时价格）
+                    current_price = self.get_current_price(symbol, use_realtime=True)
                     if current_price == 0:
                         continue
 
@@ -700,7 +775,7 @@ class PaperTradingEngine:
                     unrealized_pnl = (current_price - avg_cost) * quantity
                     unrealized_pnl_pct = ((current_price - avg_cost) / avg_cost * 100)
 
-                    # 检查止盈止损
+                    # 检查止盈止损（使用实时价格）
                     stop_loss_price = pos.get('stop_loss_price')
                     take_profit_price = pos.get('take_profit_price')
                     should_close = False

@@ -80,17 +80,27 @@ class FuturesLimitOrderExecutor:
         
         return self.connection
     
-    def get_current_price(self, symbol: str) -> Decimal:
+    def get_current_price(self, symbol: str, use_realtime: bool = False) -> Decimal:
         """
         获取当前价格
         
         Args:
             symbol: 交易对
+            use_realtime: 是否使用实时API价格（限价单扫描时使用）
             
         Returns:
             当前价格，如果获取失败返回0
         """
-        # 优先使用价格缓存服务
+        # 如果要求使用实时价格，直接调用交易引擎的实时价格方法
+        if use_realtime:
+            try:
+                price = self.trading_engine.get_current_price(symbol, use_realtime=True)
+                return Decimal(str(price)) if price else Decimal('0')
+            except Exception as e:
+                logger.error(f"获取 {symbol} 实时价格失败: {e}")
+                return Decimal('0')
+        
+        # 优先使用价格缓存服务（非实时模式）
         if self.price_cache_service:
             try:
                 price = self.price_cache_service.get_price(symbol)
@@ -152,8 +162,8 @@ class FuturesLimitOrderExecutor:
                         stop_loss_price = Decimal(str(order['stop_loss_price'])) if order.get('stop_loss_price') else None
                         take_profit_price = Decimal(str(order['take_profit_price'])) if order.get('take_profit_price') else None
                         
-                        # 获取当前价格
-                        current_price = self.get_current_price(symbol)
+                        # 获取当前价格（限价单扫描使用实时价格）
+                        current_price = self.get_current_price(symbol, use_realtime=True)
                         
                         if current_price == 0:
                             logger.warning(f"无法获取 {symbol} 的价格，跳过订单 {order_id}")

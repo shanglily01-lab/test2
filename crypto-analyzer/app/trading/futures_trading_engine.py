@@ -102,17 +102,76 @@ class FuturesTradingEngine:
             except:
                 raise
 
-    def get_current_price(self, symbol: str) -> Decimal:
+    def get_current_price(self, symbol: str, use_realtime: bool = False) -> Decimal:
         """
-        获取当前市场价格（每次查询都使用新连接，确保获取最新数据）
+        获取当前市场价格
 
         Args:
             symbol: 交易对
+            use_realtime: 是否使用实时API价格（市价单时使用）
 
         Returns:
             当前价格
         """
-        # 每次查询都创建新连接，确保获取最新价格
+        # 如果要求使用实时价格，尝试从交易所API获取
+        if use_realtime:
+            try:
+                import requests
+                from requests.adapters import HTTPAdapter
+                from urllib3.util.retry import Retry
+                
+                # 标准化交易对格式
+                symbol_clean = symbol.replace('/', '').upper()
+                
+                # 配置重试策略
+                session = requests.Session()
+                retry_strategy = Retry(
+                    total=2,
+                    backoff_factor=0.1,
+                    status_forcelist=[429, 500, 502, 503, 504],
+                )
+                adapter = HTTPAdapter(max_retries=retry_strategy)
+                session.mount("https://", adapter)
+                
+                # 优先从Binance合约API获取实时价格
+                try:
+                    response = session.get(
+                        'https://fapi.binance.com/fapi/v1/ticker/price',
+                        params={'symbol': symbol_clean},
+                        timeout=2
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data and 'price' in data:
+                            price = Decimal(str(data['price']))
+                            logger.debug(f"从Binance合约API获取实时价格: {symbol} = {price}")
+                            return price
+                except Exception as e:
+                    logger.debug(f"Binance合约API获取失败: {e}")
+                
+                # 如果Binance失败，尝试从Binance现货API获取
+                try:
+                    response = session.get(
+                        'https://api.binance.com/api/v3/ticker/price',
+                        params={'symbol': symbol_clean},
+                        timeout=2
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data and 'price' in data:
+                            price = Decimal(str(data['price']))
+                            logger.debug(f"从Binance现货API获取实时价格: {symbol} = {price}")
+                            return price
+                except Exception as e:
+                    logger.debug(f"Binance现货API获取失败: {e}")
+                
+                # 如果实时API都失败，回退到数据库缓存
+                logger.warning(f"实时API获取失败，回退到数据库缓存: {symbol}")
+            except Exception as e:
+                logger.warning(f"获取实时价格异常，回退到数据库缓存: {symbol}, {e}")
+        
+        # 从数据库获取缓存价格（默认行为）
+        # 每次查询都创建新连接，确保获取最新数据
         connection = pymysql.connect(
             host=self.db_config.get('host', 'localhost'),
             port=self.db_config.get('port', 3306),
@@ -233,8 +292,10 @@ class FuturesTradingEngine:
 
         try:
             # 1. 获取当前价格
+            # 限价单和市价单都使用实时价格（确保价格判断准确）
+            use_realtime_for_entry = True
             try:
-                current_price = self.get_current_price(symbol)
+                current_price = self.get_current_price(symbol, use_realtime=use_realtime_for_entry)
                 if not current_price or current_price <= 0:
                     raise ValueError(f"无法获取{symbol}的有效价格")
             except Exception as price_error:
@@ -387,8 +448,25 @@ class FuturesTradingEngine:
                     }
                 # 如果限价单可以立即成交，继续执行下面的市价单逻辑
 
-            # 2. 计算名义价值和所需保证金（使用限价或当前价格）
-            entry_price = limit_price if limit_price and limit_price > 0 else current_price
+            # 2. 确定开仓价格
+            # 限价单使用限价，市价单使用实时价格
+            if limit_price and limit_price > 0:
+                entry_price = limit_price
+            else:
+                # 市价单：再次获取实时价格，确保使用最新价格开仓
+                try:
+                    realtime_price = self.get_current_price(symbol, use_realtime=True)
+                    if realtime_price and realtime_price > 0:
+                        entry_price = realtime_price
+                        logger.info(f"市价单使用实时价格开仓: {symbol} = {entry_price}")
+                    else:
+                        entry_price = current_price
+                        logger.warning(f"实时价格获取失败，使用缓存价格: {symbol} = {entry_price}")
+                except Exception as e:
+                    logger.warning(f"获取实时价格失败，使用之前获取的价格: {symbol}, {e}")
+                    entry_price = current_price
+            
+            # 计算名义价值和所需保证金
             notional_value = entry_price * quantity
             margin_required = notional_value / Decimal(leverage)
 
@@ -664,7 +742,8 @@ class FuturesTradingEngine:
                 current_price = close_price
                 logger.info(f"使用指定平仓价格: {close_price:.8f} (原因: {reason})")
             else:
-                current_price = self.get_current_price(symbol)
+                # 平仓时使用实时价格，确保以最新市价平仓
+                current_price = self.get_current_price(symbol, use_realtime=True)
                 if not current_price or current_price <= 0:
                     raise ValueError(f"无法获取{symbol}的有效价格")
 
