@@ -422,6 +422,18 @@ class FuturesTradingEngine:
                         source, signal_id, datetime.now()
                     ))
                     
+                    # 更新总权益（限价单时还没有持仓，未实现盈亏为0）
+                    cursor.execute(
+                        """UPDATE paper_trading_accounts a
+                        SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
+                            SELECT SUM(p.unrealized_pnl) 
+                            FROM futures_positions p 
+                            WHERE p.account_id = a.id AND p.status = 'open'
+                        ), 0)
+                        WHERE a.id = %s""",
+                        (account_id,)
+                    )
+                    
                     self.connection.commit()
                     
                     logger.info(
@@ -633,6 +645,18 @@ class FuturesTradingEngine:
                 SET current_balance = %s, frozen_balance = frozen_balance + %s
                 WHERE id = %s""",
                 (float(new_balance), float(total_frozen), account_id)
+            )
+
+            # 10. 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
+            cursor.execute(
+                """UPDATE paper_trading_accounts a
+                SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
+                    SELECT SUM(p.unrealized_pnl) 
+                    FROM futures_positions p 
+                    WHERE p.account_id = a.id AND p.status = 'open'
+                ), 0)
+                WHERE a.id = %s""",
+                (account_id,)
             )
 
             self.connection.commit()
@@ -900,6 +924,18 @@ class FuturesTradingEngine:
                 (account_id,)
             )
 
+            # 9. 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
+            cursor.execute(
+                """UPDATE paper_trading_accounts a
+                SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
+                    SELECT SUM(p.unrealized_pnl) 
+                    FROM futures_positions p 
+                    WHERE p.account_id = a.id AND p.status = 'open'
+                ), 0)
+                WHERE a.id = %s""",
+                (account_id,)
+            )
+
             connection.commit()
             cursor.close()
 
@@ -1033,11 +1069,11 @@ class FuturesTradingEngine:
                     pos['current_price'] = float(pos.get('mark_price', 0))
                     pos['unrealized_pnl'] = float(pos.get('unrealized_pnl', 0))
                     pos['unrealized_pnl_pct'] = float(pos.get('unrealized_pnl_pct', 0))
-            
-            # 转换 Decimal 类型为 float，确保所有数值字段都能正确序列化
-            for key, value in pos.items():
-                if isinstance(value, Decimal):
-                    pos[key] = float(value)
+                
+                # 转换 Decimal 类型为 float，确保所有数值字段都能正确序列化
+                for key, value in pos.items():
+                    if isinstance(value, Decimal):
+                        pos[key] = float(value)
         
         finally:
             cursor_update.close()

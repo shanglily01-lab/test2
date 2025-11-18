@@ -648,6 +648,18 @@ async def cancel_order(order_id: str, account_id: int = 2):
                 WHERE id = %s""",
                 (total_frozen, total_frozen, account_id)
             )
+            
+            # 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
+            cursor.execute(
+                """UPDATE paper_trading_accounts a
+                SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
+                    SELECT SUM(p.unrealized_pnl) 
+                    FROM futures_positions p 
+                    WHERE p.account_id = a.id AND p.status = 'open'
+                ), 0)
+                WHERE a.id = %s""",
+                (account_id,)
+            )
         
         connection.commit()
         cursor.close()
