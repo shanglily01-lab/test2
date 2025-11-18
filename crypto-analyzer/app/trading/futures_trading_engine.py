@@ -974,47 +974,74 @@ class FuturesTradingEngine:
             connection.close()
 
         # 更新每个持仓的当前盈亏，并统一字段名
-        for pos in positions:
-            # 将 id 映射为 position_id，保持与API一致
-            if 'id' in pos and 'position_id' not in pos:
-                pos['position_id'] = pos['id']
+        # 使用实时价格更新持仓价格和盈亏
+        connection_update = pymysql.connect(
+            host=self.db_config.get('host', 'localhost'),
+            port=self.db_config.get('port', 3306),
+            user=self.db_config.get('user', 'root'),
+            password=self.db_config.get('password', ''),
+            database=self.db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True
+        )
+        
+        try:
+            cursor_update = connection_update.cursor()
             
-            try:
-                current_price = self.get_current_price(pos['symbol'])
-                entry_price = Decimal(str(pos['entry_price']))
-                quantity = Decimal(str(pos['quantity']))
-                leverage = Decimal(str(pos.get('leverage', 1)))
-                margin = Decimal(str(pos.get('margin', 0)))
-
-                # 计算未实现盈亏（基于名义价值，不乘以杠杆）
-                # 杠杆只影响保证金，不影响盈亏本身
-                if pos['position_side'] == 'LONG':
-                    unrealized_pnl = (current_price - entry_price) * quantity
-                else:
-                    unrealized_pnl = (entry_price - current_price) * quantity
-
-                pos['current_price'] = float(current_price)
-                pos['unrealized_pnl'] = float(unrealized_pnl)
+            for pos in positions:
+                # 将 id 映射为 position_id，保持与API一致
+                if 'id' in pos and 'position_id' not in pos:
+                    pos['position_id'] = pos['id']
                 
-                # 盈亏百分比基于保证金计算（杠杆收益率）
-                # 因为使用了杠杆，所以盈亏百分比 = 盈亏 / 保证金 × 100%
-                if margin > 0:
-                    pos['unrealized_pnl_pct'] = float((unrealized_pnl / margin) * 100)
-                else:
-                    # 如果没有保证金信息，回退到基于名义价值的计算
-                    notional_value = entry_price * quantity
-                    if notional_value > 0:
-                        pos['unrealized_pnl_pct'] = float((unrealized_pnl / notional_value) * 100)
+                try:
+                    # 使用实时价格更新持仓
+                    current_price = self.get_current_price(pos['symbol'], use_realtime=True)
+                    entry_price = Decimal(str(pos['entry_price']))
+                    quantity = Decimal(str(pos['quantity']))
+                    leverage = Decimal(str(pos.get('leverage', 1)))
+                    margin = Decimal(str(pos.get('margin', 0)))
+
+                    # 计算未实现盈亏（基于名义价值，不乘以杠杆）
+                    # 杠杆只影响保证金，不影响盈亏本身
+                    if pos['position_side'] == 'LONG':
+                        unrealized_pnl = (current_price - entry_price) * quantity
                     else:
-                        pos['unrealized_pnl_pct'] = 0.0
-            except Exception as e:
-                logger.warning(f"计算持仓 {pos.get('symbol', 'unknown')} 盈亏失败: {e}")
-                pass
+                        unrealized_pnl = (entry_price - current_price) * quantity
+
+                    # 计算盈亏百分比（基于保证金）
+                    unrealized_pnl_pct = (unrealized_pnl / margin * 100) if margin > 0 else Decimal('0')
+                    
+                    # 更新数据库中的 mark_price 和未实现盈亏
+                    cursor_update.execute(
+                        """UPDATE futures_positions
+                        SET mark_price = %s,
+                            unrealized_pnl = %s,
+                            unrealized_pnl_pct = %s,
+                            last_update_time = NOW()
+                        WHERE id = %s""",
+                        (float(current_price), float(unrealized_pnl), float(unrealized_pnl_pct), pos['id'])
+                    )
+
+                    pos['current_price'] = float(current_price)
+                    pos['unrealized_pnl'] = float(unrealized_pnl)
+                    pos['unrealized_pnl_pct'] = float(unrealized_pnl_pct)
+                    
+                except Exception as e:
+                    logger.warning(f"更新持仓 {pos.get('symbol', 'unknown')} 价格和盈亏失败: {e}")
+                    # 如果更新失败，至少设置默认值
+                    pos['current_price'] = float(pos.get('mark_price', 0))
+                    pos['unrealized_pnl'] = float(pos.get('unrealized_pnl', 0))
+                    pos['unrealized_pnl_pct'] = float(pos.get('unrealized_pnl_pct', 0))
             
             # 转换 Decimal 类型为 float，确保所有数值字段都能正确序列化
             for key, value in pos.items():
                 if isinstance(value, Decimal):
                     pos[key] = float(value)
+        
+        finally:
+            cursor_update.close()
+            connection_update.close()
 
         return positions
 

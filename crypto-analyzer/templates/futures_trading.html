@@ -2754,7 +2754,6 @@
         
         // 更新持仓价格和盈亏（不重新加载整个持仓列表）
         async function updatePositionsPrices() {
-            
             try {
                 const positionsBody = document.getElementById('positionsBody');
                 if (!positionsBody) {
@@ -2765,6 +2764,8 @@
                 const positionRows = positionsBody.querySelectorAll('.position-card[data-symbol]');
                 
                 if (positionRows.length === 0) {
+                    // 如果没有持仓，尝试重新加载一次
+                    await loadPositions();
                     return;
                 }
                 
@@ -2777,8 +2778,9 @@
                     }
                     
                     try {
-                        // 获取实时价格
-                        const priceResponse = await fetch(`/api/futures/price/${encodeURIComponent(symbol)}`);
+                        // 获取实时价格（使用实时API）
+                        const priceUrl = `/api/futures/price/${encodeURIComponent(symbol)}`;
+                        const priceResponse = await fetch(priceUrl);
                         if (priceResponse.ok) {
                             const priceData = await priceResponse.json();
                             if (priceData.success && priceData.price) {
@@ -2834,20 +2836,28 @@
                                     if (marginNum > 0) {
                                         unrealizedPnlPct = (unrealizedPnl / marginNum) * 100;
                                     }
-                                    
-                                    // 计算完成，继续更新显示
                                 } else {
-                                    // 数据无效，跳过
-                                    return;
+                                    return; // 数据无效，跳过
                                 }
                                 
-                                // 获取 position_id
-                                const positionId = row.getAttribute('data-position-id');
+                                // 更新价格显示 - 尝试多种选择器
+                                let priceCell = row.querySelector('.current-price-cell[data-symbol="' + symbol + '"]');
+                                if (!priceCell) {
+                                    // 尝试其他可能的选择器
+                                    priceCell = row.querySelector('[data-symbol="' + symbol + '"].current-price-cell');
+                                }
+                                if (!priceCell) {
+                                    // 尝试查找包含价格的单元格
+                                    const allCells = row.querySelectorAll('td, .cell, [class*="price"]');
+                                    for (let cell of allCells) {
+                                        if (cell.textContent.includes('$') || cell.textContent.match(/[\d,]+\.?\d*/)) {
+                                            priceCell = cell;
+                                            break;
+                                        }
+                                    }
+                                }
                                 
-                                // 更新价格显示
-                                const priceCell = row.querySelector('.current-price-cell[data-symbol="' + symbol + '"]');
                                 if (priceCell) {
-                                    const oldPrice = priceCell.textContent;
                                     priceCell.textContent = '$' + formatPrice(currentPrice);
                                     
                                     // 根据价格变化添加颜色标注
@@ -2900,7 +2910,8 @@
                             }
                         }
                     } catch (e) {
-                        // 静默处理单个持仓更新失败
+                        console.error(`updatePositionsPrices: ${symbol} 更新失败`, e);
+                        console.error(`updatePositionsPrices: ${symbol} 错误堆栈:`, e.stack);
                     }
                 }));
                 
@@ -2932,7 +2943,9 @@
                     updatePositionsPrices();
                     // 然后每2秒只更新价格和盈亏，不刷新其他内容
                     if (!priceUpdateInterval) {
-                        priceUpdateInterval = setInterval(updatePositionsPrices, 2000);
+                        priceUpdateInterval = setInterval(() => {
+                            updatePositionsPrices();
+                        }, 2000);
                     }
                 }, 1000);
             }).catch(err => {
@@ -2941,7 +2954,9 @@
                 setTimeout(() => {
                     updatePositionsPrices();
                     if (!priceUpdateInterval) {
-                        priceUpdateInterval = setInterval(updatePositionsPrices, 2000);
+                        priceUpdateInterval = setInterval(() => {
+                            updatePositionsPrices();
+                        }, 2000);
                     }
                 }, 2000);
             });

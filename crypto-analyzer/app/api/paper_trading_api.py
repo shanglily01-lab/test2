@@ -535,8 +535,9 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
                     "source": "realtime_api"
                 }
         
-        # 默认使用引擎的价格获取（使用缓存或数据库）
-        price = engine.get_current_price(symbol)
+        # 默认使用引擎的价格获取（优先使用实时价格）
+        # 即使没有 force_refresh，也尝试使用实时价格
+        price = engine.get_current_price(symbol, use_realtime=True)
 
         if price == 0:
             raise HTTPException(
@@ -548,7 +549,7 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
             "symbol": symbol,
             "price": float(price),
             "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "source": "cache_or_database"
+            "source": "realtime_or_cache"
         }
     except HTTPException:
         raise

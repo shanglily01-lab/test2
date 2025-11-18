@@ -1109,12 +1109,18 @@
         async function updatePositionPrices() {
             try {
                 const container = document.getElementById('positions-list');
-                if (!container) return;
+                if (!container) {
+                    return;
+                }
                 
                 // 获取所有持仓卡片
                 const positionCards = container.querySelectorAll('.position-card[data-symbol]');
                 
-                if (positionCards.length === 0) return;
+                if (positionCards.length === 0) {
+                    // 如果没有持仓，尝试重新加载一次
+                    await loadPositions();
+                    return;
+                }
                 
                 // 为每个持仓更新价格和盈亏（不重新渲染整个列表）
                 await Promise.all(Array.from(positionCards).map(async (card) => {
@@ -1122,8 +1128,9 @@
                     if (!symbol) return;
                     
                     try {
-                        // 获取实时价格
-                        const priceResponse = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}&force_refresh=true`);
+                        // 获取实时价格（强制刷新）
+                        const priceUrl = `/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}&force_refresh=true`;
+                        const priceResponse = await fetch(priceUrl);
                         if (priceResponse.ok) {
                             const priceData = await priceResponse.json();
                             if (priceData.price && priceData.price > 0) {
@@ -1153,6 +1160,7 @@
                                 // 更新价格显示
                                 const priceElement = card.querySelector('.current-price-display[data-symbol="' + symbol + '"]');
                                 if (priceElement) {
+                                    const oldPrice = priceElement.textContent;
                                     priceElement.textContent = formatPrice(currentPrice);
                                     // 更新价格颜色
                                     if (currentPrice > avgEntryPrice) {
@@ -1195,10 +1203,11 @@
                             }
                         }
                     } catch (e) {
-                        // 静默处理错误，不影响其他持仓的更新
+                        // 静默处理单个持仓更新失败，不影响其他持仓
                     }
                 }));
             } catch (error) {
+                // 静默处理更新失败
             }
         }
         
