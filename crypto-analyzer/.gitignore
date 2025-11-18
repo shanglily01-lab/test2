@@ -63,8 +63,9 @@ debug_*.py
 *整理*.md
 *诊断*.md
 *问题*.md
-SQL*.txt
+
 
 # 文本文件（排除 requirements.txt）
 *.txt
+ema_alerts.txt
 !requirements.txt

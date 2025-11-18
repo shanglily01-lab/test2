@@ -483,7 +483,7 @@ class PaperTradingEngine:
             WHERE id = %s""",
             (total_cost, account_id)
         )
-        
+
         # 2. 更新或创建持仓
         cursor.execute(
             "SELECT * FROM paper_trading_positions WHERE account_id = %s AND symbol = %s AND status = 'open'",
@@ -853,7 +853,7 @@ class PaperTradingEngine:
                     ), 0)
                     WHERE a.id = %s""",
                     (account_id,)
-                )
+                    )
 
                 connection.commit()
 

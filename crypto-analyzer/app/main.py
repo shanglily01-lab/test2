@@ -12,6 +12,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 import asyncio
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -1090,6 +1091,7 @@ async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
                 for result in results:
                     indicators_list.append({
                         "symbol": result['symbol'],
+                        "timeframe": result.get('timeframe', timeframe),  # 确保包含timeframe字段
                         "technical_score": float(result['technical_score']) if result.get('technical_score') else None,
                         "technical_signal": result.get('technical_signal'),
                         "rsi_value": float(result['rsi_value']) if result.get('rsi_value') else None,
@@ -1116,15 +1118,14 @@ async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/ema-signals")
-async def get_ema_signals(symbol: str = None, signal_type: str = None, limit: int = 50):
+@app.get("/api/technical-signals")
+async def get_technical_signals():
     """
-    获取EMA信号历史
+    获取所有交易对的技术信号（15m, 1h, 1d）
+    包含 EMA, MACD, RSI, BOLL 等技术指标和技术评分
     
-    Args:
-        symbol: 交易对（可选）
-        signal_type: 信号类型 BUY/SELL（可选）
-        limit: 返回数量限制
+    Returns:
+        各交易对在不同时间周期的技术指标数据
     """
     try:
         import pymysql
@@ -1134,64 +1135,1318 @@ async def get_ema_signals(symbol: str = None, signal_type: str = None, limit: in
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
         try:
-            where_clauses = []
-            params = []
+            timeframes = ['15m', '1h', '1d']
+            symbols_data = {}
             
-            if symbol:
-                symbol = symbol.replace('-', '/').upper()
-                if '/' not in symbol:
-                    symbol = f"{symbol}/USDT"
-                where_clauses.append("symbol = %s")
-                params.append(symbol)
+            # 获取所有交易对（至少有一个时间周期有数据即可）
+            cursor.execute("SELECT DISTINCT symbol FROM technical_indicators_cache WHERE timeframe IN ('15m', '1h', '1d')")
+            symbols = [row['symbol'] for row in cursor.fetchall()]
             
-            if signal_type:
-                where_clauses.append("signal_type = %s")
-                params.append(signal_type.upper())
+            for symbol in symbols:
+                symbols_data[symbol] = {}
+                
+                for timeframe in timeframes:
+                    # 获取该交易对在该时间周期的最新技术指标数据
+                    cursor.execute(
+                        """SELECT * FROM technical_indicators_cache 
+                        WHERE symbol = %s AND timeframe = %s
+                        ORDER BY updated_at DESC LIMIT 1""",
+                        (symbol, timeframe)
+                    )
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        symbols_data[symbol][timeframe] = {
+                            'rsi_value': float(result['rsi_value']) if result.get('rsi_value') else None,
+                            'rsi_signal': result.get('rsi_signal'),
+                            'macd_value': float(result['macd_value']) if result.get('macd_value') else None,
+                            'macd_signal_line': float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
+                            'macd_histogram': float(result['macd_histogram']) if result.get('macd_histogram') else None,
+                            'macd_trend': result.get('macd_trend'),
+                            'ema_short': float(result['ema_short']) if result.get('ema_short') else None,
+                            'ema_long': float(result['ema_long']) if result.get('ema_long') else None,
+                            'ema_trend': result.get('ema_trend'),
+                            'bb_upper': float(result['bb_upper']) if result.get('bb_upper') else None,
+                            'bb_middle': float(result['bb_middle']) if result.get('bb_middle') else None,
+                            'bb_lower': float(result['bb_lower']) if result.get('bb_lower') else None,
+                            'bb_position': result.get('bb_position'),
+                            'bb_width': float(result['bb_width']) if result.get('bb_width') else None,
+                            'kdj_k': float(result['kdj_k']) if result.get('kdj_k') else None,
+                            'kdj_d': float(result['kdj_d']) if result.get('kdj_d') else None,
+                            'kdj_j': float(result['kdj_j']) if result.get('kdj_j') else None,
+                            'kdj_signal': result.get('kdj_signal'),
+                            'technical_score': float(result['technical_score']) if result.get('technical_score') else None,
+                            'technical_signal': result.get('technical_signal'),
+                            'volume_ratio': float(result['volume_ratio']) if result.get('volume_ratio') else None,
+                            'updated_at': result['updated_at'].isoformat() if result.get('updated_at') else None
+                        }
+                    else:
+                        symbols_data[symbol][timeframe] = None
             
-            where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
-            params.append(limit)
+            # 转换为列表格式，便于前端显示
+            # 只返回至少有一个时间周期有数据的交易对
+            signals_list = []
+            for symbol, timeframes_data in symbols_data.items():
+                # 至少有一个时间周期有数据才添加到列表
+                if timeframes_data.get('15m') or timeframes_data.get('1h') or timeframes_data.get('1d'):
+                    signals_list.append({
+                        'symbol': symbol,
+                        '15m': timeframes_data.get('15m'),
+                        '1h': timeframes_data.get('1h'),
+                        '1d': timeframes_data.get('1d')
+                    })
             
-            sql = f"""
-                SELECT * FROM ema_signals
-                WHERE {where_sql}
-                ORDER BY timestamp DESC
-                LIMIT %s
-            """
-            
-            cursor.execute(sql, params)
-            results = cursor.fetchall()
-            
-            signals = []
-            for result in results:
-                signals.append({
-                    "id": result['id'],
-                    "symbol": result['symbol'],
-                    "timeframe": result['timeframe'],
-                    "signal_type": result['signal_type'],
-                    "signal_strength": result['signal_strength'],
-                    "timestamp": result['timestamp'].isoformat() if result.get('timestamp') else None,
-                    "price": float(result['price']) if result.get('price') else None,
-                    "short_ema": float(result['short_ema']) if result.get('short_ema') else None,
-                    "long_ema": float(result['long_ema']) if result.get('long_ema') else None,
-                    "ema_config": result.get('ema_config'),
-                    "volume_ratio": float(result['volume_ratio']) if result.get('volume_ratio') else None,
-                    "price_change_pct": float(result['price_change_pct']) if result.get('price_change_pct') else None,
-                    "ema_distance_pct": float(result['ema_distance_pct']) if result.get('ema_distance_pct') else None
-                })
+            # 批量获取价格数据
+            if signals_list:
+                symbols_list = [item['symbol'] for item in signals_list]
+                placeholders = ','.join(['%s'] * len(symbols_list))
+                cursor.execute(
+                    f"""SELECT symbol, current_price, change_24h, updated_at
+                    FROM price_stats_24h 
+                    WHERE symbol IN ({placeholders})""",
+                    symbols_list
+                )
+                price_data = cursor.fetchall()
+                price_map = {row['symbol']: row for row in price_data}
+                
+                # 将价格数据添加到每个交易对
+                for item in signals_list:
+                    price_info = price_map.get(item['symbol'])
+                    if price_info:
+                        item['current_price'] = float(price_info['current_price']) if price_info.get('current_price') else None
+                        item['change_24h'] = float(price_info['change_24h']) if price_info.get('change_24h') else None
+                    else:
+                        item['current_price'] = None
+                        item['change_24h'] = None
             
             return {
-                "total": len(signals),
-                "signals": signals
+                'success': True,
+                'data': signals_list,
+                'total': len(signals_list)
             }
+            
         finally:
             cursor.close()
             connection.close()
             
     except Exception as e:
-        logger.error(f"获取EMA信号失败: {e}")
+        logger.error(f"获取技术信号失败: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/trend-analysis")
+async def get_trend_analysis():
+    """
+    获取所有交易对的趋势分析（15m, 1h, 1d）
+    
+    Returns:
+        各交易对在不同时间周期的趋势评估
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            timeframes = ['5m', '15m', '1h', '1d']
+            symbols_data = {}
+            
+            # 获取所有交易对
+            cursor.execute("SELECT DISTINCT symbol FROM technical_indicators_cache")
+            symbols = [row['symbol'] for row in cursor.fetchall()]
+            
+            for symbol in symbols:
+                symbols_data[symbol] = {}
+                
+                for timeframe in timeframes:
+                    # 获取该交易对在该时间周期的最新数据
+                    # 重要：必须使用对应timeframe的技术指标，不能混用
+                    # - 1d趋势必须使用1d的RSI、MACD、EMA等技术指标
+                    # - 1h趋势必须使用1h的技术指标
+                    # - 15m趋势必须使用15m的技术指标
+                    cursor.execute(
+                        """SELECT * FROM technical_indicators_cache 
+                        WHERE symbol = %s AND timeframe = %s
+                        ORDER BY updated_at DESC LIMIT 1""",
+                        (symbol, timeframe)
+                    )
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        # 验证技术指标的timeframe是否匹配（双重验证，确保不会混用）
+                        result_timeframe = result.get('timeframe')
+                        if result_timeframe and result_timeframe != timeframe:
+                            logger.error(f"{symbol} 技术指标timeframe不匹配: 期望{timeframe}, 实际{result_timeframe}，跳过该数据")
+                            symbols_data[symbol][timeframe] = None
+                            continue
+                        
+                        # 获取K线数据用于价格和成交量趋势分析
+                        # 根据时间周期确定需要多少根K线
+                        # 重要：K线数据也必须使用对应timeframe的数据
+                        kline_limit = {
+                            '5m': 144,   # 12小时（144根5分钟K线）
+                            '15m': 8,    # 2小时（8根15分钟K线）
+                            '1h': 24,    # 24小时（24根1小时K线）
+                            '1d': 30     # 30天（30根日K线）
+                        }.get(timeframe, 30)
+                        
+                        cursor.execute(
+                            """SELECT open_price, high_price, low_price, close_price, volume, timestamp
+                            FROM kline_data 
+                            WHERE symbol = %s AND timeframe = %s
+                            ORDER BY timestamp DESC LIMIT %s""",
+                            (symbol, timeframe, kline_limit)
+                        )
+                        klines = cursor.fetchall()
+                        
+                        # 分析趋势（基于价格和成交量变化）
+                        # 确保传入的indicator_data和klines都是对应timeframe的数据
+                        # 函数内部会再次验证timeframe匹配性
+                        trend_analysis = _analyze_trend_from_indicators(result, klines, timeframe)
+                        symbols_data[symbol][timeframe] = trend_analysis
+                    else:
+                        # 如果没有对应timeframe的技术指标数据，返回None
+                        logger.debug(f"{symbol} {timeframe} 技术指标数据不存在")
+                        symbols_data[symbol][timeframe] = None
+            
+            # 转换为列表格式，便于前端显示
+            trend_list = []
+            for symbol, timeframes_data in symbols_data.items():
+                trend_list.append({
+                    'symbol': symbol,
+                    '5m': timeframes_data.get('5m'),
+                    '15m': timeframes_data.get('15m'),
+                    '1h': timeframes_data.get('1h'),
+                    '1d': timeframes_data.get('1d')
+                })
+            
+            # 批量获取价格数据（从price_stats_24h缓存表）
+            if trend_list:
+                symbols_list = [item['symbol'] for item in trend_list]
+                placeholders = ','.join(['%s'] * len(symbols_list))
+                cursor.execute(
+                    f"""SELECT symbol, current_price, change_24h, updated_at
+                    FROM price_stats_24h 
+                    WHERE symbol IN ({placeholders})""",
+                    symbols_list
+                )
+                price_data = cursor.fetchall()
+                price_map = {row['symbol']: row for row in price_data}
+                
+                # 将价格数据添加到每个交易对
+                for item in trend_list:
+                    price_info = price_map.get(item['symbol'])
+                    if price_info:
+                        item['current_price'] = float(price_info['current_price']) if price_info.get('current_price') else None
+                        item['change_24h'] = float(price_info['change_24h']) if price_info.get('change_24h') else None
+                        item['price_updated_at'] = price_info['updated_at'].isoformat() if price_info.get('updated_at') else None
+                    else:
+                        item['current_price'] = None
+                        item['change_24h'] = None
+                        item['price_updated_at'] = None
+            
+            return {
+                'success': True,
+                'data': trend_list,
+                'total': len(trend_list)
+            }
+            
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"获取趋势分析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, timeframe: str = '1h') -> dict:
+    """
+    基于价格和成交量变化分析趋势（不使用简单的阳线/阴线数量）
+    
+    重要：技术指标必须与timeframe匹配
+    - 1d趋势必须使用1d的RSI、MACD、EMA等技术指标
+    - 1h趋势必须使用1h的技术指标
+    - 15m趋势必须使用15m的技术指标
+    
+    Args:
+        indicator_data: 技术指标数据（必须是对应timeframe的数据）
+        klines: K线数据列表（用于价格和成交量趋势分析，必须是对应timeframe的数据）
+        timeframe: 时间周期（'5m', '15m', '1h', '1d'）
+        
+    Returns:
+        趋势分析结果
+    """
+    # 验证技术指标的timeframe（关键验证：确保不会混用不同timeframe的技术指标）
+    indicator_timeframe = indicator_data.get('timeframe')
+    if indicator_timeframe and indicator_timeframe != timeframe:
+        logger.error(f"❌ 技术指标timeframe不匹配: 期望{timeframe}, 实际{indicator_timeframe}。"
+                    f"1h趋势必须用1h指标，15m趋势必须用15m指标，1d趋势必须用1d指标！")
+        # 如果timeframe不匹配，返回默认值，避免使用错误的技术指标
+        return {
+            'trend_direction': 'SIDEWAYS',
+            'trend_text': '数据错误',
+            'trend_class': 'trend-neutral',
+            'trend_score': 50.0,
+            'confidence': 0.0,
+            'rsi_value': 50.0,
+            'macd_trend': 'neutral',
+            'ema_trend': 'neutral',
+            'technical_score': 50.0,
+            'price_change_pct': 0.0,
+            'volume_change_pct': 0.0,
+            'price_slope_pct': 0.0,
+            'volume_slope_pct': 0.0,
+            'updated_at': None
+        }
+    
+    rsi_value = float(indicator_data.get('rsi_value', 50)) if indicator_data.get('rsi_value') else 50
+    macd_trend = indicator_data.get('macd_trend', 'neutral')
+    ema_trend = indicator_data.get('ema_trend', 'neutral')
+    bb_position = indicator_data.get('bb_position', 'middle')
+    technical_score = float(indicator_data.get('technical_score', 50)) if indicator_data.get('technical_score') else 50
+    
+    # 趋势评分（0-100，50为中性）
+    trend_score = 50.0
+    price_trend_score = 50.0  # 价格趋势评分
+    volume_trend_score = 50.0  # 成交量趋势评分
+    price_change_pct = 0.0
+    volume_change_pct = 0.0
+    price_slope_pct = 0.0
+    volume_slope_pct = 0.0
+    
+    # 分析价格和成交量变化（基于线性回归和变化率）
+    if klines and len(klines) >= 3:
+        import numpy as np
+        
+        # 反转K线列表（从旧到新）
+        klines_reversed = list(reversed(klines))
+        
+        # 提取价格和成交量数据
+        prices = [float(k['close_price']) for k in klines_reversed]
+        volumes = [float(k.get('volume', 0)) for k in klines_reversed]
+        
+        # ========== 价格变化百分比计算 ==========
+        # 计算方式：使用首尾价格比较
+        # 公式：(最新价格 - 最早价格) / 最早价格 * 100
+        # 例如：最早价格100，最新价格110，变化 = (110-100)/100*100 = 10%
+        first_price = prices[0]  # 最早的价格（第一根K线收盘价）
+        last_price = prices[-1]  # 最新的价格（最后一根K线收盘价）
+        price_change_pct = ((last_price - first_price) / first_price) * 100 if first_price > 0 else 0
+        
+        # ========== 成交量变化百分比计算 ==========
+        # 计算方式：使用前1/3和后1/3的平均值比较（避免单点异常）
+        # 公式：(后1/3平均成交量 - 前1/3平均成交量) / 前1/3平均成交量 * 100
+        # 例如：前1/3平均成交量1000，后1/3平均成交量1500，变化 = (1500-1000)/1000*100 = 50%
+        # 优势：使用平均值比较，不受单根K线成交量异常影响，更能反映整体趋势
+        if len(volumes) >= 6:
+            # 前1/3的平均值
+            early_count = max(1, len(volumes) // 3)
+            early_volumes = volumes[:early_count]
+            early_avg_volume = np.mean(early_volumes) if len(early_volumes) > 0 else 1
+            
+            # 后1/3的平均值
+            late_count = max(1, len(volumes) // 3)
+            late_volumes = volumes[-late_count:]
+            late_avg_volume = np.mean(late_volumes) if len(late_volumes) > 0 else 1
+            
+            # 计算变化百分比
+            volume_change_pct = ((late_avg_volume - early_avg_volume) / early_avg_volume) * 100 if early_avg_volume > 0 else 0
+        elif len(volumes) >= 3:
+            # 如果数据点较少，使用前一半和后一半的平均值
+            mid = len(volumes) // 2
+            early_avg_volume = np.mean(volumes[:mid]) if mid > 0 else volumes[0]
+            late_avg_volume = np.mean(volumes[mid:]) if len(volumes) > mid else volumes[-1]
+            volume_change_pct = ((late_avg_volume - early_avg_volume) / early_avg_volume) * 100 if early_avg_volume > 0 else 0
+        else:
+            # 如果数据点很少，使用首尾比较（但这种情况应该很少）
+            first_volume = volumes[0] if volumes[0] > 0 else 1
+            last_volume = volumes[-1] if volumes[-1] > 0 else 1
+            volume_change_pct = ((last_volume - first_volume) / first_volume) * 100 if first_volume > 0 else 0
+        
+        # 使用线性回归计算价格趋势斜率
+        x = np.arange(len(prices))
+        y_prices = np.array(prices)
+        try:
+            price_slope = np.polyfit(x, y_prices, 1)[0]
+            price_slope_pct = (price_slope / first_price) * 100 if first_price > 0 else 0
+        except:
+            price_slope_pct = price_change_pct / len(prices)  # 降级为简单平均
+        
+        # 使用线性回归计算成交量趋势斜率
+        y_volumes = np.array(volumes)
+        try:
+            volume_slope = np.polyfit(x, y_volumes, 1)[0]
+            volume_slope_pct = (volume_slope / first_volume) * 100 if first_volume > 0 else 0
+        except:
+            volume_slope_pct = volume_change_pct / len(volumes)  # 降级为简单平均
+        
+        # 计算平均成交量（用于判断成交量是否放大）
+        avg_volume = np.mean(volumes) if len(volumes) > 0 else 1
+        recent_avg_volume = np.mean(volumes[-len(volumes)//3:]) if len(volumes) >= 3 else avg_volume
+        volume_ratio = recent_avg_volume / avg_volume if avg_volume > 0 else 1
+        
+        # 根据时间周期计算趋势评分
+        if timeframe == '1d':
+            # 1d趋势：基于30天数据（30根日K线）
+            # 价格趋势评分（权重60%）
+            if price_change_pct > 20:
+                price_trend_score = 85 + min((price_change_pct - 20) / 2, 10)  # 85-95
+            elif price_change_pct > 10:
+                price_trend_score = 70 + (price_change_pct - 10) * 1.5  # 70-85
+            elif price_change_pct > 5:
+                price_trend_score = 60 + (price_change_pct - 5) * 2  # 60-70
+            elif price_change_pct > 0:
+                price_trend_score = 50 + price_change_pct * 2  # 50-60
+            elif price_change_pct > -5:
+                price_trend_score = 40 + (price_change_pct + 5) * 2  # 40-50
+            elif price_change_pct > -10:
+                price_trend_score = 30 + (price_change_pct + 5) * 2  # 30-40
+            elif price_change_pct > -20:
+                price_trend_score = 15 + (price_change_pct + 10) * 1.5  # 15-30
+            else:
+                price_trend_score = 5 + min(abs(price_change_pct + 20) / 2, 10)  # 5-15
+            
+            # 成交量趋势评分（权重40%）
+            # 价格上涨 + 成交量放大 = 强烈看涨
+            # 价格上涨 + 成交量萎缩 = 看涨但乏力
+            # 价格下跌 + 成交量放大 = 强烈看跌
+            # 价格下跌 + 成交量萎缩 = 看跌但可能反弹
+            if price_change_pct > 0 and volume_ratio > 1.2:
+                volume_trend_score = 80  # 价涨量增，强烈看涨
+            elif price_change_pct > 0 and volume_ratio > 0.8:
+                volume_trend_score = 60  # 价涨量平，看涨
+            elif price_change_pct > 0:
+                volume_trend_score = 45  # 价涨量缩，看涨乏力
+            elif price_change_pct < 0 and volume_ratio > 1.2:
+                volume_trend_score = 20  # 价跌量增，强烈看跌
+            elif price_change_pct < 0 and volume_ratio > 0.8:
+                volume_trend_score = 40  # 价跌量平，看跌
+            else:
+                volume_trend_score = 55  # 价跌量缩，可能反弹
+            
+            # 价格趋势和成交量趋势综合
+            price_trend_score = (price_trend_score * 0.6 + volume_trend_score * 0.4)
+            
+        elif timeframe == '1h':
+            # 1h趋势：基于24小时数据（24根1小时K线）
+            # 价格趋势评分
+            if price_change_pct > 10:
+                price_trend_score = 80 + min((price_change_pct - 10) / 2, 15)  # 80-95
+            elif price_change_pct > 5:
+                price_trend_score = 65 + (price_change_pct - 5) * 3  # 65-80
+            elif price_change_pct > 2:
+                price_trend_score = 55 + (price_change_pct - 2) * 3.33  # 55-65
+            elif price_change_pct > 0:
+                price_trend_score = 50 + price_change_pct * 2.5  # 50-55
+            elif price_change_pct > -2:
+                price_trend_score = 45 + (price_change_pct + 2) * 2.5  # 45-50
+            elif price_change_pct > -5:
+                price_trend_score = 35 + (price_change_pct + 2) * 3.33  # 35-45
+            elif price_change_pct > -10:
+                price_trend_score = 20 + (price_change_pct + 5) * 3  # 20-35
+            else:
+                price_trend_score = 5 + min(abs(price_change_pct + 10) / 2, 15)  # 5-20
+            
+            # 成交量趋势评分
+            if price_change_pct > 0 and volume_ratio > 1.3:
+                volume_trend_score = 75
+            elif price_change_pct > 0 and volume_ratio > 0.9:
+                volume_trend_score = 60
+            elif price_change_pct > 0:
+                volume_trend_score = 45
+            elif price_change_pct < 0 and volume_ratio > 1.3:
+                volume_trend_score = 25
+            elif price_change_pct < 0 and volume_ratio > 0.9:
+                volume_trend_score = 40
+            else:
+                volume_trend_score = 50
+            
+            price_trend_score = (price_trend_score * 0.65 + volume_trend_score * 0.35)
+            
+        elif timeframe == '5m':
+            # 5m趋势：基于12小时数据（144根5分钟K线）
+            # 价格趋势评分（5分钟周期，价格波动可能较大）
+            if price_change_pct > 5:
+                price_trend_score = 80 + min((price_change_pct - 5) * 3, 15)  # 80-95
+            elif price_change_pct > 2:
+                price_trend_score = 65 + (price_change_pct - 2) * 5  # 65-80
+            elif price_change_pct > 0.5:
+                price_trend_score = 55 + (price_change_pct - 0.5) * 6.67  # 55-65
+            elif price_change_pct > 0:
+                price_trend_score = 50 + price_change_pct * 10  # 50-55
+            elif price_change_pct > -0.5:
+                price_trend_score = 45 + (price_change_pct + 0.5) * 10  # 45-50
+            elif price_change_pct > -2:
+                price_trend_score = 35 + (price_change_pct + 0.5) * 6.67  # 35-45
+            elif price_change_pct > -5:
+                price_trend_score = 20 + (price_change_pct + 2) * 5  # 20-35
+            else:
+                price_trend_score = 5 + min(abs(price_change_pct + 5) * 3, 15)  # 5-20
+            
+            # 成交量趋势评分（5分钟周期，成交量波动可能较大）
+            if price_change_pct > 0 and volume_ratio > 1.5:
+                volume_trend_score = 75
+            elif price_change_pct > 0 and volume_ratio > 1.2:
+                volume_trend_score = 60
+            elif price_change_pct > 0 and volume_ratio > 1.0:
+                volume_trend_score = 50
+            elif price_change_pct > 0:
+                volume_trend_score = 45
+            elif price_change_pct < 0 and volume_ratio > 1.5:
+                volume_trend_score = 25
+            elif price_change_pct < 0 and volume_ratio > 1.2:
+                volume_trend_score = 40
+            elif price_change_pct < 0 and volume_ratio > 1.0:
+                volume_trend_score = 50
+            else:
+                volume_trend_score = 45
+            
+            price_trend_score = (price_trend_score * 0.6 + volume_trend_score * 0.4)
+            
+        else:  # 15m
+            # 15m趋势：基于2小时数据
+            # 价格趋势评分
+            if price_change_pct > 3:
+                price_trend_score = 75 + min((price_change_pct - 3) * 5, 20)  # 75-95
+            elif price_change_pct > 1:
+                price_trend_score = 60 + (price_change_pct - 1) * 7.5  # 60-75
+            elif price_change_pct > 0:
+                price_trend_score = 50 + price_change_pct * 10  # 50-60
+            elif price_change_pct > -1:
+                price_trend_score = 40 + (price_change_pct + 1) * 10  # 40-50
+            elif price_change_pct > -3:
+                price_trend_score = 25 + (price_change_pct + 1) * 7.5  # 25-40
+            else:
+                price_trend_score = 5 + min(abs(price_change_pct + 3) * 5, 20)  # 5-25
+            
+            # 成交量趋势评分
+            if price_change_pct > 0 and volume_ratio > 1.5:
+                volume_trend_score = 70
+            elif price_change_pct > 0 and volume_ratio > 1.0:
+                volume_trend_score = 55
+            elif price_change_pct > 0:
+                volume_trend_score = 45
+            elif price_change_pct < 0 and volume_ratio > 1.5:
+                volume_trend_score = 30
+            elif price_change_pct < 0 and volume_ratio > 1.0:
+                volume_trend_score = 45
+            else:
+                volume_trend_score = 50
+            
+            price_trend_score = (price_trend_score * 0.7 + volume_trend_score * 0.3)
+    
+    # 技术指标评分（权重根据时间周期调整）
+    indicator_score = 50.0
+    
+    # RSI评分
+    if rsi_value < 30:
+        indicator_score += 15  # 超卖，看涨
+    elif rsi_value > 70:
+        indicator_score -= 15  # 超买，看跌
+    elif 40 <= rsi_value <= 60:
+        indicator_score += 3   # 中性区域
+    
+    # MACD评分
+    if macd_trend == 'bullish_cross':
+        indicator_score += 12
+    elif macd_trend == 'bearish_cross':
+        indicator_score -= 12
+    
+    # EMA趋势评分
+    if ema_trend == 'bullish':
+        indicator_score += 8
+    elif ema_trend == 'bearish':
+        indicator_score -= 8
+    
+    # 布林带位置评分
+    if bb_position == 'below_lower':
+        indicator_score += 8  # 价格在下轨，可能反弹
+    elif bb_position == 'above_upper':
+        indicator_score -= 8  # 价格在上轨，可能回调
+    
+    # 综合评分（根据时间周期调整权重）
+    if timeframe == '1d':
+        # 1d趋势：价格+成交量趋势80%，技术指标20%（更重视实际价格变化）
+        trend_score = (price_trend_score * 0.8 + indicator_score * 0.1 + technical_score * 0.1)
+        
+        # 对于1d趋势，如果价格变化超过阈值，直接基于价格判断，不受技术指标影响
+        if price_change_pct < -10:
+            # 价格下跌超过10%，强制判断为强烈下跌
+            trend_score = min(trend_score, 20)
+        elif price_change_pct < -5:
+            # 价格下跌5-10%，强制判断为下跌
+            trend_score = min(trend_score, 35)
+        elif price_change_pct > 10:
+            # 价格上涨超过10%，强制判断为强烈上涨
+            trend_score = max(trend_score, 80)
+        elif price_change_pct > 5:
+            # 价格上涨5-10%，强制判断为上涨
+            trend_score = max(trend_score, 65)
+    elif timeframe == '1h':
+        # 1h趋势：价格+成交量趋势60%，技术指标40%
+        trend_score = (price_trend_score * 0.6 + indicator_score * 0.2 + technical_score * 0.2)
+        
+        # 对于1h趋势，如果价格变化超过阈值，也做类似处理
+        if price_change_pct < -5:
+            trend_score = min(trend_score, 30)
+        elif price_change_pct > 5:
+            trend_score = max(trend_score, 70)
+    else:  # 15m
+        # 15m趋势：价格+成交量趋势50%，技术指标50%
+        trend_score = (price_trend_score * 0.5 + indicator_score * 0.25 + technical_score * 0.25)
+    
+    trend_score = max(0, min(100, trend_score))
+    
+    # 判断趋势方向（调整阈值，让震荡范围更窄）
+    if trend_score >= 75:
+        trend_direction = 'STRONG_UPTREND'
+        trend_text = '强烈上涨'
+        trend_class = 'trend-strong-up'
+    elif trend_score >= 60:
+        trend_direction = 'UPTREND'
+        trend_text = '上涨'
+        trend_class = 'trend-up'
+    elif trend_score >= 45:
+        trend_direction = 'SIDEWAYS'
+        trend_text = '震荡'
+        trend_class = 'trend-neutral'
+    elif trend_score >= 30:
+        trend_direction = 'DOWNTREND'
+        trend_text = '下跌'
+        trend_class = 'trend-down'
+    else:
+        trend_direction = 'STRONG_DOWNTREND'
+        trend_text = '强烈下跌'
+        trend_class = 'trend-strong-down'
+    
+    # 置信度（基于数据完整性）
+    confidence = 80.0
+    if not indicator_data.get('rsi_value'):
+        confidence -= 20
+    if not indicator_data.get('macd_trend'):
+        confidence -= 15
+    if not indicator_data.get('ema_trend'):
+        confidence -= 15
+    
+    return {
+        'trend_direction': trend_direction,
+        'trend_text': trend_text,
+        'trend_class': trend_class,
+        'trend_score': round(trend_score, 2),
+        'confidence': round(confidence, 2),
+        'rsi_value': rsi_value,
+        'macd_trend': macd_trend,
+        'ema_trend': ema_trend,
+        'technical_score': technical_score,
+        'price_change_pct': round(price_change_pct, 2),
+        'volume_change_pct': round(volume_change_pct, 2),
+        'price_slope_pct': round(price_slope_pct, 4),
+        'volume_slope_pct': round(volume_slope_pct, 4),
+        'updated_at': indicator_data.get('updated_at').isoformat() if indicator_data.get('updated_at') else None
+    }
+
+
+@app.get("/api/realtime-prices")
+async def get_realtime_prices(symbols: str = None):
+    """
+    批量获取实时价格（用于前端实时更新）
+    
+    Args:
+        symbols: 交易对列表，逗号分隔，如 "BTC/USDT,ETH/USDT"（可选，不提供则返回所有）
+    
+    Returns:
+        价格数据字典 {symbol: {price, change_24h, updated_at}}
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            if symbols:
+                # 解析交易对列表
+                symbol_list = [s.strip() for s in symbols.split(',')]
+                placeholders = ','.join(['%s'] * len(symbol_list))
+                cursor.execute(
+                    f"""SELECT symbol, current_price, change_24h, updated_at
+                    FROM price_stats_24h 
+                    WHERE symbol IN ({placeholders})""",
+                    symbol_list
+                )
+            else:
+                # 返回所有交易对的价格
+                cursor.execute(
+                    """SELECT symbol, current_price, change_24h, updated_at
+                    FROM price_stats_24h 
+                    ORDER BY symbol"""
+                )
+            
+            price_data = cursor.fetchall()
+            price_map = {}
+            
+            for row in price_data:
+                price_map[row['symbol']] = {
+                    'price': float(row['current_price']) if row.get('current_price') else None,
+                    'change_24h': float(row['change_24h']) if row.get('change_24h') else None,
+                    'updated_at': row['updated_at'].isoformat() if row.get('updated_at') else None
+                }
+            
+            return {
+                'success': True,
+                'data': price_map,
+                'total': len(price_map)
+            }
+            
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"获取实时价格失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/futures-signals")
+async def get_futures_signals():
+    """
+    获取合约交易信号分析
+    
+    综合考虑：
+    - 资金费率（funding rate）
+    - 多空比（long/short ratio）
+    - 持仓量变化（open interest）
+    - 技术指标（RSI、MACD、EMA等）
+    - 价格趋势
+    
+    Returns:
+        各交易对的合约信号分析
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            # 获取所有交易对
+            cursor.execute("SELECT DISTINCT symbol FROM technical_indicators_cache WHERE timeframe = '1h'")
+            symbols = [row['symbol'] for row in cursor.fetchall()]
+            
+            futures_signals = []
+            
+            for symbol in symbols:
+                try:
+                    # 1. 获取技术指标（5m, 15m, 1h周期）
+                    tech_data_5m = None
+                    tech_data_15m = None
+                    tech_data_1h = None
+                    
+                    for timeframe in ['5m', '15m', '1h']:
+                        cursor.execute(
+                            """SELECT * FROM technical_indicators_cache 
+                            WHERE symbol = %s AND timeframe = %s
+                            ORDER BY updated_at DESC LIMIT 1""",
+                            (symbol, timeframe)
+                        )
+                        result = cursor.fetchone()
+                        if timeframe == '5m':
+                            tech_data_5m = result
+                        elif timeframe == '15m':
+                            tech_data_15m = result
+                        elif timeframe == '1h':
+                            tech_data_1h = result
+                    
+                    # 使用1h作为主要技术指标（向后兼容）
+                    tech_data = tech_data_1h
+                    
+                    # 2. 获取资金费率
+                    cursor.execute(
+                        """SELECT current_rate, current_rate_pct, trend, market_sentiment
+                        FROM funding_rate_stats 
+                        WHERE symbol = %s
+                        ORDER BY updated_at DESC LIMIT 1""",
+                        (symbol,)
+                    )
+                    funding_data = cursor.fetchone()
+                    
+                    # 3. 获取多空比数据
+                    symbol_no_slash = symbol.replace('/', '')
+                    cursor.execute(
+                        """SELECT long_account, short_account, long_short_ratio, timestamp
+                        FROM futures_long_short_ratio 
+                        WHERE symbol IN (%s, %s)
+                        ORDER BY timestamp DESC LIMIT 1""",
+                        (symbol, symbol_no_slash)
+                    )
+                    ls_data = cursor.fetchone()
+                    
+                    # 4. 获取持仓量数据（用于计算变化）
+                    cursor.execute(
+                        """SELECT open_interest, timestamp
+                        FROM futures_open_interest 
+                        WHERE symbol IN (%s, %s)
+                        ORDER BY timestamp DESC LIMIT 2""",
+                        (symbol, symbol_no_slash)
+                    )
+                    oi_records = cursor.fetchall()
+                    
+                    # 5. 获取价格数据（用于计算涨跌幅和显示实时价格）
+                    cursor.execute(
+                        """SELECT current_price, change_24h, updated_at
+                        FROM price_stats_24h 
+                        WHERE symbol = %s
+                        ORDER BY updated_at DESC LIMIT 1""",
+                        (symbol,)
+                    )
+                    price_data = cursor.fetchone()
+                    
+                    # 分析合约信号
+                    signal_analysis = _analyze_futures_signal(
+                        symbol=symbol,
+                        tech_data=tech_data,
+                        tech_data_5m=tech_data_5m,
+                        tech_data_15m=tech_data_15m,
+                        tech_data_1h=tech_data_1h,
+                        funding_data=funding_data,
+                        ls_data=ls_data,
+                        oi_records=oi_records,
+                        price_data=price_data
+                    )
+                    
+                    if signal_analysis:
+                        futures_signals.append(signal_analysis)
+                        
+                except Exception as e:
+                    logger.warning(f"分析{symbol}合约信号失败: {e}")
+                    continue
+            
+            # 按信号强度排序
+            futures_signals.sort(key=lambda x: abs(x.get('signal_score', 0)), reverse=True)
+            
+            return {
+                'success': True,
+                'data': futures_signals,
+                'total': len(futures_signals)
+            }
+            
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"获取合约信号失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _analyze_futures_signal(
+    symbol: str,
+    tech_data: dict = None,
+    tech_data_5m: dict = None,
+    tech_data_15m: dict = None,
+    tech_data_1h: dict = None,
+    funding_data: dict = None,
+    ls_data: dict = None,
+    oi_records: list = None,
+    price_data: dict = None
+) -> dict:
+    """
+    分析合约交易信号
+    
+    Args:
+        symbol: 交易对
+        tech_data: 技术指标数据
+        funding_data: 资金费率数据
+        ls_data: 多空比数据
+        oi_records: 持仓量记录
+        price_data: 价格数据
+        
+    Returns:
+        合约信号分析结果
+    """
+    signal_score = 0.0  # 信号评分（-100到+100，正数=做多，负数=做空）
+    reasons = []
+    
+    # 1. 资金费率分析（权重30%）
+    funding_score = 0.0
+    funding_rate = 0.0
+    if funding_data and funding_data.get('current_rate'):
+        funding_rate = float(funding_data['current_rate'])
+        funding_rate_pct = funding_rate * 100
+        
+        # 资金费率极高（>0.1%）= 做空机会
+        if funding_rate > 0.001:
+            funding_score = -30
+            reasons.append(f"资金费率极高({funding_rate_pct:.3f}%)，多头过度拥挤，做空机会")
+        elif funding_rate > 0.0005:
+            funding_score = -15
+            reasons.append(f"资金费率较高({funding_rate_pct:.3f}%)，多头占优")
+        # 资金费率极低（<-0.1%）= 做多机会
+        elif funding_rate < -0.001:
+            funding_score = 30
+            reasons.append(f"资金费率极低({funding_rate_pct:.3f}%)，空头过度拥挤，做多机会")
+        elif funding_rate < -0.0005:
+            funding_score = 15
+            reasons.append(f"资金费率较低({funding_rate_pct:.3f}%)，空头占优")
+    
+    signal_score += funding_score * 0.3
+    
+    # 2. 多空比分析（权重25%）
+    ls_score = 0.0
+    long_short_ratio = 0.0
+    if ls_data and ls_data.get('long_short_ratio'):
+        long_short_ratio = float(ls_data['long_short_ratio'])
+        long_account = float(ls_data.get('long_account', 0))
+        short_account = float(ls_data.get('short_account', 0))
+        
+        # 多空比 > 2 = 多头过多，做空机会
+        if long_short_ratio > 2.0:
+            ls_score = -25
+            reasons.append(f"多空比极高({long_short_ratio:.2f})，多头账户{long_account:.1f}%，做空机会")
+        elif long_short_ratio > 1.5:
+            ls_score = -12
+            reasons.append(f"多空比较高({long_short_ratio:.2f})，多头占优")
+        # 多空比 < 0.5 = 空头过多，做多机会
+        elif long_short_ratio < 0.5:
+            ls_score = 25
+            reasons.append(f"多空比极低({long_short_ratio:.2f})，空头账户{short_account:.1f}%，做多机会")
+        elif long_short_ratio < 0.67:
+            ls_score = 12
+            reasons.append(f"多空比较低({long_short_ratio:.2f})，空头占优")
+    
+    signal_score += ls_score * 0.25
+    
+    # 3. 持仓量变化分析（权重15%）
+    oi_score = 0.0
+    oi_change_pct = 0.0
+    if oi_records and len(oi_records) >= 2:
+        current_oi = float(oi_records[0]['open_interest'])
+        previous_oi = float(oi_records[1]['open_interest'])
+        if previous_oi > 0:
+            oi_change_pct = ((current_oi - previous_oi) / previous_oi) * 100
+            
+            # 持仓量增加 + 价格上涨 = 趋势延续（看多）
+            # 持仓量增加 + 价格下跌 = 趋势延续（看空）
+            # 持仓量减少 = 可能反转
+            if price_data and price_data.get('change_24h'):
+                price_change = float(price_data['change_24h'])
+                if oi_change_pct > 5:
+                    if price_change > 0:
+                        oi_score = 10  # 持仓量增加+价格上涨=看多
+                        reasons.append(f"持仓量增加{oi_change_pct:.1f}%且价格上涨，趋势延续")
+                    else:
+                        oi_score = -10  # 持仓量增加+价格下跌=看空
+                        reasons.append(f"持仓量增加{oi_change_pct:.1f}%且价格下跌，趋势延续")
+                elif oi_change_pct < -5:
+                    oi_score = 0  # 持仓量减少，可能反转
+                    reasons.append(f"持仓量减少{abs(oi_change_pct):.1f}%，可能反转")
+    
+    signal_score += oi_score * 0.15
+    
+    # 4. 技术指标分析（权重30%）
+    tech_score = 0.0
+    rsi_value = 50.0
+    if tech_data:
+        rsi_value = float(tech_data.get('rsi_value', 50)) if tech_data.get('rsi_value') else 50
+        macd_trend = tech_data.get('macd_trend', 'neutral')
+        ema_trend = tech_data.get('ema_trend', 'neutral')
+        technical_score = float(tech_data.get('technical_score', 50)) if tech_data.get('technical_score') else 50
+        
+        # RSI分析
+        if rsi_value < 30:
+            tech_score += 15
+            reasons.append(f"RSI超卖({rsi_value:.1f})，技术面看多")
+        elif rsi_value > 70:
+            tech_score -= 15
+            reasons.append(f"RSI超买({rsi_value:.1f})，技术面看空")
+        
+        # MACD分析
+        if macd_trend == 'bullish_cross':
+            tech_score += 10
+            reasons.append("MACD金叉，技术面看多")
+        elif macd_trend == 'bearish_cross':
+            tech_score -= 10
+            reasons.append("MACD死叉，技术面看空")
+        
+        # EMA趋势
+        if ema_trend == 'bullish':
+            tech_score += 5
+        elif ema_trend == 'bearish':
+            tech_score -= 5
+        
+        # 技术评分转换（50为中心，转换为-30到+30）
+        tech_score += (technical_score - 50) * 0.6
+    
+    signal_score += tech_score * 0.3
+    
+    # 4.1. 多时间周期技术指标分析（用于前端显示）
+    def _analyze_indicator_direction(indicator_data: dict) -> dict:
+        """
+        分析单个时间周期的技术指标方向
+        
+        Returns:
+            {
+                'rsi': {'value': float, 'direction': 'up'/'down'/'neutral'},
+                'ema': {'direction': 'up'/'down'/'neutral'},
+                'macd': {'direction': 'up'/'down'/'neutral'},
+                'boll': {'position': str, 'direction': 'up'/'down'/'neutral'},
+                'overall': 'up'/'down'/'neutral'  # 综合方向
+            }
+        """
+        if not indicator_data:
+            return None
+        
+        result = {}
+        
+        # RSI方向
+        rsi_value = float(indicator_data.get('rsi_value', 50)) if indicator_data.get('rsi_value') else 50
+        if rsi_value < 30:
+            rsi_dir = 'up'  # 超卖，看涨
+        elif rsi_value > 70:
+            rsi_dir = 'down'  # 超买，看跌
+        elif rsi_value > 50:
+            rsi_dir = 'up'  # 偏强
+        elif rsi_value < 50:
+            rsi_dir = 'down'  # 偏弱
+        else:
+            rsi_dir = 'neutral'
+        result['rsi'] = {'value': round(rsi_value, 2), 'direction': rsi_dir}
+        
+        # EMA方向
+        ema_trend = indicator_data.get('ema_trend', 'neutral')
+        if ema_trend == 'bullish':
+            ema_dir = 'up'
+        elif ema_trend == 'bearish':
+            ema_dir = 'down'
+        else:
+            ema_dir = 'neutral'
+        result['ema'] = {'direction': ema_dir}
+        
+        # MACD方向
+        macd_trend = indicator_data.get('macd_trend', 'neutral')
+        if macd_trend == 'bullish_cross':
+            macd_dir = 'up'
+        elif macd_trend == 'bearish_cross':
+            macd_dir = 'down'
+        else:
+            macd_dir = 'neutral'
+        result['macd'] = {'direction': macd_dir}
+        
+        # BOLL方向
+        bb_position = indicator_data.get('bb_position', 'middle')
+        if bb_position == 'below_lower':
+            boll_dir = 'up'  # 价格在下轨，可能反弹
+        elif bb_position == 'above_upper':
+            boll_dir = 'down'  # 价格在上轨，可能回调
+        else:
+            boll_dir = 'neutral'
+        result['boll'] = {'position': bb_position, 'direction': boll_dir}
+        
+        # 综合方向判断（多数指标向上=向上，多数指标向下=向下）
+        up_count = sum([
+            1 if rsi_dir == 'up' else 0,
+            1 if ema_dir == 'up' else 0,
+            1 if macd_dir == 'up' else 0,
+            1 if boll_dir == 'up' else 0
+        ])
+        down_count = sum([
+            1 if rsi_dir == 'down' else 0,
+            1 if ema_dir == 'down' else 0,
+            1 if macd_dir == 'down' else 0,
+            1 if boll_dir == 'down' else 0
+        ])
+        
+        if up_count > down_count:
+            result['overall'] = 'up'
+        elif down_count > up_count:
+            result['overall'] = 'down'
+        else:
+            result['overall'] = 'neutral'
+        
+        return result
+    
+    # 分析各时间周期的技术指标
+    indicators_5m = _analyze_indicator_direction(tech_data_5m) if tech_data_5m else None
+    indicators_15m = _analyze_indicator_direction(tech_data_15m) if tech_data_15m else None
+    indicators_1h = _analyze_indicator_direction(tech_data_1h) if tech_data_1h else None
+    
+    # 5. 价格趋势分析（权重10%，作为确认信号）
+    price_score = 0.0
+    price_change_24h = 0.0
+    if price_data and price_data.get('change_24h'):
+        price_change_24h = float(price_data['change_24h'])
+        # 价格变化作为确认信号，权重较低
+        if price_change_24h > 3:
+            price_score = 5
+        elif price_change_24h < -3:
+            price_score = -5
+    
+    signal_score += price_score * 0.1
+    
+    # 归一化到-100到+100
+    signal_score = max(-100, min(100, signal_score))
+    
+    # 判断信号方向
+    if signal_score >= 60:
+        signal_direction = 'STRONG_LONG'
+        signal_text = '强烈做多'
+        signal_class = 'signal-strong-buy'
+    elif signal_score >= 30:
+        signal_direction = 'LONG'
+        signal_text = '做多'
+        signal_class = 'signal-buy'
+    elif signal_score >= -30:
+        signal_direction = 'NEUTRAL'
+        signal_text = '观望'
+        signal_class = 'signal-hold'
+    elif signal_score >= -60:
+        signal_direction = 'SHORT'
+        signal_text = '做空'
+        signal_class = 'signal-sell'
+    else:
+        signal_direction = 'STRONG_SHORT'
+        signal_text = '强烈做空'
+        signal_class = 'signal-strong-sell'
+    
+    # 提取技术指标原始值（用于前端显示）
+    def _extract_indicator_values(indicator_data: dict) -> dict:
+        """提取技术指标的原始值"""
+        if not indicator_data:
+            return None
+        return {
+            'rsi_value': float(indicator_data.get('rsi_value', 0)) if indicator_data.get('rsi_value') else None,
+            'ema_short': float(indicator_data.get('ema_short', 0)) if indicator_data.get('ema_short') else None,
+            'ema_long': float(indicator_data.get('ema_long', 0)) if indicator_data.get('ema_long') else None,
+            'macd_value': float(indicator_data.get('macd_value', 0)) if indicator_data.get('macd_value') else None,
+            'macd_signal_line': float(indicator_data.get('macd_signal_line', 0)) if indicator_data.get('macd_signal_line') else None,
+            'macd_histogram': float(indicator_data.get('macd_histogram', 0)) if indicator_data.get('macd_histogram') else None,
+            'bb_upper': float(indicator_data.get('bb_upper', 0)) if indicator_data.get('bb_upper') else None,
+            'bb_middle': float(indicator_data.get('bb_middle', 0)) if indicator_data.get('bb_middle') else None,
+            'bb_lower': float(indicator_data.get('bb_lower', 0)) if indicator_data.get('bb_lower') else None,
+            'bb_position': indicator_data.get('bb_position', 'middle'),
+            'technical_score': float(indicator_data.get('technical_score', 50)) if indicator_data.get('technical_score') else None
+        }
+    
+    # 提取价格数据
+    current_price = None
+    price_updated_at = None
+    if price_data and price_data.get('current_price'):
+        current_price = float(price_data['current_price'])
+        price_updated_at = price_data['updated_at'].isoformat() if price_data.get('updated_at') else None
+    
+    # 计算凯利公式建议仓位
+    def _calculate_kelly_position(
+        signal_score: float,
+        current_price: float,
+        price_change_24h: float = None,
+        rsi_value: float = None,
+        volatility: float = None
+    ) -> dict:
+        """
+        使用凯利公式计算建议仓位
+        
+        凯利公式: f = (p * b - q) / b
+        f: 建议仓位比例
+        p: 胜率（0-1）
+        b: 盈亏比（盈利/亏损）
+        q: 败率 = 1 - p
+        
+        Args:
+            signal_score: 信号评分（-100到+100）
+            current_price: 当前价格
+            price_change_24h: 24小时涨跌幅（%）
+            rsi_value: RSI值
+            volatility: 波动率（可选）
+            
+        Returns:
+            {
+                'position_pct': 建议仓位比例（%），
+                'entry_price': 建议入场价,
+                'stop_loss': 止损价,
+                'take_profit': 止盈价,
+                'kelly_fraction': 凯利分数,
+                'win_rate': 胜率,
+                'profit_loss_ratio': 盈亏比
+            }
+        """
+        if not current_price or current_price <= 0:
+            return None
+        
+        # 1. 计算胜率（基于信号强度）
+        # 信号评分越高，胜率越高
+        signal_strength = abs(signal_score) / 100.0  # 0-1
+        base_win_rate = 0.5  # 基础胜率50%
+        
+        # 根据信号强度调整胜率
+        if signal_score > 0:
+            # 做多信号：信号越强，胜率越高
+            win_rate = base_win_rate + signal_strength * 0.3  # 50%-80%
+        elif signal_score < 0:
+            # 做空信号：信号越强，胜率越高
+            win_rate = base_win_rate + signal_strength * 0.3  # 50%-80%
+        else:
+            win_rate = base_win_rate
+        
+        # 根据RSI调整胜率
+        if rsi_value:
+            if rsi_value < 30 and signal_score > 0:
+                # 超卖 + 做多信号，提高胜率
+                win_rate = min(win_rate + 0.1, 0.85)
+            elif rsi_value > 70 and signal_score < 0:
+                # 超买 + 做空信号，提高胜率
+                win_rate = min(win_rate + 0.1, 0.85)
+            elif (rsi_value < 30 and signal_score < 0) or (rsi_value > 70 and signal_score > 0):
+                # 信号与RSI矛盾，降低胜率
+                win_rate = max(win_rate - 0.15, 0.35)
+        
+        # 根据价格趋势调整胜率
+        if price_change_24h:
+            if signal_score > 0 and price_change_24h > 0:
+                # 做多 + 价格上涨，提高胜率
+                win_rate = min(win_rate + 0.05, 0.85)
+            elif signal_score < 0 and price_change_24h < 0:
+                # 做空 + 价格下跌，提高胜率
+                win_rate = min(win_rate + 0.05, 0.85)
+            elif (signal_score > 0 and price_change_24h < -3) or (signal_score < 0 and price_change_24h > 3):
+                # 信号与价格趋势严重矛盾，降低胜率
+                win_rate = max(win_rate - 0.2, 0.3)
+        
+        win_rate = max(0.3, min(0.85, win_rate))  # 限制在30%-85%
+        lose_rate = 1 - win_rate
+        
+        # 2. 计算盈亏比（基于信号强度和波动率）
+        # 默认盈亏比：做多/做空信号越强，盈亏比越高
+        base_profit_loss_ratio = 2.0  # 基础盈亏比 2:1
+        
+        # 根据信号强度调整盈亏比
+        if abs(signal_score) >= 60:
+            profit_loss_ratio = base_profit_loss_ratio + 1.0  # 3:1
+        elif abs(signal_score) >= 30:
+            profit_loss_ratio = base_profit_loss_ratio + 0.5  # 2.5:1
+        else:
+            profit_loss_ratio = base_profit_loss_ratio  # 2:1
+        
+        # 根据波动率调整（如果有）
+        if volatility:
+            if volatility > 0.05:  # 高波动
+                profit_loss_ratio = max(profit_loss_ratio - 0.5, 1.5)
+            elif volatility < 0.02:  # 低波动
+                profit_loss_ratio = min(profit_loss_ratio + 0.5, 4.0)
+        
+        profit_loss_ratio = max(1.5, min(4.0, profit_loss_ratio))  # 限制在1.5:1到4:1
+        
+        # 3. 计算凯利分数
+        # f = (p * b - q) / b
+        # 其中 p = win_rate, b = profit_loss_ratio, q = lose_rate
+        kelly_fraction = (win_rate * profit_loss_ratio - lose_rate) / profit_loss_ratio
+        
+        # 凯利分数限制在0-0.25（最多25%仓位，避免过度杠杆）
+        kelly_fraction = max(0, min(0.25, kelly_fraction))
+        
+        # 如果凯利分数为负，不建议开仓
+        if kelly_fraction <= 0:
+            return {
+                'position_pct': 0.0,
+                'entry_price': current_price,
+                'stop_loss': current_price,
+                'take_profit': current_price,
+                'kelly_fraction': 0.0,
+                'win_rate': round(win_rate * 100, 1),
+                'profit_loss_ratio': round(profit_loss_ratio, 2),
+                'recommendation': '不建议开仓'
+            }
+        
+        # 4. 计算入场价、止损价、止盈价
+        entry_price = current_price
+        
+        # 根据信号方向计算止损和止盈
+        if signal_score > 0:
+            # 做多信号
+            # 止损：当前价格下方，根据波动率调整
+            stop_loss_pct = 0.02 if not volatility else min(volatility * 0.8, 0.05)  # 2%-5%
+            stop_loss = current_price * (1 - stop_loss_pct)
+            
+            # 止盈：根据盈亏比计算
+            take_profit = current_price * (1 + stop_loss_pct * profit_loss_ratio)
+        else:
+            # 做空信号
+            # 止损：当前价格上方
+            stop_loss_pct = 0.02 if not volatility else min(volatility * 0.8, 0.05)  # 2%-5%
+            stop_loss = current_price * (1 + stop_loss_pct)
+            
+            # 止盈：根据盈亏比计算
+            take_profit = current_price * (1 - stop_loss_pct * profit_loss_ratio)
+        
+        # 5. 计算建议仓位比例（基于凯利分数，但更保守）
+        # 使用凯利分数的50%作为实际建议（更保守）
+        conservative_fraction = kelly_fraction * 0.5
+        position_pct = conservative_fraction * 100  # 转换为百分比
+        
+        return {
+            'position_pct': round(position_pct, 2),
+            'entry_price': round(entry_price, 2),
+            'stop_loss': round(stop_loss, 2),
+            'take_profit': round(take_profit, 2),
+            'kelly_fraction': round(kelly_fraction, 4),
+            'win_rate': round(win_rate * 100, 1),
+            'profit_loss_ratio': round(profit_loss_ratio, 2),
+            'recommendation': '建议开仓' if position_pct > 0 else '不建议开仓'
+        }
+    
+    # 计算凯利公式建议
+    kelly_advice = None
+    if current_price:
+        kelly_advice = _calculate_kelly_position(
+            signal_score=signal_score,
+            current_price=current_price,
+            price_change_24h=price_change_24h if price_change_24h else None,
+            rsi_value=rsi_value if rsi_value else None,
+            volatility=None  # 可以后续从历史数据计算
+        )
+    
+    return {
+        'symbol': symbol,
+        'signal_direction': signal_direction,
+        'signal_text': signal_text,
+        'signal_class': signal_class,
+        'signal_score': round(signal_score, 2),
+        'funding_rate': round(funding_rate * 100, 4) if funding_rate else None,
+        'long_short_ratio': round(long_short_ratio, 2) if long_short_ratio else None,
+        'oi_change_pct': round(oi_change_pct, 2) if oi_change_pct else None,
+        'rsi_value': round(rsi_value, 2) if rsi_value else None,
+        'current_price': current_price,
+        'price_change_24h': round(price_change_24h, 2) if price_change_24h else None,
+        'price_updated_at': price_updated_at,
+        'reasons': reasons[:3],  # 只显示前3个原因
+        # 多时间周期技术指标
+        'indicators_5m': {
+            'directions': indicators_5m,
+            'values': _extract_indicator_values(tech_data_5m)
+        } if tech_data_5m else None,
+        'indicators_15m': {
+            'directions': indicators_15m,
+            'values': _extract_indicator_values(tech_data_15m)
+        } if tech_data_15m else None,
+        'indicators_1h': {
+            'directions': indicators_1h,
+            'values': _extract_indicator_values(tech_data_1h)
+        } if tech_data_1h else None,
+        'kelly_advice': kelly_advice,  # 凯利公式建议
+        'updated_at': datetime.now().isoformat()
+    }
 
 
 # Dashboard 数据缓存（全局变量）
@@ -1526,10 +2781,16 @@ if __name__ == "__main__":
 
     logger.info("启动FastAPI服务器...")
 
+    # 配置uvicorn日志，禁用访问日志
+    import logging
+    uvicorn_logger = logging.getLogger("uvicorn.access")
+    uvicorn_logger.setLevel(logging.WARNING)  # 只显示WARNING及以上级别，过滤掉INFO级别的访问日志
+
     uvicorn.run(
         app,  # 直接传递app对象，而不是字符串
         host="0.0.0.0",
         port=9020,  # 改为9020端口，避免8000端口冲突
         reload=False,
-        log_level="info"
+        log_level="info",
+        access_log=False  # 禁用访问日志
     )

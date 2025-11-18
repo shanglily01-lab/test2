@@ -71,7 +71,7 @@ class PriceCacheService:
 
     def _update_loop(self):
         """后台更新循环"""
-        logger.info("📊 开始定期更新价格缓存...")
+        # 移除启动日志，仅在失败时打印
 
         while not self._stop_event.is_set():
             try:
@@ -110,7 +110,7 @@ class PriceCacheService:
                             'ask': Decimal(str(price_data.get('ask', price))),
                         }
 
-                logger.debug(f"✅ 价格缓存已更新：{len(self._cache)} 个币种")
+                # 移除成功时的日志，仅在失败时打印
 
         except Exception as e:
             logger.error(f"从数据库更新价格失败: {e}")

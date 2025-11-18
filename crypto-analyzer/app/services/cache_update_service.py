@@ -192,97 +192,136 @@ class CacheUpdateService:
         # logger.info(f"✅ 价格统计缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
 
     async def update_technical_indicators_cache(self, symbols: List[str]):
-        """更新技术指标缓存"""
+        """更新技术指标缓存 - 支持多个时间周期（5m, 15m, 1h等）"""
         # logger.info("📈 更新技术指标缓存...")  # 减少日志输出
+        
+        # 定义要更新的时间周期
+        timeframes = ['5m', '15m', '1h', '4h', '1d']
+        
+        # 每个时间周期所需的最小K线数量
+        min_klines = {
+            '5m': 100,   # 5分钟需要更多数据点
+            '15m': 100,  # 15分钟需要更多数据点
+            '1h': 50,
+            '4h': 50,
+            '1d': 50
+        }
 
         for symbol in symbols:
-            try:
-                # 获取足够的K线数据用于计算技术指标
-                klines = self.db_service.get_latest_klines(symbol, '1h', limit=200)
-                if not klines or len(klines) < 50:
-                    logger.warning(f"{symbol} K线数据不足，跳过")
+            for timeframe in timeframes:
+                try:
+                    # 获取足够的K线数据用于计算技术指标
+                    klines = self.db_service.get_latest_klines(symbol, timeframe, limit=200)
+                    min_required = min_klines.get(timeframe, 50)
+                    if not klines or len(klines) < min_required:
+                        # 对于5m和15m，如果数据不足，记录警告但继续处理其他时间周期
+                        if timeframe in ['5m', '15m']:
+                            logger.debug(f"{symbol} {timeframe} K线数据不足({len(klines) if klines else 0}/{min_required})，跳过")
+                        continue
+
+                    # 转换为DataFrame
+                    df = pd.DataFrame([{
+                        'timestamp': k.timestamp,
+                        'open': float(k.open),
+                        'high': float(k.high),
+                        'low': float(k.low),
+                        'close': float(k.close),
+                        'volume': float(k.volume)
+                    } for k in reversed(klines)])
+
+                    # 计算技术指标
+                    indicators = self.technical_analyzer.analyze(df)
+                    if not indicators:
+                        continue
+
+                    # 提取指标数据
+                    rsi = indicators.get('rsi', {})
+                    macd = indicators.get('macd', {})
+                    bollinger = indicators.get('bollinger', {})
+                    ema = indicators.get('ema', {})
+                    kdj = indicators.get('kdj', {})
+                    volume = indicators.get('volume', {})
+
+                    # 计算技术评分 (0-100)
+                    technical_score = self._calculate_technical_score(indicators)
+
+                    # 生成技术信号
+                    # 重要：如果RSI超买，不应该给出买入信号；如果RSI超卖，不应该给出卖出信号
+                    rsi_value = rsi.get('value', 50)
+                    is_overbought = rsi_value > 70
+                    is_oversold = rsi_value < 30
+                    
+                    if is_overbought:
+                        # RSI超买：强制信号为SELL或HOLD，不能是BUY
+                        if technical_score >= 50:
+                            technical_signal = 'HOLD'  # 即使其他指标好，超买时也不买入
+                        elif technical_score >= 25:
+                            technical_signal = 'SELL'
+                        else:
+                            technical_signal = 'STRONG_SELL'
+                    elif is_oversold:
+                        # RSI超卖：强制信号为BUY或HOLD，不能是SELL
+                        if technical_score >= 50:
+                            technical_signal = 'STRONG_BUY'  # 超卖时，其他指标好就是强烈买入
+                        elif technical_score >= 40:
+                            technical_signal = 'BUY'
+                        else:
+                            technical_signal = 'HOLD'  # 即使其他指标不好，超卖时也不卖出
+                    else:
+                        # RSI正常范围：按评分正常判断
+                        if technical_score >= 75:
+                            technical_signal = 'STRONG_BUY'
+                        elif technical_score >= 60:
+                            technical_signal = 'BUY'
+                        elif technical_score >= 40:
+                            technical_signal = 'HOLD'
+                        elif technical_score >= 25:
+                            technical_signal = 'SELL'
+                        else:
+                            technical_signal = 'STRONG_SELL'
+
+                    # 获取24小时成交量（对于短周期，使用最近24小时的数据）
+                    volume_24h = volume.get('volume_24h', 0)
+                    volume_avg = volume.get('average_volume', 0)
+
+                    # 写入数据库
+                    self._upsert_technical_indicators(
+                        symbol=symbol,
+                        timeframe=timeframe,
+                        rsi_value=rsi.get('value'),
+                        rsi_signal=rsi.get('signal'),
+                        macd_value=macd.get('value'),
+                        macd_signal_line=macd.get('signal'),
+                        macd_histogram=macd.get('histogram'),
+                        macd_trend='bullish_cross' if macd.get('bullish_cross') else ('bearish_cross' if macd.get('bearish_cross') else 'neutral'),
+                        bb_upper=bollinger.get('upper'),
+                        bb_middle=bollinger.get('middle'),
+                        bb_lower=bollinger.get('lower'),
+                        bb_position=bollinger.get('position', 'middle'),
+                        bb_width=bollinger.get('width'),
+                        ema_short=ema.get('short'),
+                        ema_long=ema.get('long'),
+                        ema_trend=ema.get('trend', 'neutral'),
+                        kdj_k=kdj.get('k'),
+                        kdj_d=kdj.get('d'),
+                        kdj_j=kdj.get('j'),
+                        kdj_signal=kdj.get('signal'),
+                        volume_24h=volume_24h,
+                        volume_avg=volume_avg,
+                        volume_ratio=(volume_24h / volume_avg) if volume_avg > 0 else 1,
+                        volume_signal='high' if volume.get('above_average') else 'normal',
+                        technical_score=technical_score,
+                        technical_signal=technical_signal,
+                        data_points=len(df)
+                    )
+
+                except Exception as e:
+                    logger.warning(f"更新{symbol} {timeframe}技术指标失败: {e}")
+                    import traceback
+                    traceback.print_exc()
                     continue
 
-                # 转换为DataFrame
-                df = pd.DataFrame([{
-                    'timestamp': k.timestamp,
-                    'open': float(k.open),
-                    'high': float(k.high),
-                    'low': float(k.low),
-                    'close': float(k.close),
-                    'volume': float(k.volume)
-                } for k in reversed(klines)])
-
-                # 计算技术指标
-                indicators = self.technical_analyzer.analyze(df)
-                if not indicators:
-                    continue
-
-                # 提取指标数据
-                rsi = indicators.get('rsi', {})
-                macd = indicators.get('macd', {})
-                bollinger = indicators.get('bollinger', {})
-                ema = indicators.get('ema', {})
-                kdj = indicators.get('kdj', {})
-                volume = indicators.get('volume', {})
-
-                # 计算技术评分 (0-100)
-                technical_score = self._calculate_technical_score(indicators)
-
-                # 生成技术信号
-                if technical_score >= 75:
-                    technical_signal = 'STRONG_BUY'
-                elif technical_score >= 60:
-                    technical_signal = 'BUY'
-                elif technical_score >= 40:
-                    technical_signal = 'HOLD'
-                elif technical_score >= 25:
-                    technical_signal = 'SELL'
-                else:
-                    technical_signal = 'STRONG_SELL'
-
-                # 获取24小时成交量
-                volume_24h = volume.get('volume_24h', 0)
-                volume_avg = volume.get('average_volume', 0)
-
-                # 写入数据库
-                self._upsert_technical_indicators(
-                    symbol=symbol,
-                    timeframe='1h',
-                    rsi_value=rsi.get('value'),
-                    rsi_signal=rsi.get('signal'),
-                    macd_value=macd.get('value'),
-                    macd_signal_line=macd.get('signal'),
-                    macd_histogram=macd.get('histogram'),
-                    macd_trend='bullish_cross' if macd.get('bullish_cross') else ('bearish_cross' if macd.get('bearish_cross') else 'neutral'),
-                    bb_upper=bollinger.get('upper'),
-                    bb_middle=bollinger.get('middle'),
-                    bb_lower=bollinger.get('lower'),
-                    bb_position=bollinger.get('position', 'middle'),
-                    bb_width=bollinger.get('width'),
-                    ema_short=ema.get('short'),
-                    ema_long=ema.get('long'),
-                    ema_trend=ema.get('trend', 'neutral'),
-                    kdj_k=kdj.get('k'),
-                    kdj_d=kdj.get('d'),
-                    kdj_j=kdj.get('j'),
-                    kdj_signal=kdj.get('signal'),
-                    volume_24h=volume_24h,
-                    volume_avg=volume_avg,
-                    volume_ratio=(volume_24h / volume_avg) if volume_avg > 0 else 1,
-                    volume_signal='high' if volume.get('above_average') else 'normal',
-                    technical_score=technical_score,
-                    technical_signal=technical_signal,
-                    data_points=len(df)
-                )
-
-            except Exception as e:
-                logger.warning(f"更新{symbol}技术指标失败: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
-
-        # logger.info(f"✅ 技术指标缓存更新完成 - {len(symbols)} 个币种")  # 减少日志输出
+        # logger.info(f"✅ 技术指标缓存更新完成 - {len(symbols)} 个币种，{len(timeframes)} 个时间周期")  # 减少日志输出
 
     async def update_hyperliquid_aggregation(self, symbols: List[str]):
         """更新Hyperliquid聚合数据"""

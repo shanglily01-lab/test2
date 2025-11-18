@@ -563,12 +563,12 @@
             
             try {
                 const requestBody = {
-                    order_id: orderId,
-                    symbol: symbol,
-                    side: type,
-                    quantity: quantity,
-                    trigger_price: triggerPrice,
-                    order_source: 'auto'
+                        order_id: orderId,
+                        symbol: symbol,
+                        side: type,
+                        quantity: quantity,
+                        trigger_price: triggerPrice,
+                        order_source: 'auto'
                 };
                 
                 // 添加止盈止损价格（如果设置了）
@@ -738,7 +738,7 @@
                 showResult('清除失败: ' + error.message, 'danger');
             }
         }
-
+        
         // 撤单并解冻资金/数量（软删除，状态改为DELETED）
         async function cancelPendingOrder(orderId, silent = false) {
             // 先尝试从前端数组获取订单信息（用于显示和关闭自动交易功能）

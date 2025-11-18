@@ -76,9 +76,6 @@ class UnifiedDataScheduler:
         logger.info("初始化缓存更新服务...")
         self.cache_service = CacheUpdateService(self.config)
 
-        # 初始化 EMA 信号监控和通知服务
-        logger.info("初始化 EMA 信号监控服务...")
-        self._init_ema_monitor()
 
         # 任务统计
         self.task_stats = {
@@ -100,7 +97,6 @@ class UnifiedDataScheduler:
             'cache_price': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_analysis': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_hyperliquid': {'count': 0, 'last_run': None, 'last_error': None},
-            'ema_signal': {'count': 0, 'last_run': None, 'last_error': None},
             'etf_daily': {'count': 0, 'last_run': None, 'last_error': None}
         }
 
@@ -157,31 +153,6 @@ class UnifiedDataScheduler:
             logger.warning(f"  ⊗ 自动合约交易服务初始化失败: {e}")
 
 
-    def _init_ema_monitor(self):
-        """初始化 EMA 信号监控服务"""
-        try:
-            from app.trading.ema_signal_monitor import EMASignalMonitor
-            from app.services.notification_service import NotificationService
-
-            # 检查是否启用 EMA 监控
-            ema_config = self.config.get('ema_signal', {})
-            if not ema_config.get('enabled', True):
-                self.ema_monitor = None
-                self.notification_service = None
-                logger.info("  ⊗ EMA 信号监控未启用")
-                return
-
-            # 初始化通知服务
-            self.notification_service = NotificationService(self.config)
-
-            # 初始化 EMA 监控器
-            self.ema_monitor = EMASignalMonitor(self.config, self.db_service)
-            logger.info(f"  ✓ EMA 信号监控服务 (EMA{self.ema_monitor.short_period}/EMA{self.ema_monitor.long_period})")
-
-        except Exception as e:
-            self.ema_monitor = None
-            self.notification_service = None
-            logger.warning(f"  ⊗ EMA 信号监控服务初始化失败: {e}")
 
     # ==================== 多交易所数据采集任务 ====================
 
@@ -652,77 +623,6 @@ class UnifiedDataScheduler:
             logger.error(f"自动交易任务失败: {e}")
             self.task_stats[task_name]['last_error'] = str(e)
 
-    # ==================== EMA 信号监控任务 ====================
-
-    async def monitor_ema_signals(self):
-        """监控 15分钟 EMA 买入信号 (每15分钟)"""
-        if not self.ema_monitor or not self.notification_service:
-            return
-
-        task_name = 'ema_signal'
-        try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始扫描 EMA 买入信号...")
-
-            # 扫描所有交易对
-            signals = await self.ema_monitor.scan_all_symbols()
-
-            if signals:
-                logger.info(f"  ✓ 发现 {len(signals)} 个 EMA 买入信号")
-
-                # 发送通知
-                self.notification_service.send_batch_signals(
-                    signals,
-                    self.ema_monitor.format_alert_message
-                )
-
-                # 统计
-                strong = len([s for s in signals if s['signal_strength'] == 'strong'])
-                medium = len([s for s in signals if s['signal_strength'] == 'medium'])
-                weak = len([s for s in signals if s['signal_strength'] == 'weak'])
-
-                logger.info(f"  信号强度分布: 强 {strong}, 中 {medium}, 弱 {weak}")
-            else:
-                logger.debug(f"  未发现 EMA 买入信号")
-
-            # 更新统计
-            self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
-
-        except Exception as e:
-            logger.error(f"EMA 信号监控任务失败: {e}")
-            self.task_stats[task_name]['last_error'] = str(e)
-
-    async def cleanup_old_ema_signals(self):
-        """清理旧的EMA信号数据 (每天一次)"""
-        try:
-            logger.info("开始清理旧的EMA信号数据...")
-
-            from sqlalchemy import text
-            session = None
-            try:
-                session = self.db_service.Session()
-
-                # 删除30天前的数据
-                result = session.execute(text("""
-                    DELETE FROM ema_signals
-                    WHERE timestamp < DATE_SUB(NOW(), INTERVAL 30 DAY)
-                """))
-
-                deleted_count = result.rowcount
-                session.commit()
-
-                if deleted_count > 0:
-                    logger.info(f"✓ 已清理 {deleted_count} 条旧的EMA信号数据（30天前）")
-                else:
-                    logger.debug("无需清理，所有信号都在30天内")
-
-            finally:
-                if session:
-                    session.close()
-
-        except Exception as e:
-            logger.error(f"清理EMA信号数据失败: {e}")
-
     # ==================== 合约监控任务 ====================
     # 合约止盈止损监控已移至 main.py，由 FastAPI 生命周期管理
     # 与现货限价单执行器保持一致，都在 main.py 中启动
@@ -1048,14 +948,6 @@ class UnifiedDataScheduler:
         # 3.6 合约持仓监控（已移至 main.py，由 FastAPI 生命周期管理）
         # 合约止盈止损监控现在在 main.py 中启动，与现货限价单执行器保持一致
 
-        # 3.7 EMA 买入信号监控
-        if self.ema_monitor:
-            schedule.every(15).minutes.do(
-                lambda: asyncio.run(self.monitor_ema_signals())
-            )
-            ema_config = f"EMA{self.ema_monitor.short_period}/EMA{self.ema_monitor.long_period}"
-            logger.info(f"  ✓ EMA 买入信号监控 ({ema_config}, {self.ema_monitor.timeframe}) - 每 15 分钟")
-
         # 4. Ethereum 链上数据
         if self.smart_money_collector:
             schedule.every(5).minutes.do(
@@ -1079,12 +971,6 @@ class UnifiedDataScheduler:
                 lambda: asyncio.run(self.collect_hyperliquid_leaderboard())
             )
             logger.info("  ✓ Hyperliquid 排行榜 - 每天 02:00")
-
-        # 5.5 EMA信号数据清理
-        schedule.every().day.at("03:00").do(
-            lambda: asyncio.run(self.cleanup_old_ema_signals())
-        )
-        logger.info("  ✓ EMA信号数据清理 (保留30天) - 每天 03:00")
 
         # 6. Hyperliquid 钱包监控 - 已移至独立的 hyperliquid_scheduler.py
         # 注意: Hyperliquid 监控任务现在由独立的调度器运行，避免阻塞主调度器
@@ -1242,13 +1128,11 @@ class UnifiedDataScheduler:
         """更新价格统计缓存 (每15秒)"""
         task_name = 'cache_price'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始更新价格缓存...")
-
             await self.cache_service.update_price_stats_cache(self.symbols)
 
             self.task_stats[task_name]['count'] += 1
             self.task_stats[task_name]['last_run'] = datetime.now()
-            logger.info(f"  ✓ 价格缓存更新完成 - {len(self.symbols)} 个币种")
+            # 移除成功时的日志，仅在失败时打印
 
         except Exception as e:
             logger.error(f"更新价格缓存失败: {e}")

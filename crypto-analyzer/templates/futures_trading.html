@@ -1376,14 +1376,14 @@
                         const dbId = pos.position_id || pos.id;
                         if (dbId) {
                             positionsDataMap[dbId] = {
-                                entry_price: parseFloat(pos.entry_price) || 0,
-                                quantity: parseFloat(pos.quantity) || 0,
-                                margin: parseFloat(pos.margin) || 0,
-                                position_side: pos.position_side,
-                                current_price: currentPrice,
-                                unrealized_pnl: unrealizedPnl,
-                                unrealized_pnl_pct: unrealizedPnlPct
-                            };
+                            entry_price: parseFloat(pos.entry_price) || 0,
+                            quantity: parseFloat(pos.quantity) || 0,
+                            margin: parseFloat(pos.margin) || 0,
+                            position_side: pos.position_side,
+                            current_price: currentPrice,
+                            unrealized_pnl: unrealizedPnl,
+                            unrealized_pnl_pct: unrealizedPnlPct
+                        };
                         }
                         
                         return positionData;

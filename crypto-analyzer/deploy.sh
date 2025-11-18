@@ -376,7 +376,7 @@ Type=simple
 User=$(whoami)
 WorkingDirectory=$PROJECT_DIR
 Environment="PATH=$PROJECT_DIR/venv/bin"
-ExecStart=$PROJECT_DIR/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $APP_PORT
+ExecStart=$PROJECT_DIR/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $APP_PORT --no-access-log
 Restart=always
 RestartSec=10
 StandardOutput=append:/var/log/crypto-analyzer.log
