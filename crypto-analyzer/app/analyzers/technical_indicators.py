@@ -42,9 +42,17 @@ class TechnicalIndicators:
         self.bb_period = self.config.get('bollinger', {}).get('period', 20)
         self.bb_std = self.config.get('bollinger', {}).get('std', 2)
 
-        # EMA参数
-        self.ema_short = self.config.get('ema', {}).get('short', 12)
+        # EMA参数（支持币安常用的9/26）
+        self.ema_short = self.config.get('ema', {}).get('short', 9)  # 默认改为9，匹配币安
         self.ema_long = self.config.get('ema', {}).get('long', 26)
+        
+        # MA参数（用于MA10/EMA10检测）
+        self.ma_period = self.config.get('ma', {}).get('period', 10)
+        self.ema_ma_period = self.config.get('ema_ma', {}).get('period', 10)  # EMA10用于与MA10对比
+        
+        # MA5/EMA5参数（用于5m卖出信号检测）
+        self.ma5_period = self.config.get('ma5', {}).get('period', 5)
+        self.ema5_period = self.config.get('ema5', {}).get('period', 5)  # EMA5用于与MA5对比
 
     def calculate_rsi(self, df: pd.DataFrame, period: int = None) -> pd.Series:
         """
@@ -226,6 +234,33 @@ class TechnicalIndicators:
                 pass
 
         return df['close'].ewm(span=period, adjust=False).mean()
+    
+    def calculate_ma(
+        self,
+        df: pd.DataFrame,
+        period: int
+    ) -> pd.Series:
+        """
+        计算MA（简单移动平均线）
+
+        Args:
+            df: 包含'close'列的DataFrame
+            period: 周期
+
+        Returns:
+            MA序列
+        """
+        if ta:
+            try:
+                ma = ta.sma(df['close'], length=period)
+                if ma is None or ma.empty:
+                    raise ValueError("Empty MA result")
+                return ma
+            except Exception as e:
+                logger.debug(f"pandas_ta MA计算失败: {e}，使用手动计算")
+                pass
+
+        return df['close'].rolling(window=period).mean()
 
     def calculate_kdj(
         self,
@@ -347,6 +382,14 @@ class TechnicalIndicators:
             # EMA
             df['ema_short'] = self.calculate_ema(df, self.ema_short)
             df['ema_long'] = self.calculate_ema(df, self.ema_long)
+            
+            # MA和EMA10（用于MA10/EMA10交叉检测）
+            df['ma10'] = self.calculate_ma(df, self.ma_period)
+            df['ema10'] = self.calculate_ema(df, self.ema_ma_period)
+            
+            # MA5和EMA5（用于5m卖出信号检测）
+            df['ma5'] = self.calculate_ma(df, self.ma5_period)
+            df['ema5'] = self.calculate_ema(df, self.ema5_period)
 
             # KDJ
             df['kdj_k'], df['kdj_d'], df['kdj_j'] = \
@@ -391,6 +434,20 @@ class TechnicalIndicators:
                     'trend': 'up' if latest['ema_short'] > latest['ema_long'] else 'down',
                     'volume_ratio': latest['volume'] / latest['vol_ma20'] if latest['vol_ma20'] > 0 else 1.0,
                     'volume_multiple': round(latest['volume'] / latest['vol_ma20'], 2) if latest['vol_ma20'] > 0 else 1.0
+                },
+                'ma_ema10': {
+                    'ma10': latest['ma10'],
+                    'ema10': latest['ema10'],
+                    'bullish_cross': latest['ema10'] > latest['ma10'],  # EMA10在MA10之上表示上升趋势
+                    'trend': 'up' if latest['ema10'] > latest['ma10'] else 'down',
+                    'cross_type': 'golden' if latest['ema10'] > latest['ma10'] else 'death' if latest['ema10'] < latest['ma10'] else 'neutral'
+                },
+                'ma_ema5': {
+                    'ma5': latest['ma5'],
+                    'ema5': latest['ema5'],
+                    'bullish_cross': latest['ema5'] > latest['ma5'],  # EMA5在MA5之上表示上升趋势
+                    'trend': 'up' if latest['ema5'] > latest['ma5'] else 'down',
+                    'cross_type': 'golden' if latest['ema5'] > latest['ma5'] else 'death' if latest['ema5'] < latest['ma5'] else 'neutral'
                 },
                 'kdj': {
                     'k': latest['kdj_k'],

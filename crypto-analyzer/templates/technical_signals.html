@@ -344,8 +344,8 @@
                 <a href="/futures_trading" class="nav-link">
                     <i class="bi bi-graph-up-arrow"></i> 模拟合约
                 </a>
-                <a href="/strategies" class="nav-link">
-                    <i class="bi bi-diagram-3"></i> 策略管理
+                <a href="/trading-strategies" class="nav-link">
+                    <i class="bi bi-diagram-3"></i> 交易策略
                 </a>
                 <a href="/etf_data" class="nav-link">
                     <i class="bi bi-pie-chart"></i> ETF 数据
@@ -1742,9 +1742,32 @@
                 priceInfo += '</small>';
             }
             
+            // EMA金叉/死叉信息（仅对5m、15m、1h显示）
+            let emaCrossInfo = '';
+            if (trend.ema_cross) {
+                // 调试：输出EMA交叉信息
+                console.log('EMA交叉信息:', trend.ema_cross);
+                
+                if (trend.ema_cross.is_golden_cross) {
+                    emaCrossInfo = '<br><small style="color: var(--success-green); font-weight: 600;">✨ EMA金叉</small>';
+                } else if (trend.ema_cross.is_death_cross) {
+                    emaCrossInfo = '<br><small style="color: var(--danger-red); font-weight: 600;">⚠️ EMA死叉</small>';
+                } else if (trend.ema_cross.is_bullish) {
+                    // 当前多头排列（短期在长期之上），但没有刚刚发生金叉
+                    emaCrossInfo = '<br><small style="color: var(--success-green);">↑ EMA多头</small>';
+                } else if (trend.ema_cross.is_bearish) {
+                    // 当前空头排列（短期在长期之下），但没有刚刚发生死叉
+                    emaCrossInfo = '<br><small style="color: var(--danger-red);">↓ EMA空头</small>';
+                }
+            } else {
+                // 调试：如果没有ema_cross信息，输出提示
+                console.log('趋势数据中没有ema_cross字段:', trend);
+            }
+            
             return `
                 <div>
                     <span class="badge ${trend.trend_class}">${trend.trend_text}</span>
+                    ${emaCrossInfo}
                     <br><small style="color: #666;">
                         评分: ${trend.trend_score} | 
                         RSI: ${formatNumber(trend.rsi_value, 1)} | 

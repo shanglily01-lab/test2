@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交易策略 - AlphaFlow</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
+        :root {
+            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
+            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
+            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
+            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
+            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
+            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
+            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
+            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
+            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
+            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
+        .header { background: var(--bg-secondary); border: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
+        .header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-lg); }
+        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-md); }
+        .header-subtitle { color: var(--text-secondary); font-size: 13px; margin-top: var(--spacing-xs); }
+        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
+        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
+        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
+        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        
+        /* 策略类型标签页 */
+        .strategy-type-tabs { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-xl); border-bottom: 2px solid var(--border-default); }
+        .strategy-type-tab { padding: var(--spacing-md) var(--spacing-xl); background: transparent; border: none; border-bottom: 3px solid transparent; color: var(--text-secondary); cursor: pointer; font-size: 15px; font-weight: 600; transition: all var(--transition-base); margin-bottom: -2px; display: flex; align-items: center; gap: var(--spacing-sm); }
+        .strategy-type-tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+        .strategy-type-tab.active { color: var(--primary-blue); border-bottom-color: var(--primary-blue); background: transparent; }
+        
+        /* 策略内容区域 */
+        .strategy-content { display: none; }
+        .strategy-content.active { display: block; }
+        
+        /* 卡片样式 */
+        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
+        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
+        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
+        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .card-body { padding: 0; }
+        
+        /* 占位内容 */
+        .placeholder-content { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
+        .placeholder-icon { font-size: 64px; margin-bottom: var(--spacing-lg); opacity: 0.5; }
+        .placeholder-text { font-size: 16px; margin-bottom: var(--spacing-sm); }
+        .placeholder-subtext { font-size: 13px; color: var(--text-tertiary); }
+        
+        /* 表单样式 */
+        .form-group { margin-bottom: var(--spacing-lg); }
+        .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-sm); }
+        .form-label .required { color: var(--danger-red); margin-left: 2px; }
+        .form-input, .form-select, .form-textarea { width: 100%; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; font-family: var(--font-family); transition: all var(--transition-base); }
+        .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(43, 111, 237, 0.1); }
+        .form-input:disabled { opacity: 0.5; cursor: not-allowed; }
+        .form-textarea { min-height: 80px; resize: vertical; }
+        .form-row { display: flex; gap: var(--spacing-lg); flex-wrap: wrap; }
+        .form-row > .form-section { flex: 1; min-width: 300px; }
+        .form-section { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+        .form-section-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-sm); border-bottom: 1px solid var(--border-default); display: flex; align-items: center; gap: var(--spacing-sm); }
+        
+        /* 单选按钮组 */
+        .radio-group { display: flex; gap: var(--spacing-md); flex-wrap: wrap; }
+        .radio-option { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-md); background: var(--bg-secondary); border: 2px solid var(--border-default); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); flex: 1; min-width: 120px; }
+        .radio-option:hover { border-color: var(--primary-blue); background: var(--bg-hover); }
+        .radio-option input[type="radio"] { width: 18px; height: 18px; cursor: pointer; }
+        .radio-option input[type="radio"]:checked + label { color: var(--primary-blue); font-weight: 600; }
+        .radio-option:has(input[type="radio"]:checked) { border-color: var(--primary-blue); background: rgba(43, 111, 237, 0.1); }
+        .radio-label { cursor: pointer; font-size: 14px; color: var(--text-primary); }
+        
+        /* 复选框组 */
+        .checkbox-group { display: flex; flex-direction: column; gap: var(--spacing-sm); }
+        .checkbox-option { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); }
+        .checkbox-option:hover { border-color: var(--primary-blue); background: var(--bg-hover); }
+        .checkbox-option input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+        .checkbox-option:has(input[type="checkbox"]:checked) { border-color: var(--primary-blue); background: rgba(43, 111, 237, 0.1); }
+        .checkbox-label { cursor: pointer; font-size: 14px; color: var(--text-primary); }
+        
+        /* 多选下拉框 */
+        .multi-select-wrapper { position: relative; }
+        .multi-select-display { padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); min-height: 44px; display: flex; flex-wrap: wrap; gap: var(--spacing-sm); align-items: center; cursor: pointer; }
+        .multi-select-tag { display: inline-flex; align-items: center; gap: var(--spacing-xs); padding: var(--spacing-xs) var(--spacing-sm); background: var(--primary-blue); color: white; border-radius: var(--radius-sm); font-size: 12px; }
+        .multi-select-tag .remove { cursor: pointer; margin-left: 4px; }
+        .multi-select-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); margin-top: var(--spacing-xs); max-height: 200px; overflow-y: auto; z-index: 100; display: none; }
+        .multi-select-dropdown.show { display: block; }
+        .multi-select-item { padding: var(--spacing-sm) var(--spacing-md); cursor: pointer; transition: background var(--transition-fast); }
+        .multi-select-item:hover { background: var(--bg-hover); }
+        .multi-select-item input[type="checkbox"] { margin-right: var(--spacing-sm); }
+        
+        /* 策略列表 */
+        .strategy-list { margin-bottom: var(--spacing-xl); }
+        .strategy-item { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); transition: all var(--transition-base); }
+        .strategy-item:hover { border-color: var(--primary-blue); box-shadow: var(--shadow-md); }
+        .strategy-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md); }
+        .strategy-item-title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+        .strategy-item-actions { display: flex; gap: var(--spacing-sm); }
+        .strategy-item-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); }
+        .strategy-item-field { }
+        .strategy-item-field-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+        .strategy-item-field-value { font-size: 14px; color: var(--text-primary); }
+        
+        /* 按钮样式 */
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
+        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .btn-primary:hover { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
+        .btn-secondary:hover { background: var(--bg-hover); border-color: var(--border-muted); }
+        .btn-success { background: var(--success-green); color: white; border-color: var(--success-green); }
+        .btn-success:hover { background: #059669; border-color: #059669; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-danger { background: var(--danger-red); color: white; border-color: var(--danger-red); }
+        .btn-danger:hover { background: #DC2626; border-color: #DC2626; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .container { padding: var(--spacing-md); }
+            .header-content { flex-direction: column; align-items: flex-start; }
+            .strategy-type-tabs { flex-direction: column; }
+            .strategy-type-tab { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div>
+                    <h1 class="header-title">
+                        <i class="bi bi-diagram-3"></i>
+                        交易策略
+                    </h1>
+                    <p class="header-subtitle">管理您的现货和合约交易策略配置</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-container">
+            <div class="nav-links">
+                <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+                <a href="/technical-signals" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 技术信号
+                </a>
+                <a href="/paper_trading" class="nav-link">
+                    <i class="bi bi-journals"></i> 模拟现货
+                </a>
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 模拟合约
+                </a>
+                <a href="/trading-strategies" class="nav-link active">
+                    <i class="bi bi-diagram-3"></i> 交易策略
+                </a>
+                <a href="/etf_data" class="nav-link">
+                    <i class="bi bi-pie-chart"></i> ETF 数据
+                </a>
+                <a href="/corporate_treasury" class="nav-link">
+                    <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/blockchain_gas" class="nav-link">
+                    <i class="bi bi-lightning-charge"></i> Gas统计
+                </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
+                </a>
+            </div>
+        </nav>
+
+        <!-- Strategy Type Tabs -->
+        <div class="strategy-type-tabs">
+            <button class="strategy-type-tab active" onclick="switchStrategyType('spot')">
+                <i class="bi bi-currency-exchange"></i>
+                现货交易策略
+            </button>
+            <button class="strategy-type-tab" onclick="switchStrategyType('futures')">
+                <i class="bi bi-graph-up-arrow"></i>
+                合约交易策略
+            </button>
+        </div>
+
+        <!-- Spot Trading Strategy Content -->
+        <div id="spotStrategyContent" class="strategy-content active">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-currency-exchange"></i>
+                        现货交易策略
+                    </h2>
+                </div>
+                <div class="card-body">
+                    <div class="placeholder-content">
+                        <div class="placeholder-icon">
+                            <i class="bi bi-currency-exchange"></i>
+                        </div>
+                        <div class="placeholder-text">现货交易策略配置</div>
+                        <div class="placeholder-subtext">此部分功能正在开发中，敬请期待...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Futures Trading Strategy Content -->
+        <div id="futuresStrategyContent" class="strategy-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-graph-up-arrow"></i>
+                        合约交易策略
+                    </h2>
+                    <button class="btn btn-primary" onclick="showAddStrategyModal()">
+                        <i class="bi bi-plus-circle"></i>
+                        添加策略
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- 策略列表 -->
+                    <div class="strategy-list" id="futuresStrategyList">
+                        <!-- 策略项将通过JavaScript动态加载 -->
+                    </div>
+                    
+                    <!-- 添加策略表单 -->
+                    <div class="form-section" id="addStrategyForm" style="display: none;">
+                        <div class="form-section-title">
+                            <i class="bi bi-plus-circle"></i>
+                            新建合约交易策略
+                        </div>
+                        
+                        <form id="strategyForm" onsubmit="saveStrategy(event)">
+                            <!-- 策略基本信息 -->
+                            <div class="form-group">
+                                <label class="form-label">策略名称<span class="required">*</span></label>
+                                <input type="text" class="form-input" id="strategyName" placeholder="例如：EMA多空策略" required>
+                            </div>
+                            
+                            <!-- 买入和卖出条件（并排显示） -->
+                            <div class="form-row">
+                                <!-- 买入条件 -->
+                                <div class="form-section" style="flex: 1;">
+                                    <div class="form-section-title">
+                                        <i class="bi bi-arrow-down-circle" style="color: var(--success-green);"></i>
+                                        买入条件
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">交易方向<span class="required">*</span></label>
+                                        <div class="checkbox-group" style="flex-direction: row; flex-wrap: wrap;">
+                                            <div class="checkbox-option">
+                                                <input type="checkbox" id="buyDirectionLong" name="buyDirection" value="long" onchange="updatePriceOptions()">
+                                                <label for="buyDirectionLong" class="checkbox-label">
+                                                    <i class="bi bi-arrow-up-circle" style="color: var(--success-green);"></i>
+                                                    做多
+                                                </label>
+                                            </div>
+                                            <div class="checkbox-option">
+                                                <input type="checkbox" id="buyDirectionShort" name="buyDirection" value="short" onchange="updatePriceOptions()">
+                                                <label for="buyDirectionShort" class="checkbox-label">
+                                                    <i class="bi bi-arrow-down-circle" style="color: var(--danger-red);"></i>
+                                                    做空
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">交易倍数<span class="required">*</span></label>
+                                        <div class="radio-group" style="flex-direction: row; flex-wrap: wrap;">
+                                            <div class="radio-option">
+                                                <input type="radio" id="leverage5" name="leverage" value="5" checked>
+                                                <label for="leverage5" class="radio-label">X5</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="leverage10" name="leverage" value="10">
+                                                <label for="leverage10" class="radio-label">X10</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="leverage20" name="leverage" value="20">
+                                                <label for="leverage20" class="radio-label">X20</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="leverage30" name="leverage" value="30">
+                                                <label for="leverage30" class="radio-label">X30</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="leverage50" name="leverage" value="50">
+                                                <label for="leverage50" class="radio-label">X50</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="leverage100" name="leverage" value="100">
+                                                <label for="leverage100" class="radio-label">X100</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">EMA信号<span class="required">*</span></label>
+                                        <div class="radio-group">
+                                            <div class="radio-option">
+                                                <input type="radio" id="buySignalEma5m" name="buySignals" value="ema_5m" onchange="autoUpdateDirection('buy')">
+                                                <label for="buySignalEma5m" class="radio-label">EMA 5分钟</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="buySignalEma15m" name="buySignals" value="ema_15m" checked onchange="autoUpdateDirection('buy')">
+                                                <label for="buySignalEma15m" class="radio-label">EMA 15分钟</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="buySignalEma1h" name="buySignals" value="ema_1h" onchange="autoUpdateDirection('buy')">
+                                                <label for="buySignalEma1h" class="radio-label">EMA 1小时</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <input type="checkbox" id="buyVolumeEnabled" name="buyVolumeEnabled" onchange="toggleBuyVolumeOptions()">
+                                            <label for="buyVolumeEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">启用成交量条件</label>
+                                        </div>
+                                        <div id="buyVolumeOptions" style="display: none;">
+                                            <label class="form-label">成交量（放量）<span class="required">*</span></label>
+                                            <div class="radio-group">
+                                                <div class="radio-option">
+                                                    <input type="radio" id="buyVolume1_15" name="buyVolume" value="1.15">
+                                                    <label for="buyVolume1_15" class="radio-label">≥1.15倍</label>
+                                                </div>
+                                                <div class="radio-option">
+                                                    <input type="radio" id="buyVolume1_5" name="buyVolume" value="1.5">
+                                                    <label for="buyVolume1_5" class="radio-label">≥1.5倍</label>
+                                                </div>
+                                                <div class="radio-option">
+                                                    <input type="radio" id="buyVolume2" name="buyVolume" value="2">
+                                                    <label for="buyVolume2" class="radio-label">≥2倍</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 卖出条件 -->
+                                <div class="form-section" style="flex: 1;">
+                                    <div class="form-section-title">
+                                        <i class="bi bi-arrow-up-circle" style="color: var(--danger-red);"></i>
+                                        卖出条件
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">EMA信号<span class="required">*</span></label>
+                                        <div class="radio-group">
+                                            <div class="radio-option">
+                                                <input type="radio" id="sellSignalEma5m" name="sellSignals" value="ema_5m" checked onchange="autoUpdateDirection('sell')">
+                                                <label for="sellSignalEma5m" class="radio-label">EMA 5分钟</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="sellSignalEma15m" name="sellSignals" value="ema_15m" onchange="autoUpdateDirection('sell')">
+                                                <label for="sellSignalEma15m" class="radio-label">EMA 15分钟</label>
+                                            </div>
+                                            <div class="radio-option">
+                                                <input type="radio" id="sellSignalEma1h" name="sellSignals" value="ema_1h" onchange="autoUpdateDirection('sell')">
+                                                <label for="sellSignalEma1h" class="radio-label">EMA 1小时</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <input type="checkbox" id="sellVolumeEnabled" name="sellVolumeEnabled" onchange="toggleSellVolumeOptions()">
+                                            <label for="sellVolumeEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">启用成交量条件</label>
+                                        </div>
+                                        <div id="sellVolumeOptions" style="display: none;">
+                                            <label class="form-label">成交量（缩量）<span class="required">*</span></label>
+                                            <div class="radio-group">
+                                                <div class="radio-option">
+                                                    <input type="radio" id="sellVolume0_9" name="sellVolume" value="0.9">
+                                                    <label for="sellVolume0_9" class="radio-label">≤0.9倍</label>
+                                                </div>
+                                                <div class="radio-option">
+                                                    <input type="radio" id="sellVolume0_5" name="sellVolume" value="0.5">
+                                                    <label for="sellVolume0_5" class="radio-label">≤0.5倍</label>
+                                                </div>
+                                                <div class="radio-option">
+                                                    <input type="radio" id="sellVolume0_5_below" name="sellVolume" value="<0.5">
+                                                    <label for="sellVolume0_5_below" class="radio-label">&lt;0.5倍</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 交易币种 -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-currency-exchange"></i>
+                                    交易币种
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">交易币种<span class="required">*</span></label>
+                                    <div id="symbolCheckboxGroup" class="checkbox-group" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--spacing-sm); max-height: 300px; overflow-y: auto; padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                        <!-- 币种复选框将通过JavaScript动态加载 -->
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 仓位控制 -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-pie-chart"></i>
+                                    仓位控制
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">仓位大小<span class="required">*</span></label>
+                                        <input type="number" class="form-input" id="positionSize" placeholder="例如：10" min="0.01" max="100" step="0.01" required>
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">占总资金的比例（%）</small>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">最大持仓数量</label>
+                                        <input type="number" class="form-input" id="maxPositions" placeholder="例如：5" min="1" step="1">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">同时持有的最大仓位数量</small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 交易价格 -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-currency-dollar"></i>
+                                    交易价格
+                                </div>
+                                
+                                <!-- 做多价格选项 -->
+                                <div class="form-group" id="longPriceGroup">
+                                    <label class="form-label">做多价格<span class="required">*</span></label>
+                                    <div class="radio-group">
+                                        <div class="radio-option">
+                                            <input type="radio" id="longPriceMarket" name="longPrice" value="market" checked>
+                                            <label for="longPriceMarket" class="radio-label">市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="longPriceMinus0_2" name="longPrice" value="market_minus_0_2">
+                                            <label for="longPriceMinus0_2" class="radio-label">-0.2%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="longPriceMinus0_4" name="longPrice" value="market_minus_0_4">
+                                            <label for="longPriceMinus0_4" class="radio-label">-0.4%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="longPriceMinus0_6" name="longPrice" value="market_minus_0_6">
+                                            <label for="longPriceMinus0_6" class="radio-label">-0.6%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="longPriceMinus0_8" name="longPrice" value="market_minus_0_8">
+                                            <label for="longPriceMinus0_8" class="radio-label">-0.8%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="longPriceMinus1" name="longPrice" value="market_minus_1">
+                                            <label for="longPriceMinus1" class="radio-label">-1%市价</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 做空价格选项 -->
+                                <div class="form-group" id="shortPriceGroup" style="display: none;">
+                                    <label class="form-label">做空价格<span class="required">*</span></label>
+                                    <div class="radio-group">
+                                        <div class="radio-option">
+                                            <input type="radio" id="shortPriceMarket" name="shortPrice" value="market" checked>
+                                            <label for="shortPriceMarket" class="radio-label">市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="shortPricePlus0_2" name="shortPrice" value="market_plus_0_2">
+                                            <label for="shortPricePlus0_2" class="radio-label">+0.2%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="shortPricePlus0_4" name="shortPrice" value="market_plus_0_4">
+                                            <label for="shortPricePlus0_4" class="radio-label">+0.4%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="shortPricePlus0_6" name="shortPrice" value="market_plus_0_6">
+                                            <label for="shortPricePlus0_6" class="radio-label">+0.6%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="shortPricePlus0_8" name="shortPrice" value="market_plus_0_8">
+                                            <label for="shortPricePlus0_8" class="radio-label">+0.8%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="shortPricePlus1" name="shortPrice" value="market_plus_1">
+                                            <label for="shortPricePlus1" class="radio-label">+1%市价</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 表单操作按钮 -->
+                            <div style="display: flex; gap: var(--spacing-md); justify-content: flex-end; margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default);">
+                                <button type="button" class="btn btn-secondary" onclick="cancelAddStrategy()">取消</button>
+                                <button type="submit" class="btn btn-primary">保存策略</button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- 空状态 -->
+                    <div class="placeholder-content" id="emptyState">
+                        <div class="placeholder-icon">
+                            <i class="bi bi-graph-up-arrow"></i>
+                        </div>
+                        <div class="placeholder-text">暂无策略</div>
+                        <div class="placeholder-subtext">点击"添加策略"按钮创建您的第一个合约交易策略</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let strategies = []; // 存储策略列表
+        let availableSymbols = []; // 可用币种列表
+        let editingStrategyId = null; // 正在编辑的策略ID
+        
+        // 切换策略类型
+        function switchStrategyType(type) {
+            // 更新标签页状态
+            document.querySelectorAll('.strategy-type-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // 更新内容显示
+            document.querySelectorAll('.strategy-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            if (type === 'spot') {
+                document.getElementById('spotStrategyContent').classList.add('active');
+            } else if (type === 'futures') {
+                document.getElementById('futuresStrategyContent').classList.add('active');
+                loadStrategies();
+            }
+        }
+
+        // 显示添加策略表单
+        function showAddStrategyModal() {
+            document.getElementById('addStrategyForm').style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+            document.querySelector('.card-header .btn').textContent = '取消添加';
+            document.querySelector('.card-header .btn').onclick = cancelAddStrategy;
+            loadAvailableSymbols();
+            // 初始化：默认选择做多
+            document.getElementById('buyDirectionLong').checked = true;
+            // 初始化价格选项
+            updatePriceOptions();
+        }
+
+        // 取消添加策略
+        function cancelAddStrategy() {
+            document.getElementById('addStrategyForm').style.display = 'none';
+            document.getElementById('strategyForm').reset();
+            // 重置成交量选项显示状态
+            document.getElementById('buyVolumeEnabled').checked = false;
+            document.getElementById('sellVolumeEnabled').checked = false;
+            toggleBuyVolumeOptions();
+            toggleSellVolumeOptions();
+            document.querySelector('.card-header .btn').innerHTML = '<i class="bi bi-plus-circle"></i> 添加策略';
+            document.querySelector('.card-header .btn').onclick = showAddStrategyModal;
+            editingStrategyId = null;
+            updateEmptyState();
+        }
+
+        // 根据交易方向更新价格选项显示
+        function updatePriceOptions() {
+            const longChecked = document.getElementById('buyDirectionLong').checked;
+            const shortChecked = document.getElementById('buyDirectionShort').checked;
+            
+            // 显示/隐藏做多价格选项
+            const longPriceGroup = document.getElementById('longPriceGroup');
+            if (longChecked) {
+                longPriceGroup.style.display = 'block';
+            } else {
+                longPriceGroup.style.display = 'none';
+            }
+            
+            // 显示/隐藏做空价格选项
+            const shortPriceGroup = document.getElementById('shortPriceGroup');
+            if (shortChecked) {
+                shortPriceGroup.style.display = 'block';
+            } else {
+                shortPriceGroup.style.display = 'none';
+            }
+        }
+
+        // 根据EMA信号自动决定多空方向
+        function autoUpdateDirection(type) {
+            if (type === 'buy') {
+                const buySignal = document.querySelector('input[name="buySignals"]:checked').value;
+                // EMA信号通常金叉表示看涨（做多），死叉表示看跌（做空）
+                // 这里可以根据实际需求调整逻辑
+                // 暂时根据EMA时间周期判断：5m和15m通常用于短期做多，1h用于中期
+                if (buySignal === 'ema_5m' || buySignal === 'ema_15m') {
+                    // 短期EMA信号，倾向于做多
+                    if (!document.getElementById('buyDirectionLong').checked) {
+                        document.getElementById('buyDirectionLong').checked = true;
+                        updatePriceOptions();
+                    }
+                } else if (buySignal === 'ema_1h') {
+                    // 1小时EMA信号，可以同时支持多空
+                    // 不做自动选择，让用户自己决定
+                }
+            } else if (type === 'sell') {
+                const sellSignal = document.querySelector('input[name="sellSignals"]:checked').value;
+                // 卖出信号通常用于平仓，不做方向自动选择
+            }
+        }
+
+        // 切换买入成交量选项显示/隐藏
+        function toggleBuyVolumeOptions() {
+            const enabled = document.getElementById('buyVolumeEnabled').checked;
+            const volumeOptions = document.getElementById('buyVolumeOptions');
+            if (enabled) {
+                volumeOptions.style.display = 'block';
+                // 设置必填验证
+                document.querySelectorAll('input[name="buyVolume"]').forEach(radio => {
+                    radio.required = true;
+                });
+            } else {
+                volumeOptions.style.display = 'none';
+                // 清除必填验证和选择
+                document.querySelectorAll('input[name="buyVolume"]').forEach(radio => {
+                    radio.required = false;
+                    radio.checked = false;
+                });
+            }
+        }
+
+        // 切换卖出成交量选项显示/隐藏
+        function toggleSellVolumeOptions() {
+            const enabled = document.getElementById('sellVolumeEnabled').checked;
+            const volumeOptions = document.getElementById('sellVolumeOptions');
+            if (enabled) {
+                volumeOptions.style.display = 'block';
+                // 设置必填验证
+                document.querySelectorAll('input[name="sellVolume"]').forEach(radio => {
+                    radio.required = true;
+                });
+            } else {
+                volumeOptions.style.display = 'none';
+                // 清除必填验证和选择
+                document.querySelectorAll('input[name="sellVolume"]').forEach(radio => {
+                    radio.required = false;
+                    radio.checked = false;
+                });
+            }
+        }
+
+        // 加载可用币种（从配置文件/API获取）
+        async function loadAvailableSymbols() {
+            try {
+                // 优先从 /api/config 获取交易对清单（从配置文件读取）
+                const configResponse = await fetch('/api/config');
+                if (configResponse.ok) {
+                    const configData = await configResponse.json();
+                    if (configData.symbols && Array.isArray(configData.symbols) && configData.symbols.length > 0) {
+                        availableSymbols = configData.symbols;
+                    }
+                }
+                
+                // 如果 /api/config 没有数据，尝试从 /api/futures/symbols 获取
+                if (availableSymbols.length === 0) {
+                    const futuresResponse = await fetch('/api/futures/symbols');
+                    if (futuresResponse.ok) {
+                        const futuresData = await futuresResponse.json();
+                        if (futuresData.success && futuresData.symbols && futuresData.symbols.length > 0) {
+                            availableSymbols = futuresData.symbols;
+                        }
+                    }
+                }
+                
+                // 如果仍然没有数据，尝试从技术信号API获取
+                if (availableSymbols.length === 0) {
+                    const techResponse = await fetch('/api/technical-signals');
+                    if (techResponse.ok) {
+                        const techData = await techResponse.json();
+                        if (techData.success && techData.data && techData.data.length > 0) {
+                            availableSymbols = techData.data.map(item => item.symbol);
+                        }
+                    }
+                }
+                
+                // 如果仍然没有数据，使用默认列表
+                if (availableSymbols.length === 0) {
+                    console.warn('无法从API获取币种列表，使用默认列表');
+                    availableSymbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'DOGE/USDT', 'XRP/USDT', 'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'MATIC/USDT'];
+                }
+                
+                const symbolCheckboxGroup = document.getElementById('symbolCheckboxGroup');
+                symbolCheckboxGroup.innerHTML = '';
+                
+                // 去重并排序
+                availableSymbols = [...new Set(availableSymbols)].sort();
+                
+                availableSymbols.forEach(symbol => {
+                    const checkboxOption = document.createElement('div');
+                    checkboxOption.className = 'checkbox-option';
+                    checkboxOption.innerHTML = `
+                        <input type="checkbox" id="symbol_${symbol.replace('/', '_')}" name="symbols" value="${symbol}">
+                        <label for="symbol_${symbol.replace('/', '_')}" class="checkbox-label">${symbol}</label>
+                    `;
+                    symbolCheckboxGroup.appendChild(checkboxOption);
+                });
+            } catch (error) {
+                console.error('加载币种列表失败:', error);
+                // 使用默认列表作为备用
+                if (availableSymbols.length === 0) {
+                    availableSymbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'DOGE/USDT', 'XRP/USDT', 'ADA/USDT', 'AVAX/USDT', 'DOT/USDT', 'MATIC/USDT'];
+                    const symbolCheckboxGroup = document.getElementById('symbolCheckboxGroup');
+                    symbolCheckboxGroup.innerHTML = '';
+                    availableSymbols.forEach(symbol => {
+                        const checkboxOption = document.createElement('div');
+                        checkboxOption.className = 'checkbox-option';
+                        checkboxOption.innerHTML = `
+                            <input type="checkbox" id="symbol_${symbol.replace('/', '_')}" name="symbols" value="${symbol}">
+                            <label for="symbol_${symbol.replace('/', '_')}" class="checkbox-label">${symbol}</label>
+                        `;
+                        symbolCheckboxGroup.appendChild(checkboxOption);
+                    });
+                }
+            }
+        }
+
+        // 保存策略
+        function saveStrategy(event) {
+            event.preventDefault();
+            
+            const buyVolumeEnabled = document.getElementById('buyVolumeEnabled').checked;
+            const sellVolumeEnabled = document.getElementById('sellVolumeEnabled').checked;
+            const buyVolumeRadio = document.querySelector('input[name="buyVolume"]:checked');
+            const sellVolumeRadio = document.querySelector('input[name="sellVolume"]:checked');
+            const buySignalRadio = document.querySelector('input[name="buySignals"]:checked');
+            const sellSignalRadio = document.querySelector('input[name="sellSignals"]:checked');
+            const longPriceRadio = document.querySelector('input[name="longPrice"]:checked');
+            const shortPriceRadio = document.querySelector('input[name="shortPrice"]:checked');
+            
+            const buyDirections = Array.from(document.querySelectorAll('input[name="buyDirection"]:checked')).map(cb => cb.value);
+            const leverageRadio = document.querySelector('input[name="leverage"]:checked');
+            
+            const formData = {
+                name: document.getElementById('strategyName').value,
+                buyDirection: buyDirections, // 改为数组，支持多选
+                leverage: leverageRadio ? parseInt(leverageRadio.value) : 5, // 交易倍数，默认5
+                buySignals: buySignalRadio ? buySignalRadio.value : null, // 改为单选
+                buyVolumeEnabled: buyVolumeEnabled,
+                buyVolume: buyVolumeEnabled && buyVolumeRadio ? buyVolumeRadio.value : null,
+                sellSignals: sellSignalRadio ? sellSignalRadio.value : null, // 改为单选
+                sellVolumeEnabled: sellVolumeEnabled,
+                sellVolume: sellVolumeEnabled && sellVolumeRadio ? sellVolumeRadio.value : null,
+                symbols: Array.from(document.querySelectorAll('input[name="symbols"]:checked')).map(cb => cb.value),
+                positionSize: parseFloat(document.getElementById('positionSize').value),
+                maxPositions: document.getElementById('maxPositions').value ? parseInt(document.getElementById('maxPositions').value) : null,
+                longPrice: longPriceRadio ? longPriceRadio.value : null,
+                shortPrice: shortPriceRadio ? shortPriceRadio.value : null
+            };
+            
+            // 验证
+            if (buyDirections.length === 0) {
+                alert('请至少选择一个交易方向（做多或做空）');
+                return;
+            }
+            
+            if (!leverageRadio) {
+                alert('请选择交易倍数');
+                return;
+            }
+            
+            if (!buySignalRadio) {
+                alert('请选择一个买入EMA信号');
+                return;
+            }
+            
+            // 如果启用了买入成交量条件，则必须选择
+            if (buyVolumeEnabled && !buyVolumeRadio) {
+                alert('请选择买入成交量条件');
+                return;
+            }
+            
+            if (!sellSignalRadio) {
+                alert('请选择一个卖出EMA信号');
+                return;
+            }
+            
+            // 如果启用了卖出成交量条件，则必须选择
+            if (sellVolumeEnabled && !sellVolumeRadio) {
+                alert('请选择卖出成交量条件');
+                return;
+            }
+            
+            // 验证价格选项
+            if (buyDirections.includes('long') && !longPriceRadio) {
+                alert('请选择做多价格');
+                return;
+            }
+            
+            if (buyDirections.includes('short') && !shortPriceRadio) {
+                alert('请选择做空价格');
+                return;
+            }
+            
+            if (formData.symbols.length === 0) {
+                alert('请至少选择一个交易币种');
+                return;
+            }
+            
+            // 更新或添加策略
+            if (editingStrategyId) {
+                // 编辑模式：更新现有策略
+                const index = strategies.findIndex(s => s.id === editingStrategyId);
+                if (index !== -1) {
+                    formData.id = editingStrategyId;
+                    formData.enabled = strategies[index].enabled; // 保持原有启用状态
+                    strategies[index] = formData;
+                }
+            } else {
+                // 新建模式：添加新策略
+                formData.id = Date.now(); // 临时ID
+                formData.enabled = false;
+                strategies.push(formData);
+            }
+            
+            // 保存到本地存储（后续可以改为API调用）
+            localStorage.setItem('futuresStrategies', JSON.stringify(strategies));
+            
+            // 刷新显示
+            loadStrategies();
+            cancelAddStrategy();
+            
+            alert('策略保存成功！');
+        }
+
+        // 加载策略列表
+        function loadStrategies() {
+            // 从本地存储加载（后续可以改为API调用）
+            const saved = localStorage.getItem('futuresStrategies');
+            if (saved) {
+                strategies = JSON.parse(saved);
+            }
+            
+            const strategyList = document.getElementById('futuresStrategyList');
+            const emptyState = document.getElementById('emptyState');
+            
+            if (strategies.length === 0) {
+                strategyList.innerHTML = '';
+                emptyState.style.display = 'block';
+            } else {
+                emptyState.style.display = 'none';
+                strategyList.innerHTML = strategies.map(strategy => `
+                    <div class="strategy-item">
+                        <div class="strategy-item-header">
+                            <div class="strategy-item-title">${strategy.name}</div>
+                            <div class="strategy-item-actions">
+                                <button class="btn btn-sm btn-info" onclick="testStrategy(${strategy.id})" title="测试24小时交易">
+                                    <i class="bi bi-graph-up"></i> 测试
+                                </button>
+                                <button class="btn btn-sm ${strategy.enabled ? 'btn-success' : 'btn-secondary'}" onclick="toggleStrategy(${strategy.id})">
+                                    ${strategy.enabled ? '<i class="bi bi-pause-circle"></i> 暂停' : '<i class="bi bi-play-circle"></i> 启用'}
+                                </button>
+                                <button class="btn btn-sm btn-secondary" onclick="editStrategy(${strategy.id})">
+                                    <i class="bi bi-pencil"></i> 编辑
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteStrategy(${strategy.id})">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            </div>
+                        </div>
+                        <div class="strategy-item-body">
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">交易方向</div>
+                                <div class="strategy-item-field-value">
+                                    ${Array.isArray(strategy.buyDirection) 
+                                        ? strategy.buyDirection.map(dir => 
+                                            `<span style="color: ${dir === 'long' ? 'var(--success-green)' : 'var(--danger-red)'}; margin-right: 8px;">
+                                                ${dir === 'long' ? '做多' : '做空'}
+                                            </span>`
+                                        ).join('')
+                                        : (strategy.buyDirection === 'long' 
+                                            ? '<span style="color: var(--success-green);">做多</span>' 
+                                            : '<span style="color: var(--danger-red);">做空</span>')}
+                                </div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">交易倍数</div>
+                                <div class="strategy-item-field-value">X${strategy.leverage || 5}</div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">买入EMA信号</div>
+                                <div class="strategy-item-field-value">${strategy.buySignals || (Array.isArray(strategy.signals) ? strategy.signals.join(', ') : '未设置')}</div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">买入成交量</div>
+                                <div class="strategy-item-field-value">${strategy.buyVolumeEnabled !== false && strategy.buyVolume ? '≥' + strategy.buyVolume + '倍' : '未启用'}</div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">卖出EMA信号</div>
+                                <div class="strategy-item-field-value">${strategy.sellSignals || '未设置'}</div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">卖出成交量</div>
+                                <div class="strategy-item-field-value">${strategy.sellVolumeEnabled !== false && strategy.sellVolume ? (strategy.sellVolume.startsWith('<') ? strategy.sellVolume + '倍' : '≤' + strategy.sellVolume + '倍') : '未启用'}</div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">交易币种</div>
+                                <div class="strategy-item-field-value">${strategy.symbols.join(', ')}</div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">仓位大小</div>
+                                <div class="strategy-item-field-value">${strategy.positionSize}%</div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">做多价格</div>
+                                <div class="strategy-item-field-value">${strategy.longPrice ? getBuyPriceTypeText(strategy.longPrice) : '未设置'}</div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">做空价格</div>
+                                <div class="strategy-item-field-value">${strategy.shortPrice ? getBuyPriceTypeText(strategy.shortPrice) : '未设置'}</div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // 获取交易方式文本
+        function getBuyPriceTypeText(type) {
+            const types = {
+                'market': '市价',
+                'market_minus_0_2': '-0.2%市价',
+                'market_minus_0_4': '-0.4%市价',
+                'market_minus_0_6': '-0.6%市价',
+                'market_minus_0_8': '-0.8%市价',
+                'market_minus_1': '-1%市价',
+                'market_plus_0_2': '+0.2%市价',
+                'market_plus_0_4': '+0.4%市价',
+                'market_plus_0_6': '+0.6%市价',
+                'market_plus_0_8': '+0.8%市价',
+                'market_plus_1': '+1%市价',
+                'limit': '限价'
+            };
+            return types[type] || type || '未设置';
+        }
+
+        // 切换策略启用状态
+        function toggleStrategy(id) {
+            const strategy = strategies.find(s => s.id === id);
+            if (strategy) {
+                strategy.enabled = !strategy.enabled;
+                localStorage.setItem('futuresStrategies', JSON.stringify(strategies));
+                loadStrategies();
+                
+                // 如果启用策略，立即执行一次
+                if (strategy.enabled) {
+                    executeStrategy(strategy);
+                }
+            }
+        }
+        
+        // 执行策略
+        async function executeStrategy(strategy) {
+            try {
+                const response = await fetch('/api/strategy/execute', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ...strategy,
+                        account_id: 2  // 默认账户ID
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    console.log('策略执行成功:', result);
+                    if (result.results && result.results.length > 0) {
+                        alert(`策略执行成功！\n执行了 ${result.results.length} 个操作`);
+                    }
+                } else {
+                    console.error('策略执行失败:', result.message);
+                }
+            } catch (error) {
+                console.error('执行策略时出错:', error);
+            }
+        }
+
+        // 编辑策略
+        function editStrategy(id) {
+            const strategy = strategies.find(s => s.id === id);
+            if (strategy) {
+                editingStrategyId = id; // 设置正在编辑的策略ID
+                
+                // 填充表单
+                document.getElementById('strategyName').value = strategy.name;
+                
+                // 买入方向（支持多选）
+                const buyDirections = Array.isArray(strategy.buyDirection) ? strategy.buyDirection : (strategy.buyDirection ? [strategy.buyDirection] : (strategy.direction ? [strategy.direction] : ['long']));
+                buyDirections.forEach(dir => {
+                    const checkbox = document.querySelector(`input[name="buyDirection"][value="${dir}"]`);
+                    if (checkbox) checkbox.checked = true;
+                });
+                
+                // 交易倍数
+                const leverage = strategy.leverage || 5;
+                const leverageRadio = document.querySelector(`input[name="leverage"][value="${leverage}"]`);
+                if (leverageRadio) leverageRadio.checked = true;
+                
+                // 更新价格选项（根据交易方向）
+                updatePriceOptions();
+                
+                // 买入EMA信号（单选）
+                const buySignal = strategy.buySignals || (Array.isArray(strategy.signals) ? strategy.signals[0] : strategy.signals) || 'ema_15m';
+                const buySignalRadio = document.querySelector(`input[name="buySignals"][value="${buySignal}"]`);
+                if (buySignalRadio) buySignalRadio.checked = true;
+                
+                // 买入成交量（根据buyVolumeEnabled决定是否启用）
+                const buyVolumeEnabled = strategy.buyVolumeEnabled !== false && strategy.buyVolume !== null && strategy.buyVolume !== undefined;
+                document.getElementById('buyVolumeEnabled').checked = buyVolumeEnabled;
+                toggleBuyVolumeOptions();
+                if (buyVolumeEnabled && strategy.buyVolume) {
+                    const buyVolumeRadio = document.querySelector(`input[name="buyVolume"][value="${strategy.buyVolume}"]`);
+                    if (buyVolumeRadio) buyVolumeRadio.checked = true;
+                }
+                
+                // 卖出EMA信号（单选）
+                const sellSignal = strategy.sellSignals || 'ema_5m';
+                const sellSignalRadio = document.querySelector(`input[name="sellSignals"][value="${sellSignal}"]`);
+                if (sellSignalRadio) sellSignalRadio.checked = true;
+                
+                // 卖出成交量（根据sellVolumeEnabled决定是否启用）
+                const sellVolumeEnabled = strategy.sellVolumeEnabled !== false && strategy.sellVolume !== null && strategy.sellVolume !== undefined;
+                document.getElementById('sellVolumeEnabled').checked = sellVolumeEnabled;
+                toggleSellVolumeOptions();
+                if (sellVolumeEnabled && strategy.sellVolume) {
+                    const sellVolumeRadio = document.querySelector(`input[name="sellVolume"][value="${strategy.sellVolume}"]`);
+                    if (sellVolumeRadio) sellVolumeRadio.checked = true;
+                }
+                
+                document.getElementById('positionSize').value = strategy.positionSize;
+                document.getElementById('maxPositions').value = strategy.maxPositions || '';
+                
+                // 做多价格
+                if (strategy.longPrice) {
+                    const longPriceRadio = document.querySelector(`input[name="longPrice"][value="${strategy.longPrice}"]`);
+                    if (longPriceRadio) longPriceRadio.checked = true;
+                }
+                
+                // 做空价格
+                if (strategy.shortPrice) {
+                    const shortPriceRadio = document.querySelector(`input[name="shortPrice"][value="${strategy.shortPrice}"]`);
+                    if (shortPriceRadio) shortPriceRadio.checked = true;
+                }
+                
+                // 显示表单
+                showAddStrategyModal();
+                
+                // 更新币种选择
+                loadAvailableSymbols().then(() => {
+                    // 清除所有币种选择
+                    document.querySelectorAll('input[name="symbols"]').forEach(cb => cb.checked = false);
+                    // 选中策略中的币种
+                    strategy.symbols.forEach(symbol => {
+                        const checkbox = document.getElementById(`symbol_${symbol.replace('/', '_')}`);
+                        if (checkbox) checkbox.checked = true;
+                    });
+                });
+            }
+        }
+
+        // 删除策略
+        function deleteStrategy(id) {
+            if (confirm('确定要删除这个策略吗？')) {
+                strategies = strategies.filter(s => s.id !== id);
+                localStorage.setItem('futuresStrategies', JSON.stringify(strategies));
+                loadStrategies();
+            }
+        }
+
+        // 测试策略（24小时回测）
+        async function testStrategy(id) {
+            const strategy = strategies.find(s => s.id === id);
+            if (!strategy) {
+                alert('策略不存在');
+                return;
+            }
+            
+            if (!strategy.symbols || strategy.symbols.length === 0) {
+                alert('策略未配置交易币种，无法测试');
+                return;
+            }
+            
+            // 显示加载提示
+            const loadingModal = document.createElement('div');
+            loadingModal.id = 'testLoadingModal';
+            loadingModal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center;';
+            loadingModal.innerHTML = `
+                <div style="background: white; padding: 30px; border-radius: 8px; text-align: center;">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                    <p style="margin-top: 20px; font-size: 16px;">正在测试策略，请稍候...</p>
+                </div>
+            `;
+            document.body.appendChild(loadingModal);
+            
+            try {
+                const response = await fetch('/api/strategy/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(strategy)
+                });
+                
+                const result = await response.json();
+                document.body.removeChild(loadingModal);
+                
+                if (!result.success) {
+                    alert('测试失败：' + (result.error || '未知错误'));
+                    return;
+                }
+                
+                // 显示测试结果
+                showTestResults(strategy.name, result.data);
+                
+            } catch (error) {
+                document.body.removeChild(loadingModal);
+                console.error('测试策略失败:', error);
+                alert('测试失败：' + error.message);
+            }
+        }
+
+        // 显示测试结果
+        function showTestResults(strategyName, results) {
+            const modal = document.createElement('div');
+            modal.id = 'testResultsModal';
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.75); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;';
+            
+            let resultsHtml = results.map(result => {
+                if (result.error) {
+                    return `
+                        <div style="margin-bottom: 24px; padding: 20px; background: #fff3cd; border-radius: 10px; border-left: 5px solid #ffc107; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <h5 style="color: #856404; margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">${result.symbol}</h5>
+                            <p style="color: #856404; margin: 0; font-size: 15px; line-height: 1.6;">${result.error}</p>
+                        </div>
+                    `;
+                }
+                
+                const pnlClass = result.total_pnl >= 0 ? 'text-success' : 'text-danger';
+                const pnlIcon = result.total_pnl >= 0 ? '▲' : '▼';
+                
+                // 统计数据
+                const buyCount = result.trades ? result.trades.filter(t => t.type === 'BUY').length : 0;
+                const sellCount = result.trades ? result.trades.filter(t => t.type === 'SELL').length : 0;
+                // 统计盈亏：只统计平仓交易（SELL类型）
+                const sellTrades = result.trades ? result.trades.filter(t => t.type === 'SELL') : [];
+                const winTrades = sellTrades.filter(t => t.pnl > 0).length;
+                const lossTrades = sellTrades.filter(t => t.pnl < 0).length;
+                const breakEvenTrades = sellTrades.filter(t => t.pnl === 0 || (t.pnl !== undefined && Math.abs(t.pnl) < 0.01)).length;
+                const winRate = (winTrades + lossTrades) > 0 ? ((winTrades / (winTrades + lossTrades)) * 100).toFixed(1) : '0.0';
+                
+                // 调试信息：检查是否有pnl为0或未定义的情况
+                if (sellTrades.length > 0) {
+                    const pnlValues = sellTrades.map(t => t.pnl).filter(p => p !== undefined);
+                    const hasZeroPnl = sellTrades.some(t => t.pnl === 0 || (t.pnl !== undefined && Math.abs(t.pnl) < 0.01));
+                    const hasUndefinedPnl = sellTrades.some(t => t.pnl === undefined || t.pnl === null);
+                    console.log('平仓交易统计:', {
+                        total: sellTrades.length,
+                        win: winTrades,
+                        loss: lossTrades,
+                        breakEven: breakEvenTrades,
+                        hasZeroPnl: hasZeroPnl,
+                        hasUndefinedPnl: hasUndefinedPnl,
+                        pnlValues: pnlValues.slice(0, 5) // 只显示前5个
+                    });
+                }
+                
+                let tradesHtml = '';
+                if (result.trades && result.trades.length > 0) {
+                    tradesHtml = `
+                        <div style="margin-top: 24px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #e9ecef;">
+                                <h6 style="margin: 0; font-size: 16px; font-weight: 600; color: #212529;">交易记录 (共 ${result.trades.length} 笔)</h6>
+                                <div style="font-size: 14px; color: #495057; font-weight: 500;">
+                                    <span style="color: #28a745; margin-right: 12px;">买入: ${buyCount}</span>
+                                    <span style="color: #dc3545; margin-right: 12px;">平仓: ${sellCount}</span>
+                                    <span style="color: ${parseFloat(winRate) >= 50 ? '#28a745' : '#dc3545'};">胜率: ${winRate}%</span>
+                                </div>
+                            </div>
+                            <div style="max-height: 450px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 6px; background: white;">
+                                <table class="table table-sm table-hover" style="font-size: 13px; margin: 0;">
+                                    <thead style="position: sticky; top: 0; background: #f8f9fa; z-index: 10; border-bottom: 2px solid #dee2e6;">
+                                        <tr>
+                                            <th style="padding: 12px 10px; font-weight: 600; color: #495057; font-size: 13px;">时间</th>
+                                            <th style="padding: 12px 10px; font-weight: 600; color: #495057; font-size: 13px;">类型</th>
+                                            <th style="padding: 12px 10px; font-weight: 600; color: #495057; font-size: 13px;">方向</th>
+                                            <th style="padding: 12px 10px; text-align: right; font-weight: 600; color: #495057; font-size: 13px;">价格</th>
+                                            <th style="padding: 12px 10px; text-align: right; font-weight: 600; color: #495057; font-size: 13px;">数量</th>
+                                            <th style="padding: 12px 10px; text-align: right; font-weight: 600; color: #495057; font-size: 13px;">盈亏</th>
+                                            <th style="padding: 12px 10px; text-align: right; font-weight: 600; color: #495057; font-size: 13px;">余额</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${result.trades.map(trade => `
+                                            <tr style="border-bottom: 1px solid #e9ecef;">
+                                                <td style="padding: 12px 10px; white-space: nowrap; color: #495057; font-size: 13px;">${new Date(trade.time).toLocaleString('zh-CN', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})}</td>
+                                                <td style="padding: 12px 10px;"><span class="badge ${trade.type === 'BUY' ? 'bg-success' : 'bg-danger'}" style="font-size: 12px; padding: 4px 8px; font-weight: 500;">${trade.type === 'BUY' ? '买入' : '平仓'}</span></td>
+                                                <td style="padding: 12px 10px;"><span style="color: ${trade.direction === 'long' ? '#28a745' : '#dc3545'}; font-weight: 600; font-size: 13px;">${trade.direction === 'long' ? '做多' : '做空'}</span></td>
+                                                <td style="padding: 12px 10px; text-align: right; font-family: 'Courier New', monospace; color: #212529; font-size: 13px; font-weight: 500;">${trade.price.toFixed(4)}</td>
+                                                <td style="padding: 12px 10px; text-align: right; font-family: 'Courier New', monospace; color: #212529; font-size: 13px; font-weight: 500;">${trade.quantity.toFixed(4)}</td>
+                                                <td style="padding: 12px 10px; text-align: right; font-family: 'Courier New', monospace; font-weight: 600; font-size: 13px;" class="${trade.pnl >= 0 ? 'text-success' : 'text-danger'}">
+                                                    ${trade.pnl ? `${trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)}<br><small style="font-size: 11px; opacity: 0.8;">(${trade.pnl_pct >= 0 ? '+' : ''}${trade.pnl_pct.toFixed(2)}%)</small>` : '-'}
+                                                </td>
+                                                <td style="padding: 12px 10px; text-align: right; font-family: 'Courier New', monospace; color: #212529; font-size: 13px; font-weight: 500;">${trade.balance.toFixed(2)}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                            ${result.debug_info && result.debug_info.length > 0 ? `
+                                <details style="margin-top: 20px; text-align: left;" open>
+                                    <summary style="cursor: pointer; color: #0066cc; font-weight: 600; font-size: 15px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #dee2e6; margin-bottom: 12px; user-select: none;">📋 查看详细调试信息 (${result.debug_info.length}条)</summary>
+                                    <div style="max-height: 500px; overflow-y: auto; background: white; padding: 16px; border-radius: 8px; font-size: 12px; font-family: 'Courier New', 'Consolas', monospace; border: 1px solid #dee2e6; box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);">
+                                        ${result.debug_info.map((info, idx) => {
+                                            const bgColor = info.includes('✅✅✅') || info.includes('❌❌❌') ? '#d4edda' : info.includes('✅') ? '#d1ecf1' : info.includes('⚠️') ? '#fff3cd' : info.includes('📊') ? '#e7f3ff' : '#f8f9fa';
+                                            const borderColor = info.includes('✅✅✅') ? '#28a745' : info.includes('❌❌❌') ? '#dc3545' : info.includes('✅') ? '#0c5460' : info.includes('⚠️') ? '#ffc107' : info.includes('📊') ? '#0066cc' : '#6c757d';
+                                            return `<div style="padding: 8px 12px; margin-bottom: 4px; border-left: 4px solid ${borderColor}; background: ${bgColor}; border-radius: 4px; line-height: 1.6; color: #212529; font-size: 12px; white-space: pre-wrap; word-wrap: break-word;">${info}</div>`;
+                                        }).join('')}
+                                    </div>
+                                </details>
+                            ` : ''}
+                        </div>
+                    `;
+                } else {
+                    // 分析未交易的原因
+                    let reasonHtml = '';
+                    if (result.golden_cross_count === 0 && result.death_cross_count === 0) {
+                        reasonHtml = `
+                            <div style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); border-radius: 10px; border-left: 5px solid #ffc107; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                <strong style="color: #856404; font-size: 16px; display: block; margin-bottom: 12px;">⚠️ 未检测到EMA金叉或死叉信号</strong>
+                                <p style="margin: 0; color: #856404; font-size: 14px; line-height: 1.7;">
+                                    在24小时的测试期间，没有出现EMA短期均线上穿或下穿长期均线的情况。
+                                    这可能是因为：
+                                </p>
+                                <ul style="margin: 12px 0 0 24px; color: #856404; font-size: 14px; line-height: 1.8;">
+                                    <li>市场处于横盘震荡状态</li>
+                                    <li>EMA短期和长期均线一直保持同一方向排列</li>
+                                    <li>需要调整EMA参数或选择其他时间周期</li>
+                                </ul>
+                            </div>
+                        `;
+                    } else if (result.golden_cross_count > 0 && result.trades_count === 0) {
+                        reasonHtml = `
+                            <div style="margin-top: 20px; padding: 20px; background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%); border-radius: 10px; border-left: 5px solid #0c5460; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                <strong style="color: #0c5460; font-size: 16px; display: block; margin-bottom: 12px;">ℹ️ 检测到 ${result.golden_cross_count} 个EMA金叉，但未执行交易</strong>
+                                <p style="margin: 0; color: #0c5460; font-size: 14px; line-height: 1.7;">
+                                    可能的原因：
+                                </p>
+                                <ul style="margin: 12px 0 0 24px; color: #0c5460; font-size: 14px; line-height: 1.8;">
+                                    ${result.buy_volume_enabled ? `<li>成交量条件未满足（需要: ≥${result.buy_volume}倍，实际可能不足）</li>` : ''}
+                                    ${!result.buy_directions || result.buy_directions.length === 0 ? '<li>未配置交易方向（做多或做空）</li>' : ''}
+                                    <li>查看下方调试信息了解详情</li>
+                                </ul>
+                            </div>
+                        `;
+                    }
+                    
+                    tradesHtml = `
+                        <div style="margin-top: 24px; padding: 24px; text-align: center; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 10px; border: 2px dashed #adb5bd; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+                            <div style="margin-bottom: 16px;">
+                                <i class="bi bi-info-circle" style="font-size: 32px; color: #6c757d; display: block; margin-bottom: 12px;"></i>
+                                <p style="color: #495057; margin: 0; font-size: 16px; font-weight: 600;">未检测到任何交易信号</p>
+                            </div>
+                            ${reasonHtml}
+                            <div style="margin-top: 20px; font-size: 14px; color: #495057; text-align: left; background: white; padding: 18px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 12px;">
+                                    <div style="padding: 10px; background: #f8f9fa; border-radius: 6px;"><strong style="color: #495057; font-size: 13px;">K线数据:</strong> <span style="color: #212529; font-weight: 600; font-size: 14px;">${result.klines_count || 0} 条</span></div>
+                                    <div style="padding: 10px; background: #f8f9fa; border-radius: 6px;"><strong style="color: #495057; font-size: 13px;">技术指标:</strong> <span style="color: #212529; font-weight: 600; font-size: 14px;">${result.indicators_count || 0} 条</span></div>
+                                    <div style="padding: 10px; background: #f8f9fa; border-radius: 6px;"><strong style="color: #495057; font-size: 13px;">匹配数据:</strong> <span style="color: #212529; font-weight: 600; font-size: 14px;">${result.matched_pairs_count || 0} 条</span></div>
+                                    <div style="padding: 10px; background: #f8f9fa; border-radius: 6px;"><strong style="color: #495057; font-size: 13px;">EMA金叉:</strong> <span style="color: #28a745; font-weight: 600; font-size: 14px;">${result.golden_cross_count || 0} 次</span></div>
+                                    <div style="padding: 10px; background: #f8f9fa; border-radius: 6px;"><strong style="color: #495057; font-size: 13px;">EMA死叉:</strong> <span style="color: #dc3545; font-weight: 600; font-size: 14px;">${result.death_cross_count || 0} 次</span></div>
+                                    <div style="padding: 10px; background: #f8f9fa; border-radius: 6px;"><strong style="color: #495057; font-size: 13px;">交易方向:</strong> <span style="color: #212529; font-weight: 600; font-size: 14px;">${result.buy_directions ? result.buy_directions.map(d => d === 'long' ? '做多' : '做空').join(', ') : '未配置'}</span></div>
+                                    <div style="padding: 10px; background: #f8f9fa; border-radius: 6px;"><strong style="color: #495057; font-size: 13px;">买入成交量:</strong> <span style="color: #212529; font-weight: 600; font-size: 14px;">${result.buy_volume_enabled ? (result.buy_volume ? `≥${result.buy_volume}倍` : '已启用') : '未启用'}</span></div>
+                                    <div style="padding: 10px; background: #f8f9fa; border-radius: 6px;"><strong style="color: #495057; font-size: 13px;">卖出成交量:</strong> <span style="color: #212529; font-weight: 600; font-size: 14px;">${result.sell_volume_enabled ? (result.sell_volume ? `≤${result.sell_volume}倍` : '已启用') : '未启用'}</span></div>
+                                </div>
+                            </div>
+                            ${result.debug_info && result.debug_info.length > 0 ? `
+                                <details style="margin-top: 20px; text-align: left;" open>
+                                    <summary style="cursor: pointer; color: #0066cc; font-weight: 600; font-size: 15px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #dee2e6; margin-bottom: 12px; user-select: none;">📋 查看详细调试信息 (${result.debug_info.length}条)</summary>
+                                    <div style="max-height: 400px; overflow-y: auto; background: white; padding: 16px; border-radius: 8px; font-size: 12px; font-family: 'Courier New', 'Consolas', monospace; border: 1px solid #dee2e6; box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);">
+                                        ${result.debug_info.map((info, idx) => {
+                                            const bgColor = info.includes('✅') ? '#d4edda' : info.includes('⚠️') ? '#fff3cd' : '#f8f9fa';
+                                            const borderColor = info.includes('✅') ? '#28a745' : info.includes('⚠️') ? '#ffc107' : '#6c757d';
+                                            return `<div style="padding: 10px 12px; margin-bottom: 6px; border-left: 4px solid ${borderColor}; background: ${bgColor}; border-radius: 4px; line-height: 1.6; color: #212529; font-size: 12px;">${info}</div>`;
+                                        }).join('')}
+                                    </div>
+                                </details>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+                
+                return `
+                    <div style="margin-bottom: 28px; padding: 24px; background: white; border-radius: 10px; border-left: 5px solid ${result.total_pnl >= 0 ? '#28a745' : '#dc3545'}; box-shadow: 0 3px 6px rgba(0,0,0,0.12);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e9ecef;">
+                            <h5 style="margin: 0; color: #212529; font-size: 20px; font-weight: 600;">${result.symbol}</h5>
+                            <span class="badge ${result.total_pnl >= 0 ? 'bg-success' : 'bg-danger'}" style="font-size: 16px; padding: 8px 16px; font-weight: 600;">
+                                ${pnlIcon} ${result.total_pnl >= 0 ? '+' : ''}${result.total_pnl_pct.toFixed(2)}%
+                            </span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+                            <div style="padding: 16px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 8px; border: 1px solid #dee2e6;">
+                                <div style="color: #6c757d; font-size: 13px; font-weight: 500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">初始资金</div>
+                                <div style="font-size: 22px; font-weight: 700; color: #212529; margin-bottom: 4px;">${result.initial_balance.toFixed(2)}</div>
+                                <div style="color: #6c757d; font-size: 12px; font-weight: 500;">USDT</div>
+                            </div>
+                            <div style="padding: 16px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 8px; border: 1px solid #dee2e6;">
+                                <div style="color: #6c757d; font-size: 13px; font-weight: 500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">最终资金</div>
+                                <div style="font-size: 22px; font-weight: 700; color: #212529; margin-bottom: 4px;">${result.final_balance.toFixed(2)}</div>
+                                <div style="color: #6c757d; font-size: 12px; font-weight: 500;">USDT</div>
+                            </div>
+                            <div style="padding: 16px; background: linear-gradient(135deg, ${result.total_pnl >= 0 ? '#d4edda' : '#f8d7da'} 0%, ${result.total_pnl >= 0 ? '#c3e6cb' : '#f5c6cb'} 100%); border-radius: 8px; border: 1px solid ${result.total_pnl >= 0 ? '#c3e6cb' : '#f5c6cb'};">
+                                <div style="color: ${result.total_pnl >= 0 ? '#155724' : '#721c24'}; font-size: 13px; font-weight: 500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">总盈亏</div>
+                                <div style="font-size: 24px; font-weight: 700;" class="${pnlClass}">
+                                    ${pnlIcon} ${result.total_pnl >= 0 ? '+' : ''}${result.total_pnl.toFixed(2)}
+                                </div>
+                                <div style="color: ${result.total_pnl >= 0 ? '#155724' : '#721c24'}; font-size: 12px; font-weight: 500;">USDT</div>
+                            </div>
+                            <div style="padding: 16px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 8px; border: 1px solid #dee2e6;">
+                                <div style="color: #6c757d; font-size: 13px; font-weight: 500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">交易次数</div>
+                                <div style="font-size: 22px; font-weight: 700; color: #212529; margin-bottom: 4px;">${result.trades_count}</div>
+                                <div style="color: #6c757d; font-size: 12px; font-weight: 500;">笔</div>
+                            </div>
+                            <div style="padding: 16px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 8px; border: 1px solid #dee2e6;">
+                                <div style="color: #6c757d; font-size: 13px; font-weight: 500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">未平仓</div>
+                                <div style="font-size: 22px; font-weight: 700; color: ${result.open_positions > 0 ? '#ffc107' : '#6c757d'}; margin-bottom: 4px;">${result.open_positions}</div>
+                                <div style="color: #6c757d; font-size: 12px; font-weight: 500;">个</div>
+                            </div>
+                            <div style="padding: 16px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 8px; border: 1px solid #dee2e6;">
+                                <div style="color: #6c757d; font-size: 13px; font-weight: 500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">胜率</div>
+                                <div style="font-size: 22px; font-weight: 700; color: ${parseFloat(winRate) >= 50 ? '#28a745' : '#dc3545'}; margin-bottom: 4px;">${winRate}%</div>
+                                <div style="color: #6c757d; font-size: 12px; font-weight: 500;">${winTrades}胜/${lossTrades}负</div>
+                            </div>
+                        </div>
+                        ${tradesHtml}
+                    </div>
+                `;
+            }).join('');
+            
+            modal.innerHTML = `
+                <div style="background: white; border-radius: 14px; padding: 32px; max-width: 1200px; max-height: 90vh; overflow-y: auto; width: 100%; box-shadow: 0 8px 16px rgba(0,0,0,0.15);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; border-bottom: 3px solid #e9ecef; padding-bottom: 18px;">
+                        <div>
+                            <h4 style="margin: 0 0 6px 0; color: #212529; font-size: 24px; font-weight: 700;">策略测试结果</h4>
+                            <div style="color: #6c757d; font-size: 15px; font-weight: 500;">${strategyName}</div>
+                        </div>
+                        <button onclick="document.body.removeChild(document.getElementById('testResultsModal'))" style="background: #f8f9fa; border: 1px solid #dee2e6; font-size: 24px; cursor: pointer; color: #495057; line-height: 1; padding: 0; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='#e9ecef'; this.style.color='#212529';" onmouseout="this.style.background='#f8f9fa'; this.style.color='#495057';">&times;</button>
+                    </div>
+                    <div style="margin-bottom: 24px; padding: 18px 20px; background: linear-gradient(135deg, #e7f3ff 0%, #d0e7ff 100%); border-radius: 10px; border-left: 5px solid #0066cc; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+                        <strong style="color: #004085; font-size: 15px; display: block; margin-bottom: 8px;">📊 测试说明</strong>
+                        <p style="margin: 0; color: #004085; font-size: 14px; line-height: 1.7;">
+                            基于过去24小时的历史数据，模拟策略交易并计算盈亏。初始资金为 10,000 USDT。测试会根据EMA金叉/死叉信号和成交量条件自动执行买入/卖出操作。
+                        </p>
+                    </div>
+                    ${resultsHtml || '<p style="text-align: center; color: #6c757d; padding: 50px; font-size: 16px;">暂无测试结果</p>'}
+                    <div style="margin-top: 32px; text-align: center; padding-top: 24px; border-top: 2px solid #e9ecef;">
+                        <button onclick="document.body.removeChild(document.getElementById('testResultsModal'))" class="btn btn-primary" style="padding: 12px 40px; font-size: 15px; font-weight: 600; border-radius: 6px;">关闭</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+
+        // 更新空状态显示
+        function updateEmptyState() {
+            const emptyState = document.getElementById('emptyState');
+            const strategyList = document.getElementById('futuresStrategyList');
+            if (strategies.length === 0 && document.getElementById('addStrategyForm').style.display === 'none') {
+                emptyState.style.display = 'block';
+            } else {
+                emptyState.style.display = 'none';
+            }
+        }
+
+        // 页面加载完成
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('交易策略页面加载完成');
+        });
+    </script>
+</body>
+</html>
+

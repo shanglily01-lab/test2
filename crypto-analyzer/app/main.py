@@ -72,6 +72,7 @@ enhanced_dashboard = None
 price_cache_service = None  # 价格缓存服务
 pending_order_executor = None  # 待成交订单自动执行器（现货限价单）
 futures_limit_order_executor = None  # 合约限价单自动执行器
+strategy_executor = None  # 策略自动执行器
 futures_monitor_service = None  # 合约止盈止损监控服务
 
 
@@ -83,7 +84,7 @@ async def lifespan(app: FastAPI):
 
     global config, price_collector, news_aggregator
     global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
-    global pending_order_executor, futures_limit_order_executor, futures_monitor_service
+    global pending_order_executor, futures_limit_order_executor, strategy_executor, futures_monitor_service
 
     # 加载配置
     config_path = project_root / "config.yaml"
@@ -217,6 +218,24 @@ async def lifespan(app: FastAPI):
             traceback.print_exc()
             futures_limit_order_executor = None
 
+        # 初始化策略自动执行器
+        try:
+            from app.services.strategy_executor import StrategyExecutor
+            from app.trading.futures_trading_engine import FuturesTradingEngine
+            
+            db_config = config.get('database', {}).get('mysql', {})
+            futures_engine = FuturesTradingEngine(db_config)
+            strategy_executor = StrategyExecutor(
+                db_config=db_config,
+                futures_engine=futures_engine
+            )
+            logger.info("✅ 策略自动执行服务初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  策略自动执行服务初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+            strategy_executor = None
+
         # 初始化合约止盈止损监控服务
         try:
             from app.trading.futures_monitor_service import FuturesMonitorService
@@ -288,6 +307,16 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"⚠️  启动合约止盈止损监控任务失败: {e}")
             futures_monitor_service = None
+    
+    # 启动策略自动执行服务
+    if strategy_executor:
+        try:
+            import asyncio
+            strategy_executor.task = asyncio.create_task(strategy_executor.run_loop(interval=60))
+            logger.info("✅ 策略自动执行服务已启动（每60秒检查）")
+        except Exception as e:
+            logger.warning(f"⚠️  启动策略自动执行任务失败: {e}")
+            strategy_executor = None
 
     yield
 
@@ -530,9 +559,14 @@ async def data_management_page():
 
 
 @app.get("/strategies")
-async def strategies_page():
-    """投资策略管理页面"""
-    # 优先使用templates/strategies.html（新版本）
+@app.get("/trading-strategies")
+async def trading_strategies_page():
+    """交易策略页面（新版本：包含现货和合约策略）"""
+    # 优先使用新的交易策略页面
+    trading_strategies_path = project_root / "templates" / "trading_strategies.html"
+    if trading_strategies_path.exists():
+        return FileResponse(str(trading_strategies_path))
+    # 备用：旧的策略管理页面
     strategies_path = project_root / "templates" / "strategies.html"
     if strategies_path.exists():
         return FileResponse(str(strategies_path))
@@ -540,12 +574,8 @@ async def strategies_page():
     strategies_path_backup = project_root / "app" / "web" / "templates" / "strategy_manager.html"
     if strategies_path_backup.exists():
         return FileResponse(str(strategies_path_backup))
-    # 备用：templates目录下的旧文件
-    strategies_path_backup2 = project_root / "templates" / "strategy_manager.html"
-    if strategies_path_backup2.exists():
-        return FileResponse(str(strategies_path_backup2))
     else:
-        raise HTTPException(status_code=404, detail="投资策略页面未找到")
+        raise HTTPException(status_code=404, detail="交易策略页面未找到")
 
 
 @app.get("/auto-trading")
@@ -960,6 +990,1033 @@ async def get_trading_signal(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/strategies")
+async def get_strategies():
+    """获取所有策略（从localStorage，暂时返回空列表，由前端管理）"""
+    # 策略目前存储在localStorage，前端自己管理
+    # 后续可以改为从数据库加载
+    return {
+        'success': True,
+        'data': [],
+        'message': '策略由前端localStorage管理，请使用前端API'
+    }
+
+@app.post("/api/strategy/execute")
+async def execute_strategy(request: dict):
+    """
+    执行单个策略
+    
+    Args:
+        request: 包含策略配置的字典
+    """
+    global strategy_executor
+    if not strategy_executor:
+        return {'success': False, 'message': '策略执行器未初始化'}
+    
+    try:
+        result = await strategy_executor.execute_strategy(
+            strategy=request,
+            account_id=request.get('account_id', 2)
+        )
+        return result
+    except Exception as e:
+        logger.error(f"执行策略失败: {e}")
+        return {'success': False, 'message': str(e)}
+
+@app.post("/api/strategy/test")
+async def test_strategy(request: dict):
+    """
+    测试策略：模拟24小时的EMA合约交易下单并计算盈亏
+    
+    Args:
+        request: 包含策略配置的字典
+            - symbols: 交易对列表
+            - buyDirection: 交易方向 ['long', 'short']
+            - leverage: 交易倍数
+            - buySignals: 买入EMA信号 (ema_5m, ema_15m, ema_1h)
+            - buyVolumeEnabled: 是否启用买入成交量条件
+            - buyVolume: 买入成交量条件
+            - sellSignals: 卖出EMA信号
+            - sellVolumeEnabled: 是否启用卖出成交量条件
+            - sellVolume: 卖出成交量条件
+            - positionSize: 仓位大小 (%)
+            - longPrice: 做多价格类型
+            - shortPrice: 做空价格类型
+    
+    Returns:
+        测试结果，包含交易记录和盈亏统计
+    """
+    try:
+        import pymysql
+        from datetime import datetime, timedelta
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            symbols = request.get('symbols', [])
+            buy_directions = request.get('buyDirection', [])
+            leverage = request.get('leverage', 5)
+            buy_signal = request.get('buySignals')
+            buy_volume_enabled = request.get('buyVolumeEnabled', False)
+            buy_volume = request.get('buyVolume')
+            sell_signal = request.get('sellSignals')
+            sell_volume_enabled = request.get('sellVolumeEnabled', False)
+            sell_volume = request.get('sellVolume')
+            position_size = request.get('positionSize', 10)
+            long_price_type = request.get('longPrice', 'market')
+            short_price_type = request.get('shortPrice', 'market')
+            
+            # 手续费率（默认0.04%，即0.0004，与futures_trading_engine保持一致）
+            fee_rate = request.get('feeRate', 0.0004)
+            
+            # 确定买入和卖出的时间周期
+            timeframe_map = {
+                'ema_5m': '5m',
+                'ema_15m': '15m',
+                'ema_1h': '1h'
+            }
+            buy_timeframe = timeframe_map.get(buy_signal, '15m')
+            sell_timeframe = timeframe_map.get(sell_signal, '5m')
+            
+            # 计算24小时前的起始时间
+            end_time = datetime.now()
+            start_time = end_time - timedelta(hours=24)
+            
+            # 转换时间格式（处理可能的字符串或datetime对象）
+            def parse_time(t):
+                if isinstance(t, str):
+                    # 尝试多种时间格式
+                    try:
+                        return datetime.strptime(t, '%Y-%m-%d %H:%M:%S')
+                    except:
+                        try:
+                            return datetime.strptime(t, '%Y-%m-%dT%H:%M:%S')
+                        except:
+                            try:
+                                return datetime.strptime(t, '%Y-%m-%d %H:%M:%S.%f')
+                            except:
+                                # 如果都失败，返回当前时间
+                                return datetime.now()
+                elif isinstance(t, datetime):
+                    return t
+                else:
+                    return datetime.now()
+            
+            results = []
+            
+            for symbol in symbols:
+                # 获取买入和卖出时间周期的K线数据
+                # 增加数据量：提前30天获取数据，确保有足够的历史数据计算技术指标
+                # 对于15分钟K线，30天 = 30 * 24 * 60 / 15 = 2880条，足够计算EMA
+                extended_start_time = start_time - timedelta(days=30)
+                
+                # 获取买入时间周期的K线数据
+                cursor.execute(
+                    """SELECT timestamp, open_price, high_price, low_price, close_price, volume 
+                    FROM kline_data 
+                    WHERE symbol = %s AND timeframe = %s 
+                    AND timestamp >= %s AND timestamp <= %s
+                    ORDER BY timestamp ASC""",
+                    (symbol, buy_timeframe, extended_start_time, end_time)
+                )
+                buy_klines = cursor.fetchall()
+                
+                # 获取卖出时间周期的K线数据
+                cursor.execute(
+                    """SELECT timestamp, open_price, high_price, low_price, close_price, volume 
+                    FROM kline_data 
+                    WHERE symbol = %s AND timeframe = %s 
+                    AND timestamp >= %s AND timestamp <= %s
+                    ORDER BY timestamp ASC""",
+                    (symbol, sell_timeframe, extended_start_time, end_time)
+                )
+                sell_klines = cursor.fetchall()
+                
+                # 根据时间周期确定最小K线数量要求
+                min_klines_map = {
+                    '5m': 100,   # 5分钟需要更多数据
+                    '15m': 100,  # 15分钟需要更多数据
+                    '1h': 50,    # 1小时
+                    '4h': 50,    # 4小时
+                    '1d': 50     # 1天
+                }
+                min_buy_klines = min_klines_map.get(buy_timeframe, 50)
+                min_sell_klines = min_klines_map.get(sell_timeframe, 50)
+                
+                if not buy_klines or len(buy_klines) < min_buy_klines:
+                    results.append({
+                        'symbol': symbol,
+                        'error': f'买入时间周期({buy_timeframe})K线数据不足（仅{len(buy_klines) if buy_klines else 0}条，至少需要{min_buy_klines}条）',
+                        'klines_count': len(buy_klines) if buy_klines else 0
+                    })
+                    continue
+                
+                if not sell_klines or len(sell_klines) < min_sell_klines:
+                    results.append({
+                        'symbol': symbol,
+                        'error': f'卖出时间周期({sell_timeframe})K线数据不足（仅{len(sell_klines) if sell_klines else 0}条，至少需要{min_sell_klines}条）',
+                        'klines_count': len(sell_klines) if sell_klines else 0
+                    })
+                    continue
+                
+                # 筛选出24小时内的K线用于回测
+                buy_test_klines = [k for k in buy_klines if parse_time(k['timestamp']) >= start_time]
+                sell_test_klines = [k for k in sell_klines if parse_time(k['timestamp']) >= start_time]
+                
+                if len(buy_test_klines) < 10:
+                    results.append({
+                        'symbol': symbol,
+                        'error': f'24小时内买入时间周期({buy_timeframe})K线数据不足（仅{len(buy_test_klines)}条）',
+                        'klines_count': len(buy_test_klines)
+                    })
+                    continue
+                
+                if len(sell_test_klines) < 10:
+                    results.append({
+                        'symbol': symbol,
+                        'error': f'24小时内卖出时间周期({sell_timeframe})K线数据不足（仅{len(sell_test_klines)}条）',
+                        'klines_count': len(sell_test_klines)
+                    })
+                    continue
+                
+                # 模拟交易
+                trades = []
+                positions = []  # 当前持仓
+                initial_balance = 10000  # 初始资金
+                balance = initial_balance
+                debug_info = []  # 调试信息
+                
+                # 添加调试信息：记录K线时间范围
+                if buy_test_klines:
+                    first_buy_time = parse_time(buy_test_klines[0]['timestamp'])
+                    last_buy_time = parse_time(buy_test_klines[-1]['timestamp'])
+                    debug_info.append(f"📊 买入时间周期({buy_timeframe})K线范围: {first_buy_time.strftime('%Y-%m-%d %H:%M')} 至 {last_buy_time.strftime('%Y-%m-%d %H:%M')}，共{len(buy_test_klines)}条")
+                
+                # 将K线数据转换为DataFrame格式（用于计算技术指标）
+                import pandas as pd
+                
+                # 为买入时间周期的每个K线计算技术指标
+                def calculate_indicators(klines, test_klines, timeframe_name):
+                    indicator_pairs = []
+                    for test_kline in test_klines:
+                        test_kline_time = parse_time(test_kline['timestamp'])
+                        
+                        # 获取到当前K线为止的所有历史K线（用于计算技术指标）
+                        historical_klines = [k for k in klines if parse_time(k['timestamp']) <= test_kline_time]
+                        
+                        # 根据时间周期确定最小历史K线数量
+                        # EMA26需要至少26条数据，但为了准确性，需要更多数据
+                        min_historical_map = {
+                            '5m': 100,   # 5分钟需要更多历史数据
+                            '15m': 100,  # 15分钟需要更多历史数据
+                            '1h': 50,    # 1小时
+                            '4h': 50,    # 4小时
+                            '1d': 50     # 1天
+                        }
+                        # 从timeframe_name中提取时间周期（格式：买入(15m)）
+                        timeframe_key = timeframe_name.split('(')[1].split(')')[0] if '(' in timeframe_name else '15m'
+                        min_historical = min_historical_map.get(timeframe_key, 50)
+                        
+                        if len(historical_klines) < min_historical:
+                            continue  # 数据不足，跳过
+                        
+                        # 转换为DataFrame
+                        df = pd.DataFrame([{
+                            'timestamp': parse_time(k['timestamp']),
+                            'open': float(k['open_price']),
+                            'high': float(k['high_price']),
+                            'low': float(k['low_price']),
+                            'close': float(k['close_price']),
+                            'volume': float(k['volume'])
+                        } for k in historical_klines])
+                        
+                        # 使用技术分析器计算指标
+                        if technical_analyzer is None:
+                            continue
+                        
+                        try:
+                            # 计算技术指标
+                            indicators_result = technical_analyzer.analyze(df)
+                            
+                            if not indicators_result:
+                                continue
+                            
+                            # 提取需要的指标
+                            ema_data = indicators_result.get('ema', {})
+                            ma_ema10_data = indicators_result.get('ma_ema10', {})
+                            ma_ema5_data = indicators_result.get('ma_ema5', {})
+                            volume_data = indicators_result.get('volume', {})
+                            rsi_data = indicators_result.get('rsi', {})
+                            
+                            ema_short = ema_data.get('short') if isinstance(ema_data, dict) else None
+                            ema_long = ema_data.get('long') if isinstance(ema_data, dict) else None
+                            ma10 = ma_ema10_data.get('ma10') if isinstance(ma_ema10_data, dict) else None
+                            ema10 = ma_ema10_data.get('ema10') if isinstance(ma_ema10_data, dict) else None
+                            ma5 = ma_ema5_data.get('ma5') if isinstance(ma_ema5_data, dict) else None
+                            ema5 = ma_ema5_data.get('ema5') if isinstance(ma_ema5_data, dict) else None
+                            
+                            # volume_ratio在ema字段中，或者从volume字段计算
+                            volume_ratio = ema_data.get('volume_ratio', 1.0) if isinstance(ema_data, dict) else 1.0
+                            if volume_ratio == 1.0 and isinstance(volume_data, dict):
+                                # 从volume数据计算ratio
+                                vol_current = volume_data.get('current', 0)
+                                vol_ma20 = volume_data.get('ma20', 1)
+                                if vol_ma20 > 0:
+                                    volume_ratio = vol_current / vol_ma20
+                            rsi_value = rsi_data.get('value') if isinstance(rsi_data, dict) else None
+                            
+                            # 如果无法从analyze结果获取，尝试从DataFrame获取
+                            if ema_short is None and 'ema_short' in df.columns:
+                                ema_short = float(df['ema_short'].iloc[-1]) if not pd.isna(df['ema_short'].iloc[-1]) else None
+                            if ema_long is None and 'ema_long' in df.columns:
+                                ema_long = float(df['ema_long'].iloc[-1]) if not pd.isna(df['ema_long'].iloc[-1]) else None
+                            if ma10 is None and 'ma10' in df.columns:
+                                ma10 = float(df['ma10'].iloc[-1]) if not pd.isna(df['ma10'].iloc[-1]) else None
+                            if ema10 is None and 'ema10' in df.columns:
+                                ema10 = float(df['ema10'].iloc[-1]) if not pd.isna(df['ema10'].iloc[-1]) else None
+                            if volume_ratio == 1.0:
+                                # 尝试从DataFrame计算volume_ratio
+                                if 'volume' in df.columns and 'vol_ma20' in df.columns:
+                                    vol_current = float(df['volume'].iloc[-1])
+                                    vol_ma20 = float(df['vol_ma20'].iloc[-1])
+                                    if vol_ma20 > 0:
+                                        volume_ratio = vol_current / vol_ma20
+                            
+                            indicator_pairs.append({
+                                'kline': test_kline,
+                                'indicator': {
+                                    'ema_short': ema_short,
+                                    'ema_long': ema_long,
+                                    'ma10': ma10,
+                                    'ema10': ema10,
+                                    'ma5': ma5,
+                                    'ema5': ema5,
+                                    'volume_ratio': volume_ratio,
+                                    'rsi_value': rsi_value,
+                                    'updated_at': test_kline_time
+                                }
+                            })
+                        except Exception as e:
+                            logger.error(f"计算{timeframe_name}技术指标失败 {symbol} {test_kline_time}: {e}")
+                            continue
+                    
+                    return indicator_pairs
+                
+                # 计算买入和卖出时间周期的指标
+                buy_indicator_pairs = calculate_indicators(buy_klines, buy_test_klines, f'买入({buy_timeframe})')
+                sell_indicator_pairs = calculate_indicators(sell_klines, sell_test_klines, f'卖出({sell_timeframe})')
+                
+                # 添加调试信息：记录成功计算的指标数量
+                if buy_indicator_pairs:
+                    debug_info.append(f"✅ 买入时间周期({buy_timeframe})成功计算{len(buy_indicator_pairs)}个时间点的技术指标")
+                if sell_indicator_pairs:
+                    debug_info.append(f"✅ 卖出时间周期({sell_timeframe})成功计算{len(sell_indicator_pairs)}个时间点的技术指标")
+                
+                if len(buy_indicator_pairs) < 2:
+                    results.append({
+                        'symbol': symbol,
+                        'error': f'买入时间周期({buy_timeframe})技术指标计算失败（K线:{len(buy_test_klines)}条, 成功计算:{len(buy_indicator_pairs)}条）',
+                        'klines_count': len(buy_test_klines),
+                        'indicators_count': len(buy_indicator_pairs),
+                        'matched_pairs_count': len(buy_indicator_pairs)
+                    })
+                    continue
+                
+                if len(sell_indicator_pairs) < 2:
+                    results.append({
+                        'symbol': symbol,
+                        'error': f'卖出时间周期({sell_timeframe})技术指标计算失败（K线:{len(sell_test_klines)}条, 成功计算:{len(sell_indicator_pairs)}条）',
+                        'klines_count': len(sell_test_klines),
+                        'indicators_count': len(sell_indicator_pairs),
+                        'matched_pairs_count': len(sell_indicator_pairs)
+                    })
+                    continue
+                
+                # 合并所有时间点，按时间顺序处理
+                all_time_points = []
+                for pair in buy_indicator_pairs:
+                    all_time_points.append({
+                        'time': pair['indicator']['updated_at'],
+                        'type': 'buy',
+                        'pair': pair
+                    })
+                for pair in sell_indicator_pairs:
+                    all_time_points.append({
+                        'time': pair['indicator']['updated_at'],
+                        'type': 'sell',
+                        'pair': pair
+                    })
+                
+                # 按时间排序，如果时间相同，先处理卖出（type='sell'排在前面）
+                all_time_points.sort(key=lambda x: (x['time'], 0 if x['type'] == 'sell' else 1))
+                
+                # 用于跟踪卖出时间周期的最新指标
+                sell_indicator_index = 0
+                
+                # 记录当前时间点是否已经平仓（用于防止滚仓）
+                last_processed_time = None
+                closed_at_current_time = False
+                
+                # 遍历所有时间点
+                for time_point in all_time_points:
+                    current_time = time_point['time']
+                    
+                    # 如果时间点改变，重置平仓标志
+                    if last_processed_time is None or current_time != last_processed_time:
+                        closed_at_current_time = False
+                        last_processed_time = current_time
+                    
+                    # 如果是买入时间点，检查买入信号（但先检查是否有持仓需要卖出）
+                    if time_point['type'] == 'buy':
+                        pair = time_point['pair']
+                        kline = pair['kline']
+                        indicator = pair['indicator']
+                        close_price = float(kline['close_price'])
+                        volume_ratio = float(indicator['volume_ratio']) if indicator.get('volume_ratio') else 1.0
+                        
+                        ema_short = float(indicator['ema_short']) if indicator.get('ema_short') else None
+                        ema_long = float(indicator['ema_long']) if indicator.get('ema_long') else None
+                        
+                        if not ema_short or not ema_long:
+                            continue
+                        
+                        # 检查买入信号（EMA金叉）- 需要找到前一个买入时间点的指标
+                        buy_signal_triggered = False
+                        # 在buy_indicator_pairs中找到当前pair的索引
+                        try:
+                            current_buy_index = buy_indicator_pairs.index(pair)
+                        except ValueError:
+                            # 如果找不到，说明pair不在列表中，跳过
+                            debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 无法找到当前K线在买入指标列表中的位置")
+                            continue
+                        
+                        # 检查买入信号（EMA9/26金叉 和 MA10/EMA10金叉）
+                        # 优化：检查最近几个时间点的EMA变化，确保不遗漏金叉信号
+                        # 金叉定义：短期EMA从下方穿越到上方（更宽松的定义，匹配币安等平台）
+                        
+                        # 先记录当前时间点的EMA状态（所有时间点都记录）
+                        curr_diff = ema_short - ema_long
+                        curr_diff_pct = (curr_diff / ema_long * 100) if ema_long > 0 else 0
+                        curr_status = "多头" if ema_short > ema_long else "空头"
+                        
+                        # 获取MA10/EMA10数据
+                        ma10 = float(indicator.get('ma10')) if indicator.get('ma10') else None
+                        ema10 = float(indicator.get('ema10')) if indicator.get('ema10') else None
+                        ma10_ema10_diff = (ema10 - ma10) if (ema10 and ma10) else None
+                        ma10_ema10_diff_pct = (ma10_ema10_diff / ma10 * 100) if (ma10_ema10_diff and ma10 and ma10 > 0) else None
+                        ma10_ema10_status = "多头" if (ema10 and ma10 and ema10 > ma10) else "空头" if (ema10 and ma10 and ema10 < ma10) else "中性"
+                        
+                        # 记录EMA9/26状态
+                        debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: 📊 EMA9/26状态 - {curr_status} | EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)")
+                        
+                        # 记录MA10/EMA10状态
+                        if ma10 and ema10:
+                            debug_info.append(f"   📊 MA10/EMA10状态 - {ma10_ema10_status} | MA10={ma10:.4f}, EMA10={ema10:.4f}, 差值={ma10_ema10_diff:.4f} ({ma10_ema10_diff_pct:+.2f}%)" if ma10_ema10_diff_pct else f"   📊 MA10/EMA10状态 - {ma10_ema10_status} | MA10={ma10:.4f}, EMA10={ema10:.4f}")
+                        
+                        # 检查MA10/EMA10交叉（作为买入/卖出信号）
+                        ma10_ema10_golden_cross = False
+                        ma10_ema10_death_cross = False
+                        
+                        if current_buy_index > 0:
+                            # 检查前3个时间点，确保不遗漏金叉
+                            lookback_count = min(3, current_buy_index)
+                            found_golden_cross = False
+                            
+                            # 详细记录所有时间点的EMA状态变化
+                            for lookback in range(1, lookback_count + 1):
+                                prev_pair = buy_indicator_pairs[current_buy_index - lookback]
+                                prev_indicator = prev_pair['indicator']
+                                prev_ema_short = float(prev_indicator['ema_short']) if prev_indicator.get('ema_short') else None
+                                prev_ema_long = float(prev_indicator['ema_long']) if prev_indicator.get('ema_long') else None
+                                prev_ma10 = float(prev_indicator.get('ma10')) if prev_indicator.get('ma10') else None
+                                prev_ema10 = float(prev_indicator.get('ema10')) if prev_indicator.get('ema10') else None
+                                prev_time = prev_indicator['updated_at']
+                                
+                                if prev_ema_short and prev_ema_long:
+                                    # 详细记录EMA9/26交叉情况
+                                    prev_diff = prev_ema_short - prev_ema_long
+                                    prev_diff_pct = (prev_diff / prev_ema_long * 100) if prev_ema_long > 0 else 0
+                                    
+                                    # EMA9/26金叉：前一个短期<=长期，当前短期>长期
+                                    # 或者：前一个短期<长期，当前短期>=长期（更宽松的定义）
+                                    is_golden_cross = (prev_ema_short <= prev_ema_long and ema_short > ema_long) or \
+                                                     (prev_ema_short < prev_ema_long and ema_short >= ema_long)
+                                    
+                                    # MA10/EMA10金叉检测（EMA10上穿MA10）➕
+                                    if prev_ma10 and prev_ema10 and ma10 and ema10:
+                                        ma10_ema10_is_golden = (prev_ema10 <= prev_ma10 and ema10 > ma10) or \
+                                                               (prev_ema10 < prev_ma10 and ema10 >= ma10)
+                                        if ma10_ema10_is_golden:
+                                            ma10_ema10_golden_cross = True
+                                            debug_info.append(f"   ➕➕➕ MA10/EMA10金叉检测成功！")
+                                            debug_info.append(f"   📍 前{lookback}个周期 ({prev_time.strftime('%Y-%m-%d %H:%M')}): MA10={prev_ma10:.4f}, EMA10={prev_ema10:.4f}, 差值={prev_ema10 - prev_ma10:.4f}, 状态={'多头' if prev_ema10 > prev_ma10 else '空头'}")
+                                            debug_info.append(f"   📍 当前时间 ({current_time.strftime('%Y-%m-%d %H:%M')}): MA10={ma10:.4f}, EMA10={ema10:.4f}, 差值={ma10_ema10_diff:.4f}, 状态={ma10_ema10_status}")
+                                    
+                                    # 买入信号：EMA9/26金叉 或 MA10/EMA10金叉
+                                    if is_golden_cross or ma10_ema10_golden_cross:
+                                        buy_signal_triggered = True
+                                        found_golden_cross = True
+                                        
+                                        if is_golden_cross:
+                                            debug_info.append(f"   ✅✅✅ EMA9/26金叉检测成功！")
+                                            debug_info.append(f"   📍 前{lookback}个周期 ({prev_time.strftime('%Y-%m-%d %H:%M')}): EMA9={prev_ema_short:.4f}, EMA26={prev_ema_long:.4f}, 差值={prev_diff:.4f} ({prev_diff_pct:+.2f}%), 状态={'多头' if prev_ema_short > prev_ema_long else '空头'}")
+                                            debug_info.append(f"   📍 当前时间 ({current_time.strftime('%Y-%m-%d %H:%M')}): EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%), 状态={curr_status}")
+                                            debug_info.append(f"   🔄 变化: EMA9 {prev_ema_short:.4f}→{ema_short:.4f} ({((ema_short-prev_ema_short)/prev_ema_short*100):+.2f}%), EMA26 {prev_ema_long:.4f}→{ema_long:.4f} ({((ema_long-prev_ema_long)/prev_ema_long*100):+.2f}%)")
+                                        
+                                        debug_info.append(f"   📊 成交量比率: {volume_ratio:.2f}x")
+                                        break
+                        else:
+                            # 第一个数据点，无法判断金叉
+                            if current_buy_index == 0:
+                                debug_info.append(f"   ℹ️ 第一个数据点，无法判断金叉")
+                        
+                        # 检查成交量条件
+                        volume_condition_met = True
+                        volume_reason = ""
+                        if buy_volume_enabled and buy_volume:
+                            required_ratio = float(buy_volume)
+                            if volume_ratio < required_ratio:
+                                volume_condition_met = False
+                                volume_reason = f"成交量不足 (当前:{volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
+                            else:
+                                volume_reason = f"成交量满足 (当前:{volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
+                        else:
+                            volume_reason = "成交量条件未启用"
+                        
+                        # 记录买入信号检查结果
+                        if buy_signal_triggered:
+                            if not volume_condition_met:
+                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA金叉但{volume_reason}")
+                            elif len(buy_directions) == 0:
+                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA金叉但未配置交易方向")
+                        
+                        # 执行买入（根据信号自动选择方向，或从配置的方向中选择）
+                        # 禁止滚仓：如果当前时间点已经平仓，不再买入（需要等待下一个时间点）
+                        if buy_signal_triggered and volume_condition_met and len(positions) == 0 and not closed_at_current_time:
+                            if len(buy_directions) > 0:
+                                # 根据EMA信号自动选择方向
+                                # 如果EMA9/26金叉或MA10/EMA10金叉，倾向于做多
+                                # 如果EMA9/26死叉或MA10/EMA10死叉，倾向于做空
+                                # 但买入信号是金叉，所以默认做多
+                                
+                                # 判断当前EMA状态
+                                # 买入信号是金叉，金叉时EMA9应该已经大于EMA26（多头）
+                                # 但如果用户配置了做空，可能是想根据其他条件做空
+                                ema_bullish = ema_short > ema_long  # EMA9 > EMA26 表示多头
+                                ma10_ema10_bullish = (ma10 and ema10 and ema10 > ma10) if (ma10 and ema10) else None
+                                
+                                # 根据信号和配置的方向选择
+                                direction = None
+                                
+                                # 如果配置了多个方向，根据信号选择
+                                if len(buy_directions) > 1:
+                                    # 买入信号是金叉，金叉时通常应该做多
+                                    # 但如果用户同时配置了做空，可能是想根据其他条件做空
+                                    # 优先根据EMA状态选择
+                                    if ema_bullish and 'long' in buy_directions:
+                                        direction = 'long'
+                                    elif not ema_bullish and 'short' in buy_directions:
+                                        # 虽然买入信号是金叉，但如果EMA9 < EMA26，可能是死叉后的反弹，选择做空
+                                        direction = 'short'
+                                    # 如果信号不明确，根据MA10/EMA10判断
+                                    elif ma10_ema10_bullish is not None:
+                                        if ma10_ema10_bullish and 'long' in buy_directions:
+                                            direction = 'long'
+                                        elif not ma10_ema10_bullish and 'short' in buy_directions:
+                                            direction = 'short'
+                                    # 如果还是无法确定，优先选择做多（因为买入信号是金叉）
+                                    if direction is None:
+                                        if 'long' in buy_directions:
+                                            direction = 'long'
+                                        elif 'short' in buy_directions:
+                                            direction = 'short'
+                                        else:
+                                            direction = buy_directions[0]
+                                else:
+                                    # 只配置了一个方向，直接使用
+                                    direction = buy_directions[0]
+                                
+                                if direction is None:
+                                    debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 无法确定交易方向")
+                                    continue
+                                
+                                # 检查是否已有相同方向的持仓（虽然前面已经检查了positions为空，但为了安全还是检查）
+                                existing_position = next((p for p in positions if p['direction'] == direction), None)
+                                if existing_position:
+                                    debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 已有{direction}方向持仓，跳过买入")
+                                    continue
+                                
+                                # 记录方向选择原因
+                                direction_reason = ""
+                                if len(buy_directions) > 1:
+                                    if ema_bullish and direction == 'long':
+                                        direction_reason = "（EMA多头信号，选择做多）"
+                                    elif not ema_bullish and direction == 'short':
+                                        direction_reason = "（EMA空头信号，选择做空）"
+                                    elif ma10_ema10_bullish is not None:
+                                        if ma10_ema10_bullish and direction == 'long':
+                                            direction_reason = "（MA10/EMA10多头信号，选择做多）"
+                                        elif not ma10_ema10_bullish and direction == 'short':
+                                            direction_reason = "（MA10/EMA10空头信号，选择做空）"
+                                    else:
+                                        direction_reason = f"（配置了多个方向，选择{direction}）"
+                                
+                                # 计算入场价格（限价单逻辑）
+                                # 获取K线的最高价和最低价
+                                high_price = float(kline.get('high', kline.get('high_price', close_price)))
+                                low_price = float(kline.get('low', kline.get('low_price', close_price)))
+                                
+                                entry_price = None
+                                can_execute = False
+                                
+                                if direction == 'long':
+                                    # 做多：需要等待价格下跌到目标价格
+                                    if long_price_type == 'market':
+                                        entry_price = close_price
+                                        can_execute = True
+                                    elif long_price_type == 'market_minus_0_2':
+                                        target_price = close_price * 0.998
+                                        if low_price <= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                    elif long_price_type == 'market_minus_0_4':
+                                        target_price = close_price * 0.996
+                                        if low_price <= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                    elif long_price_type == 'market_minus_0_6':
+                                        target_price = close_price * 0.994
+                                        if low_price <= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                    elif long_price_type == 'market_minus_0_8':
+                                        target_price = close_price * 0.992
+                                        if low_price <= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                    elif long_price_type == 'market_minus_1':
+                                        target_price = close_price * 0.99
+                                        if low_price <= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                elif direction == 'short':
+                                    # 做空：需要等待价格上涨到目标价格
+                                    if short_price_type == 'market':
+                                        entry_price = close_price
+                                        can_execute = True
+                                    elif short_price_type == 'market_plus_0_2':
+                                        target_price = close_price * 1.002
+                                        if high_price >= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                    elif short_price_type == 'market_plus_0_4':
+                                        target_price = close_price * 1.004
+                                        if high_price >= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                    elif short_price_type == 'market_plus_0_6':
+                                        target_price = close_price * 1.006
+                                        if high_price >= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                    elif short_price_type == 'market_plus_0_8':
+                                        target_price = close_price * 1.008
+                                        if high_price >= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                    elif short_price_type == 'market_plus_1':
+                                        target_price = close_price * 1.01
+                                        if high_price >= target_price:
+                                            entry_price = target_price
+                                            can_execute = True
+                                
+                                # 如果限价单条件不满足，跳过本次买入
+                                if not can_execute or entry_price is None:
+                                    # 计算目标价格用于显示
+                                    price_type_text = long_price_type if direction == 'long' else short_price_type
+                                    if direction == 'long':
+                                        if long_price_type == 'market_minus_0_2':
+                                            target_text = f"{close_price * 0.998:.4f}"
+                                        elif long_price_type == 'market_minus_0_4':
+                                            target_text = f"{close_price * 0.996:.4f}"
+                                        elif long_price_type == 'market_minus_0_6':
+                                            target_text = f"{close_price * 0.994:.4f}"
+                                        elif long_price_type == 'market_minus_0_8':
+                                            target_text = f"{close_price * 0.992:.4f}"
+                                        elif long_price_type == 'market_minus_1':
+                                            target_text = f"{close_price * 0.99:.4f}"
+                                        else:
+                                            target_text = "市价"
+                                    else:  # short
+                                        if short_price_type == 'market_plus_0_2':
+                                            target_text = f"{close_price * 1.002:.4f}"
+                                        elif short_price_type == 'market_plus_0_4':
+                                            target_text = f"{close_price * 1.004:.4f}"
+                                        elif short_price_type == 'market_plus_0_6':
+                                            target_text = f"{close_price * 1.006:.4f}"
+                                        elif short_price_type == 'market_plus_0_8':
+                                            target_text = f"{close_price * 1.008:.4f}"
+                                        elif short_price_type == 'market_plus_1':
+                                            target_text = f"{close_price * 1.01:.4f}"
+                                        else:
+                                            target_text = "市价"
+                                    debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 限价单未成交 | 目标价={target_text}, 当前K线范围=[{low_price:.4f}, {high_price:.4f}], 收盘价={close_price:.4f}")
+                                    continue
+                                
+                                # 计算仓位大小
+                                position_value = balance * (position_size / 100)
+                                quantity = (position_value * leverage) / entry_price
+                                
+                                if quantity > 0:
+                                    # 计算开仓手续费
+                                    open_fee = (entry_price * quantity) * fee_rate
+                                    
+                                    # 扣除开仓手续费
+                                    balance -= open_fee
+                                    
+                                    position = {
+                                        'direction': direction,
+                                        'entry_price': entry_price,
+                                        'quantity': quantity,
+                                        'entry_time': current_time,
+                                        'leverage': leverage,
+                                        'open_fee': open_fee  # 记录开仓手续费
+                                    }
+                                    positions.append(position)
+                                    
+                                    trades.append({
+                                        'type': 'BUY',
+                                        'direction': direction,
+                                        'price': entry_price,
+                                        'quantity': quantity,
+                                        'time': current_time,
+                                        'balance': balance,
+                                        'fee': open_fee,  # 开仓手续费
+                                        'fee_rate': fee_rate
+                                    })
+                                    
+                                    direction_text = "做多" if direction == 'long' else "做空"
+                                    debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}{direction_reason}，价格={entry_price:.4f}，数量={quantity:.4f}，开仓手续费={open_fee:.4f}，余额={balance:.2f}")
+                            else:
+                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 买入信号触发但未配置交易方向")
+                        elif buy_signal_triggered and volume_condition_met and len(positions) > 0:
+                            debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 买入信号触发但已有持仓，跳过买入（需先卖出）")
+                        elif buy_signal_triggered and volume_condition_met and closed_at_current_time:
+                            debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 买入信号触发但当前时间点已平仓，跳过买入（禁止滚仓，需等待下一个时间点）")
+                    
+                    # 如果是卖出时间点，检查卖出信号（仅当有持仓时）
+                    elif time_point['type'] == 'sell' and len(positions) > 0:
+                        pair = time_point['pair']
+                        kline = pair['kline']
+                        indicator = pair['indicator']
+                        close_price = float(kline['close_price'])
+                        volume_ratio = float(indicator['volume_ratio']) if indicator.get('volume_ratio') else 1.0
+                        
+                        # 卖出信号：检测5m的MA5/EMA5死叉（向下信号）
+                        # 获取MA5/EMA5数据（用于5m卖出信号）
+                        ma5 = float(indicator.get('ma5')) if indicator.get('ma5') else None
+                        ema5 = float(indicator.get('ema5')) if indicator.get('ema5') else None
+                        
+                        if not ma5 or not ema5:
+                            debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ MA5/EMA5数据不足，无法检测卖出信号")
+                            continue
+                        
+                        # 检查卖出信号（MA5/EMA5死叉）
+                        # 死叉定义：EMA5从上方穿越到下方（向下信号）
+                        sell_signal_triggered = False
+                        current_sell_index = sell_indicator_pairs.index(pair)
+                        
+                        # 先记录当前时间点的MA5/EMA5状态（所有时间点都记录）
+                        ma5_ema5_diff = ema5 - ma5
+                        ma5_ema5_diff_pct = (ma5_ema5_diff / ma5 * 100) if ma5 > 0 else 0
+                        ma5_ema5_status = "多头" if ema5 > ma5 else "空头"
+                        
+                        # 记录MA5/EMA5状态
+                        debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 MA5/EMA5状态 - {ma5_ema5_status} | MA5={ma5:.4f}, EMA5={ema5:.4f}, 差值={ma5_ema5_diff:.4f} ({ma5_ema5_diff_pct:+.2f}%)")
+                        
+                        if current_sell_index > 0:
+                            # 检查前3个时间点，确保不遗漏死叉
+                            lookback_count = min(3, current_sell_index)
+                            
+                            for lookback in range(1, lookback_count + 1):
+                                prev_pair = sell_indicator_pairs[current_sell_index - lookback]
+                                prev_indicator = prev_pair['indicator']
+                                prev_ma5 = float(prev_indicator.get('ma5')) if prev_indicator.get('ma5') else None
+                                prev_ema5 = float(prev_indicator.get('ema5')) if prev_indicator.get('ema5') else None
+                                prev_time = prev_indicator['updated_at']
+                                
+                                if prev_ma5 and prev_ema5:
+                                    # 详细记录MA5/EMA5交叉情况
+                                    prev_ma5_ema5_diff = prev_ema5 - prev_ma5
+                                    prev_ma5_ema5_diff_pct = (prev_ma5_ema5_diff / prev_ma5 * 100) if prev_ma5 > 0 else 0
+                                    prev_ma5_ema5_status = "多头" if prev_ema5 > prev_ma5 else "空头"
+                                    
+                                    # MA5/EMA5死叉检测（EMA5下穿MA5，向下信号）➖
+                                    # 死叉：前一个EMA5>=MA5，当前EMA5<MA5
+                                    # 或者：前一个EMA5>MA5，当前EMA5<=MA5（更宽松的定义）
+                                    ma5_ema5_is_death = (prev_ema5 >= prev_ma5 and ema5 < ma5) or \
+                                                        (prev_ema5 > prev_ma5 and ema5 <= ma5)
+                                    
+                                    if ma5_ema5_is_death:
+                                        sell_signal_triggered = True
+                                        debug_info.append(f"   ➖➖➖ MA5/EMA5死叉检测成功（5m向下信号）！")
+                                        debug_info.append(f"   📍 前{lookback}个周期 ({prev_time.strftime('%Y-%m-%d %H:%M')}): MA5={prev_ma5:.4f}, EMA5={prev_ema5:.4f}, 差值={prev_ma5_ema5_diff:.4f} ({prev_ma5_ema5_diff_pct:+.2f}%), 状态={prev_ma5_ema5_status}")
+                                        debug_info.append(f"   📍 当前时间 ({current_time.strftime('%Y-%m-%d %H:%M')}): MA5={ma5:.4f}, EMA5={ema5:.4f}, 差值={ma5_ema5_diff:.4f} ({ma5_ema5_diff_pct:+.2f}%), 状态={ma5_ema5_status}")
+                                        debug_info.append(f"   🔄 变化: EMA5 {prev_ema5:.4f}→{ema5:.4f} ({((ema5-prev_ema5)/prev_ema5*100):+.2f}%), MA5 {prev_ma5:.4f}→{ma5:.4f} ({((ma5-prev_ma5)/prev_ma5*100):+.2f}%)")
+                                        debug_info.append(f"   📊 成交量比率: {volume_ratio:.2f}x")
+                                        break
+                        
+                        # 检查卖出成交量条件
+                        sell_volume_condition_met = True
+                        sell_volume_reason = ""
+                        if sell_volume_enabled and sell_volume:
+                            required_ratio = float(sell_volume.replace('<', '').replace('≤', ''))
+                            if sell_volume.startswith('<'):
+                                if volume_ratio >= required_ratio:
+                                    sell_volume_condition_met = False
+                                    sell_volume_reason = f"成交量不符合 (当前:{volume_ratio:.2f}x, 需要:<{required_ratio}x)"
+                                else:
+                                    sell_volume_reason = f"成交量符合 (当前:{volume_ratio:.2f}x, 需要:<{required_ratio}x)"
+                            else:
+                                if volume_ratio > required_ratio:
+                                    sell_volume_condition_met = False
+                                    sell_volume_reason = f"成交量不符合 (当前:{volume_ratio:.2f}x, 需要:≤{required_ratio}x)"
+                                else:
+                                    sell_volume_reason = f"成交量符合 (当前:{volume_ratio:.2f}x, 需要:≤{required_ratio}x)"
+                        else:
+                            sell_volume_reason = "成交量条件未启用"
+                        
+                        # 记录卖出信号检查结果
+                        if sell_signal_triggered:
+                            if not sell_volume_condition_met:
+                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ EMA死叉但{sell_volume_reason}")
+                        
+                        # 执行卖出（平仓）
+                        # 平仓条件：5m的MA5/EMA5死叉（向下信号）+ 成交量条件（如果启用）
+                        if sell_signal_triggered and sell_volume_condition_met:
+                            for position in positions[:]:  # 使用切片复制，避免迭代时修改
+                                # 获取K线的最高价和最低价
+                                high_price = float(kline.get('high', kline.get('high_price', close_price)))
+                                low_price = float(kline.get('low', kline.get('low_price', close_price)))
+                                
+                                entry_price = position['entry_price']
+                                quantity = position['quantity']
+                                direction = position['direction']
+                                
+                                # 平仓价格逻辑（限价单）：
+                                # 做多平仓：需要等待价格上涨到入场价的+1%才能成交
+                                # 做空平仓：需要等待价格下跌到入场价的-1%才能成交
+                                exit_price = None
+                                can_execute = False
+                                
+                                if direction == 'long':
+                                    # 做多平仓：等待价格上涨到入场价的+1%才能成交
+                                    target_price = entry_price * 1.01
+                                    # 检查K线最高价是否达到或高于目标价格
+                                    if high_price >= target_price:
+                                        exit_price = target_price
+                                        can_execute = True
+                                    else:
+                                        # 如果未达到目标价，不平仓，继续等待
+                                        target_text = f"{target_price:.4f}"
+                                        debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做多平仓限价单未成交 | 目标价={target_text}, 当前K线范围=[{low_price:.4f}, {high_price:.4f}], 收盘价={close_price:.4f}, 入场价={entry_price:.4f}")
+                                        continue
+                                else:  # short
+                                    # 做空平仓：等待价格下跌到入场价的-1%才能成交
+                                    target_price = entry_price * 0.99
+                                    # 检查K线最低价是否达到或低于目标价格
+                                    if low_price <= target_price:
+                                        exit_price = target_price
+                                        can_execute = True
+                                    else:
+                                        # 如果未达到目标价，不平仓，继续等待
+                                        target_text = f"{target_price:.4f}"
+                                        debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做空平仓限价单未成交 | 目标价={target_text}, 当前K线范围=[{low_price:.4f}, {high_price:.4f}], 收盘价={close_price:.4f}, 入场价={entry_price:.4f}")
+                                        continue
+                                
+                                # 如果无法执行平仓，记录日志并跳过
+                                if not can_execute or exit_price is None:
+                                    continue
+                                
+                                # 计算毛盈亏（未扣除手续费）
+                                if direction == 'long':
+                                    # 做多：毛盈亏 = (平仓价 - 入场价) * 数量
+                                    gross_pnl = (exit_price - entry_price) * quantity
+                                else:  # short
+                                    # 做空：毛盈亏 = (入场价 - 平仓价) * 数量
+                                    gross_pnl = (entry_price - exit_price) * quantity
+                                
+                                # 调试信息：记录价格和盈亏计算
+                                price_change = exit_price - entry_price if direction == 'long' else entry_price - exit_price
+                                price_change_pct = (price_change / entry_price * 100) if entry_price > 0 else 0
+                                debug_info.append(f"   💰 盈亏计算: {direction} | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 价差={price_change:+.4f} ({price_change_pct:+.2f}%), 毛盈亏={gross_pnl:+.2f}")
+                                
+                                # 计算平仓手续费
+                                close_fee = (exit_price * quantity) * fee_rate
+                                
+                                # 获取开仓手续费（如果已记录）
+                                open_fee = position.get('open_fee', 0)
+                                
+                                # 计算总手续费
+                                total_fee = open_fee + close_fee
+                                
+                                # 计算实际盈亏（扣除手续费）
+                                pnl = gross_pnl - total_fee
+                                
+                                # 计算盈亏百分比（基于实际使用的保证金）
+                                margin_used = (entry_price * quantity) / leverage
+                                pnl_pct = (pnl / margin_used) * 100 if margin_used > 0 else 0
+                                
+                                # 更新余额（加上毛盈亏，减去平仓手续费）
+                                balance += gross_pnl - close_fee
+                                
+                                # 记录平仓交易
+                                trades.append({
+                                    'type': 'SELL',
+                                    'direction': direction,
+                                    'price': exit_price,
+                                    'quantity': quantity,
+                                    'time': current_time,
+                                    'pnl': pnl,  # 实际盈亏（已扣除手续费）
+                                    'gross_pnl': gross_pnl,  # 毛盈亏
+                                    'pnl_pct': pnl_pct,
+                                    'balance': balance,
+                                    'entry_price': entry_price,  # 记录入场价，方便查看
+                                    'entry_time': position['entry_time'],  # 记录入场时间
+                                    'open_fee': open_fee,  # 开仓手续费
+                                    'close_fee': close_fee,  # 平仓手续费
+                                    'total_fee': total_fee,  # 总手续费
+                                    'fee_rate': fee_rate
+                                })
+                                
+                                # 从持仓列表中移除（完全平仓）
+                                positions.remove(position)
+                                
+                                # 标记当前时间点已平仓（防止滚仓：同一时间点平仓后不再买入）
+                                closed_at_current_time = True
+                                
+                                # 记录平仓日志
+                                direction_text = "做多" if direction == 'long' else "做空"
+                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ✅ 平仓{direction_text} | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={quantity:.4f}, 毛盈亏={gross_pnl:+.2f}, 手续费={total_fee:.4f}(开仓{open_fee:.4f}+平仓{close_fee:.4f}), 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%), 余额={balance:.2f}")
+                        elif sell_signal_triggered and not sell_volume_condition_met:
+                            # 卖出信号触发但成交量条件不满足
+                            for position in positions:
+                                direction_text = "做多" if position['direction'] == 'long' else "做空"
+                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ {direction_text}持仓未平仓，卖出信号触发但{sell_volume_reason}")
+                
+                # 计算最终盈亏（平掉所有未平仓的持仓）
+                final_balance = balance
+                if len(positions) > 0:
+                    # 使用最后一个卖出时间周期的K线价格进行强制平仓
+                    if sell_indicator_pairs:
+                        last_pair = sell_indicator_pairs[-1]
+                        last_kline = last_pair['kline']
+                        last_time = parse_time(last_kline['timestamp'])
+                        exit_price = float(last_kline['close_price'])
+                    elif buy_indicator_pairs:
+                        last_pair = buy_indicator_pairs[-1]
+                        last_kline = last_pair['kline']
+                        last_time = parse_time(last_kline['timestamp'])
+                        exit_price = float(last_kline['close_price'])
+                    else:
+                        exit_price = positions[0]['entry_price']  # 如果没有数据，使用入场价（盈亏为0）
+                        last_time = datetime.now()
+                    
+                    for position in positions:
+                        entry_price = position['entry_price']
+                        quantity = position['quantity']
+                        direction = position['direction']
+                        
+                        # 计算毛盈亏
+                        if position['direction'] == 'long':
+                            gross_pnl = (exit_price - entry_price) * quantity
+                        else:  # short
+                            gross_pnl = (entry_price - exit_price) * quantity
+                        
+                        # 计算平仓手续费
+                        close_fee = (exit_price * quantity) * fee_rate
+                        
+                        # 获取开仓手续费（如果已记录）
+                        open_fee = position.get('open_fee', 0)
+                        
+                        # 计算总手续费
+                        total_fee = open_fee + close_fee
+                        
+                        # 计算实际盈亏（扣除手续费）
+                        pnl = gross_pnl - total_fee
+                        
+                        margin_used = (entry_price * quantity) / leverage
+                        pnl_pct = (pnl / margin_used) * 100 if margin_used > 0 else 0
+                        
+                        final_balance += gross_pnl - close_fee
+                        
+                        # 记录强制平仓交易
+                        direction_text = "做多" if direction == 'long' else "做空"
+                        trades.append({
+                            'type': 'SELL',
+                            'direction': direction,
+                            'price': exit_price,
+                            'quantity': quantity,
+                            'time': last_time,
+                            'pnl': pnl,  # 实际盈亏（已扣除手续费）
+                            'gross_pnl': gross_pnl,  # 毛盈亏
+                            'pnl_pct': pnl_pct,
+                            'balance': final_balance,
+                            'entry_price': entry_price,
+                            'entry_time': position['entry_time'],
+                            'open_fee': open_fee,  # 开仓手续费
+                            'close_fee': close_fee,  # 平仓手续费
+                            'total_fee': total_fee,  # 总手续费
+                            'fee_rate': fee_rate,
+                            'force_close': True  # 标记为强制平仓
+                        })
+                        
+                        debug_info.append(f"{last_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 强制平仓{direction_text}（测试结束） | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={quantity:.4f}, 毛盈亏={gross_pnl:+.2f}, 手续费={total_fee:.4f}, 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%)")
+                
+                total_pnl = final_balance - initial_balance
+                total_pnl_pct = (total_pnl / initial_balance) * 100
+                
+                # 统计信号检测情况
+                golden_cross_count = len([info for info in debug_info if 'EMA金叉' in info])
+                death_cross_count = len([info for info in debug_info if 'EMA死叉' in info])
+                
+                results.append({
+                    'symbol': symbol,
+                    'initial_balance': initial_balance,
+                    'final_balance': final_balance,
+                    'total_pnl': total_pnl,
+                    'total_pnl_pct': total_pnl_pct,
+                    'trades_count': len(trades),
+                    'trades': trades,  # 返回所有交易
+                    'open_positions': len(positions),
+                    'debug_info': debug_info,  # 返回所有调试信息
+                    'klines_count': len(buy_test_klines) + len(sell_test_klines),
+                    'indicators_count': len(buy_indicator_pairs) + len(sell_indicator_pairs),
+                    'matched_pairs_count': len(buy_indicator_pairs) + len(sell_indicator_pairs),
+                    'golden_cross_count': golden_cross_count,
+                    'death_cross_count': death_cross_count,
+                    'buy_directions': buy_directions,
+                    'buy_volume_enabled': buy_volume_enabled,
+                    'buy_volume': buy_volume,
+                    'sell_volume_enabled': sell_volume_enabled,
+                    'sell_volume': sell_volume
+                })
+            
+            return {
+                'success': True,
+                'data': results
+            }
+            
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"策略测试失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/config")
 async def get_config():
     """获取当前配置"""
@@ -1295,10 +2352,86 @@ async def get_trend_analysis():
                         )
                         klines = cursor.fetchall()
                         
+                        # 对于5m、15m、1h时间周期，获取历史EMA数据以检测金叉
+                        ema_cross_info = None
+                        if timeframe in ['5m', '15m', '1h']:
+                            # 获取最近10条技术指标记录，用于检测EMA金叉（增加记录数以提高检测准确性）
+                            cursor.execute(
+                                """SELECT ema_short, ema_long, updated_at
+                                FROM technical_indicators_cache 
+                                WHERE symbol = %s AND timeframe = %s
+                                ORDER BY updated_at DESC LIMIT 10""",
+                                (symbol, timeframe)
+                            )
+                            ema_history = cursor.fetchall()
+                            # 调试：记录EMA历史数据数量
+                            if len(ema_history) < 2:
+                                logger.debug(f"{symbol} {timeframe} EMA历史数据不足: {len(ema_history)}条")
+                            if len(ema_history) >= 2:
+                                # 当前EMA值
+                                curr_ema_short = float(ema_history[0].get('ema_short', 0)) if ema_history[0].get('ema_short') else 0
+                                curr_ema_long = float(ema_history[0].get('ema_long', 0)) if ema_history[0].get('ema_long') else 0
+                                
+                                if curr_ema_short > 0 and curr_ema_long > 0:
+                                    # 检测最近是否发生金叉（在最近10条记录中查找）
+                                    is_golden_cross = False
+                                    is_death_cross = False
+                                    
+                                    # 从最新到最旧遍历，查找最近一次交叉
+                                    for i in range(len(ema_history) - 1):
+                                        curr_ema_short_i = float(ema_history[i].get('ema_short', 0)) if ema_history[i].get('ema_short') else 0
+                                        curr_ema_long_i = float(ema_history[i].get('ema_long', 0)) if ema_history[i].get('ema_long') else 0
+                                        prev_ema_short = float(ema_history[i+1].get('ema_short', 0)) if ema_history[i+1].get('ema_short') else 0
+                                        prev_ema_long = float(ema_history[i+1].get('ema_long', 0)) if ema_history[i+1].get('ema_long') else 0
+                                        
+                                        if prev_ema_short > 0 and prev_ema_long > 0 and curr_ema_short_i > 0 and curr_ema_long_i > 0:
+                                            # 检测金叉（短期上穿长期）：前一个短期<=长期，当前短期>长期
+                                            if prev_ema_short <= prev_ema_long and curr_ema_short_i > curr_ema_long_i:
+                                                is_golden_cross = True
+                                                break
+                                            # 检测死叉（短期下穿长期）：前一个短期>=长期，当前短期<长期
+                                            elif prev_ema_short >= prev_ema_long and curr_ema_short_i < curr_ema_long_i:
+                                                is_death_cross = True
+                                                break
+                                    
+                                    # 如果最近没有发生交叉，但当前状态是短期在长期之上，显示为"多头排列"
+                                    # 如果最近没有发生交叉，但当前状态是短期在长期之下，显示为"空头排列"
+                                    is_bullish = curr_ema_short > curr_ema_long
+                                    is_bearish = curr_ema_short < curr_ema_long
+                                    
+                                    # 调试：记录EMA状态
+                                    if is_golden_cross or is_death_cross or is_bullish or is_bearish:
+                                        logger.debug(f"{symbol} {timeframe} EMA状态: 金叉={is_golden_cross}, 死叉={is_death_cross}, 多头={is_bullish}, 空头={is_bearish}, 短期={curr_ema_short:.4f}, 长期={curr_ema_long:.4f}")
+                                    
+                                    ema_cross_info = {
+                                        'is_golden_cross': is_golden_cross,
+                                        'is_death_cross': is_death_cross,
+                                        'ema_short': curr_ema_short,
+                                        'ema_long': curr_ema_long,
+                                        'is_bullish': is_bullish,  # 当前是否多头排列
+                                        'is_bearish': is_bearish   # 当前是否空头排列
+                                    }
+                            else:
+                                # 即使历史数据不足，也尝试从当前记录获取EMA状态
+                                curr_ema_short = float(result.get('ema_short', 0)) if result.get('ema_short') else 0
+                                curr_ema_long = float(result.get('ema_long', 0)) if result.get('ema_long') else 0
+                                if curr_ema_short > 0 and curr_ema_long > 0:
+                                    ema_cross_info = {
+                                        'is_golden_cross': False,
+                                        'is_death_cross': False,
+                                        'ema_short': curr_ema_short,
+                                        'ema_long': curr_ema_long,
+                                        'is_bullish': curr_ema_short > curr_ema_long,
+                                        'is_bearish': curr_ema_short < curr_ema_long
+                                    }
+                                else:
+                                    # 调试：记录为什么没有EMA数据
+                                    logger.debug(f"{symbol} {timeframe} 当前记录中EMA数据缺失: ema_short={result.get('ema_short')}, ema_long={result.get('ema_long')}")
+                        
                         # 分析趋势（基于价格和成交量变化）
                         # 确保传入的indicator_data和klines都是对应timeframe的数据
                         # 函数内部会再次验证timeframe匹配性
-                        trend_analysis = _analyze_trend_from_indicators(result, klines, timeframe)
+                        trend_analysis = _analyze_trend_from_indicators(result, klines, timeframe, ema_cross_info)
                         symbols_data[symbol][timeframe] = trend_analysis
                     else:
                         # 如果没有对应timeframe的技术指标数据，返回None
@@ -1358,7 +2491,7 @@ async def get_trend_analysis():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, timeframe: str = '1h') -> dict:
+def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, timeframe: str = '1h', ema_cross_info: dict = None) -> dict:
     """
     基于价格和成交量变化分析趋势（不使用简单的阳线/阴线数量）
     
@@ -1498,6 +2631,13 @@ def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, ti
     elif ema_trend == 'bearish':
         indicator_score -= 8
     
+    # EMA金叉/死叉评分（仅对5m、15m、1h时间周期）
+    if ema_cross_info and timeframe in ['5m', '15m', '1h']:
+        if ema_cross_info.get('is_golden_cross'):
+            indicator_score += 10  # 金叉加分
+        elif ema_cross_info.get('is_death_cross'):
+            indicator_score -= 10  # 死叉减分
+    
     # 布林带位置评分
     if bb_position == 'below_lower':
         indicator_score += 8  # 价格在下轨，可能反弹
@@ -1552,6 +2692,57 @@ def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, ti
     if not indicator_data.get('ema_trend'):
         confidence -= 15
     
+    # 构建EMA金叉信息（仅对5m、15m、1h时间周期）
+    ema_cross_result = None
+    if ema_cross_info and timeframe in ['5m', '15m', '1h']:
+        ema_cross_result = {
+            'is_golden_cross': ema_cross_info.get('is_golden_cross', False),
+            'is_death_cross': ema_cross_info.get('is_death_cross', False),
+            'is_bullish': ema_cross_info.get('is_bullish', False),  # 当前多头排列
+            'is_bearish': ema_cross_info.get('is_bearish', False),  # 当前空头排列
+            'ema_short': ema_cross_info.get('ema_short'),
+            'ema_long': ema_cross_info.get('ema_long')
+        }
+    elif timeframe in ['5m', '15m', '1h']:
+        # 即使没有历史数据，也尝试从indicator_data获取当前EMA状态
+        ema_short = float(indicator_data.get('ema_short', 0)) if indicator_data.get('ema_short') else 0
+        ema_long = float(indicator_data.get('ema_long', 0)) if indicator_data.get('ema_long') else 0
+        if ema_short > 0 and ema_long > 0:
+            ema_cross_result = {
+                'is_golden_cross': False,
+                'is_death_cross': False,
+                'is_bullish': ema_short > ema_long,
+                'is_bearish': ema_short < ema_long,
+                'ema_short': ema_short,
+                'ema_long': ema_long
+            }
+    
+    # 确保ema_cross字段总是存在（即使为None，也要包含在返回结果中）
+    # 对于5m、15m、1h时间周期，如果没有数据，至少返回一个空对象
+    if timeframe in ['5m', '15m', '1h'] and ema_cross_result is None:
+        # 最后尝试从indicator_data获取（双重保险）
+        ema_short = float(indicator_data.get('ema_short', 0)) if indicator_data.get('ema_short') else 0
+        ema_long = float(indicator_data.get('ema_long', 0)) if indicator_data.get('ema_long') else 0
+        if ema_short > 0 and ema_long > 0:
+            ema_cross_result = {
+                'is_golden_cross': False,
+                'is_death_cross': False,
+                'is_bullish': ema_short > ema_long,
+                'is_bearish': ema_short < ema_long,
+                'ema_short': ema_short,
+                'ema_long': ema_long
+            }
+        else:
+            # 即使没有数据，也返回一个空对象，确保字段存在
+            ema_cross_result = {
+                'is_golden_cross': False,
+                'is_death_cross': False,
+                'is_bullish': False,
+                'is_bearish': False,
+                'ema_short': None,
+                'ema_long': None
+            }
+    
     return {
         'trend_direction': trend_direction,
         'trend_text': trend_text,
@@ -1561,6 +2752,7 @@ def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, ti
         'rsi_value': rsi_value,
         'macd_trend': macd_trend,
         'ema_trend': ema_trend,
+        'ema_cross': ema_cross_result,  # EMA金叉/死叉信息（5m/15m/1h总是有值，1d为None）
         'technical_score': technical_score,
         'price_change_pct': round(price_change_pct, 2),
         'volume_change_pct': round(volume_change_pct, 2),
