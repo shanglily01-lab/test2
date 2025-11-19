@@ -70,6 +70,8 @@
         .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); }
         .btn-primary { background: var(--primary-blue); color: white; }
         .btn-primary:hover { background: var(--primary-blue-hover); }
+        .btn-info-beautiful { background: var(--primary-blue); color: white; border: none; }
+        .btn-info-beautiful:hover { background: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
         .btn-detail {
             display: inline-flex;
             align-items: center;
@@ -375,11 +377,14 @@
 
         <!-- 交易信号列表和超卖超买信号 -->
         <div class="card">
-            <div class="card-header">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h2 class="card-title">
                     <i class="bi bi-bell"></i>
                     交易信号
                 </h2>
+                <button class="btn btn-info-beautiful" onclick="showTabExplanation()" id="tabExplanationBtn" style="padding: 6px 12px; font-size: 13px;">
+                    <i class="bi bi-info-circle"></i> 详情说明
+                </button>
             </div>
             <div class="card-body">
                 <!-- 标签页 -->
@@ -392,8 +397,8 @@
                     </button>
                     <button class="tab" onclick="switchTab('futures')" id="tabFutures">
                         <i class="bi bi-currency-exchange"></i> 合约信号
-                    </button>
-                </div>
+                        </button>
+                    </div>
                 
                 <!-- 趋势判断标签页内容 -->
                 <div id="tabContentTrend" class="tab-content active">
@@ -440,16 +445,11 @@
                                 </tr>
                             </tbody>
                         </table>
-                    </div>
-                </div>
+            </div>
+        </div>
 
                 <!-- 合约信号标签页内容 -->
                 <div id="tabContentFutures" class="tab-content">
-                    <div class="filters" style="margin-bottom: var(--spacing-lg);">
-                        <button class="btn btn-primary" onclick="loadFuturesSignals()">
-                            <i class="bi bi-arrow-clockwise"></i> 刷新
-                        </button>
-            </div>
                 <div class="table-container">
                     <table>
                         <thead>
@@ -497,12 +497,34 @@
         </div>
     </div>
 
+    <!-- 标签页详情说明模态框 -->
+    <div id="tabExplanationModal" class="modal-overlay" onclick="if(event.target === this) closeTabExplanation()">
+        <div class="modal-container" onclick="event.stopPropagation()" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2 class="modal-title">
+                    <i class="bi bi-info-circle"></i>
+                    <span id="tabExplanationTitle">详情说明</span>
+                </h2>
+                <button class="modal-close" onclick="closeTabExplanation()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="tabExplanationContent" style="padding: var(--spacing-xl);">
+                <!-- 内容将通过 JavaScript 动态填充 -->
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentSymbol = '';
         let currentTimeframe = '1h';
         
+        // 当前激活的标签页
+        let currentActiveTab = 'trend';
+        
         // 切换标签页
         function switchTab(tabName) {
+            currentActiveTab = tabName;
             // 隐藏所有标签页内容
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.remove('active');
@@ -532,6 +554,287 @@
             }
         }
 
+        // 显示标签页详情说明
+        function showTabExplanation() {
+            const modal = document.getElementById('tabExplanationModal');
+            const title = document.getElementById('tabExplanationTitle');
+            const content = document.getElementById('tabExplanationContent');
+            
+            let explanationHtml = '';
+            
+            if (currentActiveTab === 'trend') {
+                title.textContent = '趋势判断 - 详情说明';
+                explanationHtml = `
+                    <div style="line-height: 1.8; color: var(--text-primary);">
+                        <h3 style="color: var(--primary-blue); margin-bottom: var(--spacing-lg); font-size: 20px;">
+                            <i class="bi bi-graph-up-arrow"></i> 趋势判断分析说明
+                        </h3>
+                        
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 功能概述</h4>
+                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
+                                趋势判断页面综合分析多个时间周期（5分钟、15分钟、1小时、1天）的技术指标、价格变化和成交量变化，为每个交易对提供趋势评估。
+                            </p>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">⏱️ 时间周期说明</h4>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
+                                <li><strong>5分钟：</strong>基于2小时内的价格和成交量数据，适合短期交易信号</li>
+                                <li><strong>15分钟：</strong>基于2小时内的价格和成交量数据，适合短期趋势判断</li>
+                                <li><strong>1小时：</strong>基于24小时内的价格和成交量变化，适合中期趋势分析</li>
+                                <li><strong>1天：</strong>基于30天的价格和成交量数据，适合长期趋势判断</li>
+                            </ul>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📈 趋势判断标准</h4>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--success-green); font-weight: 600; margin-bottom: 4px;">强烈上涨 (STRONG_UPTREND)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 ≥ 60，多个技术指标强烈看多，价格和成交量同步上涨</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--success-green); font-weight: 600; margin-bottom: 4px;">上涨 (UPTREND)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 ≥ 45，技术指标整体看多，价格呈上升趋势</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">震荡 (SIDEWAYS)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 30-45，多空力量平衡，价格在区间内波动</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--danger-red); font-weight: 600; margin-bottom: 4px;">下跌 (DOWNTREND)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 15-30，技术指标整体看空，价格呈下降趋势</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
+                                <p style="color: var(--danger-red); font-weight: 600; margin-bottom: 4px;">强烈下跌 (STRONG_DOWNTREND)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 < 15，多个技术指标强烈看空，价格和成交量同步下跌</p>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">🔍 评估维度</h4>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
+                                <li><strong>技术指标：</strong>RSI、MACD、EMA、布林带等指标的综合评分</li>
+                                <li><strong>价格变化：</strong>基于时间周期内的价格涨跌幅</li>
+                                <li><strong>成交量变化：</strong>成交量的增减趋势，配合价格判断趋势强度</li>
+                                <li><strong>线性回归：</strong>价格和成交量的斜率分析，判断趋势方向</li>
+                            </ul>
+                        </div>
+
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--primary-blue);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-sm); font-size: 16px;">💡 使用建议</h4>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2; margin: 0;">
+                                <li>结合多个时间周期综合判断，避免单一周期误导</li>
+                                <li>长期趋势（1天）适合判断大方向，短期趋势（5分钟、15分钟）适合寻找入场时机</li>
+                                <li>当多个时间周期趋势一致时，信号更可靠</li>
+                                <li>注意价格和成交量的配合，量价齐升/齐跌的信号更强烈</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            } else if (currentActiveTab === 'technical') {
+                title.textContent = '技术信号 - 详情说明';
+                explanationHtml = `
+                    <div style="line-height: 1.8; color: var(--text-primary);">
+                        <h3 style="color: var(--primary-blue); margin-bottom: var(--spacing-lg); font-size: 20px;">
+                            <i class="bi bi-bar-chart"></i> 技术信号分析说明
+                        </h3>
+                        
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 功能概述</h4>
+                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
+                                技术信号页面综合评估15分钟、1小时、1天三个时间周期的技术指标（EMA、MACD、RSI、BOLL等），为每个交易对生成技术评分和交易信号。
+                            </p>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">⏱️ 时间周期说明</h4>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
+                                <li><strong>15分钟：</strong>短期技术指标，适合捕捉短期交易机会</li>
+                                <li><strong>1小时：</strong>中期技术指标，适合判断中期趋势</li>
+                                <li><strong>1天：</strong>长期技术指标，适合判断长期趋势方向</li>
+                            </ul>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📈 技术指标说明</h4>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">EMA (指数移动平均线)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">短期EMA上穿长期EMA为看涨信号，下穿为看跌信号</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">MACD (指数平滑移动平均线)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">MACD线上穿信号线为金叉（看涨），下穿为死叉（看跌）</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">RSI (相对强弱指标)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">RSI < 30为超卖（看涨），RSI > 70为超买（看跌）</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
+                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">BOLL (布林带)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">价格触及下轨可能反弹，触及上轨可能回调</p>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">🎯 综合评分说明</h4>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
+                                <li><strong>0-40分：</strong>技术面偏弱，建议观望或做空</li>
+                                <li><strong>40-60分：</strong>技术面中性，多空平衡</li>
+                                <li><strong>60-100分：</strong>技术面偏强，建议做多</li>
+                                <li>综合评分 = (15分钟评分 + 1小时评分 + 1天评分) / 3</li>
+                            </ul>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 信号类型</h4>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--success-green); font-weight: 600; margin-bottom: 4px;">强烈买入 (STRONG_BUY)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">多个时间周期技术指标强烈看多，综合评分高</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--success-green); font-weight: 600; margin-bottom: 4px;">买入 (BUY)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">技术指标整体看多，适合做多</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">持有 (HOLD)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">技术指标中性，建议观望</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--danger-red); font-weight: 600; margin-bottom: 4px;">卖出 (SELL)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">技术指标整体看空，适合做空</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
+                                <p style="color: var(--danger-red); font-weight: 600; margin-bottom: 4px;">强烈卖出 (STRONG_SELL)</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">多个时间周期技术指标强烈看空，综合评分低</p>
+                            </div>
+                        </div>
+
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--primary-blue);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-sm); font-size: 16px;">💡 使用建议</h4>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2; margin: 0;">
+                                <li>结合多个时间周期的技术指标，避免单一周期误导</li>
+                                <li>当多个指标（EMA、MACD、RSI、BOLL）方向一致时，信号更可靠</li>
+                                <li>注意RSI的超买超卖区域，结合其他指标综合判断</li>
+                                <li>长期趋势（1天）决定大方向，短期趋势（15分钟）寻找入场时机</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            } else if (currentActiveTab === 'futures') {
+                title.textContent = '合约信号 - 详情说明';
+                explanationHtml = `
+                    <div style="line-height: 1.8; color: var(--text-primary);">
+                        <h3 style="color: var(--primary-blue); margin-bottom: var(--spacing-lg); font-size: 20px;">
+                            <i class="bi bi-currency-exchange"></i> 合约信号分析说明
+                        </h3>
+                        
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 功能概述</h4>
+                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
+                                合约信号页面综合分析资金费率、持仓量变化、多时间周期技术指标（5分钟、15分钟、1小时）和价格趋势，为合约交易提供做多/做空信号和凯利公式仓位建议。
+                            </p>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📈 评估维度（4个维度）</h4>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">1. 资金费率（权重35%）</p>
+                                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 4px;">反映市场情绪，费率极高（>0.1%）说明多头过度拥挤，做空机会；费率极低（<-0.1%）说明空头过度拥挤，做多机会</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">2. 持仓量变化（权重20%）</p>
+                                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 4px;">持仓量增加+价格上涨=趋势延续（看多）；持仓量增加+价格下跌=趋势延续（看空）；持仓量减少=可能反转</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
+                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">3. 技术指标（权重35%）</p>
+                                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 4px;">综合分析5分钟、15分钟、1小时三个时间周期的RSI、EMA、MACD、BOLL等技术指标</p>
+                            </div>
+                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
+                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">4. 价格趋势（权重10%）</p>
+                                <p style="color: var(--text-secondary); font-size: 13px;">24小时涨跌幅作为确认信号，涨幅>3%看多，跌幅>3%看空</p>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">🎯 信号评分与方向</h4>
+                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
+                                信号评分范围：-100 到 +100（正数=做多，负数=做空）
+                            </p>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
+                                <li><strong>≥ 60分：</strong>强烈做多</li>
+                                <li><strong>30-60分：</strong>做多</li>
+                                <li><strong>-30 到 30分：</strong>观望</li>
+                                <li><strong>-60 到 -30分：</strong>做空</li>
+                                <li><strong>≤ -60分：</strong>强烈做空</li>
+                            </ul>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">💰 凯利公式仓位建议</h4>
+                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
+                                基于信号强度、RSI、价格趋势等因素，使用凯利公式计算建议仓位比例、入场价、止损价和止盈价。
+                            </p>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
+                                <li><strong>建议仓位：</strong>基于胜率和盈亏比计算的最优仓位比例</li>
+                                <li><strong>入场价：</strong>建议的建仓价格</li>
+                                <li><strong>止损价：</strong>风险控制，跌破此价格应止损离场</li>
+                                <li><strong>止盈价：</strong>目标收益，达到此价格可考虑止盈</li>
+                            </ul>
+                        </div>
+
+                        <div style="margin-bottom: var(--spacing-lg);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 技术指标方向说明</h4>
+                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
+                                每个时间周期（5分钟、15分钟、1小时）显示：
+                            </p>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
+                                <li><strong>RSI：</strong>显示数值和方向（↑看涨、↓看跌、→中性）</li>
+                                <li><strong>EMA：</strong>显示方向（↑看涨、↓看跌、→中性）</li>
+                                <li><strong>MACD：</strong>显示方向（↑金叉看涨、↓死叉看跌、→中性）</li>
+                                <li><strong>BOLL：</strong>显示方向（↑价格在下轨看涨、↓价格在上轨看跌、→中性）</li>
+                                <li><strong>综合评估：</strong>基于多数指标方向判断整体趋势</li>
+                            </ul>
+                        </div>
+
+                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--primary-blue);">
+                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-sm); font-size: 16px;">💡 使用建议</h4>
+                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2; margin: 0;">
+                                <li>资金费率是重要的反向指标，费率极高时往往是做空机会</li>
+                                <li>持仓量变化配合价格趋势，可以判断趋势的延续性</li>
+                                <li>多个时间周期的技术指标方向一致时，信号更可靠</li>
+                                <li>严格按照凯利公式建议的止损价设置止损，控制风险</li>
+                                <li>信号评分在-30到30之间时，建议观望，等待更明确的信号</li>
+                                <li>多空比仅供参考（用户数多空比），不参与评分计算</li>
+                            </ul>
+                        </div>
+
+                        <div style="background: var(--warning-yellow-bg); padding: var(--spacing-md); border-radius: var(--radius-md); margin-top: var(--spacing-lg); border-left: 4px solid var(--warning-yellow);">
+                            <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">⚠️ 风险提示</p>
+                            <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
+                                合约交易风险较高，请务必设置止损，控制仓位，不要过度杠杆。所有信号仅供参考，不构成投资建议。
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = explanationHtml;
+            modal.style.display = 'flex';
+            setTimeout(() => {
+                modal.classList.add('active');
+            }, 10);
+        }
+
+        // 关闭标签页详情说明
+        function closeTabExplanation() {
+            const modal = document.getElementById('tabExplanationModal');
+            modal.classList.remove('active');
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 300);
+        }
+
         // 格式化数字
         function formatNumber(num, decimals = 2) {
             if (num === null || num === undefined) return '-';
@@ -541,9 +844,13 @@
         // 格式化价格（针对不同交易对使用不同小数位数）
         function formatPrice(price, symbol) {
             if (price === null || price === undefined) return '-';
-            // DOGE保留4位小数（支持多种格式：DOGE/USDT, DOGEUSDT, DOGE等）
             if (symbol) {
                 const symbolUpper = symbol.toUpperCase();
+                // PUMP保留5位小数（支持多种格式：PUMP/USDT, PUMPUSDT, PUMP等）
+                if (symbolUpper.includes('PUMP')) {
+                    return Number(price).toFixed(5);
+                }
+                // DOGE保留4位小数（支持多种格式：DOGE/USDT, DOGEUSDT, DOGE等）
                 if (symbolUpper.includes('DOGE')) {
                     return Number(price).toFixed(4);
                 }
@@ -849,6 +1156,36 @@
                     <div class="price-info">
             `;
             
+            // 获取信号方向（做多/做空）
+            let directionText = '';
+            let directionClass = '';
+            if (signalData && signalData.signal_direction) {
+                const direction = signalData.signal_direction;
+                if (direction === 'STRONG_LONG' || direction === 'LONG') {
+                    directionText = '做多';
+                    directionClass = 'signal-buy';
+                } else if (direction === 'STRONG_SHORT' || direction === 'SHORT') {
+                    directionText = '做空';
+                    directionClass = 'signal-sell';
+                } else {
+                    directionText = '观望';
+                    directionClass = 'signal-hold';
+                }
+            } else if (signalData && signalData.signal_text) {
+                // 从signal_text中提取方向
+                const text = signalData.signal_text;
+                if (text.includes('做多') || text.includes('买入')) {
+                    directionText = '做多';
+                    directionClass = 'signal-buy';
+                } else if (text.includes('做空') || text.includes('卖出')) {
+                    directionText = '做空';
+                    directionClass = 'signal-sell';
+                } else {
+                    directionText = '观望';
+                    directionClass = 'signal-hold';
+                }
+            }
+            
             // 优先使用凯利公式建议（如果合约信号数据中有）
             const kellyAdvice = signalData?.kelly_advice || (indicatorsData?.kelly_advice ? indicatorsData.kelly_advice : null);
             
@@ -857,6 +1194,14 @@
                 // 使用凯利公式建议
                 const displayPrice = currentPrice || kellyAdvice.entry_price;
                 html += `
+                    ${directionText ? `
+                    <div class="price-item">
+                        <div class="price-label">交易方向</div>
+                        <div class="price-value ${directionClass}" style="font-size: 18px; font-weight: 700;">
+                            ${directionText === '做多' ? '📈 做多' : directionText === '做空' ? '📉 做空' : '⏸️ 观望'}
+                        </div>
+                    </div>
+                    ` : ''}
                     <div class="price-item">
                         <div class="price-label">当前价格</div>
                         <div class="price-value">${formatPrice(displayPrice, symbol)} USDT</div>
@@ -904,7 +1249,41 @@
             } else if (signalData && signalData.price) {
                 // 使用实时价格或信号中的价格
                 const displayPrice = currentPrice || signalData.price.current;
+                // 获取信号方向（如果还没有获取）
+                if (!directionText && signalData.signal_direction) {
+                    const direction = signalData.signal_direction;
+                    if (direction === 'STRONG_LONG' || direction === 'LONG') {
+                        directionText = '做多';
+                        directionClass = 'signal-buy';
+                    } else if (direction === 'STRONG_SHORT' || direction === 'SHORT') {
+                        directionText = '做空';
+                        directionClass = 'signal-sell';
+                    } else {
+                        directionText = '观望';
+                        directionClass = 'signal-hold';
+                    }
+                } else if (!directionText && signalData.signal_text) {
+                    const text = signalData.signal_text;
+                    if (text.includes('做多') || text.includes('买入')) {
+                        directionText = '做多';
+                        directionClass = 'signal-buy';
+                    } else if (text.includes('做空') || text.includes('卖出')) {
+                        directionText = '做空';
+                        directionClass = 'signal-sell';
+                    } else {
+                        directionText = '观望';
+                        directionClass = 'signal-hold';
+                    }
+                }
                 html += `
+                    ${directionText ? `
+                    <div class="price-item">
+                        <div class="price-label">交易方向</div>
+                        <div class="price-value ${directionClass}" style="font-size: 18px; font-weight: 700;">
+                            ${directionText === '做多' ? '📈 做多' : directionText === '做空' ? '📉 做空' : '⏸️ 观望'}
+                        </div>
+                    </div>
+                    ` : ''}
                     <div class="price-item">
                         <div class="price-label">当前价格</div>
                         <div class="price-value">${formatPrice(displayPrice, symbol)} USDT</div>
@@ -1336,7 +1715,7 @@
                     });
                     
                     tbody.innerHTML = html;
-                } else {
+                        } else {
                     tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无数据</td></tr>';
                 }
             } catch (error) {
@@ -1452,7 +1831,7 @@
                 const data = await response.json();
                 
                 if (data.success && data.data && data.data.length > 0) {
-                    let html = '';
+                        let html = '';
                     
                     data.data.forEach(signal => {
                         // 格式化价格显示
@@ -1468,14 +1847,14 @@
                                 </div>
                             `;
                         }
-                        
-                        html += `
+                            
+                            html += `
                             <tr data-symbol="${signal.symbol}">
                                 <td><strong>${signal.symbol}</strong></td>
                                 <td>${priceHtml}</td>
                                 <td>
                                     <span class="badge ${signal.signal_class}">${signal.signal_text}</span>
-                                </td>
+                                    </td>
                                 <td class="${signal.signal_score >= 0 ? 'signal-buy' : 'signal-sell'}" style="font-weight: 600;">
                                     ${signal.signal_score >= 0 ? '+' : ''}${formatNumber(signal.signal_score, 1)}
                                 </td>
@@ -1500,14 +1879,14 @@
                                 <td>
                                     <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${signal.symbol}')" title="查看详情">
                                         <i class="bi bi-eye"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        `;
-                    });
+                                        </button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
                     
-                    tbody.innerHTML = html;
-                } else {
+                        tbody.innerHTML = html;
+                    } else {
                     tbody.innerHTML = '<tr><td colspan="12" class="empty-state">暂无合约信号数据</td></tr>';
                 }
             } catch (error) {
@@ -1573,19 +1952,19 @@
             // 加载初始数据（趋势判断作为默认TAB）
             await loadTrendAnalysis();
             
-            // 设置定时刷新（每30秒刷新一次，包含价格和指标数据）
+            // 设置定时刷新（每5分钟刷新一次，包含价格和指标数据）
             // 无论当前在哪个标签页，都刷新所有数据，确保数据是最新的
             setInterval(() => {
                 loadTrendAnalysis();
-            }, 30000); // 每30秒刷新趋势分析
+            }, 300000); // 每5分钟刷新趋势分析
             
             setInterval(() => {
                 loadTechnicalSignals();
-            }, 30000); // 每30秒刷新技术信号
+            }, 300000); // 每5分钟刷新技术信号
             
             setInterval(() => {
                 loadFuturesSignals();
-            }, 30000); // 每30秒刷新合约信号
+            }, 300000); // 每5分钟刷新合约信号
             
             // 实时价格更新（每5秒更新一次价格，不影响其他数据）
             setInterval(() => {
@@ -1724,6 +2103,16 @@
                             signalData.price = {};
                         }
                         signalData.price.current = futuresSignalData.current_price;
+                    }
+                    // 合并信号方向信息（用于显示做多/做空）
+                    if (futuresSignalData.signal_direction) {
+                        signalData.signal_direction = futuresSignalData.signal_direction;
+                    }
+                    if (futuresSignalData.signal_text) {
+                        signalData.signal_text = futuresSignalData.signal_text;
+                    }
+                    if (futuresSignalData.signal_class) {
+                        signalData.signal_class = futuresSignalData.signal_class;
                     }
                 }
                 

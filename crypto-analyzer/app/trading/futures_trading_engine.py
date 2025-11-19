@@ -1081,6 +1081,110 @@ class FuturesTradingEngine:
 
         return positions
 
+    def update_all_accounts_equity(self):
+        """
+        更新所有账户的总权益
+        总权益 = 当前余额 + 冻结余额 + 所有持仓的未实现盈亏总和
+        
+        注意：此方法会先更新所有持仓的未实现盈亏（基于最新价格），然后再更新总权益
+        """
+        try:
+            if not self.connection or not self.connection.open:
+                self._connect_db()
+            
+            cursor = self.connection.cursor()
+            
+            # 第一步：更新所有持仓的未实现盈亏（基于最新价格）
+            cursor.execute(
+                """SELECT id, symbol, entry_price, quantity, position_side, margin, leverage
+                FROM futures_positions 
+                WHERE status = 'open'"""
+            )
+            positions = cursor.fetchall()
+            
+            for pos in positions:
+                try:
+                    # 获取当前价格
+                    current_price = self.get_current_price(pos['symbol'], use_realtime=True)
+                    if current_price == 0:
+                        continue
+                    
+                    entry_price = Decimal(str(pos['entry_price']))
+                    quantity = Decimal(str(pos['quantity']))
+                    margin = Decimal(str(pos.get('margin', 0)))
+                    
+                    # 计算未实现盈亏
+                    if pos['position_side'] == 'LONG':
+                        unrealized_pnl = (current_price - entry_price) * quantity
+                    else:  # SHORT
+                        unrealized_pnl = (entry_price - current_price) * quantity
+                    
+                    # 计算盈亏百分比
+                    unrealized_pnl_pct = (unrealized_pnl / margin * 100) if margin > 0 else Decimal('0')
+                    
+                    # 更新持仓的未实现盈亏
+                    cursor.execute(
+                        """UPDATE futures_positions
+                        SET mark_price = %s,
+                            unrealized_pnl = %s,
+                            unrealized_pnl_pct = %s,
+                            last_update_time = NOW()
+                        WHERE id = %s""",
+                        (float(current_price), float(unrealized_pnl), float(unrealized_pnl_pct), pos['id'])
+                    )
+                except Exception as e:
+                    logger.warning(f"更新持仓 {pos.get('symbol', 'unknown')} 未实现盈亏失败: {e}")
+                    continue
+            
+            # 第二步：更新所有账户的总权益
+            # 获取所有有合约持仓的账户
+            cursor.execute(
+                """SELECT DISTINCT account_id 
+                FROM futures_positions 
+                WHERE status = 'open'"""
+            )
+            account_ids_with_positions = [row['account_id'] for row in cursor.fetchall()]
+            
+            # 获取所有账户（包括没有持仓的）
+            cursor.execute("SELECT id FROM paper_trading_accounts")
+            all_account_ids = [row['id'] for row in cursor.fetchall()]
+            
+            updated_count = 0
+            for account_id in all_account_ids:
+                try:
+                    # 更新该账户的总权益
+                    cursor.execute(
+                        """UPDATE paper_trading_accounts a
+                        SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
+                            SELECT SUM(p.unrealized_pnl) 
+                            FROM futures_positions p 
+                            WHERE p.account_id = a.id AND p.status = 'open'
+                        ), 0),
+                        updated_at = NOW()
+                        WHERE a.id = %s""",
+                        (account_id,)
+                    )
+                    updated_count += 1
+                except Exception as e:
+                    logger.warning(f"更新账户 {account_id} 总权益失败: {e}")
+                    continue
+            
+            self.connection.commit()
+            cursor.close()
+            
+            return updated_count
+            
+        except Exception as e:
+            logger.error(f"更新所有账户总权益失败: {e}")
+            import traceback
+            traceback.print_exc()
+            if self.connection:
+                try:
+                    self.connection.rollback()
+                except:
+                    pass
+            return 0
+
     def __del__(self):
         """关闭数据库连接"""
         if self.connection and self.connection.open:

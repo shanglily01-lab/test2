@@ -1285,21 +1285,13 @@ async def get_trend_analysis():
                             continue
                         
                         # 获取K线数据用于价格和成交量趋势分析
-                        # 根据时间周期确定需要多少根K线
-                        # 重要：K线数据也必须使用对应timeframe的数据
-                        kline_limit = {
-                            '5m': 144,   # 12小时（144根5分钟K线）
-                            '15m': 8,    # 2小时（8根15分钟K线）
-                            '1h': 24,    # 24小时（24根1小时K线）
-                            '1d': 30     # 30天（30根日K线）
-                        }.get(timeframe, 30)
-                        
+                        # 只需要最新2根K线，用于对比前一个数据
                         cursor.execute(
                             """SELECT open_price, high_price, low_price, close_price, volume, timestamp
                             FROM kline_data 
                             WHERE symbol = %s AND timeframe = %s
-                            ORDER BY timestamp DESC LIMIT %s""",
-                            (symbol, timeframe, kline_limit)
+                            ORDER BY timestamp DESC LIMIT 2""",
+                            (symbol, timeframe)
                         )
                         klines = cursor.fetchall()
                         
@@ -1421,226 +1413,67 @@ def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, ti
     price_slope_pct = 0.0
     volume_slope_pct = 0.0
     
-    # 分析价格和成交量变化（基于线性回归和变化率）
-    if klines and len(klines) >= 3:
-        import numpy as np
+    # 分析价格和成交量变化（直接与前一个数据对比）
+    if klines and len(klines) >= 2:
+        # K线数据按时间倒序排列（最新的在前）
+        # klines[0] 是最新的K线，klines[1] 是前一个K线
         
-        # 反转K线列表（从旧到新）
-        klines_reversed = list(reversed(klines))
-        
-        # 提取价格和成交量数据
-        prices = [float(k['close_price']) for k in klines_reversed]
-        volumes = [float(k.get('volume', 0)) for k in klines_reversed]
+        # 提取最新和前一个K线的价格和成交量
+        current_price = float(klines[0]['close_price'])
+        previous_price = float(klines[1]['close_price'])
+        current_volume = float(klines[0].get('volume', 0))
+        previous_volume = float(klines[1].get('volume', 0))
         
         # ========== 价格变化百分比计算 ==========
-        # 计算方式：使用首尾价格比较
-        # 公式：(最新价格 - 最早价格) / 最早价格 * 100
-        # 例如：最早价格100，最新价格110，变化 = (110-100)/100*100 = 10%
-        first_price = prices[0]  # 最早的价格（第一根K线收盘价）
-        last_price = prices[-1]  # 最新的价格（最后一根K线收盘价）
-        price_change_pct = ((last_price - first_price) / first_price) * 100 if first_price > 0 else 0
+        # 直接对比：最新K线收盘价 vs 前一个K线收盘价
+        # 公式：(最新价格 - 前一个价格) / 前一个价格 * 100
+        price_change_pct = ((current_price - previous_price) / previous_price) * 100 if previous_price > 0 else 0
         
         # ========== 成交量变化百分比计算 ==========
-        # 计算方式：使用前1/3和后1/3的平均值比较（避免单点异常）
-        # 公式：(后1/3平均成交量 - 前1/3平均成交量) / 前1/3平均成交量 * 100
-        # 例如：前1/3平均成交量1000，后1/3平均成交量1500，变化 = (1500-1000)/1000*100 = 50%
-        # 优势：使用平均值比较，不受单根K线成交量异常影响，更能反映整体趋势
-        if len(volumes) >= 6:
-            # 前1/3的平均值
-            early_count = max(1, len(volumes) // 3)
-            early_volumes = volumes[:early_count]
-            early_avg_volume = np.mean(early_volumes) if len(early_volumes) > 0 else 1
-            
-            # 后1/3的平均值
-            late_count = max(1, len(volumes) // 3)
-            late_volumes = volumes[-late_count:]
-            late_avg_volume = np.mean(late_volumes) if len(late_volumes) > 0 else 1
-            
-            # 计算变化百分比
-            volume_change_pct = ((late_avg_volume - early_avg_volume) / early_avg_volume) * 100 if early_avg_volume > 0 else 0
-        elif len(volumes) >= 3:
-            # 如果数据点较少，使用前一半和后一半的平均值
-            mid = len(volumes) // 2
-            early_avg_volume = np.mean(volumes[:mid]) if mid > 0 else volumes[0]
-            late_avg_volume = np.mean(volumes[mid:]) if len(volumes) > mid else volumes[-1]
-            volume_change_pct = ((late_avg_volume - early_avg_volume) / early_avg_volume) * 100 if early_avg_volume > 0 else 0
+        # 直接对比：最新K线成交量 vs 前一个K线成交量
+        # 公式：(最新成交量 - 前一个成交量) / 前一个成交量 * 100
+        volume_change_pct = ((current_volume - previous_volume) / previous_volume) * 100 if previous_volume > 0 else 0
+        
+        # 简化的斜率计算（用于兼容性，实际不再使用）
+        price_slope_pct = price_change_pct
+        volume_slope_pct = volume_change_pct
+        
+        # 成交量比率（用于判断成交量是否放大）
+        volume_ratio = current_volume / previous_volume if previous_volume > 0 else 1
+        
+        # 根据时间周期计算趋势评分（简化逻辑，基于价格和成交量变化）
+        # 价格趋势评分：基于价格变化百分比，直接映射到0-100分
+        # 每1%价格变化 = 10分，50分为中性（价格不变）
+        if price_change_pct > 0:
+            # 价格上涨：50-100分
+            price_trend_score = 50 + min(price_change_pct * 10, 50)  # 每1%涨幅=10分，最高100分
         else:
-            # 如果数据点很少，使用首尾比较（但这种情况应该很少）
-            first_volume = volumes[0] if volumes[0] > 0 else 1
-            last_volume = volumes[-1] if volumes[-1] > 0 else 1
-            volume_change_pct = ((last_volume - first_volume) / first_volume) * 100 if first_volume > 0 else 0
+            # 价格下跌：0-50分
+            price_trend_score = 50 + max(price_change_pct * 10, -50)  # 每1%跌幅=-10分，最低0分
         
-        # 使用线性回归计算价格趋势斜率
-        x = np.arange(len(prices))
-        y_prices = np.array(prices)
-        try:
-            price_slope = np.polyfit(x, y_prices, 1)[0]
-            price_slope_pct = (price_slope / first_price) * 100 if first_price > 0 else 0
-        except:
-            price_slope_pct = price_change_pct / len(prices)  # 降级为简单平均
-        
-        # 使用线性回归计算成交量趋势斜率
-        y_volumes = np.array(volumes)
-        try:
-            volume_slope = np.polyfit(x, y_volumes, 1)[0]
-            volume_slope_pct = (volume_slope / first_volume) * 100 if first_volume > 0 else 0
-        except:
-            volume_slope_pct = volume_change_pct / len(volumes)  # 降级为简单平均
-        
-        # 计算平均成交量（用于判断成交量是否放大）
-        avg_volume = np.mean(volumes) if len(volumes) > 0 else 1
-        recent_avg_volume = np.mean(volumes[-len(volumes)//3:]) if len(volumes) >= 3 else avg_volume
-        volume_ratio = recent_avg_volume / avg_volume if avg_volume > 0 else 1
-        
-        # 根据时间周期计算趋势评分
-        if timeframe == '1d':
-            # 1d趋势：基于30天数据（30根日K线）
-            # 价格趋势评分（权重60%）
-            if price_change_pct > 20:
-                price_trend_score = 85 + min((price_change_pct - 20) / 2, 10)  # 85-95
-            elif price_change_pct > 10:
-                price_trend_score = 70 + (price_change_pct - 10) * 1.5  # 70-85
-            elif price_change_pct > 5:
-                price_trend_score = 60 + (price_change_pct - 5) * 2  # 60-70
-            elif price_change_pct > 0:
-                price_trend_score = 50 + price_change_pct * 2  # 50-60
-            elif price_change_pct > -5:
-                price_trend_score = 40 + (price_change_pct + 5) * 2  # 40-50
-            elif price_change_pct > -10:
-                price_trend_score = 30 + (price_change_pct + 5) * 2  # 30-40
-            elif price_change_pct > -20:
-                price_trend_score = 15 + (price_change_pct + 10) * 1.5  # 15-30
+        # 成交量趋势评分：基于价格变化和成交量比率的配合
+        if price_change_pct > 0:
+            # 价格上涨时
+            if volume_ratio > 1.2:
+                volume_trend_score = 70  # 价涨量增，看涨
+            elif volume_ratio > 0.8:
+                volume_trend_score = 55  # 价涨量平，中性偏涨
             else:
-                price_trend_score = 5 + min(abs(price_change_pct + 20) / 2, 10)  # 5-15
-            
-            # 成交量趋势评分（权重40%）
-            # 价格上涨 + 成交量放大 = 强烈看涨
-            # 价格上涨 + 成交量萎缩 = 看涨但乏力
-            # 价格下跌 + 成交量放大 = 强烈看跌
-            # 价格下跌 + 成交量萎缩 = 看跌但可能反弹
-            if price_change_pct > 0 and volume_ratio > 1.2:
-                volume_trend_score = 80  # 价涨量增，强烈看涨
-            elif price_change_pct > 0 and volume_ratio > 0.8:
-                volume_trend_score = 60  # 价涨量平，看涨
-            elif price_change_pct > 0:
                 volume_trend_score = 45  # 价涨量缩，看涨乏力
-            elif price_change_pct < 0 and volume_ratio > 1.2:
-                volume_trend_score = 20  # 价跌量增，强烈看跌
-            elif price_change_pct < 0 and volume_ratio > 0.8:
-                volume_trend_score = 40  # 价跌量平，看跌
+        elif price_change_pct < 0:
+            # 价格下跌时
+            if volume_ratio > 1.2:
+                volume_trend_score = 30  # 价跌量增，看跌
+            elif volume_ratio > 0.8:
+                volume_trend_score = 45  # 价跌量平，中性偏跌
             else:
-                volume_trend_score = 55  # 价跌量缩，可能反弹
-            
-            # 价格趋势和成交量趋势综合
-            price_trend_score = (price_trend_score * 0.6 + volume_trend_score * 0.4)
-            
-        elif timeframe == '1h':
-            # 1h趋势：基于24小时数据（24根1小时K线）
-            # 价格趋势评分
-            if price_change_pct > 10:
-                price_trend_score = 80 + min((price_change_pct - 10) / 2, 15)  # 80-95
-            elif price_change_pct > 5:
-                price_trend_score = 65 + (price_change_pct - 5) * 3  # 65-80
-            elif price_change_pct > 2:
-                price_trend_score = 55 + (price_change_pct - 2) * 3.33  # 55-65
-            elif price_change_pct > 0:
-                price_trend_score = 50 + price_change_pct * 2.5  # 50-55
-            elif price_change_pct > -2:
-                price_trend_score = 45 + (price_change_pct + 2) * 2.5  # 45-50
-            elif price_change_pct > -5:
-                price_trend_score = 35 + (price_change_pct + 2) * 3.33  # 35-45
-            elif price_change_pct > -10:
-                price_trend_score = 20 + (price_change_pct + 5) * 3  # 20-35
-            else:
-                price_trend_score = 5 + min(abs(price_change_pct + 10) / 2, 15)  # 5-20
-            
-            # 成交量趋势评分
-            if price_change_pct > 0 and volume_ratio > 1.3:
-                volume_trend_score = 75
-            elif price_change_pct > 0 and volume_ratio > 0.9:
-                volume_trend_score = 60
-            elif price_change_pct > 0:
-                volume_trend_score = 45
-            elif price_change_pct < 0 and volume_ratio > 1.3:
-                volume_trend_score = 25
-            elif price_change_pct < 0 and volume_ratio > 0.9:
-                volume_trend_score = 40
-            else:
-                volume_trend_score = 50
-            
-            price_trend_score = (price_trend_score * 0.65 + volume_trend_score * 0.35)
-            
-        elif timeframe == '5m':
-            # 5m趋势：基于12小时数据（144根5分钟K线）
-            # 价格趋势评分（5分钟周期，价格波动可能较大）
-            if price_change_pct > 5:
-                price_trend_score = 80 + min((price_change_pct - 5) * 3, 15)  # 80-95
-            elif price_change_pct > 2:
-                price_trend_score = 65 + (price_change_pct - 2) * 5  # 65-80
-            elif price_change_pct > 0.5:
-                price_trend_score = 55 + (price_change_pct - 0.5) * 6.67  # 55-65
-            elif price_change_pct > 0:
-                price_trend_score = 50 + price_change_pct * 10  # 50-55
-            elif price_change_pct > -0.5:
-                price_trend_score = 45 + (price_change_pct + 0.5) * 10  # 45-50
-            elif price_change_pct > -2:
-                price_trend_score = 35 + (price_change_pct + 0.5) * 6.67  # 35-45
-            elif price_change_pct > -5:
-                price_trend_score = 20 + (price_change_pct + 2) * 5  # 20-35
-            else:
-                price_trend_score = 5 + min(abs(price_change_pct + 5) * 3, 15)  # 5-20
-            
-            # 成交量趋势评分（5分钟周期，成交量波动可能较大）
-            if price_change_pct > 0 and volume_ratio > 1.5:
-                volume_trend_score = 75
-            elif price_change_pct > 0 and volume_ratio > 1.2:
-                volume_trend_score = 60
-            elif price_change_pct > 0 and volume_ratio > 1.0:
-                volume_trend_score = 50
-            elif price_change_pct > 0:
-                volume_trend_score = 45
-            elif price_change_pct < 0 and volume_ratio > 1.5:
-                volume_trend_score = 25
-            elif price_change_pct < 0 and volume_ratio > 1.2:
-                volume_trend_score = 40
-            elif price_change_pct < 0 and volume_ratio > 1.0:
-                volume_trend_score = 50
-            else:
-                volume_trend_score = 45
-            
-            price_trend_score = (price_trend_score * 0.6 + volume_trend_score * 0.4)
-            
-        else:  # 15m
-            # 15m趋势：基于2小时数据
-            # 价格趋势评分
-            if price_change_pct > 3:
-                price_trend_score = 75 + min((price_change_pct - 3) * 5, 20)  # 75-95
-            elif price_change_pct > 1:
-                price_trend_score = 60 + (price_change_pct - 1) * 7.5  # 60-75
-            elif price_change_pct > 0:
-                price_trend_score = 50 + price_change_pct * 10  # 50-60
-            elif price_change_pct > -1:
-                price_trend_score = 40 + (price_change_pct + 1) * 10  # 40-50
-            elif price_change_pct > -3:
-                price_trend_score = 25 + (price_change_pct + 1) * 7.5  # 25-40
-            else:
-                price_trend_score = 5 + min(abs(price_change_pct + 3) * 5, 20)  # 5-25
-            
-            # 成交量趋势评分
-            if price_change_pct > 0 and volume_ratio > 1.5:
-                volume_trend_score = 70
-            elif price_change_pct > 0 and volume_ratio > 1.0:
-                volume_trend_score = 55
-            elif price_change_pct > 0:
-                volume_trend_score = 45
-            elif price_change_pct < 0 and volume_ratio > 1.5:
-                volume_trend_score = 30
-            elif price_change_pct < 0 and volume_ratio > 1.0:
-                volume_trend_score = 45
-            else:
-                volume_trend_score = 50
-            
-            price_trend_score = (price_trend_score * 0.7 + volume_trend_score * 0.3)
+                volume_trend_score = 50  # 价跌量缩，可能反弹
+        else:
+            # 价格不变
+            volume_trend_score = 50
+        
+        # 价格和成交量趋势综合评分（价格权重70%，成交量权重30%）
+        price_trend_score = (price_trend_score * 0.7 + volume_trend_score * 0.3)
     
     # 技术指标评分（权重根据时间周期调整）
     indicator_score = 50.0
@@ -1672,35 +1505,19 @@ def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, ti
         indicator_score -= 8  # 价格在上轨，可能回调
     
     # 综合评分（根据时间周期调整权重）
+    # 简化逻辑：价格+成交量趋势占主要权重，技术指标作为辅助
     if timeframe == '1d':
         # 1d趋势：价格+成交量趋势80%，技术指标20%（更重视实际价格变化）
         trend_score = (price_trend_score * 0.8 + indicator_score * 0.1 + technical_score * 0.1)
-        
-        # 对于1d趋势，如果价格变化超过阈值，直接基于价格判断，不受技术指标影响
-        if price_change_pct < -10:
-            # 价格下跌超过10%，强制判断为强烈下跌
-            trend_score = min(trend_score, 20)
-        elif price_change_pct < -5:
-            # 价格下跌5-10%，强制判断为下跌
-            trend_score = min(trend_score, 35)
-        elif price_change_pct > 10:
-            # 价格上涨超过10%，强制判断为强烈上涨
-            trend_score = max(trend_score, 80)
-        elif price_change_pct > 5:
-            # 价格上涨5-10%，强制判断为上涨
-            trend_score = max(trend_score, 65)
     elif timeframe == '1h':
-        # 1h趋势：价格+成交量趋势60%，技术指标40%
+        # 1h趋势：价格+成交量趋势70%，技术指标30%
+        trend_score = (price_trend_score * 0.7 + indicator_score * 0.15 + technical_score * 0.15)
+    elif timeframe == '15m':
+        # 15m趋势：价格+成交量趋势60%，技术指标40%
         trend_score = (price_trend_score * 0.6 + indicator_score * 0.2 + technical_score * 0.2)
-        
-        # 对于1h趋势，如果价格变化超过阈值，也做类似处理
-        if price_change_pct < -5:
-            trend_score = min(trend_score, 30)
-        elif price_change_pct > 5:
-            trend_score = max(trend_score, 70)
-    else:  # 15m
-        # 15m趋势：价格+成交量趋势50%，技术指标50%
-        trend_score = (price_trend_score * 0.5 + indicator_score * 0.25 + technical_score * 0.25)
+    else:  # 5m
+        # 5m趋势：价格+成交量趋势60%，技术指标40%
+        trend_score = (price_trend_score * 0.6 + indicator_score * 0.2 + technical_score * 0.2)
     
     trend_score = max(0, min(100, trend_score))
     
@@ -2002,34 +1819,16 @@ def _analyze_futures_signal(
             funding_score = 15
             reasons.append(f"资金费率较低({funding_rate_pct:.3f}%)，空头占优")
     
-    signal_score += funding_score * 0.3
+    signal_score += funding_score * 0.35  # 权重从30%提升到35%
     
-    # 2. 多空比分析（权重25%）
-    ls_score = 0.0
+    # 2. 多空比分析已移除（因为多空比是用户数的多空比，不是实际仓位的多空比）
+    # 原权重25%已重新分配给其他维度
     long_short_ratio = 0.0
     if ls_data and ls_data.get('long_short_ratio'):
         long_short_ratio = float(ls_data['long_short_ratio'])
-        long_account = float(ls_data.get('long_account', 0))
-        short_account = float(ls_data.get('short_account', 0))
-        
-        # 多空比 > 2 = 多头过多，做空机会
-        if long_short_ratio > 2.0:
-            ls_score = -25
-            reasons.append(f"多空比极高({long_short_ratio:.2f})，多头账户{long_account:.1f}%，做空机会")
-        elif long_short_ratio > 1.5:
-            ls_score = -12
-            reasons.append(f"多空比较高({long_short_ratio:.2f})，多头占优")
-        # 多空比 < 0.5 = 空头过多，做多机会
-        elif long_short_ratio < 0.5:
-            ls_score = 25
-            reasons.append(f"多空比极低({long_short_ratio:.2f})，空头账户{short_account:.1f}%，做多机会")
-        elif long_short_ratio < 0.67:
-            ls_score = 12
-            reasons.append(f"多空比较低({long_short_ratio:.2f})，空头占优")
+        # 保留数据用于显示，但不参与评分计算
     
-    signal_score += ls_score * 0.25
-    
-    # 3. 持仓量变化分析（权重15%）
+    # 3. 持仓量变化分析（权重从15%提升到20%）
     oi_score = 0.0
     oi_change_pct = 0.0
     if oi_records and len(oi_records) >= 2:
@@ -2054,9 +1853,9 @@ def _analyze_futures_signal(
                     oi_score = 0  # 持仓量减少，可能反转
                     reasons.append(f"持仓量减少{abs(oi_change_pct):.1f}%，可能反转")
     
-    signal_score += oi_score * 0.15
+    signal_score += oi_score * 0.20  # 权重从15%提升到20%
     
-    # 4. 技术指标分析（权重30%）
+    # 4. 技术指标分析（权重从30%提升到35%）
     tech_score = 0.0
     rsi_value = 50.0
     if tech_data:
@@ -2090,7 +1889,7 @@ def _analyze_futures_signal(
         # 技术评分转换（50为中心，转换为-30到+30）
         tech_score += (technical_score - 50) * 0.6
     
-    signal_score += tech_score * 0.3
+    signal_score += tech_score * 0.35  # 权重从30%提升到35%
     
     # 4.1. 多时间周期技术指标分析（用于前端显示）
     def _analyze_indicator_direction(indicator_data: dict) -> dict:
@@ -2183,7 +1982,7 @@ def _analyze_futures_signal(
     indicators_15m = _analyze_indicator_direction(tech_data_15m) if tech_data_15m else None
     indicators_1h = _analyze_indicator_direction(tech_data_1h) if tech_data_1h else None
     
-    # 5. 价格趋势分析（权重10%，作为确认信号）
+    # 5. 价格趋势分析（权重从10%提升到10%，保持不变）
     price_score = 0.0
     price_change_24h = 0.0
     if price_data and price_data.get('change_24h'):
@@ -2194,7 +1993,7 @@ def _analyze_futures_signal(
         elif price_change_24h < -3:
             price_score = -5
     
-    signal_score += price_score * 0.1
+    signal_score += price_score * 0.10  # 权重保持10%
     
     # 归一化到-100到+100
     signal_score = max(-100, min(100, signal_score))

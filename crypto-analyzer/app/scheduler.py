@@ -43,6 +43,7 @@ from app.collectors.hyperliquid_collector import HyperliquidCollector
 from app.database.db_service import DatabaseService
 # 合约监控服务已移至 main.py，不再在此导入
 from app.trading.auto_futures_trader import AutoFuturesTrader
+from app.trading.futures_trading_engine import FuturesTradingEngine
 from app.services.cache_update_service import CacheUpdateService
 
 
@@ -97,7 +98,8 @@ class UnifiedDataScheduler:
             'cache_price': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_analysis': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_hyperliquid': {'count': 0, 'last_run': None, 'last_error': None},
-            'etf_daily': {'count': 0, 'last_run': None, 'last_error': None}
+            'etf_daily': {'count': 0, 'last_run': None, 'last_error': None},
+            'futures_equity_update': {'count': 0, 'last_run': None, 'last_error': None}
         }
 
         logger.info(f"调度器初始化完成 - 监控币种: {len(self.symbols)} 个")
@@ -143,6 +145,15 @@ class UnifiedDataScheduler:
 
         # 5. 合约监控服务（已移至 main.py，由 FastAPI 生命周期管理，此处不再初始化）
         self.futures_monitor = None
+
+        # 5.5. 合约交易引擎（用于更新总权益）
+        db_config = self.config.get('database', {}).get('mysql', {})
+        try:
+            self.futures_engine = FuturesTradingEngine(db_config)
+            logger.info("  ✓ 合约交易引擎 (用于更新总权益)")
+        except Exception as e:
+            logger.warning(f"  ⊗ 合约交易引擎初始化失败: {e}")
+            self.futures_engine = None
 
         # 6. 自动合约交易服务
         try:
@@ -1000,6 +1011,13 @@ class UnifiedDataScheduler:
             )
             logger.info("  ✓ Hyperliquid聚合缓存 - 每 10 分钟")
 
+        # 模拟合约总权益更新 - 每30秒
+        if self.futures_engine:
+            schedule.every(30).seconds.do(
+                self.update_futures_accounts_equity
+            )
+            logger.info("  ✓ 模拟合约总权益更新 - 每 30 秒")
+
         logger.info("所有定时任务设置完成")
 
     async def run_initial_collection(self):
@@ -1136,6 +1154,26 @@ class UnifiedDataScheduler:
 
         except Exception as e:
             logger.error(f"更新价格缓存失败: {e}")
+            self.task_stats[task_name]['last_error'] = str(e)
+
+    def update_futures_accounts_equity(self):
+        """更新所有模拟合约账户的总权益 (每30秒)"""
+        if not self.futures_engine:
+            return
+        
+        task_name = 'futures_equity_update'
+        try:
+            updated_count = self.futures_engine.update_all_accounts_equity()
+            if updated_count > 0:
+                logger.debug(f"已更新 {updated_count} 个账户的总权益")
+            
+            # 更新统计
+            self.task_stats[task_name]['count'] += 1
+            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_error'] = None
+            
+        except Exception as e:
+            logger.error(f"更新模拟合约总权益失败: {e}")
             self.task_stats[task_name]['last_error'] = str(e)
 
     async def update_analysis_cache(self):

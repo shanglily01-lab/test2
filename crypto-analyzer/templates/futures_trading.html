@@ -42,6 +42,7 @@
         .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
         .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
         .card-body { padding: 0; }
+        .trades-card .card-body { padding: var(--spacing-md); }
         .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--spacing-md); }
         .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-lg); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; }
         .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
@@ -262,7 +263,7 @@
         .trading-panel-wrapper { display: flex; flex-direction: column; height: 100%; }
         .positions-trades-wrapper { display: flex; flex-direction: column; gap: var(--spacing-xl); height: 100%; }
         .positions-card, .trades-card { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-        .positions-card .card-body, .trades-card .card-body { flex: 1; overflow-y: auto; min-height: 0; }
+        .positions-card .card-body, .trades-card .card-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; }
         .positions-card .card-body::-webkit-scrollbar, .trades-card .card-body::-webkit-scrollbar { width: 6px; }
         .positions-card .card-body::-webkit-scrollbar-track, .trades-card .card-body::-webkit-scrollbar-track { background: var(--bg-tertiary); border-radius: 3px; }
         .positions-card .card-body::-webkit-scrollbar-thumb, .trades-card .card-body::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
@@ -554,12 +555,12 @@
                         </h2>
                         <div class="last-update" id="trades-update">-</div>
                     </div>
-                    <div class="card-body">
-                        <div id="tradesLoading" class="loading-overlay" style="min-height: 200px;">
+                    <div class="card-body" style="padding: var(--spacing-md); display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                        <div id="tradesLoading" class="loading-overlay" style="min-height: 200px; flex: 1;">
                             <div class="spinner"></div>
                         </div>
-                        <div id="tradesTable" style="display: none;">
-                            <div class="table-container" style="max-height: 500px; overflow-y: auto;">
+                        <div id="tradesTable" style="display: none; flex-direction: column; min-height: 0;">
+                            <div class="table-container" style="flex: 1; overflow-y: auto; min-height: 0;">
                                 <table>
                                     <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 10;">
                                         <tr>
@@ -581,7 +582,7 @@
                                     </tbody>
                                 </table>
                             </div>
-                            <div id="tradesPagination" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-top: 1px solid var(--border-default); margin-top: 8px;">
+                            <div id="tradesPagination" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-top: 1px solid var(--border-default); margin-top: 8px; flex-shrink: 0;">
                                 <div class="text-sm text-secondary">
                                     <span id="tradesPageInfo">第 1 页，共 1 页</span>
                                 </div>
@@ -591,9 +592,11 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="tradesEmpty" class="empty-state" style="display: none;">
-                            <div class="empty-state-icon">📜</div>
-                            <div class="empty-state-text">暂无交易记录</div>
+                        <div id="tradesEmpty" class="empty-state" style="display: none; flex: 1; align-items: center; justify-content: center;">
+                            <div>
+                                <div class="empty-state-icon">📜</div>
+                                <div class="empty-state-text">暂无交易记录</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1897,7 +1900,7 @@
                     nextBtn.disabled = currentTradesPage >= totalTradesPages;
                     
                     tradesTitle.textContent = `最近交易记录 [${totalTradesCount}]`;
-                    tradesTable.style.display = 'block';
+                    tradesTable.style.display = 'flex';
                     tradesPagination.style.display = 'flex';
                     tradesEmpty.style.display = 'none';
                     document.getElementById('trades-update').textContent = new Date().toLocaleTimeString('zh-CN');
@@ -1905,7 +1908,7 @@
                     tradesTitle.textContent = '最近交易记录 [0]';
                     tradesTable.style.display = 'none';
                     tradesPagination.style.display = 'none';
-                    tradesEmpty.style.display = 'block';
+                    tradesEmpty.style.display = 'flex';
                     document.getElementById('trades-update').textContent = new Date().toLocaleTimeString('zh-CN');
                 }
             } catch (error) {
