@@ -2050,6 +2050,7 @@ def _analyze_futures_signal(
     def _calculate_kelly_position(
         signal_score: float,
         current_price: float,
+        symbol: str = None,
         price_change_24h: float = None,
         rsi_value: float = None,
         volatility: float = None
@@ -2155,20 +2156,29 @@ def _analyze_futures_signal(
         # 凯利分数限制在0-0.25（最多25%仓位，避免过度杠杆）
         kelly_fraction = max(0, min(0.25, kelly_fraction))
         
+        # 4. 根据交易对确定价格精度
+        price_decimals = 2  # 默认2位小数
+        if symbol:
+            symbol_upper = symbol.upper()
+            if 'PUMP' in symbol_upper:
+                price_decimals = 5  # PUMP保留5位小数
+            elif 'DOGE' in symbol_upper:
+                price_decimals = 4  # DOGE保留4位小数
+        
         # 如果凯利分数为负，不建议开仓
         if kelly_fraction <= 0:
             return {
                 'position_pct': 0.0,
-                'entry_price': current_price,
-                'stop_loss': current_price,
-                'take_profit': current_price,
+                'entry_price': round(current_price, price_decimals),
+                'stop_loss': round(current_price, price_decimals),
+                'take_profit': round(current_price, price_decimals),
                 'kelly_fraction': 0.0,
                 'win_rate': round(win_rate * 100, 1),
                 'profit_loss_ratio': round(profit_loss_ratio, 2),
                 'recommendation': '不建议开仓'
             }
         
-        # 4. 计算入场价、止损价、止盈价
+        # 5. 计算入场价、止损价、止盈价
         entry_price = current_price
         
         # 根据信号方向计算止损和止盈
@@ -2196,9 +2206,9 @@ def _analyze_futures_signal(
         
         return {
             'position_pct': round(position_pct, 2),
-            'entry_price': round(entry_price, 2),
-            'stop_loss': round(stop_loss, 2),
-            'take_profit': round(take_profit, 2),
+            'entry_price': round(entry_price, price_decimals),
+            'stop_loss': round(stop_loss, price_decimals),
+            'take_profit': round(take_profit, price_decimals),
             'kelly_fraction': round(kelly_fraction, 4),
             'win_rate': round(win_rate * 100, 1),
             'profit_loss_ratio': round(profit_loss_ratio, 2),
@@ -2211,6 +2221,7 @@ def _analyze_futures_signal(
         kelly_advice = _calculate_kelly_position(
             signal_score=signal_score,
             current_price=current_price,
+            symbol=symbol,  # 传入symbol以确定价格精度
             price_change_24h=price_change_24h if price_change_24h else None,
             rsi_value=rsi_value if rsi_value else None,
             volatility=None  # 可以后续从历史数据计算

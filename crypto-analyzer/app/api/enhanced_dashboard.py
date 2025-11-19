@@ -367,7 +367,7 @@ class EnhancedDashboard:
                 result = {
                     'monitored_wallets': total_monitored,
                     'total_volume_24h': total_volume,
-                    'recent_trades': recent_trades[:20],  # 最近20笔大额交易
+                    'recent_trades': recent_trades[:50],  # 最近50笔大额交易
                     'top_coins': [
                         {
                             'coin': coin,
