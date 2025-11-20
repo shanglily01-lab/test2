@@ -5,11 +5,52 @@
 
 import uuid
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 from loguru import logger
 import pymysql
+
+# 定义本地时区（UTC+8）
+LOCAL_TIMEZONE = timezone(timedelta(hours=8))
+
+def get_local_time() -> datetime:
+    """获取本地时间（UTC+8）"""
+    return datetime.now(LOCAL_TIMEZONE).replace(tzinfo=None)
+
+def get_quantity_precision(symbol: str) -> int:
+    """
+    根据交易对获取数量精度（小数位数）
+    
+    Args:
+        symbol: 交易对，如 'PUMP/USDT', 'DOGE/USDT'
+    
+    Returns:
+        数量精度（小数位数）
+    """
+    symbol_upper = symbol.upper().replace('/', '')
+    # PUMP/USDT 和 DOGE/USDT 保持8位小数
+    if 'PUMP' in symbol_upper or 'DOGE' in symbol_upper:
+        return 8
+    # 其他交易对默认8位小数（数据库字段支持）
+    return 8
+
+def round_quantity(quantity: Decimal, symbol: str) -> Decimal:
+    """
+    根据交易对精度对数量进行四舍五入
+    
+    Args:
+        quantity: 数量
+        symbol: 交易对
+    
+    Returns:
+        四舍五入后的数量
+    """
+    precision = get_quantity_precision(symbol)
+    # 使用 quantize 进行精度控制
+    from decimal import ROUND_HALF_UP
+    quantize_str = '0.' + '0' * precision
+    return quantity.quantize(Decimal(quantize_str), rounding=ROUND_HALF_UP)
 
 
 class FuturesTradingEngine:
@@ -419,7 +460,7 @@ class FuturesTradingEngine:
                         float(limit_fee), float(Decimal('0.0004')),
                         float(limit_stop_loss_price) if limit_stop_loss_price else None,
                         float(limit_take_profit_price) if limit_take_profit_price else None,
-                        source, signal_id, datetime.now()
+                        source, signal_id, get_local_time()
                     ))
                     
                     # 更新总权益（限价单时还没有持仓，未实现盈亏为0）
@@ -477,6 +518,9 @@ class FuturesTradingEngine:
                 except Exception as e:
                     logger.warning(f"获取实时价格失败，使用之前获取的价格: {symbol}, {e}")
                     entry_price = current_price
+            
+            # 根据交易对精度对数量进行四舍五入
+            quantity = round_quantity(quantity, symbol)
             
             # 计算名义价值和所需保证金
             notional_value = entry_price * quantity
@@ -570,7 +614,7 @@ class FuturesTradingEngine:
                 float(take_profit_price) if take_profit_price else None,
                 float(stop_loss_pct) if stop_loss_pct else None,
                 float(take_profit_pct) if take_profit_pct else None,
-                datetime.now(), source, signal_id
+                get_local_time(), source, signal_id
             ))
 
             position_id = cursor.lastrowid
@@ -608,7 +652,7 @@ class FuturesTradingEngine:
                 float(entry_price), float(quantity), float(quantity),
                 float(margin_required), float(notional_value), float(notional_value),
                 float(fee), float(fee_rate),
-                float(entry_price), datetime.now(),
+                float(entry_price), get_local_time(),
                 source, signal_id
             ))
 
@@ -633,7 +677,7 @@ class FuturesTradingEngine:
                 account_id, order_id, position_id, trade_id,
                 symbol, side, float(entry_price), float(quantity), float(notional_value),
                 leverage, float(margin_required), float(fee), float(fee_rate),
-                float(entry_price), datetime.now()
+                float(entry_price), get_local_time()
             ))
 
             # 9. 更新账户余额
@@ -661,8 +705,12 @@ class FuturesTradingEngine:
 
             self.connection.commit()
 
+            # 记录当前时间（本地时间）
+            current_time_str = get_local_time().strftime('%Y-%m-%d %H:%M:%S')
+            # 根据交易对确定数量显示精度
+            qty_precision = get_quantity_precision(symbol)
             logger.info(
-                f"开仓成功: {symbol} {position_side} {quantity} @ {entry_price}, "
+                f"{current_time_str}: 开仓成功: {symbol} {position_side} {float(quantity):.{qty_precision}f} @ {entry_price}, "
                 f"杠杆{leverage}x, 保证金{margin_required:.2f} USDT"
             )
 
@@ -753,6 +801,9 @@ class FuturesTradingEngine:
             # 如果没指定平仓数量，则全部平仓
             if close_quantity is None:
                 close_quantity = quantity
+            else:
+                # 根据交易对精度对平仓数量进行四舍五入
+                close_quantity = round_quantity(close_quantity, symbol)
 
             if close_quantity <= 0:
                 raise ValueError(f"平仓数量必须大于0")
@@ -838,7 +889,7 @@ class FuturesTradingEngine:
                 float(current_price), float(close_quantity), float(close_quantity),
                 float(close_value), float(close_value),
                 float(fee), float(fee_rate),
-                float(current_price), datetime.now(),
+                float(current_price), get_local_time(),
                 float(realized_pnl), float(pnl_pct),
                 reason
             ))
@@ -867,7 +918,7 @@ class FuturesTradingEngine:
                 symbol, side, float(current_price), float(close_quantity), float(close_value),
                 leverage, float(position_margin), float(fee), float(fee_rate),
                 float(realized_pnl), float(pnl_pct), float(roi),
-                float(entry_price), datetime.now()
+                float(entry_price), get_local_time()
             ))
 
             # 7. 更新持仓状态
@@ -878,7 +929,7 @@ class FuturesTradingEngine:
                     SET status = 'closed', close_time = %s,
                         realized_pnl = %s
                     WHERE id = %s""",
-                    (datetime.now(), float(realized_pnl), position_id)
+                    (get_local_time(), float(realized_pnl), position_id)
                 )
 
                 # 释放全部保证金
@@ -939,8 +990,10 @@ class FuturesTradingEngine:
             connection.commit()
             cursor.close()
 
+            # 根据交易对确定数量显示精度
+            qty_precision = get_quantity_precision(symbol)
             logger.info(
-                f"平仓成功: {symbol} {position_side} {close_quantity} @ {current_price}, "
+                f"平仓成功: {symbol} {position_side} {float(close_quantity):.{qty_precision}f} @ {current_price}, "
                 f"盈亏{realized_pnl:.2f} USDT ({pnl_pct:.2f}%), ROI {roi:.2f}%"
             )
 

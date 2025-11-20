@@ -1136,11 +1136,16 @@ async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_s
         cursor.close()
         connection.close()
 
-        # 转换 Decimal 为 float
+        # 转换 Decimal 为 float，datetime 为字符串
         for trade in trades:
             for key, value in trade.items():
                 if isinstance(value, Decimal):
                     trade[key] = float(value)
+                elif isinstance(value, datetime):
+                    # 将 datetime 转换为字符串（本地时间格式）
+                    # 如果数据库存储的是UTC时间，需要转换为本地时间（UTC+8）
+                    # 假设数据库存储的是本地时间（UTC+8），直接格式化
+                    trade[key] = value.strftime('%Y-%m-%d %H:%M:%S')
 
         # 计算总页数
         total_pages = (total_count + page_size - 1) // page_size if page_size > 0 else 1
@@ -1188,3 +1193,84 @@ async def health():
         'service': 'futures-api',
         'status': 'running'
     }
+
+
+# ==================== 策略配置管理 ====================
+
+@router.get('/strategies')
+async def get_futures_strategies():
+    """
+    获取所有合约交易策略配置
+    
+    Returns:
+        策略配置列表
+    """
+    try:
+        import json
+        
+        # 策略配置文件路径
+        strategies_file = Path(__file__).parent.parent.parent / 'config' / 'strategies' / 'futures_strategies.json'
+        
+        # 如果文件不存在，返回空列表
+        if not strategies_file.exists():
+            return {
+                'success': True,
+                'data': [],
+                'count': 0
+            }
+        
+        # 读取策略配置
+        with open(strategies_file, 'r', encoding='utf-8') as f:
+            strategies = json.load(f)
+        
+        return {
+            'success': True,
+            'data': strategies,
+            'count': len(strategies)
+        }
+        
+    except Exception as e:
+        logger.error(f"获取策略配置失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post('/strategies')
+async def save_futures_strategies(strategies: List[Dict] = Body(...)):
+    """
+    保存合约交易策略配置
+    
+    - **strategies**: 策略配置列表
+    """
+    try:
+        import json
+        
+        # 策略配置文件路径
+        strategies_dir = Path(__file__).parent.parent.parent / 'config' / 'strategies'
+        strategies_dir.mkdir(parents=True, exist_ok=True)
+        strategies_file = strategies_dir / 'futures_strategies.json'
+        
+        # 验证策略数据
+        if not isinstance(strategies, list):
+            raise HTTPException(status_code=400, detail="策略配置必须是列表格式")
+        
+        # 保存策略配置
+        with open(strategies_file, 'w', encoding='utf-8') as f:
+            json.dump(strategies, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"策略配置已保存到 {strategies_file}，共 {len(strategies)} 个策略")
+        
+        return {
+            'success': True,
+            'message': f'策略配置保存成功，共 {len(strategies)} 个策略',
+            'count': len(strategies)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"保存策略配置失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

@@ -13,7 +13,9 @@ if str(project_root) not in sys.path:
 
 import asyncio
 from datetime import datetime
+from typing import Optional
 from fastapi import FastAPI, HTTPException
+from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -308,15 +310,9 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  启动合约止盈止损监控任务失败: {e}")
             futures_monitor_service = None
     
-    # 启动策略自动执行服务
-    if strategy_executor:
-        try:
-            import asyncio
-            strategy_executor.task = asyncio.create_task(strategy_executor.run_loop(interval=60))
-            logger.info("✅ 策略自动执行服务已启动（每60秒检查）")
-        except Exception as e:
-            logger.warning(f"⚠️  启动策略自动执行任务失败: {e}")
-            strategy_executor = None
+    # 策略自动执行服务已移至独立的 strategy_scheduler.py
+    # 如需自动执行策略，请单独运行: python app/strategy_scheduler.py
+    # 策略执行器仍保留在内存中，供API接口使用（手动执行策略）
 
     yield
 
@@ -1026,7 +1022,8 @@ async def execute_strategy(request: dict):
 @app.post("/api/strategy/test")
 async def test_strategy(request: dict):
     """
-    测试策略：模拟24小时的EMA合约交易下单并计算盈亏
+    测试策略：模拟48小时的EMA合约交易下单并计算盈亏
+    测试结果会自动保存到数据库中
     
     Args:
         request: 包含策略配置的字典
@@ -1047,966 +1044,72 @@ async def test_strategy(request: dict):
         测试结果，包含交易记录和盈亏统计
     """
     try:
-        import pymysql
-        from datetime import datetime, timedelta
+        # 使用策略测试服务
+        from app.services.strategy_test_service import StrategyTestService
         
+        db_config = config.get('database', {}).get('mysql', {})
+        test_service = StrategyTestService(db_config=db_config, technical_analyzer=technical_analyzer)
+        return await test_service.test_strategy(request)
+        
+    except Exception as e:
+        logger.error(f"策略测试失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/strategy/test/history")
+async def get_strategy_test_history(
+    strategy_id: Optional[int] = Query(None, description="策略ID"),
+    strategy_name: Optional[str] = Query(None, description="策略名称"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量")
+):
+    """获取策略测试历史记录"""
+    try:
+        import pymysql
         db_config = config.get('database', {}).get('mysql', {})
         connection = pymysql.connect(**db_config)
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
         try:
-            symbols = request.get('symbols', [])
-            buy_directions = request.get('buyDirection', [])
-            leverage = request.get('leverage', 5)
-            buy_signal = request.get('buySignals')
-            buy_volume_enabled = request.get('buyVolumeEnabled', False)
-            buy_volume = request.get('buyVolume')
-            sell_signal = request.get('sellSignals')
-            sell_volume_enabled = request.get('sellVolumeEnabled', False)
-            sell_volume = request.get('sellVolume')
-            position_size = request.get('positionSize', 10)
-            long_price_type = request.get('longPrice', 'market')
-            short_price_type = request.get('shortPrice', 'market')
+            where_conditions = []
+            params = []
             
-            # 手续费率（默认0.04%，即0.0004，与futures_trading_engine保持一致）
-            fee_rate = request.get('feeRate', 0.0004)
+            if strategy_id:
+                where_conditions.append("strategy_id = %s")
+                params.append(strategy_id)
             
-            # 确定买入和卖出的时间周期
-            timeframe_map = {
-                'ema_5m': '5m',
-                'ema_15m': '15m',
-                'ema_1h': '1h'
-            }
-            buy_timeframe = timeframe_map.get(buy_signal, '15m')
-            sell_timeframe = timeframe_map.get(sell_signal, '5m')
+            if strategy_name:
+                where_conditions.append("strategy_name LIKE %s")
+                params.append(f"%{strategy_name}%")
             
-            # 计算24小时前的起始时间
-            end_time = datetime.now()
-            start_time = end_time - timedelta(hours=24)
+            where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
             
-            # 转换时间格式（处理可能的字符串或datetime对象）
-            def parse_time(t):
-                if isinstance(t, str):
-                    # 尝试多种时间格式
-                    try:
-                        return datetime.strptime(t, '%Y-%m-%d %H:%M:%S')
-                    except:
-                        try:
-                            return datetime.strptime(t, '%Y-%m-%dT%H:%M:%S')
-                        except:
-                            try:
-                                return datetime.strptime(t, '%Y-%m-%d %H:%M:%S.%f')
-                            except:
-                                # 如果都失败，返回当前时间
-                                return datetime.now()
-                elif isinstance(t, datetime):
-                    return t
-                else:
-                    return datetime.now()
+            cursor.execute(f"SELECT COUNT(*) as total FROM strategy_test_results {where_clause}", params)
+            total = cursor.fetchone()['total']
             
-            results = []
+            offset = (page - 1) * page_size
+            cursor.execute(f"""
+                SELECT * FROM strategy_test_results 
+                {where_clause}
+                ORDER BY created_at DESC 
+                LIMIT %s OFFSET %s
+            """, params + [page_size, offset])
             
-            for symbol in symbols:
-                # 获取买入和卖出时间周期的K线数据
-                # 增加数据量：提前30天获取数据，确保有足够的历史数据计算技术指标
-                # 对于15分钟K线，30天 = 30 * 24 * 60 / 15 = 2880条，足够计算EMA
-                extended_start_time = start_time - timedelta(days=30)
-                
-                # 获取买入时间周期的K线数据
-                cursor.execute(
-                    """SELECT timestamp, open_price, high_price, low_price, close_price, volume 
-                    FROM kline_data 
-                    WHERE symbol = %s AND timeframe = %s 
-                    AND timestamp >= %s AND timestamp <= %s
-                    ORDER BY timestamp ASC""",
-                    (symbol, buy_timeframe, extended_start_time, end_time)
-                )
-                buy_klines = cursor.fetchall()
-                
-                # 获取卖出时间周期的K线数据
-                cursor.execute(
-                    """SELECT timestamp, open_price, high_price, low_price, close_price, volume 
-                    FROM kline_data 
-                    WHERE symbol = %s AND timeframe = %s 
-                    AND timestamp >= %s AND timestamp <= %s
-                    ORDER BY timestamp ASC""",
-                    (symbol, sell_timeframe, extended_start_time, end_time)
-                )
-                sell_klines = cursor.fetchall()
-                
-                # 根据时间周期确定最小K线数量要求
-                min_klines_map = {
-                    '5m': 100,   # 5分钟需要更多数据
-                    '15m': 100,  # 15分钟需要更多数据
-                    '1h': 50,    # 1小时
-                    '4h': 50,    # 4小时
-                    '1d': 50     # 1天
-                }
-                min_buy_klines = min_klines_map.get(buy_timeframe, 50)
-                min_sell_klines = min_klines_map.get(sell_timeframe, 50)
-                
-                if not buy_klines or len(buy_klines) < min_buy_klines:
-                    results.append({
-                        'symbol': symbol,
-                        'error': f'买入时间周期({buy_timeframe})K线数据不足（仅{len(buy_klines) if buy_klines else 0}条，至少需要{min_buy_klines}条）',
-                        'klines_count': len(buy_klines) if buy_klines else 0
-                    })
-                    continue
-                
-                if not sell_klines or len(sell_klines) < min_sell_klines:
-                    results.append({
-                        'symbol': symbol,
-                        'error': f'卖出时间周期({sell_timeframe})K线数据不足（仅{len(sell_klines) if sell_klines else 0}条，至少需要{min_sell_klines}条）',
-                        'klines_count': len(sell_klines) if sell_klines else 0
-                    })
-                    continue
-                
-                # 筛选出24小时内的K线用于回测
-                buy_test_klines = [k for k in buy_klines if parse_time(k['timestamp']) >= start_time]
-                sell_test_klines = [k for k in sell_klines if parse_time(k['timestamp']) >= start_time]
-                
-                if len(buy_test_klines) < 10:
-                    results.append({
-                        'symbol': symbol,
-                        'error': f'24小时内买入时间周期({buy_timeframe})K线数据不足（仅{len(buy_test_klines)}条）',
-                        'klines_count': len(buy_test_klines)
-                    })
-                    continue
-                
-                if len(sell_test_klines) < 10:
-                    results.append({
-                        'symbol': symbol,
-                        'error': f'24小时内卖出时间周期({sell_timeframe})K线数据不足（仅{len(sell_test_klines)}条）',
-                        'klines_count': len(sell_test_klines)
-                    })
-                    continue
-                
-                # 模拟交易
-                trades = []
-                positions = []  # 当前持仓
-                initial_balance = 10000  # 初始资金
-                balance = initial_balance
-                debug_info = []  # 调试信息
-                
-                # 添加调试信息：记录K线时间范围
-                if buy_test_klines:
-                    first_buy_time = parse_time(buy_test_klines[0]['timestamp'])
-                    last_buy_time = parse_time(buy_test_klines[-1]['timestamp'])
-                    debug_info.append(f"📊 买入时间周期({buy_timeframe})K线范围: {first_buy_time.strftime('%Y-%m-%d %H:%M')} 至 {last_buy_time.strftime('%Y-%m-%d %H:%M')}，共{len(buy_test_klines)}条")
-                
-                # 将K线数据转换为DataFrame格式（用于计算技术指标）
-                import pandas as pd
-                
-                # 为买入时间周期的每个K线计算技术指标
-                def calculate_indicators(klines, test_klines, timeframe_name):
-                    indicator_pairs = []
-                    for test_kline in test_klines:
-                        test_kline_time = parse_time(test_kline['timestamp'])
-                        
-                        # 获取到当前K线为止的所有历史K线（用于计算技术指标）
-                        historical_klines = [k for k in klines if parse_time(k['timestamp']) <= test_kline_time]
-                        
-                        # 根据时间周期确定最小历史K线数量
-                        # EMA26需要至少26条数据，但为了准确性，需要更多数据
-                        min_historical_map = {
-                            '5m': 100,   # 5分钟需要更多历史数据
-                            '15m': 100,  # 15分钟需要更多历史数据
-                            '1h': 50,    # 1小时
-                            '4h': 50,    # 4小时
-                            '1d': 50     # 1天
-                        }
-                        # 从timeframe_name中提取时间周期（格式：买入(15m)）
-                        timeframe_key = timeframe_name.split('(')[1].split(')')[0] if '(' in timeframe_name else '15m'
-                        min_historical = min_historical_map.get(timeframe_key, 50)
-                        
-                        if len(historical_klines) < min_historical:
-                            continue  # 数据不足，跳过
-                        
-                        # 转换为DataFrame
-                        df = pd.DataFrame([{
-                            'timestamp': parse_time(k['timestamp']),
-                            'open': float(k['open_price']),
-                            'high': float(k['high_price']),
-                            'low': float(k['low_price']),
-                            'close': float(k['close_price']),
-                            'volume': float(k['volume'])
-                        } for k in historical_klines])
-                        
-                        # 使用技术分析器计算指标
-                        if technical_analyzer is None:
-                            continue
-                        
-                        try:
-                            # 计算技术指标
-                            indicators_result = technical_analyzer.analyze(df)
-                            
-                            if not indicators_result:
-                                continue
-                            
-                            # 提取需要的指标
-                            ema_data = indicators_result.get('ema', {})
-                            ma_ema10_data = indicators_result.get('ma_ema10', {})
-                            ma_ema5_data = indicators_result.get('ma_ema5', {})
-                            volume_data = indicators_result.get('volume', {})
-                            rsi_data = indicators_result.get('rsi', {})
-                            
-                            ema_short = ema_data.get('short') if isinstance(ema_data, dict) else None
-                            ema_long = ema_data.get('long') if isinstance(ema_data, dict) else None
-                            ma10 = ma_ema10_data.get('ma10') if isinstance(ma_ema10_data, dict) else None
-                            ema10 = ma_ema10_data.get('ema10') if isinstance(ma_ema10_data, dict) else None
-                            ma5 = ma_ema5_data.get('ma5') if isinstance(ma_ema5_data, dict) else None
-                            ema5 = ma_ema5_data.get('ema5') if isinstance(ma_ema5_data, dict) else None
-                            
-                            # volume_ratio在ema字段中，或者从volume字段计算
-                            volume_ratio = ema_data.get('volume_ratio', 1.0) if isinstance(ema_data, dict) else 1.0
-                            if volume_ratio == 1.0 and isinstance(volume_data, dict):
-                                # 从volume数据计算ratio
-                                vol_current = volume_data.get('current', 0)
-                                vol_ma20 = volume_data.get('ma20', 1)
-                                if vol_ma20 > 0:
-                                    volume_ratio = vol_current / vol_ma20
-                            rsi_value = rsi_data.get('value') if isinstance(rsi_data, dict) else None
-                            
-                            # 如果无法从analyze结果获取，尝试从DataFrame获取
-                            if ema_short is None and 'ema_short' in df.columns:
-                                ema_short = float(df['ema_short'].iloc[-1]) if not pd.isna(df['ema_short'].iloc[-1]) else None
-                            if ema_long is None and 'ema_long' in df.columns:
-                                ema_long = float(df['ema_long'].iloc[-1]) if not pd.isna(df['ema_long'].iloc[-1]) else None
-                            if ma10 is None and 'ma10' in df.columns:
-                                ma10 = float(df['ma10'].iloc[-1]) if not pd.isna(df['ma10'].iloc[-1]) else None
-                            if ema10 is None and 'ema10' in df.columns:
-                                ema10 = float(df['ema10'].iloc[-1]) if not pd.isna(df['ema10'].iloc[-1]) else None
-                            if volume_ratio == 1.0:
-                                # 尝试从DataFrame计算volume_ratio
-                                if 'volume' in df.columns and 'vol_ma20' in df.columns:
-                                    vol_current = float(df['volume'].iloc[-1])
-                                    vol_ma20 = float(df['vol_ma20'].iloc[-1])
-                                    if vol_ma20 > 0:
-                                        volume_ratio = vol_current / vol_ma20
-                            
-                            indicator_pairs.append({
-                                'kline': test_kline,
-                                'indicator': {
-                                    'ema_short': ema_short,
-                                    'ema_long': ema_long,
-                                    'ma10': ma10,
-                                    'ema10': ema10,
-                                    'ma5': ma5,
-                                    'ema5': ema5,
-                                    'volume_ratio': volume_ratio,
-                                    'rsi_value': rsi_value,
-                                    'updated_at': test_kline_time
-                                }
-                            })
-                        except Exception as e:
-                            logger.error(f"计算{timeframe_name}技术指标失败 {symbol} {test_kline_time}: {e}")
-                            continue
-                    
-                    return indicator_pairs
-                
-                # 计算买入和卖出时间周期的指标
-                buy_indicator_pairs = calculate_indicators(buy_klines, buy_test_klines, f'买入({buy_timeframe})')
-                sell_indicator_pairs = calculate_indicators(sell_klines, sell_test_klines, f'卖出({sell_timeframe})')
-                
-                # 添加调试信息：记录成功计算的指标数量
-                if buy_indicator_pairs:
-                    debug_info.append(f"✅ 买入时间周期({buy_timeframe})成功计算{len(buy_indicator_pairs)}个时间点的技术指标")
-                if sell_indicator_pairs:
-                    debug_info.append(f"✅ 卖出时间周期({sell_timeframe})成功计算{len(sell_indicator_pairs)}个时间点的技术指标")
-                
-                if len(buy_indicator_pairs) < 2:
-                    results.append({
-                        'symbol': symbol,
-                        'error': f'买入时间周期({buy_timeframe})技术指标计算失败（K线:{len(buy_test_klines)}条, 成功计算:{len(buy_indicator_pairs)}条）',
-                        'klines_count': len(buy_test_klines),
-                        'indicators_count': len(buy_indicator_pairs),
-                        'matched_pairs_count': len(buy_indicator_pairs)
-                    })
-                    continue
-                
-                if len(sell_indicator_pairs) < 2:
-                    results.append({
-                        'symbol': symbol,
-                        'error': f'卖出时间周期({sell_timeframe})技术指标计算失败（K线:{len(sell_test_klines)}条, 成功计算:{len(sell_indicator_pairs)}条）',
-                        'klines_count': len(sell_test_klines),
-                        'indicators_count': len(sell_indicator_pairs),
-                        'matched_pairs_count': len(sell_indicator_pairs)
-                    })
-                    continue
-                
-                # 合并所有时间点，按时间顺序处理
-                all_time_points = []
-                for pair in buy_indicator_pairs:
-                    all_time_points.append({
-                        'time': pair['indicator']['updated_at'],
-                        'type': 'buy',
-                        'pair': pair
-                    })
-                for pair in sell_indicator_pairs:
-                    all_time_points.append({
-                        'time': pair['indicator']['updated_at'],
-                        'type': 'sell',
-                        'pair': pair
-                    })
-                
-                # 按时间排序，如果时间相同，先处理卖出（type='sell'排在前面）
-                all_time_points.sort(key=lambda x: (x['time'], 0 if x['type'] == 'sell' else 1))
-                
-                # 用于跟踪卖出时间周期的最新指标
-                sell_indicator_index = 0
-                
-                # 记录当前时间点是否已经平仓（用于防止滚仓）
-                last_processed_time = None
-                closed_at_current_time = False
-                
-                # 遍历所有时间点
-                for time_point in all_time_points:
-                    current_time = time_point['time']
-                    
-                    # 如果时间点改变，重置平仓标志
-                    if last_processed_time is None or current_time != last_processed_time:
-                        closed_at_current_time = False
-                        last_processed_time = current_time
-                    
-                    # 如果是买入时间点，检查买入信号（但先检查是否有持仓需要卖出）
-                    if time_point['type'] == 'buy':
-                        pair = time_point['pair']
-                        kline = pair['kline']
-                        indicator = pair['indicator']
-                        close_price = float(kline['close_price'])
-                        volume_ratio = float(indicator['volume_ratio']) if indicator.get('volume_ratio') else 1.0
-                        
-                        ema_short = float(indicator['ema_short']) if indicator.get('ema_short') else None
-                        ema_long = float(indicator['ema_long']) if indicator.get('ema_long') else None
-                        
-                        if not ema_short or not ema_long:
-                            continue
-                        
-                        # 检查买入信号（EMA金叉）- 需要找到前一个买入时间点的指标
-                        buy_signal_triggered = False
-                        # 在buy_indicator_pairs中找到当前pair的索引
-                        try:
-                            current_buy_index = buy_indicator_pairs.index(pair)
-                        except ValueError:
-                            # 如果找不到，说明pair不在列表中，跳过
-                            debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 无法找到当前K线在买入指标列表中的位置")
-                            continue
-                        
-                        # 检查买入信号（EMA9/26金叉 和 MA10/EMA10金叉）
-                        # 优化：检查最近几个时间点的EMA变化，确保不遗漏金叉信号
-                        # 金叉定义：短期EMA从下方穿越到上方（更宽松的定义，匹配币安等平台）
-                        
-                        # 先记录当前时间点的EMA状态（所有时间点都记录）
-                        curr_diff = ema_short - ema_long
-                        curr_diff_pct = (curr_diff / ema_long * 100) if ema_long > 0 else 0
-                        curr_status = "多头" if ema_short > ema_long else "空头"
-                        
-                        # 获取MA10/EMA10数据
-                        ma10 = float(indicator.get('ma10')) if indicator.get('ma10') else None
-                        ema10 = float(indicator.get('ema10')) if indicator.get('ema10') else None
-                        ma10_ema10_diff = (ema10 - ma10) if (ema10 and ma10) else None
-                        ma10_ema10_diff_pct = (ma10_ema10_diff / ma10 * 100) if (ma10_ema10_diff and ma10 and ma10 > 0) else None
-                        ma10_ema10_status = "多头" if (ema10 and ma10 and ema10 > ma10) else "空头" if (ema10 and ma10 and ema10 < ma10) else "中性"
-                        
-                        # 记录EMA9/26状态
-                        debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: 📊 EMA9/26状态 - {curr_status} | EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)")
-                        
-                        # 记录MA10/EMA10状态
-                        if ma10 and ema10:
-                            debug_info.append(f"   📊 MA10/EMA10状态 - {ma10_ema10_status} | MA10={ma10:.4f}, EMA10={ema10:.4f}, 差值={ma10_ema10_diff:.4f} ({ma10_ema10_diff_pct:+.2f}%)" if ma10_ema10_diff_pct else f"   📊 MA10/EMA10状态 - {ma10_ema10_status} | MA10={ma10:.4f}, EMA10={ema10:.4f}")
-                        
-                        # 检查MA10/EMA10交叉（作为买入/卖出信号）
-                        ma10_ema10_golden_cross = False
-                        ma10_ema10_death_cross = False
-                        
-                        if current_buy_index > 0:
-                            # 检查前3个时间点，确保不遗漏金叉
-                            lookback_count = min(3, current_buy_index)
-                            found_golden_cross = False
-                            
-                            # 详细记录所有时间点的EMA状态变化
-                            for lookback in range(1, lookback_count + 1):
-                                prev_pair = buy_indicator_pairs[current_buy_index - lookback]
-                                prev_indicator = prev_pair['indicator']
-                                prev_ema_short = float(prev_indicator['ema_short']) if prev_indicator.get('ema_short') else None
-                                prev_ema_long = float(prev_indicator['ema_long']) if prev_indicator.get('ema_long') else None
-                                prev_ma10 = float(prev_indicator.get('ma10')) if prev_indicator.get('ma10') else None
-                                prev_ema10 = float(prev_indicator.get('ema10')) if prev_indicator.get('ema10') else None
-                                prev_time = prev_indicator['updated_at']
-                                
-                                if prev_ema_short and prev_ema_long:
-                                    # 详细记录EMA9/26交叉情况
-                                    prev_diff = prev_ema_short - prev_ema_long
-                                    prev_diff_pct = (prev_diff / prev_ema_long * 100) if prev_ema_long > 0 else 0
-                                    
-                                    # EMA9/26金叉：前一个短期<=长期，当前短期>长期
-                                    # 或者：前一个短期<长期，当前短期>=长期（更宽松的定义）
-                                    is_golden_cross = (prev_ema_short <= prev_ema_long and ema_short > ema_long) or \
-                                                     (prev_ema_short < prev_ema_long and ema_short >= ema_long)
-                                    
-                                    # MA10/EMA10金叉检测（EMA10上穿MA10）➕
-                                    if prev_ma10 and prev_ema10 and ma10 and ema10:
-                                        ma10_ema10_is_golden = (prev_ema10 <= prev_ma10 and ema10 > ma10) or \
-                                                               (prev_ema10 < prev_ma10 and ema10 >= ma10)
-                                        if ma10_ema10_is_golden:
-                                            ma10_ema10_golden_cross = True
-                                            debug_info.append(f"   ➕➕➕ MA10/EMA10金叉检测成功！")
-                                            debug_info.append(f"   📍 前{lookback}个周期 ({prev_time.strftime('%Y-%m-%d %H:%M')}): MA10={prev_ma10:.4f}, EMA10={prev_ema10:.4f}, 差值={prev_ema10 - prev_ma10:.4f}, 状态={'多头' if prev_ema10 > prev_ma10 else '空头'}")
-                                            debug_info.append(f"   📍 当前时间 ({current_time.strftime('%Y-%m-%d %H:%M')}): MA10={ma10:.4f}, EMA10={ema10:.4f}, 差值={ma10_ema10_diff:.4f}, 状态={ma10_ema10_status}")
-                                    
-                                    # 买入信号：EMA9/26金叉 或 MA10/EMA10金叉
-                                    if is_golden_cross or ma10_ema10_golden_cross:
-                                        buy_signal_triggered = True
-                                        found_golden_cross = True
-                                        
-                                        if is_golden_cross:
-                                            debug_info.append(f"   ✅✅✅ EMA9/26金叉检测成功！")
-                                            debug_info.append(f"   📍 前{lookback}个周期 ({prev_time.strftime('%Y-%m-%d %H:%M')}): EMA9={prev_ema_short:.4f}, EMA26={prev_ema_long:.4f}, 差值={prev_diff:.4f} ({prev_diff_pct:+.2f}%), 状态={'多头' if prev_ema_short > prev_ema_long else '空头'}")
-                                            debug_info.append(f"   📍 当前时间 ({current_time.strftime('%Y-%m-%d %H:%M')}): EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%), 状态={curr_status}")
-                                            debug_info.append(f"   🔄 变化: EMA9 {prev_ema_short:.4f}→{ema_short:.4f} ({((ema_short-prev_ema_short)/prev_ema_short*100):+.2f}%), EMA26 {prev_ema_long:.4f}→{ema_long:.4f} ({((ema_long-prev_ema_long)/prev_ema_long*100):+.2f}%)")
-                                        
-                                        debug_info.append(f"   📊 成交量比率: {volume_ratio:.2f}x")
-                                        break
-                        else:
-                            # 第一个数据点，无法判断金叉
-                            if current_buy_index == 0:
-                                debug_info.append(f"   ℹ️ 第一个数据点，无法判断金叉")
-                        
-                        # 检查成交量条件
-                        volume_condition_met = True
-                        volume_reason = ""
-                        if buy_volume_enabled and buy_volume:
-                            required_ratio = float(buy_volume)
-                            if volume_ratio < required_ratio:
-                                volume_condition_met = False
-                                volume_reason = f"成交量不足 (当前:{volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
-                            else:
-                                volume_reason = f"成交量满足 (当前:{volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
-                        else:
-                            volume_reason = "成交量条件未启用"
-                        
-                        # 记录买入信号检查结果
-                        if buy_signal_triggered:
-                            if not volume_condition_met:
-                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA金叉但{volume_reason}")
-                            elif len(buy_directions) == 0:
-                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA金叉但未配置交易方向")
-                        
-                        # 执行买入（根据信号自动选择方向，或从配置的方向中选择）
-                        # 禁止滚仓：如果当前时间点已经平仓，不再买入（需要等待下一个时间点）
-                        if buy_signal_triggered and volume_condition_met and len(positions) == 0 and not closed_at_current_time:
-                            if len(buy_directions) > 0:
-                                # 根据EMA信号自动选择方向
-                                # 如果EMA9/26金叉或MA10/EMA10金叉，倾向于做多
-                                # 如果EMA9/26死叉或MA10/EMA10死叉，倾向于做空
-                                # 但买入信号是金叉，所以默认做多
-                                
-                                # 判断当前EMA状态
-                                # 买入信号是金叉，金叉时EMA9应该已经大于EMA26（多头）
-                                # 但如果用户配置了做空，可能是想根据其他条件做空
-                                ema_bullish = ema_short > ema_long  # EMA9 > EMA26 表示多头
-                                ma10_ema10_bullish = (ma10 and ema10 and ema10 > ma10) if (ma10 and ema10) else None
-                                
-                                # 根据信号和配置的方向选择
-                                direction = None
-                                
-                                # 如果配置了多个方向，根据信号选择
-                                if len(buy_directions) > 1:
-                                    # 买入信号是金叉，金叉时通常应该做多
-                                    # 但如果用户同时配置了做空，可能是想根据其他条件做空
-                                    # 优先根据EMA状态选择
-                                    if ema_bullish and 'long' in buy_directions:
-                                        direction = 'long'
-                                    elif not ema_bullish and 'short' in buy_directions:
-                                        # 虽然买入信号是金叉，但如果EMA9 < EMA26，可能是死叉后的反弹，选择做空
-                                        direction = 'short'
-                                    # 如果信号不明确，根据MA10/EMA10判断
-                                    elif ma10_ema10_bullish is not None:
-                                        if ma10_ema10_bullish and 'long' in buy_directions:
-                                            direction = 'long'
-                                        elif not ma10_ema10_bullish and 'short' in buy_directions:
-                                            direction = 'short'
-                                    # 如果还是无法确定，优先选择做多（因为买入信号是金叉）
-                                    if direction is None:
-                                        if 'long' in buy_directions:
-                                            direction = 'long'
-                                        elif 'short' in buy_directions:
-                                            direction = 'short'
-                                        else:
-                                            direction = buy_directions[0]
-                                else:
-                                    # 只配置了一个方向，直接使用
-                                    direction = buy_directions[0]
-                                
-                                if direction is None:
-                                    debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 无法确定交易方向")
-                                    continue
-                                
-                                # 检查是否已有相同方向的持仓（虽然前面已经检查了positions为空，但为了安全还是检查）
-                                existing_position = next((p for p in positions if p['direction'] == direction), None)
-                                if existing_position:
-                                    debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 已有{direction}方向持仓，跳过买入")
-                                    continue
-                                
-                                # 记录方向选择原因
-                                direction_reason = ""
-                                if len(buy_directions) > 1:
-                                    if ema_bullish and direction == 'long':
-                                        direction_reason = "（EMA多头信号，选择做多）"
-                                    elif not ema_bullish and direction == 'short':
-                                        direction_reason = "（EMA空头信号，选择做空）"
-                                    elif ma10_ema10_bullish is not None:
-                                        if ma10_ema10_bullish and direction == 'long':
-                                            direction_reason = "（MA10/EMA10多头信号，选择做多）"
-                                        elif not ma10_ema10_bullish and direction == 'short':
-                                            direction_reason = "（MA10/EMA10空头信号，选择做空）"
-                                    else:
-                                        direction_reason = f"（配置了多个方向，选择{direction}）"
-                                
-                                # 计算入场价格（限价单逻辑）
-                                # 获取K线的最高价和最低价
-                                high_price = float(kline.get('high', kline.get('high_price', close_price)))
-                                low_price = float(kline.get('low', kline.get('low_price', close_price)))
-                                
-                                entry_price = None
-                                can_execute = False
-                                
-                                if direction == 'long':
-                                    # 做多：需要等待价格下跌到目标价格
-                                    if long_price_type == 'market':
-                                        entry_price = close_price
-                                        can_execute = True
-                                    elif long_price_type == 'market_minus_0_2':
-                                        target_price = close_price * 0.998
-                                        if low_price <= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                    elif long_price_type == 'market_minus_0_4':
-                                        target_price = close_price * 0.996
-                                        if low_price <= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                    elif long_price_type == 'market_minus_0_6':
-                                        target_price = close_price * 0.994
-                                        if low_price <= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                    elif long_price_type == 'market_minus_0_8':
-                                        target_price = close_price * 0.992
-                                        if low_price <= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                    elif long_price_type == 'market_minus_1':
-                                        target_price = close_price * 0.99
-                                        if low_price <= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                elif direction == 'short':
-                                    # 做空：需要等待价格上涨到目标价格
-                                    if short_price_type == 'market':
-                                        entry_price = close_price
-                                        can_execute = True
-                                    elif short_price_type == 'market_plus_0_2':
-                                        target_price = close_price * 1.002
-                                        if high_price >= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                    elif short_price_type == 'market_plus_0_4':
-                                        target_price = close_price * 1.004
-                                        if high_price >= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                    elif short_price_type == 'market_plus_0_6':
-                                        target_price = close_price * 1.006
-                                        if high_price >= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                    elif short_price_type == 'market_plus_0_8':
-                                        target_price = close_price * 1.008
-                                        if high_price >= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                    elif short_price_type == 'market_plus_1':
-                                        target_price = close_price * 1.01
-                                        if high_price >= target_price:
-                                            entry_price = target_price
-                                            can_execute = True
-                                
-                                # 如果限价单条件不满足，跳过本次买入
-                                if not can_execute or entry_price is None:
-                                    # 计算目标价格用于显示
-                                    price_type_text = long_price_type if direction == 'long' else short_price_type
-                                    if direction == 'long':
-                                        if long_price_type == 'market_minus_0_2':
-                                            target_text = f"{close_price * 0.998:.4f}"
-                                        elif long_price_type == 'market_minus_0_4':
-                                            target_text = f"{close_price * 0.996:.4f}"
-                                        elif long_price_type == 'market_minus_0_6':
-                                            target_text = f"{close_price * 0.994:.4f}"
-                                        elif long_price_type == 'market_minus_0_8':
-                                            target_text = f"{close_price * 0.992:.4f}"
-                                        elif long_price_type == 'market_minus_1':
-                                            target_text = f"{close_price * 0.99:.4f}"
-                                        else:
-                                            target_text = "市价"
-                                    else:  # short
-                                        if short_price_type == 'market_plus_0_2':
-                                            target_text = f"{close_price * 1.002:.4f}"
-                                        elif short_price_type == 'market_plus_0_4':
-                                            target_text = f"{close_price * 1.004:.4f}"
-                                        elif short_price_type == 'market_plus_0_6':
-                                            target_text = f"{close_price * 1.006:.4f}"
-                                        elif short_price_type == 'market_plus_0_8':
-                                            target_text = f"{close_price * 1.008:.4f}"
-                                        elif short_price_type == 'market_plus_1':
-                                            target_text = f"{close_price * 1.01:.4f}"
-                                        else:
-                                            target_text = "市价"
-                                    debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 限价单未成交 | 目标价={target_text}, 当前K线范围=[{low_price:.4f}, {high_price:.4f}], 收盘价={close_price:.4f}")
-                                    continue
-                                
-                                # 计算仓位大小
-                                position_value = balance * (position_size / 100)
-                                quantity = (position_value * leverage) / entry_price
-                                
-                                if quantity > 0:
-                                    # 计算开仓手续费
-                                    open_fee = (entry_price * quantity) * fee_rate
-                                    
-                                    # 扣除开仓手续费
-                                    balance -= open_fee
-                                    
-                                    position = {
-                                        'direction': direction,
-                                        'entry_price': entry_price,
-                                        'quantity': quantity,
-                                        'entry_time': current_time,
-                                        'leverage': leverage,
-                                        'open_fee': open_fee  # 记录开仓手续费
-                                    }
-                                    positions.append(position)
-                                    
-                                    trades.append({
-                                        'type': 'BUY',
-                                        'direction': direction,
-                                        'price': entry_price,
-                                        'quantity': quantity,
-                                        'time': current_time,
-                                        'balance': balance,
-                                        'fee': open_fee,  # 开仓手续费
-                                        'fee_rate': fee_rate
-                                    })
-                                    
-                                    direction_text = "做多" if direction == 'long' else "做空"
-                                    debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}{direction_reason}，价格={entry_price:.4f}，数量={quantity:.4f}，开仓手续费={open_fee:.4f}，余额={balance:.2f}")
-                            else:
-                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 买入信号触发但未配置交易方向")
-                        elif buy_signal_triggered and volume_condition_met and len(positions) > 0:
-                            debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 买入信号触发但已有持仓，跳过买入（需先卖出）")
-                        elif buy_signal_triggered and volume_condition_met and closed_at_current_time:
-                            debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 买入信号触发但当前时间点已平仓，跳过买入（禁止滚仓，需等待下一个时间点）")
-                    
-                    # 如果是卖出时间点，检查卖出信号（仅当有持仓时）
-                    elif time_point['type'] == 'sell' and len(positions) > 0:
-                        pair = time_point['pair']
-                        kline = pair['kline']
-                        indicator = pair['indicator']
-                        close_price = float(kline['close_price'])
-                        volume_ratio = float(indicator['volume_ratio']) if indicator.get('volume_ratio') else 1.0
-                        
-                        # 卖出信号：检测5m的MA5/EMA5死叉（向下信号）
-                        # 获取MA5/EMA5数据（用于5m卖出信号）
-                        ma5 = float(indicator.get('ma5')) if indicator.get('ma5') else None
-                        ema5 = float(indicator.get('ema5')) if indicator.get('ema5') else None
-                        
-                        if not ma5 or not ema5:
-                            debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ MA5/EMA5数据不足，无法检测卖出信号")
-                            continue
-                        
-                        # 检查卖出信号（MA5/EMA5死叉）
-                        # 死叉定义：EMA5从上方穿越到下方（向下信号）
-                        sell_signal_triggered = False
-                        current_sell_index = sell_indicator_pairs.index(pair)
-                        
-                        # 先记录当前时间点的MA5/EMA5状态（所有时间点都记录）
-                        ma5_ema5_diff = ema5 - ma5
-                        ma5_ema5_diff_pct = (ma5_ema5_diff / ma5 * 100) if ma5 > 0 else 0
-                        ma5_ema5_status = "多头" if ema5 > ma5 else "空头"
-                        
-                        # 记录MA5/EMA5状态
-                        debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 MA5/EMA5状态 - {ma5_ema5_status} | MA5={ma5:.4f}, EMA5={ema5:.4f}, 差值={ma5_ema5_diff:.4f} ({ma5_ema5_diff_pct:+.2f}%)")
-                        
-                        if current_sell_index > 0:
-                            # 检查前3个时间点，确保不遗漏死叉
-                            lookback_count = min(3, current_sell_index)
-                            
-                            for lookback in range(1, lookback_count + 1):
-                                prev_pair = sell_indicator_pairs[current_sell_index - lookback]
-                                prev_indicator = prev_pair['indicator']
-                                prev_ma5 = float(prev_indicator.get('ma5')) if prev_indicator.get('ma5') else None
-                                prev_ema5 = float(prev_indicator.get('ema5')) if prev_indicator.get('ema5') else None
-                                prev_time = prev_indicator['updated_at']
-                                
-                                if prev_ma5 and prev_ema5:
-                                    # 详细记录MA5/EMA5交叉情况
-                                    prev_ma5_ema5_diff = prev_ema5 - prev_ma5
-                                    prev_ma5_ema5_diff_pct = (prev_ma5_ema5_diff / prev_ma5 * 100) if prev_ma5 > 0 else 0
-                                    prev_ma5_ema5_status = "多头" if prev_ema5 > prev_ma5 else "空头"
-                                    
-                                    # MA5/EMA5死叉检测（EMA5下穿MA5，向下信号）➖
-                                    # 死叉：前一个EMA5>=MA5，当前EMA5<MA5
-                                    # 或者：前一个EMA5>MA5，当前EMA5<=MA5（更宽松的定义）
-                                    ma5_ema5_is_death = (prev_ema5 >= prev_ma5 and ema5 < ma5) or \
-                                                        (prev_ema5 > prev_ma5 and ema5 <= ma5)
-                                    
-                                    if ma5_ema5_is_death:
-                                        sell_signal_triggered = True
-                                        debug_info.append(f"   ➖➖➖ MA5/EMA5死叉检测成功（5m向下信号）！")
-                                        debug_info.append(f"   📍 前{lookback}个周期 ({prev_time.strftime('%Y-%m-%d %H:%M')}): MA5={prev_ma5:.4f}, EMA5={prev_ema5:.4f}, 差值={prev_ma5_ema5_diff:.4f} ({prev_ma5_ema5_diff_pct:+.2f}%), 状态={prev_ma5_ema5_status}")
-                                        debug_info.append(f"   📍 当前时间 ({current_time.strftime('%Y-%m-%d %H:%M')}): MA5={ma5:.4f}, EMA5={ema5:.4f}, 差值={ma5_ema5_diff:.4f} ({ma5_ema5_diff_pct:+.2f}%), 状态={ma5_ema5_status}")
-                                        debug_info.append(f"   🔄 变化: EMA5 {prev_ema5:.4f}→{ema5:.4f} ({((ema5-prev_ema5)/prev_ema5*100):+.2f}%), MA5 {prev_ma5:.4f}→{ma5:.4f} ({((ma5-prev_ma5)/prev_ma5*100):+.2f}%)")
-                                        debug_info.append(f"   📊 成交量比率: {volume_ratio:.2f}x")
-                                        break
-                        
-                        # 检查卖出成交量条件
-                        sell_volume_condition_met = True
-                        sell_volume_reason = ""
-                        if sell_volume_enabled and sell_volume:
-                            required_ratio = float(sell_volume.replace('<', '').replace('≤', ''))
-                            if sell_volume.startswith('<'):
-                                if volume_ratio >= required_ratio:
-                                    sell_volume_condition_met = False
-                                    sell_volume_reason = f"成交量不符合 (当前:{volume_ratio:.2f}x, 需要:<{required_ratio}x)"
-                                else:
-                                    sell_volume_reason = f"成交量符合 (当前:{volume_ratio:.2f}x, 需要:<{required_ratio}x)"
-                            else:
-                                if volume_ratio > required_ratio:
-                                    sell_volume_condition_met = False
-                                    sell_volume_reason = f"成交量不符合 (当前:{volume_ratio:.2f}x, 需要:≤{required_ratio}x)"
-                                else:
-                                    sell_volume_reason = f"成交量符合 (当前:{volume_ratio:.2f}x, 需要:≤{required_ratio}x)"
-                        else:
-                            sell_volume_reason = "成交量条件未启用"
-                        
-                        # 记录卖出信号检查结果
-                        if sell_signal_triggered:
-                            if not sell_volume_condition_met:
-                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ EMA死叉但{sell_volume_reason}")
-                        
-                        # 执行卖出（平仓）
-                        # 平仓条件：5m的MA5/EMA5死叉（向下信号）+ 成交量条件（如果启用）
-                        if sell_signal_triggered and sell_volume_condition_met:
-                            for position in positions[:]:  # 使用切片复制，避免迭代时修改
-                                # 获取K线的最高价和最低价
-                                high_price = float(kline.get('high', kline.get('high_price', close_price)))
-                                low_price = float(kline.get('low', kline.get('low_price', close_price)))
-                                
-                                entry_price = position['entry_price']
-                                quantity = position['quantity']
-                                direction = position['direction']
-                                
-                                # 平仓价格逻辑（限价单）：
-                                # 做多平仓：需要等待价格上涨到入场价的+1%才能成交
-                                # 做空平仓：需要等待价格下跌到入场价的-1%才能成交
-                                exit_price = None
-                                can_execute = False
-                                
-                                if direction == 'long':
-                                    # 做多平仓：等待价格上涨到入场价的+1%才能成交
-                                    target_price = entry_price * 1.01
-                                    # 检查K线最高价是否达到或高于目标价格
-                                    if high_price >= target_price:
-                                        exit_price = target_price
-                                        can_execute = True
-                                    else:
-                                        # 如果未达到目标价，不平仓，继续等待
-                                        target_text = f"{target_price:.4f}"
-                                        debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做多平仓限价单未成交 | 目标价={target_text}, 当前K线范围=[{low_price:.4f}, {high_price:.4f}], 收盘价={close_price:.4f}, 入场价={entry_price:.4f}")
-                                        continue
-                                else:  # short
-                                    # 做空平仓：等待价格下跌到入场价的-1%才能成交
-                                    target_price = entry_price * 0.99
-                                    # 检查K线最低价是否达到或低于目标价格
-                                    if low_price <= target_price:
-                                        exit_price = target_price
-                                        can_execute = True
-                                    else:
-                                        # 如果未达到目标价，不平仓，继续等待
-                                        target_text = f"{target_price:.4f}"
-                                        debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做空平仓限价单未成交 | 目标价={target_text}, 当前K线范围=[{low_price:.4f}, {high_price:.4f}], 收盘价={close_price:.4f}, 入场价={entry_price:.4f}")
-                                        continue
-                                
-                                # 如果无法执行平仓，记录日志并跳过
-                                if not can_execute or exit_price is None:
-                                    continue
-                                
-                                # 计算毛盈亏（未扣除手续费）
-                                if direction == 'long':
-                                    # 做多：毛盈亏 = (平仓价 - 入场价) * 数量
-                                    gross_pnl = (exit_price - entry_price) * quantity
-                                else:  # short
-                                    # 做空：毛盈亏 = (入场价 - 平仓价) * 数量
-                                    gross_pnl = (entry_price - exit_price) * quantity
-                                
-                                # 调试信息：记录价格和盈亏计算
-                                price_change = exit_price - entry_price if direction == 'long' else entry_price - exit_price
-                                price_change_pct = (price_change / entry_price * 100) if entry_price > 0 else 0
-                                debug_info.append(f"   💰 盈亏计算: {direction} | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 价差={price_change:+.4f} ({price_change_pct:+.2f}%), 毛盈亏={gross_pnl:+.2f}")
-                                
-                                # 计算平仓手续费
-                                close_fee = (exit_price * quantity) * fee_rate
-                                
-                                # 获取开仓手续费（如果已记录）
-                                open_fee = position.get('open_fee', 0)
-                                
-                                # 计算总手续费
-                                total_fee = open_fee + close_fee
-                                
-                                # 计算实际盈亏（扣除手续费）
-                                pnl = gross_pnl - total_fee
-                                
-                                # 计算盈亏百分比（基于实际使用的保证金）
-                                margin_used = (entry_price * quantity) / leverage
-                                pnl_pct = (pnl / margin_used) * 100 if margin_used > 0 else 0
-                                
-                                # 更新余额（加上毛盈亏，减去平仓手续费）
-                                balance += gross_pnl - close_fee
-                                
-                                # 记录平仓交易
-                                trades.append({
-                                    'type': 'SELL',
-                                    'direction': direction,
-                                    'price': exit_price,
-                                    'quantity': quantity,
-                                    'time': current_time,
-                                    'pnl': pnl,  # 实际盈亏（已扣除手续费）
-                                    'gross_pnl': gross_pnl,  # 毛盈亏
-                                    'pnl_pct': pnl_pct,
-                                    'balance': balance,
-                                    'entry_price': entry_price,  # 记录入场价，方便查看
-                                    'entry_time': position['entry_time'],  # 记录入场时间
-                                    'open_fee': open_fee,  # 开仓手续费
-                                    'close_fee': close_fee,  # 平仓手续费
-                                    'total_fee': total_fee,  # 总手续费
-                                    'fee_rate': fee_rate
-                                })
-                                
-                                # 从持仓列表中移除（完全平仓）
-                                positions.remove(position)
-                                
-                                # 标记当前时间点已平仓（防止滚仓：同一时间点平仓后不再买入）
-                                closed_at_current_time = True
-                                
-                                # 记录平仓日志
-                                direction_text = "做多" if direction == 'long' else "做空"
-                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ✅ 平仓{direction_text} | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={quantity:.4f}, 毛盈亏={gross_pnl:+.2f}, 手续费={total_fee:.4f}(开仓{open_fee:.4f}+平仓{close_fee:.4f}), 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%), 余额={balance:.2f}")
-                        elif sell_signal_triggered and not sell_volume_condition_met:
-                            # 卖出信号触发但成交量条件不满足
-                            for position in positions:
-                                direction_text = "做多" if position['direction'] == 'long' else "做空"
-                                debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ {direction_text}持仓未平仓，卖出信号触发但{sell_volume_reason}")
-                
-                # 计算最终盈亏（平掉所有未平仓的持仓）
-                final_balance = balance
-                if len(positions) > 0:
-                    # 使用最后一个卖出时间周期的K线价格进行强制平仓
-                    if sell_indicator_pairs:
-                        last_pair = sell_indicator_pairs[-1]
-                        last_kline = last_pair['kline']
-                        last_time = parse_time(last_kline['timestamp'])
-                        exit_price = float(last_kline['close_price'])
-                    elif buy_indicator_pairs:
-                        last_pair = buy_indicator_pairs[-1]
-                        last_kline = last_pair['kline']
-                        last_time = parse_time(last_kline['timestamp'])
-                        exit_price = float(last_kline['close_price'])
-                    else:
-                        exit_price = positions[0]['entry_price']  # 如果没有数据，使用入场价（盈亏为0）
-                        last_time = datetime.now()
-                    
-                    for position in positions:
-                        entry_price = position['entry_price']
-                        quantity = position['quantity']
-                        direction = position['direction']
-                        
-                        # 计算毛盈亏
-                        if position['direction'] == 'long':
-                            gross_pnl = (exit_price - entry_price) * quantity
-                        else:  # short
-                            gross_pnl = (entry_price - exit_price) * quantity
-                        
-                        # 计算平仓手续费
-                        close_fee = (exit_price * quantity) * fee_rate
-                        
-                        # 获取开仓手续费（如果已记录）
-                        open_fee = position.get('open_fee', 0)
-                        
-                        # 计算总手续费
-                        total_fee = open_fee + close_fee
-                        
-                        # 计算实际盈亏（扣除手续费）
-                        pnl = gross_pnl - total_fee
-                        
-                        margin_used = (entry_price * quantity) / leverage
-                        pnl_pct = (pnl / margin_used) * 100 if margin_used > 0 else 0
-                        
-                        final_balance += gross_pnl - close_fee
-                        
-                        # 记录强制平仓交易
-                        direction_text = "做多" if direction == 'long' else "做空"
-                        trades.append({
-                            'type': 'SELL',
-                            'direction': direction,
-                            'price': exit_price,
-                            'quantity': quantity,
-                            'time': last_time,
-                            'pnl': pnl,  # 实际盈亏（已扣除手续费）
-                            'gross_pnl': gross_pnl,  # 毛盈亏
-                            'pnl_pct': pnl_pct,
-                            'balance': final_balance,
-                            'entry_price': entry_price,
-                            'entry_time': position['entry_time'],
-                            'open_fee': open_fee,  # 开仓手续费
-                            'close_fee': close_fee,  # 平仓手续费
-                            'total_fee': total_fee,  # 总手续费
-                            'fee_rate': fee_rate,
-                            'force_close': True  # 标记为强制平仓
-                        })
-                        
-                        debug_info.append(f"{last_time.strftime('%Y-%m-%d %H:%M')}: ⚠️ 强制平仓{direction_text}（测试结束） | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={quantity:.4f}, 毛盈亏={gross_pnl:+.2f}, 手续费={total_fee:.4f}, 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%)")
-                
-                total_pnl = final_balance - initial_balance
-                total_pnl_pct = (total_pnl / initial_balance) * 100
-                
-                # 统计信号检测情况
-                golden_cross_count = len([info for info in debug_info if 'EMA金叉' in info])
-                death_cross_count = len([info for info in debug_info if 'EMA死叉' in info])
-                
-                results.append({
-                    'symbol': symbol,
-                    'initial_balance': initial_balance,
-                    'final_balance': final_balance,
-                    'total_pnl': total_pnl,
-                    'total_pnl_pct': total_pnl_pct,
-                    'trades_count': len(trades),
-                    'trades': trades,  # 返回所有交易
-                    'open_positions': len(positions),
-                    'debug_info': debug_info,  # 返回所有调试信息
-                    'klines_count': len(buy_test_klines) + len(sell_test_klines),
-                    'indicators_count': len(buy_indicator_pairs) + len(sell_indicator_pairs),
-                    'matched_pairs_count': len(buy_indicator_pairs) + len(sell_indicator_pairs),
-                    'golden_cross_count': golden_cross_count,
-                    'death_cross_count': death_cross_count,
-                    'buy_directions': buy_directions,
-                    'buy_volume_enabled': buy_volume_enabled,
-                    'buy_volume': buy_volume,
-                    'sell_volume_enabled': sell_volume_enabled,
-                    'sell_volume': sell_volume
-                })
+            results = cursor.fetchall()
+            
+            for r in results:
+                for key, value in r.items():
+                    if isinstance(value, datetime):
+                        r[key] = value.strftime('%Y-%m-%d %H:%M:%S')
             
             return {
                 'success': True,
-                'data': results
+                'data': results,
+                'pagination': {
+                    'page': page,
+                    'page_size': page_size,
+                    'total': total,
+                    'total_pages': (total + page_size - 1) // page_size
+                }
             }
             
         finally:
@@ -2014,8 +1117,831 @@ async def test_strategy(request: dict):
             connection.close()
             
     except Exception as e:
-        logger.error(f"策略测试失败: {e}", exc_info=True)
+        logger.error(f"获取测试历史失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/strategy/test/history/{test_result_id}")
+async def get_strategy_test_detail(test_result_id: int):
+    """获取策略测试详细结果"""
+    try:
+        import pymysql
+        import json
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            cursor.execute("SELECT * FROM strategy_test_results WHERE id = %s", (test_result_id,))
+            main_result = cursor.fetchone()
+            
+            if not main_result:
+                raise HTTPException(status_code=404, detail="测试结果不存在")
+            
+            cursor.execute("SELECT * FROM strategy_test_result_details WHERE test_result_id = %s", (test_result_id,))
+            details = cursor.fetchall()
+            
+            for key, value in main_result.items():
+                if isinstance(value, datetime):
+                    main_result[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                elif key == 'strategy_config' and value:
+                    try:
+                        main_result[key] = json.loads(value) if isinstance(value, str) else value
+                    except:
+                        pass
+            
+            for detail in details:
+                for key, value in detail.items():
+                    if isinstance(value, datetime):
+                        detail[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+                    elif key == 'test_result_data' and value:
+                        try:
+                            detail[key] = json.loads(value) if isinstance(value, str) else value
+                        except:
+                            pass
+                    elif key == 'debug_info' and value:
+                        try:
+                            # 解析调试信息JSON
+                            detail[key] = json.loads(value) if isinstance(value, str) else value
+                        except:
+                            # 如果解析失败，保持原值
+                            pass
+            
+            return {
+                'success': True,
+                'data': {
+                    'main': main_result,
+                    'details': details
+                }
+            }
+            
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取测试详情失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/config")
+async def get_config():
+    """获取当前配置"""
+    try:
+        # 确保 symbols 是列表
+        symbols = config.get('symbols', [])
+        if not isinstance(symbols, list):
+            symbols = list(symbols) if symbols else []
+        
+        # 确保 exchanges 是字典
+        exchanges = config.get('exchanges', {})
+        if not isinstance(exchanges, dict):
+            exchanges = {}
+        exchange_list = list(exchanges.keys()) if exchanges else []
+        
+        # 确保 news 是字典
+        news = config.get('news', {})
+        if not isinstance(news, dict):
+            news = {}
+        news_sources = list(news.keys()) if news else []
+        
+        return {
+            "symbols": symbols,
+            "exchanges": exchange_list,
+            "news_sources": news_sources
+        }
+    except Exception as e:
+        logger.error(f"获取配置失败: {e}")
+        # 返回安全的默认值
+        return {
+            "symbols": [],
+            "exchanges": [],
+            "news_sources": []
+        }
+
+@app.get("/api/technical-indicators")
+async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
+    """
+    获取技术指标数据
+    
+    Args:
+        symbol: 交易对（可选，不指定则返回所有）
+        timeframe: 时间周期
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            if symbol:
+                # 格式化交易对符号
+                symbol = symbol.replace('-', '/').upper()
+                if '/' not in symbol:
+                    symbol = f"{symbol}/USDT"
+                
+                sql = """
+                    SELECT * FROM technical_indicators_cache 
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY updated_at DESC LIMIT 1
+                """
+                cursor.execute(sql, (symbol, timeframe))
+                result = cursor.fetchone()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的技术指标数据")
+                
+                return {
+                    "symbol": result['symbol'],
+                    "timeframe": result['timeframe'],
+                    "rsi": {
+                        "value": float(result['rsi_value']) if result.get('rsi_value') else None,
+                        "signal": result.get('rsi_signal')
+                    },
+                    "macd": {
+                        "value": float(result['macd_value']) if result.get('macd_value') else None,
+                        "signal_line": float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
+                        "histogram": float(result['macd_histogram']) if result.get('macd_histogram') else None,
+                        "trend": result.get('macd_trend')
+                    },
+                    "bollinger_bands": {
+                        "upper": float(result['bb_upper']) if result.get('bb_upper') else None,
+                        "middle": float(result['bb_middle']) if result.get('bb_middle') else None,
+                        "lower": float(result['bb_lower']) if result.get('bb_lower') else None,
+                        "position": result.get('bb_position'),
+                        "width": float(result['bb_width']) if result.get('bb_width') else None
+                    },
+                    "ema": {
+                        "short": float(result['ema_short']) if result.get('ema_short') else None,
+                        "long": float(result['ema_long']) if result.get('ema_long') else None,
+                        "trend": result.get('ema_trend')
+                    },
+                    "kdj": {
+                        "k": float(result['kdj_k']) if result.get('kdj_k') else None,
+                        "d": float(result['kdj_d']) if result.get('kdj_d') else None,
+                        "j": float(result['kdj_j']) if result.get('kdj_j') else None,
+                        "signal": result.get('kdj_signal')
+                    },
+                    "volume": {
+                        "volume_24h": float(result['volume_24h']) if result.get('volume_24h') else None,
+                        "volume_avg": float(result['volume_avg']) if result.get('volume_avg') else None,
+                        "volume_ratio": float(result['volume_ratio']) if result.get('volume_ratio') else None,
+                        "signal": result.get('volume_signal')
+                    },
+                    "technical_score": float(result['technical_score']) if result.get('technical_score') else None,
+                    "technical_signal": result.get('technical_signal'),
+                    "updated_at": result['updated_at'].isoformat() if result.get('updated_at') else None
+                }
+            else:
+                # 返回所有交易对的技术指标
+                sql = """
+                    SELECT t1.* FROM technical_indicators_cache t1
+                    INNER JOIN (
+                        SELECT symbol, MAX(updated_at) as max_updated_at
+                        FROM technical_indicators_cache
+                        WHERE timeframe = %s
+                        GROUP BY symbol
+                    ) t2 ON t1.symbol = t2.symbol AND t1.updated_at = t2.max_updated_at
+                    WHERE t1.timeframe = %s
+                    ORDER BY t1.technical_score DESC
+                """
+                cursor.execute(sql, (timeframe, timeframe))
+                results = cursor.fetchall()
+                
+                indicators_list = []
+                for result in results:
+                    indicators_list.append({
+                        "symbol": result['symbol'],
+                        "timeframe": result.get('timeframe', timeframe),  # 确保包含timeframe字段
+                        "technical_score": float(result['technical_score']) if result.get('technical_score') else None,
+                        "technical_signal": result.get('technical_signal'),
+                        "rsi_value": float(result['rsi_value']) if result.get('rsi_value') else None,
+                        "macd_trend": result.get('macd_trend'),
+                        "ema_trend": result.get('ema_trend'),
+                        "updated_at": result['updated_at'].isoformat() if result.get('updated_at') else None
+                    })
+                
+                return {
+                    "timeframe": timeframe,
+                    "total": len(indicators_list),
+                    "indicators": indicators_list
+                }
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取技术指标失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/technical-signals")
+async def get_technical_signals():
+    """
+    获取所有交易对的技术信号（15m, 1h, 1d）
+    包含 EMA, MACD, RSI, BOLL 等技术指标和技术评分
+    
+    Returns:
+        各交易对在不同时间周期的技术指标数据
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            timeframes = ['15m', '1h', '1d']
+            symbols_data = {}
+            
+            # 获取所有交易对（至少有一个时间周期有数据即可）
+            cursor.execute("SELECT DISTINCT symbol FROM technical_indicators_cache WHERE timeframe IN ('15m', '1h', '1d')")
+            symbols = [row['symbol'] for row in cursor.fetchall()]
+            
+            for symbol in symbols:
+                symbols_data[symbol] = {}
+                
+                for timeframe in timeframes:
+                    # 获取该交易对在该时间周期的最新技术指标数据
+                    cursor.execute(
+                        """SELECT * FROM technical_indicators_cache 
+                        WHERE symbol = %s AND timeframe = %s
+                        ORDER BY updated_at DESC LIMIT 1""",
+                        (symbol, timeframe)
+                    )
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        symbols_data[symbol][timeframe] = {
+                            'rsi_value': float(result['rsi_value']) if result.get('rsi_value') else None,
+                            'rsi_signal': result.get('rsi_signal'),
+                            'macd_value': float(result['macd_value']) if result.get('macd_value') else None,
+                            'macd_signal_line': float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
+                            'macd_histogram': float(result['macd_histogram']) if result.get('macd_histogram') else None,
+                            'macd_trend': result.get('macd_trend'),
+                            'bb_upper': float(result['bb_upper']) if result.get('bb_upper') else None,
+                            'bb_middle': float(result['bb_middle']) if result.get('bb_middle') else None,
+                            'bb_lower': float(result['bb_lower']) if result.get('bb_lower') else None,
+                            'bb_position': result.get('bb_position'),
+                            'ema_short': float(result['ema_short']) if result.get('ema_short') else None,
+                            'ema_long': float(result['ema_long']) if result.get('ema_long') else None,
+                            'ema_trend': result.get('ema_trend'),
+                            'kdj_k': float(result['kdj_k']) if result.get('kdj_k') else None,
+                            'kdj_d': float(result['kdj_d']) if result.get('kdj_d') else None,
+                            'kdj_j': float(result['kdj_j']) if result.get('kdj_j') else None,
+                            'kdj_signal': result.get('kdj_signal'),
+                            'technical_score': float(result['technical_score']) if result.get('technical_score') else None,
+                            'technical_signal': result.get('technical_signal'),
+                            'updated_at': result['updated_at'].isoformat() if result.get('updated_at') else None
+                        }
+            
+            return {
+                "timeframes": timeframes,
+                "symbols": symbols_data
+            }
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"获取技术信号失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/config")
+async def get_config():
+    """获取当前配置"""
+    try:
+        # 确保 symbols 是列表
+        symbols = config.get('symbols', [])
+        if not isinstance(symbols, list):
+            symbols = list(symbols) if symbols else []
+        
+        # 确保 exchanges 是字典
+        exchanges = config.get('exchanges', {})
+        if not isinstance(exchanges, dict):
+            exchanges = {}
+        exchange_list = list(exchanges.keys()) if exchanges else []
+        
+        # 确保 news 是字典
+        news = config.get('news', {})
+        if not isinstance(news, dict):
+            news = {}
+        news_sources = list(news.keys()) if news else []
+        
+        return {
+            "symbols": symbols,
+            "exchanges": exchange_list,
+            "news_sources": news_sources
+        }
+    except Exception as e:
+        logger.error(f"获取配置失败: {e}")
+        # 返回安全的默认值
+        return {
+            "symbols": [],
+            "exchanges": [],
+            "news_sources": []
+        }
+
+
+@app.get("/api/technical-indicators")
+async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
+    """
+    获取技术指标数据
+    
+    Args:
+        symbol: 交易对（可选，不指定则返回所有）
+        timeframe: 时间周期
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            if symbol:
+                # 格式化交易对符号
+                symbol = symbol.replace('-', '/').upper()
+                if '/' not in symbol:
+                    symbol = f"{symbol}/USDT"
+                
+                sql = """
+                    SELECT * FROM technical_indicators_cache 
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY updated_at DESC LIMIT 1
+                """
+                cursor.execute(sql, (symbol, timeframe))
+                result = cursor.fetchone()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的技术指标数据")
+                
+                return {
+                    "symbol": result['symbol'],
+                    "timeframe": result['timeframe'],
+                    "rsi": {
+                        "value": float(result['rsi_value']) if result.get('rsi_value') else None,
+                        "signal": result.get('rsi_signal')
+                    },
+                    "macd": {
+                        "value": float(result['macd_value']) if result.get('macd_value') else None,
+                        "signal_line": float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
+                        "histogram": float(result['macd_histogram']) if result.get('macd_histogram') else None,
+                        "trend": result.get('macd_trend')
+                    },
+                    "bollinger_bands": {
+                        "upper": float(result['bb_upper']) if result.get('bb_upper') else None,
+                        "middle": float(result['bb_middle']) if result.get('bb_middle') else None,
+                        "lower": float(result['bb_lower']) if result.get('bb_lower') else None,
+                        "position": result.get('bb_position'),
+                        "width": float(result['bb_width']) if result.get('bb_width') else None
+                    },
+                    "ema": {
+                        "short": float(result['ema_short']) if result.get('ema_short') else None,
+                        "long": float(result['ema_long']) if result.get('ema_long') else None,
+                        "trend": result.get('ema_trend')
+                    },
+                    "kdj": {
+                        "k": float(result['kdj_k']) if result.get('kdj_k') else None,
+                        "d": float(result['kdj_d']) if result.get('kdj_d') else None,
+                        "j": float(result['kdj_j']) if result.get('kdj_j') else None,
+                        "signal": result.get('kdj_signal')
+                    },
+                    "volume": {
+                        "volume_24h": float(result['volume_24h']) if result.get('volume_24h') else None,
+                        "volume_avg": float(result['volume_avg']) if result.get('volume_avg') else None,
+                        "volume_ratio": float(result['volume_ratio']) if result.get('volume_ratio') else None,
+                        "signal": result.get('volume_signal')
+                    },
+                    "technical_score": float(result['technical_score']) if result.get('technical_score') else None,
+                    "technical_signal": result.get('technical_signal'),
+                    "updated_at": result['updated_at'].isoformat() if result.get('updated_at') else None
+                }
+            else:
+                # 返回所有交易对的技术指标
+                sql = """
+                    SELECT t1.* FROM technical_indicators_cache t1
+                    INNER JOIN (
+                        SELECT symbol, MAX(updated_at) as max_updated_at
+                        FROM technical_indicators_cache
+                        WHERE timeframe = %s
+                        GROUP BY symbol
+                    ) t2 ON t1.symbol = t2.symbol AND t1.updated_at = t2.max_updated_at
+                    WHERE t1.timeframe = %s
+                    ORDER BY t1.technical_score DESC
+                """
+                cursor.execute(sql, (timeframe, timeframe))
+                results = cursor.fetchall()
+                
+                indicators_list = []
+                for result in results:
+                    indicators_list.append({
+                        "symbol": result['symbol'],
+                        "timeframe": result.get('timeframe', timeframe),  # 确保包含timeframe字段
+                        "technical_score": float(result['technical_score']) if result.get('technical_score') else None,
+                        "technical_signal": result.get('technical_signal'),
+                        "rsi_value": float(result['rsi_value']) if result.get('rsi_value') else None,
+                        "macd_trend": result.get('macd_trend'),
+                        "ema_trend": result.get('ema_trend'),
+                        "updated_at": result['updated_at'].isoformat() if result.get('updated_at') else None
+                    })
+                
+                return {
+                    "timeframe": timeframe,
+                    "total": len(indicators_list),
+                    "indicators": indicators_list
+                }
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取技术指标失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/technical-signals")
+async def get_technical_signals():
+    """
+    获取所有交易对的技术信号（15m, 1h, 1d）
+    包含 EMA, MACD, RSI, BOLL 等技术指标和技术评分
+    
+    Returns:
+        各交易对在不同时间周期的技术指标数据
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            timeframes = ['15m', '1h', '1d']
+            symbols_data = {}
+            
+            # 获取所有交易对（至少有一个时间周期有数据即可）
+            cursor.execute("SELECT DISTINCT symbol FROM technical_indicators_cache WHERE timeframe IN ('15m', '1h', '1d')")
+            symbols = [row['symbol'] for row in cursor.fetchall()]
+            
+            for symbol in symbols:
+                symbols_data[symbol] = {}
+                
+                for timeframe in timeframes:
+                    # 获取该交易对在该时间周期的最新技术指标数据
+                    cursor.execute(
+                        """SELECT * FROM technical_indicators_cache 
+                        WHERE symbol = %s AND timeframe = %s 
+                        ORDER BY updated_at DESC LIMIT 1""",
+                        (symbol, timeframe)
+                    )
+                    result = cursor.fetchone()
+                    
+                    if result:
+                        symbols_data[symbol][timeframe] = {
+                            'rsi_value': float(result['rsi_value']) if result.get('rsi_value') else None,
+                            'rsi_signal': result.get('rsi_signal'),
+                            'macd_value': float(result['macd_value']) if result.get('macd_value') else None,
+                            'macd_signal_line': float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
+                            'macd_histogram': float(result['macd_histogram']) if result.get('macd_histogram') else None,
+                            'macd_trend': result.get('macd_trend'),
+                            'bb_upper': float(result['bb_upper']) if result.get('bb_upper') else None,
+                            'bb_middle': float(result['bb_middle']) if result.get('bb_middle') else None,
+                            'bb_lower': float(result['bb_lower']) if result.get('bb_lower') else None,
+                            'bb_position': result.get('bb_position'),
+                            'bb_width': float(result['bb_width']) if result.get('bb_width') else None,
+                            'ema_short': float(result['ema_short']) if result.get('ema_short') else None,
+                            'ema_long': float(result['ema_long']) if result.get('ema_long') else None,
+                            'ema_trend': result.get('ema_trend'),
+                            'kdj_k': float(result['kdj_k']) if result.get('kdj_k') else None,
+                            'kdj_d': float(result['kdj_d']) if result.get('kdj_d') else None,
+                            'kdj_j': float(result['kdj_j']) if result.get('kdj_j') else None,
+                            'kdj_signal': result.get('kdj_signal'),
+                            'technical_score': float(result['technical_score']) if result.get('technical_score') else None,
+                            'technical_signal': result.get('technical_signal'),
+                            'volume_ratio': float(result['volume_ratio']) if result.get('volume_ratio') else None,
+                            'updated_at': result['updated_at'].isoformat() if result.get('updated_at') else None
+                        }
+                    else:
+                        symbols_data[symbol][timeframe] = None
+            
+            # 转换为列表格式，便于前端显示
+            # 只返回至少有一个时间周期有数据的交易对
+            signals_list = []
+            for symbol, timeframes_data in symbols_data.items():
+                # 至少有一个时间周期有数据才添加到列表
+                if timeframes_data.get('15m') or timeframes_data.get('1h') or timeframes_data.get('1d'):
+                    signals_list.append({
+                        'symbol': symbol,
+                        '15m': timeframes_data.get('15m'),
+                        '1h': timeframes_data.get('1h'),
+                        '1d': timeframes_data.get('1d')
+                    })
+            
+            return {
+                "timeframes": timeframes,
+                "total": len(signals_list),
+                "signals": signals_list
+            }
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"获取技术信号失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/config")
+async def get_config():
+    """获取当前配置"""
+    try:
+        # 确保 symbols 是列表
+        symbols = config.get('symbols', [])
+        if not isinstance(symbols, list):
+            symbols = list(symbols) if symbols else []
+        
+        # 确保 exchanges 是字典
+        exchanges = config.get('exchanges', {})
+        if not isinstance(exchanges, dict):
+            exchanges = {}
+        exchange_list = list(exchanges.keys()) if exchanges else []
+        
+        # 确保 news 是字典
+        news = config.get('news', {})
+        if not isinstance(news, dict):
+            news = {}
+        news_sources = list(news.keys()) if news else []
+        
+        return {
+            "symbols": symbols,
+            "exchanges": exchange_list,
+            "news_sources": news_sources
+        }
+    except Exception as e:
+        logger.error(f"获取配置失败: {e}")
+        # 返回安全的默认值
+        return {
+            "symbols": [],
+            "exchanges": [],
+            "news_sources": []
+        }
+
+
+@app.get("/api/technical-indicators")
+async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
+    """
+    获取技术指标数据
+    
+    Args:
+        symbol: 交易对（可选，不指定则返回所有）
+        timeframe: 时间周期
+    """
+    try:
+        import pymysql
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            if symbol:
+                # 格式化交易对符号
+                symbol = symbol.replace('-', '/').upper()
+                if '/' not in symbol:
+                    symbol = f"{symbol}/USDT"
+                
+                sql = """
+                    SELECT * FROM technical_indicators_cache 
+                    WHERE symbol = %s AND timeframe = %s 
+                    ORDER BY updated_at DESC LIMIT 1
+                """
+                cursor.execute(sql, (symbol, timeframe))
+                result = cursor.fetchone()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的技术指标数据")
+                
+                return {
+                    "symbol": result['symbol'],
+                    "timeframe": result['timeframe'],
+                    "rsi": {
+                        "value": float(result['rsi_value']) if result.get('rsi_value') else None,
+                        "signal": result.get('rsi_signal')
+                    },
+                    "macd": {
+                        "value": float(result['macd_value']) if result.get('macd_value') else None,
+                        "signal_line": float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
+                        "histogram": float(result['macd_histogram']) if result.get('macd_histogram') else None,
+                        "trend": result.get('macd_trend')
+                    },
+                    "bollinger_bands": {
+                        "upper": float(result['bb_upper']) if result.get('bb_upper') else None,
+                        "middle": float(result['bb_middle']) if result.get('bb_middle') else None,
+                        "lower": float(result['bb_lower']) if result.get('bb_lower') else None,
+                        "position": result.get('bb_position'),
+                        "width": float(result['bb_width']) if result.get('bb_width') else None
+                    },
+                    "ema": {
+                        "short": float(result['ema_short']) if result.get('ema_short') else None,
+                        "long": float(result['ema_long']) if result.get('ema_long') else None,
+                        "trend": result.get('ema_trend')
+                    },
+                    "kdj": {
+                        "k": float(result['kdj_k']) if result.get('kdj_k') else None,
+                        "d": float(result['kdj_d']) if result.get('kdj_d') else None,
+                        "j": float(result['kdj_j']) if result.get('kdj_j') else None,
+                        "signal": result.get('kdj_signal')
+                    },
+                    "volume": {
+                        "volume_24h": float(result['volume_24h']) if result.get('volume_24h') else None,
+                        "volume_avg": float(result['volume_avg']) if result.get('volume_avg') else None,
+                        "volume_ratio": float(result['volume_ratio']) if result.get('volume_ratio') else None,
+                        "signal": result.get('volume_signal')
+                    },
+                    "technical_score": float(result['technical_score']) if result.get('technical_score') else None,
+                    "technical_signal": result.get('technical_signal'),
+                    "updated_at": result['updated_at'].isoformat() if result.get('updated_at') else None
+                }
+            else:
+                # 返回所有交易对的技术指标
+                sql = """
+                    SELECT t1.* FROM technical_indicators_cache t1
+                    INNER JOIN (
+                        SELECT symbol, MAX(updated_at) as max_updated_at
+                        FROM technical_indicators_cache
+                        WHERE timeframe = %s
+                        GROUP BY symbol
+                    ) t2 ON t1.symbol = t2.symbol AND t1.updated_at = t2.max_updated_at
+                    WHERE t1.timeframe = %s
+                    ORDER BY t1.technical_score DESC
+                """
+                cursor.execute(sql, (timeframe, timeframe))
+                results = cursor.fetchall()
+                
+                indicators_list = []
+                for result in results:
+                    indicators_list.append({
+                        "symbol": result['symbol'],
+                        "timeframe": result.get('timeframe', timeframe),  # 确保包含timeframe字段
+                        "technical_score": float(result['technical_score']) if result.get('technical_score') else None,
+                        "technical_signal": result.get('technical_signal'),
+                        "rsi_value": float(result['rsi_value']) if result.get('rsi_value') else None,
+                        "macd_trend": result.get('macd_trend'),
+                        "ema_trend": result.get('ema_trend'),
+                        "updated_at": result['updated_at'].isoformat() if result.get('updated_at') else None
+                    })
+                
+                return {
+                    "timeframe": timeframe,
+                    "indicators": indicators_list
+                }
+        finally:
+            cursor.close()
+            connection.close()
+    except Exception as e:
+        logger.error(f"获取技术指标失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/config")
+async def get_config():
+    """获取当前配置"""
+    try:
+        # 确保 symbols 是列表
+        symbols = config.get('symbols', [])
+        if not isinstance(symbols, list):
+            symbols = list(symbols) if symbols else []
+        
+        # 确保 exchanges 是字典
+        exchanges = config.get('exchanges', {})
+        if not isinstance(exchanges, dict):
+            exchanges = {}
+        exchange_list = list(exchanges.keys()) if exchanges else []
+        
+        # 确保 news 是字典
+        news = config.get('news', {})
+        if not isinstance(news, dict):
+            news = {}
+        news_sources = list(news.keys()) if news else []
+        
+        return {
+            "symbols": symbols,
+            "exchanges": exchange_list,
+            "news_sources": news_sources
+        }
+    except Exception as e:
+        logger.error(f"获取配置失败: {e}")
+        # 返回安全的默认值
+        return {
+            "symbols": [],
+            "exchanges": [],
+            "news_sources": []
+        }
+
+
+@app.get("/api/technical-indicators")
+async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
+    """
+    获取技术指标数据
+    
+    Args:
+        symbol: 交易对（可选，不指定则返回所有）
+        timeframe: 时间周期
+    
+    Returns:
+        技术指标数据
+    """
+    try:
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            if symbol:
+                # 格式化交易对符号
+                symbol = symbol.replace('-', '/').upper()
+                if '/' not in symbol:
+                    symbol = f"{symbol}/USDT"
+                
+                sql = """
+                SELECT * FROM technical_indicators 
+                WHERE symbol = %s AND timeframe = %s
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """
+                cursor.execute(sql, (symbol, timeframe))
+                result = cursor.fetchone()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail=f"未找到 {symbol} 的技术指标数据")
+                
+                return {
+                    "symbol": result['symbol'],
+                    "timeframe": result['timeframe'],
+                    "ema_short": result.get('ema_short'),
+                    "ema_long": result.get('ema_long'),
+                    "ma10": result.get('ma10'),
+                    "ema10": result.get('ema10'),
+                    "ma5": result.get('ma5'),
+                    "ema5": result.get('ema5'),
+                    "volume_ratio": result.get('volume_ratio'),
+                    "rsi_value": result.get('rsi_value'),
+                    "updated_at": result['updated_at'].isoformat() if result.get('updated_at') else None
+                }
+            else:
+                # 返回所有交易对的技术指标
+                sql = """
+                SELECT * FROM technical_indicators 
+                WHERE timeframe = %s
+                ORDER BY updated_at DESC
+                """
+                cursor.execute(sql, (timeframe,))
+                results = cursor.fetchall()
+                
+                return {
+                    "timeframe": timeframe,
+                    "data": [
+                        {
+                            "symbol": r['symbol'],
+                            "ema_short": r.get('ema_short'),
+                            "ema_long": r.get('ema_long'),
+                            "ma10": r.get('ma10'),
+                            "ema10": r.get('ema10'),
+                            "ma5": r.get('ma5'),
+                            "ema5": r.get('ema5'),
+                            "volume_ratio": r.get('volume_ratio'),
+                            "rsi_value": r.get('rsi_value'),
+                            "updated_at": r['updated_at'].isoformat() if r.get('updated_at') else None
+                        }
+                        for r in results
+                    ]
+                }
+        finally:
+            cursor.close()
+            connection.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取技术指标失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/config")
 async def get_config():

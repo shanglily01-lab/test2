@@ -206,6 +206,10 @@ class FuturesLimitOrderExecutor:
                                 
                                 # 执行开仓（使用限价作为成交价）
                                 # 注意：由于价格已经达到限价，open_position 会立即成交
+                                # 保留原始订单的来源和信号ID（如果是策略订单）
+                                original_source = order.get('order_source', 'limit_order')
+                                original_signal_id = order.get('signal_id')
+                                
                                 result = self.trading_engine.open_position(
                                     account_id=account_id,
                                     symbol=symbol,
@@ -215,7 +219,8 @@ class FuturesLimitOrderExecutor:
                                     limit_price=limit_price,  # 使用限价作为成交价
                                     stop_loss_price=stop_loss_price,
                                     take_profit_price=take_profit_price,
-                                    source='limit_order'
+                                    source=original_source,  # 保留原始来源（strategy 或 limit_order）
+                                    signal_id=original_signal_id  # 保留原始信号ID
                                 )
                                 
                                 if result.get('success'):

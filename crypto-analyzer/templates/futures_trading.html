@@ -527,6 +527,7 @@
                                                 <th>保证金</th>
                                                 <th>止损价</th>
                                                 <th>止盈价</th>
+                                                <th>来源</th>
                                                 <th>状态</th>
                                                 <th>创建时间</th>
                                                 <th>操作</th>
@@ -1546,6 +1547,15 @@
                                               order.status === 'PARTIALLY_FILLED' ? 'badge-info' : 'badge-neutral';
                             const fillProgress = order.quantity > 0 ? ((order.executed_quantity || 0) / order.quantity * 100).toFixed(1) : 0;
 
+                            // 格式化订单来源
+                            const orderSource = order.order_source || 'manual';
+                            const sourceText = orderSource === 'strategy' ? '策略' : 
+                                             orderSource === 'limit_order' ? '限价单' : 
+                                             orderSource === 'manual' ? '手动' : orderSource;
+                            const sourceClass = orderSource === 'strategy' ? 'badge-info' : 
+                                              orderSource === 'limit_order' ? 'badge-warning' : 
+                                              'badge-neutral';
+                            
                             return `
                                 <tr>
                                     <td><strong>${order.symbol}</strong></td>
@@ -1593,6 +1603,7 @@
                                             </div>
                                         ` : (order.take_profit_price ? '<span style="color: var(--success-green);">$' + formatPrice(order.take_profit_price) + '</span>' : '--')}
                                     </td>
+                                    <td><span class="badge ${sourceClass}" title="${order.signal_id ? '策略ID: ' + order.signal_id : ''}">${sourceText}</span></td>
                                     <td><span class="badge ${statusClass}">${statusText}</span></td>
                                     <td class="text-sm text-secondary">${order.created_at ? new Date(order.created_at).toLocaleString('zh-CN') : '--'}</td>
                                     <td>
@@ -1835,11 +1846,14 @@
                         }
                         const reasonMap = {
                             'manual': '<span class="badge badge-info">手动</span>',
+                            'strategy': '<span class="badge badge-primary">策略</span>',
+                            'limit_order': '<span class="badge badge-warning">限价单</span>',
                             'stop_loss': '<span class="badge badge-danger">止损</span>',
                             'take_profit': '<span class="badge badge-success">止盈</span>',
                             'liquidation': '<span class="badge badge-warning">强平</span>',
                             'signal': '<span class="badge badge-secondary">信号</span>',
-                            'auto': '<span class="badge badge-secondary">自动</span>'
+                            'auto': '<span class="badge badge-secondary">自动</span>',
+                            'strategy_signal': '<span class="badge badge-primary">策略信号</span>'
                         };
                         // 转换为小写进行比较，确保匹配
                         const sourceLower = String(orderSource).toLowerCase().trim();
