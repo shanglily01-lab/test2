@@ -245,8 +245,19 @@ class StrategyExecutor:
                                                  (prev_ema_short < prev_ema_long and ema_short >= ema_long)
                                 
                                 # 死叉：EMA9向下穿越EMA26（做空信号）
+                                # 条件1：前EMA9 >= 前EMA26 且 当前EMA9 < 当前EMA26（从上方穿越到下方）
+                                # 条件2：前EMA9 > 前EMA26 且 当前EMA9 <= 当前EMA26（从上方穿越到下方或持平）
                                 is_death_cross = (prev_ema_short >= prev_ema_long and ema_short < ema_long) or \
                                                  (prev_ema_short > prev_ema_long and ema_short <= ema_long)
+                                
+                                # 详细记录死叉检测过程
+                                if 'short' in buy_directions:
+                                    logger.info(f"{symbol} 🔍 做空信号检测详情:")
+                                    logger.info(f"   前EMA9={prev_ema_short:.6f}, 前EMA26={prev_ema_long:.6f}, 差值={prev_ema_short - prev_ema_long:.6f}")
+                                    logger.info(f"   当前EMA9={ema_short:.6f}, 当前EMA26={ema_long:.6f}, 差值={ema_short - ema_long:.6f}")
+                                    logger.info(f"   条件1(前>=后且当前<): {prev_ema_short >= prev_ema_long} and {ema_short < ema_long} = {prev_ema_short >= prev_ema_long and ema_short < ema_long}")
+                                    logger.info(f"   条件2(前>后且当前<=): {prev_ema_short > prev_ema_long} and {ema_short <= ema_long} = {prev_ema_short > prev_ema_long and ema_short <= ema_long}")
+                                    logger.info(f"   死叉结果: {is_death_cross}")
                                 
                                 # 记录EMA交叉检测结果（使用info级别以便追踪）
                                 logger.info(f"{symbol} 📊 EMA(9,26)交叉检测: 前EMA9={prev_ema_short:.4f}, 前EMA26={prev_ema_long:.4f}, 当前EMA9={ema_short:.4f}, 当前EMA26={ema_long:.4f}")
@@ -385,7 +396,8 @@ class StrategyExecutor:
                                             # 做空：需要 EMA10 < MA10（MA10/EMA10 空头）
                                             ma10_ema10_ok = ema10 < ma10
                                             if not ma10_ema10_ok:
-                                                logger.info(f"{symbol} ⚠️ 做空但MA10/EMA10不同向: EMA10={ema10:.4f} >= MA10={ma10:.4f}（需要EMA10 < MA10）")
+                                                logger.info(f"{symbol} ⚠️ 做空但MA10/EMA10不同向: EMA10={ema10:.4f} >= MA10={ma10:.4f}（需要EMA10 < MA10），做空信号被过滤")
+                                                logger.info(f"{symbol} 💡 提示：如果希望更多做空机会，可以在策略配置中关闭'启用 MA10/EMA10 同向过滤'选项")
                                             else:
                                                 logger.info(f"{symbol} ✅ 做空MA10/EMA10同向: EMA10={ema10:.4f} < MA10={ma10:.4f}")
                                 else:
@@ -447,10 +459,12 @@ class StrategyExecutor:
                                     if not volume_ok:
                                         failed_conditions.append("成交量条件")
                                     if not ma10_ema10_ok:
-                                        failed_conditions.append("MA10/EMA10过滤")
+                                        failed_conditions.append("MA10/EMA10过滤（做空需要EMA10 < MA10）")
                                     if not trend_confirm_ok:
                                         failed_conditions.append("趋势持续性")
                                     logger.info(f"{symbol} ❌ 交易条件未全部满足，失败的条件: {', '.join(failed_conditions)}")
+                                    if direction == 'short' and not ma10_ema10_ok:
+                                        logger.info(f"{symbol} 💡 做空建议：如果希望更多做空机会，可以在策略配置中关闭'启用 MA10/EMA10 同向过滤'选项")
                                 
                                 if volume_ok and ma10_ema10_ok and trend_confirm_ok:
                                     action_name = '买入(做多)' if direction == 'long' else '卖出(做空)'

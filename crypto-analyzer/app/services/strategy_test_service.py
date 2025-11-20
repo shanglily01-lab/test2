@@ -745,9 +745,11 @@ class StrategyTestService:
                 ma10_ema10_golden_cross = False
                 
                 if current_buy_index > 0:
-                    # 检查前3个时间点，确保不遗漏金叉
+                    # 检查前3个时间点，确保不遗漏交叉信号
                     lookback_count = min(3, current_buy_index)
                     found_golden_cross = False
+                    found_death_cross = False
+                    detected_cross_type = None  # 'golden' 或 'death'
                     
                     for lookback in range(1, lookback_count + 1):
                         prev_pair = buy_indicator_pairs[current_buy_index - lookback]
@@ -759,9 +761,13 @@ class StrategyTestService:
                         prev_time = prev_indicator['updated_at']
                         
                         if prev_ema_short and prev_ema_long:
-                            # EMA9/26金叉
+                            # EMA9/26金叉（向上穿越）
                             is_golden_cross = (prev_ema_short <= prev_ema_long and ema_short > ema_long) or \
                                              (prev_ema_short < prev_ema_long and ema_short >= ema_long)
+                            
+                            # EMA9/26死叉（向下穿越）
+                            is_death_cross = (prev_ema_short >= prev_ema_long and ema_short < ema_long) or \
+                                             (prev_ema_short > prev_ema_long and ema_short <= ema_long)
                             
                             # MA10/EMA10金叉检测
                             if prev_ma10 and prev_ema10 and ma10 and ema10:
@@ -775,8 +781,9 @@ class StrategyTestService:
                             signal_triggered = False
                             
                             if buy_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
-                                # 只使用 EMA9/26 金叉
-                                if is_golden_cross:
+                                # 检测 EMA9/26 金叉（做多）和死叉（做空）
+                                if is_golden_cross and 'long' in buy_directions:
+                                    # 金叉 = 做多信号
                                     # 检查信号强度过滤
                                     ema_strength_pct = abs(curr_diff_pct)
                                     if min_ema_cross_strength > 0 and ema_strength_pct < min_ema_cross_strength:
@@ -786,7 +793,23 @@ class StrategyTestService:
                                     signal_triggered = True
                                     buy_signal_triggered = True
                                     found_golden_cross = True
-                                    debug_info.append(f"   ✅✅✅ EMA9/26金叉检测成功！")
+                                    detected_cross_type = 'golden'
+                                    debug_info.append(f"   ✅✅✅ EMA9/26金叉检测成功（做多信号）！")
+                                    if min_ema_cross_strength > 0:
+                                        debug_info.append(f"   ✅ 信号强度检查通过 (差值={ema_strength_pct:.2f}% ≥ {min_ema_cross_strength:.2f}%)")
+                                elif is_death_cross and 'short' in buy_directions:
+                                    # 死叉 = 做空信号
+                                    # 检查信号强度过滤
+                                    ema_strength_pct = abs(curr_diff_pct)
+                                    if min_ema_cross_strength > 0 and ema_strength_pct < min_ema_cross_strength:
+                                        debug_info.append(f"   ⚠️ EMA9/26死叉信号强度不足 (差值={ema_strength_pct:.2f}%, 需要≥{min_ema_cross_strength:.2f}%)，已过滤")
+                                        break
+                                    
+                                    signal_triggered = True
+                                    buy_signal_triggered = True
+                                    found_death_cross = True
+                                    detected_cross_type = 'death'
+                                    debug_info.append(f"   ✅✅✅ EMA9/26死叉检测成功（做空信号）！")
                                     if min_ema_cross_strength > 0:
                                         debug_info.append(f"   ✅ 信号强度检查通过 (差值={ema_strength_pct:.2f}% ≥ {min_ema_cross_strength:.2f}%)")
                             elif buy_signal == 'ma_ema10':
@@ -820,40 +843,49 @@ class StrategyTestService:
                 
                 if buy_signal_triggered and can_open_position and not closed_at_current_time:
                     if len(buy_directions) > 0:
-                        # 判断当前EMA状态
-                        ema_bullish = ema_short > ema_long
-                        ma10_ema10_bullish = (ma10 and ema10 and ema10 > ma10) if (ma10 and ema10) else None
-                        
-                        # 根据信号和配置的方向选择
+                        # 根据检测到的交叉类型确定方向（金叉=做多，死叉=做空）
                         direction = None
                         
-                        if len(buy_directions) > 1:
-                            if ema_bullish and 'long' in buy_directions:
-                                direction = 'long'
-                                debug_info.append(f"   📊 方向判断：EMA多头，选择做多")
-                            elif not ema_bullish and 'short' in buy_directions:
-                                direction = 'short'
-                                debug_info.append(f"   📊 方向判断：EMA空头，选择做空")
-                            elif ma10_ema10_bullish is not None:
-                                if ma10_ema10_bullish and 'long' in buy_directions:
-                                    direction = 'long'
-                                    debug_info.append(f"   📊 方向判断：MA10/EMA10多头，选择做多")
-                                elif not ma10_ema10_bullish and 'short' in buy_directions:
-                                    direction = 'short'
-                                    debug_info.append(f"   📊 方向判断：MA10/EMA10空头，选择做空")
-                            if direction is None:
-                                if 'long' in buy_directions:
-                                    direction = 'long'
-                                    debug_info.append(f"   📊 方向判断：默认选择做多")
-                                elif 'short' in buy_directions:
-                                    direction = 'short'
-                                    debug_info.append(f"   📊 方向判断：默认选择做空")
-                                else:
-                                    direction = buy_directions[0]
-                                    debug_info.append(f"   📊 方向判断：使用第一个方向 {direction}")
+                        if detected_cross_type == 'golden':
+                            # 金叉 = 做多
+                            direction = 'long'
+                            debug_info.append(f"   📊 方向判断：检测到金叉，选择做多")
+                        elif detected_cross_type == 'death':
+                            # 死叉 = 做空
+                            direction = 'short'
+                            debug_info.append(f"   📊 方向判断：检测到死叉，选择做空")
                         else:
-                            direction = buy_directions[0]
-                            debug_info.append(f"   📊 方向判断：单一方向 {direction}")
+                            # 如果没有检测到交叉，根据EMA状态判断（兼容旧逻辑）
+                            ema_bullish = ema_short > ema_long
+                            ma10_ema10_bullish = (ma10 and ema10 and ema10 > ma10) if (ma10 and ema10) else None
+                            
+                            if len(buy_directions) > 1:
+                                if ema_bullish and 'long' in buy_directions:
+                                    direction = 'long'
+                                    debug_info.append(f"   📊 方向判断：EMA多头，选择做多")
+                                elif not ema_bullish and 'short' in buy_directions:
+                                    direction = 'short'
+                                    debug_info.append(f"   📊 方向判断：EMA空头，选择做空")
+                                elif ma10_ema10_bullish is not None:
+                                    if ma10_ema10_bullish and 'long' in buy_directions:
+                                        direction = 'long'
+                                        debug_info.append(f"   📊 方向判断：MA10/EMA10多头，选择做多")
+                                    elif not ma10_ema10_bullish and 'short' in buy_directions:
+                                        direction = 'short'
+                                        debug_info.append(f"   📊 方向判断：MA10/EMA10空头，选择做空")
+                                if direction is None:
+                                    if 'long' in buy_directions:
+                                        direction = 'long'
+                                        debug_info.append(f"   📊 方向判断：默认选择做多")
+                                    elif 'short' in buy_directions:
+                                        direction = 'short'
+                                        debug_info.append(f"   📊 方向判断：默认选择做空")
+                                    else:
+                                        direction = buy_directions[0]
+                                        debug_info.append(f"   📊 方向判断：使用第一个方向 {direction}")
+                            else:
+                                direction = buy_directions[0]
+                                debug_info.append(f"   📊 方向判断：单一方向 {direction}")
                         
                         if direction is None:
                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 无法确定交易方向")

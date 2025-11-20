@@ -24,7 +24,7 @@
     "shortPrice": "market",
     "stopLoss": 3,
     "takeProfit": 9,
-    "ma10Ema10TrendFilter": true,
+    "ma10Ema10TrendFilter": false,
     "minEMACrossStrength": 0,
     "minMA10CrossStrength": 0,
     "minSignalStrength": {
@@ -64,7 +64,7 @@
     "shortPrice": "market",
     "stopLoss": 3,
     "takeProfit": 9,
-    "ma10Ema10TrendFilter": true,
+    "ma10Ema10TrendFilter": false,
     "minEMACrossStrength": 0,
     "minMA10CrossStrength": 0,
     "minSignalStrength": {
