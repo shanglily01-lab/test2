@@ -1,6 +1,6 @@
 """
 策略测试服务
-用于回测交易策略，模拟48小时的交易并计算盈亏
+用于回测交易策略，模拟24小时的交易并计算盈亏
 测试结果会保存到数据库中
 """
 
@@ -141,12 +141,12 @@ class StrategyTestService:
                 buy_timeframe = timeframe_map.get(buy_signal, '15m')
                 sell_timeframe = timeframe_map.get(sell_signal, '5m')
                 
-                # 计算时间范围：最近48小时
+                # 计算时间范围：最近24小时
                 now_local = datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
                 end_time_local = now_local
                 
-                # 计算48小时前的起始时间
-                start_time_local = now_local - timedelta(hours=48)
+                # 计算24小时前的起始时间
+                start_time_local = now_local - timedelta(hours=24)
                 
                 # 转换为UTC时间用于数据库查询
                 end_time_utc = end_time_local.replace(tzinfo=self.LOCAL_TZ).astimezone(timezone.utc).replace(tzinfo=None)

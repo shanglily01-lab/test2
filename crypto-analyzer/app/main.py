@@ -267,6 +267,8 @@ async def lifespan(app: FastAPI):
         price_cache_service = None
         pending_order_executor = None
         futures_limit_order_executor = None
+        strategy_executor = None
+        futures_monitor_service = None
         logger.warning("⚠️  系统以降级模式运行")
 
     logger.info("🚀 FastAPI 启动完成")
@@ -310,9 +312,17 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  启动合约止盈止损监控任务失败: {e}")
             futures_monitor_service = None
     
-    # 策略自动执行服务已移至独立的 strategy_scheduler.py
-    # 如需自动执行策略，请单独运行: python app/strategy_scheduler.py
-    # 策略执行器仍保留在内存中，供API接口使用（手动执行策略）
+    # 启动策略自动执行服务
+    if strategy_executor:
+        try:
+            import asyncio
+            strategy_executor.task = asyncio.create_task(strategy_executor.run_loop(interval=5))
+            logger.info("✅ 策略自动执行服务已启动（每5秒检查）")
+        except Exception as e:
+            logger.warning(f"⚠️  启动策略自动执行任务失败: {e}")
+            import traceback
+            traceback.print_exc()
+            strategy_executor = None
 
     yield
 
@@ -342,6 +352,14 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 合约止盈止损监控服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止合约止盈止损监控服务失败: {e}")
+    
+    # 停止策略自动执行服务
+    if strategy_executor:
+        try:
+            strategy_executor.stop()
+            logger.info("✅ 策略自动执行服务已停止")
+        except Exception as e:
+            logger.warning(f"⚠️  停止策略自动执行服务失败: {e}")
 
     # 停止价格缓存服务
     if price_cache_service:

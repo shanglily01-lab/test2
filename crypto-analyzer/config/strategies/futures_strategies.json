@@ -18,8 +18,8 @@
     "symbols": [
       "ZEC/USDT"
     ],
-    "positionSize": 50,
-    "maxPositions": 1,
+    "positionSize": 30,
+    "maxPositions": 3,
     "longPrice": "market",
     "shortPrice": "market",
     "stopLoss": 3,
@@ -34,8 +34,10 @@
     "trendConfirmBars": 0,
     "exitOnMAFlip": true,
     "exitOnEMAWeak": true,
+    "preventDuplicateEntry": false,
+    "minHoldingTimeHours": 0,
     "id": 1735123456790,
-    "enabled": false
+    "enabled": true
   },
   {
     "name": "TY -SOL",
@@ -57,7 +59,7 @@
       "SOL/USDT"
     ],
     "positionSize": 50,
-    "maxPositions": null,
+    "maxPositions": 1,
     "longPrice": "market",
     "shortPrice": "market",
     "stopLoss": 3,
@@ -72,8 +74,10 @@
     "trendConfirmBars": 0,
     "exitOnMAFlip": true,
     "exitOnEMAWeak": true,
+    "preventDuplicateEntry": false,
+    "minHoldingTimeHours": 0,
     "id": 1763635511206,
-    "enabled": false
+    "enabled": true
   },
   {
     "name": "ETH",
@@ -81,7 +85,7 @@
       "long",
       "short"
     ],
-    "leverage": 5,
+    "leverage": 10,
     "buySignals": "ema_15m",
     "buyVolumeEnabled": false,
     "buyVolumeLongEnabled": false,
@@ -94,8 +98,8 @@
     "symbols": [
       "ETH/USDT"
     ],
-    "positionSize": 50,
-    "maxPositions": null,
+    "positionSize": 30,
+    "maxPositions": 3,
     "longPrice": "market",
     "shortPrice": "market",
     "stopLoss": 3,
@@ -113,6 +117,46 @@
     "preventDuplicateEntry": false,
     "minHoldingTimeHours": 0,
     "id": 1763636840333,
-    "enabled": false
+    "enabled": true
+  },
+  {
+    "name": "BTC",
+    "buyDirection": [
+      "long",
+      "short"
+    ],
+    "leverage": 10,
+    "buySignals": "ema_15m",
+    "buyVolumeEnabled": true,
+    "buyVolumeLongEnabled": true,
+    "buyVolumeShortEnabled": true,
+    "buyVolumeLong": "1.0",
+    "buyVolumeShort": "<0.6",
+    "sellSignals": "ema_5m",
+    "sellVolumeEnabled": false,
+    "sellVolume": null,
+    "symbols": [
+      "BTC/USDT"
+    ],
+    "positionSize": 30,
+    "maxPositions": 3,
+    "longPrice": "market",
+    "shortPrice": "market",
+    "stopLoss": 3,
+    "takeProfit": 6,
+    "ma10Ema10TrendFilter": true,
+    "minEMACrossStrength": 0,
+    "minMA10CrossStrength": 0,
+    "minSignalStrength": {
+      "ema9_26": 0,
+      "ma10_ema10": 0
+    },
+    "trendConfirmBars": 1,
+    "exitOnMAFlip": true,
+    "exitOnEMAWeak": true,
+    "preventDuplicateEntry": false,
+    "minHoldingTimeHours": 0,
+    "id": 1763639600185,
+    "enabled": true
   }
 ]
