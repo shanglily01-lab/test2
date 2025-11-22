@@ -283,6 +283,10 @@
                 <i class="bi bi-graph-up-arrow"></i>
                 合约交易策略
             </button>
+            <button class="strategy-type-tab" onclick="switchStrategyType('execution', event)">
+                <i class="bi bi-list-check"></i>
+                策略执行清单
+            </button>
         </div>
 
         <!-- Spot Trading Strategy Content -->
@@ -600,6 +604,71 @@
                                             <small style="color: var(--text-secondary); font-size: 12px; margin-left: 26px;">当EMA9/26差值小于0.05%时，立即平仓退出</small>
                                         </div>
                                     </div>
+                                    
+                                    <!-- 技术指标过滤器 -->
+                                    <div class="form-group" style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default);">
+                                        <label class="form-label" style="font-size: 14px; font-weight: 600; margin-bottom: var(--spacing-md);">
+                                            <i class="bi bi-funnel"></i> 技术指标过滤器
+                                        </label>
+                                        
+                                        <!-- RSI过滤器 -->
+                                        <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-md); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                                <input type="checkbox" id="rsiFilterEnabled" name="rsiFilterEnabled">
+                                                <label for="rsiFilterEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">启用 RSI 过滤</label>
+                                            </div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 8px;">
+                                                <div>
+                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">做多时RSI最大值</label>
+                                                    <input type="number" class="form-input" id="rsiLongMax" placeholder="70" min="50" max="90" step="1" value="70" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">做多时RSI需小于此值</small>
+                                                </div>
+                                                <div>
+                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">做空时RSI最小值</label>
+                                                    <input type="number" class="form-input" id="rsiShortMin" placeholder="30" min="10" max="50" step="1" value="30" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">做空时RSI需大于此值</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- MACD过滤器 -->
+                                        <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-md); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                                <input type="checkbox" id="macdFilterEnabled" name="macdFilterEnabled">
+                                                <label for="macdFilterEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">启用 MACD 过滤</label>
+                                            </div>
+                                            <div style="margin-left: 26px; margin-top: 8px;">
+                                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                                                    <input type="checkbox" id="macdLongRequirePositive" name="macdLongRequirePositive" checked>
+                                                    <label for="macdLongRequirePositive" class="checkbox-label" style="margin: 0; font-size: 13px;">做多时要求MACD柱状图 > 0</label>
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 8px;">
+                                                    <input type="checkbox" id="macdShortRequireNegative" name="macdShortRequireNegative" checked>
+                                                    <label for="macdShortRequireNegative" class="checkbox-label" style="margin: 0; font-size: 13px;">做空时要求MACD柱状图 < 0</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- KDJ过滤器 -->
+                                        <div style="padding: var(--spacing-md); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                                <input type="checkbox" id="kdjFilterEnabled" name="kdjFilterEnabled">
+                                                <label for="kdjFilterEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">启用 KDJ 过滤</label>
+                                            </div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 8px;">
+                                                <div>
+                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">做多时KDJ K值最大值</label>
+                                                    <input type="number" class="form-input" id="kdjLongMaxK" placeholder="80" min="60" max="95" step="1" value="80" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">做多时KDJ K值需小于此值</small>
+                                                </div>
+                                                <div>
+                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">做空时KDJ K值最小值</label>
+                                                    <input type="number" class="form-input" id="kdjShortMinK" placeholder="20" min="5" max="40" step="1" value="20" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">做空时KDJ K值需大于此值</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 
                                 <!-- 卖出条件 -->
@@ -697,6 +766,20 @@
                                         <label class="form-label">最大持仓数量</label>
                                         <input type="number" class="form-input" id="maxPositions" placeholder="例如：5" min="1" step="1">
                                         <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">同时持有的最大仓位数量</small>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">最大做多持仓数</label>
+                                        <input type="number" class="form-input" id="maxLongPositions" placeholder="例如：2" min="1" step="1">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">同时持有的最大做多仓位数量（避免方向过于集中）</small>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label class="form-label">最大做空持仓数</label>
+                                        <input type="number" class="form-input" id="maxShortPositions" placeholder="例如：2" min="1" step="1">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">同时持有的最大做空仓位数量（避免方向过于集中）</small>
                                     </div>
                                 </div>
                             </div>
@@ -812,6 +895,127 @@
                 </div>
             </div>
         </div>
+
+        <!-- Strategy Execution List Content -->
+        <div id="executionListContent" class="strategy-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-list-check"></i>
+                        策略执行清单
+                    </h2>
+                    <button class="btn btn-secondary" onclick="refreshExecutionList()">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        刷新
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- 筛选器 -->
+                    <div style="display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); flex-wrap: wrap; align-items: center;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label">市场类型</label>
+                            <select class="form-select" id="executionMarketType" onchange="loadExecutionList()">
+                                <option value="all">全部</option>
+                                <option value="spot">现货</option>
+                                <option value="futures">合约</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label">操作类型</label>
+                            <select class="form-select" id="executionActionType" onchange="loadExecutionList()">
+                                <option value="all">全部</option>
+                                <option value="buy">买入/开仓</option>
+                                <option value="sell">卖出/平仓</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label">状态</label>
+                            <select class="form-select" id="executionStatus" onchange="loadExecutionList()">
+                                <option value="all">全部</option>
+                                <option value="FILLED">已成交</option>
+                                <option value="PENDING">待成交</option>
+                                <option value="CANCELLED">已取消</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label">交易对</label>
+                            <input type="text" class="form-input" id="executionSymbol" placeholder="例如: BTC/USDT" onchange="loadExecutionList()">
+                        </div>
+                    </div>
+
+                    <!-- 执行结果列表 -->
+                    <div id="executionListContainer">
+                        <div class="placeholder-content">
+                            <div class="placeholder-icon">
+                                <i class="bi bi-hourglass-split"></i>
+                            </div>
+                            <div class="placeholder-text">加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Strategy Execution List Content -->
+        <div id="executionListContent" class="strategy-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="bi bi-list-check"></i>
+                        策略执行清单
+                    </h2>
+                    <button class="btn btn-secondary" onclick="refreshExecutionList()">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        刷新
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- 筛选器 -->
+                    <div style="display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); flex-wrap: wrap; align-items: center;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label">市场类型</label>
+                            <select class="form-select" id="executionMarketType" onchange="loadExecutionList()">
+                                <option value="all">全部</option>
+                                <option value="spot">现货</option>
+                                <option value="futures">合约</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label">操作类型</label>
+                            <select class="form-select" id="executionActionType" onchange="loadExecutionList()">
+                                <option value="all">全部</option>
+                                <option value="buy">买入/开仓</option>
+                                <option value="sell">卖出/平仓</option>
+                                <option value="order">下单</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label">交易对</label>
+                            <input type="text" class="form-input" id="executionSymbol" placeholder="例如: BTC/USDT" onchange="loadExecutionList()">
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label">时间范围</label>
+                            <select class="form-select" id="executionTimeRange" onchange="loadExecutionList()">
+                                <option value="1h">最近1小时</option>
+                                <option value="24h" selected>最近24小时</option>
+                                <option value="7d">最近7天</option>
+                                <option value="30d">最近30天</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 执行结果列表 -->
+                    <div id="executionListContainer">
+                        <div class="placeholder-content">
+                            <div class="placeholder-icon">
+                                <i class="bi bi-hourglass-split"></i>
+                            </div>
+                            <div class="placeholder-text">正在加载执行记录...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -847,6 +1051,9 @@
             } else if (type === 'futures') {
                 document.getElementById('futuresStrategyContent').classList.add('active');
                 loadStrategies();
+            } else if (type === 'execution') {
+                document.getElementById('executionListContent').classList.add('active');
+                loadExecutionList();
             }
         }
 
@@ -916,6 +1123,31 @@
             }
             if (document.getElementById('minHoldingTimeHours')) {
                 document.getElementById('minHoldingTimeHours').value = '';
+            }
+            
+            // 清除同方向持仓限制
+            if (document.getElementById('maxLongPositions')) {
+                document.getElementById('maxLongPositions').value = '';
+            }
+            if (document.getElementById('maxShortPositions')) {
+                document.getElementById('maxShortPositions').value = '';
+            }
+            
+            // 清除技术指标过滤器
+            if (document.getElementById('rsiFilterEnabled')) {
+                document.getElementById('rsiFilterEnabled').checked = false;
+                document.getElementById('rsiLongMax').value = '70';
+                document.getElementById('rsiShortMin').value = '30';
+            }
+            if (document.getElementById('macdFilterEnabled')) {
+                document.getElementById('macdFilterEnabled').checked = false;
+                document.getElementById('macdLongRequirePositive').checked = true;
+                document.getElementById('macdShortRequireNegative').checked = true;
+            }
+            if (document.getElementById('kdjFilterEnabled')) {
+                document.getElementById('kdjFilterEnabled').checked = false;
+                document.getElementById('kdjLongMaxK').value = '80';
+                document.getElementById('kdjShortMinK').value = '20';
             }
             
             // 重置按钮
@@ -1180,6 +1412,8 @@
                 symbols: Array.from(document.querySelectorAll('input[name="symbols"]:checked')).map(cb => cb.value),
                 positionSize: parseFloat(document.getElementById('positionSize').value),
                 maxPositions: document.getElementById('maxPositions').value ? parseInt(document.getElementById('maxPositions').value) : null,
+                maxLongPositions: document.getElementById('maxLongPositions').value ? parseInt(document.getElementById('maxLongPositions').value) : null,
+                maxShortPositions: document.getElementById('maxShortPositions').value ? parseInt(document.getElementById('maxShortPositions').value) : null,
                 longPrice: longPriceRadio ? longPriceRadio.value : null,
                 shortPrice: shortPriceRadio ? shortPriceRadio.value : null,
                 stopLoss: document.getElementById('stopLoss').value ? parseFloat(document.getElementById('stopLoss').value) : null,
@@ -1195,7 +1429,22 @@
                 exitOnMAFlip: document.getElementById('exitOnMAFlip') ? document.getElementById('exitOnMAFlip').checked : false,
                 exitOnEMAWeak: document.getElementById('exitOnEMAWeak') ? document.getElementById('exitOnEMAWeak').checked : false,
                 preventDuplicateEntry: document.getElementById('preventDuplicateEntry') ? document.getElementById('preventDuplicateEntry').checked : false,
-                minHoldingTimeHours: document.getElementById('minHoldingTimeHours') ? (document.getElementById('minHoldingTimeHours').value ? parseFloat(document.getElementById('minHoldingTimeHours').value) : 0) : 0
+                minHoldingTimeHours: document.getElementById('minHoldingTimeHours') ? (document.getElementById('minHoldingTimeHours').value ? parseFloat(document.getElementById('minHoldingTimeHours').value) : 0) : 0,
+                rsiFilter: {
+                    enabled: document.getElementById('rsiFilterEnabled') ? document.getElementById('rsiFilterEnabled').checked : false,
+                    longMax: document.getElementById('rsiLongMax') ? parseFloat(document.getElementById('rsiLongMax').value) : 70,
+                    shortMin: document.getElementById('rsiShortMin') ? parseFloat(document.getElementById('rsiShortMin').value) : 30
+                },
+                macdFilter: {
+                    enabled: document.getElementById('macdFilterEnabled') ? document.getElementById('macdFilterEnabled').checked : false,
+                    longRequirePositive: document.getElementById('macdLongRequirePositive') ? document.getElementById('macdLongRequirePositive').checked : true,
+                    shortRequireNegative: document.getElementById('macdShortRequireNegative') ? document.getElementById('macdShortRequireNegative').checked : true
+                },
+                kdjFilter: {
+                    enabled: document.getElementById('kdjFilterEnabled') ? document.getElementById('kdjFilterEnabled').checked : false,
+                    longMaxK: document.getElementById('kdjLongMaxK') ? parseFloat(document.getElementById('kdjLongMaxK').value) : 80,
+                    shortMinK: document.getElementById('kdjShortMinK') ? parseFloat(document.getElementById('kdjShortMinK').value) : 20
+                }
             };
             
             // 验证
@@ -1412,6 +1661,20 @@
                                 <div class="strategy-item-field-value">${strategy.positionSize}%</div>
                             </div>
                             <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">最大持仓数</div>
+                                <div class="strategy-item-field-value">${strategy.maxPositions || '未设置'}</div>
+                            </div>
+                            ${strategy.maxLongPositions || strategy.maxShortPositions ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">同方向持仓限制</div>
+                                    <div class="strategy-item-field-value">
+                                        ${strategy.maxLongPositions ? `做多: ${strategy.maxLongPositions}` : ''}
+                                        ${strategy.maxLongPositions && strategy.maxShortPositions ? ', ' : ''}
+                                        ${strategy.maxShortPositions ? `做空: ${strategy.maxShortPositions}` : ''}
+                                    </div>
+                                </div>
+                            ` : ''}
+                            <div class="strategy-item-field">
                                 <div class="strategy-item-field-label">止损</div>
                                 <div class="strategy-item-field-value">${strategy.stopLoss ? strategy.stopLoss + '%' : '未设置'}</div>
                             </div>
@@ -1423,6 +1686,24 @@
                                 <div class="strategy-item-field-label">MA10/EMA10同向过滤</div>
                                 <div class="strategy-item-field-value">${strategy.ma10Ema10TrendFilter ? '✅ 已启用' : '❌ 未启用'}</div>
                             </div>
+                            ${strategy.rsiFilter && strategy.rsiFilter.enabled ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">RSI过滤</div>
+                                    <div class="strategy-item-field-value">✅ 已启用 (做多≤${strategy.rsiFilter.longMax || 70}, 做空≥${strategy.rsiFilter.shortMin || 30})</div>
+                                </div>
+                            ` : ''}
+                            ${strategy.macdFilter && strategy.macdFilter.enabled ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">MACD过滤</div>
+                                    <div class="strategy-item-field-value">✅ 已启用</div>
+                                </div>
+                            ` : ''}
+                            ${strategy.kdjFilter && strategy.kdjFilter.enabled ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">KDJ过滤</div>
+                                    <div class="strategy-item-field-value">✅ 已启用 (做多K≤${strategy.kdjFilter.longMaxK || 80}, 做空K≥${strategy.kdjFilter.shortMinK || 20})</div>
+                                </div>
+                            ` : ''}
                             ${strategy.minSignalStrength ? `
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">信号强度过滤（持仓时）</div>
@@ -1656,6 +1937,8 @@
             
             document.getElementById('positionSize').value = strategy.positionSize;
             document.getElementById('maxPositions').value = strategy.maxPositions || '';
+            document.getElementById('maxLongPositions').value = strategy.maxLongPositions || '';
+            document.getElementById('maxShortPositions').value = strategy.maxShortPositions || '';
             
             // 止损止盈
             document.getElementById('stopLoss').value = strategy.stopLoss || '';
@@ -1690,6 +1973,29 @@
             }
             if (document.getElementById('minHoldingTimeHours')) {
                 document.getElementById('minHoldingTimeHours').value = strategy.minHoldingTimeHours || '';
+            }
+            
+            // 技术指标过滤器
+            if (strategy.rsiFilter) {
+                if (document.getElementById('rsiFilterEnabled')) {
+                    document.getElementById('rsiFilterEnabled').checked = strategy.rsiFilter.enabled === true;
+                    document.getElementById('rsiLongMax').value = strategy.rsiFilter.longMax || 70;
+                    document.getElementById('rsiShortMin').value = strategy.rsiFilter.shortMin || 30;
+                }
+            }
+            if (strategy.macdFilter) {
+                if (document.getElementById('macdFilterEnabled')) {
+                    document.getElementById('macdFilterEnabled').checked = strategy.macdFilter.enabled === true;
+                    document.getElementById('macdLongRequirePositive').checked = strategy.macdFilter.longRequirePositive !== false;
+                    document.getElementById('macdShortRequireNegative').checked = strategy.macdFilter.shortRequireNegative !== false;
+                }
+            }
+            if (strategy.kdjFilter) {
+                if (document.getElementById('kdjFilterEnabled')) {
+                    document.getElementById('kdjFilterEnabled').checked = strategy.kdjFilter.enabled === true;
+                    document.getElementById('kdjLongMaxK').value = strategy.kdjFilter.longMaxK || 80;
+                    document.getElementById('kdjShortMinK').value = strategy.kdjFilter.shortMinK || 20;
+                }
             }
             
             // 做多价格
@@ -2493,6 +2799,122 @@
             } else {
                 emptyState.style.display = 'none';
             }
+        }
+
+        // 加载策略执行清单
+        async function loadExecutionList() {
+            const container = document.getElementById('executionListContainer');
+            if (!container) return;
+            
+            container.innerHTML = '<div class="placeholder-content"><div class="placeholder-icon"><i class="bi bi-hourglass-split"></i></div><div class="placeholder-text">正在加载执行记录...</div></div>';
+            
+            try {
+                const marketType = document.getElementById('executionMarketType')?.value || 'all';
+                const actionType = document.getElementById('executionActionType')?.value || 'all';
+                const status = document.getElementById('executionStatus')?.value || 'all';
+                const symbol = document.getElementById('executionSymbol')?.value || '';
+                const timeRange = document.getElementById('executionTimeRange')?.value || '24h';
+                
+                // 构建查询参数
+                const params = new URLSearchParams();
+                if (marketType !== 'all') params.append('market_type', marketType);
+                if (actionType !== 'all') params.append('action_type', actionType);
+                if (status !== 'all') params.append('status', status);
+                if (symbol) params.append('symbol', symbol);
+                if (timeRange) params.append('time_range', timeRange);
+                
+                const response = await fetch(`/api/strategy/execution/list?${params.toString()}`);
+                const result = await response.json();
+                
+                if (!result.success) {
+                    container.innerHTML = `<div class="placeholder-content"><div class="placeholder-icon" style="color: var(--danger-red);"><i class="bi bi-exclamation-triangle"></i></div><div class="placeholder-text">加载失败</div><div class="placeholder-subtext">${result.error || '未知错误'}</div></div>`;
+                    return;
+                }
+                
+                const executions = result.data || [];
+                
+                if (executions.length === 0) {
+                    container.innerHTML = '<div class="placeholder-content"><div class="placeholder-icon"><i class="bi bi-inbox"></i></div><div class="placeholder-text">暂无执行记录</div><div class="placeholder-subtext">策略执行记录将显示在这里</div></div>';
+                    return;
+                }
+                
+                // 渲染执行记录列表
+                container.innerHTML = executions.map(item => {
+                    const actionIcon = item.action === 'buy' || item.action === 'BUY' || item.action === 'OPEN' || item.action === 'LONG' || item.action === 'SHORT' 
+                        ? '<i class="bi bi-arrow-down-circle" style="color: var(--success-green);"></i>' 
+                        : '<i class="bi bi-arrow-up-circle" style="color: var(--danger-red);"></i>';
+                    const actionText = item.action === 'buy' || item.action === 'BUY' || item.action === 'OPEN' || item.action === 'LONG' 
+                        ? '买入/开仓' 
+                        : item.action === 'SHORT' ? '做空' : '卖出/平仓';
+                    const statusColor = item.status === 'FILLED' ? 'var(--success-green)' : item.status === 'PENDING' ? 'var(--warning-yellow)' : 'var(--text-secondary)';
+                    
+                    return `
+                        <div class="strategy-item" style="margin-bottom: var(--spacing-md);">
+                            <div class="strategy-item-header">
+                                <div class="strategy-item-title">
+                                    ${actionIcon} ${actionText} - ${item.symbol || 'N/A'}
+                                </div>
+                                <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+                                    <span style="padding: 4px 12px; background: ${statusColor}20; color: ${statusColor}; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;">
+                                        ${item.status || 'N/A'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="strategy-item-body">
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">市场类型</div>
+                                    <div class="strategy-item-field-value">${item.market_type === 'futures' ? '合约' : '现货'}</div>
+                                </div>
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">价格</div>
+                                    <div class="strategy-item-field-value">${item.price ? parseFloat(item.price).toFixed(4) : 'N/A'}</div>
+                                </div>
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">数量</div>
+                                    <div class="strategy-item-field-value">${item.quantity ? parseFloat(item.quantity).toFixed(4) : 'N/A'}</div>
+                                </div>
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">金额</div>
+                                    <div class="strategy-item-field-value">${item.amount ? parseFloat(item.amount).toFixed(2) : 'N/A'} USDT</div>
+                                </div>
+                                ${item.leverage ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">杠杆</div>
+                                    <div class="strategy-item-field-value">${item.leverage}x</div>
+                                </div>
+                                ` : ''}
+                                ${item.pnl !== undefined && item.pnl !== null ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">盈亏</div>
+                                    <div class="strategy-item-field-value" style="color: ${parseFloat(item.pnl) >= 0 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                        ${parseFloat(item.pnl) >= 0 ? '+' : ''}${parseFloat(item.pnl).toFixed(2)} USDT
+                                    </div>
+                                </div>
+                                ` : ''}
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">时间</div>
+                                    <div class="strategy-item-field-value">${item.created_at || item.fill_time || 'N/A'}</div>
+                                </div>
+                                ${item.order_source ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">来源</div>
+                                    <div class="strategy-item-field-value">${item.order_source === 'strategy' ? '策略执行' : item.order_source === 'manual' ? '手动' : item.order_source}</div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+            } catch (error) {
+                console.error('加载执行清单失败:', error);
+                container.innerHTML = `<div class="placeholder-content"><div class="placeholder-icon" style="color: var(--danger-red);"><i class="bi bi-exclamation-triangle"></i></div><div class="placeholder-text">加载失败</div><div class="placeholder-subtext">${error.message}</div></div>`;
+            }
+        }
+        
+        // 刷新执行清单
+        function refreshExecutionList() {
+            loadExecutionList();
         }
 
         // 页面加载完成

@@ -73,7 +73,7 @@ news:
     enabled: true
     client_id: 3wDsL3raqIviY2_oWqc-BQ
     client_secret: vd2RKRAIBwAqhfzIncka1hB8BN_sNA
-    proxy: http://127.0.0.1:7890
+    proxy: http://127.0.0.1:7897
     subreddits:
     - CryptoCurrency
     - Bitcoin
@@ -90,7 +90,7 @@ news:
     bearer_token: AAAAAAAAAAAAAAAAAAAAAIyy4wEAAAAAPNUMv1mZeCTVJ%2FQ9xz0K3XaHxb4%3D9UuKff6pLBTojcb8VHcllLeK2QM0y15w0kyKyiA1JlfKW72uI3
     api_key: kROtWxKFuSIDgu8PI5Eld9KSQ
     api_secret: AerreoyB5i0b6IzVuNNDfTCUgEinkl9sTOe5TPTmxwtsTl8DkK
-    proxy: http://127.0.0.1:7890
+    proxy: http://127.0.0.1:7897
     vip_accounts:
     - username: elonmusk
       name: Elon Musk
@@ -113,7 +113,7 @@ news:
   coingecko:
     enabled: true
     api_key: ''
-    proxy: http://127.0.0.1:7890
+    proxy: http://127.0.0.1:7897
   telegram:
     enabled: false
     api_id: ''
@@ -233,7 +233,7 @@ smart_money:
   enabled: true
   etherscan_api_key: IZQFMDIK16MHNG9TKU8ZWKE13SVJ7279Z7
   bscscan_api_key: IZQFMDIK16MHNG9TKU8ZWKE13SVJ7279Z7
-  proxy: http://127.0.0.1:7890
+  proxy: http://127.0.0.1:7897
   min_transaction_usd: 100000
   addresses:
   - address: '0x28C6c06298d514Db089934071355E5743bf21d60'

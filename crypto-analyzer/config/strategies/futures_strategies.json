@@ -7,11 +7,11 @@
     ],
     "leverage": 10,
     "buySignals": "ema_15m",
-    "buyVolumeEnabled": false,
-    "buyVolumeLongEnabled": false,
-    "buyVolumeShortEnabled": false,
-    "buyVolumeLong": null,
-    "buyVolumeShort": null,
+    "buyVolumeEnabled": true,
+    "buyVolumeLongEnabled": true,
+    "buyVolumeShortEnabled": true,
+    "buyVolumeLong": "1.0",
+    "buyVolumeShort": "<0.6",
     "sellSignals": "ema_5m",
     "sellVolumeEnabled": false,
     "sellVolume": null,
@@ -20,11 +20,13 @@
     ],
     "positionSize": 30,
     "maxPositions": 3,
+    "maxLongPositions": 2,
+    "maxShortPositions": 2,
     "longPrice": "market",
     "shortPrice": "market",
     "stopLoss": 3,
     "takeProfit": 9,
-    "ma10Ema10TrendFilter": false,
+    "ma10Ema10TrendFilter": true,
     "minEMACrossStrength": 0,
     "minMA10CrossStrength": 0,
     "minSignalStrength": {
@@ -36,6 +38,21 @@
     "exitOnEMAWeak": true,
     "preventDuplicateEntry": false,
     "minHoldingTimeHours": 0,
+    "rsiFilter": {
+      "enabled": true,
+      "longMax": 70,
+      "shortMin": 30
+    },
+    "macdFilter": {
+      "enabled": true,
+      "longRequirePositive": true,
+      "shortRequireNegative": true
+    },
+    "kdjFilter": {
+      "enabled": true,
+      "longMaxK": 80,
+      "shortMinK": 20
+    },
     "id": 1735123456790,
     "enabled": true
   },
@@ -58,13 +75,15 @@
     "symbols": [
       "SOL/USDT"
     ],
-    "positionSize": 50,
-    "maxPositions": 1,
+    "positionSize": 30,
+    "maxPositions": 3,
+    "maxLongPositions": 2,
+    "maxShortPositions": 2,
     "longPrice": "market",
     "shortPrice": "market",
     "stopLoss": 3,
     "takeProfit": 9,
-    "ma10Ema10TrendFilter": false,
+    "ma10Ema10TrendFilter": true,
     "minEMACrossStrength": 0,
     "minMA10CrossStrength": 0,
     "minSignalStrength": {
@@ -76,6 +95,21 @@
     "exitOnEMAWeak": true,
     "preventDuplicateEntry": false,
     "minHoldingTimeHours": 0,
+    "rsiFilter": {
+      "enabled": true,
+      "longMax": 70,
+      "shortMin": 30
+    },
+    "macdFilter": {
+      "enabled": true,
+      "longRequirePositive": true,
+      "shortRequireNegative": true
+    },
+    "kdjFilter": {
+      "enabled": true,
+      "longMaxK": 80,
+      "shortMinK": 20
+    },
     "id": 1763635511206,
     "enabled": true
   },
@@ -100,6 +134,8 @@
     ],
     "positionSize": 30,
     "maxPositions": 3,
+    "maxLongPositions": null,
+    "maxShortPositions": null,
     "longPrice": "market",
     "shortPrice": "market",
     "stopLoss": 3,
@@ -116,6 +152,21 @@
     "exitOnEMAWeak": true,
     "preventDuplicateEntry": false,
     "minHoldingTimeHours": 0,
+    "rsiFilter": {
+      "enabled": true,
+      "longMax": 70,
+      "shortMin": 30
+    },
+    "macdFilter": {
+      "enabled": true,
+      "longRequirePositive": true,
+      "shortRequireNegative": true
+    },
+    "kdjFilter": {
+      "enabled": true,
+      "longMaxK": 80,
+      "shortMinK": 20
+    },
     "id": 1763636840333,
     "enabled": true
   },
@@ -127,11 +178,11 @@
     ],
     "leverage": 10,
     "buySignals": "ema_15m",
-    "buyVolumeEnabled": true,
-    "buyVolumeLongEnabled": true,
-    "buyVolumeShortEnabled": true,
-    "buyVolumeLong": "1.0",
-    "buyVolumeShort": "<0.6",
+    "buyVolumeEnabled": false,
+    "buyVolumeLongEnabled": false,
+    "buyVolumeShortEnabled": false,
+    "buyVolumeLong": null,
+    "buyVolumeShort": null,
     "sellSignals": "ema_5m",
     "sellVolumeEnabled": false,
     "sellVolume": null,
@@ -140,6 +191,8 @@
     ],
     "positionSize": 30,
     "maxPositions": 3,
+    "maxLongPositions": null,
+    "maxShortPositions": null,
     "longPrice": "market",
     "shortPrice": "market",
     "stopLoss": 3,
@@ -156,7 +209,79 @@
     "exitOnEMAWeak": true,
     "preventDuplicateEntry": false,
     "minHoldingTimeHours": 0,
+    "rsiFilter": {
+      "enabled": false,
+      "longMax": 70,
+      "shortMin": 30
+    },
+    "macdFilter": {
+      "enabled": false,
+      "longRequirePositive": true,
+      "shortRequireNegative": true
+    },
+    "kdjFilter": {
+      "enabled": false,
+      "longMaxK": 80,
+      "shortMinK": 20
+    },
     "id": 1763639600185,
     "enabled": true
+  },
+  {
+    "name": "HYPE",
+    "buyDirection": [
+      "long",
+      "short"
+    ],
+    "leverage": 5,
+    "buySignals": "ema_15m",
+    "buyVolumeEnabled": false,
+    "buyVolumeLongEnabled": false,
+    "buyVolumeShortEnabled": false,
+    "buyVolumeLong": null,
+    "buyVolumeShort": null,
+    "sellSignals": "ema_5m",
+    "sellVolumeEnabled": false,
+    "sellVolume": null,
+    "symbols": [
+      "HYPE/USDT"
+    ],
+    "positionSize": 30,
+    "maxPositions": 3,
+    "maxLongPositions": 2,
+    "maxShortPositions": 2,
+    "longPrice": "market",
+    "shortPrice": "market",
+    "stopLoss": 3,
+    "takeProfit": 9,
+    "ma10Ema10TrendFilter": false,
+    "minEMACrossStrength": 0,
+    "minMA10CrossStrength": 0,
+    "minSignalStrength": {
+      "ema9_26": 0,
+      "ma10_ema10": 0
+    },
+    "trendConfirmBars": 0,
+    "exitOnMAFlip": true,
+    "exitOnEMAWeak": true,
+    "preventDuplicateEntry": false,
+    "minHoldingTimeHours": 0,
+    "rsiFilter": {
+      "enabled": false,
+      "longMax": 70,
+      "shortMin": 30
+    },
+    "macdFilter": {
+      "enabled": false,
+      "longRequirePositive": true,
+      "shortRequireNegative": true
+    },
+    "kdjFilter": {
+      "enabled": false,
+      "longMaxK": 80,
+      "shortMinK": 20
+    },
+    "id": 1763707707256,
+    "enabled": false
   }
 ]

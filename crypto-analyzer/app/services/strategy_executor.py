@@ -168,34 +168,156 @@ class StrategyExecutor:
                         """, (account_id, symbol))
                         existing_positions = cursor.fetchall()
                         
-                        # 获取最新的K线和技术指标
-                        # 买入信号检查
+                        # 获取K线数据并实时计算技术指标
+                        # 买入信号检查：需要至少26根K线来计算EMA26，多获取一些以确保有足够的有效数据
                         cursor.execute("""
-                            SELECT k.*, t.* 
-                            FROM kline_data k
-                            LEFT JOIN technical_indicators_cache t 
-                                ON k.symbol = t.symbol 
-                                AND k.timeframe = t.timeframe
-                                AND k.timestamp = t.updated_at
-                            WHERE k.symbol = %s AND k.timeframe = %s
-                            ORDER BY k.timestamp DESC
-                            LIMIT 2
+                            SELECT * 
+                            FROM kline_data
+                            WHERE symbol = %s AND timeframe = %s
+                            ORDER BY timestamp DESC
+                            LIMIT 50
                         """, (symbol, buy_timeframe))
-                        buy_klines = cursor.fetchall()
+                        buy_klines_raw = cursor.fetchall()
                         
-                        # 卖出信号检查
+                        # 记录K线数据情况
+                        kline_count = len(buy_klines_raw) if buy_klines_raw else 0
+                        logger.info(f"{symbol} 📈 获取到 {kline_count} 根K线数据（时间周期: {buy_timeframe}）")
+                        
+                        # 实时计算技术指标
+                        if buy_klines_raw and len(buy_klines_raw) >= 9:  # 至少需要9根K线才能计算EMA9
+                            import pandas as pd
+                            tech_indicators = TechnicalIndicators()
+                            # 转换为DataFrame（注意：需要按时间正序排列）
+                            df = pd.DataFrame(list(reversed(buy_klines_raw)))
+                            # 重命名列名以匹配技术指标计算所需的格式
+                            if 'close_price' in df.columns:
+                                df['close'] = pd.to_numeric(df['close_price'], errors='coerce')
+                            elif 'close' not in df.columns:
+                                # 如果既没有close_price也没有close，尝试其他可能的列名
+                                logger.error(f"{symbol} ⚠️ DataFrame中找不到close或close_price列，可用列: {df.columns.tolist()}")
+                                raise KeyError("close")
+                            else:
+                                df['close'] = pd.to_numeric(df['close'], errors='coerce')
+                            
+                            # 检查是否有有效的close价格
+                            valid_close_count = df['close'].notna().sum()
+                            logger.info(f"{symbol} 📊 有效收盘价数量: {valid_close_count}/{len(df)}")
+                            
+                            if valid_close_count < 9:
+                                logger.warning(f"{symbol} ⚠️ 有效收盘价不足9个，无法计算EMA指标")
+                            else:
+                                # 计算EMA9（至少需要9根K线）
+                                ema_short_series = tech_indicators.calculate_ema(df, period=9)
+                                ema_short_valid = ema_short_series.notna().sum()
+                                logger.info(f"{symbol} ✅ EMA9计算完成，有效值: {ema_short_valid}/{len(ema_short_series)}")
+                                
+                                # 计算EMA26（需要26根K线，如果不足则返回NaN）
+                                if len(buy_klines_raw) >= 26:
+                                    ema_long_series = tech_indicators.calculate_ema(df, period=26)
+                                    ema_long_valid = ema_long_series.notna().sum()
+                                    logger.info(f"{symbol} ✅ EMA26计算完成，有效值: {ema_long_valid}/{len(ema_long_series)}")
+                                else:
+                                    logger.warning(f"{symbol} ⚠️ K线数据不足26根（当前{kline_count}根），无法计算EMA26，需要至少26根K线")
+                                    ema_long_series = pd.Series([None] * len(df))
+                                
+                                # 计算MA10和EMA10（如果需要）
+                                if len(buy_klines_raw) >= 10:
+                                    ma10_series = tech_indicators.calculate_ma(df, period=10)
+                                    ema10_series = tech_indicators.calculate_ema(df, period=10)
+                                else:
+                                    ma10_series = pd.Series([None] * len(df))
+                                    ema10_series = pd.Series([None] * len(df))
+                                
+                                # 计算MA5和EMA5（如果需要）
+                                if len(buy_klines_raw) >= 5:
+                                    ma5_series = tech_indicators.calculate_ma(df, period=5)
+                                    ema5_series = tech_indicators.calculate_ema(df, period=5)
+                                else:
+                                    ma5_series = pd.Series([None] * len(df))
+                                    ema5_series = pd.Series([None] * len(df))
+                                
+                                # 将指标值添加到K线数据中
+                                ema_short_added = 0
+                                ema_long_added = 0
+                                for i, kline in enumerate(buy_klines_raw):
+                                    idx = len(buy_klines_raw) - 1 - i  # 反转索引
+                                    if idx < len(ema_short_series) and not pd.isna(ema_short_series.iloc[idx]):
+                                        kline['ema_short'] = float(ema_short_series.iloc[idx])
+                                        ema_short_added += 1
+                                    if idx < len(ema_long_series) and not pd.isna(ema_long_series.iloc[idx]):
+                                        kline['ema_long'] = float(ema_long_series.iloc[idx])
+                                        ema_long_added += 1
+                                    if idx < len(ma10_series) and not pd.isna(ma10_series.iloc[idx]):
+                                        kline['ma10'] = float(ma10_series.iloc[idx])
+                                    if idx < len(ema10_series) and not pd.isna(ema10_series.iloc[idx]):
+                                        kline['ema10'] = float(ema10_series.iloc[idx])
+                                    if idx < len(ma5_series) and not pd.isna(ma5_series.iloc[idx]):
+                                        kline['ma5'] = float(ma5_series.iloc[idx])
+                                    if idx < len(ema5_series) and not pd.isna(ema5_series.iloc[idx]):
+                                        kline['ema5'] = float(ema5_series.iloc[idx])
+                                logger.info(f"{symbol} 📝 EMA数据已添加到K线: EMA9={ema_short_added}根, EMA26={ema_long_added}根")
+                        else:
+                            logger.warning(f"{symbol} ⚠️ K线数据不足（需要至少9根，实际{kline_count}根），无法计算EMA指标。请检查数据库中是否有足够的K线数据。")
+                        
+                        # 只取最新的2根K线用于信号检测
+                        buy_klines = buy_klines_raw[:2] if buy_klines_raw else []
+                        
+                        # 卖出信号检查：同样需要计算技术指标，多获取一些以确保有足够的有效数据
                         cursor.execute("""
-                            SELECT k.*, t.* 
-                            FROM kline_data k
-                            LEFT JOIN technical_indicators_cache t 
-                                ON k.symbol = t.symbol 
-                                AND k.timeframe = t.timeframe
-                                AND k.timestamp = t.updated_at
-                            WHERE k.symbol = %s AND k.timeframe = %s
-                            ORDER BY k.timestamp DESC
-                            LIMIT 2
+                            SELECT * 
+                            FROM kline_data
+                            WHERE symbol = %s AND timeframe = %s
+                            ORDER BY timestamp DESC
+                            LIMIT 50
                         """, (symbol, sell_timeframe))
-                        sell_klines = cursor.fetchall()
+                        sell_klines_raw = cursor.fetchall()
+                        
+                        # 实时计算技术指标
+                        if sell_klines_raw and len(sell_klines_raw) >= 26:
+                            import pandas as pd
+                            tech_indicators = TechnicalIndicators()
+                            # 转换为DataFrame（注意：需要按时间正序排列）
+                            df = pd.DataFrame(list(reversed(sell_klines_raw)))
+                            # 重命名列名以匹配技术指标计算所需的格式
+                            if 'close_price' in df.columns:
+                                df['close'] = pd.to_numeric(df['close_price'], errors='coerce')
+                            elif 'close' not in df.columns:
+                                # 如果既没有close_price也没有close，尝试其他可能的列名
+                                logger.error(f"{symbol} ⚠️ DataFrame中找不到close或close_price列，可用列: {df.columns.tolist()}")
+                                raise KeyError("close")
+                            else:
+                                df['close'] = pd.to_numeric(df['close'], errors='coerce')
+                            
+                            # 计算EMA9和EMA26
+                            ema_short_series = tech_indicators.calculate_ema(df, period=9)
+                            ema_long_series = tech_indicators.calculate_ema(df, period=26)
+                            
+                            # 计算MA10和EMA10（如果需要）
+                            ma10_series = tech_indicators.calculate_ma(df, period=10)
+                            ema10_series = tech_indicators.calculate_ema(df, period=10)
+                            
+                            # 计算MA5和EMA5（如果需要）
+                            ma5_series = tech_indicators.calculate_ma(df, period=5)
+                            ema5_series = tech_indicators.calculate_ema(df, period=5)
+                            
+                            # 将指标值添加到K线数据中
+                            for i, kline in enumerate(sell_klines_raw):
+                                idx = len(sell_klines_raw) - 1 - i  # 反转索引
+                                if idx < len(ema_short_series) and not pd.isna(ema_short_series.iloc[idx]):
+                                    kline['ema_short'] = float(ema_short_series.iloc[idx])
+                                if idx < len(ema_long_series) and not pd.isna(ema_long_series.iloc[idx]):
+                                    kline['ema_long'] = float(ema_long_series.iloc[idx])
+                                if idx < len(ma10_series) and not pd.isna(ma10_series.iloc[idx]):
+                                    kline['ma10'] = float(ma10_series.iloc[idx])
+                                if idx < len(ema10_series) and not pd.isna(ema10_series.iloc[idx]):
+                                    kline['ema10'] = float(ema10_series.iloc[idx])
+                                if idx < len(ma5_series) and not pd.isna(ma5_series.iloc[idx]):
+                                    kline['ma5'] = float(ma5_series.iloc[idx])
+                                if idx < len(ema5_series) and not pd.isna(ema5_series.iloc[idx]):
+                                    kline['ema5'] = float(ema5_series.iloc[idx])
+                        
+                        # 只取最新的2根K线用于信号检测
+                        sell_klines = sell_klines_raw[:2] if sell_klines_raw else []
                         
                         if not buy_klines or len(buy_klines) < 2:
                             logger.debug(f"{symbol} K线数据不足（需要2根，实际{len(buy_klines) if buy_klines else 0}根），跳过")
@@ -225,7 +347,14 @@ class StrategyExecutor:
                             latest_kline = buy_klines[0]
                             prev_kline = buy_klines[1]
                             
-                            logger.info(f"{symbol} 📊 检查买入信号（EMA9/26交叉）: 最新K线时间={latest_kline.get('timestamp')}, EMA数据存在={latest_kline.get('ema_short') is not None and latest_kline.get('ema_long') is not None}")
+                            ema_short_exists = latest_kline.get('ema_short') is not None
+                            ema_long_exists = latest_kline.get('ema_long') is not None
+                            logger.info(f"{symbol} 📊 检查买入信号（EMA9/26交叉）: 最新K线时间={latest_kline.get('timestamp')}, EMA9存在={ema_short_exists}, EMA26存在={ema_long_exists}, EMA数据完整={ema_short_exists and ema_long_exists}")
+                            
+                            if not ema_short_exists:
+                                logger.warning(f"{symbol} ⚠️ 最新K线缺少EMA9数据，可能原因：1) K线数据不足9根 2) 收盘价数据无效")
+                            if not ema_long_exists:
+                                logger.warning(f"{symbol} ⚠️ 最新K线缺少EMA26数据，可能原因：1) K线数据不足26根（当前需要至少26根） 2) 收盘价数据无效")
                             
                             if latest_kline.get('ema_short') and latest_kline.get('ema_long'):
                                 ema_short = float(latest_kline['ema_short'])  # EMA9
@@ -416,14 +545,22 @@ class StrategyExecutor:
                                     cursor.execute("""
                                         SELECT k.*, t.* 
                                         FROM kline_data k
-                                        LEFT JOIN technical_indicators_cache t 
-                                            ON k.symbol = t.symbol 
-                                            AND k.timeframe = t.timeframe
-                                            AND k.timestamp = t.updated_at
+                                        LEFT JOIN (
+                                            SELECT t1.* 
+                                            FROM technical_indicators_cache t1
+                                            INNER JOIN (
+                                                SELECT symbol, timeframe, MAX(updated_at) as max_updated_at
+                                                FROM technical_indicators_cache
+                                                WHERE symbol = %s AND timeframe = %s
+                                                GROUP BY symbol, timeframe
+                                            ) t2 ON t1.symbol = t2.symbol 
+                                                AND t1.timeframe = t2.timeframe 
+                                                AND t1.updated_at = t2.max_updated_at
+                                        ) t ON k.symbol = t.symbol AND k.timeframe = t.timeframe
                                         WHERE k.symbol = %s AND k.timeframe = %s
                                         ORDER BY k.timestamp DESC
                                         LIMIT %s
-                                    """, (symbol, buy_timeframe, trend_confirm_bars + 2))
+                                    """, (symbol, buy_timeframe, symbol, buy_timeframe, trend_confirm_bars + 2))
                                     history_klines = cursor.fetchall()
                                     
                                     if len(history_klines) >= trend_confirm_bars + 1:

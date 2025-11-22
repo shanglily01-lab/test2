@@ -1792,3 +1792,195 @@ async def diagnose_trade(request: TradeDiagnosticRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"诊断失败: {str(e)}")
+
+
+@router.get("/execution/list")
+async def get_strategy_execution_list(
+    market_type: Optional[str] = Query(None, description="市场类型: spot, futures, all"),
+    action_type: Optional[str] = Query(None, description="操作类型: buy, sell, all"),
+    status: Optional[str] = Query(None, description="订单状态: FILLED, PENDING, CANCELLED, all"),
+    symbol: Optional[str] = Query(None, description="交易对"),
+    time_range: str = Query("24h", description="时间范围: 1h, 24h, 7d, 30d"),
+    limit: int = Query(100, description="返回数量限制")
+):
+    """
+    获取策略执行清单（整合现货和合约订单）
+    
+    返回所有策略执行的买入、平仓、下单等信息
+    """
+    try:
+        from datetime import datetime, timedelta
+        import pymysql
+        from app.database.db_service import get_db_config
+        
+        # 计算时间范围
+        now = datetime.now()
+        time_delta_map = {
+            '1h': timedelta(hours=1),
+            '24h': timedelta(hours=24),
+            '7d': timedelta(days=7),
+            '30d': timedelta(days=30)
+        }
+        start_time = now - time_delta_map.get(time_range, timedelta(hours=24))
+        
+        db_config = get_db_config()
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            all_executions = []
+            
+            # 获取现货订单（如果market_type为all或spot）
+            if not market_type or market_type == 'all' or market_type == 'spot':
+                spot_sql = """
+                    SELECT 
+                        order_id,
+                        symbol,
+                        side,
+                        order_type,
+                        price,
+                        quantity,
+                        executed_quantity,
+                        executed_amount,
+                        fee,
+                        status,
+                        avg_fill_price,
+                        fill_time,
+                        order_source,
+                        created_at,
+                        'spot' as market_type
+                    FROM paper_trading_orders
+                    WHERE created_at >= %s
+                """
+                spot_params = [start_time]
+                
+                if symbol:
+                    spot_sql += " AND symbol = %s"
+                    spot_params.append(symbol)
+                
+                if status and status != 'all':
+                    spot_sql += " AND status = %s"
+                    spot_params.append(status)
+                
+                if action_type and action_type != 'all':
+                    if action_type == 'buy':
+                        spot_sql += " AND side = 'BUY'"
+                    elif action_type == 'sell':
+                        spot_sql += " AND side = 'SELL'"
+                
+                spot_sql += " ORDER BY created_at DESC LIMIT %s"
+                spot_params.append(limit)
+                
+                cursor.execute(spot_sql, spot_params)
+                spot_orders = cursor.fetchall()
+                
+                for order in spot_orders:
+                    action = 'buy' if order['side'] == 'BUY' else 'sell'
+                    all_executions.append({
+                        'id': order['order_id'],
+                        'market_type': 'spot',
+                        'action': action,
+                        'symbol': order['symbol'],
+                        'price': float(order['avg_fill_price']) if order['avg_fill_price'] else float(order['price']) if order['price'] else None,
+                        'quantity': float(order['executed_quantity']) if order['executed_quantity'] else float(order['quantity']),
+                        'amount': float(order['executed_amount']) if order['executed_amount'] else None,
+                        'fee': float(order['fee']) if order['fee'] else 0,
+                        'status': order['status'],
+                        'created_at': order['fill_time'].strftime('%Y-%m-%d %H:%M:%S') if order['fill_time'] else (order['created_at'].strftime('%Y-%m-%d %H:%M:%S') if order['created_at'] else None),
+                        'order_source': order['order_source'],
+                        'leverage': None,
+                        'pnl': None
+                    })
+            
+            # 获取合约订单（如果market_type为all或futures）
+            if not market_type or market_type == 'all' or market_type == 'futures':
+                futures_sql = """
+                    SELECT 
+                        order_id,
+                        symbol,
+                        side,
+                        order_type,
+                        price,
+                        quantity,
+                        executed_quantity,
+                        executed_value,
+                        fee,
+                        status,
+                        avg_fill_price,
+                        fill_time,
+                        order_source,
+                        leverage,
+                        realized_pnl,
+                        created_at,
+                        'futures' as market_type
+                    FROM futures_orders
+                    WHERE created_at >= %s
+                """
+                futures_params = [start_time]
+                
+                if symbol:
+                    futures_sql += " AND symbol = %s"
+                    futures_params.append(symbol)
+                
+                if status and status != 'all':
+                    futures_sql += " AND status = %s"
+                    futures_params.append(status)
+                
+                if action_type and action_type != 'all':
+                    if action_type == 'buy':
+                        futures_sql += " AND (side LIKE 'OPEN_%' OR side = 'LONG')"
+                    elif action_type == 'sell':
+                        futures_sql += " AND (side LIKE 'CLOSE_%' OR side = 'SELL')"
+                
+                futures_sql += " ORDER BY created_at DESC LIMIT %s"
+                futures_params.append(limit)
+                
+                cursor.execute(futures_sql, futures_params)
+                futures_orders = cursor.fetchall()
+                
+                for order in futures_orders:
+                    side = order['side']
+                    if side.startswith('OPEN_') or side == 'LONG':
+                        action = 'buy'
+                    elif side.startswith('CLOSE_'):
+                        action = 'sell'
+                    else:
+                        action = 'sell' if 'SELL' in side else 'buy'
+                    
+                    all_executions.append({
+                        'id': order['order_id'],
+                        'market_type': 'futures',
+                        'action': action,
+                        'symbol': order['symbol'],
+                        'price': float(order['avg_fill_price']) if order['avg_fill_price'] else float(order['price']) if order['price'] else None,
+                        'quantity': float(order['executed_quantity']) if order['executed_quantity'] else float(order['quantity']),
+                        'amount': float(order['executed_value']) if order['executed_value'] else None,
+                        'fee': float(order['fee']) if order['fee'] else 0,
+                        'status': order['status'],
+                        'created_at': order['fill_time'].strftime('%Y-%m-%d %H:%M:%S') if order['fill_time'] else (order['created_at'].strftime('%Y-%m-%d %H:%M:%S') if order['created_at'] else None),
+                        'order_source': order['order_source'],
+                        'leverage': int(order['leverage']) if order['leverage'] else None,
+                        'pnl': float(order['realized_pnl']) if order['realized_pnl'] is not None else None
+                    })
+            
+            # 按时间排序（最新的在前）
+            all_executions.sort(key=lambda x: x['created_at'] or '', reverse=True)
+            
+            # 限制返回数量
+            all_executions = all_executions[:limit]
+            
+            return {
+                'success': True,
+                'data': all_executions,
+                'count': len(all_executions)
+            }
+            
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"获取策略执行清单失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取执行清单失败: {str(e)}")

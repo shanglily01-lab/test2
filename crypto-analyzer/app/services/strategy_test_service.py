@@ -111,6 +111,8 @@ class StrategyTestService:
                 sell_volume = request.get('sellVolume')
                 position_size = request.get('positionSize', 10)
                 max_positions = request.get('maxPositions')  # 最大持仓数
+                max_long_positions = request.get('maxLongPositions')  # 最大做多持仓数
+                max_short_positions = request.get('maxShortPositions')  # 最大做空持仓数
                 long_price_type = request.get('longPrice', 'market')
                 short_price_type = request.get('shortPrice', 'market')
                 stop_loss_pct = request.get('stopLoss')
@@ -129,6 +131,27 @@ class StrategyTestService:
                 prevent_duplicate_entry = request.get('preventDuplicateEntry', False)  # 防止重复开仓
                 min_holding_time_hours = request.get('minHoldingTimeHours', 0)  # 最小持仓时间（小时）
                 fee_rate = request.get('feeRate', 0.0004)
+                
+                # 新指标过滤配置
+                rsi_filter = request.get('rsiFilter', {})
+                rsi_filter_enabled = rsi_filter.get('enabled', False) if isinstance(rsi_filter, dict) else False
+                rsi_long_max = rsi_filter.get('longMax', 70) if isinstance(rsi_filter, dict) else 70
+                rsi_short_min = rsi_filter.get('shortMin', 30) if isinstance(rsi_filter, dict) else 30
+                
+                macd_filter = request.get('macdFilter', {})
+                macd_filter_enabled = macd_filter.get('enabled', False) if isinstance(macd_filter, dict) else False
+                macd_long_require_positive = macd_filter.get('longRequirePositive', True) if isinstance(macd_filter, dict) else True
+                macd_short_require_negative = macd_filter.get('shortRequireNegative', True) if isinstance(macd_filter, dict) else True
+                
+                kdj_filter = request.get('kdjFilter', {})
+                kdj_filter_enabled = kdj_filter.get('enabled', False) if isinstance(kdj_filter, dict) else False
+                kdj_long_max_k = kdj_filter.get('longMaxK', 80) if isinstance(kdj_filter, dict) else 80
+                kdj_short_min_k = kdj_filter.get('shortMinK', 20) if isinstance(kdj_filter, dict) else 20
+                kdj_allow_strong_signal = kdj_filter.get('allowStrongSignal', False) if isinstance(kdj_filter, dict) else False
+                kdj_strong_signal_threshold = kdj_filter.get('strongSignalThreshold', 1.0) if isinstance(kdj_filter, dict) else 1.0
+                
+                bollinger_filter = request.get('bollingerFilter', {})
+                bollinger_filter_enabled = bollinger_filter.get('enabled', False) if isinstance(bollinger_filter, dict) else False
                 
                 # 确定买入和卖出的时间周期
                 timeframe_map = {
@@ -269,7 +292,21 @@ class StrategyTestService:
                         exit_on_ema_weak=exit_on_ema_weak,
                         prevent_duplicate_entry=prevent_duplicate_entry,
                         min_holding_time_hours=min_holding_time_hours,
-                        fee_rate=fee_rate
+                        fee_rate=fee_rate,
+                        max_long_positions=max_long_positions,
+                        max_short_positions=max_short_positions,
+                        rsi_filter_enabled=rsi_filter_enabled,
+                        rsi_long_max=rsi_long_max,
+                        rsi_short_min=rsi_short_min,
+                        macd_filter_enabled=macd_filter_enabled,
+                        macd_long_require_positive=macd_long_require_positive,
+                        macd_short_require_negative=macd_short_require_negative,
+                        kdj_filter_enabled=kdj_filter_enabled,
+                        kdj_long_max_k=kdj_long_max_k,
+                        kdj_short_min_k=kdj_short_min_k,
+                        kdj_allow_strong_signal=kdj_allow_strong_signal,
+                        kdj_strong_signal_threshold=kdj_strong_signal_threshold,
+                        bollinger_filter_enabled=bollinger_filter_enabled
                     )
                     
                     results.append(result)
@@ -519,6 +556,20 @@ class StrategyTestService:
         prevent_duplicate_entry = kwargs.get('prevent_duplicate_entry', False)  # 防止重复开仓
         min_holding_time_hours = kwargs.get('min_holding_time_hours', 0)  # 最小持仓时间（小时）
         fee_rate = kwargs.get('fee_rate', 0.0004)
+        max_long_positions = kwargs.get('max_long_positions')  # 最大做多持仓数
+        max_short_positions = kwargs.get('max_short_positions')  # 最大做空持仓数
+        rsi_filter_enabled = kwargs.get('rsi_filter_enabled', False)
+        rsi_long_max = kwargs.get('rsi_long_max', 70)
+        rsi_short_min = kwargs.get('rsi_short_min', 30)
+        macd_filter_enabled = kwargs.get('macd_filter_enabled', False)
+        macd_long_require_positive = kwargs.get('macd_long_require_positive', True)
+        macd_short_require_negative = kwargs.get('macd_short_require_negative', True)
+        kdj_filter_enabled = kwargs.get('kdj_filter_enabled', False)
+        kdj_long_max_k = kwargs.get('kdj_long_max_k', 80)
+        kdj_short_min_k = kwargs.get('kdj_short_min_k', 20)
+        kdj_allow_strong_signal = kwargs.get('kdj_allow_strong_signal', False)
+        kdj_strong_signal_threshold = kwargs.get('kdj_strong_signal_threshold', 1.0)
+        bollinger_filter_enabled = kwargs.get('bollinger_filter_enabled', False)
         
         # 模拟交易
         trades = []
@@ -587,6 +638,8 @@ class StrategyTestService:
                     ma_ema5_data = indicators_result.get('ma_ema5', {})
                     volume_data = indicators_result.get('volume', {})
                     rsi_data = indicators_result.get('rsi', {})
+                    macd_data = indicators_result.get('macd', {})
+                    kdj_data = indicators_result.get('kdj', {})
                     
                     ema_short = ema_data.get('short') if isinstance(ema_data, dict) else None
                     ema_long = ema_data.get('long') if isinstance(ema_data, dict) else None
@@ -603,6 +656,8 @@ class StrategyTestService:
                         if vol_ma20 > 0:
                             volume_ratio = vol_current / vol_ma20
                     rsi_value = rsi_data.get('value') if isinstance(rsi_data, dict) else None
+                    macd_histogram = macd_data.get('histogram') if isinstance(macd_data, dict) else None
+                    kdj_k = kdj_data.get('k') if isinstance(kdj_data, dict) else None
                     
                     # 如果无法从analyze结果获取，尝试从DataFrame获取
                     if ema_short is None and 'ema_short' in df.columns:
@@ -619,6 +674,12 @@ class StrategyTestService:
                             vol_ma20 = float(df['vol_ma20'].iloc[-1])
                             if vol_ma20 > 0:
                                 volume_ratio = vol_current / vol_ma20
+                    if rsi_value is None and 'rsi' in df.columns:
+                        rsi_value = float(df['rsi'].iloc[-1]) if not pd.isna(df['rsi'].iloc[-1]) else None
+                    if macd_histogram is None and 'macd_histogram' in df.columns:
+                        macd_histogram = float(df['macd_histogram'].iloc[-1]) if not pd.isna(df['macd_histogram'].iloc[-1]) else None
+                    if kdj_k is None and 'kdj_k' in df.columns:
+                        kdj_k = float(df['kdj_k'].iloc[-1]) if not pd.isna(df['kdj_k'].iloc[-1]) else None
                     
                     indicator_pairs.append({
                         'kline': test_kline,
@@ -630,7 +691,9 @@ class StrategyTestService:
                             'ma5': ma5,
                             'ema5': ema5,
                             'volume_ratio': volume_ratio,
-                            'rsi_value': rsi_value,
+                            'rsi': rsi_value,
+                            'macd_histogram': macd_histogram,
+                            'kdj_k': kdj_k,
                             'updated_at': test_kline_time
                         }
                     })
@@ -943,6 +1006,64 @@ class StrategyTestService:
                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA金叉但{volume_reason}")
                             continue
                         
+                        # 检查同方向持仓限制
+                        if direction == 'long' and max_long_positions is not None:
+                            long_positions_count = len([p for p in positions if p['direction'] == 'long'])
+                            if long_positions_count >= max_long_positions:
+                                can_open_position = False
+                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 已达到最大做多持仓数限制（{max_long_positions}个），当前做多持仓{long_positions_count}个，跳过买入信号")
+                                continue
+                        elif direction == 'short' and max_short_positions is not None:
+                            short_positions_count = len([p for p in positions if p['direction'] == 'short'])
+                            if short_positions_count >= max_short_positions:
+                                can_open_position = False
+                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 已达到最大做空持仓数限制（{max_short_positions}个），当前做空持仓{short_positions_count}个，跳过买入信号")
+                                continue
+                        
+                        # 检查 RSI 过滤
+                        if rsi_filter_enabled:
+                            rsi_value = float(indicator.get('rsi')) if indicator.get('rsi') else None
+                            if rsi_value is not None:
+                                if direction == 'long' and rsi_value > rsi_long_max:
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做多时RSI过高 (RSI={rsi_value:.2f} > {rsi_long_max})，已过滤")
+                                    continue
+                                elif direction == 'short' and rsi_value < rsi_short_min:
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤")
+                                    continue
+                        
+                        # 检查 MACD 过滤
+                        if macd_filter_enabled:
+                            macd_histogram = float(indicator.get('macd_histogram')) if indicator.get('macd_histogram') else None
+                            if macd_histogram is not None:
+                                if direction == 'long' and macd_long_require_positive and macd_histogram <= 0:
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MACD过滤：做多时MACD柱状图非正 (MACD={macd_histogram:.4f})，已过滤")
+                                    continue
+                                elif direction == 'short' and macd_short_require_negative and macd_histogram >= 0:
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MACD过滤：做空时MACD柱状图非负 (MACD={macd_histogram:.4f})，已过滤")
+                                    continue
+                        
+                        # 检查 KDJ 过滤
+                        if kdj_filter_enabled:
+                            kdj_k = float(indicator.get('kdj_k')) if indicator.get('kdj_k') else None
+                            if kdj_k is not None:
+                                # 检查是否为强信号（EMA差值百分比）
+                                # curr_diff_pct 在前面已经计算（第790行）
+                                ema_diff_pct_abs = abs(curr_diff_pct) if 'curr_diff_pct' in locals() and curr_diff_pct is not None else 0
+                                is_strong_signal = kdj_allow_strong_signal and ema_diff_pct_abs >= kdj_strong_signal_threshold
+                                
+                                if direction == 'long' and kdj_k > kdj_long_max_k:
+                                    if is_strong_signal:
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做多时KDJ K值过高 (K={kdj_k:.2f} > {kdj_long_max_k})，但EMA信号强度足够 (差值={ema_diff_pct_abs:.2f}% ≥ {kdj_strong_signal_threshold}%)，允许通过")
+                                    else:
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做多时KDJ K值过高 (K={kdj_k:.2f} > {kdj_long_max_k})，已过滤")
+                                        continue
+                                elif direction == 'short' and kdj_k < kdj_short_min_k:
+                                    if is_strong_signal:
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做空时KDJ K值过低 (K={kdj_k:.2f} < {kdj_short_min_k})，但EMA信号强度足够 (差值={ema_diff_pct_abs:.2f}% ≥ {kdj_strong_signal_threshold}%)，允许通过")
+                                    else:
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做空时KDJ K值过低 (K={kdj_k:.2f} < {kdj_short_min_k})，已过滤")
+                                        continue
+                        
                         # 检查 MA10/EMA10 信号强度（如果配置了）
                         ma10_ema10_ok = True
                         if ma10 and ema10:
@@ -1181,7 +1302,7 @@ class StrategyTestService:
                             
                             direction_text = "做多" if direction == 'long' else "做空"
                             qty_precision = self.get_quantity_precision(symbol)
-                            debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={entry_price:.4f}，数量={quantity:.{qty_precision}f}，开仓手续费={open_fee:.4f}，余额={balance:.2f}")
+                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={entry_price:.4f}，数量={quantity:.{qty_precision}f}，开仓手续费={open_fee:.4f}，余额={balance:.2f}")
             
             # 如果是卖出时间点，检查卖出信号
             elif time_point['type'] == 'sell' and len(positions) > 0:
@@ -1503,7 +1624,8 @@ class StrategyTestService:
                         closed_at_current_time = True
                         
                         qty_precision = self.get_quantity_precision(symbol)
-                        debug_info.append(f"{current_time.strftime('%Y-%m-%d %H:%M')}: ✅ 平仓{direction_text} | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={quantity:.{qty_precision}f}, 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%), 余额={balance:.2f}")
+                        current_time_local = self.utc_to_local(current_time)
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 平仓{direction_text} | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={quantity:.{qty_precision}f}, 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%), 余额={balance:.2f}")
         
         # 计算最终盈亏（平掉所有未平仓的持仓）
         final_balance = balance

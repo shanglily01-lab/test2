@@ -74,7 +74,6 @@ enhanced_dashboard = None
 price_cache_service = None  # 价格缓存服务
 pending_order_executor = None  # 待成交订单自动执行器（现货限价单）
 futures_limit_order_executor = None  # 合约限价单自动执行器
-strategy_executor = None  # 策略自动执行器
 futures_monitor_service = None  # 合约止盈止损监控服务
 
 
@@ -86,7 +85,7 @@ async def lifespan(app: FastAPI):
 
     global config, price_collector, news_aggregator
     global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
-    global pending_order_executor, futures_limit_order_executor, strategy_executor, futures_monitor_service
+    global pending_order_executor, futures_limit_order_executor, futures_monitor_service
 
     # 加载配置
     config_path = project_root / "config.yaml"
@@ -220,24 +219,6 @@ async def lifespan(app: FastAPI):
             traceback.print_exc()
             futures_limit_order_executor = None
 
-        # 初始化策略自动执行器
-        try:
-            from app.services.strategy_executor import StrategyExecutor
-            from app.trading.futures_trading_engine import FuturesTradingEngine
-            
-            db_config = config.get('database', {}).get('mysql', {})
-            futures_engine = FuturesTradingEngine(db_config)
-            strategy_executor = StrategyExecutor(
-                db_config=db_config,
-                futures_engine=futures_engine
-            )
-            logger.info("✅ 策略自动执行服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  策略自动执行服务初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-            strategy_executor = None
-
         # 初始化合约止盈止损监控服务
         try:
             from app.trading.futures_monitor_service import FuturesMonitorService
@@ -267,7 +248,6 @@ async def lifespan(app: FastAPI):
         price_cache_service = None
         pending_order_executor = None
         futures_limit_order_executor = None
-        strategy_executor = None
         futures_monitor_service = None
         logger.warning("⚠️  系统以降级模式运行")
 
@@ -301,7 +281,8 @@ async def lifespan(app: FastAPI):
                 """合约止盈止损监控循环（每5秒）"""
                 while True:
                     try:
-                        futures_monitor_service.monitor_positions()
+                        # 使用 asyncio.to_thread 在线程池中执行同步方法，避免阻塞事件循环
+                        await asyncio.to_thread(futures_monitor_service.monitor_positions)
                     except Exception as e:
                         logger.error(f"合约止盈止损监控出错: {e}")
                     await asyncio.sleep(5)
@@ -311,18 +292,6 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"⚠️  启动合约止盈止损监控任务失败: {e}")
             futures_monitor_service = None
-    
-    # 启动策略自动执行服务
-    if strategy_executor:
-        try:
-            import asyncio
-            strategy_executor.task = asyncio.create_task(strategy_executor.run_loop(interval=5))
-            logger.info("✅ 策略自动执行服务已启动（每5秒检查）")
-        except Exception as e:
-            logger.warning(f"⚠️  启动策略自动执行任务失败: {e}")
-            import traceback
-            traceback.print_exc()
-            strategy_executor = None
 
     yield
 
@@ -352,14 +321,6 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 合约止盈止损监控服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止合约止盈止损监控服务失败: {e}")
-    
-    # 停止策略自动执行服务
-    if strategy_executor:
-        try:
-            strategy_executor.stop()
-            logger.info("✅ 策略自动执行服务已停止")
-        except Exception as e:
-            logger.warning(f"⚠️  停止策略自动执行服务失败: {e}")
 
     # 停止价格缓存服务
     if price_cache_service:
@@ -1018,24 +979,241 @@ async def get_strategies():
 @app.post("/api/strategy/execute")
 async def execute_strategy(request: dict):
     """
-    执行单个策略
+    执行单个策略（功能已禁用）
     
-    Args:
-        request: 包含策略配置的字典
+    注意：策略自动执行功能已被移除，此端点仅用于兼容性
     """
-    global strategy_executor
-    if not strategy_executor:
-        return {'success': False, 'message': '策略执行器未初始化'}
+    return {
+        'success': False,
+        'message': '策略自动执行功能已禁用。策略由前端localStorage管理，请使用策略测试功能进行回测。'
+    }
+
+@app.get("/api/strategy/execution/list")
+async def get_strategy_execution_list(
+    market_type: Optional[str] = Query(None, description="市场类型: spot, futures, all"),
+    action_type: Optional[str] = Query(None, description="操作类型: buy, sell, all"),
+    status: Optional[str] = Query(None, description="订单状态: FILLED, PENDING, CANCELLED, all"),
+    symbol: Optional[str] = Query(None, description="交易对"),
+    time_range: str = Query("24h", description="时间范围: 1h, 24h, 7d, 30d"),
+    limit: int = Query(100, description="返回数量限制")
+):
+    """
+    获取策略执行清单（整合现货和合约订单）
     
+    返回所有策略执行的买入、平仓、下单等信息
+    """
     try:
-        result = await strategy_executor.execute_strategy(
-            strategy=request,
-            account_id=request.get('account_id', 2)
-        )
-        return result
+        from datetime import datetime, timedelta
+        import pymysql
+        
+        # 计算时间范围（如果没有指定或为空，默认查询最近30天）
+        now = datetime.now()
+        time_delta_map = {
+            '1h': timedelta(hours=1),
+            '24h': timedelta(hours=24),
+            '7d': timedelta(days=7),
+            '30d': timedelta(days=30),
+            'all': timedelta(days=365)  # 支持查询所有数据
+        }
+        # 如果没有指定时间范围或为空，默认查询最近30天
+        if not time_range or time_range == '':
+            time_range = '30d'
+        start_time = now - time_delta_map.get(time_range, timedelta(days=30))
+        
+        db_config = config.get('database', {}).get('mysql', {})
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            all_executions = []
+            
+            # 获取现货订单（如果market_type为all或spot）
+            if not market_type or market_type == 'all' or market_type == 'spot':
+                # 先检查表是否存在
+                cursor.execute("""
+                    SELECT COUNT(*) as count 
+                    FROM information_schema.tables 
+                    WHERE table_schema = DATABASE() 
+                    AND table_name = 'paper_trading_orders'
+                """)
+                table_exists = cursor.fetchone()['count'] > 0
+                
+                if table_exists:
+                    spot_sql = """
+                        SELECT 
+                            order_id,
+                            symbol,
+                            side,
+                            order_type,
+                            price,
+                            quantity,
+                            executed_quantity,
+                            executed_amount,
+                            fee,
+                            status,
+                            avg_fill_price,
+                            fill_time,
+                            COALESCE(order_source, 'manual') as order_source,
+                            created_at,
+                            'spot' as market_type
+                        FROM paper_trading_orders
+                        WHERE created_at >= %s
+                    """
+                    spot_params = [start_time]
+                    
+                    if symbol:
+                        spot_sql += " AND symbol = %s"
+                        spot_params.append(symbol)
+                    
+                    if status and status != 'all':
+                        spot_sql += " AND status = %s"
+                        spot_params.append(status)
+                    
+                    if action_type and action_type != 'all':
+                        if action_type == 'buy':
+                            spot_sql += " AND side = 'BUY'"
+                        elif action_type == 'sell':
+                            spot_sql += " AND side = 'SELL'"
+                    
+                    spot_sql += " ORDER BY created_at DESC LIMIT %s"
+                    spot_params.append(limit)
+                
+                    cursor.execute(spot_sql, spot_params)
+                    spot_orders = cursor.fetchall()
+                else:
+                    spot_orders = []
+                
+                for order in spot_orders:
+                    action = 'buy' if order['side'] == 'BUY' else 'sell'
+                    all_executions.append({
+                        'id': order['order_id'],
+                        'market_type': 'spot',
+                        'action': action,
+                        'symbol': order['symbol'],
+                        'price': float(order['avg_fill_price']) if order['avg_fill_price'] else float(order['price']) if order['price'] else None,
+                        'quantity': float(order['executed_quantity']) if order['executed_quantity'] else float(order['quantity']),
+                        'amount': float(order['executed_amount']) if order['executed_amount'] else None,
+                        'fee': float(order['fee']) if order['fee'] else 0,
+                        'status': order['status'],
+                        'created_at': order['fill_time'].strftime('%Y-%m-%d %H:%M:%S') if order['fill_time'] else (order['created_at'].strftime('%Y-%m-%d %H:%M:%S') if order['created_at'] else None),
+                        'order_source': order['order_source'],
+                        'leverage': None,
+                        'pnl': None
+                    })
+            
+            # 获取合约订单（如果market_type为all或futures）
+            if not market_type or market_type == 'all' or market_type == 'futures':
+                # 先检查表是否存在
+                cursor.execute("""
+                    SELECT COUNT(*) as count 
+                    FROM information_schema.tables 
+                    WHERE table_schema = DATABASE() 
+                    AND table_name = 'futures_orders'
+                """)
+                table_exists = cursor.fetchone()['count'] > 0
+                
+                if table_exists:
+                    futures_sql = """
+                        SELECT 
+                            order_id,
+                            symbol,
+                            side,
+                            order_type,
+                            price,
+                            quantity,
+                            executed_quantity,
+                            executed_value,
+                            fee,
+                            status,
+                            avg_fill_price,
+                            fill_time,
+                            COALESCE(order_source, 'manual') as order_source,
+                            leverage,
+                            realized_pnl,
+                            created_at,
+                            'futures' as market_type
+                        FROM futures_orders
+                        WHERE created_at >= %s
+                    """
+                    futures_params = [start_time]
+                    
+                    if symbol:
+                        futures_sql += " AND symbol = %s"
+                        futures_params.append(symbol)
+                    
+                    if status and status != 'all':
+                        futures_sql += " AND status = %s"
+                        futures_params.append(status)
+                    
+                    if action_type and action_type != 'all':
+                        if action_type == 'buy':
+                            futures_sql += " AND (side LIKE 'OPEN_%' OR side = 'LONG')"
+                        elif action_type == 'sell':
+                            futures_sql += " AND (side LIKE 'CLOSE_%' OR side = 'SELL')"
+                    
+                    futures_sql += " ORDER BY created_at DESC LIMIT %s"
+                    futures_params.append(limit)
+                
+                    cursor.execute(futures_sql, futures_params)
+                    futures_orders = cursor.fetchall()
+                else:
+                    futures_orders = []
+                
+                for order in futures_orders:
+                    side = order['side']
+                    if side.startswith('OPEN_') or side == 'LONG':
+                        action = 'buy'
+                    elif side.startswith('CLOSE_'):
+                        action = 'sell'
+                    else:
+                        action = 'sell' if 'SELL' in side else 'buy'
+                    
+                    all_executions.append({
+                        'id': order['order_id'],
+                        'market_type': 'futures',
+                        'action': action,
+                        'symbol': order['symbol'],
+                        'price': float(order['avg_fill_price']) if order['avg_fill_price'] else float(order['price']) if order['price'] else None,
+                        'quantity': float(order['executed_quantity']) if order['executed_quantity'] else float(order['quantity']),
+                        'amount': float(order['executed_value']) if order['executed_value'] else None,
+                        'fee': float(order['fee']) if order['fee'] else 0,
+                        'status': order['status'],
+                        'created_at': order['fill_time'].strftime('%Y-%m-%d %H:%M:%S') if order['fill_time'] else (order['created_at'].strftime('%Y-%m-%d %H:%M:%S') if order['created_at'] else None),
+                        'order_source': order['order_source'],
+                        'leverage': float(order['leverage']) if order['leverage'] else None,
+                        'pnl': float(order['realized_pnl']) if order['realized_pnl'] else None
+                    })
+            
+            # 按创建时间排序
+            all_executions.sort(key=lambda x: x['created_at'] or '', reverse=True)
+            
+            # 如果没有任何数据，返回提示信息
+            if len(all_executions) == 0:
+                return {
+                    'success': True,
+                    'data': [],
+                    'total': 0,
+                    'message': f'在最近{time_range}内没有找到订单数据。可能的原因：1) 数据库中确实没有订单记录 2) 时间范围筛选太严格（当前：{time_range}）3) 筛选条件不匹配。建议：尝试扩大时间范围或清除筛选条件。'
+                }
+            
+            return {
+                'success': True,
+                'data': all_executions,
+                'total': len(all_executions)
+            }
+            
+        finally:
+            cursor.close()
+            connection.close()
+            
     except Exception as e:
-        logger.error(f"执行策略失败: {e}")
-        return {'success': False, 'message': str(e)}
+        logger.error(f"获取策略执行清单失败: {e}", exc_info=True)
+        return {
+            'success': False,
+            'error': str(e),
+            'data': [],
+            'total': 0
+        }
 
 @app.post("/api/strategy/test")
 async def test_strategy(request: dict):

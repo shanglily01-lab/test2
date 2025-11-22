@@ -113,9 +113,15 @@ class UnifiedDataScheduler:
         # 1.5 合约数据采集器 (Binance Futures)
         futures_config = self.config.get('binance_futures', {})
         if futures_config.get('enabled', True):  # 默认启用
-            binance_config = self.config.get('exchanges', {}).get('binance', {})
-            self.futures_collector = BinanceFuturesCollector(binance_config)
-            logger.info("  ✓ 合约数据采集器 (Binance Futures)")
+            try:
+                binance_config = self.config.get('exchanges', {}).get('binance', {})
+                self.futures_collector = BinanceFuturesCollector(binance_config)
+                logger.info("  ✓ 合约数据采集器 (Binance Futures)")
+            except Exception as e:
+                logger.warning(f"  ⚠️  合约数据采集器初始化失败: {e}")
+                logger.debug(f"  错误详情: {type(e).__name__}: {str(e)}")
+                self.futures_collector = None
+                logger.info("  ⊗ 合约数据采集器 (初始化失败，将跳过合约数据采集)")
         else:
             self.futures_collector = None
             logger.info("  ⊗ 合约数据采集器 (未启用)")

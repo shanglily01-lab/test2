@@ -34,16 +34,48 @@ class BinanceFuturesCollector:
         api_key = self.config.get('api_key', '').strip()
         api_secret = self.config.get('api_secret', '').strip()
 
-        # 初始化币安客户端
-        if api_key and api_secret:
-            self.client = Client(api_key, api_secret)
-            logger.info("初始化币安合约采集器 (使用API密钥)")
-        else:
-            self.client = Client("", "")
-            logger.info("初始化币安合约采集器 (公开接口模式)")
+        # 初始化币安客户端（捕获连接错误）
+        try:
+            if api_key and api_secret:
+                self.client = Client(api_key, api_secret)
+                logger.info("初始化币安合约采集器 (使用API密钥)")
+            else:
+                self.client = Client("", "")
+                logger.info("初始化币安合约采集器 (公开接口模式)")
+        except (ConnectionError, requests.exceptions.ConnectionError, Exception) as e:
+            logger.warning(f"币安合约采集器初始化失败（连接错误）: {e}")
+            logger.debug(f"错误类型: {type(e).__name__}, 错误详情: {str(e)}")
+            self.client = None
+            logger.info("币安合约采集器将在首次使用时重试连接")
 
         # 创建带重试的 requests session
         self.session = self._create_session()
+    
+    def _ensure_client(self):
+        """
+        确保客户端已初始化，如果未初始化则尝试重新初始化
+        
+        Returns:
+            bool: 客户端是否可用
+        """
+        if self.client is not None:
+            return True
+        
+        # 尝试重新初始化客户端
+        try:
+            api_key = self.config.get('api_key', '').strip()
+            api_secret = self.config.get('api_secret', '').strip()
+            
+            if api_key and api_secret:
+                self.client = Client(api_key, api_secret)
+                logger.info("币安合约采集器客户端重新初始化成功 (使用API密钥)")
+            else:
+                self.client = Client("", "")
+                logger.info("币安合约采集器客户端重新初始化成功 (公开接口模式)")
+            return True
+        except Exception as e:
+            logger.debug(f"币安合约采集器客户端重新初始化失败: {e}")
+            return False
 
     def _create_session(self):
         """创建带重试机制的 requests session"""
