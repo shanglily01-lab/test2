@@ -54,6 +54,7 @@ def round_quantity(quantity: Decimal, symbol: str) -> Decimal:
 
 from app.trading.futures_trading_engine import FuturesTradingEngine
 from app.analyzers.technical_indicators import TechnicalIndicators
+from app.services.strategy_hit_recorder import StrategyHitRecorder
 
 
 class StrategyExecutor:
@@ -72,6 +73,7 @@ class StrategyExecutor:
         self.running = False
         self.task = None
         self.technical_analyzer = TechnicalIndicators()
+        self.hit_recorder = StrategyHitRecorder(db_config)  # 策略命中记录器
         
     def _get_connection(self):
         """获取数据库连接"""
@@ -362,7 +364,7 @@ class StrategyExecutor:
                                 prev_ema_short = float(prev_kline.get('ema_short', 0)) if prev_kline.get('ema_short') else None
                                 prev_ema_long = float(prev_kline.get('ema_long', 0)) if prev_kline.get('ema_long') else None
                                 
-                                logger.info(f"{symbol} ✅ EMA数据完整: 当前EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 前EMA9={prev_ema_short}, 前EMA26={prev_ema_long}")
+                                logger.debug(f"{symbol} ✅ EMA数据完整: 当前EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 前EMA9={prev_ema_short}, 前EMA26={prev_ema_long}")
                                 
                                 if prev_ema_short is None or prev_ema_long is None:
                                     logger.info(f"{symbol} ⚠️ 前一根K线缺少EMA数据，跳过交叉检测（前EMA9={prev_ema_short}, 前EMA26={prev_ema_long}）")
@@ -410,16 +412,62 @@ class StrategyExecutor:
                                     # 记录为什么没有触发信号
                                     if is_golden_cross and 'long' not in buy_directions:
                                         logger.info(f"{symbol} ⚠️ 检测到向上穿越，但未配置做多方向（buyDirection={buy_directions}）")
+                                        # 即使方向未配置，也记录这个信号（用于分析）
+                                        hit_signal_type = 'BUY_LONG'
+                                        logger.info(f"{symbol} 📝 准备记录命中信息（方向未配置）: 策略={strategy.get('name')}, 信号={hit_signal_type}")
+                                        try:
+                                            result = self.hit_recorder.record_signal_hit(
+                                                strategy=strategy,
+                                                symbol=symbol,
+                                                signal_type=hit_signal_type,
+                                                signal_source='ema_9_26',
+                                                signal_timeframe=buy_timeframe,
+                                                kline_data=latest_kline,
+                                                direction='long',
+                                                executed=False,
+                                                execution_result='SKIPPED',
+                                                execution_reason=f'方向未配置: buyDirection={buy_directions}',
+                                                volume_ratio=float(latest_kline.get('volume_ratio', 1.0))
+                                            )
+                                            if result:
+                                                logger.info(f"{symbol} ✅ 命中信息记录成功（方向未配置）")
+                                        except Exception as e:
+                                            logger.error(f"{symbol} ❌ 记录命中信息时出错: {e}")
                                     elif is_death_cross and 'short' not in buy_directions:
                                         logger.info(f"{symbol} ⚠️ 检测到向下穿越，但未配置做空方向（buyDirection={buy_directions}）")
+                                        # 即使方向未配置，也记录这个信号（用于分析）
+                                        hit_signal_type = 'BUY_SHORT'
+                                        logger.info(f"{symbol} 📝 准备记录命中信息（方向未配置）: 策略={strategy.get('name')}, 信号={hit_signal_type}")
+                                        try:
+                                            result = self.hit_recorder.record_signal_hit(
+                                                strategy=strategy,
+                                                symbol=symbol,
+                                                signal_type=hit_signal_type,
+                                                signal_source='ema_9_26',
+                                                signal_timeframe=buy_timeframe,
+                                                kline_data=latest_kline,
+                                                direction='short',
+                                                executed=False,
+                                                execution_result='SKIPPED',
+                                                execution_reason=f'方向未配置: buyDirection={buy_directions}',
+                                                volume_ratio=float(latest_kline.get('volume_ratio', 1.0))
+                                            )
+                                            if result:
+                                                logger.info(f"{symbol} ✅ 命中信息记录成功（方向未配置）")
+                                        except Exception as e:
+                                            logger.error(f"{symbol} ❌ 记录命中信息时出错: {e}")
                                     elif not is_golden_cross and not is_death_cross:
                                         # 即使没有交叉，也显示当前EMA状态，帮助调试
                                         ema_status = "多头" if ema_short > ema_long else "空头" if ema_short < ema_long else "持平"
                                         prev_ema_status = "多头" if prev_ema_short > prev_ema_long else "空头" if prev_ema_short < prev_ema_long else "持平"
                                         logger.info(f"{symbol} 📊 未检测到交叉信号: 当前EMA9={ema_short:.4f}, EMA26={ema_long:.4f} ({ema_status}), 前EMA9={prev_ema_short:.4f}, 前EMA26={prev_ema_long:.4f} ({prev_ema_status})")
                                 
+                                # 即使没有触发信号，也记录检测过程（用于追踪和分析）
+                                # 记录"未检测到信号"的情况，这样可以看到策略的检测频率
                                 if not signal_triggered:
-                                    logger.info(f"{symbol} ⏭️ 未触发交易信号，跳过（可能原因：未检测到交叉、方向未配置、或其他条件）")
+                                    logger.debug(f"{symbol} ⏭️ 未触发交易信号，跳过（可能原因：未检测到交叉、方向未配置、或其他条件）")
+                                    # 记录未检测到信号的情况（可选，如果不想记录可以注释掉）
+                                    # 这里不记录，因为会产生大量无用记录
                                     continue
                                 
                                 # 交易方向已经根据交叉类型确定
@@ -429,12 +477,62 @@ class StrategyExecutor:
                                 
                                 logger.info(f"{symbol} ✅ 检测到EMA(9,26){signal_type}信号（{direction}）！开始检查交易条件...")
                                 
-                                # 检查信号强度过滤
+                                # 记录信号命中（在检查过滤条件之前）
+                                signal_strength_ok = True
+                                ema_strength_pct = None
                                 if min_ema_cross_strength > 0:
                                     ema_diff = ema_short - ema_long
                                     ema_strength_pct = abs(ema_diff / ema_long * 100) if ema_long > 0 else 0
-                                    if ema_strength_pct < min_ema_cross_strength:
+                                    signal_strength_ok = ema_strength_pct >= min_ema_cross_strength
+                                
+                                # 记录信号命中
+                                hit_signal_type = 'BUY_LONG' if direction == 'long' else 'BUY_SHORT'
+                                logger.info(f"{symbol} 📝 准备记录命中信息: 策略={strategy.get('name')}, 信号={hit_signal_type}")
+                                try:
+                                    result = self.hit_recorder.record_signal_hit(
+                                        strategy=strategy,
+                                        symbol=symbol,
+                                        signal_type=hit_signal_type,
+                                        signal_source='ema_9_26',
+                                        signal_timeframe=buy_timeframe,
+                                        kline_data=latest_kline,
+                                        direction=direction,
+                                        executed=False,  # 稍后会更新
+                                        execution_result=None,
+                                        volume_ratio=float(latest_kline.get('volume_ratio', 1.0)),
+                                        signal_strength_ok=signal_strength_ok
+                                    )
+                                    if result:
+                                        logger.info(f"{symbol} ✅ 命中信息记录成功")
+                                    else:
+                                        logger.warning(f"{symbol} ⚠️ 命中信息记录失败（返回False）")
+                                except Exception as e:
+                                    logger.error(f"{symbol} ❌ 记录命中信息时出错: {e}")
+                                    import traceback
+                                    traceback.print_exc()
+                                
+                                # 检查信号强度过滤
+                                if min_ema_cross_strength > 0:
+                                    if not signal_strength_ok:
                                         logger.info(f"{symbol} ⚠️ EMA9/26{signal_type}信号强度不足 (差值={ema_strength_pct:.2f}%, 需要≥{min_ema_cross_strength:.2f}%)，已过滤")
+                                        # 记录信号被过滤的情况
+                                        try:
+                                            self.hit_recorder.record_signal_hit(
+                                                strategy=strategy,
+                                                symbol=symbol,
+                                                signal_type=hit_signal_type,
+                                                signal_source='ema_9_26',
+                                                signal_timeframe=buy_timeframe,
+                                                kline_data=latest_kline,
+                                                direction=direction,
+                                                executed=False,
+                                                execution_result='SKIPPED',
+                                                execution_reason=f'信号强度不足: {ema_strength_pct:.2f}% < {min_ema_cross_strength:.2f}%',
+                                                volume_ratio=float(latest_kline.get('volume_ratio', 1.0)),
+                                                signal_strength_ok=False
+                                            )
+                                        except Exception as e:
+                                            logger.error(f"{symbol} ❌ 记录被过滤信号时出错: {e}")
                                         continue
                                 else:
                                     logger.debug(f"{symbol} 信号强度检查通过（未启用过滤）")
@@ -510,6 +608,25 @@ class StrategyExecutor:
                                         ma10_ema10_strength_pct = abs(ma10_ema10_diff / ma10 * 100) if ma10 > 0 else 0
                                         if ma10_ema10_strength_pct < min_ma10_cross_strength:
                                             logger.info(f"{symbol} ⚠️ MA10/EMA10信号强度不足 (差值={ma10_ema10_strength_pct:.2f}%, 需要≥{min_ma10_cross_strength:.2f}%)，已过滤")
+                                            # 记录信号被过滤的情况
+                                            try:
+                                                self.hit_recorder.record_signal_hit(
+                                                    strategy=strategy,
+                                                    symbol=symbol,
+                                                    signal_type=hit_signal_type,
+                                                    signal_source='ema_9_26',
+                                                    signal_timeframe=buy_timeframe,
+                                                    kline_data=latest_kline,
+                                                    direction=direction,
+                                                    executed=False,
+                                                    execution_result='SKIPPED',
+                                                    execution_reason=f'MA10/EMA10信号强度不足: {ma10_ema10_strength_pct:.2f}% < {min_ma10_cross_strength:.2f}%',
+                                                    volume_ratio=float(latest_kline.get('volume_ratio', 1.0)),
+                                                    signal_strength_ok=True,
+                                                    ma10_ema10_trend_ok=None
+                                                )
+                                            except Exception as e:
+                                                logger.error(f"{symbol} ❌ 记录被过滤信号时出错: {e}")
                                             continue
                                     
                                     # 检查 MA10/EMA10 是否与交易方向同向（如果启用了过滤）
@@ -591,6 +708,22 @@ class StrategyExecutor:
                                 all_conditions_met = volume_ok and ma10_ema10_ok and trend_confirm_ok
                                 logger.info(f"{symbol} 📋 交易条件检查总结: 成交量={volume_ok}, MA10/EMA10={ma10_ema10_ok}, 趋势持续性={trend_confirm_ok}, 全部满足={all_conditions_met}")
                                 
+                                # 获取最近一次命中记录的ID（用于后续更新）
+                                hit_id = None
+                                try:
+                                    # 查询最近一次该策略和交易对的命中记录
+                                    cursor.execute("""
+                                        SELECT id FROM strategy_hits
+                                        WHERE strategy_id = %s AND symbol = %s
+                                        ORDER BY created_at DESC
+                                        LIMIT 1
+                                    """, (strategy.get('id'), symbol))
+                                    hit_record = cursor.fetchone()
+                                    if hit_record:
+                                        hit_id = hit_record['id']
+                                except Exception as e:
+                                    logger.debug(f"查询命中记录ID失败: {e}")
+                                
                                 if not all_conditions_met:
                                     failed_conditions = []
                                     if not volume_ok:
@@ -602,6 +735,15 @@ class StrategyExecutor:
                                     logger.info(f"{symbol} ❌ 交易条件未全部满足，失败的条件: {', '.join(failed_conditions)}")
                                     if direction == 'short' and not ma10_ema10_ok:
                                         logger.info(f"{symbol} 💡 做空建议：如果希望更多做空机会，可以在策略配置中关闭'启用 MA10/EMA10 同向过滤'选项")
+                                    
+                                    # 更新命中记录：条件未满足，未执行
+                                    if hit_id:
+                                        self.hit_recorder.update_execution_result(
+                                            hit_id=hit_id,
+                                            executed=False,
+                                            execution_result='SKIPPED',
+                                            execution_reason=f"条件未满足: {', '.join(failed_conditions)}"
+                                        )
                                 
                                 if volume_ok and ma10_ema10_ok and trend_confirm_ok:
                                     action_name = '买入(做多)' if direction == 'long' else '卖出(做空)'
@@ -710,6 +852,21 @@ class StrategyExecutor:
                                             # 如果没有 entry_price，尝试从其他字段获取
                                             actual_entry_price = result.get('current_price') or result.get('limit_price') or estimated_entry_price
                                         
+                                        # 获取持仓ID和订单ID
+                                        position_id = result.get('position_id')
+                                        order_id = result.get('order_id')
+                                        
+                                        # 更新命中记录：执行成功
+                                        if hit_id:
+                                            self.hit_recorder.update_execution_result(
+                                                hit_id=hit_id,
+                                                executed=True,
+                                                execution_result='SUCCESS',
+                                                execution_reason='所有条件满足，已执行开仓',
+                                                position_id=position_id,
+                                                order_id=str(order_id) if order_id else None
+                                            )
+                                        
                                         results.append({
                                             'symbol': symbol,
                                             'action': 'buy',
@@ -728,6 +885,15 @@ class StrategyExecutor:
                                         # 根据交易对确定数量显示精度
                                         qty_precision = get_quantity_precision(symbol)
                                         logger.info(f"{current_time_str}: ✅ 策略{action_name}: {symbol} {direction} @ {price_info}, 数量={float(quantity):.{qty_precision}f}")
+                                    else:
+                                        # 执行失败，更新命中记录
+                                        if hit_id:
+                                            self.hit_recorder.update_execution_result(
+                                                hit_id=hit_id,
+                                                executed=False,
+                                                execution_result='FAILED',
+                                                execution_reason=result.get('message', '开仓失败')
+                                            )
                         
                         # 检查卖出信号（平仓）
                         if len(existing_positions) > 0:
@@ -827,6 +993,29 @@ class StrategyExecutor:
                                                         (prev_ema_short > prev_ema_long and ema_short <= ema_long)
                                     
                                     if is_death_cross:
+                                        # 记录卖出信号命中
+                                        logger.info(f"{symbol} 📝 准备记录卖出信号命中信息")
+                                        try:
+                                            result = self.hit_recorder.record_signal_hit(
+                                                strategy=strategy,
+                                                symbol=symbol,
+                                                signal_type='SELL',
+                                                signal_source=sell_signal,
+                                                signal_timeframe=sell_timeframe,
+                                                kline_data=latest_sell_kline,
+                                                direction=None,  # 卖出信号不区分方向
+                                                executed=False,  # 稍后会更新
+                                                execution_result=None
+                                            )
+                                            if result:
+                                                logger.info(f"{symbol} ✅ 卖出信号命中信息记录成功")
+                                            else:
+                                                logger.warning(f"{symbol} ⚠️ 卖出信号命中信息记录失败（返回False）")
+                                        except Exception as e:
+                                            logger.error(f"{symbol} ❌ 记录卖出信号命中信息时出错: {e}")
+                                            import traceback
+                                            traceback.print_exc()
+                                        
                                         # 检查成交量条件
                                         volume_ratio = float(latest_sell_kline.get('volume_ratio', 1.0))
                                         volume_ok = True
@@ -855,6 +1044,21 @@ class StrategyExecutor:
                                                     volume_ok = False
                                         
                                         if volume_ok:
+                                            # 获取最近一次卖出信号命中记录的ID
+                                            sell_hit_id = None
+                                            try:
+                                                cursor.execute("""
+                                                    SELECT id FROM strategy_hits
+                                                    WHERE strategy_id = %s AND symbol = %s AND signal_type = 'SELL'
+                                                    ORDER BY created_at DESC
+                                                    LIMIT 1
+                                                """, (strategy.get('id'), symbol))
+                                                sell_hit_record = cursor.fetchone()
+                                                if sell_hit_record:
+                                                    sell_hit_id = sell_hit_record['id']
+                                            except Exception as e:
+                                                logger.debug(f"查询卖出信号命中记录ID失败: {e}")
+                                            
                                             # 平仓所有持仓
                                             for position in existing_positions:
                                                 result = self.futures_engine.close_position(
@@ -863,6 +1067,16 @@ class StrategyExecutor:
                                                 )
                                                 
                                                 if result.get('success'):
+                                                    # 更新卖出信号命中记录
+                                                    if sell_hit_id:
+                                                        self.hit_recorder.update_execution_result(
+                                                            hit_id=sell_hit_id,
+                                                            executed=True,
+                                                            execution_result='SUCCESS',
+                                                            execution_reason='卖出信号触发，已平仓',
+                                                            position_id=position['id']
+                                                        )
+                                                    
                                                     results.append({
                                                         'symbol': symbol,
                                                         'action': 'sell',
@@ -870,6 +1084,34 @@ class StrategyExecutor:
                                                         'success': True
                                                     })
                                                     logger.info(f"✅ 策略平仓: {symbol} 持仓ID {position['id']}")
+                                                else:
+                                                    # 平仓失败，更新命中记录
+                                                    if sell_hit_id:
+                                                        self.hit_recorder.update_execution_result(
+                                                            hit_id=sell_hit_id,
+                                                            executed=False,
+                                                            execution_result='FAILED',
+                                                            execution_reason=result.get('message', '平仓失败')
+                                                        )
+                                        else:
+                                            # 成交量条件不满足，更新命中记录
+                                            try:
+                                                cursor.execute("""
+                                                    SELECT id FROM strategy_hits
+                                                    WHERE strategy_id = %s AND symbol = %s AND signal_type = 'SELL'
+                                                    ORDER BY created_at DESC
+                                                    LIMIT 1
+                                                """, (strategy.get('id'), symbol))
+                                                sell_hit_record = cursor.fetchone()
+                                                if sell_hit_record:
+                                                    self.hit_recorder.update_execution_result(
+                                                        hit_id=sell_hit_record['id'],
+                                                        executed=False,
+                                                        execution_result='SKIPPED',
+                                                        execution_reason=f'成交量条件不满足: {volume_ratio:.2f}x'
+                                                    )
+                                            except Exception as e:
+                                                logger.debug(f"更新卖出信号命中记录失败: {e}")
                     
                     except Exception as e:
                         logger.error(f"执行策略时出错 ({symbol}): {e}")
@@ -917,16 +1159,17 @@ class StrategyExecutor:
             strategies = self._load_strategies_from_file()
             
             if not strategies:
-                logger.info("未找到启用的策略")
+                logger.warning("⚠️ 未找到启用的策略，跳过策略检查")
                 return
             
-            logger.info(f"找到 {len(strategies)} 个启用的策略，开始检查...")
+            logger.info(f"📊 找到 {len(strategies)} 个启用的策略，开始检查...")
+            logger.debug(f"策略列表: {[s.get('name') for s in strategies]}")
             
             # 执行每个策略
             for strategy in strategies:
                 try:
                     strategy_name = strategy.get('name', '未知')
-                    logger.info(f"检查策略: {strategy_name} (ID: {strategy.get('id')})")
+                    logger.info(f"🔍 检查策略: {strategy_name} (ID: {strategy.get('id')})")
                     account_id = strategy.get('account_id', 2)
                     result = await self.execute_strategy(strategy, account_id=account_id)
                     

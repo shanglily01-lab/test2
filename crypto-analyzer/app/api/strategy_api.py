@@ -1984,3 +1984,132 @@ async def get_strategy_execution_list(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取执行清单失败: {str(e)}")
+
+
+@router.get("/hits")
+async def get_strategy_hits(
+    strategy_id: Optional[int] = Query(None, description="策略ID"),
+    symbol: Optional[str] = Query(None, description="交易对"),
+    signal_type: Optional[str] = Query(None, description="信号类型: BUY_LONG, BUY_SHORT, SELL"),
+    executed: Optional[bool] = Query(None, description="是否已执行"),
+    time_range: str = Query("24h", description="时间范围: 1h, 24h, 7d, 30d"),
+    limit: int = Query(100, description="返回数量限制")
+):
+    """
+    获取策略命中记录
+    
+    返回所有策略信号命中情况，包括已执行和未执行的信号
+    """
+    try:
+        from datetime import datetime, timedelta
+        import pymysql
+        from app.database.db_service import get_db_config
+        
+        # 计算时间范围
+        now = datetime.now()
+        time_delta_map = {
+            '1h': timedelta(hours=1),
+            '24h': timedelta(hours=24),
+            '7d': timedelta(days=7),
+            '30d': timedelta(days=30),
+            'all': timedelta(days=365)
+        }
+        start_time = now - time_delta_map.get(time_range, timedelta(hours=24))
+        
+        db_config = get_db_config()
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            sql = """
+                SELECT 
+                    id, strategy_id, strategy_name, symbol, account_id,
+                    signal_type, signal_source, signal_timeframe, signal_timestamp,
+                    ema_short, ema_long, ma10, ema10, ma5, ema5, current_price,
+                    ema_cross_strength_pct, ma10_ema10_strength_pct,
+                    volume_ratio, volume_condition_met,
+                    ma10_ema10_trend_ok, trend_confirm_ok, signal_strength_ok,
+                    executed, execution_result, execution_reason,
+                    position_id, order_id, direction, leverage, position_size_pct,
+                    created_at, updated_at
+                FROM strategy_hits
+                WHERE signal_timestamp >= %s
+            """
+            params = [start_time]
+            
+            if strategy_id:
+                sql += " AND strategy_id = %s"
+                params.append(strategy_id)
+            
+            if symbol:
+                sql += " AND symbol = %s"
+                params.append(symbol)
+            
+            if signal_type:
+                sql += " AND signal_type = %s"
+                params.append(signal_type)
+            
+            if executed is not None:
+                sql += " AND executed = %s"
+                params.append(executed)
+            
+            sql += " ORDER BY signal_timestamp DESC LIMIT %s"
+            params.append(limit)
+            
+            cursor.execute(sql, params)
+            hits = cursor.fetchall()
+            
+            # 格式化结果
+            result = []
+            for hit in hits:
+                result.append({
+                    'id': hit['id'],
+                    'strategy_id': hit['strategy_id'],
+                    'strategy_name': hit['strategy_name'],
+                    'symbol': hit['symbol'],
+                    'account_id': hit['account_id'],
+                    'signal_type': hit['signal_type'],
+                    'signal_source': hit['signal_source'],
+                    'signal_timeframe': hit['signal_timeframe'],
+                    'signal_timestamp': hit['signal_timestamp'].strftime('%Y-%m-%d %H:%M:%S') if hit['signal_timestamp'] else None,
+                    'current_price': float(hit['current_price']) if hit['current_price'] else None,
+                    'ema_short': float(hit['ema_short']) if hit['ema_short'] else None,
+                    'ema_long': float(hit['ema_long']) if hit['ema_long'] else None,
+                    'ma10': float(hit['ma10']) if hit['ma10'] else None,
+                    'ema10': float(hit['ema10']) if hit['ema10'] else None,
+                    'ma5': float(hit['ma5']) if hit['ma5'] else None,
+                    'ema5': float(hit['ema5']) if hit['ema5'] else None,
+                    'ema_cross_strength_pct': float(hit['ema_cross_strength_pct']) if hit['ema_cross_strength_pct'] else None,
+                    'ma10_ema10_strength_pct': float(hit['ma10_ema10_strength_pct']) if hit['ma10_ema10_strength_pct'] else None,
+                    'volume_ratio': float(hit['volume_ratio']) if hit['volume_ratio'] else None,
+                    'volume_condition_met': bool(hit['volume_condition_met']) if hit['volume_condition_met'] is not None else None,
+                    'ma10_ema10_trend_ok': bool(hit['ma10_ema10_trend_ok']) if hit['ma10_ema10_trend_ok'] is not None else None,
+                    'trend_confirm_ok': bool(hit['trend_confirm_ok']) if hit['trend_confirm_ok'] is not None else None,
+                    'signal_strength_ok': bool(hit['signal_strength_ok']) if hit['signal_strength_ok'] is not None else None,
+                    'executed': bool(hit['executed']),
+                    'execution_result': hit['execution_result'],
+                    'execution_reason': hit['execution_reason'],
+                    'position_id': hit['position_id'],
+                    'order_id': hit['order_id'],
+                    'direction': hit['direction'],
+                    'leverage': hit['leverage'],
+                    'position_size_pct': float(hit['position_size_pct']) if hit['position_size_pct'] else None,
+                    'created_at': hit['created_at'].strftime('%Y-%m-%d %H:%M:%S') if hit['created_at'] else None,
+                    'updated_at': hit['updated_at'].strftime('%Y-%m-%d %H:%M:%S') if hit['updated_at'] else None
+                })
+            
+            return {
+                'success': True,
+                'data': result,
+                'count': len(result)
+            }
+            
+        finally:
+            cursor.close()
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"获取策略命中记录失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取策略命中记录失败: {str(e)}")
