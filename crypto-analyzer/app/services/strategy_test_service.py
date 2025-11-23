@@ -129,6 +129,7 @@ class StrategyTestService:
                 exit_on_ma_flip = request.get('exitOnMAFlip', False)  # MA10/EMA10反转时立即平仓
                 exit_on_ema_weak = request.get('exitOnEMAWeak', False)  # EMA差值<0.05%时平仓
                 prevent_duplicate_entry = request.get('preventDuplicateEntry', False)  # 防止重复开仓
+                close_opposite_on_entry = request.get('closeOppositeOnEntry', False)  # 开仓前先平掉相反方向的持仓
                 min_holding_time_hours = request.get('minHoldingTimeHours', 0)  # 最小持仓时间（小时）
                 fee_rate = request.get('feeRate', 0.0004)
                 
@@ -291,6 +292,7 @@ class StrategyTestService:
                         exit_on_ma_flip=exit_on_ma_flip,
                         exit_on_ema_weak=exit_on_ema_weak,
                         prevent_duplicate_entry=prevent_duplicate_entry,
+                        close_opposite_on_entry=close_opposite_on_entry,
                         min_holding_time_hours=min_holding_time_hours,
                         fee_rate=fee_rate,
                         max_long_positions=max_long_positions,
@@ -554,6 +556,7 @@ class StrategyTestService:
         exit_on_ma_flip = kwargs.get('exit_on_ma_flip', False)  # MA10/EMA10反转时立即平仓
         exit_on_ema_weak = kwargs.get('exit_on_ema_weak', False)  # EMA差值<0.05%时平仓
         prevent_duplicate_entry = kwargs.get('prevent_duplicate_entry', False)  # 防止重复开仓
+        close_opposite_on_entry = kwargs.get('close_opposite_on_entry', False)  # 开仓前先平掉相反方向的持仓
         min_holding_time_hours = kwargs.get('min_holding_time_hours', 0)  # 最小持仓时间（小时）
         fee_rate = kwargs.get('fee_rate', 0.0004)
         max_long_positions = kwargs.get('max_long_positions')  # 最大做多持仓数
@@ -836,7 +839,8 @@ class StrategyTestService:
                             if prev_ma10 and prev_ema10 and ma10 and ema10:
                                 ma10_ema10_is_golden = (prev_ema10 <= prev_ma10 and ema10 > ma10) or \
                                                        (prev_ema10 < prev_ma10 and ema10 >= ma10)
-                                if ma10_ema10_is_golden:
+                                if ma10_ema10_is_golden and not ma10_ema10_golden_cross:
+                                    # 只在首次检测到MA10/EMA10金叉时输出日志
                                     ma10_ema10_golden_cross = True
                                     debug_info.append(f"   ➕➕➕ MA10/EMA10金叉检测成功！")
                             
@@ -1019,6 +1023,55 @@ class StrategyTestService:
                                 can_open_position = False
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 已达到最大做空持仓数限制（{max_short_positions}个），当前做空持仓{short_positions_count}个，跳过买入信号")
                                 continue
+                        
+                        # 开仓前先平掉相反方向的持仓（如果启用）
+                        if close_opposite_on_entry:
+                            opposite_positions = [p for p in positions if p['direction'] != direction]
+                            if opposite_positions:
+                                close_price = float(kline['close_price'])
+                                for opp_position in opposite_positions[:]:
+                                    opp_entry_price = opp_position['entry_price']
+                                    opp_quantity = opp_position['quantity']
+                                    opp_direction = opp_position['direction']
+                                    
+                                    # 使用当前价格平仓
+                                    exit_price = close_price
+                                    
+                                    if opp_direction == 'long':
+                                        gross_pnl = (exit_price - opp_entry_price) * opp_quantity
+                                    else:
+                                        gross_pnl = (opp_entry_price - exit_price) * opp_quantity
+                                    
+                                    close_fee = (exit_price * opp_quantity) * fee_rate
+                                    open_fee = opp_position.get('open_fee', 0)
+                                    total_fee = open_fee + close_fee
+                                    pnl = gross_pnl - total_fee
+                                    
+                                    margin_used = (opp_entry_price * opp_quantity) / leverage
+                                    pnl_pct = (pnl / margin_used) * 100 if margin_used > 0 else 0
+                                    
+                                    balance += gross_pnl - close_fee
+                                    
+                                    opp_direction_text = "做多" if opp_direction == 'long' else "做空"
+                                    trades.append({
+                                        'type': 'SELL',
+                                        'direction': opp_direction,
+                                        'price': exit_price,
+                                        'quantity': opp_quantity,
+                                        'time': current_time,
+                                        'balance': balance,
+                                        'pnl': pnl,
+                                        'pnl_pct': pnl_pct,
+                                        'fee': close_fee,
+                                        'fee_rate': fee_rate,
+                                        'exit_reason': f'开{direction}仓前平仓'
+                                    })
+                                    
+                                    positions.remove(opp_position)
+                                    closed_at_current_time = True
+                                    
+                                    qty_precision = self.get_quantity_precision(symbol)
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 开{direction}仓前平掉{opp_direction_text}持仓 | 入场价={opp_entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={opp_quantity:.{qty_precision}f}, 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%)")
                         
                         # 检查 RSI 过滤
                         if rsi_filter_enabled:
@@ -1567,20 +1620,17 @@ class StrategyTestService:
                         quantity = position['quantity']
                         direction = position['direction']
                         
-                        # 平仓价格逻辑
-                        exit_price = None
-                        can_execute = False
-                        
+                        # 平仓价格逻辑：卖出信号触发时直接使用当前价格平仓
+                        # 对于做多，使用收盘价或最高价（取较低者，更保守）
+                        # 对于做空，使用收盘价或最低价（取较高者，更保守）
                         if direction == 'long':
-                            target_price = entry_price * 1.01
-                            if high_price >= target_price:
-                                exit_price = target_price
-                                can_execute = True
+                            # 做多平仓：使用收盘价（更保守，避免使用最高价）
+                            exit_price = close_price
+                            can_execute = True
                         else:
-                            target_price = entry_price * 0.99
-                            if low_price <= target_price:
-                                exit_price = target_price
-                                can_execute = True
+                            # 做空平仓：使用收盘价（更保守，避免使用最低价）
+                            exit_price = close_price
+                            can_execute = True
                         
                         if not can_execute or exit_price is None:
                             continue
