@@ -835,11 +835,11 @@ class StrategyTestService:
                             is_death_cross = (prev_ema_short >= prev_ema_long and ema_short < ema_long) or \
                                              (prev_ema_short > prev_ema_long and ema_short <= ema_long)
                             
-                            # MA10/EMA10金叉检测
-                            if prev_ma10 and prev_ema10 and ma10 and ema10:
+                            # MA10/EMA10金叉检测（只在循环外检测一次，避免重复输出）
+                            if prev_ma10 and prev_ema10 and ma10 and ema10 and not ma10_ema10_golden_cross:
                                 ma10_ema10_is_golden = (prev_ema10 <= prev_ma10 and ema10 > ma10) or \
                                                        (prev_ema10 < prev_ma10 and ema10 >= ma10)
-                                if ma10_ema10_is_golden and not ma10_ema10_golden_cross:
+                                if ma10_ema10_is_golden:
                                     # 只在首次检测到MA10/EMA10金叉时输出日志
                                     ma10_ema10_golden_cross = True
                                     debug_info.append(f"   ➕➕➕ MA10/EMA10金叉检测成功！")
@@ -1447,109 +1447,112 @@ class StrategyTestService:
                         positions.remove(position)
                         closed_at_current_time = True
                 
-                        # 如果已经因为止损止盈平仓，跳过卖出信号检查
-                        if closed_at_current_time or len(positions) == 0:
-                            continue
-                        
-                        # 检查趋势反转退出机制（优先级高于卖出信号）
-                        should_exit = False
-                        exit_reason = None
-                        
-                        # 需要获取前一个时间点的指标来检查反转
-                        current_sell_index = None
-                        try:
-                            current_sell_index = sell_indicator_pairs.index(pair)
-                        except ValueError:
-                            pass
-                        
-                        if current_sell_index is not None and current_sell_index > 0:
-                            prev_pair = sell_indicator_pairs[current_sell_index - 1]
-                            prev_indicator = prev_pair['indicator']
+                # 如果已经因为止损止盈平仓，跳过卖出信号检查
+                if closed_at_current_time or len(positions) == 0:
+                    continue
+                
+                # 检查趋势反转退出机制（优先级高于卖出信号）
+                should_exit = False
+                exit_reason = None
+                
+                # 需要获取前一个时间点的指标来检查反转
+                current_sell_index = None
+                try:
+                    current_sell_index = sell_indicator_pairs.index(pair)
+                except ValueError:
+                    pass
+                
+                if current_sell_index is not None and current_sell_index > 0:
+                    prev_pair = sell_indicator_pairs[current_sell_index - 1]
+                    prev_indicator = prev_pair['indicator']
+                    
+                    # 检查 MA10/EMA10 反转退出
+                    if exit_on_ma_flip:
+                        if indicator.get('ma10') and indicator.get('ema10') and \
+                           prev_indicator.get('ma10') and prev_indicator.get('ema10'):
+                            ma10 = float(indicator['ma10'])
+                            ema10 = float(indicator['ema10'])
+                            prev_ma10 = float(prev_indicator['ma10'])
+                            prev_ema10 = float(prev_indicator['ema10'])
                             
-                            # 检查 MA10/EMA10 反转退出
-                            if exit_on_ma_flip:
-                                if indicator.get('ma10') and indicator.get('ema10') and \
-                                   prev_indicator.get('ma10') and prev_indicator.get('ema10'):
-                                    ma10 = float(indicator['ma10'])
-                                    ema10 = float(indicator['ema10'])
-                                    prev_ma10 = float(prev_indicator['ma10'])
-                                    prev_ema10 = float(prev_indicator['ema10'])
-                                    
-                                    # 检查是否反转（从多头转为空头，或从空头转为多头）
-                                    prev_bullish = prev_ema10 > prev_ma10
-                                    curr_bullish = ema10 > ma10
-                                    
-                                    if prev_bullish != curr_bullish:
-                                        should_exit = True
-                                        exit_reason = 'MA10/EMA10反转'
-                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 检测到MA10/EMA10反转，触发退出机制")
+                            # 检查是否反转（从多头转为空头，或从空头转为多头）
+                            prev_bullish = prev_ema10 > prev_ma10
+                            curr_bullish = ema10 > ma10
                             
-                            # 检查 EMA 弱信号退出
-                            if not should_exit and exit_on_ema_weak:
-                                if indicator.get('ema_short') and indicator.get('ema_long'):
-                                    ema_short = float(indicator['ema_short'])
-                                    ema_long = float(indicator['ema_long'])
-                                    ema_diff = abs(ema_short - ema_long)
-                                    ema_diff_pct = (ema_diff / ema_long * 100) if ema_long > 0 else 0
-                                    
-                                    if ema_diff_pct < 0.05:  # EMA差值<0.05%
-                                        should_exit = True
-                                        exit_reason = 'EMA信号过弱'
-                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ EMA差值过小({ema_diff_pct:.2f}%)，触发退出机制")
-                        
-                        # 如果触发趋势反转退出，立即平仓
-                        if should_exit:
-                            for position in positions[:]:
-                                entry_price = position['entry_price']
-                                quantity = position['quantity']
-                                direction = position['direction']
-                                
-                                # 使用当前K线价格平仓
-                                exit_price = close_price
-                                
-                                if direction == 'long':
-                                    gross_pnl = (exit_price - entry_price) * quantity
-                                else:
-                                    gross_pnl = (entry_price - exit_price) * quantity
-                                
-                                close_fee = (exit_price * quantity) * fee_rate
-                                open_fee = position.get('open_fee', 0)
-                                total_fee = open_fee + close_fee
-                                pnl = gross_pnl - total_fee
-                                
-                                margin_used = (entry_price * quantity) / leverage
-                                pnl_pct = (pnl / margin_used) * 100 if margin_used > 0 else 0
-                                
-                                balance += gross_pnl - close_fee
-                                
-                                direction_text = "做多" if direction == 'long' else "做空"
-                                trades.append({
-                                    'type': 'SELL',
-                                    'direction': direction,
-                                    'price': exit_price,
-                                    'quantity': quantity,
-                                    'time': current_time,
-                                    'balance': balance,
-                                    'pnl': pnl,
-                                    'pnl_pct': pnl_pct,
-                                    'fee': close_fee,
-                                    'fee_rate': fee_rate,
-                                    'exit_reason': exit_reason
-                                })
-                                
-                                positions.remove(position)
-                                closed_at_current_time = True
-                                
-                                qty_precision = self.get_quantity_precision(symbol)
-                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 趋势反转退出{direction_text} | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={quantity:.{qty_precision}f}, 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%), 原因: {exit_reason}")
+                            if prev_bullish != curr_bullish:
+                                should_exit = True
+                                exit_reason = 'MA10/EMA10反转'
+                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 检测到MA10/EMA10反转，触发退出机制")
+                    
+                    # 检查 EMA 弱信号退出
+                    if not should_exit and exit_on_ema_weak:
+                        if indicator.get('ema_short') and indicator.get('ema_long'):
+                            ema_short = float(indicator['ema_short'])
+                            ema_long = float(indicator['ema_long'])
+                            ema_diff = abs(ema_short - ema_long)
+                            ema_diff_pct = (ema_diff / ema_long * 100) if ema_long > 0 else 0
                             
-                            continue  # 已平仓，跳过后续卖出信号检查
+                            if ema_diff_pct < 0.05:  # EMA差值<0.05%
+                                should_exit = True
+                                exit_reason = 'EMA信号过弱'
+                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ EMA差值过小({ema_diff_pct:.2f}%)，触发退出机制")
+                
+                # 如果触发趋势反转退出，立即平仓
+                if should_exit:
+                    for position in positions[:]:
+                        entry_price = position['entry_price']
+                        quantity = position['quantity']
+                        direction = position['direction']
                         
-                        # 卖出信号检查
+                        # 使用当前K线价格平仓
+                        exit_price = close_price
+                        
+                        if direction == 'long':
+                            gross_pnl = (exit_price - entry_price) * quantity
+                        else:
+                            gross_pnl = (entry_price - exit_price) * quantity
+                        
+                        close_fee = (exit_price * quantity) * fee_rate
+                        open_fee = position.get('open_fee', 0)
+                        total_fee = open_fee + close_fee
+                        pnl = gross_pnl - total_fee
+                        
+                        margin_used = (entry_price * quantity) / leverage
+                        pnl_pct = (pnl / margin_used) * 100 if margin_used > 0 else 0
+                        
+                        balance += gross_pnl - close_fee
+                        
+                        direction_text = "做多" if direction == 'long' else "做空"
+                        trades.append({
+                            'type': 'SELL',
+                            'direction': direction,
+                            'price': exit_price,
+                            'quantity': quantity,
+                            'time': current_time,
+                            'balance': balance,
+                            'pnl': pnl,
+                            'pnl_pct': pnl_pct,
+                            'fee': close_fee,
+                            'fee_rate': fee_rate,
+                            'exit_reason': exit_reason
+                        })
+                        
+                        positions.remove(position)
+                        closed_at_current_time = True
+                        
+                        qty_precision = self.get_quantity_precision(symbol)
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 趋势反转退出{direction_text} | 入场价={entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={quantity:.{qty_precision}f}, 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%), 原因: {exit_reason}")
+                    
+                    continue  # 已平仓，跳过后续卖出信号检查
+                
+                # 卖出信号检查
                 sell_signal_triggered = False
                 try:
                     current_sell_index = sell_indicator_pairs.index(pair)
                 except ValueError:
+                    # 如果找不到当前时间点的指标，跳过卖出信号检查
+                    if len(positions) > 0:
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 未找到卖出时间周期({sell_timeframe})的指标数据，跳过卖出信号检查")
                     continue
                 
                 ma5 = float(indicator.get('ma5')) if indicator.get('ma5') else None
@@ -1575,6 +1578,7 @@ class StrategyTestService:
                                                     (prev_ema5 > prev_ma5 and ema5 <= ma5)
                                 if ma5_ema5_is_death:
                                     sell_signal_triggered = True
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5死叉，触发卖出信号")
                                     break
                         elif sell_signal == 'ma_ema10':
                             prev_ma10 = float(prev_indicator.get('ma10')) if prev_indicator.get('ma10') else None
@@ -1585,6 +1589,7 @@ class StrategyTestService:
                                                       (prev_ema10 > prev_ma10 and ema10 <= ma10)
                                 if ma10_ema10_is_death:
                                     sell_signal_triggered = True
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10死叉，触发卖出信号")
                                     break
                         elif sell_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
                             prev_ema_short = float(prev_indicator.get('ema_short')) if prev_indicator.get('ema_short') else None
@@ -1595,7 +1600,12 @@ class StrategyTestService:
                                                (prev_ema_short > prev_ema_long and ema_short <= ema_long)
                                 if ema_is_death:
                                     sell_signal_triggered = True
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26死叉，触发卖出信号")
                                     break
+                else:
+                    # 如果没有历史数据，无法检测卖出信号
+                    if len(positions) > 0:
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出时间周期历史数据不足，无法检测卖出信号（需要至少1个历史数据点）")
                 
                 # 检查卖出成交量条件
                 sell_volume_condition_met = True
@@ -1612,6 +1622,15 @@ class StrategyTestService:
                     elif sell_volume == '<0.6':
                         if volume_ratio >= 0.6:
                             sell_volume_condition_met = False
+                
+                # 如果卖出信号触发但成交量条件不满足，记录日志
+                if sell_signal_triggered and not sell_volume_condition_met:
+                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出信号已触发，但成交量条件不满足（成交量比率={volume_ratio:.2f}x，要求={sell_volume}），跳过平仓")
+                
+                # 如果持仓存在但没有卖出信号，记录日志（每10个时间点记录一次，避免日志过多）
+                if len(positions) > 0 and not sell_signal_triggered and current_buy_index % 10 == 0:
+                    position_info = ', '.join([f"{p['direction']}({p['entry_price']:.4f})" for p in positions])
+                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 当前持仓: {position_info}，未检测到卖出信号（{sell_signal}）")
                 
                 # 执行卖出
                 if sell_signal_triggered and sell_volume_condition_met:

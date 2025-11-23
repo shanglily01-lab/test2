@@ -120,11 +120,16 @@ class StrategyExecutor:
             sell_volume_enabled = strategy.get('sellVolumeEnabled', False)
             sell_volume = strategy.get('sellVolume')
             position_size = strategy.get('positionSize', 10)
+            max_positions = strategy.get('maxPositions')  # 最大持仓数
+            max_long_positions = strategy.get('maxLongPositions')  # 最大做多持仓数
+            max_short_positions = strategy.get('maxShortPositions')  # 最大做空持仓数
             long_price_type = strategy.get('longPrice', 'market')
             short_price_type = strategy.get('shortPrice', 'market')
             # 止损止盈参数
             stop_loss_pct = strategy.get('stopLoss')  # 止损百分比
             take_profit_pct = strategy.get('takeProfit')  # 止盈百分比
+            # 开仓前先平掉相反方向的持仓
+            close_opposite_on_entry = strategy.get('closeOppositeOnEntry', False)
             # MA10/EMA10 同向过滤
             ma10_ema10_trend_filter = strategy.get('ma10Ema10TrendFilter', False)  # 是否启用 MA10/EMA10 同向过滤
             # 信号强度过滤参数（兼容旧格式和新格式）
@@ -345,7 +350,13 @@ class StrategyExecutor:
                         # - EMA9向上穿越EMA26（金叉）= 做多信号
                         # - EMA9向下穿越EMA26（死叉）= 做空信号
                         
-                        if len(existing_positions) == 0 and not has_pending_strategy_order:
+                        # 检查是否可以开新仓（允许有持仓时开新仓，但需要检查最大持仓限制）
+                        can_open_new_position = True
+                        if max_positions is not None and len(existing_positions) >= max_positions:
+                            can_open_new_position = False
+                            logger.info(f"{symbol} ⚠️ 已达到最大持仓数限制（{max_positions}个），当前持仓{len(existing_positions)}个，跳过买入信号")
+                        
+                        if can_open_new_position and not has_pending_strategy_order:
                             latest_kline = buy_klines[0]
                             prev_kline = buy_klines[1]
                             
@@ -704,9 +715,22 @@ class StrategyExecutor:
                                         trend_confirm_ok = False
                                         logger.debug(f"{symbol} 历史K线不足，无法检查趋势持续性（需要{trend_confirm_bars + 2}根，仅{len(history_klines)}根）")
                                 
+                                # 检查同方向持仓限制（在检查其他条件之前）
+                                position_limit_ok = True
+                                if direction == 'long' and max_long_positions is not None:
+                                    long_positions_count = len([p for p in existing_positions if p.get('position_side') == 'LONG'])
+                                    if long_positions_count >= max_long_positions:
+                                        position_limit_ok = False
+                                        logger.info(f"{symbol} ⚠️ 已达到最大做多持仓数限制（{max_long_positions}个），当前做多持仓{long_positions_count}个，跳过买入信号")
+                                elif direction == 'short' and max_short_positions is not None:
+                                    short_positions_count = len([p for p in existing_positions if p.get('position_side') == 'SHORT'])
+                                    if short_positions_count >= max_short_positions:
+                                        position_limit_ok = False
+                                        logger.info(f"{symbol} ⚠️ 已达到最大做空持仓数限制（{max_short_positions}个），当前做空持仓{short_positions_count}个，跳过买入信号")
+                                
                                 # 总结所有条件检查结果
-                                all_conditions_met = volume_ok and ma10_ema10_ok and trend_confirm_ok
-                                logger.info(f"{symbol} 📋 交易条件检查总结: 成交量={volume_ok}, MA10/EMA10={ma10_ema10_ok}, 趋势持续性={trend_confirm_ok}, 全部满足={all_conditions_met}")
+                                all_conditions_met = volume_ok and ma10_ema10_ok and trend_confirm_ok and position_limit_ok
+                                logger.info(f"{symbol} 📋 交易条件检查总结: 成交量={volume_ok}, MA10/EMA10={ma10_ema10_ok}, 趋势持续性={trend_confirm_ok}, 持仓限制={position_limit_ok}, 全部满足={all_conditions_met}")
                                 
                                 # 获取最近一次命中记录的ID（用于后续更新）
                                 hit_id = None
@@ -732,6 +756,8 @@ class StrategyExecutor:
                                         failed_conditions.append("MA10/EMA10过滤（做空需要EMA10 < MA10）")
                                     if not trend_confirm_ok:
                                         failed_conditions.append("趋势持续性")
+                                    if not position_limit_ok:
+                                        failed_conditions.append("持仓限制")
                                     logger.info(f"{symbol} ❌ 交易条件未全部满足，失败的条件: {', '.join(failed_conditions)}")
                                     if direction == 'short' and not ma10_ema10_ok:
                                         logger.info(f"{symbol} 💡 做空建议：如果希望更多做空机会，可以在策略配置中关闭'启用 MA10/EMA10 同向过滤'选项")
@@ -745,9 +771,30 @@ class StrategyExecutor:
                                             execution_reason=f"条件未满足: {', '.join(failed_conditions)}"
                                         )
                                 
-                                if volume_ok and ma10_ema10_ok and trend_confirm_ok:
+                                if volume_ok and ma10_ema10_ok and trend_confirm_ok and all_conditions_met:
                                     action_name = '买入(做多)' if direction == 'long' else '卖出(做空)'
                                     logger.info(f"{symbol} ✅ 所有交易条件满足，准备执行{action_name}...")
+                                    
+                                    # 开仓前先平掉相反方向的持仓（如果启用）
+                                    if close_opposite_on_entry:
+                                        opposite_side = 'SHORT' if direction == 'long' else 'LONG'
+                                        opposite_positions = [p for p in existing_positions if p.get('position_side') == opposite_side]
+                                        if opposite_positions:
+                                            logger.info(f"{symbol} 🔄 开{direction}仓前，先平掉{len(opposite_positions)}个{opposite_side}持仓")
+                                            for opp_position in opposite_positions:
+                                                try:
+                                                    result = self.futures_engine.close_position(
+                                                        position_id=opp_position['id'],
+                                                        reason=f'开{direction}仓前平仓'
+                                                    )
+                                                    if result.get('success'):
+                                                        logger.info(f"{symbol} ✅ 已平掉{opposite_side}持仓 ID {opp_position['id']}")
+                                                        # 从列表中移除已平仓的持仓
+                                                        existing_positions.remove(opp_position)
+                                                    else:
+                                                        logger.warning(f"{symbol} ⚠️ 平掉{opposite_side}持仓失败: {result.get('message', '未知错误')}")
+                                                except Exception as e:
+                                                    logger.error(f"{symbol} ❌ 平掉{opposite_side}持仓时出错: {e}")
                                     
                                     # 执行开仓
                                     # 获取实时价格用于计算

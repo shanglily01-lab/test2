@@ -90,6 +90,17 @@
         .checkbox-option:has(input[type="checkbox"]:checked) { border-color: var(--primary-blue); background: rgba(43, 111, 237, 0.1); }
         .checkbox-label { cursor: pointer; font-size: 14px; color: var(--text-primary); }
         
+        /* Modal弹框样式 */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); z-index: 10000; display: none; align-items: flex-start; justify-content: center; padding: var(--spacing-xl); overflow-y: auto; }
+        .modal-overlay.show { display: flex; }
+        .modal-container { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); width: 100%; max-width: 1400px; max-height: 90vh; margin: auto; display: flex; flex-direction: column; box-shadow: var(--shadow-xl); }
+        .modal-header { padding: var(--spacing-lg) var(--spacing-xl); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .modal-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .modal-close { background: transparent; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-md); transition: all var(--transition-base); }
+        .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .modal-body { padding: var(--spacing-xl); overflow-y: auto; flex: 1; }
+        .modal-footer { padding: var(--spacing-lg) var(--spacing-xl); border-top: 1px solid var(--border-default); display: flex; justify-content: flex-end; gap: var(--spacing-md); flex-shrink: 0; }
+        
         /* 多选下拉框 */
         .multi-select-wrapper { position: relative; }
         .multi-select-display { padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); min-height: 44px; display: flex; flex-wrap: wrap; gap: var(--spacing-sm); align-items: center; cursor: pointer; }
@@ -109,7 +120,6 @@
         .strategy-item-title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
         .strategy-item-actions { display: flex; gap: var(--spacing-sm); }
         .strategy-item-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-md); }
-        .strategy-item-field { }
         .strategy-item-field-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
         .strategy-item-field-value { font-size: 14px; color: var(--text-primary); }
         
@@ -329,14 +339,22 @@
                         <!-- 策略项将通过JavaScript动态加载 -->
                     </div>
                     
-                    <!-- 添加策略表单 -->
-                    <div class="form-section" id="addStrategyForm" style="display: none;">
-                        <div class="form-section-title">
-                            <i class="bi bi-plus-circle"></i>
-                            新建合约交易策略
-                        </div>
-                        
-                        <form id="strategyForm" onsubmit="saveStrategy(event)">
+                    <!-- 策略列表将在这里显示 -->
+                    
+        <!-- 策略编辑Modal弹框 -->
+        <div class="modal-overlay" id="strategyModal">
+            <div class="modal-container">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="modalTitle">
+                        <i class="bi bi-plus-circle"></i>
+                        新建合约交易策略
+                    </h3>
+                    <button class="modal-close" onclick="closeStrategyModal()" type="button">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="strategyForm" onsubmit="saveStrategy(event)">
                             <!-- 策略基本信息 -->
                             <div class="form-group">
                                 <label class="form-label">策略名称<span class="required">*</span></label>
@@ -765,7 +783,9 @@
                                     <div class="form-group">
                                         <label class="form-label">最大持仓数量</label>
                                         <input type="number" class="form-input" id="maxPositions" placeholder="例如：5" min="1" step="1">
-                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">同时持有的最大仓位数量</small>
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">
+                                            同时持有的最大仓位总数（多空合计）。留空则不限制总数，仅按方向限制。
+                                        </small>
                                     </div>
                                 </div>
                                 
@@ -773,13 +793,28 @@
                                     <div class="form-group">
                                         <label class="form-label">最大做多持仓数</label>
                                         <input type="number" class="form-input" id="maxLongPositions" placeholder="例如：2" min="1" step="1">
-                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">同时持有的最大做多仓位数量（避免方向过于集中）</small>
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">
+                                            同时持有的最大做多仓位数量。留空则不限制做多数量。
+                                        </small>
                                     </div>
                                     
                                     <div class="form-group">
                                         <label class="form-label">最大做空持仓数</label>
                                         <input type="number" class="form-input" id="maxShortPositions" placeholder="例如：2" min="1" step="1">
-                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">同时持有的最大做空仓位数量（避免方向过于集中）</small>
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">
+                                            同时持有的最大做空仓位数量。留空则不限制做空数量。
+                                        </small>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group" style="width: 100%;">
+                                        <small style="color: var(--text-secondary); font-size: 12px; display: block; padding: 8px; background: var(--bg-secondary); border-radius: var(--radius-sm);">
+                                            <strong>💡 持仓限制说明：</strong><br>
+                                            • 如果设置了"最大持仓数量"，则多空合计不能超过此数量<br>
+                                            • 如果设置了"最大做多/做空持仓数"，则分别限制各方向的持仓数<br>
+                                            • 建议：设置方向限制（如做多2个、做空2个）比设置总数限制更灵活
+                                        </small>
                                     </div>
                                 </div>
                             </div>
@@ -802,6 +837,18 @@
                                         <label class="form-label">止盈（%）</label>
                                         <input type="number" class="form-input" id="takeProfit" placeholder="例如：5" min="0" max="100" step="0.1">
                                         <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">盈利达到此百分比时自动平仓（建议5-10%）</small>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">
+                                            <input type="checkbox" id="closeOppositeOnEntry" style="margin-right: 8px;">
+                                            开仓前先平掉相反方向持仓
+                                        </label>
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block; margin-left: 24px;">
+                                            启用后，开多仓前会先平掉所有空仓，开空仓前会先平掉所有多仓。避免同时持有多空仓位，适合趋势跟踪策略。
+                                        </small>
                                     </div>
                                 </div>
                             </div>
@@ -876,13 +923,14 @@
                                 </div>
                             </div>
                             
-                            <!-- 表单操作按钮 -->
-                            <div style="display: flex; gap: var(--spacing-md); justify-content: flex-end; margin-top: var(--spacing-xl); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default);">
-                                <button type="button" class="btn btn-secondary" onclick="cancelAddStrategy()">取消</button>
-                                <button type="submit" class="btn btn-primary">保存策略</button>
-                            </div>
-                        </form>
-                    </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeStrategyModal()">取消</button>
+                    <button type="submit" class="btn btn-primary" onclick="document.getElementById('strategyForm').dispatchEvent(new Event('submit'))">保存策略</button>
+                </div>
+            </div>
+        </div>
                     
                     <!-- 空状态 -->
                     <div class="placeholder-content" id="emptyState">
@@ -1057,30 +1105,21 @@
             }
         }
 
-        // 显示添加策略表单
+        // 显示添加策略表单（Modal弹框）
         function showAddStrategyModal() {
-            document.getElementById('addStrategyForm').style.display = 'block';
-            document.getElementById('emptyState').style.display = 'none';
-            const headerBtn = document.querySelector('.card-header .btn');
-            if (headerBtn) {
-                // 根据是否在编辑模式设置按钮文本
-                if (editingStrategyId !== null && editingStrategyId !== undefined) {
-                    headerBtn.innerHTML = '<i class="bi bi-x-circle"></i> 取消编辑';
-                } else {
-                    headerBtn.innerHTML = '<i class="bi bi-x-circle"></i> 取消添加';
-                }
-                headerBtn.onclick = cancelAddStrategy;
+            const modal = document.getElementById('strategyModal');
+            const modalTitle = document.getElementById('modalTitle');
+            
+            // 更新Modal标题
+            if (editingStrategyId !== null && editingStrategyId !== undefined) {
+                modalTitle.innerHTML = '<i class="bi bi-pencil"></i> 编辑合约交易策略';
+            } else {
+                modalTitle.innerHTML = '<i class="bi bi-plus-circle"></i> 新建合约交易策略';
             }
             
-            // 更新表单标题
-            const formTitle = document.querySelector('#addStrategyForm .form-section-title');
-            if (formTitle) {
-                if (editingStrategyId !== null && editingStrategyId !== undefined) {
-                    formTitle.innerHTML = '<i class="bi bi-pencil"></i> 编辑合约交易策略';
-                } else {
-                    formTitle.innerHTML = '<i class="bi bi-plus-circle"></i> 新建合约交易策略';
-                }
-            }
+            // 显示Modal
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden'; // 防止背景滚动
             
             loadAvailableSymbols();
             
@@ -1093,9 +1132,13 @@
             }
         }
 
-        // 取消添加策略
-        function cancelAddStrategy() {
-            document.getElementById('addStrategyForm').style.display = 'none';
+        // 关闭策略Modal
+        function closeStrategyModal() {
+            const modal = document.getElementById('strategyModal');
+            modal.classList.remove('show');
+            document.body.style.overflow = ''; // 恢复滚动
+            
+            // 重置表单
             document.getElementById('strategyForm').reset();
             // 重置成交量选项显示状态
             document.getElementById('sellVolumeEnabled').checked = false;
@@ -1114,6 +1157,10 @@
             // 清除趋势持续性检查
             document.getElementById('trendConfirmBars').value = '';
             // 清除趋势反转退出机制
+            // 清除开仓前先平掉相反方向持仓
+            if (document.getElementById('closeOppositeOnEntry')) {
+                document.getElementById('closeOppositeOnEntry').checked = false;
+            }
             document.getElementById('exitOnMAFlip').checked = false;
             document.getElementById('exitOnEMAWeak').checked = false;
             
@@ -1150,22 +1197,34 @@
                 document.getElementById('kdjShortMinK').value = '20';
             }
             
-            // 重置按钮
-            const headerBtn = document.querySelector('.card-header .btn');
-            if (headerBtn) {
-                headerBtn.innerHTML = '<i class="bi bi-plus-circle"></i> 添加策略';
-                headerBtn.onclick = showAddStrategyModal;
-            }
-            
-            // 重置表单标题
-            const formTitle = document.querySelector('#addStrategyForm .form-section-title');
-            if (formTitle) {
-                formTitle.innerHTML = '<i class="bi bi-plus-circle"></i> 新建合约交易策略';
-            }
-            
             editingStrategyId = null;
             updateEmptyState();
+            
+            // 关闭Modal
+            closeStrategyModal();
         }
+        
+        // 点击Modal背景关闭
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('strategyModal');
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeStrategyModal();
+                    }
+                });
+            }
+            
+            // ESC键关闭Modal
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    const modal = document.getElementById('strategyModal');
+                    if (modal && modal.classList.contains('show')) {
+                        closeStrategyModal();
+                    }
+                }
+            });
+        });
 
         // 根据交易方向更新价格选项显示
         function updatePriceOptions() {
@@ -1418,6 +1477,7 @@
                 shortPrice: shortPriceRadio ? shortPriceRadio.value : null,
                 stopLoss: document.getElementById('stopLoss').value ? parseFloat(document.getElementById('stopLoss').value) : null,
                 takeProfit: document.getElementById('takeProfit').value ? parseFloat(document.getElementById('takeProfit').value) : null,
+                closeOppositeOnEntry: document.getElementById('closeOppositeOnEntry') ? document.getElementById('closeOppositeOnEntry').checked : false,
                 ma10Ema10TrendFilter: document.getElementById('ma10Ema10TrendFilter').checked,
                 minEMACrossStrength: document.getElementById('minEMACrossStrength').value ? parseFloat(document.getElementById('minEMACrossStrength').value) : 0,
                 minMA10CrossStrength: document.getElementById('minMA10CrossStrength').value ? parseFloat(document.getElementById('minMA10CrossStrength').value) : 0,
@@ -1532,7 +1592,8 @@
             if (saved) {
                 // 刷新显示
                 loadStrategies();
-                cancelAddStrategy();
+                closeStrategyModal();
+                cancelAddStrategy(); // 重置表单状态
                 showToast('策略保存成功！', 'success');
             }
         }
@@ -1682,6 +1743,12 @@
                                 <div class="strategy-item-field-label">止盈</div>
                                 <div class="strategy-item-field-value">${strategy.takeProfit ? strategy.takeProfit + '%' : '未设置'}</div>
                             </div>
+                            ${strategy.closeOppositeOnEntry ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">开仓前先平相反方向</div>
+                                    <div class="strategy-item-field-value">✅ 已启用</div>
+                                </div>
+                            ` : ''}
                             <div class="strategy-item-field">
                                 <div class="strategy-item-field-label">MA10/EMA10同向过滤</div>
                                 <div class="strategy-item-field-value">${strategy.ma10Ema10TrendFilter ? '✅ 已启用' : '❌ 未启用'}</div>
@@ -1974,6 +2041,9 @@
             if (document.getElementById('minHoldingTimeHours')) {
                 document.getElementById('minHoldingTimeHours').value = strategy.minHoldingTimeHours || '';
             }
+            if (document.getElementById('closeOppositeOnEntry')) {
+                document.getElementById('closeOppositeOnEntry').checked = strategy.closeOppositeOnEntry === true;
+            }
             
             // 技术指标过滤器
             if (strategy.rsiFilter) {
@@ -2010,20 +2080,8 @@
                 if (shortPriceRadio) shortPriceRadio.checked = true;
             }
             
-            // 显示表单
+            // 显示Modal表单
             showAddStrategyModal();
-            
-            // 更新按钮文本为"取消编辑"
-            const headerBtn = document.querySelector('.card-header .btn');
-            if (headerBtn) {
-                headerBtn.innerHTML = '<i class="bi bi-x-circle"></i> 取消编辑';
-            }
-            
-            // 更新表单标题
-            const formTitle = document.querySelector('#addStrategyForm .form-section-title');
-            if (formTitle) {
-                formTitle.innerHTML = '<i class="bi bi-pencil"></i> 编辑合约交易策略';
-            }
             
             // 更新币种选择
             loadAvailableSymbols().then(() => {
