@@ -1016,6 +1016,8 @@ class StrategyExecutor:
                                         # 死叉检测：EMA5下穿MA5
                                         is_death_cross = (prev_ema5 >= prev_ma5 and ema5 < ma5) or \
                                                         (prev_ema5 > prev_ma5 and ema5 <= ma5)
+                                        if is_death_cross:
+                                            logger.info(f"{symbol} ✅ 检测到MA5/EMA5死叉，触发卖出信号")
                                 elif sell_signal == 'ma_ema10':
                                     # MA10/EMA10死叉
                                     if latest_sell_kline.get('ma10') and latest_sell_kline.get('ema10'):
@@ -1027,6 +1029,8 @@ class StrategyExecutor:
                                         # 死叉检测：EMA10下穿MA10
                                         is_death_cross = (prev_ema10 >= prev_ma10 and ema10 < ma10) or \
                                                         (prev_ema10 > prev_ma10 and ema10 <= ma10)
+                                        if is_death_cross:
+                                            logger.info(f"{symbol} ✅ 检测到MA10/EMA10死叉，触发卖出信号")
                                 elif sell_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
                                     # EMA9/26死叉
                                     if latest_sell_kline.get('ema_short') and latest_sell_kline.get('ema_long'):
@@ -1038,6 +1042,8 @@ class StrategyExecutor:
                                         # 死叉检测：短期EMA下穿长期EMA
                                         is_death_cross = (prev_ema_short >= prev_ema_long and ema_short < ema_long) or \
                                                         (prev_ema_short > prev_ema_long and ema_short <= ema_long)
+                                        if is_death_cross:
+                                            logger.info(f"{symbol} ✅ 检测到EMA9/26死叉，触发卖出信号")
                                     
                                     if is_death_cross:
                                         # 记录卖出信号命中
@@ -1089,6 +1095,10 @@ class StrategyExecutor:
                                                         volume_ok = volume_ratio <= required_ratio
                                                 except:
                                                     volume_ok = False
+                                        
+                                        # 如果卖出信号触发但成交量条件不满足，记录日志
+                                        if is_death_cross and not volume_ok:
+                                            logger.info(f"{symbol} ⚠️ 卖出信号已触发，但成交量条件不满足（成交量比率={volume_ratio:.2f}x，要求={sell_volume}），跳过平仓")
                                         
                                         if volume_ok:
                                             # 获取最近一次卖出信号命中记录的ID
