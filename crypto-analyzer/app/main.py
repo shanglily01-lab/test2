@@ -1537,80 +1537,7 @@ async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/technical-signals")
-async def get_technical_signals():
-    """
-    获取所有交易对的技术信号（15m, 1h, 1d）
-    包含 EMA, MACD, RSI, BOLL 等技术指标和技术评分
-    
-    Returns:
-        各交易对在不同时间周期的技术指标数据
-    """
-    try:
-        import pymysql
-        
-        db_config = config.get('database', {}).get('mysql', {})
-        connection = pymysql.connect(**db_config)
-        cursor = connection.cursor(pymysql.cursors.DictCursor)
-        
-        try:
-            timeframes = ['15m', '1h', '1d']
-            symbols_data = {}
-            
-            # 获取所有交易对（至少有一个时间周期有数据即可）
-            cursor.execute("SELECT DISTINCT symbol FROM technical_indicators_cache WHERE timeframe IN ('15m', '1h', '1d')")
-            symbols = [row['symbol'] for row in cursor.fetchall()]
-            
-            for symbol in symbols:
-                symbols_data[symbol] = {}
-                
-                for timeframe in timeframes:
-                    # 获取该交易对在该时间周期的最新技术指标数据
-                    cursor.execute(
-                        """SELECT * FROM technical_indicators_cache 
-                        WHERE symbol = %s AND timeframe = %s
-                        ORDER BY updated_at DESC LIMIT 1""",
-                        (symbol, timeframe)
-                    )
-                    result = cursor.fetchone()
-                    
-                    if result:
-                        symbols_data[symbol][timeframe] = {
-                            'rsi_value': float(result['rsi_value']) if result.get('rsi_value') else None,
-                            'rsi_signal': result.get('rsi_signal'),
-                            'macd_value': float(result['macd_value']) if result.get('macd_value') else None,
-                            'macd_signal_line': float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
-                            'macd_histogram': float(result['macd_histogram']) if result.get('macd_histogram') else None,
-                            'macd_trend': result.get('macd_trend'),
-                            'bb_upper': float(result['bb_upper']) if result.get('bb_upper') else None,
-                            'bb_middle': float(result['bb_middle']) if result.get('bb_middle') else None,
-                            'bb_lower': float(result['bb_lower']) if result.get('bb_lower') else None,
-                            'bb_position': result.get('bb_position'),
-                            'ema_short': float(result['ema_short']) if result.get('ema_short') else None,
-                            'ema_long': float(result['ema_long']) if result.get('ema_long') else None,
-                            'ema_trend': result.get('ema_trend'),
-                            'kdj_k': float(result['kdj_k']) if result.get('kdj_k') else None,
-                            'kdj_d': float(result['kdj_d']) if result.get('kdj_d') else None,
-                            'kdj_j': float(result['kdj_j']) if result.get('kdj_j') else None,
-                            'kdj_signal': result.get('kdj_signal'),
-                            'technical_score': float(result['technical_score']) if result.get('technical_score') else None,
-                            'technical_signal': result.get('technical_signal'),
-                            'updated_at': result['updated_at'].isoformat() if result.get('updated_at') else None
-                        }
-            
-            return {
-                "timeframes": timeframes,
-                "symbols": symbols_data
-            }
-        finally:
-            cursor.close()
-            connection.close()
-            
-    except Exception as e:
-        logger.error(f"获取技术信号失败: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+# 已删除重复的 /api/technical-signals 端点定义（第二个版本），请使用第2300行的版本
 
 
 @app.get("/api/config")
@@ -1771,98 +1698,7 @@ async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/technical-signals")
-async def get_technical_signals():
-    """
-    获取所有交易对的技术信号（15m, 1h, 1d）
-    包含 EMA, MACD, RSI, BOLL 等技术指标和技术评分
-    
-    Returns:
-        各交易对在不同时间周期的技术指标数据
-    """
-    try:
-        import pymysql
-        
-        db_config = config.get('database', {}).get('mysql', {})
-        connection = pymysql.connect(**db_config)
-        cursor = connection.cursor(pymysql.cursors.DictCursor)
-        
-        try:
-            timeframes = ['15m', '1h', '1d']
-            symbols_data = {}
-            
-            # 获取所有交易对（至少有一个时间周期有数据即可）
-            cursor.execute("SELECT DISTINCT symbol FROM technical_indicators_cache WHERE timeframe IN ('15m', '1h', '1d')")
-            symbols = [row['symbol'] for row in cursor.fetchall()]
-            
-            for symbol in symbols:
-                symbols_data[symbol] = {}
-                
-                for timeframe in timeframes:
-                    # 获取该交易对在该时间周期的最新技术指标数据
-                    cursor.execute(
-                        """SELECT * FROM technical_indicators_cache 
-                        WHERE symbol = %s AND timeframe = %s 
-                        ORDER BY updated_at DESC LIMIT 1""",
-                        (symbol, timeframe)
-                    )
-                    result = cursor.fetchone()
-                    
-                    if result:
-                        symbols_data[symbol][timeframe] = {
-                            'rsi_value': float(result['rsi_value']) if result.get('rsi_value') else None,
-                            'rsi_signal': result.get('rsi_signal'),
-                            'macd_value': float(result['macd_value']) if result.get('macd_value') else None,
-                            'macd_signal_line': float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
-                            'macd_histogram': float(result['macd_histogram']) if result.get('macd_histogram') else None,
-                            'macd_trend': result.get('macd_trend'),
-                            'bb_upper': float(result['bb_upper']) if result.get('bb_upper') else None,
-                            'bb_middle': float(result['bb_middle']) if result.get('bb_middle') else None,
-                            'bb_lower': float(result['bb_lower']) if result.get('bb_lower') else None,
-                            'bb_position': result.get('bb_position'),
-                            'bb_width': float(result['bb_width']) if result.get('bb_width') else None,
-                            'ema_short': float(result['ema_short']) if result.get('ema_short') else None,
-                            'ema_long': float(result['ema_long']) if result.get('ema_long') else None,
-                            'ema_trend': result.get('ema_trend'),
-                            'kdj_k': float(result['kdj_k']) if result.get('kdj_k') else None,
-                            'kdj_d': float(result['kdj_d']) if result.get('kdj_d') else None,
-                            'kdj_j': float(result['kdj_j']) if result.get('kdj_j') else None,
-                            'kdj_signal': result.get('kdj_signal'),
-                            'technical_score': float(result['technical_score']) if result.get('technical_score') else None,
-                            'technical_signal': result.get('technical_signal'),
-                            'volume_ratio': float(result['volume_ratio']) if result.get('volume_ratio') else None,
-                            'updated_at': result['updated_at'].isoformat() if result.get('updated_at') else None
-                        }
-                    else:
-                        symbols_data[symbol][timeframe] = None
-            
-            # 转换为列表格式，便于前端显示
-            # 只返回至少有一个时间周期有数据的交易对
-            signals_list = []
-            for symbol, timeframes_data in symbols_data.items():
-                # 至少有一个时间周期有数据才添加到列表
-                if timeframes_data.get('15m') or timeframes_data.get('1h') or timeframes_data.get('1d'):
-                    signals_list.append({
-                        'symbol': symbol,
-                        '15m': timeframes_data.get('15m'),
-                        '1h': timeframes_data.get('1h'),
-                        '1d': timeframes_data.get('1d')
-                    })
-            
-            return {
-                "timeframes": timeframes,
-                "total": len(signals_list),
-                "signals": signals_list
-            }
-        finally:
-            cursor.close()
-            connection.close()
-            
-    except Exception as e:
-        logger.error(f"获取技术信号失败: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+# 已删除重复的 /api/technical-signals 端点定义（第二个版本），请使用第2300行的版本
 
 
 @app.get("/api/config")
@@ -2636,6 +2472,17 @@ def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, ti
         logger.error(f"❌ 技术指标timeframe不匹配: 期望{timeframe}, 实际{indicator_timeframe}。"
                     f"1h趋势必须用1h指标，15m趋势必须用15m指标，1d趋势必须用1d指标！")
         # 如果timeframe不匹配，返回默认值，避免使用错误的技术指标
+        # 确保 ema_cross 字段总是存在
+        ema_cross_default = None
+        if timeframe in ['5m', '15m', '1h']:
+            ema_cross_default = {
+                'is_golden_cross': False,
+                'is_death_cross': False,
+                'is_bullish': False,
+                'is_bearish': False,
+                'ema_short': None,
+                'ema_long': None
+            }
         return {
             'trend_direction': 'SIDEWAYS',
             'trend_text': '数据错误',
@@ -2645,6 +2492,7 @@ def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, ti
             'rsi_value': 50.0,
             'macd_trend': 'neutral',
             'ema_trend': 'neutral',
+            'ema_cross': ema_cross_default,  # 确保字段总是存在
             'technical_score': 50.0,
             'price_change_pct': 0.0,
             'volume_change_pct': 0.0,

@@ -545,7 +545,10 @@
                 document.getElementById('tabContentTechnical').classList.add('active');
                 document.getElementById('tabTechnical').classList.add('active');
                 // 切换到技术信号时自动加载数据
-                loadTechnicalSignals();
+                console.log('切换到技术信号TAB，开始加载数据...');
+                loadTechnicalSignals().catch(error => {
+                    console.error('加载技术信号数据失败:', error);
+                });
             } else if (tabName === 'futures') {
                 document.getElementById('tabContentFutures').classList.add('active');
                 document.getElementById('tabFutures').classList.add('active');
@@ -1466,16 +1469,60 @@
         async function loadTechnicalSignals() {
             try {
                 const tbody = document.getElementById('technicalSignalsTableBody');
+                if (!tbody) {
+                    console.error('找不到 technicalSignalsTableBody 元素');
+                    return;
+                }
+                
                 // 每次刷新都更新表格内容，确保价格等数据能及时更新
                 // 不显示"加载中"提示，直接更新数据，避免闪烁
+                console.log('开始加载技术信号数据...');
                 
                 const response = await fetch('/api/technical-signals');
-                const data = await response.json();
                 
-                if (data.success && data.data && data.data.length > 0) {
+                // 检查 HTTP 响应状态
+                if (!response.ok) {
+                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.detail || errorData.message || errorMessage;
+                    } catch (e) {
+                        // 如果无法解析 JSON，使用默认错误信息
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                const data = await response.json();
+                console.log('API返回数据:', data); // 调试日志
+                
+                // 检查数据格式
+                if (!data || typeof data !== 'object') {
+                    throw new Error('API返回数据格式错误：不是有效的JSON对象');
+                }
+                
+                // 更宽松的数据检查：success 可以是 true 或 "true"，data 必须是数组
+                const isSuccess = data.success === true || data.success === 'true' || data.success === 1;
+                const hasData = data.data && Array.isArray(data.data);
+                const hasItems = hasData && data.data.length > 0;
+                
+                console.log('数据格式检查:', {
+                    success: data.success,
+                    successType: typeof data.success,
+                    isSuccess: isSuccess,
+                    hasData: hasData,
+                    dataType: typeof data.data,
+                    isArray: Array.isArray(data.data),
+                    dataLength: hasData ? data.data.length : 0,
+                    hasItems: hasItems
+                });
+                
+                if (isSuccess && hasItems) {
                     let html = '';
+                    console.log(`开始处理 ${data.data.length} 条数据...`);
                     
-                    data.data.forEach(item => {
+                    try {
+                        data.data.forEach((item, index) => {
+                            try {
                         const indicators15m = item['15m'];
                         const indicators1h = item['1h'];
                         const indicators1d = item['1d'];
@@ -1601,23 +1648,57 @@
                                 </td>
                             </tr>
                         `;
-                    });
-                    
-                    tbody.innerHTML = html;
+                            } catch (itemError) {
+                                console.error(`处理第 ${index + 1} 条数据时出错:`, itemError, item);
+                                // 跳过这条数据，继续处理下一条
+                            }
+                        });
+                        
+                        console.log(`成功加载 ${data.data.length} 条技术信号数据`);
+                        tbody.innerHTML = html;
+                    } catch (processError) {
+                        console.error('处理数据时出错:', processError);
+                        throw processError;
+                    }
                 } else {
                     // 显示更详细的提示信息
                     let emptyMessage = '暂无技术信号数据';
-                    if (data.success && data.data && data.data.length === 0) {
-                        emptyMessage = '暂无技术信号数据（可能15m、1h或1d时间周期的数据尚未生成，请等待缓存更新）';
-                    } else if (!data.success) {
+                    console.log('API返回数据（进入else分支）:', data); // 调试日志
+                    console.log('数据检查:', {
+                        success: data?.success,
+                        hasData: !!data?.data,
+                        isArray: Array.isArray(data?.data),
+                        dataLength: data?.data?.length,
+                        dataType: typeof data?.data
+                    });
+                    
+                    // 检查数据格式
+                    if (data === null || data === undefined) {
+                        emptyMessage = '加载失败: API返回数据为空';
+                    } else if (data.success === false || (data.success !== true && data.detail)) {
+                        // API明确返回失败，或者有错误详情
                         emptyMessage = `加载失败: ${data.detail || data.message || '未知错误'}`;
+                    } else if ((data.success === true || data.success === 'true' || data.success === 1) && data.data && Array.isArray(data.data) && data.data.length === 0) {
+                        // 成功但数据为空
+                        emptyMessage = '暂无技术信号数据（可能15m、1h或1d时间周期的数据尚未生成，请等待缓存更新）';
+                        console.log('数据为空，但API返回成功');
+                    } else if (data.success !== true && (!data.data || !Array.isArray(data.data))) {
+                        // 如果返回的数据格式不对，可能是API返回格式改变了
+                        emptyMessage = `加载失败: API返回格式异常（期望包含success:true和data数组字段，实际返回: ${JSON.stringify(data).substring(0, 200)}）`;
+                        console.error('API返回格式异常:', data);
+                    } else {
+                        // 其他情况
+                        emptyMessage = `暂无技术信号数据（success=${data?.success}, data类型=${typeof data?.data}, 是否为数组=${Array.isArray(data?.data)}, 长度=${data?.data?.length || 0}）`;
+                        console.warn('未匹配到任何条件，使用默认提示:', data);
                     }
                     tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${emptyMessage}</td></tr>`;
                 }
             } catch (error) {
                 console.error('加载技术信号失败:', error);
+                console.error('错误详情:', error.stack);
+                const errorMessage = error.message || '请稍后重试';
                 document.getElementById('technicalSignalsTableBody').innerHTML = 
-                    `<tr><td colspan="7" class="empty-state">加载失败: ${error.message || '请稍后重试'}</td></tr>`;
+                    `<tr><td colspan="7" class="empty-state">加载失败: ${errorMessage}</td></tr>`;
             }
         }
 
@@ -1744,10 +1825,8 @@
             
             // EMA金叉/死叉信息（仅对5m、15m、1h显示）
             let emaCrossInfo = '';
-            if (trend.ema_cross) {
-                // 调试：输出EMA交叉信息
-                console.log('EMA交叉信息:', trend.ema_cross);
-                
+            // 检查 ema_cross 字段是否存在且不为 null
+            if (trend.ema_cross && typeof trend.ema_cross === 'object') {
                 if (trend.ema_cross.is_golden_cross) {
                     emaCrossInfo = '<br><small style="color: var(--success-green); font-weight: 600;">✨ EMA金叉</small>';
                 } else if (trend.ema_cross.is_death_cross) {
@@ -1759,10 +1838,8 @@
                     // 当前空头排列（短期在长期之下），但没有刚刚发生死叉
                     emaCrossInfo = '<br><small style="color: var(--danger-red);">↓ EMA空头</small>';
                 }
-            } else {
-                // 调试：如果没有ema_cross信息，输出提示
-                console.log('趋势数据中没有ema_cross字段:', trend);
             }
+            // 如果 ema_cross 不存在或为 null，不显示任何信息（这是正常的，特别是对于1d时间周期）
             
             return `
                 <div>
