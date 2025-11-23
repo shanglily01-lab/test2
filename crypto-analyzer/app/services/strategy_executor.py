@@ -142,9 +142,13 @@ class StrategyExecutor:
                 min_ma10_cross_strength = max(min_ma10_cross_strength, min_signal_strength.get('ma10_ema10', 0.0))
             # 趋势持续性检查参数
             trend_confirm_bars = strategy.get('trendConfirmBars', 0)  # 趋势至少持续K线数（默认0表示不启用）
+            trend_confirm_ema_threshold = strategy.get('trendConfirmEMAThreshold', 0.0)  # 趋势确认EMA差值阈值（%），增强趋势确认
             # 趋势反转退出机制
             exit_on_ma_flip = strategy.get('exitOnMAFlip', False)  # MA10/EMA10反转时立即平仓
+            exit_on_ma_flip_threshold = strategy.get('exitOnMAFlipThreshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
             exit_on_ema_weak = strategy.get('exitOnEMAWeak', False)  # EMA差值<0.05%时平仓
+            exit_on_ema_weak_threshold = strategy.get('exitOnEMAWeakThreshold', 0.05)  # EMA弱信号阈值（%），默认0.05%
+            early_stop_loss_pct = strategy.get('earlyStopLossPct', None)  # 早期止损百分比，基于EMA差值或价格回撤
             
             if not symbols or not buy_directions or not buy_signal or not sell_signal:
                 return {'success': False, 'message': '策略配置不完整'}
@@ -694,6 +698,8 @@ class StrategyExecutor:
                                     if len(history_klines) >= trend_confirm_bars + 1:
                                         # 检查从交叉发生到现在是否一直保持趋势
                                         trend_maintained = True
+                                        ema_strength_ok = True
+                                        
                                         for i in range(len(history_klines) - 1):
                                             check_kline = history_klines[i]
                                             check_ema_short = float(check_kline.get('ema_short', 0)) if check_kline.get('ema_short') else None
@@ -706,10 +712,31 @@ class StrategyExecutor:
                                                 elif direction == 'short' and check_ema_short >= check_ema_long:
                                                     trend_maintained = False
                                                     break
+                                                
+                                                # 检查EMA差值是否满足阈值（增强趋势确认）
+                                                if trend_confirm_ema_threshold > 0:
+                                                    check_ema_diff = abs(check_ema_short - check_ema_long)
+                                                    check_ema_diff_pct = (check_ema_diff / check_ema_long * 100) if check_ema_long > 0 else 0
+                                                    if check_ema_diff_pct < trend_confirm_ema_threshold:
+                                                        ema_strength_ok = False
+                                                        break
+                                        
+                                        # 检查当前K线的EMA差值是否满足阈值
+                                        if trend_confirm_ema_threshold > 0 and trend_maintained:
+                                            if latest_kline.get('ema_short') and latest_kline.get('ema_long'):
+                                                curr_ema_short = float(latest_kline['ema_short'])
+                                                curr_ema_long = float(latest_kline['ema_long'])
+                                                curr_ema_diff = abs(curr_ema_short - curr_ema_long)
+                                                curr_ema_diff_pct = (curr_ema_diff / curr_ema_long * 100) if curr_ema_long > 0 else 0
+                                                if curr_ema_diff_pct < trend_confirm_ema_threshold:
+                                                    ema_strength_ok = False
                                         
                                         if not trend_maintained:
                                             trend_confirm_ok = False
                                             logger.info(f"{symbol} ⚠️ 趋势持续性检查失败（{signal_type}后趋势未持续{trend_confirm_bars}个周期）")
+                                        elif not ema_strength_ok:
+                                            trend_confirm_ok = False
+                                            logger.info(f"{symbol} ⚠️ 趋势确认失败，EMA差值未达到阈值({trend_confirm_ema_threshold}%)")
                                     else:
                                         # 历史K线不足，无法检查趋势持续性
                                         trend_confirm_ok = False
@@ -961,16 +988,27 @@ class StrategyExecutor:
                                         prev_ma10 = float(prev_sell_kline['ma10'])
                                         prev_ema10 = float(prev_sell_kline['ema10'])
                                         
+                                        # 计算MA10/EMA10差值百分比
+                                        prev_diff = prev_ema10 - prev_ma10
+                                        prev_diff_pct = abs(prev_diff / prev_ma10 * 100) if prev_ma10 > 0 else 0
+                                        curr_diff = ema10 - ma10
+                                        curr_diff_pct = abs(curr_diff / ma10 * 100) if ma10 > 0 else 0
+                                        
                                         # 检查是否反转（从多头转为空头，或从空头转为多头）
                                         prev_bullish = prev_ema10 > prev_ma10
                                         curr_bullish = ema10 > ma10
                                         
+                                        # 只有当差值百分比超过阈值时才触发反转退出（避免小幅波动）
                                         if prev_bullish != curr_bullish:
-                                            should_exit = True
-                                            exit_reason = 'MA10/EMA10反转'
-                                            logger.info(f"⚠️ {symbol} 检测到MA10/EMA10反转，触发退出机制")
+                                            # 检查差值是否超过阈值
+                                            if prev_diff_pct >= exit_on_ma_flip_threshold or curr_diff_pct >= exit_on_ma_flip_threshold:
+                                                should_exit = True
+                                                exit_reason = f'MA10/EMA10反转(阈值≥{exit_on_ma_flip_threshold}%)'
+                                                logger.info(f"⚠️ {symbol} 检测到MA10/EMA10反转，触发退出机制（前差值={prev_diff_pct:.2f}%，当前差值={curr_diff_pct:.2f}%，阈值={exit_on_ma_flip_threshold}%）")
+                                            else:
+                                                logger.debug(f"{symbol} MA10/EMA10反转但差值过小（前差值={prev_diff_pct:.2f}%，当前差值={curr_diff_pct:.2f}% < 阈值{exit_on_ma_flip_threshold}%），忽略")
                                 
-                                # 检查 EMA 弱信号退出
+                                # 检查 EMA 弱信号退出（使用可配置阈值）
                                 if not should_exit and exit_on_ema_weak:
                                     if latest_sell_kline.get('ema_short') and latest_sell_kline.get('ema_long'):
                                         ema_short = float(latest_sell_kline['ema_short'])
@@ -978,10 +1016,47 @@ class StrategyExecutor:
                                         ema_diff = abs(ema_short - ema_long)
                                         ema_diff_pct = (ema_diff / ema_long * 100) if ema_long > 0 else 0
                                         
-                                        if ema_diff_pct < 0.05:  # EMA差值<0.05%
+                                        if ema_diff_pct < exit_on_ema_weak_threshold:  # EMA差值小于阈值
                                             should_exit = True
-                                            exit_reason = 'EMA信号过弱'
-                                            logger.info(f"⚠️ {symbol} EMA差值过小({ema_diff_pct:.2f}%)，触发退出机制")
+                                            exit_reason = f'EMA信号过弱(差值<{exit_on_ema_weak_threshold}%)'
+                                            logger.info(f"⚠️ {symbol} EMA差值过小({ema_diff_pct:.2f}% < {exit_on_ema_weak_threshold}%)，触发退出机制")
+                                
+                                # 检查早期止损（基于EMA差值或价格回撤）
+                                if not should_exit and early_stop_loss_pct is not None and early_stop_loss_pct > 0:
+                                    # 基于EMA差值计算早期止损（对所有持仓都适用）
+                                    if latest_sell_kline.get('ema_short') and latest_sell_kline.get('ema_long'):
+                                        ema_short = float(latest_sell_kline['ema_short'])
+                                        ema_long = float(latest_sell_kline['ema_long'])
+                                        ema_diff_pct = abs(ema_short - ema_long) / ema_long * 100 if ema_long > 0 else 0
+                                        
+                                        # 如果EMA差值缩小到阈值以下，触发早期止损
+                                        if ema_diff_pct < early_stop_loss_pct:
+                                            should_exit = True
+                                            exit_reason = f'早期止损(EMA差值{ema_diff_pct:.2f}% < {early_stop_loss_pct}%)'
+                                            logger.info(f"⚠️ {symbol} EMA差值缩小({ema_diff_pct:.2f}% < {early_stop_loss_pct}%)，触发早期止损")
+                                    
+                                    # 基于价格回撤计算早期止损（逐个检查持仓）
+                                    if not should_exit:
+                                        current_price = float(latest_sell_kline.get('close_price', 0))
+                                        if current_price > 0:
+                                            for position in existing_positions:
+                                                entry_price = float(position.get('entry_price', 0))
+                                                position_side = position.get('position_side', '')
+                                                
+                                                if position_side == 'LONG':
+                                                    price_drop_pct = (entry_price - current_price) / entry_price * 100
+                                                    if price_drop_pct >= early_stop_loss_pct:
+                                                        should_exit = True
+                                                        exit_reason = f'早期止损(价格回撤{price_drop_pct:.2f}% ≥ {early_stop_loss_pct}%)'
+                                                        logger.info(f"⚠️ {symbol} 做多价格回撤({price_drop_pct:.2f}% ≥ {early_stop_loss_pct}%)，触发早期止损")
+                                                        break
+                                                elif position_side == 'SHORT':
+                                                    price_rise_pct = (current_price - entry_price) / entry_price * 100
+                                                    if price_rise_pct >= early_stop_loss_pct:
+                                                        should_exit = True
+                                                        exit_reason = f'早期止损(价格回撤{price_rise_pct:.2f}% ≥ {early_stop_loss_pct}%)'
+                                                        logger.info(f"⚠️ {symbol} 做空价格回撤({price_rise_pct:.2f}% ≥ {early_stop_loss_pct}%)，触发早期止损")
+                                                        break
                                 
                                 # 如果触发趋势反转退出，立即平仓
                                 if should_exit:

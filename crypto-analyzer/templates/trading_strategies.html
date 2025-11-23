@@ -607,19 +607,54 @@
                                     </div>
                                     
                                     <div class="form-group">
+                                        <label class="form-label">趋势确认EMA差值阈值（%）</label>
+                                        <input type="number" id="trendConfirmEMAThreshold" name="trendConfirmEMAThreshold" 
+                                               step="0.01" min="0" max="5" 
+                                               placeholder="0.1" 
+                                               style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; margin-top: 8px;">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">趋势确认时，EMA差值必须≥此阈值（0表示不启用，建议0.1-0.3%）</small>
+                                    </div>
+                                    
+                                    <div class="form-group">
                                         <label class="form-label">趋势反转退出机制</label>
                                         <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
                                             <div style="display: flex; align-items: center; gap: 8px;">
                                                 <input type="checkbox" id="exitOnMAFlip" name="exitOnMAFlip">
                                                 <label for="exitOnMAFlip" class="checkbox-label" style="margin: 0; font-weight: 500;">MA10/EMA10反转时立即平仓</label>
                                             </div>
-                                            <small style="color: var(--text-secondary); font-size: 12px; margin-left: 26px;">当MA10/EMA10从多头转为空头（或相反）时，立即平仓退出</small>
+                                            <div style="margin-left: 26px; margin-top: 4px;">
+                                                <small style="color: var(--text-secondary); font-size: 12px; display: block;">当MA10/EMA10从多头转为空头（或相反）时，立即平仓退出</small>
+                                                <input type="number" id="exitOnMAFlipThreshold" name="exitOnMAFlipThreshold" 
+                                                       step="0.01" min="0" max="5" 
+                                                       placeholder="0.1" 
+                                                       style="width: 120px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; margin-top: 4px;">
+                                                <small style="color: var(--text-secondary); font-size: 11px; margin-left: 4px;">阈值（%），避免小幅波动触发</small>
+                                            </div>
                                             
                                             <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
                                                 <input type="checkbox" id="exitOnEMAWeak" name="exitOnEMAWeak">
                                                 <label for="exitOnEMAWeak" class="checkbox-label" style="margin: 0; font-weight: 500;">EMA信号过弱时平仓</label>
                                             </div>
-                                            <small style="color: var(--text-secondary); font-size: 12px; margin-left: 26px;">当EMA9/26差值小于0.05%时，立即平仓退出</small>
+                                            <div style="margin-left: 26px; margin-top: 4px;">
+                                                <small style="color: var(--text-secondary); font-size: 12px; display: block;">当EMA9/26差值小于阈值时，立即平仓退出</small>
+                                                <input type="number" id="exitOnEMAWeakThreshold" name="exitOnEMAWeakThreshold" 
+                                                       step="0.01" min="0" max="1" 
+                                                       placeholder="0.05" 
+                                                       style="width: 120px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; margin-top: 4px;">
+                                                <small style="color: var(--text-secondary); font-size: 11px; margin-left: 4px;">阈值（%），默认0.05%</small>
+                                            </div>
+                                            
+                                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                                                <label class="form-label" style="margin: 0; font-weight: 500;">早期止损（%）</label>
+                                            </div>
+                                            <div style="margin-left: 0; margin-top: 4px;">
+                                                <input type="number" id="earlyStopLossPct" name="earlyStopLossPct" 
+                                                       step="0.1" min="0" max="10" 
+                                                       placeholder="例如：3" 
+                                                       style="width: 120px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; margin-top: 4px;">
+                                                <small style="color: var(--text-secondary); font-size: 11px; margin-left: 4px;">基于EMA差值或价格回撤的早期止损（留空表示不启用）</small>
+                                                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">当EMA差值缩小或价格回撤达到此百分比时，触发早期止损（建议2-5%）</small>
+                                            </div>
                                         </div>
                                     </div>
                                     
@@ -1162,7 +1197,19 @@
                 document.getElementById('closeOppositeOnEntry').checked = false;
             }
             document.getElementById('exitOnMAFlip').checked = false;
+            if (document.getElementById('exitOnMAFlipThreshold')) {
+                document.getElementById('exitOnMAFlipThreshold').value = '';
+            }
             document.getElementById('exitOnEMAWeak').checked = false;
+            if (document.getElementById('exitOnEMAWeakThreshold')) {
+                document.getElementById('exitOnEMAWeakThreshold').value = '';
+            }
+            if (document.getElementById('earlyStopLossPct')) {
+                document.getElementById('earlyStopLossPct').value = '';
+            }
+            if (document.getElementById('trendConfirmEMAThreshold')) {
+                document.getElementById('trendConfirmEMAThreshold').value = '';
+            }
             
             // 清除风险控制
             if (document.getElementById('preventDuplicateEntry')) {
@@ -1486,8 +1533,12 @@
                     ma10_ema10: document.getElementById('minSignalStrength_ma10_ema10').value ? parseFloat(document.getElementById('minSignalStrength_ma10_ema10').value) : 0
                 },
                 trendConfirmBars: document.getElementById('trendConfirmBars').value ? parseInt(document.getElementById('trendConfirmBars').value) : 0,
+                trendConfirmEMAThreshold: document.getElementById('trendConfirmEMAThreshold') && document.getElementById('trendConfirmEMAThreshold').value ? parseFloat(document.getElementById('trendConfirmEMAThreshold').value) : 0,
                 exitOnMAFlip: document.getElementById('exitOnMAFlip') ? document.getElementById('exitOnMAFlip').checked : false,
+                exitOnMAFlipThreshold: document.getElementById('exitOnMAFlipThreshold') && document.getElementById('exitOnMAFlipThreshold').value ? parseFloat(document.getElementById('exitOnMAFlipThreshold').value) : 0.1,
                 exitOnEMAWeak: document.getElementById('exitOnEMAWeak') ? document.getElementById('exitOnEMAWeak').checked : false,
+                exitOnEMAWeakThreshold: document.getElementById('exitOnEMAWeakThreshold') && document.getElementById('exitOnEMAWeakThreshold').value ? parseFloat(document.getElementById('exitOnEMAWeakThreshold').value) : 0.05,
+                earlyStopLossPct: document.getElementById('earlyStopLossPct') && document.getElementById('earlyStopLossPct').value ? parseFloat(document.getElementById('earlyStopLossPct').value) : null,
                 preventDuplicateEntry: document.getElementById('preventDuplicateEntry') ? document.getElementById('preventDuplicateEntry').checked : false,
                 minHoldingTimeHours: document.getElementById('minHoldingTimeHours') ? (document.getElementById('minHoldingTimeHours').value ? parseFloat(document.getElementById('minHoldingTimeHours').value) : 0) : 0,
                 rsiFilter: {
@@ -2029,10 +2080,22 @@
             
             // 趋势持续性检查
             document.getElementById('trendConfirmBars').value = strategy.trendConfirmBars || '';
+            if (document.getElementById('trendConfirmEMAThreshold')) {
+                document.getElementById('trendConfirmEMAThreshold').value = strategy.trendConfirmEMAThreshold || '';
+            }
             
             // 趋势反转退出机制
             document.getElementById('exitOnMAFlip').checked = strategy.exitOnMAFlip === true;
+            if (document.getElementById('exitOnMAFlipThreshold')) {
+                document.getElementById('exitOnMAFlipThreshold').value = strategy.exitOnMAFlipThreshold || '0.1';
+            }
             document.getElementById('exitOnEMAWeak').checked = strategy.exitOnEMAWeak === true;
+            if (document.getElementById('exitOnEMAWeakThreshold')) {
+                document.getElementById('exitOnEMAWeakThreshold').value = strategy.exitOnEMAWeakThreshold || '0.05';
+            }
+            if (document.getElementById('earlyStopLossPct')) {
+                document.getElementById('earlyStopLossPct').value = strategy.earlyStopLossPct || '';
+            }
             
             // 风险控制
             if (document.getElementById('preventDuplicateEntry')) {

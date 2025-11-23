@@ -127,7 +127,11 @@ class StrategyTestService:
                     min_ma10_cross_strength = max(min_ma10_cross_strength, min_signal_strength.get('ma10_ema10', 0.0))
                 trend_confirm_bars = request.get('trendConfirmBars', 0)
                 exit_on_ma_flip = request.get('exitOnMAFlip', False)  # MA10/EMA10反转时立即平仓
+                exit_on_ma_flip_threshold = request.get('exitOnMAFlipThreshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
                 exit_on_ema_weak = request.get('exitOnEMAWeak', False)  # EMA差值<0.05%时平仓
+                exit_on_ema_weak_threshold = request.get('exitOnEMAWeakThreshold', 0.05)  # EMA弱信号阈值（%），默认0.05%
+                early_stop_loss_pct = request.get('earlyStopLossPct', None)  # 早期止损百分比，基于EMA差值或价格回撤
+                trend_confirm_ema_threshold = request.get('trendConfirmEMAThreshold', 0.0)  # 趋势确认EMA差值阈值（%），增强趋势确认
                 prevent_duplicate_entry = request.get('preventDuplicateEntry', False)  # 防止重复开仓
                 close_opposite_on_entry = request.get('closeOppositeOnEntry', False)  # 开仓前先平掉相反方向的持仓
                 min_holding_time_hours = request.get('minHoldingTimeHours', 0)  # 最小持仓时间（小时）
@@ -289,8 +293,12 @@ class StrategyTestService:
                         min_ema_cross_strength=min_ema_cross_strength,
                         min_ma10_cross_strength=min_ma10_cross_strength,
                         trend_confirm_bars=trend_confirm_bars,
+                        trend_confirm_ema_threshold=trend_confirm_ema_threshold,
                         exit_on_ma_flip=exit_on_ma_flip,
+                        exit_on_ma_flip_threshold=exit_on_ma_flip_threshold,
                         exit_on_ema_weak=exit_on_ema_weak,
+                        exit_on_ema_weak_threshold=exit_on_ema_weak_threshold,
+                        early_stop_loss_pct=early_stop_loss_pct,
                         prevent_duplicate_entry=prevent_duplicate_entry,
                         close_opposite_on_entry=close_opposite_on_entry,
                         min_holding_time_hours=min_holding_time_hours,
@@ -553,8 +561,13 @@ class StrategyTestService:
         min_ema_cross_strength = kwargs.get('min_ema_cross_strength', 0.0)
         min_ma10_cross_strength = kwargs.get('min_ma10_cross_strength', 0.0)
         trend_confirm_bars = kwargs.get('trend_confirm_bars', 0)
+        trend_confirm_bars = kwargs.get('trend_confirm_bars', 0)  # 趋势至少持续K线数（默认0表示不启用）
+        trend_confirm_ema_threshold = kwargs.get('trend_confirm_ema_threshold', 0.0)  # 趋势确认EMA差值阈值（%），增强趋势确认
         exit_on_ma_flip = kwargs.get('exit_on_ma_flip', False)  # MA10/EMA10反转时立即平仓
+        exit_on_ma_flip_threshold = kwargs.get('exit_on_ma_flip_threshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
         exit_on_ema_weak = kwargs.get('exit_on_ema_weak', False)  # EMA差值<0.05%时平仓
+        exit_on_ema_weak_threshold = kwargs.get('exit_on_ema_weak_threshold', 0.05)  # EMA弱信号阈值（%），默认0.05%
+        early_stop_loss_pct = kwargs.get('early_stop_loss_pct', None)  # 早期止损百分比，基于EMA差值或价格回撤
         prevent_duplicate_entry = kwargs.get('prevent_duplicate_entry', False)  # 防止重复开仓
         close_opposite_on_entry = kwargs.get('close_opposite_on_entry', False)  # 开仓前先平掉相反方向的持仓
         min_holding_time_hours = kwargs.get('min_holding_time_hours', 0)  # 最小持仓时间（小时）
@@ -1187,6 +1200,8 @@ class StrategyTestService:
                                 if bars_since_cross >= required_bars:
                                     # 检查从金叉到当前的所有K线，趋势是否一直维持
                                     trend_maintained = True
+                                    ema_strength_ok = True
+                                    
                                     for check_index in range(golden_cross_index, current_buy_index + 1):
                                         if check_index < len(buy_indicator_pairs):
                                             check_pair = buy_indicator_pairs[check_index]
@@ -1206,6 +1221,15 @@ class StrategyTestService:
                                                         trend_maintained = False
                                                         debug_info.append(f"   ⚠️ 趋势确认失败：在索引{check_index}处趋势反转")
                                                         break
+                                                    
+                                                    # 检查EMA差值是否满足阈值（增强趋势确认）
+                                                    if trend_confirm_ema_threshold > 0:
+                                                        check_ema_diff = abs(check_ema_short - check_ema_long)
+                                                        check_ema_diff_pct = (check_ema_diff / check_ema_long * 100) if check_ema_long > 0 else 0
+                                                        if check_ema_diff_pct < trend_confirm_ema_threshold:
+                                                            ema_strength_ok = False
+                                                            debug_info.append(f"   ⚠️ 趋势确认失败：在索引{check_index}处EMA差值过小({check_ema_diff_pct:.2f}% < {trend_confirm_ema_threshold}%)")
+                                                            break
                                             elif buy_signal == 'ma_ema10':
                                                 if check_ma10 and check_ema10:
                                                     if direction == 'long' and check_ema10 <= check_ma10:
@@ -1217,9 +1241,21 @@ class StrategyTestService:
                                                         debug_info.append(f"   ⚠️ 趋势确认失败：在索引{check_index}处趋势反转")
                                                         break
                                     
+                                    # 检查当前K线的EMA差值是否满足阈值
+                                    if trend_confirm_ema_threshold > 0 and trend_maintained:
+                                        if buy_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
+                                            curr_ema_diff = abs(ema_short - ema_long)
+                                            curr_ema_diff_pct = (curr_ema_diff / ema_long * 100) if ema_long > 0 else 0
+                                            if curr_ema_diff_pct < trend_confirm_ema_threshold:
+                                                ema_strength_ok = False
+                                                debug_info.append(f"   ⚠️ 趋势确认失败：当前EMA差值过小({curr_ema_diff_pct:.2f}% < {trend_confirm_ema_threshold}%)")
+                                    
                                     if not trend_maintained:
                                         trend_confirm_ok = False
                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认失败，趋势未持续{trend_confirm_bars}根K线")
+                                    elif not ema_strength_ok:
+                                        trend_confirm_ok = False
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认失败，EMA差值未达到阈值({trend_confirm_ema_threshold}%)")
                                 else:
                                     # 金叉刚发生，还需要等待更多K线
                                     trend_confirm_ok = False
@@ -1466,7 +1502,7 @@ class StrategyTestService:
                     prev_pair = sell_indicator_pairs[current_sell_index - 1]
                     prev_indicator = prev_pair['indicator']
                     
-                    # 检查 MA10/EMA10 反转退出
+                    # 检查 MA10/EMA10 反转退出（带阈值，避免小幅波动触发）
                     if exit_on_ma_flip:
                         if indicator.get('ma10') and indicator.get('ema10') and \
                            prev_indicator.get('ma10') and prev_indicator.get('ema10'):
@@ -1475,16 +1511,27 @@ class StrategyTestService:
                             prev_ma10 = float(prev_indicator['ma10'])
                             prev_ema10 = float(prev_indicator['ema10'])
                             
+                            # 计算MA10/EMA10差值百分比
+                            prev_diff = prev_ema10 - prev_ma10
+                            prev_diff_pct = abs(prev_diff / prev_ma10 * 100) if prev_ma10 > 0 else 0
+                            curr_diff = ema10 - ma10
+                            curr_diff_pct = abs(curr_diff / ma10 * 100) if ma10 > 0 else 0
+                            
                             # 检查是否反转（从多头转为空头，或从空头转为多头）
                             prev_bullish = prev_ema10 > prev_ma10
                             curr_bullish = ema10 > ma10
                             
+                            # 只有当差值百分比超过阈值时才触发反转退出（避免小幅波动）
                             if prev_bullish != curr_bullish:
-                                should_exit = True
-                                exit_reason = 'MA10/EMA10反转'
-                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 检测到MA10/EMA10反转，触发退出机制")
+                                # 检查差值是否超过阈值
+                                if prev_diff_pct >= exit_on_ma_flip_threshold or curr_diff_pct >= exit_on_ma_flip_threshold:
+                                    should_exit = True
+                                    exit_reason = f'MA10/EMA10反转(阈值≥{exit_on_ma_flip_threshold}%)'
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 检测到MA10/EMA10反转，触发退出机制（前差值={prev_diff_pct:.2f}%，当前差值={curr_diff_pct:.2f}%，阈值={exit_on_ma_flip_threshold}%）")
+                                else:
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 📊 MA10/EMA10反转但差值过小（前差值={prev_diff_pct:.2f}%，当前差值={curr_diff_pct:.2f}% < 阈值{exit_on_ma_flip_threshold}%），忽略")
                     
-                    # 检查 EMA 弱信号退出
+                    # 检查 EMA 弱信号退出（使用可配置阈值）
                     if not should_exit and exit_on_ema_weak:
                         if indicator.get('ema_short') and indicator.get('ema_long'):
                             ema_short = float(indicator['ema_short'])
@@ -1492,10 +1539,45 @@ class StrategyTestService:
                             ema_diff = abs(ema_short - ema_long)
                             ema_diff_pct = (ema_diff / ema_long * 100) if ema_long > 0 else 0
                             
-                            if ema_diff_pct < 0.05:  # EMA差值<0.05%
+                            if ema_diff_pct < exit_on_ema_weak_threshold:  # EMA差值小于阈值
                                 should_exit = True
-                                exit_reason = 'EMA信号过弱'
-                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ EMA差值过小({ema_diff_pct:.2f}%)，触发退出机制")
+                                exit_reason = f'EMA信号过弱(差值<{exit_on_ema_weak_threshold}%)'
+                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ EMA差值过小({ema_diff_pct:.2f}% < {exit_on_ema_weak_threshold}%)，触发退出机制")
+                    
+                    # 检查早期止损（基于EMA差值或价格回撤）
+                    if not should_exit and early_stop_loss_pct is not None and early_stop_loss_pct > 0:
+                        for position in positions[:]:
+                            entry_price = position['entry_price']
+                            direction = position['direction']
+                            
+                            # 基于EMA差值计算早期止损
+                            if indicator.get('ema_short') and indicator.get('ema_long'):
+                                ema_short = float(indicator['ema_short'])
+                                ema_long = float(indicator['ema_long'])
+                                ema_diff_pct = abs(ema_short - ema_long) / ema_long * 100 if ema_long > 0 else 0
+                                
+                                # 如果EMA差值缩小到阈值以下，触发早期止损
+                                if ema_diff_pct < early_stop_loss_pct:
+                                    should_exit = True
+                                    exit_reason = f'早期止损(EMA差值{ema_diff_pct:.2f}% < {early_stop_loss_pct}%)'
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ EMA差值缩小({ema_diff_pct:.2f}% < {early_stop_loss_pct}%)，触发早期止损")
+                                    break
+                            
+                            # 基于价格回撤计算早期止损
+                            if direction == 'long':
+                                price_drop_pct = (entry_price - close_price) / entry_price * 100
+                                if price_drop_pct >= early_stop_loss_pct:
+                                    should_exit = True
+                                    exit_reason = f'早期止损(价格回撤{price_drop_pct:.2f}% ≥ {early_stop_loss_pct}%)'
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做多价格回撤({price_drop_pct:.2f}% ≥ {early_stop_loss_pct}%)，触发早期止损")
+                                    break
+                            else:  # short
+                                price_rise_pct = (close_price - entry_price) / entry_price * 100
+                                if price_rise_pct >= early_stop_loss_pct:
+                                    should_exit = True
+                                    exit_reason = f'早期止损(价格回撤{price_rise_pct:.2f}% ≥ {early_stop_loss_pct}%)'
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做空价格回撤({price_rise_pct:.2f}% ≥ {early_stop_loss_pct}%)，触发早期止损")
+                                    break
                 
                 # 如果触发趋势反转退出，立即平仓
                 if should_exit:
@@ -1607,6 +1689,13 @@ class StrategyTestService:
                     if len(positions) > 0:
                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出时间周期历史数据不足，无法检测卖出信号（需要至少1个历史数据点）")
                 
+                # 如果持仓存在但没有卖出信号，记录日志（每10个时间点记录一次，避免日志过多）
+                if len(positions) > 0 and not sell_signal_triggered:
+                    # 使用时间戳的分钟数来判断是否记录（每10分钟记录一次）
+                    if current_time_local.minute % 10 == 0:
+                        position_info = ', '.join([f"{p['direction']}({p['entry_price']:.4f})" for p in positions])
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 当前持仓: {position_info}，未检测到卖出信号（{sell_signal}）")
+                
                 # 检查卖出成交量条件
                 sell_volume_condition_met = True
                 if sell_volume_enabled and sell_volume:
@@ -1628,9 +1717,11 @@ class StrategyTestService:
                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出信号已触发，但成交量条件不满足（成交量比率={volume_ratio:.2f}x，要求={sell_volume}），跳过平仓")
                 
                 # 如果持仓存在但没有卖出信号，记录日志（每10个时间点记录一次，避免日志过多）
-                if len(positions) > 0 and not sell_signal_triggered and current_buy_index % 10 == 0:
-                    position_info = ', '.join([f"{p['direction']}({p['entry_price']:.4f})" for p in positions])
-                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 当前持仓: {position_info}，未检测到卖出信号（{sell_signal}）")
+                if len(positions) > 0 and not sell_signal_triggered:
+                    # 使用时间戳的分钟数来判断是否记录（每10分钟记录一次）
+                    if current_time_local.minute % 10 == 0:
+                        position_info = ', '.join([f"{p['direction']}({p['entry_price']:.4f})" for p in positions])
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 当前持仓: {position_info}，未检测到卖出信号（{sell_signal}）")
                 
                 # 执行卖出
                 if sell_signal_triggered and sell_volume_condition_met:
