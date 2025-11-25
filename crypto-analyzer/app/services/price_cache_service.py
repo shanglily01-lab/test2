@@ -83,37 +83,55 @@ class PriceCacheService:
             self._stop_event.wait(self.update_interval)
 
     def _update_prices_from_db(self):
-        """从数据库更新价格"""
-        try:
-            from app.database.db_service import DatabaseService
+        """从数据库更新价格（带重试机制）"""
+        max_retries = 3
+        retry_delay = 1  # 秒
+        
+        for attempt in range(max_retries):
+            try:
+                from app.database.db_service import DatabaseService
 
-            db_service = DatabaseService(self.db_config)
+                db_service = DatabaseService(self.db_config)
 
-            # 获取所有最新价格
-            prices = db_service.get_all_latest_prices()
+                # 获取所有最新价格
+                prices = db_service.get_all_latest_prices()
 
-            if not prices:
-                logger.warning("数据库中没有价格数据")
+                if not prices:
+                    logger.warning("数据库中没有价格数据")
+                    return
+
+                # 更新缓存
+                with self._lock:
+                    for price_data in prices:
+                        symbol = price_data.get('symbol')
+                        price = price_data.get('price')
+
+                        if symbol and price:
+                            self._cache[symbol] = {
+                                'price': Decimal(str(price)),
+                                'timestamp': datetime.now(),
+                                'bid': Decimal(str(price_data.get('bid', price))),
+                                'ask': Decimal(str(price_data.get('ask', price))),
+                            }
+
+                    # 移除成功时的日志，仅在失败时打印
+                
+                # 成功，退出重试循环
                 return
 
-            # 更新缓存
-            with self._lock:
-                for price_data in prices:
-                    symbol = price_data.get('symbol')
-                    price = price_data.get('price')
-
-                    if symbol and price:
-                        self._cache[symbol] = {
-                            'price': Decimal(str(price)),
-                            'timestamp': datetime.now(),
-                            'bid': Decimal(str(price_data.get('bid', price))),
-                            'ask': Decimal(str(price_data.get('ask', price))),
-                        }
-
-                # 移除成功时的日志，仅在失败时打印
-
-        except Exception as e:
-            logger.error(f"从数据库更新价格失败: {e}")
+            except Exception as e:
+                error_msg = str(e)
+                is_connection_error = 'Lost connection' in error_msg or 'OperationalError' in str(type(e).__name__) or '2013' in error_msg
+                
+                if attempt < max_retries - 1 and is_connection_error:
+                    logger.debug(f"从数据库更新价格失败（尝试 {attempt + 1}/{max_retries}）: {e}，{retry_delay}秒后重试...")
+                    import time
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # 指数退避
+                else:
+                    # 最后一次尝试失败，记录错误但不抛出异常（避免影响主程序）
+                    logger.error(f"从数据库更新价格失败（已重试 {attempt + 1} 次）: {e}")
+                    return  # 静默失败，使用缓存数据
 
     def get_price(self, symbol: str) -> Decimal:
         """

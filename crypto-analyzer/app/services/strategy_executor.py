@@ -503,8 +503,9 @@ class StrategyExecutor:
                                 # 记录信号命中
                                 hit_signal_type = 'BUY_LONG' if direction == 'long' else 'BUY_SHORT'
                                 logger.info(f"{symbol} 📝 准备记录命中信息: 策略={strategy.get('name')}, 信号={hit_signal_type}")
+                                hit_id = None
                                 try:
-                                    result = self.hit_recorder.record_signal_hit(
+                                    hit_id = self.hit_recorder.record_signal_hit(
                                         strategy=strategy,
                                         symbol=symbol,
                                         signal_type=hit_signal_type,
@@ -517,10 +518,10 @@ class StrategyExecutor:
                                         volume_ratio=float(latest_kline.get('volume_ratio', 1.0)),
                                         signal_strength_ok=signal_strength_ok
                                     )
-                                    if result:
-                                        logger.info(f"{symbol} ✅ 命中信息记录成功")
+                                    if hit_id:
+                                        logger.info(f"{symbol} ✅ 命中信息记录成功，ID={hit_id}")
                                     else:
-                                        logger.warning(f"{symbol} ⚠️ 命中信息记录失败（返回False）")
+                                        logger.warning(f"{symbol} ⚠️ 命中信息记录失败（返回None）")
                                 except Exception as e:
                                     logger.error(f"{symbol} ❌ 记录命中信息时出错: {e}")
                                     import traceback
@@ -530,24 +531,17 @@ class StrategyExecutor:
                                 if min_ema_cross_strength > 0:
                                     if not signal_strength_ok:
                                         logger.info(f"{symbol} ⚠️ EMA9/26{signal_type}信号强度不足 (差值={ema_strength_pct:.2f}%, 需要≥{min_ema_cross_strength:.2f}%)，已过滤")
-                                        # 记录信号被过滤的情况
-                                        try:
-                                            self.hit_recorder.record_signal_hit(
-                                                strategy=strategy,
-                                                symbol=symbol,
-                                                signal_type=hit_signal_type,
-                                                signal_source='ema_9_26',
-                                                signal_timeframe=buy_timeframe,
-                                                kline_data=latest_kline,
-                                                direction=direction,
-                                                executed=False,
-                                                execution_result='SKIPPED',
-                                                execution_reason=f'信号强度不足: {ema_strength_pct:.2f}% < {min_ema_cross_strength:.2f}%',
-                                                volume_ratio=float(latest_kline.get('volume_ratio', 1.0)),
-                                                signal_strength_ok=False
-                                            )
-                                        except Exception as e:
-                                            logger.error(f"{symbol} ❌ 记录被过滤信号时出错: {e}")
+                                        # 更新已存在的命中记录，而不是创建新记录
+                                        if hit_id:
+                                            try:
+                                                self.hit_recorder.update_execution_result(
+                                                    hit_id=hit_id,
+                                                    executed=False,
+                                                    execution_result='SKIPPED',
+                                                    execution_reason=f'信号强度不足: {ema_strength_pct:.2f}% < {min_ema_cross_strength:.2f}%'
+                                                )
+                                            except Exception as e:
+                                                logger.error(f"{symbol} ❌ 更新被过滤信号时出错: {e}")
                                         continue
                                 else:
                                     logger.debug(f"{symbol} 信号强度检查通过（未启用过滤）")
@@ -623,25 +617,17 @@ class StrategyExecutor:
                                         ma10_ema10_strength_pct = abs(ma10_ema10_diff / ma10 * 100) if ma10 > 0 else 0
                                         if ma10_ema10_strength_pct < min_ma10_cross_strength:
                                             logger.info(f"{symbol} ⚠️ MA10/EMA10信号强度不足 (差值={ma10_ema10_strength_pct:.2f}%, 需要≥{min_ma10_cross_strength:.2f}%)，已过滤")
-                                            # 记录信号被过滤的情况
-                                            try:
-                                                self.hit_recorder.record_signal_hit(
-                                                    strategy=strategy,
-                                                    symbol=symbol,
-                                                    signal_type=hit_signal_type,
-                                                    signal_source='ema_9_26',
-                                                    signal_timeframe=buy_timeframe,
-                                                    kline_data=latest_kline,
-                                                    direction=direction,
-                                                    executed=False,
-                                                    execution_result='SKIPPED',
-                                                    execution_reason=f'MA10/EMA10信号强度不足: {ma10_ema10_strength_pct:.2f}% < {min_ma10_cross_strength:.2f}%',
-                                                    volume_ratio=float(latest_kline.get('volume_ratio', 1.0)),
-                                                    signal_strength_ok=True,
-                                                    ma10_ema10_trend_ok=None
-                                                )
-                                            except Exception as e:
-                                                logger.error(f"{symbol} ❌ 记录被过滤信号时出错: {e}")
+                                            # 更新已存在的命中记录，而不是创建新记录
+                                            if hit_id:
+                                                try:
+                                                    self.hit_recorder.update_execution_result(
+                                                        hit_id=hit_id,
+                                                        executed=False,
+                                                        execution_result='SKIPPED',
+                                                        execution_reason=f'MA10/EMA10信号强度不足: {ma10_ema10_strength_pct:.2f}% < {min_ma10_cross_strength:.2f}%'
+                                                    )
+                                                except Exception as e:
+                                                    logger.error(f"{symbol} ❌ 更新被过滤信号时出错: {e}")
                                             continue
                                     
                                     # 检查 MA10/EMA10 是否与交易方向同向（如果启用了过滤）
@@ -671,9 +657,11 @@ class StrategyExecutor:
                                         logger.info(f"{symbol} ⚠️ MA10/EMA10数据缺失，但trend_filter已启用，允许继续（可能影响交易决策）")
                                 
                                 # 检查趋势持续性（如果启用了）
+                                # 参考 strategy_test_service 的逻辑：找到交叉发生的位置，然后检查是否持续了足够的K线数
                                 trend_confirm_ok = True
                                 if trend_confirm_bars > 0:
-                                    # 需要获取更多历史K线来检查趋势持续性
+                                    # 找到交叉发生的K线位置（在当前K线或之前的K线）
+                                    # 需要获取更多历史K线来查找交叉位置
                                     cursor.execute("""
                                         SELECT k.*, t.* 
                                         FROM kline_data k
@@ -692,55 +680,104 @@ class StrategyExecutor:
                                         WHERE k.symbol = %s AND k.timeframe = %s
                                         ORDER BY k.timestamp DESC
                                         LIMIT %s
-                                    """, (symbol, buy_timeframe, symbol, buy_timeframe, trend_confirm_bars + 2))
+                                    """, (symbol, buy_timeframe, symbol, buy_timeframe, max(trend_confirm_bars + 5, 10)))
                                     history_klines = cursor.fetchall()
                                     
-                                    if len(history_klines) >= trend_confirm_bars + 1:
-                                        # 检查从交叉发生到现在是否一直保持趋势
-                                        trend_maintained = True
-                                        ema_strength_ok = True
-                                        
-                                        for i in range(len(history_klines) - 1):
-                                            check_kline = history_klines[i]
-                                            check_ema_short = float(check_kline.get('ema_short', 0)) if check_kline.get('ema_short') else None
-                                            check_ema_long = float(check_kline.get('ema_long', 0)) if check_kline.get('ema_long') else None
+                                    if len(history_klines) >= 2:
+                                        # 找到交叉发生的位置
+                                        cross_index = None
+                                        # 从最新的K线开始，向前查找交叉位置
+                                        for i in range(min(5, len(history_klines) - 1)):
+                                            current_kline = history_klines[i]
+                                            prev_kline = history_klines[i + 1]
                                             
-                                            if check_ema_short and check_ema_long:
-                                                if direction == 'long' and check_ema_short <= check_ema_long:
-                                                    trend_maintained = False
-                                                    break
-                                                elif direction == 'short' and check_ema_short >= check_ema_long:
-                                                    trend_maintained = False
-                                                    break
+                                            curr_ema_short = float(current_kline.get('ema_short', 0)) if current_kline.get('ema_short') else None
+                                            curr_ema_long = float(current_kline.get('ema_long', 0)) if current_kline.get('ema_long') else None
+                                            prev_ema_short = float(prev_kline.get('ema_short', 0)) if prev_kline.get('ema_short') else None
+                                            prev_ema_long = float(prev_kline.get('ema_long', 0)) if prev_kline.get('ema_long') else None
+                                            
+                                            if curr_ema_short and curr_ema_long and prev_ema_short and prev_ema_long:
+                                                # 检查是否在当前K线发生交叉
+                                                if direction == 'long':
+                                                    # 做多：检查是否发生金叉（EMA9向上穿越EMA26）
+                                                    is_cross_now = (prev_ema_short <= prev_ema_long and curr_ema_short > curr_ema_long) or \
+                                                                  (prev_ema_short < prev_ema_long and curr_ema_short >= curr_ema_long)
+                                                else:
+                                                    # 做空：检查是否发生死叉（EMA9向下穿越EMA26）
+                                                    is_cross_now = (prev_ema_short >= prev_ema_long and curr_ema_short < curr_ema_long) or \
+                                                                  (prev_ema_short > prev_ema_long and curr_ema_short <= curr_ema_long)
                                                 
-                                                # 检查EMA差值是否满足阈值（增强趋势确认）
-                                                if trend_confirm_ema_threshold > 0:
-                                                    check_ema_diff = abs(check_ema_short - check_ema_long)
-                                                    check_ema_diff_pct = (check_ema_diff / check_ema_long * 100) if check_ema_long > 0 else 0
-                                                    if check_ema_diff_pct < trend_confirm_ema_threshold:
-                                                        ema_strength_ok = False
-                                                        break
+                                                if is_cross_now:
+                                                    cross_index = i
+                                                    break
                                         
-                                        # 检查当前K线的EMA差值是否满足阈值
-                                        if trend_confirm_ema_threshold > 0 and trend_maintained:
-                                            if latest_kline.get('ema_short') and latest_kline.get('ema_long'):
-                                                curr_ema_short = float(latest_kline['ema_short'])
-                                                curr_ema_long = float(latest_kline['ema_long'])
-                                                curr_ema_diff = abs(curr_ema_short - curr_ema_long)
-                                                curr_ema_diff_pct = (curr_ema_diff / curr_ema_long * 100) if curr_ema_long > 0 else 0
-                                                if curr_ema_diff_pct < trend_confirm_ema_threshold:
-                                                    ema_strength_ok = False
-                                        
-                                        if not trend_maintained:
-                                            trend_confirm_ok = False
-                                            logger.info(f"{symbol} ⚠️ 趋势持续性检查失败（{signal_type}后趋势未持续{trend_confirm_bars}个周期）")
-                                        elif not ema_strength_ok:
-                                            trend_confirm_ok = False
-                                            logger.info(f"{symbol} ⚠️ 趋势确认失败，EMA差值未达到阈值({trend_confirm_ema_threshold}%)")
+                                        if cross_index is not None:
+                                            # 找到了交叉位置，检查从交叉到当前是否持续了足够的K线数
+                                            # 如果交叉发生在当前K线（index=0），且trend_confirm_bars=1，则当前K线已经满足条件
+                                            bars_since_cross = cross_index
+                                            required_bars = trend_confirm_bars - 1 if cross_index == 0 else trend_confirm_bars
+                                            
+                                            if bars_since_cross >= required_bars:
+                                                # 检查从交叉到当前的所有K线，趋势是否一直维持
+                                                trend_maintained = True
+                                                ema_strength_ok = True
+                                                
+                                                for check_i in range(cross_index, -1, -1):  # 从交叉位置到当前K线
+                                                    if check_i < len(history_klines):
+                                                        check_kline = history_klines[check_i]
+                                                        check_ema_short = float(check_kline.get('ema_short', 0)) if check_kline.get('ema_short') else None
+                                                        check_ema_long = float(check_kline.get('ema_long', 0)) if check_kline.get('ema_long') else None
+                                                        
+                                                        if check_ema_short and check_ema_long:
+                                                            if direction == 'long' and check_ema_short <= check_ema_long:
+                                                                trend_maintained = False
+                                                                break
+                                                            elif direction == 'short' and check_ema_short >= check_ema_long:
+                                                                trend_maintained = False
+                                                                break
+                                                            
+                                                            # 检查EMA差值是否满足阈值
+                                                            if trend_confirm_ema_threshold > 0:
+                                                                check_ema_diff = abs(check_ema_short - check_ema_long)
+                                                                check_ema_diff_pct = (check_ema_diff / check_ema_long * 100) if check_ema_long > 0 else 0
+                                                                if check_ema_diff_pct < trend_confirm_ema_threshold:
+                                                                    ema_strength_ok = False
+                                                                    break
+                                                
+                                                # 检查当前K线的EMA差值是否满足阈值
+                                                if trend_confirm_ema_threshold > 0 and trend_maintained:
+                                                    if latest_kline.get('ema_short') and latest_kline.get('ema_long'):
+                                                        curr_ema_short = float(latest_kline['ema_short'])
+                                                        curr_ema_long = float(latest_kline['ema_long'])
+                                                        curr_ema_diff = abs(curr_ema_short - curr_ema_long)
+                                                        curr_ema_diff_pct = (curr_ema_diff / curr_ema_long * 100) if curr_ema_long > 0 else 0
+                                                        if curr_ema_diff_pct < trend_confirm_ema_threshold:
+                                                            ema_strength_ok = False
+                                                
+                                                if not trend_maintained:
+                                                    trend_confirm_ok = False
+                                                    logger.info(f"{symbol} ⚠️ 趋势持续性检查失败（{signal_type}后趋势未持续{trend_confirm_bars}个周期）")
+                                                elif not ema_strength_ok:
+                                                    trend_confirm_ok = False
+                                                    logger.info(f"{symbol} ⚠️ 趋势确认失败，EMA差值未达到阈值({trend_confirm_ema_threshold}%)")
+                                            else:
+                                                # 交叉刚发生，还需要等待更多K线
+                                                trend_confirm_ok = False
+                                                wait_bars = required_bars - bars_since_cross
+                                                logger.info(f"{symbol} ⚠️ 趋势确认中，交叉发生在{wait_bars}根K线前，已过{bars_since_cross}根K线，需要等待{wait_bars}根K线（共需{trend_confirm_bars}根）")
+                                        else:
+                                            # 未找到交叉位置，可能是信号触发逻辑有问题，或者交叉发生在更早的K线
+                                            # 在这种情况下，如果历史K线足够，允许继续（假设交叉发生在更早的位置）
+                                            if len(history_klines) >= trend_confirm_bars + 2:
+                                                trend_confirm_ok = True
+                                                logger.info(f"{symbol} ⚠️ 未找到交叉位置，但历史K线足够，允许继续")
+                                            else:
+                                                trend_confirm_ok = True  # 允许继续，不强制要求
+                                                logger.info(f"{symbol} ⚠️ 未找到交叉位置且历史K线不足，允许继续")
                                     else:
                                         # 历史K线不足，无法检查趋势持续性
-                                        trend_confirm_ok = False
-                                        logger.debug(f"{symbol} 历史K线不足，无法检查趋势持续性（需要{trend_confirm_bars + 2}根，仅{len(history_klines)}根）")
+                                        trend_confirm_ok = True  # 允许继续
+                                        logger.info(f"{symbol} ⚠️ 历史K线不足，无法检查趋势持续性（需要至少2根，仅{len(history_klines)}根），允许继续")
                                 
                                 # 检查同方向持仓限制（在检查其他条件之前）
                                 position_limit_ok = True
@@ -759,21 +796,21 @@ class StrategyExecutor:
                                 all_conditions_met = volume_ok and ma10_ema10_ok and trend_confirm_ok and position_limit_ok
                                 logger.info(f"{symbol} 📋 交易条件检查总结: 成交量={volume_ok}, MA10/EMA10={ma10_ema10_ok}, 趋势持续性={trend_confirm_ok}, 持仓限制={position_limit_ok}, 全部满足={all_conditions_met}")
                                 
-                                # 获取最近一次命中记录的ID（用于后续更新）
-                                hit_id = None
-                                try:
-                                    # 查询最近一次该策略和交易对的命中记录
-                                    cursor.execute("""
-                                        SELECT id FROM strategy_hits
-                                        WHERE strategy_id = %s AND symbol = %s
-                                        ORDER BY created_at DESC
-                                        LIMIT 1
-                                    """, (strategy.get('id'), symbol))
-                                    hit_record = cursor.fetchone()
-                                    if hit_record:
-                                        hit_id = hit_record['id']
-                                except Exception as e:
-                                    logger.debug(f"查询命中记录ID失败: {e}")
+                                # hit_id 已经在记录信号命中时获取，如果没有则尝试查询
+                                if not hit_id:
+                                    try:
+                                        # 查询最近一次该策略和交易对的命中记录
+                                        cursor.execute("""
+                                            SELECT id FROM strategy_hits
+                                            WHERE strategy_id = %s AND symbol = %s
+                                            ORDER BY created_at DESC
+                                            LIMIT 1
+                                        """, (strategy.get('id'), symbol))
+                                        hit_record = cursor.fetchone()
+                                        if hit_record:
+                                            hit_id = hit_record['id']
+                                    except Exception as e:
+                                        logger.debug(f"查询命中记录ID失败: {e}")
                                 
                                 if not all_conditions_met:
                                     failed_conditions = []
@@ -790,13 +827,34 @@ class StrategyExecutor:
                                         logger.info(f"{symbol} 💡 做空建议：如果希望更多做空机会，可以在策略配置中关闭'启用 MA10/EMA10 同向过滤'选项")
                                     
                                     # 更新命中记录：条件未满足，未执行
-                                    if hit_id:
-                                        self.hit_recorder.update_execution_result(
-                                            hit_id=hit_id,
-                                            executed=False,
-                                            execution_result='SKIPPED',
-                                            execution_reason=f"条件未满足: {', '.join(failed_conditions)}"
-                                        )
+                                    # 确保即使hit_id为None也尝试更新（通过查询获取）
+                                    update_hit_id = hit_id
+                                    if not update_hit_id:
+                                        try:
+                                            cursor.execute("""
+                                                SELECT id FROM strategy_hits
+                                                WHERE strategy_id = %s AND symbol = %s AND signal_type = %s
+                                                ORDER BY created_at DESC
+                                                LIMIT 1
+                                            """, (strategy.get('id'), symbol, hit_signal_type))
+                                            hit_record = cursor.fetchone()
+                                            if hit_record:
+                                                update_hit_id = hit_record['id']
+                                        except Exception as e:
+                                            logger.debug(f"查询命中记录ID失败: {e}")
+                                    
+                                    if update_hit_id:
+                                        try:
+                                            self.hit_recorder.update_execution_result(
+                                                hit_id=update_hit_id,
+                                                executed=False,
+                                                execution_result='SKIPPED',
+                                                execution_reason=f"条件未满足: {', '.join(failed_conditions)}"
+                                            )
+                                        except Exception as e:
+                                            logger.error(f"{symbol} ❌ 更新执行结果失败: {e}")
+                                    else:
+                                        logger.warning(f"{symbol} ⚠️ 无法更新执行结果：找不到命中记录ID")
                                 
                                 if volume_ok and ma10_ema10_ok and trend_confirm_ok and all_conditions_met:
                                     action_name = '买入(做多)' if direction == 'long' else '卖出(做空)'

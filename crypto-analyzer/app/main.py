@@ -1013,12 +1013,12 @@ async def get_strategy_execution_list(
             '24h': timedelta(hours=24),
             '7d': timedelta(days=7),
             '30d': timedelta(days=30),
-            'all': timedelta(days=365)  # 支持查询所有数据
+            'all': None  # all表示查询所有数据，不限制时间
         }
         # 如果没有指定时间范围或为空，默认查询最近30天
         if not time_range or time_range == '':
             time_range = '30d'
-        start_time = now - time_delta_map.get(time_range, timedelta(days=30))
+        start_time = None if time_range == 'all' else (now - time_delta_map.get(time_range, timedelta(days=30)))
         
         db_config = config.get('database', {}).get('mysql', {})
         connection = pymysql.connect(**db_config)
@@ -1057,9 +1057,13 @@ async def get_strategy_execution_list(
                             created_at,
                             'spot' as market_type
                         FROM paper_trading_orders
-                        WHERE created_at >= %s
+                        WHERE 1=1
                     """
-                    spot_params = [start_time]
+                    spot_params = []
+                    
+                    if start_time is not None:
+                        spot_sql += " AND created_at >= %s"
+                        spot_params.append(start_time)
                     
                     if symbol:
                         spot_sql += " AND symbol = %s"
@@ -1133,9 +1137,13 @@ async def get_strategy_execution_list(
                             created_at,
                             'futures' as market_type
                         FROM futures_orders
-                        WHERE created_at >= %s
+                        WHERE 1=1
                     """
-                    futures_params = [start_time]
+                    futures_params = []
+                    
+                    if start_time is not None:
+                        futures_sql += " AND created_at >= %s"
+                        futures_params.append(start_time)
                     
                     if symbol:
                         futures_sql += " AND symbol = %s"

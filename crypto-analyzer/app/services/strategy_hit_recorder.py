@@ -50,7 +50,7 @@ class StrategyHitRecorder:
         position_id: Optional[int] = None,
         order_id: Optional[str] = None,
         **kwargs
-    ) -> bool:
+    ) -> Optional[int]:
         """记录策略信号命中"""
         logger.info(f"📝 record_signal_hit 被调用: 策略={strategy.get('name') if strategy else 'None'}, 交易对={symbol}, 信号={signal_type}")
         """
@@ -72,7 +72,7 @@ class StrategyHitRecorder:
             **kwargs: 其他信息（如成交量条件、过滤结果等）
         
         Returns:
-            是否保存成功
+            保存成功返回 hit_id，失败返回 None
         """
         try:
             connection = self._get_connection()
@@ -159,7 +159,7 @@ class StrategyHitRecorder:
                 
                 logger.info(f"✅ 策略命中记录已保存: 策略={strategy.get('name')}, 交易对={symbol}, 信号={signal_type}, ID={hit_id}")
                 logger.info(f"   数据库: {self.db_config.get('database')}, 表: strategy_hits, 时间: {signal_timestamp}")
-                return True
+                return hit_id
                 
             except Exception as e:
                 connection.rollback()
@@ -167,7 +167,7 @@ class StrategyHitRecorder:
                 logger.error(f"   策略: {strategy.get('name', '未知')}, 交易对: {symbol}, 信号: {signal_type}")
                 import traceback
                 logger.error(f"   错误详情:\n{traceback.format_exc()}")
-                return False
+                return None
             finally:
                 cursor.close()
                 connection.close()
@@ -177,7 +177,7 @@ class StrategyHitRecorder:
             logger.error(f"   策略: {strategy.get('name', '未知') if strategy else 'None'}, 交易对: {symbol}, 信号: {signal_type}")
             import traceback
             logger.error(f"   错误详情:\n{traceback.format_exc()}")
-            return False
+            return None
     
     def update_execution_result(
         self,

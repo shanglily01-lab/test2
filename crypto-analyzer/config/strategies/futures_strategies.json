@@ -26,6 +26,7 @@
     "shortPrice": "market",
     "stopLoss": 3,
     "takeProfit": 9,
+    "closeOppositeOnEntry": true,
     "ma10Ema10TrendFilter": true,
     "minEMACrossStrength": 0,
     "minMA10CrossStrength": 0,
@@ -33,9 +34,13 @@
       "ema9_26": 0,
       "ma10_ema10": 0
     },
-    "trendConfirmBars": 0,
+    "trendConfirmBars": 1,
+    "trendConfirmEMAThreshold": 0.1,
     "exitOnMAFlip": true,
+    "exitOnMAFlipThreshold": 0.1,
     "exitOnEMAWeak": true,
+    "exitOnEMAWeakThreshold": 0.05,
+    "earlyStopLossPct": null,
     "preventDuplicateEntry": false,
     "minHoldingTimeHours": 0,
     "rsiFilter": {
@@ -248,13 +253,14 @@
     ],
     "positionSize": 30,
     "maxPositions": 3,
-    "maxLongPositions": 2,
-    "maxShortPositions": 2,
+    "maxLongPositions": 1,
+    "maxShortPositions": 1,
     "longPrice": "market",
     "shortPrice": "market",
     "stopLoss": 3,
     "takeProfit": 9,
-    "ma10Ema10TrendFilter": false,
+    "closeOppositeOnEntry": false,
+    "ma10Ema10TrendFilter": true,
     "minEMACrossStrength": 0,
     "minMA10CrossStrength": 0,
     "minSignalStrength": {
@@ -262,22 +268,26 @@
       "ma10_ema10": 0
     },
     "trendConfirmBars": 0,
+    "trendConfirmEMAThreshold": 0,
     "exitOnMAFlip": true,
+    "exitOnMAFlipThreshold": 0.1,
     "exitOnEMAWeak": true,
+    "exitOnEMAWeakThreshold": 0.05,
+    "earlyStopLossPct": null,
     "preventDuplicateEntry": false,
     "minHoldingTimeHours": 0,
     "rsiFilter": {
-      "enabled": false,
+      "enabled": true,
       "longMax": 70,
       "shortMin": 30
     },
     "macdFilter": {
-      "enabled": false,
+      "enabled": true,
       "longRequirePositive": true,
       "shortRequireNegative": true
     },
     "kdjFilter": {
-      "enabled": false,
+      "enabled": true,
       "longMaxK": 80,
       "shortMinK": 20
     },

@@ -1009,66 +1009,6 @@
                                 <option value="all">全部</option>
                                 <option value="buy">买入/开仓</option>
                                 <option value="sell">卖出/平仓</option>
-                            </select>
-                        </div>
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label">状态</label>
-                            <select class="form-select" id="executionStatus" onchange="loadExecutionList()">
-                                <option value="all">全部</option>
-                                <option value="FILLED">已成交</option>
-                                <option value="PENDING">待成交</option>
-                                <option value="CANCELLED">已取消</option>
-                            </select>
-                        </div>
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label">交易对</label>
-                            <input type="text" class="form-input" id="executionSymbol" placeholder="例如: BTC/USDT" onchange="loadExecutionList()">
-                        </div>
-                    </div>
-
-                    <!-- 执行结果列表 -->
-                    <div id="executionListContainer">
-                        <div class="placeholder-content">
-                            <div class="placeholder-icon">
-                                <i class="bi bi-hourglass-split"></i>
-                            </div>
-                            <div class="placeholder-text">加载中...</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Strategy Execution List Content -->
-        <div id="executionListContent" class="strategy-content">
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-list-check"></i>
-                        策略执行清单
-                    </h2>
-                    <button class="btn btn-secondary" onclick="refreshExecutionList()">
-                        <i class="bi bi-arrow-clockwise"></i>
-                        刷新
-                    </button>
-                </div>
-                <div class="card-body">
-                    <!-- 筛选器 -->
-                    <div style="display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); flex-wrap: wrap; align-items: center;">
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label">市场类型</label>
-                            <select class="form-select" id="executionMarketType" onchange="loadExecutionList()">
-                                <option value="all">全部</option>
-                                <option value="spot">现货</option>
-                                <option value="futures">合约</option>
-                            </select>
-                        </div>
-                        <div style="flex: 1; min-width: 200px;">
-                            <label class="form-label">操作类型</label>
-                            <select class="form-select" id="executionActionType" onchange="loadExecutionList()">
-                                <option value="all">全部</option>
-                                <option value="buy">买入/开仓</option>
-                                <option value="sell">卖出/平仓</option>
                                 <option value="order">下单</option>
                             </select>
                         </div>
@@ -1080,9 +1020,19 @@
                             <label class="form-label">时间范围</label>
                             <select class="form-select" id="executionTimeRange" onchange="loadExecutionList()">
                                 <option value="1h">最近1小时</option>
-                                <option value="24h" selected>最近24小时</option>
+                                <option value="24h">最近24小时</option>
                                 <option value="7d">最近7天</option>
-                                <option value="30d">最近30天</option>
+                                <option value="30d" selected>最近30天</option>
+                                <option value="all">全部</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label class="form-label">状态</label>
+                            <select class="form-select" id="executionStatus" onchange="loadExecutionList()">
+                                <option value="all">全部</option>
+                                <option value="FILLED">已成交</option>
+                                <option value="PENDING">待成交</option>
+                                <option value="CANCELLED">已取消</option>
                             </select>
                         </div>
                     </div>
@@ -2934,7 +2884,7 @@
                 const actionType = document.getElementById('executionActionType')?.value || 'all';
                 const status = document.getElementById('executionStatus')?.value || 'all';
                 const symbol = document.getElementById('executionSymbol')?.value || '';
-                const timeRange = document.getElementById('executionTimeRange')?.value || '24h';
+                const timeRange = document.getElementById('executionTimeRange')?.value || '30d';
                 
                 // 构建查询参数
                 const params = new URLSearchParams();
@@ -3019,7 +2969,7 @@
                                 ${item.order_source ? `
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">来源</div>
-                                    <div class="strategy-item-field-value">${item.order_source === 'strategy' ? '策略执行' : item.order_source === 'manual' ? '手动' : item.order_source}</div>
+                                    <div class="strategy-item-field-value">${item.order_source === 'strategy' || item.order_source === 'strategy_signal' || (item.order_source && item.order_source.startsWith('strategy_exit')) ? '策略执行' : item.order_source === 'manual' ? '手动' : item.order_source}</div>
                                 </div>
                                 ` : ''}
                             </div>

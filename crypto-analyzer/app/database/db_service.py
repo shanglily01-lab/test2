@@ -34,76 +34,92 @@ class DatabaseService:
         self._init_database()
 
     def _init_database(self):
-        """初始化数据库连接"""
-        try:
-            db_type = self.config.get('type', 'mysql')
+        """初始化数据库连接（带重试机制）"""
+        max_retries = 3
+        retry_delay = 2  # 秒
+        
+        for attempt in range(max_retries):
+            try:
+                db_type = self.config.get('type', 'mysql')
 
-            if db_type == 'mysql':
-                mysql_config = self.config.get('mysql', {})
-                host = mysql_config.get('host', 'localhost')
-                port = mysql_config.get('port', 3306)
-                user = mysql_config.get('user', 'root')
-                password = mysql_config.get('password', '')
-                database = mysql_config.get('database', 'binance-data')
+                if db_type == 'mysql':
+                    mysql_config = self.config.get('mysql', {})
+                    host = mysql_config.get('host', 'localhost')
+                    port = mysql_config.get('port', 3306)
+                    user = mysql_config.get('user', 'root')
+                    password = mysql_config.get('password', '')
+                    database = mysql_config.get('database', 'binance-data')
 
-                # URL编码密码以处理特殊字符
-                password_encoded = quote_plus(password)
+                    # URL编码密码以处理特殊字符
+                    password_encoded = quote_plus(password)
 
-                # 创建连接字符串
-                db_uri = f"mysql+pymysql://{user}:{password_encoded}@{host}:{port}/{database}?charset=utf8mb4"
+                    # 创建连接字符串
+                    db_uri = f"mysql+pymysql://{user}:{password_encoded}@{host}:{port}/{database}?charset=utf8mb4"
 
-                self.engine = create_engine(
-                    db_uri,
-                    pool_size=20,  # 增加连接池大小
-                    max_overflow=30,  # 增加溢出连接数
-                    pool_pre_ping=True,  # 自动检测连接是否有效
-                    pool_recycle=3600,  # 1小时后回收连接，避免长时间连接失效
-                    echo=False,  # 设为True可以看到SQL语句
-                    connect_args={
-                        'connect_timeout': 10,
-                        'read_timeout': 60,  # 增加读取超时时间到60秒，处理复杂查询
-                        'write_timeout': 30
-                    }
-                )
+                    self.engine = create_engine(
+                        db_uri,
+                        pool_size=20,  # 增加连接池大小
+                        max_overflow=30,  # 增加溢出连接数
+                        pool_pre_ping=True,  # 自动检测连接是否有效
+                        pool_recycle=3600,  # 1小时后回收连接，避免长时间连接失效
+                        echo=False,  # 设为True可以看到SQL语句
+                        connect_args={
+                            'connect_timeout': 10,
+                            'read_timeout': 60,  # 增加读取超时时间到60秒，处理复杂查询
+                            'write_timeout': 30
+                        }
+                    )
 
-                # 只在首次连接时打印日志，避免重复打印
-                if not DatabaseService._connection_logged:
-                    logger.info(f"MySQL数据库连接成功: {host}:{port}/{database}")
-                    DatabaseService._connection_logged = True
+                    # 只在首次连接时打印日志，避免重复打印
+                    if not DatabaseService._connection_logged:
+                        logger.info(f"MySQL数据库连接成功: {host}:{port}/{database}")
+                        DatabaseService._connection_logged = True
+                    else:
+                        logger.debug(f"MySQL数据库连接池已创建: {host}:{port}/{database}")
+
+                elif db_type == 'sqlite':
+                    sqlite_path = self.config.get('sqlite', {}).get('path', './data/crypto.db')
+                    db_uri = f"sqlite:///{sqlite_path}"
+                    self.engine = create_engine(db_uri, echo=False)
+                    
+                    # 只在首次连接时打印日志
+                    if not DatabaseService._connection_logged:
+                        logger.info(f"SQLite数据库连接成功: {sqlite_path}")
+                        DatabaseService._connection_logged = True
+                    else:
+                        logger.debug(f"SQLite数据库连接已创建: {sqlite_path}")
+
                 else:
-                    logger.debug(f"MySQL数据库连接池已创建: {host}:{port}/{database}")
+                    raise ValueError(f"不支持的数据库类型: {db_type}")
 
-            elif db_type == 'sqlite':
-                sqlite_path = self.config.get('sqlite', {}).get('path', './data/crypto.db')
-                db_uri = f"sqlite:///{sqlite_path}"
-                self.engine = create_engine(db_uri, echo=False)
+                # 创建会话工厂
+                self.SessionLocal = sessionmaker(bind=self.engine)
+
+                # 创建所有表
+                Base.metadata.create_all(self.engine)
                 
-                # 只在首次连接时打印日志
-                if not DatabaseService._connection_logged:
-                    logger.info(f"SQLite数据库连接成功: {sqlite_path}")
-                    DatabaseService._connection_logged = True
+                # 只在首次创建表时打印日志
+                if not hasattr(DatabaseService, '_tables_created_logged'):
+                    logger.info("数据库表创建/检查完成")
+                    DatabaseService._tables_created_logged = True
                 else:
-                    logger.debug(f"SQLite数据库连接已创建: {sqlite_path}")
-
-            else:
-                raise ValueError(f"不支持的数据库类型: {db_type}")
-
-            # 创建会话工厂
-            self.SessionLocal = sessionmaker(bind=self.engine)
-
-            # 创建所有表
-            Base.metadata.create_all(self.engine)
-            
-            # 只在首次创建表时打印日志
-            if not hasattr(DatabaseService, '_tables_created_logged'):
-                logger.info("数据库表创建/检查完成")
-                DatabaseService._tables_created_logged = True
-            else:
-                logger.debug("数据库表检查完成")
-
-        except Exception as e:
-            logger.error(f"数据库初始化失败: {e}")
-            raise
+                    logger.debug("数据库表检查完成")
+                
+                # 成功，退出重试循环
+                return
+                
+            except Exception as e:
+                error_msg = str(e)
+                is_connection_error = 'Lost connection' in error_msg or 'OperationalError' in str(type(e).__name__)
+                
+                if attempt < max_retries - 1 and is_connection_error:
+                    logger.warning(f"数据库连接失败（尝试 {attempt + 1}/{max_retries}）: {e}，{retry_delay}秒后重试...")
+                    import time
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # 指数退避
+                else:
+                    logger.error(f"数据库初始化失败（已重试 {attempt + 1} 次）: {e}")
+                    raise
 
     def get_session(self) -> Session:
         """获取数据库会话"""
