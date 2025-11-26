@@ -40,10 +40,10 @@ class StrategyExecutor:
         
         # 初始化数据库服务，用于保存交易记录
         try:
-            db_service_config = {
-                'type': 'mysql',
-                'mysql': db_config
-            }
+        db_service_config = {
+            'type': 'mysql',
+            'mysql': db_config
+        }
             self.db_service = DatabaseService(db_service_config)
         except Exception as e:
             logger.warning(f"初始化数据库服务失败，交易记录将不会保存: {e}")
@@ -63,7 +63,7 @@ class StrategyExecutor:
         
         try:
             margin = (entry_price * quantity) / leverage if entry_price and quantity else None
-            total_value = (exit_price or entry_price) * quantity if quantity else None
+                total_value = (exit_price or entry_price) * quantity if quantity else None
             
             trade_record_data = {
                 'strategy_id': strategy_id,
@@ -168,42 +168,42 @@ class StrategyExecutor:
             connection = pymysql.connect(**self.db_config)
             cursor = connection.cursor(pymysql.cursors.DictCursor)
             
-            try:
-                symbols = strategy.get('symbols', [])
-                buy_directions = strategy.get('buyDirection', [])
-                leverage = strategy.get('leverage', 5)
-                buy_signal = strategy.get('buySignals')
-                buy_volume_enabled = strategy.get('buyVolumeEnabled', False)
-                buy_volume_long_enabled = strategy.get('buyVolumeLongEnabled', False)
-                buy_volume_short_enabled = strategy.get('buyVolumeShortEnabled', False)
+        try:
+            symbols = strategy.get('symbols', [])
+            buy_directions = strategy.get('buyDirection', [])
+            leverage = strategy.get('leverage', 5)
+            buy_signal = strategy.get('buySignals')
+            buy_volume_enabled = strategy.get('buyVolumeEnabled', False)
+            buy_volume_long_enabled = strategy.get('buyVolumeLongEnabled', False)
+            buy_volume_short_enabled = strategy.get('buyVolumeShortEnabled', False)
                 buy_volume = strategy.get('buyVolume')
-                buy_volume_long = strategy.get('buyVolumeLong')
-                buy_volume_short = strategy.get('buyVolumeShort')
-                sell_signal = strategy.get('sellSignals')
-                sell_volume_enabled = strategy.get('sellVolumeEnabled', False)
-                sell_volume = strategy.get('sellVolume')
-                position_size = strategy.get('positionSize', 10)
-                max_positions = strategy.get('maxPositions')  # 最大持仓数
-                max_long_positions = strategy.get('maxLongPositions')  # 最大做多持仓数
-                max_short_positions = strategy.get('maxShortPositions')  # 最大做空持仓数
-                long_price_type = strategy.get('longPrice', 'market')
-                short_price_type = strategy.get('shortPrice', 'market')
+            buy_volume_long = strategy.get('buyVolumeLong')
+            buy_volume_short = strategy.get('buyVolumeShort')
+            sell_signal = strategy.get('sellSignals')
+            sell_volume_enabled = strategy.get('sellVolumeEnabled', False)
+            sell_volume = strategy.get('sellVolume')
+            position_size = strategy.get('positionSize', 10)
+            max_positions = strategy.get('maxPositions')  # 最大持仓数
+            max_long_positions = strategy.get('maxLongPositions')  # 最大做多持仓数
+            max_short_positions = strategy.get('maxShortPositions')  # 最大做空持仓数
+            long_price_type = strategy.get('longPrice', 'market')
+            short_price_type = strategy.get('shortPrice', 'market')
                 stop_loss_pct = strategy.get('stopLoss')
                 take_profit_pct = strategy.get('takeProfit')
                 ma10_ema10_trend_filter = strategy.get('ma10Ema10TrendFilter', False)
                 min_ema_cross_strength = strategy.get('minEMACrossStrength', 0.0)
                 min_ma10_cross_strength = strategy.get('minMA10CrossStrength', 0.0)
-                # 新的信号强度配置（优先级高于旧格式）
-                min_signal_strength = strategy.get('minSignalStrength', {})
-                if min_signal_strength:
-                    min_ema_cross_strength = max(min_ema_cross_strength, min_signal_strength.get('ema9_26', 0.0))
-                    min_ma10_cross_strength = max(min_ma10_cross_strength, min_signal_strength.get('ma10_ema10', 0.0))
+            # 新的信号强度配置（优先级高于旧格式）
+            min_signal_strength = strategy.get('minSignalStrength', {})
+            if min_signal_strength:
+                min_ema_cross_strength = max(min_ema_cross_strength, min_signal_strength.get('ema9_26', 0.0))
+                min_ma10_cross_strength = max(min_ma10_cross_strength, min_signal_strength.get('ma10_ema10', 0.0))
                 trend_confirm_bars = strategy.get('trendConfirmBars', 0)
-                exit_on_ma_flip = strategy.get('exitOnMAFlip', False)  # MA10/EMA10反转时立即平仓
-                exit_on_ma_flip_threshold = strategy.get('exitOnMAFlipThreshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
-                exit_on_ema_weak = strategy.get('exitOnEMAWeak', False)  # EMA差值<0.05%时平仓
-                exit_on_ema_weak_threshold = strategy.get('exitOnEMAWeakThreshold', 0.05)  # EMA弱信号阈值（%），默认0.05%
-                early_stop_loss_pct = strategy.get('earlyStopLossPct', None)  # 早期止损百分比，基于EMA差值或价格回撤
+            exit_on_ma_flip = strategy.get('exitOnMAFlip', False)  # MA10/EMA10反转时立即平仓
+            exit_on_ma_flip_threshold = strategy.get('exitOnMAFlipThreshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
+            exit_on_ema_weak = strategy.get('exitOnEMAWeak', False)  # EMA差值<0.05%时平仓
+            exit_on_ema_weak_threshold = strategy.get('exitOnEMAWeakThreshold', 0.05)  # EMA弱信号阈值（%），默认0.05%
+            early_stop_loss_pct = strategy.get('earlyStopLossPct', None)  # 早期止损百分比，基于EMA差值或价格回撤
                 trend_confirm_ema_threshold = strategy.get('trendConfirmEMAThreshold', 0.0)  # 趋势确认EMA差值阈值（%），增强趋势确认
                 prevent_duplicate_entry = strategy.get('preventDuplicateEntry', False)  # 防止重复开仓
                 close_opposite_on_entry = strategy.get('closeOppositeOnEntry', False)  # 开仓前先平掉相反方向的持仓
@@ -232,16 +232,16 @@ class StrategyExecutor:
                 bollinger_filter_enabled = bollinger_filter.get('enabled', False) if isinstance(bollinger_filter, dict) else False
                 
                 # 确定买入和卖出的时间周期
-                timeframe_map = {
-                    'ema_5m': '5m',
-                    'ema_15m': '15m',
-                    'ema_1h': '1h',
+            timeframe_map = {
+                'ema_5m': '5m',
+                'ema_15m': '15m',
+                'ema_1h': '1h',
                     'ma_ema5': '5m',
                     'ma_ema10': '5m'
-                }
-                buy_timeframe = timeframe_map.get(buy_signal, '15m')
-                sell_timeframe = timeframe_map.get(sell_signal, '5m')
-                
+            }
+            buy_timeframe = timeframe_map.get(buy_signal, '15m')
+            sell_timeframe = timeframe_map.get(sell_signal, '5m')
+            
                 # 实时运行：只处理当前时间点
                 now_local = datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
                 end_time_local = now_local
@@ -406,7 +406,7 @@ class StrategyExecutor:
                         return [convert_datetime_to_str(item) for item in obj]
                     elif isinstance(obj, datetime):
                         return obj.strftime('%Y-%m-%d %H:%M:%S')
-                    else:
+                        else:
                         return obj
                 
                 results = convert_datetime_to_str(results)
@@ -716,15 +716,15 @@ class StrategyExecutor:
             debug_info.append(f"📊 测试时间范围: {start_time_local.strftime('%Y-%m-%d %H:%M')} 至 {end_time_local.strftime('%Y-%m-%d %H:%M')}（本地时间 UTC+8）")
         
         # 将K线数据转换为DataFrame格式（用于计算技术指标）
-        import pandas as pd
+                            import pandas as pd
         
         # 为买入时间周期的每个K线计算技术指标
         def calculate_indicators(klines, test_klines, timeframe_name):
             indicator_pairs = []
             for test_kline in test_klines:
                 test_kline_time = self.parse_time(test_kline['timestamp'])
-                
-                # 获取到当前K线为止的所有历史K线（用于计算技术指标）
+                                
+                                # 获取到当前K线为止的所有历史K线（用于计算技术指标）
                 historical_klines = [k for k in klines if self.parse_time(k['timestamp']) <= test_kline_time]
                 
                 # 根据时间周期确定最小历史K线数量
@@ -739,23 +739,23 @@ class StrategyExecutor:
                 min_historical = min_historical_map.get(timeframe_key, 50)
                 
                 if len(historical_klines) < min_historical:
-                    continue
-                
-                # 转换为DataFrame
-                df = pd.DataFrame([{
+                                    continue
+                                
+                                # 转换为DataFrame
+                                df = pd.DataFrame([{
                     'timestamp': self.parse_time(k['timestamp']),
                     'open': float(k['open_price']),
                     'high': float(k['high_price']),
                     'low': float(k['low_price']),
                     'close': float(k['close_price']),
                     'volume': float(k['volume'])
-                } for k in historical_klines])
-                
+                                } for k in historical_klines])
+                                
                 # 使用技术分析器计算指标
                 if self.technical_analyzer is None:
-                    continue
-                
-                try:
+                                    continue
+                                
+                                try:
                     # 计算技术指标
                     indicators_result = self.technical_analyzer.analyze(df)
                     
@@ -812,25 +812,25 @@ class StrategyExecutor:
                         kdj_k = float(df['kdj_k'].iloc[-1]) if not pd.isna(df['kdj_k'].iloc[-1]) else None
                     
                     indicator_pairs.append({
-                        'kline': test_kline,
-                        'indicator': {
-                            'ema_short': ema_short,
-                            'ema_long': ema_long,
-                            'ma10': ma10,
-                            'ema10': ema10,
-                            'ma5': ma5,
-                            'ema5': ema5,
+                                        'kline': test_kline,
+                                        'indicator': {
+                                            'ema_short': ema_short,
+                                            'ema_long': ema_long,
+                                            'ma10': ma10,
+                                            'ema10': ema10,
+                                            'ma5': ma5,
+                                            'ema5': ema5,
                             'volume_ratio': volume_ratio,
                             'rsi': rsi_value,
                             'macd_histogram': macd_histogram,
                             'kdj_k': kdj_k,
-                            'updated_at': test_kline_time
-                        }
-                    })
-                except Exception as e:
+                                            'updated_at': test_kline_time
+                                        }
+                                    })
+                                except Exception as e:
                     logger.error(f"计算{timeframe_name}技术指标失败 {symbol} {test_kline_time}: {e}")
-                    continue
-            
+                                    continue
+                            
             return indicator_pairs
         
         # 计算买入和卖出时间周期的指标
@@ -994,8 +994,8 @@ class StrategyExecutor:
                 current_sell_index = len(sell_indicator_pairs) - 1
                 if current_sell_index > 0:
                     prev_pair = sell_indicator_pairs[current_sell_index - 1]
-                    prev_indicator = prev_pair['indicator']
-                    
+                                    prev_indicator = prev_pair['indicator']
+                                    
                     # 检查 MA10/EMA10 反转退出
                     if exit_on_ma_flip:
                         if sell_indicator.get('ma10') and sell_indicator.get('ema10') and \
@@ -1048,13 +1048,13 @@ class StrategyExecutor:
                                 if price_drop_pct >= early_stop_loss_pct:
                                     should_exit = True
                                     exit_reason = f'早期止损(价格回撤{price_drop_pct:.2f}% ≥ {early_stop_loss_pct}%)'
-                                    break
+                                                        break
                             else:
                                 price_rise_pct = (realtime_price - entry_price) / entry_price * 100
                                 if price_rise_pct >= early_stop_loss_pct:
                                     should_exit = True
                                     exit_reason = f'早期止损(价格回撤{price_rise_pct:.2f}% ≥ {early_stop_loss_pct}%)'
-                                    break
+                                                        break
                                     
                 # 如果触发趋势反转退出，立即平仓
                 if should_exit:
@@ -1231,7 +1231,7 @@ class StrategyExecutor:
                                 
                                 positions.remove(position)
                                 closed_at_current_time = True
-                            else:
+                                        else:
                                 error_msg = close_result.get('message', '未知错误')
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ❌ 平仓失败: {error_msg}")
                                 logger.error(f"{symbol} 平仓失败 (持仓ID: {position_id}): {error_msg}")
@@ -1428,54 +1428,54 @@ class StrategyExecutor:
                             # 检查成交量条件
                             volume_condition_met = True
                             volume_reason = ""
-                            if direction == 'long':
-                                if buy_volume_enabled and buy_volume_long_enabled:
-                                    volume_condition = buy_volume_long or buy_volume
-                                    if volume_condition:
-                                        try:
-                                            required_ratio = float(volume_condition)
+                                    if direction == 'long':
+                                        if buy_volume_enabled and buy_volume_long_enabled:
+                                            volume_condition = buy_volume_long or buy_volume
+                                            if volume_condition:
+                                                try:
+                                                    required_ratio = float(volume_condition)
                                             if buy_volume_ratio < required_ratio:
                                                 volume_condition_met = False
                                                 volume_reason = f"做多成交量不足 (当前:{buy_volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
-                                        except:
+                                                except:
                                             volume_condition_met = False
                                             volume_reason = f"做多成交量条件格式错误: {volume_condition}"
-                            else:
-                                if buy_volume_enabled and (buy_volume_short_enabled or buy_volume_short):
-                                    volume_condition = buy_volume_short
-                                    if volume_condition:
-                                        # 尝试解析为数值（支持 "0.3" 这样的格式）
-                                        try:
-                                            required_ratio = float(volume_condition)
-                                            # 如果是数值格式，检查是否 >= 该值
+                                    else:
+                                    if buy_volume_enabled and (buy_volume_short_enabled or buy_volume_short):
+                                        volume_condition = buy_volume_short
+                                        if volume_condition:
+                                            # 尝试解析为数值（支持 "0.3" 这样的格式）
+                                            try:
+                                                required_ratio = float(volume_condition)
+                                                # 如果是数值格式，检查是否 >= 该值
                                             if buy_volume_ratio < required_ratio:
                                                 volume_condition_met = False
                                                 volume_reason = f"做空成交量不足 (当前:{buy_volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
-                                        except (ValueError, TypeError):
-                                            # 如果不是数值，按字符串格式处理
-                                            if volume_condition == '>1':
+                                            except (ValueError, TypeError):
+                                                # 如果不是数值，按字符串格式处理
+                                                if volume_condition == '>1':
                                                 if buy_volume_ratio <= 1.0:
                                                     volume_condition_met = False
                                                     volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:>1x)"
-                                            elif volume_condition == '0.8-1':
+                                                elif volume_condition == '0.8-1':
                                                 if not (0.8 <= buy_volume_ratio <= 1.0):
                                                     volume_condition_met = False
                                                     volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:0.8-1x)"
-                                            elif volume_condition == '0.6-0.8':
+                                                elif volume_condition == '0.6-0.8':
                                                 if not (0.6 <= buy_volume_ratio < 0.8):
                                                     volume_condition_met = False
                                                     volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:0.6-0.8x)"
-                                            elif volume_condition == '<0.6':
+                                                elif volume_condition == '<0.6':
                                                 if buy_volume_ratio >= 0.6:
                                                     volume_condition_met = False
                                                     volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:<0.6x)"
-                                            else:
+                                                else:
                                                 volume_condition_met = False
                                                 volume_reason = f"做空成交量条件格式错误: {volume_condition}"
                             
                             if not volume_condition_met:
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA金叉但{volume_reason}")
-                            else:
+                                                else:
                                 # 检查同方向持仓限制
                                 if direction == 'long' and max_long_positions is not None:
                                     long_positions_count = len([p for p in positions if p['direction'] == 'long'])
@@ -1588,26 +1588,26 @@ class StrategyExecutor:
                                                                         # 检查 MA10/EMA10 信号强度
                                                                         ma10_ema10_ok = True
                                                                         if ma10 and ema10:
-                                                                            if min_ma10_cross_strength > 0:
-                                                                                ma10_ema10_strength_pct = abs(ma10_ema10_diff / ma10 * 100) if ma10 > 0 else 0
-                                                                                if ma10_ema10_strength_pct < min_ma10_cross_strength:
+                                        if min_ma10_cross_strength > 0:
+                                            ma10_ema10_strength_pct = abs(ma10_ema10_diff / ma10 * 100) if ma10 > 0 else 0
+                                            if ma10_ema10_strength_pct < min_ma10_cross_strength:
                                                                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MA10/EMA10信号强度不足 (差值={ma10_ema10_strength_pct:.2f}%, 需要≥{min_ma10_cross_strength:.2f}%)，已过滤")
                                                                                 else:
                                                                                     # 信号强度通过，检查趋势过滤
-                                                                                    if ma10_ema10_trend_filter:
-                                                                                        if direction == 'long':
-                                                                                            ma10_ema10_ok = ema10 > ma10
-                                                                                        else:
-                                                                                            ma10_ema10_ok = ema10 < ma10
-                                                                                        if not ma10_ema10_ok:
+                                        if ma10_ema10_trend_filter:
+                                            if direction == 'long':
+                                                ma10_ema10_ok = ema10 > ma10
+                                                else:
+                                                ma10_ema10_ok = ema10 < ma10
+                                                if not ma10_ema10_ok:
                                                                                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MA10/EMA10不同向")
-                                                                            else:
-                                                                                if min_ma10_cross_strength > 0 or ma10_ema10_trend_filter:
+                                                else:
+                                        if min_ma10_cross_strength > 0 or ma10_ema10_trend_filter:
                                                                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 缺少 MA10/EMA10 数据，跳过检查")
                                                                         
                                                                         # 检查趋势持续性
-                                                                        trend_confirm_ok = True
-                                                                        if trend_confirm_bars > 0:
+                                    trend_confirm_ok = True
+                                    if trend_confirm_bars > 0:
                                                                             # 找到金叉发生的索引位置
                                                                             golden_cross_index = None
                                                                             for check_lookback in range(1, min(4, current_buy_index + 1)):
@@ -1623,7 +1623,7 @@ class StrategyExecutor:
                                                                                             # 检查是否在当前K线发生金叉
                                                                                             is_cross_now = (check_prev_ema_short <= check_prev_ema_long and ema_short > ema_long) or \
                                                                                                           (check_prev_ema_short < check_prev_ema_long and ema_short >= ema_long)
-                                                                                            if is_cross_now:
+                                                if is_cross_now:
                                                                                                 golden_cross_index = current_buy_index
                                                                                                 break
                                                                                     elif buy_signal == 'ma_ema10':
@@ -1634,8 +1634,8 @@ class StrategyExecutor:
                                                                                                           (check_prev_ema10 < check_prev_ma10 and ema10 >= ma10)
                                                                                             if is_cross_now:
                                                                                                 golden_cross_index = current_buy_index
-                                                                                                break
-                                                                            
+                                                    break
+                                        
                                                                             if golden_cross_index is not None:
                                                                                 # 如果金叉发生在当前K线，且trend_confirm_bars=1，则当前K线已经满足条件（1根K线确认）
                                                                                 # 如果金叉发生在之前的K线，需要检查是否持续了足够的K线数
@@ -1644,12 +1644,12 @@ class StrategyExecutor:
                                                                     # 如果金叉发生在当前K线，bars_since_cross=0，但当前K线本身就算1根，所以需要 >= (trend_confirm_bars - 1)
                                                                     # 如果金叉发生在之前的K线，需要 >= trend_confirm_bars
                                                                     required_bars = trend_confirm_bars - 1 if golden_cross_index == current_buy_index else trend_confirm_bars
-                                                                    
-                                                                    if bars_since_cross >= required_bars:
+                                            
+                                            if bars_since_cross >= required_bars:
                                                                         # 检查从金叉到当前的所有K线，趋势是否一直维持
-                                                                        trend_maintained = True
-                                                                        ema_strength_ok = True
-                                                                        
+                                                trend_maintained = True
+                                                ema_strength_ok = True
+                                                
                                                                         for check_index in range(golden_cross_index, current_buy_index + 1):
                                                                             if check_index < len(buy_indicator_pairs):
                                                                                 check_pair = buy_indicator_pairs[check_index]
@@ -1660,22 +1660,22 @@ class StrategyExecutor:
                                                                                 check_ema10 = float(check_indicator.get('ema10', 0)) if check_indicator.get('ema10') else None
                                                                                 
                                                                                 if buy_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
-                                                                                    if check_ema_short and check_ema_long:
-                                                                                        if direction == 'long' and check_ema_short <= check_ema_long:
-                                                                                            trend_maintained = False
+                                                        if check_ema_short and check_ema_long:
+                                                            if direction == 'long' and check_ema_short <= check_ema_long:
+                                                                trend_maintained = False
                                                                                             debug_info.append(f"   ⚠️ 趋势确认失败：在索引{check_index}处趋势反转")
-                                                                                            break
-                                                                                        elif direction == 'short' and check_ema_short >= check_ema_long:
-                                                                                            trend_maintained = False
+                                                                break
+                                                            elif direction == 'short' and check_ema_short >= check_ema_long:
+                                                                trend_maintained = False
                                                                                             debug_info.append(f"   ⚠️ 趋势确认失败：在索引{check_index}处趋势反转")
-                                                                                            break
-                                                                                        
+                                                                break
+                                                            
                                                                                         # 检查EMA差值是否满足阈值（增强趋势确认）
-                                                                                        if trend_confirm_ema_threshold > 0:
-                                                                                            check_ema_diff = abs(check_ema_short - check_ema_long)
-                                                                                            check_ema_diff_pct = (check_ema_diff / check_ema_long * 100) if check_ema_long > 0 else 0
-                                                                                            if check_ema_diff_pct < trend_confirm_ema_threshold:
-                                                                                                ema_strength_ok = False
+                                                            if trend_confirm_ema_threshold > 0:
+                                                                check_ema_diff = abs(check_ema_short - check_ema_long)
+                                                                check_ema_diff_pct = (check_ema_diff / check_ema_long * 100) if check_ema_long > 0 else 0
+                                                                if check_ema_diff_pct < trend_confirm_ema_threshold:
+                                                                    ema_strength_ok = False
                                                                                                 debug_info.append(f"   ⚠️ 趋势确认失败：在索引{check_index}处EMA差值过小({check_ema_diff_pct:.2f}% < {trend_confirm_ema_threshold}%)")
                                                                                                 break
                                                                                 elif buy_signal == 'ma_ema10':
@@ -1687,37 +1687,37 @@ class StrategyExecutor:
                                                                                         elif direction == 'short' and check_ema10 >= check_ma10:
                                                                                             trend_maintained = False
                                                                                             debug_info.append(f"   ⚠️ 趋势确认失败：在索引{check_index}处趋势反转")
-                                                                                            break
-                                                                        
-                                                                        # 检查当前K线的EMA差值是否满足阈值
-                                                                        if trend_confirm_ema_threshold > 0 and trend_maintained:
+                                                                    break
+                                                
+                                                # 检查当前K线的EMA差值是否满足阈值
+                                                if trend_confirm_ema_threshold > 0 and trend_maintained:
                                                                             if buy_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
                                                                                 curr_ema_diff = abs(ema_short - ema_long)
                                                                                 curr_ema_diff_pct = (curr_ema_diff / ema_long * 100) if ema_long > 0 else 0
-                                                                                if curr_ema_diff_pct < trend_confirm_ema_threshold:
-                                                                                    ema_strength_ok = False
+                                                        if curr_ema_diff_pct < trend_confirm_ema_threshold:
+                                                            ema_strength_ok = False
                                                                                     debug_info.append(f"   ⚠️ 趋势确认失败：当前EMA差值过小({curr_ema_diff_pct:.2f}% < {trend_confirm_ema_threshold}%)")
-                                                                        
-                                                                        if not trend_maintained:
-                                                                            trend_confirm_ok = False
+                                                
+                                                if not trend_maintained:
+                                                    trend_confirm_ok = False
                                                                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认失败，趋势未持续{trend_confirm_bars}根K线")
-                                                                        elif not ema_strength_ok:
-                                                                            trend_confirm_ok = False
+                                                elif not ema_strength_ok:
+                                                    trend_confirm_ok = False
                                                                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认失败，EMA差值未达到阈值({trend_confirm_ema_threshold}%)")
-                                                                    else:
+                                            else:
                                                                         # 金叉刚发生，还需要等待更多K线
-                                                                        trend_confirm_ok = False
-                                                                        wait_bars = required_bars - bars_since_cross
+                                                trend_confirm_ok = False
+                                                wait_bars = required_bars - bars_since_cross
                                                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认中，金叉发生在索引{golden_cross_index}，当前索引{current_buy_index}，已过{bars_since_cross}根K线，需要等待{wait_bars}根K线（共需{trend_confirm_bars}根）")
-                                                                else:
+                                        else:
                                                                     # 未找到金叉，可能是信号触发逻辑有问题
                                                                     trend_confirm_ok = False
                                                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 未找到金叉位置，无法进行趋势确认")
                                                                     
-                                                                    if not trend_confirm_ok:
+                                        if not trend_confirm_ok:
                                                                         # 趋势确认失败，跳过买入
                                                                         pass
-                                                                    else:
+                                        else:
                                                                         # 添加调试信息：所有检查都通过，准备买入
                                                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅ 所有买入条件检查通过，准备执行买入操作")
                                                                         
@@ -1725,42 +1725,42 @@ class StrategyExecutor:
                                                                         entry_price = None
                                                                         can_execute = False
                                                                         
-                                                                        if direction == 'long':
-                                                                            if long_price_type == 'market':
+                                        if direction == 'long':
+                                            if long_price_type == 'market':
                                                                                 entry_price = realtime_price
                                                                                 can_execute = True
-                                                                            elif long_price_type == 'market_minus_0_2':
+                                            elif long_price_type == 'market_minus_0_2':
                                                                                 entry_price = realtime_price * 0.998
                                                                                 can_execute = True
-                                                                            elif long_price_type == 'market_minus_0_4':
+                                            elif long_price_type == 'market_minus_0_4':
                                                                                 entry_price = realtime_price * 0.996
                                                                                 can_execute = True
-                                                                            elif long_price_type == 'market_minus_0_6':
+                                            elif long_price_type == 'market_minus_0_6':
                                                                                 entry_price = realtime_price * 0.994
                                                                                 can_execute = True
-                                                                            elif long_price_type == 'market_minus_0_8':
+                                            elif long_price_type == 'market_minus_0_8':
                                                                                 entry_price = realtime_price * 0.992
                                                                                 can_execute = True
-                                                                            elif long_price_type == 'market_minus_1':
+                                            elif long_price_type == 'market_minus_1':
                                                                                 entry_price = realtime_price * 0.99
                                                                                 can_execute = True
                                                                         elif direction == 'short':
-                                                                            if short_price_type == 'market':
+                                            if short_price_type == 'market':
                                                                                 entry_price = realtime_price
                                                                                 can_execute = True
-                                                                            elif short_price_type == 'market_plus_0_2':
+                                            elif short_price_type == 'market_plus_0_2':
                                                                                 entry_price = realtime_price * 1.002
                                                                                 can_execute = True
-                                                                            elif short_price_type == 'market_plus_0_4':
+                                            elif short_price_type == 'market_plus_0_4':
                                                                                 entry_price = realtime_price * 1.004
                                                                                 can_execute = True
-                                                                            elif short_price_type == 'market_plus_0_6':
+                                            elif short_price_type == 'market_plus_0_6':
                                                                                 entry_price = realtime_price * 1.006
                                                                                 can_execute = True
-                                                                            elif short_price_type == 'market_plus_0_8':
+                                            elif short_price_type == 'market_plus_0_8':
                                                                                 entry_price = realtime_price * 1.008
                                                                                 can_execute = True
-                                                                            elif short_price_type == 'market_plus_1':
+                                            elif short_price_type == 'market_plus_1':
                                                                                 entry_price = realtime_price * 1.01
                                                                                 can_execute = True
                                                                         
@@ -1775,8 +1775,8 @@ class StrategyExecutor:
                                                                                 cursor_balance = connection_balance.cursor(pymysql.cursors.DictCursor)
                                                                                 cursor_balance.execute(
                                                                                     "SELECT total_equity, current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
-                                                                                    (account_id,)
-                                                                                )
+                                            (account_id,)
+                                        )
                                                                                 account = cursor_balance.fetchone()
                                                                                 cursor_balance.close()
                                                                                 connection_balance.close()
@@ -1807,34 +1807,34 @@ class StrategyExecutor:
                                                                                 open_fee = (entry_price * quantity) * fee_rate
                                                                                 
                                                                                 # 计算止损止盈价格
-                                                                                stop_loss_price = None
-                                                                                take_profit_price = None
+                                        stop_loss_price = None
+                                        take_profit_price = None
                                                                                 if stop_loss_pct is not None:
-                                                                                    if direction == 'long':
+                                            if direction == 'long':
                                                                                         stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
-                                                                                    else:
+                                            else:
                                                                                         stop_loss_price = entry_price * (1 + stop_loss_pct / 100)
                                                                                 if take_profit_pct is not None:
-                                                                                    if direction == 'long':
+                                            if direction == 'long':
                                                                                         take_profit_price = entry_price * (1 + take_profit_pct / 100)
-                                                                                    else:
+                                            else:
                                                                                         take_profit_price = entry_price * (1 - take_profit_pct / 100)
-                                                                                
+                                        
                                                                                 # 使用 futures_engine 执行真实开仓（使用实时价格）
-                                                                                position_side = 'LONG' if direction == 'long' else 'SHORT'
+                                        position_side = 'LONG' if direction == 'long' else 'SHORT'
                                                                                 quantity_decimal = Decimal(str(quantity))
                                                                                 entry_price_decimal = Decimal(str(entry_price))
-                                                                                
+                                        
                                                                                 open_result = self.futures_engine.open_position(
-                                                                                    account_id=account_id,
-                                                                                    symbol=symbol,
-                                                                                    position_side=position_side,
+                                            account_id=account_id,
+                                            symbol=symbol,
+                                            position_side=position_side,
                                                                                     quantity=quantity_decimal,
-                                                                                    leverage=leverage,
+                                            leverage=leverage,
                                                                                     limit_price=entry_price_decimal if long_price_type != 'market' and short_price_type != 'market' else None,
                                                                                     stop_loss_pct=Decimal(str(stop_loss_pct)) if stop_loss_pct else None,
                                                                                     take_profit_pct=Decimal(str(take_profit_pct)) if take_profit_pct else None,
-                                                                                    source='strategy',
+                                            source='strategy',
                                                                                     signal_id=None
                                                                                 )
                                                                                 
@@ -1843,21 +1843,21 @@ class StrategyExecutor:
                                                                                     actual_entry_price = float(open_result.get('entry_price', entry_price))
                                                                                     actual_quantity = float(open_result.get('quantity', quantity))
                                                                                     actual_fee = float(open_result.get('fee', open_fee))
-                                                                                    
-                                                                                    # 保存交易记录到数据库
-                                                                                    self._save_trade_record(
-                                                                                        symbol=symbol,
-                                                                                        action='BUY',
-                                                                                        direction=direction,
+                                            
+                                            # 保存交易记录到数据库
+                                                self._save_trade_record(
+                                                    symbol=symbol,
+                                                    action='BUY',
+                                                    direction=direction,
                                                                                         entry_price=actual_entry_price,
-                                                                                        exit_price=None,
+                                                    exit_price=None,
                                                                                         quantity=actual_quantity,
-                                                                                        leverage=leverage,
+                                                    leverage=leverage,
                                                                                         fee=actual_fee,
-                                                                                        realized_pnl=None,
+                                                    realized_pnl=None,
                                                                                         strategy_id=strategy_id,
                                                                                         strategy_name=strategy_name,
-                                                                                        account_id=account_id,
+                                                    account_id=account_id,
                                                                                         reason='买入信号触发',
                                                                                         trade_time=current_time_local
                                                                                     )
@@ -1865,7 +1865,7 @@ class StrategyExecutor:
                                                                                     # 添加到模拟持仓列表（用于后续卖出逻辑）
                                                                                     position = {
                                                                                         'position_id': position_id,
-                                                                                        'direction': direction,
+                                                'direction': direction,
                                                                                         'entry_price': actual_entry_price,
                                                                                         'quantity': actual_quantity,
                                                                                         'entry_time': current_time,
@@ -1880,7 +1880,7 @@ class StrategyExecutor:
                                                                                     direction_text = "做多" if direction == 'long' else "做空"
                                                                                     qty_precision = self.get_quantity_precision(symbol)
                                                                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={actual_entry_price:.4f}，数量={actual_quantity:.{qty_precision}f}，开仓手续费={actual_fee:.4f}，持仓ID={position_id}")
-                                                                                else:
+                                            else:
                                                                                     error_msg = open_result.get('message', '未知错误')
                                                                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ❌ 开仓失败: {error_msg}")
                                                                                     logger.error(f"{symbol} 开仓失败: {error_msg}")
@@ -1891,7 +1891,7 @@ class StrategyExecutor:
         death_cross_count = len([info for info in debug_info if '死叉' in info])
         
         return {
-            'symbol': symbol,
+                                                    'symbol': symbol,
             'trades_count': len(trades),
             'trades': trades,
             'open_positions': len(positions),
@@ -1930,7 +1930,7 @@ class StrategyExecutor:
             
             try:
                 # 从 trading_strategies 表加载启用的策略
-                cursor.execute("""
+                                                cursor.execute("""
                     SELECT * FROM trading_strategies 
                     WHERE enabled = 1
                     ORDER BY id ASC
@@ -1955,7 +1955,7 @@ class StrategyExecutor:
                         }
                         result.append(strategy_dict)
                         logger.debug(f"  策略: {strategy_dict['name']} (ID: {strategy_dict['id']}, 账户: {strategy_dict['account_id']})")
-                    except Exception as e:
+                                                except Exception as e:
                         logger.error(f"解析策略配置失败 (ID: {strategy.get('id')}): {e}")
                         continue
                 
@@ -1996,7 +1996,7 @@ class StrategyExecutor:
                 except Exception as e:
                     logger.error(f"❌ 执行策略失败 (ID: {strategy.get('id')}, 名称: {strategy.get('name')}): {e}", exc_info=True)
                     continue
-            
+                    
             logger.debug(f"✓ 所有策略检查完成（共 {len(strategies)} 个）")
         except Exception as e:
             logger.error(f"❌ 检查策略时出错: {e}", exc_info=True)
