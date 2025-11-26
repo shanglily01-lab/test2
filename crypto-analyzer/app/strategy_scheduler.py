@@ -143,16 +143,24 @@ class StrategyScheduler:
         logger.info(f"🔄 策略实时监控服务已启动（间隔: {interval}秒，实时响应新K线）")
 
         try:
+            loop_count = 0
             while self.running:
                 try:
+                    loop_count += 1
+                    logger.debug(f"策略检查循环 #{loop_count} 开始...")
+                    
                     # 检查是否有新K线生成，如果有则立即执行策略检查
                     has_new_kline = await self.check_for_new_klines()
                     
                     if has_new_kline:
-                        logger.debug("检测到新K线，立即执行策略检查")
+                        logger.info("🆕 检测到新K线，立即执行策略检查")
+                    else:
+                        logger.debug("未检测到新K线，按计划执行策略检查")
                     
                     # 执行策略检查（无论是否有新K线，都按间隔检查以确保不遗漏）
                     await self.strategy_executor.check_and_execute_strategies()
+                    
+                    logger.debug(f"策略检查循环 #{loop_count} 完成，等待 {interval} 秒...")
                 except Exception as e:
                     logger.error(f"策略执行循环出错: {e}")
                     import traceback

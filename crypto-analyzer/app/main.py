@@ -994,13 +994,14 @@ async def get_strategy_execution_list(
     action_type: Optional[str] = Query(None, description="操作类型: buy, sell, all"),
     status: Optional[str] = Query(None, description="订单状态: FILLED, PENDING, CANCELLED, all"),
     symbol: Optional[str] = Query(None, description="交易对"),
-    time_range: str = Query("24h", description="时间范围: 1h, 24h, 7d, 30d"),
+    strategy_id: Optional[int] = Query(None, description="策略ID"),
+    time_range: str = Query("30d", description="时间范围: 1h, 24h, 7d, 30d, all"),
     limit: int = Query(100, description="返回数量限制")
 ):
     """
-    获取策略执行清单（整合现货和合约订单）
+    获取策略执行清单（从 strategy_trade_records 表获取）
     
-    返回所有策略执行的买入、平仓、下单等信息
+    返回所有策略执行的买入、平仓等交易记录
     """
     try:
         from datetime import datetime, timedelta
@@ -1025,175 +1026,137 @@ async def get_strategy_execution_list(
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
         try:
+            # 先检查表是否存在
+            cursor.execute("""
+                SELECT COUNT(*) as count 
+                FROM information_schema.tables 
+                WHERE table_schema = DATABASE() 
+                AND table_name = 'strategy_trade_records'
+            """)
+            table_exists = cursor.fetchone()['count'] > 0
+            
+            if not table_exists:
+                return {
+                    'success': True,
+                    'data': [],
+                    'total': 0,
+                    'message': 'strategy_trade_records 表不存在，请先运行测试或执行策略'
+                }
+            
+            # 构建查询SQL
+            sql = """
+                SELECT 
+                    id,
+                    strategy_id,
+                    strategy_name,
+                    account_id,
+                    symbol,
+                    action,
+                    direction,
+                    position_side,
+                    entry_price,
+                    exit_price,
+                    quantity,
+                    leverage,
+                    margin,
+                    total_value,
+                    fee,
+                    realized_pnl,
+                    position_id,
+                    order_id,
+                    signal_id,
+                    reason,
+                    trade_time,
+                    created_at
+                FROM strategy_trade_records
+                WHERE 1=1
+            """
+            params = []
+            
+            # 时间范围筛选
+            if start_time is not None:
+                sql += " AND trade_time >= %s"
+                params.append(start_time)
+            
+            # 交易对筛选
+            if symbol:
+                sql += " AND symbol = %s"
+                params.append(symbol)
+            
+            # 策略ID筛选
+            if strategy_id:
+                sql += " AND strategy_id = %s"
+                params.append(strategy_id)
+            
+            # 操作类型筛选
+            if action_type and action_type != 'all':
+                if action_type == 'buy':
+                    sql += " AND action IN ('BUY', 'OPEN')"
+                elif action_type == 'sell':
+                    sql += " AND action IN ('SELL', 'CLOSE')"
+            
+            # 市场类型筛选（根据account_id判断：0=测试，其他=实盘）
+            if market_type and market_type != 'all':
+                if market_type == 'test':
+                    sql += " AND account_id = 0"
+                elif market_type == 'live':
+                    sql += " AND account_id > 0"
+            
+            sql += " ORDER BY trade_time DESC LIMIT %s"
+            params.append(limit)
+            
+            cursor.execute(sql, params)
+            records = cursor.fetchall()
+            
+            # 转换数据格式
             all_executions = []
-            
-            # 获取现货订单（如果market_type为all或spot）
-            if not market_type or market_type == 'all' or market_type == 'spot':
-                # 先检查表是否存在
-                cursor.execute("""
-                    SELECT COUNT(*) as count 
-                    FROM information_schema.tables 
-                    WHERE table_schema = DATABASE() 
-                    AND table_name = 'paper_trading_orders'
-                """)
-                table_exists = cursor.fetchone()['count'] > 0
-                
-                if table_exists:
-                    spot_sql = """
-                        SELECT 
-                            order_id,
-                            symbol,
-                            side,
-                            order_type,
-                            price,
-                            quantity,
-                            executed_quantity,
-                            executed_amount,
-                            fee,
-                            status,
-                            avg_fill_price,
-                            fill_time,
-                            COALESCE(order_source, 'manual') as order_source,
-                            created_at,
-                            'spot' as market_type
-                        FROM paper_trading_orders
-                        WHERE 1=1
-                    """
-                    spot_params = []
-                    
-                    if start_time is not None:
-                        spot_sql += " AND created_at >= %s"
-                        spot_params.append(start_time)
-                    
-                    if symbol:
-                        spot_sql += " AND symbol = %s"
-                        spot_params.append(symbol)
-                    
-                    if status and status != 'all':
-                        spot_sql += " AND status = %s"
-                        spot_params.append(status)
-                    
-                    if action_type and action_type != 'all':
-                        if action_type == 'buy':
-                            spot_sql += " AND side = 'BUY'"
-                        elif action_type == 'sell':
-                            spot_sql += " AND side = 'SELL'"
-                    
-                    spot_sql += " ORDER BY created_at DESC LIMIT %s"
-                    spot_params.append(limit)
-                
-                    cursor.execute(spot_sql, spot_params)
-                    spot_orders = cursor.fetchall()
+            for record in records:
+                action = record['action'].lower()
+                if action == 'buy' or action == 'open':
+                    action_display = 'buy'
+                elif action == 'sell' or action == 'close':
+                    action_display = 'sell'
                 else:
-                    spot_orders = []
+                    action_display = action
                 
-                for order in spot_orders:
-                    action = 'buy' if order['side'] == 'BUY' else 'sell'
-                    all_executions.append({
-                        'id': order['order_id'],
-                        'market_type': 'spot',
-                        'action': action,
-                        'symbol': order['symbol'],
-                        'price': float(order['avg_fill_price']) if order['avg_fill_price'] else float(order['price']) if order['price'] else None,
-                        'quantity': float(order['executed_quantity']) if order['executed_quantity'] else float(order['quantity']),
-                        'amount': float(order['executed_amount']) if order['executed_amount'] else None,
-                        'fee': float(order['fee']) if order['fee'] else 0,
-                        'status': order['status'],
-                        'created_at': order['fill_time'].strftime('%Y-%m-%d %H:%M:%S') if order['fill_time'] else (order['created_at'].strftime('%Y-%m-%d %H:%M:%S') if order['created_at'] else None),
-                        'order_source': order['order_source'],
-                        'leverage': None,
-                        'pnl': None
-                    })
-            
-            # 获取合约订单（如果market_type为all或futures）
-            if not market_type or market_type == 'all' or market_type == 'futures':
-                # 先检查表是否存在
-                cursor.execute("""
-                    SELECT COUNT(*) as count 
-                    FROM information_schema.tables 
-                    WHERE table_schema = DATABASE() 
-                    AND table_name = 'futures_orders'
-                """)
-                table_exists = cursor.fetchone()['count'] > 0
-                
-                if table_exists:
-                    futures_sql = """
-                        SELECT 
-                            order_id,
-                            symbol,
-                            side,
-                            order_type,
-                            price,
-                            quantity,
-                            executed_quantity,
-                            executed_value,
-                            fee,
-                            status,
-                            avg_fill_price,
-                            fill_time,
-                            COALESCE(order_source, 'manual') as order_source,
-                            leverage,
-                            realized_pnl,
-                            created_at,
-                            'futures' as market_type
-                        FROM futures_orders
-                        WHERE 1=1
-                    """
-                    futures_params = []
-                    
-                    if start_time is not None:
-                        futures_sql += " AND created_at >= %s"
-                        futures_params.append(start_time)
-                    
-                    if symbol:
-                        futures_sql += " AND symbol = %s"
-                        futures_params.append(symbol)
-                    
-                    if status and status != 'all':
-                        futures_sql += " AND status = %s"
-                        futures_params.append(status)
-                    
-                    if action_type and action_type != 'all':
-                        if action_type == 'buy':
-                            futures_sql += " AND (side LIKE 'OPEN_%' OR side = 'LONG')"
-                        elif action_type == 'sell':
-                            futures_sql += " AND (side LIKE 'CLOSE_%' OR side = 'SELL')"
-                    
-                    futures_sql += " ORDER BY created_at DESC LIMIT %s"
-                    futures_params.append(limit)
-                
-                    cursor.execute(futures_sql, futures_params)
-                    futures_orders = cursor.fetchall()
+                # 确定价格（买入用entry_price，卖出用exit_price或entry_price）
+                price = None
+                if record['action'] in ('BUY', 'OPEN'):
+                    price = float(record['entry_price']) if record['entry_price'] else None
                 else:
-                    futures_orders = []
+                    price = float(record['exit_price']) if record['exit_price'] else (float(record['entry_price']) if record['entry_price'] else None)
                 
-                for order in futures_orders:
-                    side = order['side']
-                    if side.startswith('OPEN_') or side == 'LONG':
-                        action = 'buy'
-                    elif side.startswith('CLOSE_'):
-                        action = 'sell'
-                    else:
-                        action = 'sell' if 'SELL' in side else 'buy'
-                    
-                    all_executions.append({
-                        'id': order['order_id'],
-                        'market_type': 'futures',
-                        'action': action,
-                        'symbol': order['symbol'],
-                        'price': float(order['avg_fill_price']) if order['avg_fill_price'] else float(order['price']) if order['price'] else None,
-                        'quantity': float(order['executed_quantity']) if order['executed_quantity'] else float(order['quantity']),
-                        'amount': float(order['executed_value']) if order['executed_value'] else None,
-                        'fee': float(order['fee']) if order['fee'] else 0,
-                        'status': order['status'],
-                        'created_at': order['fill_time'].strftime('%Y-%m-%d %H:%M:%S') if order['fill_time'] else (order['created_at'].strftime('%Y-%m-%d %H:%M:%S') if order['created_at'] else None),
-                        'order_source': order['order_source'],
-                        'leverage': float(order['leverage']) if order['leverage'] else None,
-                        'pnl': float(order['realized_pnl']) if order['realized_pnl'] else None
-                    })
-            
-            # 按创建时间排序
-            all_executions.sort(key=lambda x: x['created_at'] or '', reverse=True)
+                # 确定金额
+                amount = float(record['total_value']) if record['total_value'] else None
+                if not amount and price and record['quantity']:
+                    amount = float(price) * float(record['quantity'])
+                
+                # 判断是测试还是实盘
+                is_test = record['account_id'] == 0
+                market_type_display = 'test' if is_test else 'futures'
+                
+                all_executions.append({
+                    'id': record['id'],
+                    'strategy_id': record['strategy_id'],
+                    'strategy_name': record['strategy_name'] or '未知策略',
+                    'market_type': market_type_display,
+                    'action': action_display,
+                    'symbol': record['symbol'],
+                    'price': price,
+                    'quantity': float(record['quantity']) if record['quantity'] else None,
+                    'amount': amount,
+                    'fee': float(record['fee']) if record['fee'] else 0,
+                    'status': 'FILLED',  # 策略交易记录都是已成交的
+                    'created_at': record['trade_time'].strftime('%Y-%m-%d %H:%M:%S') if record['trade_time'] else (record['created_at'].strftime('%Y-%m-%d %H:%M:%S') if record['created_at'] else None),
+                    'order_source': '策略执行' if not is_test else '策略测试',
+                    'leverage': int(record['leverage']) if record['leverage'] else None,
+                    'pnl': float(record['realized_pnl']) if record['realized_pnl'] is not None else None,
+                    'direction': record['direction'],
+                    'position_side': record['position_side'],
+                    'reason': record['reason'],
+                    'entry_price': float(record['entry_price']) if record['entry_price'] else None,
+                    'exit_price': float(record['exit_price']) if record['exit_price'] else None
+                })
             
             # 如果没有任何数据，返回提示信息
             if len(all_executions) == 0:
@@ -1201,7 +1164,7 @@ async def get_strategy_execution_list(
                     'success': True,
                     'data': [],
                     'total': 0,
-                    'message': f'在最近{time_range}内没有找到订单数据。可能的原因：1) 数据库中确实没有订单记录 2) 时间范围筛选太严格（当前：{time_range}）3) 筛选条件不匹配。建议：尝试扩大时间范围或清除筛选条件。'
+                    'message': f'在最近{time_range}内没有找到策略执行记录。可能的原因：1) 数据库中确实没有策略执行记录 2) 时间范围筛选太严格（当前：{time_range}）3) 筛选条件不匹配。建议：尝试扩大时间范围或清除筛选条件。'
                 }
             
             return {

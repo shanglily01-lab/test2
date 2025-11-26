@@ -446,3 +446,107 @@ class SmartMoneySignal(Base):
 
     def __repr__(self):
         return f"<SmartMoneySignal(token={self.token_symbol}, type={self.signal_type}, strength={self.signal_strength}, confidence={self.confidence_score}%)>"
+
+
+class StrategyTradeRecord(Base):
+    """策略交易记录表 - 存储策略执行的买入、平仓等交易信息"""
+    __tablename__ = 'strategy_trade_records'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # 策略信息
+    strategy_id = Column(BigInteger, nullable=False, index=True)  # 策略ID
+    strategy_name = Column(String(100))  # 策略名称
+    account_id = Column(Integer, nullable=False, index=True)  # 账户ID
+    
+    # 交易信息
+    symbol = Column(String(20), nullable=False, index=True)  # 交易对
+    action = Column(String(20), nullable=False, index=True)  # 交易动作: BUY(买入/开仓), SELL(平仓), CLOSE(平仓)
+    direction = Column(String(10))  # 方向: long(做多), short(做空)
+    position_side = Column(String(10))  # 持仓方向: LONG, SHORT
+    
+    # 价格和数量
+    entry_price = Column(DECIMAL(18, 8))  # 开仓价格
+    exit_price = Column(DECIMAL(18, 8))  # 平仓价格
+    quantity = Column(DECIMAL(18, 8), nullable=False)  # 数量
+    leverage = Column(Integer, default=1)  # 杠杆倍数
+    
+    # 金额信息
+    margin = Column(DECIMAL(18, 8))  # 保证金
+    total_value = Column(DECIMAL(18, 8))  # 总价值
+    fee = Column(DECIMAL(18, 8))  # 手续费
+    realized_pnl = Column(DECIMAL(18, 8))  # 已实现盈亏
+    
+    # 关联信息
+    position_id = Column(Integer, index=True)  # 持仓ID
+    order_id = Column(String(50), index=True)  # 订单ID
+    signal_id = Column(Integer)  # 信号ID（关联strategy_hits表）
+    
+    # 交易原因
+    reason = Column(String(200))  # 交易原因，如：策略信号、止损、止盈、趋势反转等
+    
+    # 时间信息
+    trade_time = Column(DateTime, nullable=False, index=True)  # 交易时间
+    
+    created_at = Column(DateTime, default=datetime.now)  # 记录创建时间
+    
+    __table_args__ = (
+        Index('idx_strategy_symbol_time', 'strategy_id', 'symbol', 'trade_time'),
+        Index('idx_account_action_time', 'account_id', 'action', 'trade_time'),
+        Index('idx_position_id', 'position_id'),
+    )
+    
+    def __repr__(self):
+        return f"<StrategyTradeRecord(strategy={self.strategy_name}, symbol={self.symbol}, action={self.action}, time={self.trade_time})>"
+
+
+class StrategyTestRecord(Base):
+    """策略测试交易记录表 - 存储策略测试过程中的买入、平仓等交易信息"""
+    __tablename__ = 'strategy_test_records'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    # 策略信息
+    strategy_id = Column(BigInteger, nullable=False, index=True)  # 策略ID
+    strategy_name = Column(String(100))  # 策略名称
+    account_id = Column(Integer, nullable=False, index=True)  # 账户ID
+    
+    # 交易信息
+    symbol = Column(String(20), nullable=False, index=True)  # 交易对
+    action = Column(String(20), nullable=False, index=True)  # 交易动作: BUY(买入/开仓), SELL(平仓), CLOSE(平仓)
+    direction = Column(String(10))  # 方向: long(做多), short(做空)
+    position_side = Column(String(10))  # 持仓方向: LONG, SHORT
+    
+    # 价格和数量
+    entry_price = Column(DECIMAL(18, 8))  # 开仓价格
+    exit_price = Column(DECIMAL(18, 8))  # 平仓价格
+    quantity = Column(DECIMAL(18, 8), nullable=False)  # 数量
+    leverage = Column(Integer, default=1)  # 杠杆倍数
+    
+    # 金额信息
+    margin = Column(DECIMAL(18, 8))  # 保证金
+    total_value = Column(DECIMAL(18, 8))  # 总价值
+    fee = Column(DECIMAL(18, 8))  # 手续费
+    realized_pnl = Column(DECIMAL(18, 8))  # 已实现盈亏
+    
+    # 关联信息
+    position_id = Column(Integer, index=True)  # 持仓ID
+    order_id = Column(String(50), index=True)  # 订单ID
+    signal_id = Column(Integer)  # 信号ID（关联strategy_hits表）
+    
+    # 交易原因
+    reason = Column(String(200))  # 交易原因，如：策略信号、止损、止盈、趋势反转等
+    
+    # 时间信息
+    trade_time = Column(DateTime, nullable=False, index=True)  # 交易时间
+    
+    created_at = Column(DateTime, default=datetime.now)  # 记录创建时间
+    
+    __table_args__ = (
+        Index('idx_strategy_symbol_time', 'strategy_id', 'symbol', 'trade_time'),
+        Index('idx_account_action_time', 'account_id', 'action', 'trade_time'),
+        Index('idx_position_id', 'position_id'),
+    )
+    
+    def __repr__(self):
+        return f"<StrategyTestRecord(strategy={self.strategy_name}, symbol={self.symbol}, action={self.action}, time={self.trade_time})>"

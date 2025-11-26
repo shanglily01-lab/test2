@@ -11,7 +11,7 @@ from typing import List, Dict, Optional
 from datetime import datetime, timezone
 from loguru import logger
 
-from .models import Base, PriceData, KlineData, TradeData, OrderBookData, NewsData, FundingRateData, FuturesOpenInterest, FuturesLongShortRatio, SmartMoneyAddress, SmartMoneyTransaction, SmartMoneySignal
+from .models import Base, PriceData, KlineData, TradeData, OrderBookData, NewsData, FundingRateData, FuturesOpenInterest, FuturesLongShortRatio, SmartMoneyAddress, SmartMoneyTransaction, SmartMoneySignal, StrategyTradeRecord, StrategyTestRecord
 
 
 class DatabaseService:
@@ -1082,6 +1082,158 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"获取代币聪明钱信号失败: {e}")
             return None
+        finally:
+            session.close()
+
+    # ==================== 策略交易记录相关方法 ====================
+
+    def save_strategy_trade_record(self, trade_data: Dict) -> bool:
+        """
+        保存策略交易记录
+
+        Args:
+            trade_data: 交易数据字典，包含以下字段：
+                - strategy_id: 策略ID
+                - strategy_name: 策略名称
+                - account_id: 账户ID
+                - symbol: 交易对
+                - action: 交易动作 (BUY/SELL/CLOSE)
+                - direction: 方向 (long/short)
+                - position_side: 持仓方向 (LONG/SHORT)
+                - entry_price: 开仓价格
+                - exit_price: 平仓价格
+                - quantity: 数量
+                - leverage: 杠杆倍数
+                - margin: 保证金
+                - total_value: 总价值
+                - fee: 手续费
+                - realized_pnl: 已实现盈亏
+                - position_id: 持仓ID
+                - order_id: 订单ID
+                - signal_id: 信号ID
+                - reason: 交易原因
+                - trade_time: 交易时间
+
+        Returns:
+            是否保存成功
+        """
+        session = self.get_session()
+        try:
+            trade_record = StrategyTradeRecord(
+                strategy_id=trade_data.get('strategy_id'),
+                strategy_name=trade_data.get('strategy_name'),
+                account_id=trade_data.get('account_id'),
+                symbol=trade_data.get('symbol'),
+                action=trade_data.get('action'),
+                direction=trade_data.get('direction'),
+                position_side=trade_data.get('position_side'),
+                entry_price=trade_data.get('entry_price'),
+                exit_price=trade_data.get('exit_price'),
+                quantity=trade_data.get('quantity'),
+                leverage=trade_data.get('leverage', 1),
+                margin=trade_data.get('margin'),
+                total_value=trade_data.get('total_value'),
+                fee=trade_data.get('fee'),
+                realized_pnl=trade_data.get('realized_pnl'),
+                position_id=trade_data.get('position_id'),
+                order_id=trade_data.get('order_id'),
+                signal_id=trade_data.get('signal_id'),
+                reason=trade_data.get('reason'),
+                trade_time=trade_data.get('trade_time', datetime.now())
+            )
+
+            session.add(trade_record)
+            session.commit()
+            logger.info(f"保存策略交易记录成功: {trade_data.get('strategy_name')} - {trade_data.get('symbol')} {trade_data.get('action')}")
+            return True
+
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"保存策略交易记录失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+        except Exception as e:
+            session.rollback()
+            logger.error(f"保存策略交易记录时发生未知错误: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+        finally:
+            session.close()
+    
+    def save_strategy_test_record(self, trade_data: Dict) -> bool:
+        """
+        保存策略测试交易记录
+
+        Args:
+            trade_data: 交易数据字典，包含以下字段：
+                - strategy_id: 策略ID
+                - strategy_name: 策略名称
+                - account_id: 账户ID
+                - symbol: 交易对
+                - action: 交易动作 (BUY/SELL/CLOSE)
+                - direction: 方向 (long/short)
+                - position_side: 持仓方向 (LONG/SHORT)
+                - entry_price: 开仓价格
+                - exit_price: 平仓价格
+                - quantity: 数量
+                - leverage: 杠杆倍数
+                - margin: 保证金
+                - total_value: 总价值
+                - fee: 手续费
+                - realized_pnl: 已实现盈亏
+                - position_id: 持仓ID
+                - order_id: 订单ID
+                - signal_id: 信号ID
+                - reason: 交易原因
+                - trade_time: 交易时间
+
+        Returns:
+            是否保存成功
+        """
+        session = self.get_session()
+        try:
+            test_record = StrategyTestRecord(
+                strategy_id=trade_data.get('strategy_id'),
+                strategy_name=trade_data.get('strategy_name'),
+                account_id=trade_data.get('account_id'),
+                symbol=trade_data.get('symbol'),
+                action=trade_data.get('action'),
+                direction=trade_data.get('direction'),
+                position_side=trade_data.get('position_side'),
+                entry_price=trade_data.get('entry_price'),
+                exit_price=trade_data.get('exit_price'),
+                quantity=trade_data.get('quantity'),
+                leverage=trade_data.get('leverage', 1),
+                margin=trade_data.get('margin'),
+                total_value=trade_data.get('total_value'),
+                fee=trade_data.get('fee'),
+                realized_pnl=trade_data.get('realized_pnl'),
+                position_id=trade_data.get('position_id'),
+                order_id=trade_data.get('order_id'),
+                signal_id=trade_data.get('signal_id'),
+                reason=trade_data.get('reason'),
+                trade_time=trade_data.get('trade_time', datetime.now())
+            )
+
+            session.add(test_record)
+            session.commit()
+            logger.info(f"保存策略测试交易记录成功到 strategy_test_records 表: {trade_data.get('strategy_name')} - {trade_data.get('symbol')} {trade_data.get('action')}")
+            return True
+
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"保存策略测试交易记录失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+        except Exception as e:
+            session.rollback()
+            logger.error(f"保存策略测试交易记录时发生未知错误: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
         finally:
             session.close()
 

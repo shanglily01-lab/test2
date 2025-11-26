@@ -175,10 +175,10 @@ api:
 database:
   type: mysql
   mysql:
-    host: 13.212.252.171 
+    host: localhost
     port: 3306
-    user: admin
-    password: Admin@2024!Strong
+    user: root
+    password: Tonny@1000
     database: binance-data
   sqlite:
     path: ./data/crypto.db

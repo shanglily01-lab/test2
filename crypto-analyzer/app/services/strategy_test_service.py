@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from loguru import logger
 from fastapi import HTTPException
+from app.database.db_service import DatabaseService
 
 
 class StrategyTestService:
@@ -28,10 +29,68 @@ class StrategyTestService:
         
         # 定义本地时区（UTC+8）
         self.LOCAL_TZ = timezone(timedelta(hours=8))
+        
+        # 初始化数据库服务，用于保存交易记录
+        try:
+            db_service_config = {
+                'type': 'mysql',
+                'mysql': db_config
+            }
+            self.db_service = DatabaseService(db_service_config)
+        except Exception as e:
+            logger.warning(f"初始化数据库服务失败，交易记录将不会保存: {e}")
+            self.db_service = None
     
     def get_local_time(self) -> datetime:
         """获取本地时间（UTC+8）"""
         return datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
+    
+    def _save_trade_record(self, symbol: str, action: str, direction: str, entry_price: float, 
+                          exit_price: float, quantity: float, leverage: int, fee: float,
+                          realized_pnl: float, strategy_id, strategy_name: str, 
+                          account_id: int, reason: str, trade_time: datetime):
+        """保存交易记录到数据库的辅助方法"""
+        if not self.db_service:
+            logger.warning(f"{symbol} 数据库服务未初始化，无法保存测试交易记录")
+            return
+        
+        try:
+            margin = (entry_price * quantity) / leverage if entry_price and quantity else None
+            total_value = (exit_price or entry_price) * quantity if quantity else None
+            
+            trade_record_data = {
+                'strategy_id': strategy_id,
+                'strategy_name': strategy_name,
+                'account_id': account_id,
+                'symbol': symbol,
+                'action': action,
+                'direction': direction,
+                'position_side': 'LONG' if direction == 'long' else 'SHORT',
+                'entry_price': entry_price,
+                'exit_price': exit_price,
+                'quantity': quantity,
+                'leverage': leverage,
+                'margin': margin,
+                'total_value': total_value,
+                'fee': fee,
+                'realized_pnl': realized_pnl,
+                'position_id': None,
+                'order_id': None,
+                'signal_id': None,
+                'reason': reason,
+                'trade_time': trade_time if trade_time else self.get_local_time()
+            }
+            # 明确调用测试记录保存方法，保存到 strategy_test_records 表
+            logger.debug(f"{symbol} 准备保存测试交易记录到 strategy_test_records 表: {action} {direction} {quantity} @ {entry_price}")
+            success = self.db_service.save_strategy_test_record(trade_record_data)
+            if success:
+                logger.info(f"{symbol} ✅ 保存测试交易记录成功到 strategy_test_records 表: {action} {direction} {quantity} @ {entry_price}")
+            else:
+                logger.error(f"{symbol} ❌ 保存测试交易记录失败: 返回False")
+        except Exception as e:
+            logger.error(f"{symbol} ❌ 保存测试交易记录失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     def get_quantity_precision(self, symbol: str) -> int:
         """根据交易对获取数量精度（小数位数）"""
@@ -295,6 +354,9 @@ class StrategyTestService:
                         trend_confirm_bars=trend_confirm_bars,
                         trend_confirm_ema_threshold=trend_confirm_ema_threshold,
                         exit_on_ma_flip=exit_on_ma_flip,
+                        strategy_id=request.get('id'),
+                        strategy_name=request.get('name', '测试策略'),
+                        account_id=0,  # 测试时使用0作为账户ID
                         exit_on_ma_flip_threshold=exit_on_ma_flip_threshold,
                         exit_on_ema_weak=exit_on_ema_weak,
                         exit_on_ema_weak_threshold=exit_on_ema_weak_threshold,
@@ -586,6 +648,9 @@ class StrategyTestService:
         kdj_allow_strong_signal = kwargs.get('kdj_allow_strong_signal', False)
         kdj_strong_signal_threshold = kwargs.get('kdj_strong_signal_threshold', 1.0)
         bollinger_filter_enabled = kwargs.get('bollinger_filter_enabled', False)
+        strategy_id = kwargs.get('strategy_id')
+        strategy_name = kwargs.get('strategy_name', '测试策略')
+        account_id = kwargs.get('account_id', 0)
         
         # 模拟交易
         trades = []
@@ -1080,6 +1145,24 @@ class StrategyTestService:
                                         'exit_reason': f'开{direction}仓前平仓'
                                     })
                                     
+                                    # 保存交易记录到数据库
+                                    self._save_trade_record(
+                                        symbol=symbol,
+                                        action='CLOSE',
+                                        direction=opp_direction,
+                                        entry_price=opp_entry_price,
+                                        exit_price=exit_price,
+                                        quantity=opp_quantity,
+                                        leverage=leverage,
+                                        fee=close_fee,
+                                        realized_pnl=pnl,
+                                        strategy_id=strategy_id,
+                                        strategy_name=strategy_name,
+                                        account_id=account_id,
+                                        reason=f'开{direction}仓前平仓',
+                                        trade_time=self.utc_to_local(current_time) if current_time else self.get_local_time()
+                                    )
+                                    
                                     positions.remove(opp_position)
                                     closed_at_current_time = True
                                     
@@ -1389,6 +1472,24 @@ class StrategyTestService:
                                 'fee_rate': fee_rate
                             })
                             
+                            # 保存交易记录到数据库
+                            self._save_trade_record(
+                                symbol=symbol,
+                                action='BUY',
+                                direction=direction,
+                                entry_price=entry_price,
+                                exit_price=None,
+                                quantity=quantity,
+                                leverage=leverage,
+                                fee=open_fee,
+                                realized_pnl=None,
+                                strategy_id=strategy_id,
+                                strategy_name=strategy_name,
+                                account_id=account_id,
+                                reason='买入信号触发',
+                                trade_time=self.utc_to_local(current_time) if current_time else self.get_local_time()
+                            )
+                            
                             direction_text = "做多" if direction == 'long' else "做空"
                             qty_precision = self.get_quantity_precision(symbol)
                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={entry_price:.4f}，数量={quantity:.{qty_precision}f}，开仓手续费={open_fee:.4f}，余额={balance:.2f}")
@@ -1479,6 +1580,24 @@ class StrategyTestService:
                             'fee_rate': fee_rate,
                             'exit_reason': exit_reason
                         })
+                        
+                        # 保存交易记录到数据库
+                        self._save_trade_record(
+                            symbol=symbol,
+                            action='SELL',
+                            direction=direction,
+                            entry_price=entry_price,
+                            exit_price=exit_price,
+                            quantity=quantity,
+                            leverage=leverage,
+                            fee=close_fee,
+                            realized_pnl=pnl,
+                            strategy_id=strategy_id,
+                            strategy_name=strategy_name,
+                            account_id=account_id,
+                            reason=exit_reason,
+                            trade_time=self.utc_to_local(current_time) if current_time else self.get_local_time()
+                        )
                         
                         positions.remove(position)
                         closed_at_current_time = True
@@ -1618,6 +1737,24 @@ class StrategyTestService:
                             'fee_rate': fee_rate,
                             'exit_reason': exit_reason
                         })
+                        
+                        # 保存交易记录到数据库
+                        self._save_trade_record(
+                            symbol=symbol,
+                            action='SELL',
+                            direction=direction,
+                            entry_price=entry_price,
+                            exit_price=exit_price,
+                            quantity=quantity,
+                            leverage=leverage,
+                            fee=close_fee,
+                            realized_pnl=pnl,
+                            strategy_id=strategy_id,
+                            strategy_name=strategy_name,
+                            account_id=account_id,
+                            reason=exit_reason,
+                            trade_time=self.utc_to_local(current_time) if current_time else self.get_local_time()
+                        )
                         
                         positions.remove(position)
                         closed_at_current_time = True
@@ -1843,6 +1980,24 @@ class StrategyTestService:
                     'fee_rate': fee_rate,
                     'force_close': True
                 })
+                
+                # 保存交易记录到数据库
+                self._save_trade_record(
+                    symbol=symbol,
+                    action='SELL',
+                    direction=direction,
+                    entry_price=entry_price,
+                    exit_price=exit_price,
+                    quantity=quantity,
+                    leverage=leverage,
+                    fee=close_fee,
+                    realized_pnl=pnl,
+                    strategy_id=strategy_id,
+                    strategy_name=strategy_name,
+                    account_id=account_id,
+                    reason='测试结束强制平仓',
+                    trade_time=self.utc_to_local(last_time) if last_time else self.get_local_time()
+                )
         
         total_pnl = final_balance - initial_balance
         total_pnl_pct = (total_pnl / initial_balance) * 100

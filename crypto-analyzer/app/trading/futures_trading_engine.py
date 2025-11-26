@@ -788,7 +788,14 @@ class FuturesTradingEngine:
             position = cursor.fetchone()
 
             if not position:
-                raise ValueError(f"持仓 {position_id} 不存在或已平仓")
+                # 持仓不存在或已平仓，这是正常情况（可能已经被其他操作平仓），返回成功结果
+                logger.debug(f"持仓 {position_id} 不存在或已平仓，跳过平仓操作")
+                return {
+                    'success': True,
+                    'message': f"持仓 {position_id} 不存在或已平仓",
+                    'position_id': position_id,
+                    'already_closed': True
+                }
 
             symbol = position['symbol']
             position_side = position['position_side']
@@ -1013,6 +1020,31 @@ class FuturesTradingEngine:
                 'message': f"平仓成功，盈亏{realized_pnl:.2f} USDT ({pnl_pct:.2f}%)"
             }
 
+        except ValueError as e:
+            # ValueError 通常是业务逻辑错误（如持仓不存在），已经在上面处理了
+            # 但如果是其他 ValueError，需要处理
+            error_msg = str(e)
+            if '不存在或已平仓' in error_msg:
+                # 这种情况已经在上面处理了，不应该到这里
+                logger.debug(f"持仓不存在（已在上面处理）: {e}")
+                return {
+                    'success': True,
+                    'message': error_msg,
+                    'already_closed': True
+                }
+            else:
+                # 其他 ValueError
+                if connection:
+                    try:
+                        connection.rollback()
+                    except:
+                        pass
+                logger.error(f"平仓失败: {e}")
+                return {
+                    'success': False,
+                    'error': error_msg,
+                    'message': f"平仓失败: {error_msg}"
+                }
         except Exception as e:
             if connection:
                 try:

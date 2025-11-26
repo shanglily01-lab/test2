@@ -998,9 +998,9 @@
                         <div style="flex: 1; min-width: 200px;">
                             <label class="form-label">市场类型</label>
                             <select class="form-select" id="executionMarketType" onchange="loadExecutionList()">
-                                <option value="all">全部</option>
-                                <option value="spot">现货</option>
-                                <option value="futures">合约</option>
+                                <option value="all">全部类型</option>
+                                <option value="test">测试</option>
+                                <option value="live">实盘</option>
                             </select>
                         </div>
                         <div style="flex: 1; min-width: 200px;">
@@ -1118,87 +1118,121 @@
         }
 
         // 关闭策略Modal
+        let isClosingModal = false; // 防止递归调用
         function closeStrategyModal() {
-            const modal = document.getElementById('strategyModal');
-            modal.classList.remove('show');
-            document.body.style.overflow = ''; // 恢复滚动
+            // 防止递归调用
+            if (isClosingModal) {
+                return;
+            }
+            isClosingModal = true;
             
-            // 重置表单
-            document.getElementById('strategyForm').reset();
-            // 重置成交量选项显示状态
-            document.getElementById('sellVolumeEnabled').checked = false;
-            toggleSellVolumeOptions();
-            // 清除所有成交量选项的选择
-            document.querySelectorAll('input[name="buyVolumeLong"]').forEach(radio => radio.checked = false);
-            document.querySelectorAll('input[name="buyVolumeShort"]').forEach(radio => radio.checked = false);
-            // 清除 MA10/EMA10 同向过滤
-            document.getElementById('ma10Ema10TrendFilter').checked = false;
-            // 清除信号强度过滤（旧格式）
-            document.getElementById('minEMACrossStrength').value = '';
-            document.getElementById('minMA10CrossStrength').value = '';
-            // 清除信号强度过滤（新格式）
-            document.getElementById('minSignalStrength_ema9_26').value = '';
-            document.getElementById('minSignalStrength_ma10_ema10').value = '';
-            // 清除趋势持续性检查
-            document.getElementById('trendConfirmBars').value = '';
-            // 清除趋势反转退出机制
-            // 清除开仓前先平掉相反方向持仓
-            if (document.getElementById('closeOppositeOnEntry')) {
-                document.getElementById('closeOppositeOnEntry').checked = false;
+            try {
+                const modal = document.getElementById('strategyModal');
+                if (modal) {
+                    modal.classList.remove('show');
+                }
+                document.body.style.overflow = ''; // 恢复滚动
+                
+                // 重置表单
+                const form = document.getElementById('strategyForm');
+                if (form) {
+                    form.reset();
+                }
+                
+                // 重置成交量选项显示状态（先移除事件监听器，避免触发）
+                const sellVolumeEnabled = document.getElementById('sellVolumeEnabled');
+                if (sellVolumeEnabled) {
+                    sellVolumeEnabled.removeEventListener('change', toggleSellVolumeOptions);
+                    sellVolumeEnabled.checked = false;
+                    sellVolumeEnabled.addEventListener('change', toggleSellVolumeOptions);
+                    toggleSellVolumeOptions();
+                }
+                // 清除所有成交量选项的选择
+                document.querySelectorAll('input[name="buyVolumeLong"]').forEach(radio => radio.checked = false);
+                document.querySelectorAll('input[name="buyVolumeShort"]').forEach(radio => radio.checked = false);
+                // 清除 MA10/EMA10 同向过滤
+                const ma10Ema10Filter = document.getElementById('ma10Ema10TrendFilter');
+                if (ma10Ema10Filter) {
+                    ma10Ema10Filter.checked = false;
+                }
+                // 清除信号强度过滤（旧格式）
+                const minEMACrossStrength = document.getElementById('minEMACrossStrength');
+                if (minEMACrossStrength) minEMACrossStrength.value = '';
+                const minMA10CrossStrength = document.getElementById('minMA10CrossStrength');
+                if (minMA10CrossStrength) minMA10CrossStrength.value = '';
+                // 清除信号强度过滤（新格式）
+                const minSignalStrength_ema9_26 = document.getElementById('minSignalStrength_ema9_26');
+                if (minSignalStrength_ema9_26) minSignalStrength_ema9_26.value = '';
+                const minSignalStrength_ma10_ema10 = document.getElementById('minSignalStrength_ma10_ema10');
+                if (minSignalStrength_ma10_ema10) minSignalStrength_ma10_ema10.value = '';
+                // 清除趋势持续性检查
+                const trendConfirmBars = document.getElementById('trendConfirmBars');
+                if (trendConfirmBars) trendConfirmBars.value = '';
+                // 清除趋势反转退出机制
+                // 清除开仓前先平掉相反方向持仓
+                const closeOppositeOnEntry = document.getElementById('closeOppositeOnEntry');
+                if (closeOppositeOnEntry) closeOppositeOnEntry.checked = false;
+                const exitOnMAFlip = document.getElementById('exitOnMAFlip');
+                if (exitOnMAFlip) exitOnMAFlip.checked = false;
+                const exitOnMAFlipThreshold = document.getElementById('exitOnMAFlipThreshold');
+                if (exitOnMAFlipThreshold) exitOnMAFlipThreshold.value = '';
+                const exitOnEMAWeak = document.getElementById('exitOnEMAWeak');
+                if (exitOnEMAWeak) exitOnEMAWeak.checked = false;
+                const exitOnEMAWeakThreshold = document.getElementById('exitOnEMAWeakThreshold');
+                if (exitOnEMAWeakThreshold) exitOnEMAWeakThreshold.value = '';
+                const earlyStopLossPct = document.getElementById('earlyStopLossPct');
+                if (earlyStopLossPct) earlyStopLossPct.value = '';
+                const trendConfirmEMAThreshold = document.getElementById('trendConfirmEMAThreshold');
+                if (trendConfirmEMAThreshold) trendConfirmEMAThreshold.value = '';
+                
+                // 清除风险控制
+                const preventDuplicateEntry = document.getElementById('preventDuplicateEntry');
+                if (preventDuplicateEntry) preventDuplicateEntry.checked = false;
+                const minHoldingTimeHours = document.getElementById('minHoldingTimeHours');
+                if (minHoldingTimeHours) minHoldingTimeHours.value = '';
+                
+                // 清除同方向持仓限制
+                const maxLongPositions = document.getElementById('maxLongPositions');
+                if (maxLongPositions) maxLongPositions.value = '';
+                const maxShortPositions = document.getElementById('maxShortPositions');
+                if (maxShortPositions) maxShortPositions.value = '';
+                
+                // 清除技术指标过滤器
+                const rsiFilterEnabled = document.getElementById('rsiFilterEnabled');
+                if (rsiFilterEnabled) {
+                    rsiFilterEnabled.checked = false;
+                    const rsiLongMax = document.getElementById('rsiLongMax');
+                    if (rsiLongMax) rsiLongMax.value = '70';
+                    const rsiShortMin = document.getElementById('rsiShortMin');
+                    if (rsiShortMin) rsiShortMin.value = '30';
+                }
+                const macdFilterEnabled = document.getElementById('macdFilterEnabled');
+                if (macdFilterEnabled) {
+                    macdFilterEnabled.checked = false;
+                    const macdLongRequirePositive = document.getElementById('macdLongRequirePositive');
+                    if (macdLongRequirePositive) macdLongRequirePositive.checked = true;
+                    const macdShortRequireNegative = document.getElementById('macdShortRequireNegative');
+                    if (macdShortRequireNegative) macdShortRequireNegative.checked = true;
+                }
+                const kdjFilterEnabled = document.getElementById('kdjFilterEnabled');
+                if (kdjFilterEnabled) {
+                    kdjFilterEnabled.checked = false;
+                    const kdjLongMaxK = document.getElementById('kdjLongMaxK');
+                    if (kdjLongMaxK) kdjLongMaxK.value = '80';
+                    const kdjShortMinK = document.getElementById('kdjShortMinK');
+                    if (kdjShortMinK) kdjShortMinK.value = '20';
+                }
+                
+                editingStrategyId = null;
+                updateEmptyState();
+            } catch (error) {
+                console.error('关闭Modal时出错:', error);
+            } finally {
+                // 重置递归保护标志（延迟重置，确保所有操作完成）
+                setTimeout(() => {
+                    isClosingModal = false;
+                }, 100);
             }
-            document.getElementById('exitOnMAFlip').checked = false;
-            if (document.getElementById('exitOnMAFlipThreshold')) {
-                document.getElementById('exitOnMAFlipThreshold').value = '';
-            }
-            document.getElementById('exitOnEMAWeak').checked = false;
-            if (document.getElementById('exitOnEMAWeakThreshold')) {
-                document.getElementById('exitOnEMAWeakThreshold').value = '';
-            }
-            if (document.getElementById('earlyStopLossPct')) {
-                document.getElementById('earlyStopLossPct').value = '';
-            }
-            if (document.getElementById('trendConfirmEMAThreshold')) {
-                document.getElementById('trendConfirmEMAThreshold').value = '';
-            }
-            
-            // 清除风险控制
-            if (document.getElementById('preventDuplicateEntry')) {
-                document.getElementById('preventDuplicateEntry').checked = false;
-            }
-            if (document.getElementById('minHoldingTimeHours')) {
-                document.getElementById('minHoldingTimeHours').value = '';
-            }
-            
-            // 清除同方向持仓限制
-            if (document.getElementById('maxLongPositions')) {
-                document.getElementById('maxLongPositions').value = '';
-            }
-            if (document.getElementById('maxShortPositions')) {
-                document.getElementById('maxShortPositions').value = '';
-            }
-            
-            // 清除技术指标过滤器
-            if (document.getElementById('rsiFilterEnabled')) {
-                document.getElementById('rsiFilterEnabled').checked = false;
-                document.getElementById('rsiLongMax').value = '70';
-                document.getElementById('rsiShortMin').value = '30';
-            }
-            if (document.getElementById('macdFilterEnabled')) {
-                document.getElementById('macdFilterEnabled').checked = false;
-                document.getElementById('macdLongRequirePositive').checked = true;
-                document.getElementById('macdShortRequireNegative').checked = true;
-            }
-            if (document.getElementById('kdjFilterEnabled')) {
-                document.getElementById('kdjFilterEnabled').checked = false;
-                document.getElementById('kdjLongMaxK').value = '80';
-                document.getElementById('kdjShortMinK').value = '20';
-            }
-            
-            editingStrategyId = null;
-            updateEmptyState();
-            
-            // 关闭Modal
-            closeStrategyModal();
         }
         
         // 点击Modal背景关闭
@@ -1593,8 +1627,7 @@
             if (saved) {
                 // 刷新显示
                 loadStrategies();
-                closeStrategyModal();
-                cancelAddStrategy(); // 重置表单状态
+                closeStrategyModal(); // closeStrategyModal 已经会重置表单状态
                 showToast('策略保存成功！', 'success');
             }
         }
@@ -2918,6 +2951,7 @@
                         ? '买入/开仓' 
                         : item.action === 'SHORT' ? '做空' : '卖出/平仓';
                     const statusColor = item.status === 'FILLED' ? 'var(--success-green)' : item.status === 'PENDING' ? 'var(--warning-yellow)' : 'var(--text-secondary)';
+                    const marketTypeText = item.market_type === 'test' ? '测试' : item.market_type === 'futures' ? '合约' : '现货';
                     
                     return `
                         <div class="strategy-item" style="margin-bottom: var(--spacing-md);">
@@ -2932,14 +2966,40 @@
                                 </div>
                             </div>
                             <div class="strategy-item-body">
+                                ${item.strategy_name ? `
                                 <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">市场类型</div>
-                                    <div class="strategy-item-field-value">${item.market_type === 'futures' ? '合约' : '现货'}</div>
+                                    <div class="strategy-item-field-label">策略名称</div>
+                                    <div class="strategy-item-field-value">${item.strategy_name}</div>
                                 </div>
+                                ` : ''}
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">类型</div>
+                                    <div class="strategy-item-field-value">${marketTypeText}</div>
+                                </div>
+                                ${item.direction ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">方向</div>
+                                    <div class="strategy-item-field-value">${item.direction === 'long' ? '做多' : '做空'}</div>
+                                </div>
+                                ` : ''}
+                                ${item.action === 'sell' && item.entry_price ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">开仓价</div>
+                                    <div class="strategy-item-field-value">${parseFloat(item.entry_price).toFixed(4)}</div>
+                                </div>
+                                ` : ''}
+                                ${item.action === 'sell' && item.exit_price ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">平仓价</div>
+                                    <div class="strategy-item-field-value">${parseFloat(item.exit_price).toFixed(4)}</div>
+                                </div>
+                                ` : ''}
+                                ${item.action === 'buy' ? `
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">价格</div>
                                     <div class="strategy-item-field-value">${item.price ? parseFloat(item.price).toFixed(4) : 'N/A'}</div>
                                 </div>
+                                ` : ''}
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">数量</div>
                                     <div class="strategy-item-field-value">${item.quantity ? parseFloat(item.quantity).toFixed(4) : 'N/A'}</div>
@@ -2962,14 +3022,26 @@
                                     </div>
                                 </div>
                                 ` : ''}
+                                ${item.fee ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">手续费</div>
+                                    <div class="strategy-item-field-value">${parseFloat(item.fee).toFixed(4)} USDT</div>
+                                </div>
+                                ` : ''}
+                                ${item.reason ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">交易原因</div>
+                                    <div class="strategy-item-field-value">${item.reason}</div>
+                                </div>
+                                ` : ''}
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">时间</div>
-                                    <div class="strategy-item-field-value">${item.created_at || item.fill_time || 'N/A'}</div>
+                                    <div class="strategy-item-field-value">${item.created_at || 'N/A'}</div>
                                 </div>
                                 ${item.order_source ? `
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">来源</div>
-                                    <div class="strategy-item-field-value">${item.order_source === 'strategy' || item.order_source === 'strategy_signal' || (item.order_source && item.order_source.startsWith('strategy_exit')) ? '策略执行' : item.order_source === 'manual' ? '手动' : item.order_source}</div>
+                                    <div class="strategy-item-field-value">${item.order_source}</div>
                                 </div>
                                 ` : ''}
                             </div>

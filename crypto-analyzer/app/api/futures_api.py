@@ -1200,7 +1200,7 @@ async def health():
 @router.get('/strategies')
 async def get_futures_strategies():
     """
-    获取所有合约交易策略配置
+    获取所有合约交易策略配置（从数据库读取）
     
     Returns:
         策略配置列表
@@ -1208,26 +1208,51 @@ async def get_futures_strategies():
     try:
         import json
         
-        # 策略配置文件路径
-        strategies_file = Path(__file__).parent.parent.parent / 'config' / 'strategies' / 'futures_strategies.json'
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
         
-        # 如果文件不存在，返回空列表
-        if not strategies_file.exists():
+        try:
+            # 从数据库读取策略配置
+            cursor.execute("""
+                SELECT id, name, description, account_id, enabled, config, 
+                       created_at, updated_at
+                FROM trading_strategies
+                ORDER BY id ASC
+            """)
+            rows = cursor.fetchall()
+            
+            # 转换为前端需要的格式
+            strategies = []
+            for row in rows:
+                strategy = {
+                    'id': row['id'],
+                    'name': row['name'],
+                    'description': row.get('description', ''),
+                    'account_id': row.get('account_id', 2),
+                    'enabled': bool(row.get('enabled', 0)),
+                    'created_at': row.get('created_at').isoformat() if row.get('created_at') else None,
+                    'updated_at': row.get('updated_at').isoformat() if row.get('updated_at') else None
+                }
+                
+                # 解析 config JSON 字段
+                if row.get('config'):
+                    try:
+                        config = json.loads(row['config']) if isinstance(row['config'], str) else row['config']
+                        strategy.update(config)  # 合并配置到策略对象
+                    except Exception as e:
+                        logger.warning(f"解析策略配置失败 (ID: {row['id']}): {e}")
+                
+                strategies.append(strategy)
+            
             return {
                 'success': True,
-                'data': [],
-                'count': 0
+                'data': strategies,
+                'count': len(strategies)
             }
-        
-        # 读取策略配置
-        with open(strategies_file, 'r', encoding='utf-8') as f:
-            strategies = json.load(f)
-        
-        return {
-            'success': True,
-            'data': strategies,
-            'count': len(strategies)
-        }
+            
+        finally:
+            cursor.close()
+            connection.close()
         
     except Exception as e:
         logger.error(f"获取策略配置失败: {e}")
@@ -1239,38 +1264,198 @@ async def get_futures_strategies():
 @router.post('/strategies')
 async def save_futures_strategies(strategies: List[Dict] = Body(...)):
     """
-    保存合约交易策略配置
+    保存合约交易策略配置（保存到数据库）
     
     - **strategies**: 策略配置列表
     """
     try:
         import json
         
-        # 策略配置文件路径
-        strategies_dir = Path(__file__).parent.parent.parent / 'config' / 'strategies'
-        strategies_dir.mkdir(parents=True, exist_ok=True)
-        strategies_file = strategies_dir / 'futures_strategies.json'
-        
         # 验证策略数据
         if not isinstance(strategies, list):
             raise HTTPException(status_code=400, detail="策略配置必须是列表格式")
         
-        # 保存策略配置
-        with open(strategies_file, 'w', encoding='utf-8') as f:
-            json.dump(strategies, f, ensure_ascii=False, indent=2)
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor()
         
-        logger.info(f"策略配置已保存到 {strategies_file}，共 {len(strategies)} 个策略")
-        
-        return {
-            'success': True,
-            'message': f'策略配置保存成功，共 {len(strategies)} 个策略',
-            'count': len(strategies)
-        }
+        try:
+            saved_count = 0
+            updated_count = 0
+            
+            for strategy in strategies:
+                # 提取基本信息
+                strategy_id = strategy.get('id')
+                name = strategy.get('name', '未命名策略')
+                description = strategy.get('description', '')
+                account_id = strategy.get('account_id', 2)
+                enabled = 1 if strategy.get('enabled', False) else 0
+                
+                # 提取配置信息（排除基本信息字段）
+                config_fields = {k: v for k, v in strategy.items() 
+                               if k not in ['id', 'name', 'description', 'account_id', 'enabled', 'created_at', 'updated_at']}
+                config_json = json.dumps(config_fields, ensure_ascii=False) if config_fields else None
+                
+                # 检查策略是否存在
+                if strategy_id:
+                    cursor.execute("""
+                        SELECT id FROM trading_strategies WHERE id = %s
+                    """, (strategy_id,))
+                    exists = cursor.fetchone()
+                    
+                    if exists:
+                        # 更新现有策略
+                        cursor.execute("""
+                            UPDATE trading_strategies
+                            SET name = %s, description = %s, account_id = %s, 
+                                enabled = %s, config = %s, updated_at = NOW()
+                            WHERE id = %s
+                        """, (name, description, account_id, enabled, config_json, strategy_id))
+                        updated_count += 1
+                    else:
+                        # 插入新策略（使用指定的ID）
+                        cursor.execute("""
+                            INSERT INTO trading_strategies 
+                            (id, name, description, account_id, enabled, config)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                        """, (strategy_id, name, description, account_id, enabled, config_json))
+                        saved_count += 1
+                else:
+                    # 插入新策略（自动生成ID）
+                    cursor.execute("""
+                        INSERT INTO trading_strategies 
+                        (name, description, account_id, enabled, config)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (name, description, account_id, enabled, config_json))
+                    saved_count += 1
+            
+            connection.commit()
+            
+            logger.info(f"策略配置已保存到数据库，新增 {saved_count} 个，更新 {updated_count} 个，共 {len(strategies)} 个策略")
+            
+            return {
+                'success': True,
+                'message': f'策略配置保存成功，新增 {saved_count} 个，更新 {updated_count} 个',
+                'count': len(strategies),
+                'saved': saved_count,
+                'updated': updated_count
+            }
+            
+        except Exception as e:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+            connection.close()
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"保存策略配置失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete('/strategies/{strategy_id}')
+async def delete_futures_strategy(strategy_id: int):
+    """
+    删除合约交易策略配置
+    
+    - **strategy_id**: 策略ID
+    """
+    try:
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor()
+        
+        try:
+            # 检查策略是否存在
+            cursor.execute("SELECT id, name FROM trading_strategies WHERE id = %s", (strategy_id,))
+            strategy = cursor.fetchone()
+            
+            if not strategy:
+                raise HTTPException(status_code=404, detail=f"策略 ID {strategy_id} 不存在")
+            
+            # 删除策略
+            cursor.execute("DELETE FROM trading_strategies WHERE id = %s", (strategy_id,))
+            connection.commit()
+            
+            logger.info(f"策略已删除: ID={strategy_id}, Name={strategy[1]}")
+            
+            return {
+                'success': True,
+                'message': f'策略已删除',
+                'id': strategy_id
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+            connection.close()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除策略配置失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch('/strategies/{strategy_id}/toggle')
+async def toggle_futures_strategy(strategy_id: int):
+    """
+    切换策略启用/禁用状态
+    
+    - **strategy_id**: 策略ID
+    """
+    try:
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        
+        try:
+            # 获取当前状态
+            cursor.execute("SELECT id, name, enabled FROM trading_strategies WHERE id = %s", (strategy_id,))
+            strategy = cursor.fetchone()
+            
+            if not strategy:
+                raise HTTPException(status_code=404, detail=f"策略 ID {strategy_id} 不存在")
+            
+            # 切换状态
+            new_enabled = 1 if strategy['enabled'] == 0 else 0
+            cursor.execute("""
+                UPDATE trading_strategies 
+                SET enabled = %s, updated_at = NOW()
+                WHERE id = %s
+            """, (new_enabled, strategy_id))
+            connection.commit()
+            
+            status_text = '启用' if new_enabled else '禁用'
+            logger.info(f"策略状态已切换: ID={strategy_id}, Name={strategy['name']}, Status={status_text}")
+            
+            return {
+                'success': True,
+                'message': f'策略已{status_text}',
+                'id': strategy_id,
+                'enabled': bool(new_enabled)
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+            connection.close()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"切换策略状态失败: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
