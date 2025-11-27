@@ -1597,12 +1597,34 @@ class StrategyExecutor:
         # 执行买入
         # 检查是否可以开仓：防止重复开仓或检查最大持仓数
         can_open_position = True
-        if prevent_duplicate_entry and len(positions) > 0:
+
+        # 获取当前K线的时间戳（用于防止同一根K线重复触发）
+        current_kline_time = None
+        if buy_signal_triggered and buy_pair:
+            current_kline_time = self.parse_time(buy_pair['kline']['timestamp'])
+
+        # 检查是否在同一根K线内已经开过仓（防止重复触发）
+        if buy_signal_triggered and current_kline_time and len(positions) > 0:
+            # 计算K线的时间间隔（分钟）
+            timeframe_minutes = {'5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440}.get(buy_timeframe, 15)
+            for pos in positions:
+                pos_entry_time = pos.get('entry_time')
+                if pos_entry_time:
+                    # 检查持仓开仓时间是否在当前K线范围内
+                    time_diff = abs((pos_entry_time - current_kline_time).total_seconds() / 60)
+                    if time_diff < timeframe_minutes:
+                        can_open_position = False
+                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 同一根K线内已有开仓记录，跳过重复信号（上次开仓: {pos_entry_time.strftime('%Y-%m-%d %H:%M')}）"
+                        debug_info.append(msg)
+                        logger.info(f"{symbol} {msg}")
+                        break
+
+        if prevent_duplicate_entry and len(positions) > 0 and can_open_position:
             can_open_position = False
             msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 防止重复开仓已启用，当前已有{len(positions)}个持仓，跳过买入信号"
             debug_info.append(msg)
             logger.info(f"{symbol} {msg}")
-        elif max_positions is not None and len(positions) >= max_positions:
+        elif max_positions is not None and len(positions) >= max_positions and can_open_position:
             can_open_position = False
             msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 已达到最大持仓数限制（{max_positions}个），当前持仓{len(positions)}个，跳过买入信号"
             debug_info.append(msg)
