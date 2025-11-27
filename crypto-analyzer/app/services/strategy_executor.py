@@ -1604,20 +1604,48 @@ class StrategyExecutor:
             current_kline_time = self.parse_time(buy_pair['kline']['timestamp'])
 
         # 检查是否在同一根K线内已经开过仓（防止重复触发）
-        if buy_signal_triggered and current_kline_time and len(positions) > 0:
+        # 注意：需要查询数据库中最近的交易记录，而不是只检查当前持仓（因为可能已平仓）
+        if buy_signal_triggered and current_kline_time:
             # 计算K线的时间间隔（分钟）
             timeframe_minutes = {'5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440}.get(buy_timeframe, 15)
+
+            # 先检查当前持仓
             for pos in positions:
                 pos_entry_time = pos.get('entry_time')
                 if pos_entry_time:
-                    # 检查持仓开仓时间是否在当前K线范围内
                     time_diff = abs((pos_entry_time - current_kline_time).total_seconds() / 60)
                     if time_diff < timeframe_minutes:
                         can_open_position = False
-                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 同一根K线内已有开仓记录，跳过重复信号（上次开仓: {pos_entry_time.strftime('%Y-%m-%d %H:%M')}）"
+                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 同一根K线内已有持仓，跳过重复信号（开仓时间: {pos_entry_time.strftime('%Y-%m-%d %H:%M')}）"
                         debug_info.append(msg)
                         logger.info(f"{symbol} {msg}")
                         break
+
+            # 如果当前没有持仓，还需要查询最近的交易记录（防止平仓后立即重新开仓）
+            if can_open_position:
+                try:
+                    connection = self._get_connection()
+                    cursor = connection.cursor(pymysql.cursors.DictCursor)
+                    # 查询该策略在当前K线时间范围内是否有开仓记录
+                    kline_start_time = current_kline_time
+                    cursor.execute("""
+                        SELECT trade_time FROM strategy_trade_records
+                        WHERE symbol = %s AND strategy_id = %s AND action = 'BUY'
+                        AND trade_time >= %s
+                        ORDER BY trade_time DESC LIMIT 1
+                    """, (symbol, strategy_id, kline_start_time))
+                    recent_trade = cursor.fetchone()
+                    cursor.close()
+                    connection.close()
+
+                    if recent_trade:
+                        can_open_position = False
+                        recent_time = recent_trade['trade_time']
+                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 同一根K线内已有交易记录，跳过重复信号（上次交易: {recent_time.strftime('%Y-%m-%d %H:%M:%S')}）"
+                        debug_info.append(msg)
+                        logger.info(f"{symbol} {msg}")
+                except Exception as e:
+                    logger.warning(f"{symbol} 查询最近交易记录失败: {e}")
 
         if prevent_duplicate_entry and len(positions) > 0 and can_open_position:
             can_open_position = False
