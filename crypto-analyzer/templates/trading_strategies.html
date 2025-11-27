@@ -158,6 +158,82 @@
         @keyframes slideOutRight { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
         .toast.hiding { animation: slideOutRight 0.3s ease-out forwards; }
         
+        /* 自定义确认对话框 */
+        .confirm-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            z-index: 10001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .confirm-modal-dialog {
+            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-xl);
+            padding: 0;
+            min-width: 400px;
+            max-width: 500px;
+            box-shadow: var(--shadow-xl), 0 0 40px rgba(0, 0, 0, 0.4);
+            animation: slideUpModal 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            overflow: hidden;
+        }
+        @keyframes slideUpModal {
+            from {
+                transform: translateY(20px) scale(0.95);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+        }
+        .confirm-modal-header {
+            padding: var(--spacing-xl);
+            border-bottom: 1px solid var(--border-default);
+        }
+        .confirm-modal-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+        }
+        .confirm-modal-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .confirm-modal-body {
+            padding: var(--spacing-xl);
+            color: var(--text-secondary);
+            line-height: 1.6;
+            font-size: 15px;
+        }
+        .confirm-modal-footer {
+            padding: var(--spacing-lg) var(--spacing-xl);
+            border-top: 1px solid var(--border-default);
+            display: flex;
+            gap: var(--spacing-md);
+            justify-content: flex-end;
+            background: var(--bg-secondary);
+        }
+        
         /* 响应式设计 */
         @media (max-width: 768px) {
             .container { padding: var(--spacing-md); }
@@ -2143,6 +2219,78 @@
             });
         }
 
+        // 显示自定义确认对话框
+        function showConfirmDialog(title, message, type = 'warning') {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'confirm-modal-overlay';
+                
+                const iconConfig = {
+                    'warning': { icon: 'exclamation-triangle-fill', color: 'var(--warning-yellow)', bg: 'rgba(245, 158, 11, 0.2)', border: 'rgba(245, 158, 11, 0.3)' },
+                    'danger': { icon: 'x-circle-fill', color: 'var(--danger-red)', bg: 'rgba(239, 68, 68, 0.2)', border: 'rgba(239, 68, 68, 0.3)' },
+                    'info': { icon: 'info-circle-fill', color: 'var(--info-blue)', bg: 'rgba(59, 130, 246, 0.2)', border: 'rgba(59, 130, 246, 0.3)' }
+                };
+                const config = iconConfig[type] || iconConfig['warning'];
+                
+                overlay.innerHTML = `
+                    <div class="confirm-modal-dialog">
+                        <div class="confirm-modal-header">
+                            <div class="confirm-modal-title">
+                                <div class="confirm-modal-icon" style="background: linear-gradient(135deg, ${config.bg} 0%, ${config.bg.replace('0.2', '0.1')} 100%); border: 2px solid ${config.border};">
+                                    <i class="bi bi-${config.icon}" style="font-size: 24px; color: ${config.color};"></i>
+                                </div>
+                                <span>${title}</span>
+                            </div>
+                        </div>
+                        <div class="confirm-modal-body">
+                            ${message}
+                        </div>
+                        <div class="confirm-modal-footer">
+                            <button class="btn btn-secondary" id="modal-cancel-btn" style="min-width: 100px;">
+                                <i class="bi bi-x-circle"></i> 取消
+                            </button>
+                            <button class="btn btn-danger" id="modal-confirm-btn" style="min-width: 100px;">
+                                <i class="bi bi-check-circle"></i> 确定
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(overlay);
+                
+                const cancelBtn = overlay.querySelector('#modal-cancel-btn');
+                const confirmBtn = overlay.querySelector('#modal-confirm-btn');
+                const dialog = overlay.querySelector('.confirm-modal-dialog');
+                
+                const closeModal = (result) => {
+                    dialog.style.animation = 'slideUpModal 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) reverse';
+                    overlay.style.animation = 'fadeIn 0.2s ease-out reverse';
+                    setTimeout(() => {
+                        overlay.remove();
+                        resolve(result);
+                    }, 300);
+                };
+                
+                cancelBtn.addEventListener('click', () => closeModal(false));
+                confirmBtn.addEventListener('click', () => closeModal(true));
+                
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        closeModal(false);
+                    }
+                });
+                
+                // ESC键关闭
+                const handleEsc = (e) => {
+                    if (e.key === 'Escape') {
+                        closeModal(false);
+                        document.removeEventListener('keydown', handleEsc);
+                    }
+                };
+                document.addEventListener('keydown', handleEsc);
+            });
+        }
+
         // 删除策略
         async function deleteStrategy(id) {
             // 确保 ID 类型一致
@@ -2157,16 +2305,49 @@
                 return;
             }
             
-            if (confirm(`确定要删除策略 "${strategy.name}" 吗？此操作不可恢复。`)) {
-                strategies = strategies.filter(s => {
-                    const sId = typeof s.id === 'string' ? parseInt(s.id) : s.id;
-                    return sId !== strategyId;
+            // 使用自定义确认对话框
+            const confirmed = await showConfirmDialog(
+                '删除策略',
+                `确定要删除策略 <strong style="color: var(--text-primary);">"${strategy.name}"</strong> 吗？<br><br>此操作不可恢复，请谨慎操作。`,
+                'danger'
+            );
+            
+            if (!confirmed) {
+                return;
+            }
+            
+            try {
+                // 直接调用 DELETE API 删除策略
+                const response = await fetch(`/api/futures/strategies/${strategyId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
                 });
-                const saved = await saveStrategiesToServer();
-                if (saved) {
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 从前端数组中移除
+                    strategies = strategies.filter(s => {
+                        const sId = typeof s.id === 'string' ? parseInt(s.id) : s.id;
+                        return sId !== strategyId;
+                    });
+                    
+                    // 如果删除的是当前正在编辑的策略，重置编辑状态
+                    if (editingStrategyId === strategyId) {
+                        editingStrategyId = null;
+                    }
+                    
+                    // 重新加载策略列表
                     loadStrategies();
-                    showToast('策略已删除', 'success');
+                    showToast(`策略 "${strategy.name}" 已删除`, 'success');
+                } else {
+                    showToast(result.message || '删除失败', 'error');
                 }
+            } catch (error) {
+                console.error('删除策略失败:', error);
+                showToast('删除策略失败: ' + (error.message || '未知错误'), 'error');
             }
         }
 
