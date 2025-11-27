@@ -1277,7 +1277,17 @@ class DatabaseService:
         import pymysql
         
         try:
-            connection = pymysql.connect(**self.db_config)
+            # 从配置中获取MySQL连接参数
+            mysql_config = self.config.get('mysql', {})
+            connection = pymysql.connect(
+                host=mysql_config.get('host', 'localhost'),
+                port=mysql_config.get('port', 3306),
+                user=mysql_config.get('user', 'root'),
+                password=mysql_config.get('password', ''),
+                database=mysql_config.get('database', 'binance-data'),
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
             cursor = connection.cursor()
             
             try:
