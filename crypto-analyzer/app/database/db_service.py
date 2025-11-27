@@ -1236,6 +1236,120 @@ class DatabaseService:
             return False
         finally:
             session.close()
+    
+    def save_strategy_capital_record(self, capital_data: Dict) -> bool:
+        """
+        保存策略资金管理记录
+        
+        Args:
+            capital_data: 资金数据字典，包含以下字段：
+                - strategy_id: 策略ID
+                - strategy_name: 策略名称
+                - account_id: 账户ID
+                - symbol: 交易对
+                - trade_record_id: 关联的交易记录ID（可选）
+                - position_id: 关联的持仓ID（可选）
+                - order_id: 关联的订单ID（可选）
+                - change_type: 资金变化类型 (FROZEN/UNFROZEN/REALIZED_PNL/FEE/DEPOSIT/WITHDRAW)
+                - action: 交易动作 (BUY/SELL/CLOSE)
+                - direction: 方向 (long/short)
+                - amount_change: 金额变化（正数表示增加，负数表示减少）
+                - balance_before: 变化前余额
+                - balance_after: 变化后余额
+                - frozen_before: 变化前冻结金额
+                - frozen_after: 变化后冻结金额
+                - available_before: 变化前可用余额
+                - available_after: 变化后可用余额
+                - entry_price: 开仓价格（可选）
+                - exit_price: 平仓价格（可选）
+                - quantity: 数量（可选）
+                - leverage: 杠杆倍数（可选）
+                - margin: 保证金（可选）
+                - realized_pnl: 已实现盈亏（可选）
+                - fee: 手续费（可选）
+                - reason: 资金变化原因
+                - description: 详细描述（可选）
+                - change_time: 资金变化时间
+        
+        Returns:
+            bool: 保存成功返回True，失败返回False
+        """
+        import pymysql
+        
+        try:
+            connection = pymysql.connect(**self.db_config)
+            cursor = connection.cursor()
+            
+            try:
+                insert_sql = """
+                    INSERT INTO strategy_capital_management (
+                        strategy_id, strategy_name, account_id, symbol,
+                        trade_record_id, position_id, order_id,
+                        change_type, action, direction,
+                        amount_change, balance_before, balance_after,
+                        frozen_before, frozen_after, available_before, available_after,
+                        entry_price, exit_price, quantity, leverage, margin,
+                        realized_pnl, fee, reason, description, change_time
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s
+                    )
+                """
+                
+                cursor.execute(insert_sql, (
+                    capital_data.get('strategy_id'),
+                    capital_data.get('strategy_name'),
+                    capital_data.get('account_id'),
+                    capital_data.get('symbol'),
+                    capital_data.get('trade_record_id'),
+                    capital_data.get('position_id'),
+                    capital_data.get('order_id'),
+                    capital_data.get('change_type'),
+                    capital_data.get('action'),
+                    capital_data.get('direction'),
+                    capital_data.get('amount_change'),
+                    capital_data.get('balance_before'),
+                    capital_data.get('balance_after'),
+                    capital_data.get('frozen_before'),
+                    capital_data.get('frozen_after'),
+                    capital_data.get('available_before'),
+                    capital_data.get('available_after'),
+                    capital_data.get('entry_price'),
+                    capital_data.get('exit_price'),
+                    capital_data.get('quantity'),
+                    capital_data.get('leverage'),
+                    capital_data.get('margin'),
+                    capital_data.get('realized_pnl'),
+                    capital_data.get('fee'),
+                    capital_data.get('reason'),
+                    capital_data.get('description'),
+                    capital_data.get('change_time', datetime.now())
+                ))
+                
+                connection.commit()
+                logger.info(f"保存策略资金管理记录成功: {capital_data.get('strategy_name')} - {capital_data.get('symbol')} {capital_data.get('change_type')} {capital_data.get('amount_change')}")
+                return True
+                
+            except Exception as e:
+                connection.rollback()
+                logger.error(f"保存策略资金管理记录失败: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                return False
+            finally:
+                cursor.close()
+                connection.close()
+                
+        except Exception as e:
+            logger.error(f"保存策略资金管理记录时发生未知错误: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
 
     # ==================== 数据查询方法 ====================
 

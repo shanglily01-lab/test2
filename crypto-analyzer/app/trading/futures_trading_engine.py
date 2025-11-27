@@ -530,7 +530,7 @@ class FuturesTradingEngine:
             fee_rate = Decimal('0.0004')
             fee = notional_value * fee_rate
 
-            # 4. 检查账户余额
+            # 4. 检查账户余额（并保存变化前的余额信息）
             try:
                 cursor.execute(
                     "SELECT current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
@@ -547,6 +547,11 @@ class FuturesTradingEngine:
                 current_balance = Decimal(str(account['current_balance']))
                 frozen_balance = Decimal(str(account.get('frozen_balance', 0) or 0))
                 available_balance = current_balance - frozen_balance
+                
+                # 保存变化前的余额信息（用于资金管理记录）
+                balance_before = float(current_balance)
+                frozen_before = float(frozen_balance)
+                available_before = float(available_balance)
                 
                 if available_balance < (margin_required + fee):
                     return {
@@ -690,6 +695,11 @@ class FuturesTradingEngine:
                 WHERE id = %s""",
                 (float(new_balance), float(total_frozen), account_id)
             )
+            
+            # 获取变化后的余额信息（用于资金管理记录）
+            balance_after = float(new_balance)
+            frozen_after = float(frozen_balance + total_frozen)
+            available_after = balance_after - frozen_after
 
             # 10. 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
             cursor.execute(
@@ -729,6 +739,13 @@ class FuturesTradingEngine:
                 'liquidation_price': float(liquidation_price),
                 'stop_loss_price': float(stop_loss_price) if stop_loss_price else None,
                 'take_profit_price': float(take_profit_price) if take_profit_price else None,
+                # 余额信息（用于资金管理记录）
+                'balance_before': balance_before,
+                'balance_after': balance_after,
+                'frozen_before': frozen_before,
+                'frozen_after': frozen_after,
+                'available_before': available_before,
+                'available_after': available_after,
                 'message': f"开{position_side}仓成功"
             }
 
@@ -804,6 +821,19 @@ class FuturesTradingEngine:
             quantity = Decimal(str(position['quantity']))
             leverage = position['leverage']
             margin = Decimal(str(position['margin']))
+            
+            # 获取变化前的账户余额信息（用于资金管理记录）
+            cursor.execute(
+                "SELECT current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
+                (account_id,)
+            )
+            account_before = cursor.fetchone()
+            if account_before:
+                balance_before = float(account_before['current_balance'])
+                frozen_before = float(account_before.get('frozen_balance', 0) or 0)
+                available_before = balance_before - frozen_before
+            else:
+                balance_before = frozen_before = available_before = None
 
             # 如果没指定平仓数量，则全部平仓
             if close_quantity is None:
@@ -993,6 +1023,19 @@ class FuturesTradingEngine:
                 WHERE a.id = %s""",
                 (account_id,)
             )
+            
+            # 获取变化后的账户余额信息（用于资金管理记录）
+            cursor.execute(
+                "SELECT current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
+                (account_id,)
+            )
+            account_after = cursor.fetchone()
+            if account_after:
+                balance_after = float(account_after['current_balance'])
+                frozen_after = float(account_after.get('frozen_balance', 0) or 0)
+                available_after = balance_after - frozen_after
+            else:
+                balance_after = frozen_after = available_after = None
 
             connection.commit()
             cursor.close()
@@ -1011,13 +1054,22 @@ class FuturesTradingEngine:
                 'symbol': symbol,
                 'position_side': position_side,
                 'close_quantity': float(close_quantity),
+                'exit_price': float(current_price),  # 添加 exit_price 别名，与开仓返回的 entry_price 对应
                 'close_price': float(current_price),
                 'entry_price': float(entry_price),
                 'realized_pnl': float(realized_pnl),
                 'pnl_pct': float(pnl_pct),
                 'roi': float(roi),
                 'fee': float(fee),
-                'message': f"平仓成功，盈亏{realized_pnl:.2f} USDT ({pnl_pct:.2f}%)"
+                'message': f"平仓成功，盈亏{realized_pnl:.2f} USDT ({pnl_pct:.2f}%)",
+                # 余额信息（用于资金管理记录）
+                'balance_before': balance_before,
+                'balance_after': balance_after,
+                'frozen_before': frozen_before,
+                'frozen_after': frozen_after,
+                'available_before': available_before,
+                'available_after': available_after,
+                'margin': float(position_margin),  # 释放的保证金
             }
 
         except ValueError as e:
