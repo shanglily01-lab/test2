@@ -336,12 +336,14 @@ class StrategyExecutor:
                 sell_klines = cursor.fetchall()
 
                 # 根据时间周期确定最小K线数量要求
+                # 注意：EMA26 需要至少26根K线，为保证稳定性建议至少50根
+                # 15分钟K线：24小时=96根，所以设为50
                 min_klines_map = {
-                    '5m': 100,
-                    '15m': 100,
-                    '1h': 50,
-                    '4h': 50,
-                    '1d': 50
+                    '5m': 50,
+                    '15m': 50,
+                    '1h': 30,
+                    '4h': 30,
+                    '1d': 30
                 }
                 min_buy_klines = min_klines_map.get(buy_timeframe, 50)
                 min_sell_klines = min_klines_map.get(sell_timeframe, 50)
@@ -798,12 +800,13 @@ class StrategyExecutor:
                 historical_klines = [k for k in klines if self.parse_time(k['timestamp']) <= test_kline_time]
                 
                 # 根据时间周期确定最小历史K线数量
+                # EMA26 需要至少26根K线，为保证稳定性建议至少30根
                 min_historical_map = {
-                    '5m': 100,
-                    '15m': 100,
-                    '1h': 50,
-                    '4h': 50,
-                    '1d': 50
+                    '5m': 30,
+                    '15m': 30,
+                    '1h': 30,
+                    '4h': 30,
+                    '1d': 30
                 }
                 timeframe_key = timeframe_name.split('(')[1].split(')')[0] if '(' in timeframe_name else '15m'
                 min_historical = min_historical_map.get(timeframe_key, 50)
