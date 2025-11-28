@@ -50,112 +50,162 @@ def clear_all_data(account_id: int = 2, reset_balance: float = 10000.0):
         password=db_config.get('password', ''),
         database=db_config.get('database', 'binance-data'),
         charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
+        cursorclass=pymysql.cursors.DictCursor,
+        connect_timeout=10,
+        read_timeout=300,  # 5分钟读取超时
+        write_timeout=300  # 5分钟写入超时
     )
     cursor = connection.cursor()
+    
+    def safe_delete(table_name, use_truncate=False):
+        """安全删除表数据"""
+        try:
+            # 先查询数据量
+            cursor.execute(f"SELECT COUNT(*) as count FROM {table_name}")
+            count_result = cursor.fetchone()
+            count = count_result['count'] if count_result else 0
+            
+            if count == 0:
+                print(f"  ⚠ 表 {table_name} 为空，跳过")
+                return 0
+            
+            print(f"  📊 表 {table_name} 共有 {count} 条记录，开始删除...")
+            sys.stdout.flush()
+            
+            if use_truncate and count > 1000:
+                # 对于大表使用TRUNCATE（更快）
+                cursor.execute(f"TRUNCATE TABLE {table_name}")
+                deleted_count = count
+            else:
+                # 小表使用DELETE
+                cursor.execute(f"DELETE FROM {table_name}")
+                deleted_count = cursor.rowcount
+            
+            connection.commit()  # 每步都提交，避免长时间锁定
+            print(f"  ✓ 已删除 {deleted_count} 条记录")
+            sys.stdout.flush()
+            return deleted_count
+        except Exception as e:
+            connection.rollback()
+            print(f"  ⚠ 表 {table_name} 删除失败: {e}")
+            sys.stdout.flush()
+            return 0
     
     try:
         print("=" * 60)
         print("开始清理所有数据...")
         print("=" * 60)
+        sys.stdout.flush()
         
         deleted_counts = {}
         
         # 1. 清理策略交易记录
-        print("\n[1/8] 清理策略交易记录...")
-        cursor.execute("DELETE FROM strategy_trade_records")
-        deleted_counts['strategy_trade_records'] = cursor.rowcount
-        print(f"  ✓ 已删除 {cursor.rowcount} 条策略交易记录")
+        print("\n[1/9] 清理策略交易记录...")
+        sys.stdout.flush()
+        deleted_counts['strategy_trade_records'] = safe_delete('strategy_trade_records')
         
         # 2. 清理策略测试记录
-        print("\n[2/8] 清理策略测试记录...")
-        cursor.execute("DELETE FROM strategy_test_records")
-        deleted_counts['strategy_test_records'] = cursor.rowcount
-        print(f"  ✓ 已删除 {cursor.rowcount} 条策略测试记录")
+        print("\n[2/9] 清理策略测试记录...")
+        sys.stdout.flush()
+        deleted_counts['strategy_test_records'] = safe_delete('strategy_test_records')
         
         # 3. 清理策略执行结果详情
-        print("\n[3/8] 清理策略执行结果详情...")
+        print("\n[3/9] 清理策略执行结果详情...")
+        sys.stdout.flush()
         try:
-            cursor.execute("DELETE FROM strategy_execution_result_details")
-            deleted_counts['strategy_execution_result_details'] = cursor.rowcount
-            print(f"  ✓ 已删除 {cursor.rowcount} 条策略执行结果详情")
+            deleted_counts['strategy_execution_result_details'] = safe_delete('strategy_execution_result_details')
         except Exception as e:
-            print(f"  ⚠ 表 strategy_execution_result_details 不存在或删除失败: {e}")
+            print(f"  ⚠ 表 strategy_execution_result_details 不存在: {e}")
             deleted_counts['strategy_execution_result_details'] = 0
         
         # 4. 清理策略执行结果
-        print("\n[4/8] 清理策略执行结果...")
+        print("\n[4/9] 清理策略执行结果...")
+        sys.stdout.flush()
         try:
-            cursor.execute("DELETE FROM strategy_execution_results")
-            deleted_counts['strategy_execution_results'] = cursor.rowcount
-            print(f"  ✓ 已删除 {cursor.rowcount} 条策略执行结果")
+            deleted_counts['strategy_execution_results'] = safe_delete('strategy_execution_results')
         except Exception as e:
-            print(f"  ⚠ 表 strategy_execution_results 不存在或删除失败: {e}")
+            print(f"  ⚠ 表 strategy_execution_results 不存在: {e}")
             deleted_counts['strategy_execution_results'] = 0
         
         # 5. 清理策略命中记录
-        print("\n[5/8] 清理策略命中记录...")
+        print("\n[5/9] 清理策略命中记录...")
+        sys.stdout.flush()
         try:
-            cursor.execute("DELETE FROM strategy_hits")
-            deleted_counts['strategy_hits'] = cursor.rowcount
-            print(f"  ✓ 已删除 {cursor.rowcount} 条策略命中记录")
+            deleted_counts['strategy_hits'] = safe_delete('strategy_hits')
         except Exception as e:
-            print(f"  ⚠ 表 strategy_hits 不存在或删除失败: {e}")
+            print(f"  ⚠ 表 strategy_hits 不存在: {e}")
             deleted_counts['strategy_hits'] = 0
         
         # 6. 清理策略资金管理记录
-        print("\n[6/8] 清理策略资金管理记录...")
+        print("\n[6/9] 清理策略资金管理记录...")
+        sys.stdout.flush()
         try:
-            cursor.execute("DELETE FROM strategy_capital_management")
-            deleted_counts['strategy_capital_management'] = cursor.rowcount
-            print(f"  ✓ 已删除 {cursor.rowcount} 条策略资金管理记录")
+            deleted_counts['strategy_capital_management'] = safe_delete('strategy_capital_management')
         except Exception as e:
-            print(f"  ⚠ 表 strategy_capital_management 不存在或删除失败: {e}")
+            print(f"  ⚠ 表 strategy_capital_management 不存在: {e}")
             deleted_counts['strategy_capital_management'] = 0
         
         # 7. 清理合约数据
-        print("\n[7/8] 清理合约数据...")
+        print("\n[7/9] 清理合约数据...")
+        sys.stdout.flush()
         
         # 清理合约持仓
         try:
-            cursor.execute("DELETE FROM futures_positions WHERE account_id = %s", (account_id,))
-            deleted_counts['futures_positions'] = cursor.rowcount
-            print(f"  ✓ 已删除 {cursor.rowcount} 条合约持仓记录")
+            cursor.execute("SELECT COUNT(*) as count FROM futures_positions WHERE account_id = %s", (account_id,))
+            count_result = cursor.fetchone()
+            count = count_result['count'] if count_result else 0
+            if count > 0:
+                print(f"  📊 合约持仓共有 {count} 条记录，开始删除...")
+                sys.stdout.flush()
+                cursor.execute("DELETE FROM futures_positions WHERE account_id = %s", (account_id,))
+                deleted_counts['futures_positions'] = cursor.rowcount
+                connection.commit()
+                print(f"  ✓ 已删除 {cursor.rowcount} 条合约持仓记录")
+            else:
+                print(f"  ⚠ 合约持仓为空，跳过")
+                deleted_counts['futures_positions'] = 0
+            sys.stdout.flush()
         except Exception as e:
             print(f"  ⚠ 表 futures_positions 不存在或删除失败: {e}")
             deleted_counts['futures_positions'] = 0
+            sys.stdout.flush()
         
         # 清理合约交易
         try:
-            cursor.execute("DELETE FROM futures_trades WHERE account_id = %s", (account_id,))
-            deleted_counts['futures_trades'] = cursor.rowcount
-            print(f"  ✓ 已删除 {cursor.rowcount} 条合约交易记录")
+            cursor.execute("SELECT COUNT(*) as count FROM futures_trades WHERE account_id = %s", (account_id,))
+            count_result = cursor.fetchone()
+            count = count_result['count'] if count_result else 0
+            if count > 0:
+                print(f"  📊 合约交易共有 {count} 条记录，开始删除...")
+                sys.stdout.flush()
+                cursor.execute("DELETE FROM futures_trades WHERE account_id = %s", (account_id,))
+                deleted_counts['futures_trades'] = cursor.rowcount
+                connection.commit()
+                print(f"  ✓ 已删除 {cursor.rowcount} 条合约交易记录")
+            else:
+                print(f"  ⚠ 合约交易为空，跳过")
+                deleted_counts['futures_trades'] = 0
+            sys.stdout.flush()
         except Exception as e:
             print(f"  ⚠ 表 futures_trades 不存在或删除失败: {e}")
             deleted_counts['futures_trades'] = 0
+            sys.stdout.flush()
         
-        # 8. 清理现货数据
-        print("\n[8/8] 清理现货数据...")
+        # 8. 清理现货数据（使用TRUNCATE，因为可能数据量很大）
+        print("\n[8/9] 清理现货数据...")
+        sys.stdout.flush()
         
         # 清理价格数据
-        cursor.execute("DELETE FROM price_data")
-        deleted_counts['price_data'] = cursor.rowcount
-        print(f"  ✓ 已删除 {cursor.rowcount} 条价格数据")
+        deleted_counts['price_data'] = safe_delete('price_data', use_truncate=True)
         
         # 清理K线数据
-        cursor.execute("DELETE FROM kline_data")
-        deleted_counts['kline_data'] = cursor.rowcount
-        print(f"  ✓ 已删除 {cursor.rowcount} 条K线数据")
+        deleted_counts['kline_data'] = safe_delete('kline_data', use_truncate=True)
         
         # 清理交易数据
-        cursor.execute("DELETE FROM trade_data")
-        deleted_counts['trade_data'] = cursor.rowcount
-        print(f"  ✓ 已删除 {cursor.rowcount} 条交易数据")
+        deleted_counts['trade_data'] = safe_delete('trade_data', use_truncate=True)
         
         # 清理订单簿数据
-        cursor.execute("DELETE FROM orderbook_data")
-        deleted_counts['orderbook_data'] = cursor.rowcount
-        print(f"  ✓ 已删除 {cursor.rowcount} 条订单簿数据")
+        deleted_counts['orderbook_data'] = safe_delete('orderbook_data', use_truncate=True)
         
         # 9. 重置账户余额
         print("\n[9/9] 重置账户余额...")
@@ -174,13 +224,11 @@ def clear_all_data(account_id: int = 2, reset_balance: float = 10000.0):
         else:
             print(f"  ⚠ 账户 {account_id} 不存在，跳过重置")
         
-        # 提交事务
-        connection.commit()
-        
         # 打印总结
         print("\n" + "=" * 60)
         print("数据清理完成！")
         print("=" * 60)
+        sys.stdout.flush()
         print("\n删除统计：")
         total_deleted = 0
         for table, count in deleted_counts.items():

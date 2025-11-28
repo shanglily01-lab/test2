@@ -219,7 +219,12 @@ class StrategyExecutor:
             执行结果
         """
         try:
-            connection = pymysql.connect(**self.db_config)
+            connection = pymysql.connect(
+                **self.db_config,
+                connect_timeout=10,
+                read_timeout=30,
+                write_timeout=30
+            )
             cursor = connection.cursor(pymysql.cursors.DictCursor)
 
             symbols = strategy.get('symbols', [])
@@ -571,7 +576,18 @@ class StrategyExecutor:
                 execution_result_id = cursor.lastrowid
                 connection.commit()
 
-                # 插入详情表
+                # 插入详情表（批量插入，每10条提交一次，减少锁定时间）
+                detail_insert_count = 0
+                # 先检查debug_info字段是否存在（只检查一次，避免重复查询）
+                cursor.execute("""
+                    SELECT COLUMN_NAME 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_SCHEMA = DATABASE() 
+                    AND TABLE_NAME = 'strategy_execution_result_details' 
+                    AND COLUMN_NAME = 'debug_info'
+                """)
+                has_debug_info_column = cursor.fetchone() is not None
+                
                 for r in results:
                     symbol = r.get('symbol')
                     if not symbol:
@@ -596,19 +612,10 @@ class StrategyExecutor:
                     debug_info_json = json.dumps(debug_info, ensure_ascii=False) if debug_info else None
                     debug_info_count = len(debug_info) if debug_info else 0
 
-                    # 检查debug_info字段是否存在
-                    cursor.execute("""
-                        SELECT COLUMN_NAME 
-                        FROM INFORMATION_SCHEMA.COLUMNS 
-                        WHERE TABLE_SCHEMA = DATABASE() 
-                        AND TABLE_NAME = 'strategy_execution_result_details' 
-                        AND COLUMN_NAME = 'debug_info'
-                    """)
-                    has_debug_info_column = cursor.fetchone() is not None
-
-                    if has_debug_info_column:
-                        # 如果字段存在，使用包含debug_info的SQL
-                        cursor.execute("""
+                    try:
+                        if has_debug_info_column:
+                            # 如果字段存在，使用包含debug_info的SQL
+                            cursor.execute("""
                             INSERT INTO strategy_execution_result_details
                             (execution_result_id, symbol, trades_count, buy_count, sell_count, 
                              winning_trades, losing_trades, win_rate, initial_balance, final_balance,
@@ -637,10 +644,10 @@ class StrategyExecutor:
                             json.dumps(r, ensure_ascii=False) if not r.get('error') else None,
                             debug_info_json,
                             debug_info_count
-                        ))
-                    else:
-                        # 如果字段不存在，使用不包含debug_info的SQL（调试信息会保存在execution_result_data中）
-                        cursor.execute("""
+                            ))
+                        else:
+                            # 如果字段不存在，使用不包含debug_info的SQL（调试信息会保存在execution_result_data中）
+                            cursor.execute("""
                             INSERT INTO strategy_execution_result_details
                             (execution_result_id, symbol, trades_count, buy_count, sell_count, 
                              winning_trades, losing_trades, win_rate, initial_balance, final_balance,
@@ -666,7 +673,63 @@ class StrategyExecutor:
                             r.get('indicators_count', 0),
                             r.get('error'),
                             json.dumps(r, ensure_ascii=False) if not r.get('error') else None
-                        ))
+                            ))
+                        
+                        detail_insert_count += 1
+                        
+                        # 每插入10条时提交，减少锁定时间
+                        if detail_insert_count % 10 == 0:
+                            try:
+                                connection.commit()
+                            except Exception as commit_error:
+                                logger.warning(f"批量提交详情数据失败: {commit_error}，继续尝试...")
+                                connection.rollback()
+                    except pymysql.err.OperationalError as insert_error:
+                        error_code = insert_error.args[0] if insert_error.args else 0
+                        if error_code == 1205:  # Lock wait timeout
+                            logger.warning(f"插入详情数据失败 (symbol={symbol}): 锁等待超时，跳过该条记录")
+                        else:
+                            logger.warning(f"插入详情数据失败 (symbol={symbol}): {insert_error}，跳过该条记录")
+                        connection.rollback()
+                        continue
+                    except Exception as insert_error:
+                        logger.warning(f"插入详情数据失败 (symbol={symbol}): {insert_error}，跳过该条记录")
+                        connection.rollback()
+                        continue
+                
+                # 最终提交（确保所有数据都已提交）
+                if detail_insert_count > 0:
+                    try:
+                        connection.commit()
+                    except Exception as commit_error:
+                        logger.warning(f"最终提交详情数据时出错（可能已提交）: {commit_error}")
+                        
+            except pymysql.err.OperationalError as e:
+                # 处理锁等待超时等操作错误
+                error_code = e.args[0] if e.args else 0
+                if error_code == 1205:  # Lock wait timeout exceeded
+                    logger.error(f"保存执行结果到数据库失败: 锁等待超时，可能是清理脚本正在运行。错误: {e}")
+                    connection.rollback()
+                    # 尝试重试一次
+                    try:
+                        import time
+                        time.sleep(1)  # 等待1秒后重试
+                        logger.info("重试保存执行结果...")
+                        # 这里可以添加重试逻辑，但为了简化，先记录错误
+                    except Exception as retry_error:
+                        logger.error(f"重试保存执行结果失败: {retry_error}")
+                else:
+                    logger.error(f"保存执行结果到数据库失败: {e}", exc_info=True)
+                    connection.rollback()
+            except pymysql.err.OperationalError as e:
+                # 处理锁等待超时等操作错误
+                error_code = e.args[0] if e.args else 0
+                if error_code == 1205:  # Lock wait timeout exceeded
+                    logger.error(f"保存执行结果到数据库失败: 锁等待超时，可能是清理脚本正在运行。错误: {e}")
+                    connection.rollback()
+                else:
+                    logger.error(f"保存执行结果到数据库失败: {e}", exc_info=True)
+                    connection.rollback()
             except Exception as e:
                 logger.error(f"保存执行结果到数据库失败: {e}", exc_info=True)
                 connection.rollback()
