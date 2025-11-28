@@ -1953,19 +1953,19 @@ class StrategyExecutor:
                         if buy_volume_enabled and (buy_volume_short_enabled or buy_volume_short):
                             volume_condition = buy_volume_short
                             if volume_condition:
-                                # 支持新的范围格式: 0-0.5, 0.5-1, >1
-                                if volume_condition == '0-0.5':
-                                    if not (0 <= buy_volume_ratio <= 0.5):
+                                # 支持新的范围格式: <1, 1-2, >2
+                                if volume_condition == '<1':
+                                    if buy_volume_ratio >= 1.0:
                                         volume_condition_met = False
-                                        volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:0-0.5x)"
-                                elif volume_condition == '0.5-1':
-                                    if not (0.5 <= buy_volume_ratio <= 1.0):
+                                        volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:<1x)"
+                                elif volume_condition == '1-2':
+                                    if not (1.0 <= buy_volume_ratio <= 2.0):
                                         volume_condition_met = False
-                                        volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:0.5-1x)"
-                                elif volume_condition == '>1':
-                                    if buy_volume_ratio <= 1.0:
+                                        volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:1-2x)"
+                                elif volume_condition == '>2':
+                                    if buy_volume_ratio <= 2.0:
                                         volume_condition_met = False
-                                        volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:>1x)"
+                                        volume_reason = f"做空成交量不符合 (当前:{buy_volume_ratio:.2f}x, 需要:>2x)"
                                 else:
                                     # 尝试解析为单一数值（兼容旧格式）
                                     try:
