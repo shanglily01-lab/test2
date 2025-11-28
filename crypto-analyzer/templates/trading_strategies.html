@@ -796,67 +796,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    <div class="form-group">
-                                        <div id="sellVolumeOptions" style="display: block;">
-                                            <!-- 平仓做多成交量 -->
-                                            <div style="margin-bottom: 16px;">
-                                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                                    <input type="checkbox" id="sellVolumeLongEnabled" name="sellVolumeLongEnabled" onchange="toggleSellVolumeLongOptions()">
-                                                    <label for="sellVolumeLongEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">启用平仓做多成交量条件</label>
-                                                </div>
-                                                <div id="sellVolumeLongOptions" style="display: none;">
-                                                    <label class="form-label">平仓做多成交量条件<span class="required">*</span></label>
-                                                    <div class="radio-group">
-                                                        <div class="radio-option">
-                                                            <input type="radio" id="sellVolumeLong_any" name="sellVolumeLong" value="any">
-                                                            <label for="sellVolumeLong_any" class="radio-label">不限制</label>
-                                                        </div>
-                                                        <div class="radio-option">
-                                                            <input type="radio" id="sellVolumeLong_lt1" name="sellVolumeLong" value="<1">
-                                                            <label for="sellVolumeLong_lt1" class="radio-label">&lt;1倍</label>
-                                                        </div>
-                                                        <div class="radio-option">
-                                                            <input type="radio" id="sellVolumeLong_1_2" name="sellVolumeLong" value="1-2">
-                                                            <label for="sellVolumeLong_1_2" class="radio-label">1~2倍</label>
-                                                        </div>
-                                                        <div class="radio-option">
-                                                            <input type="radio" id="sellVolumeLong_gt2" name="sellVolumeLong" value=">2">
-                                                            <label for="sellVolumeLong_gt2" class="radio-label">&gt;2倍</label>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <!-- 平仓做空成交量 -->
-                                            <div>
-                                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                                    <input type="checkbox" id="sellVolumeShortEnabled" name="sellVolumeShortEnabled" onchange="toggleSellVolumeShortOptions()">
-                                                    <label for="sellVolumeShortEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">启用平仓做空成交量条件</label>
-                                                </div>
-                                                <div id="sellVolumeShortOptions" style="display: none;">
-                                                    <label class="form-label">平仓做空成交量条件<span class="required">*</span></label>
-                                                    <div class="radio-group">
-                                                        <div class="radio-option">
-                                                            <input type="radio" id="sellVolumeShort_any" name="sellVolumeShort" value="any">
-                                                            <label for="sellVolumeShort_any" class="radio-label">不限制</label>
-                                                        </div>
-                                                        <div class="radio-option">
-                                                            <input type="radio" id="sellVolumeShort_lt1" name="sellVolumeShort" value="<1">
-                                                            <label for="sellVolumeShort_lt1" class="radio-label">&lt;1倍</label>
-                                                        </div>
-                                                        <div class="radio-option">
-                                                            <input type="radio" id="sellVolumeShort_1_2" name="sellVolumeShort" value="1-2">
-                                                            <label for="sellVolumeShort_1_2" class="radio-label">1~2倍</label>
-                                                        </div>
-                                                        <div class="radio-option">
-                                                            <input type="radio" id="sellVolumeShort_gt2" name="sellVolumeShort" value=">2">
-                                                            <label for="sellVolumeShort_gt2" class="radio-label">&gt;2倍</label>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <!-- 平仓成交量条件已移除，平仓时不限制成交量 -->
                                 </div>
                             </div>
 
@@ -1223,22 +1163,9 @@
                     buyVolumeShortEnabled.checked = false;
                     toggleBuyVolumeShortOptions();
                 }
-                // 重置平仓成交量选项
-                const sellVolumeLongEnabled = document.getElementById('sellVolumeLongEnabled');
-                if (sellVolumeLongEnabled) {
-                    sellVolumeLongEnabled.checked = false;
-                    toggleSellVolumeLongOptions();
-                }
-                const sellVolumeShortEnabled = document.getElementById('sellVolumeShortEnabled');
-                if (sellVolumeShortEnabled) {
-                    sellVolumeShortEnabled.checked = false;
-                    toggleSellVolumeShortOptions();
-                }
-                // 清除所有成交量选项的选择
+                // 清除所有买入成交量选项的选择
                 document.querySelectorAll('input[name="buyVolumeLong"]').forEach(radio => radio.checked = false);
                 document.querySelectorAll('input[name="buyVolumeShort"]').forEach(radio => radio.checked = false);
-                document.querySelectorAll('input[name="sellVolumeLong"]').forEach(radio => radio.checked = false);
-                document.querySelectorAll('input[name="sellVolumeShort"]').forEach(radio => radio.checked = false);
                 // 清除 MA10/EMA10 同向过滤
                 const ma10Ema10Filter = document.getElementById('ma10Ema10TrendFilter');
                 if (ma10Ema10Filter) {
@@ -1436,42 +1363,6 @@
             }
         }
 
-        // 切换平仓做多成交量选项显示/隐藏
-        function toggleSellVolumeLongOptions() {
-            const enabled = document.getElementById('sellVolumeLongEnabled').checked;
-            const volumeOptions = document.getElementById('sellVolumeLongOptions');
-            if (enabled) {
-                volumeOptions.style.display = 'block';
-                document.querySelectorAll('input[name="sellVolumeLong"]').forEach(radio => {
-                    radio.required = true;
-                });
-            } else {
-                volumeOptions.style.display = 'none';
-                document.querySelectorAll('input[name="sellVolumeLong"]').forEach(radio => {
-                    radio.required = false;
-                    radio.checked = false;
-                });
-            }
-        }
-
-        // 切换平仓做空成交量选项显示/隐藏
-        function toggleSellVolumeShortOptions() {
-            const enabled = document.getElementById('sellVolumeShortEnabled').checked;
-            const volumeOptions = document.getElementById('sellVolumeShortOptions');
-            if (enabled) {
-                volumeOptions.style.display = 'block';
-                document.querySelectorAll('input[name="sellVolumeShort"]').forEach(radio => {
-                    radio.required = true;
-                });
-            } else {
-                volumeOptions.style.display = 'none';
-                document.querySelectorAll('input[name="sellVolumeShort"]').forEach(radio => {
-                    radio.required = false;
-                    radio.checked = false;
-                });
-            }
-        }
-
         // 加载可用币种（从配置文件/API获取）
         async function loadAvailableSymbols() {
             try {
@@ -1576,8 +1467,6 @@
 
             const buyVolumeLongRadio = document.querySelector('input[name="buyVolumeLong"]:checked');
             const buyVolumeShortRadio = document.querySelector('input[name="buyVolumeShort"]:checked');
-            const sellVolumeLongRadio = document.querySelector('input[name="sellVolumeLong"]:checked');
-            const sellVolumeShortRadio = document.querySelector('input[name="sellVolumeShort"]:checked');
             const buySignalRadio = document.querySelector('input[name="buySignals"]:checked');
             const sellSignalRadio = document.querySelector('input[name="sellSignals"]:checked');
             const longPriceRadio = document.querySelector('input[name="longPrice"]:checked');
@@ -1591,11 +1480,6 @@
             const buyVolumeShortEnabled = document.getElementById('buyVolumeShortEnabled').checked;
             const buyVolumeEnabled = buyVolumeLongEnabled || buyVolumeShortEnabled;
 
-            // 判断是否启用了平仓成交量条件
-            const sellVolumeLongEnabled = document.getElementById('sellVolumeLongEnabled').checked;
-            const sellVolumeShortEnabled = document.getElementById('sellVolumeShortEnabled').checked;
-            const sellVolumeEnabled = sellVolumeLongEnabled || sellVolumeShortEnabled;
-
             const formData = {
                 name: document.getElementById('strategyName').value,
                 buyDirection: buyDirections, // 改为数组，支持多选
@@ -1607,11 +1491,7 @@
                 buyVolumeLong: buyVolumeLongEnabled && buyVolumeLongRadio ? buyVolumeLongRadio.value : null,
                 buyVolumeShort: buyVolumeShortEnabled && buyVolumeShortRadio ? buyVolumeShortRadio.value : null,
                 sellSignals: sellSignalRadio ? sellSignalRadio.value : null, // 改为单选
-                sellVolumeEnabled: sellVolumeEnabled,
-                sellVolumeLongEnabled: sellVolumeLongEnabled,
-                sellVolumeShortEnabled: sellVolumeShortEnabled,
-                sellVolumeLong: sellVolumeLongEnabled && sellVolumeLongRadio ? sellVolumeLongRadio.value : null,
-                sellVolumeShort: sellVolumeShortEnabled && sellVolumeShortRadio ? sellVolumeShortRadio.value : null,
+                // 平仓成交量已移除，不再限制
                 symbols: Array.from(document.querySelectorAll('input[name="symbols"]:checked')).map(cb => cb.value),
                 positionSize: parseFloat(document.getElementById('positionSize').value),
                 maxPositions: document.getElementById('maxPositions').value ? parseInt(document.getElementById('maxPositions').value) : null,
@@ -1685,17 +1565,7 @@
                 showToast('请选择一个卖出信号', 'warning');
                 return;
             }
-            
-            // 如果启用了平仓成交量条件，则必须选择
-            if (sellVolumeLongEnabled && !sellVolumeLongRadio) {
-                showToast('请选择平仓做多成交量条件', 'warning');
-                return;
-            }
-            if (sellVolumeShortEnabled && !sellVolumeShortRadio) {
-                showToast('请选择平仓做空成交量条件', 'warning');
-                return;
-            }
-            
+
             // 验证价格选项
             if (buyDirections.includes('long') && !longPriceRadio) {
                 showToast('请选择做多价格', 'warning');
@@ -1847,19 +1717,6 @@
                             <div class="strategy-item-field">
                                 <div class="strategy-item-field-label">卖出信号</div>
                                 <div class="strategy-item-field-value">${strategy.sellSignals || '未设置'}</div>
-                            </div>
-                            <div class="strategy-item-field">
-                                <div class="strategy-item-field-label">平仓成交量</div>
-                                <div class="strategy-item-field-value">${strategy.sellVolumeEnabled !== false ?
-                                    (() => {
-                                        const longText = (strategy.sellVolumeLongEnabled !== false && strategy.sellVolumeLong) ?
-                                            `平多: ${strategy.sellVolumeLong}倍` :
-                                            (strategy.sellVolumeLongEnabled === false ? '平多: 未启用' : '平多: 未设置');
-                                        const shortText = (strategy.sellVolumeShortEnabled !== false && strategy.sellVolumeShort) ?
-                                            `平空: ${strategy.sellVolumeShort}倍` :
-                                            (strategy.sellVolumeShortEnabled === false ? '平空: 未启用' : '平空: 未设置');
-                                        return `${longText}, ${shortText}`;
-                                    })() : '未启用'}</div>
                             </div>
                             <div class="strategy-item-field">
                                 <div class="strategy-item-field-label">交易币种</div>
@@ -2140,25 +1997,9 @@
             const sellSignal = strategy.sellSignals || 'ema_5m';
             const sellSignalRadio = document.querySelector(`input[name="sellSignals"][value="${sellSignal}"]`);
             if (sellSignalRadio) sellSignalRadio.checked = true;
-            
-            // 平仓做多成交量
-            const sellVolumeLongEnabled = strategy.sellVolumeLongEnabled !== false && strategy.sellVolumeLong;
-            document.getElementById('sellVolumeLongEnabled').checked = sellVolumeLongEnabled;
-            toggleSellVolumeLongOptions();
-            if (sellVolumeLongEnabled && strategy.sellVolumeLong) {
-                const sellVolumeLongRadio = document.querySelector(`input[name="sellVolumeLong"][value="${strategy.sellVolumeLong}"]`);
-                if (sellVolumeLongRadio) sellVolumeLongRadio.checked = true;
-            }
 
-            // 平仓做空成交量
-            const sellVolumeShortEnabled = strategy.sellVolumeShortEnabled !== false && strategy.sellVolumeShort;
-            document.getElementById('sellVolumeShortEnabled').checked = sellVolumeShortEnabled;
-            toggleSellVolumeShortOptions();
-            if (sellVolumeShortEnabled && strategy.sellVolumeShort) {
-                const sellVolumeShortRadio = document.querySelector(`input[name="sellVolumeShort"][value="${strategy.sellVolumeShort}"]`);
-                if (sellVolumeShortRadio) sellVolumeShortRadio.checked = true;
-            }
-            
+            // 平仓成交量已移除，不再需要回填
+
             document.getElementById('positionSize').value = strategy.positionSize;
             document.getElementById('maxPositions').value = strategy.maxPositions || '';
             document.getElementById('maxLongPositions').value = strategy.maxLongPositions || '';
