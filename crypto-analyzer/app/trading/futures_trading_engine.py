@@ -503,20 +503,22 @@ class FuturesTradingEngine:
 
             # 2. 确定开仓价格
             # 限价单使用限价，市价单使用实时价格
+            logger.info(f"🔍 {symbol} {position_side} 开仓价格确定: limit_price={limit_price}, current_price={current_price}")
             if limit_price and limit_price > 0:
                 entry_price = limit_price
+                logger.info(f"📌 {symbol} {position_side} 使用限价开仓: entry_price={entry_price}")
             else:
                 # 市价单：再次获取实时价格，确保使用最新价格开仓
                 try:
                     realtime_price = self.get_current_price(symbol, use_realtime=True)
                     if realtime_price and realtime_price > 0:
                         entry_price = realtime_price
-                        logger.info(f"市价单使用实时价格开仓: {symbol} = {entry_price}")
+                        logger.info(f"✅ {symbol} {position_side} 市价单使用实时价格开仓: entry_price={entry_price}")
                     else:
                         entry_price = current_price
-                        logger.warning(f"实时价格获取失败，使用缓存价格: {symbol} = {entry_price}")
+                        logger.warning(f"⚠️ {symbol} {position_side} 实时价格获取失败，使用缓存价格: entry_price={entry_price}")
                 except Exception as e:
-                    logger.warning(f"获取实时价格失败，使用之前获取的价格: {symbol}, {e}")
+                    logger.warning(f"⚠️ {symbol} {position_side} 获取实时价格失败，使用之前获取的价格: entry_price={current_price}, error={e}")
                     entry_price = current_price
             
             # 根据交易对精度对数量进行四舍五入

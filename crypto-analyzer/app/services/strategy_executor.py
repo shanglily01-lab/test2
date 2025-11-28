@@ -2409,13 +2409,23 @@ class StrategyExecutor:
                                         quantity_decimal = Decimal(str(quantity))
                                         entry_price_decimal = Decimal(str(entry_price))
                                                 
+                                        # 判断是否使用限价单：做多时检查long_price_type，做空时检查short_price_type
+                                        use_limit_price = False
+                                        if direction == 'long' and long_price_type != 'market':
+                                            use_limit_price = True
+                                        elif direction == 'short' and short_price_type != 'market':
+                                            use_limit_price = True
+
+                                        # 添加开仓调试日志
+                                        logger.info(f"🔔 {symbol} 准备开仓: 方向={direction}, 实时价格={realtime_price:.4f}, 入场价格={entry_price:.4f}, 使用限价={use_limit_price}")
+
                                         open_result = self.futures_engine.open_position(
                                             account_id=account_id,
                                             symbol=symbol,
                                             position_side=position_side,
                                             quantity=quantity_decimal,
                                             leverage=leverage,
-                                            limit_price=entry_price_decimal if long_price_type != 'market' and short_price_type != 'market' else None,
+                                            limit_price=entry_price_decimal if use_limit_price else None,
                                             stop_loss_pct=Decimal(str(stop_loss_pct)) if stop_loss_pct else None,
                                             take_profit_pct=Decimal(str(take_profit_pct)) if take_profit_pct else None,
                                             source='strategy',
