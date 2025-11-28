@@ -1315,11 +1315,15 @@ class StrategyExecutor:
                                 pos_direction = pos.get('direction')
                                 if pos_direction == 'long' and ma5_ema5_is_death:
                                     sell_signal_triggered = True
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5死叉 - 触发做多平仓信号")
+                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5死叉 - 触发做多平仓信号"
+                                    debug_info.append(msg)
+                                    logger.info(f"{symbol} {msg}")
                                     break
                                 elif pos_direction == 'short' and ma5_ema5_is_golden:
                                     sell_signal_triggered = True
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5金叉 - 触发做空平仓信号")
+                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5金叉 - 触发做空平仓信号"
+                                    debug_info.append(msg)
+                                    logger.info(f"{symbol} {msg}")
                                     break
 
                             if not sell_signal_triggered:
@@ -1343,11 +1347,15 @@ class StrategyExecutor:
                                 pos_direction = pos.get('direction')
                                 if pos_direction == 'long' and ma10_ema10_is_death:
                                     sell_signal_triggered = True
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10死叉 - 触发做多平仓信号")
+                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10死叉 - 触发做多平仓信号"
+                                    debug_info.append(msg)
+                                    logger.info(f"{symbol} {msg}")
                                     break
                                 elif pos_direction == 'short' and ma10_ema10_is_golden:
                                     sell_signal_triggered = True
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10金叉 - 触发做空平仓信号")
+                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10金叉 - 触发做空平仓信号"
+                                    debug_info.append(msg)
+                                    logger.info(f"{symbol} {msg}")
                                     break
 
                             if not sell_signal_triggered:
@@ -1374,11 +1382,15 @@ class StrategyExecutor:
                                 pos_direction = pos.get('direction')
                                 if pos_direction == 'long' and ema_is_death:
                                     sell_signal_triggered = True
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26死叉 - 触发做多平仓信号")
+                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26死叉 - 触发做多平仓信号"
+                                    debug_info.append(msg)
+                                    logger.info(f"{symbol} {msg}")
                                     break
                                 elif pos_direction == 'short' and ema_is_golden:
                                     sell_signal_triggered = True
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26金叉 - 触发做空平仓信号")
+                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26金叉 - 触发做空平仓信号"
+                                    debug_info.append(msg)
+                                    logger.info(f"{symbol} {msg}")
                                     break
 
                             if not sell_signal_triggered:
@@ -1502,6 +1514,12 @@ class StrategyExecutor:
 
             # 检查EMA数据是否完整
             if prev_ema_short and prev_ema_long and curr_ema_short and curr_ema_long:
+                # 记录EMA状态用于诊断
+                signal_time = self.parse_time(curr_pair['kline']['timestamp'])
+                signal_time_local = self.utc_to_local(signal_time)
+                prev_status = "多头" if prev_ema_short > prev_ema_long else "空头"
+                curr_status = "多头" if curr_ema_short > curr_ema_long else "空头"
+                logger.debug(f"{symbol} [{buy_timeframe}] {signal_time_local.strftime('%Y-%m-%d %H:%M')}: EMA状态检查 | 前K线: EMA9={prev_ema_short:.4f}, EMA26={prev_ema_long:.4f} ({prev_status}) | 当前K线: EMA9={curr_ema_short:.4f}, EMA26={curr_ema_long:.4f} ({curr_status})")
                 
                 # EMA9/26金叉（向上穿越）：前一个K线EMA9 <= EMA26，当前K线EMA9 > EMA26
                 is_golden_cross = (prev_ema_short <= prev_ema_long and curr_ema_short > curr_ema_long) or \
@@ -1510,6 +1528,11 @@ class StrategyExecutor:
                 # EMA9/26死叉（向下穿越）：前一个K线EMA9 >= EMA26，当前K线EMA9 < EMA26
                 is_death_cross = (prev_ema_short >= prev_ema_long and curr_ema_short < curr_ema_long) or \
                                  (prev_ema_short > prev_ema_long and curr_ema_short <= curr_ema_long)
+                
+                if is_golden_cross:
+                    logger.debug(f"{symbol} [{buy_timeframe}] {signal_time_local.strftime('%Y-%m-%d %H:%M')}: 🔍 检测到EMA9/26金叉（向上穿越）")
+                elif is_death_cross:
+                    logger.debug(f"{symbol} [{buy_timeframe}] {signal_time_local.strftime('%Y-%m-%d %H:%M')}: 🔍 检测到EMA9/26死叉（向下穿越）")
                 
                 # MA10/EMA10金叉检测
                 ma10_ema10_golden_cross = False
@@ -1551,10 +1574,16 @@ class StrategyExecutor:
                             # 记录信号检测信息
                             signal_time = self.parse_time(curr_pair['kline']['timestamp'])
                             signal_time_local = self.utc_to_local(signal_time)
-                            debug_info.append(f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ EMA9/26金叉检测成功（做多信号）- 当前K线穿越！")
-                            debug_info.append(f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)")
+                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ EMA9/26金叉检测成功（做多信号）- 当前K线穿越！"
+                            debug_info.append(msg)
+                            logger.info(f"{symbol} {msg}")
+                            msg_detail = f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)"
+                            debug_info.append(msg_detail)
+                            logger.info(f"{symbol} {msg_detail}")
                             if min_ema_cross_strength > 0:
-                                debug_info.append(f"   ✅ 信号强度检查通过 (差值={ema_strength_pct:.2f}% ≥ {min_ema_cross_strength:.2f}%)")
+                                msg_strength = f"   ✅ 信号强度检查通过 (差值={ema_strength_pct:.2f}% ≥ {min_ema_cross_strength:.2f}%)"
+                                debug_info.append(msg_strength)
+                                logger.info(f"{symbol} {msg_strength}")
 
                     elif is_death_cross and 'short' in buy_directions:
                         # 死叉 = 做空信号
@@ -1585,10 +1614,16 @@ class StrategyExecutor:
                             # 记录信号检测信息
                             signal_time = self.parse_time(curr_pair['kline']['timestamp'])
                             signal_time_local = self.utc_to_local(signal_time)
-                            debug_info.append(f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ EMA9/26死叉检测成功（做空信号）- 当前K线穿越！")
-                            debug_info.append(f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)")
+                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ EMA9/26死叉检测成功（做空信号）- 当前K线穿越！"
+                            debug_info.append(msg)
+                            logger.info(f"{symbol} {msg}")
+                            msg_detail = f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)"
+                            debug_info.append(msg_detail)
+                            logger.info(f"{symbol} {msg_detail}")
                             if min_ema_cross_strength > 0:
-                                debug_info.append(f"   ✅ 信号强度检查通过 (差值={ema_strength_pct:.2f}% ≥ {min_ema_cross_strength:.2f}%)")
+                                msg_strength = f"   ✅ 信号强度检查通过 (差值={ema_strength_pct:.2f}% ≥ {min_ema_cross_strength:.2f}%)"
+                                debug_info.append(msg_strength)
+                                logger.info(f"{symbol} {msg_strength}")
                     else:
                         # 当前K线没有穿越，记录当前EMA状态
                         latest_diff = curr_ema_short - curr_ema_long
@@ -1708,11 +1743,15 @@ class StrategyExecutor:
                 if detected_cross_type == 'golden':
                     # 金叉 = 做多
                     direction = 'long'
-                    debug_info.append(f"   📊 方向判断：检测到金叉，选择做多")
+                    msg = f"   📊 方向判断：检测到金叉，选择做多"
+                    debug_info.append(msg)
+                    logger.info(f"{symbol} {msg}")
                 elif detected_cross_type == 'death':
                     # 死叉 = 做空
                     direction = 'short'
-                    debug_info.append(f"   📊 方向判断：检测到死叉，选择做空")
+                    msg = f"   📊 方向判断：检测到死叉，选择做空"
+                    debug_info.append(msg)
+                    logger.info(f"{symbol} {msg}")
                 else:
                     # 如果没有检测到交叉类型，根据EMA状态判断（兼容旧逻辑）
                     ema_bullish = (ema_short and ema_long and ema_short > ema_long)
@@ -1802,8 +1841,11 @@ class StrategyExecutor:
                                             volume_reason = f"做空成交量条件格式错误: {volume_condition}"
                             
                     if not volume_condition_met:
-                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA金叉但{volume_reason}")
+                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA金叉但{volume_reason}"
+                        debug_info.append(msg)
+                        logger.info(f"{symbol} {msg}")
                     else:
+                        logger.info(f"{symbol} [{buy_timeframe}]: ✅ 成交量条件检查通过 (成交量比率: {buy_volume_ratio:.2f}x)")
                         # 检查同方向持仓限制
                         if direction == 'long' and max_long_positions is not None:
                             long_positions_count = len([p for p in positions if p['direction'] == 'long'])
@@ -1880,28 +1922,41 @@ class StrategyExecutor:
                                     
                             # 初始化趋势确认标志
                             trend_confirm_ok = True
+                            logger.info(f"{symbol} [{buy_timeframe}]: 🔍 开始趋势确认和过滤检查 (方向: {direction})")
                                     
                             # 检查 RSI 过滤
                             if rsi_filter_enabled:
                                 rsi_value = float(buy_indicator.get('rsi')) if buy_indicator.get('rsi') else None
                                 if rsi_value is not None:
                                     if direction == 'long' and rsi_value > rsi_long_max:
-                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做多时RSI过高 (RSI={rsi_value:.2f} > {rsi_long_max})，已过滤")
+                                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做多时RSI过高 (RSI={rsi_value:.2f} > {rsi_long_max})，已过滤"
+                                        debug_info.append(msg)
+                                        logger.info(f"{symbol} {msg}")
                                         trend_confirm_ok = False
                                     elif direction == 'short' and rsi_value < rsi_short_min:
-                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤")
+                                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤"
+                                        debug_info.append(msg)
+                                        logger.info(f"{symbol} {msg}")
                                         trend_confirm_ok = False
+                                    else:
+                                        logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI过滤通过 (RSI={rsi_value:.2f})")
                                     
                             # 检查 MACD 过滤
                             if trend_confirm_ok and macd_filter_enabled:
                                 macd_histogram = float(buy_indicator.get('macd_histogram')) if buy_indicator.get('macd_histogram') else None
                                 if macd_histogram is not None:
-                                    if direction == 'long' and macd_long_require_positive and macd_histogram <= 0:
-                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MACD过滤：做多时MACD柱状图非正 (MACD={macd_histogram:.4f})，已过滤")
-                                        trend_confirm_ok = False
-                                    elif direction == 'short' and macd_short_require_negative and macd_histogram >= 0:
-                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MACD过滤：做空时MACD柱状图非负 (MACD={macd_histogram:.4f})，已过滤")
-                                        trend_confirm_ok = False
+                                            if direction == 'long' and macd_long_require_positive and macd_histogram <= 0:
+                                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MACD过滤：做多时MACD柱状图非正 (MACD={macd_histogram:.4f})，已过滤"
+                                                debug_info.append(msg)
+                                                logger.info(f"{symbol} {msg}")
+                                                trend_confirm_ok = False
+                                            elif direction == 'short' and macd_short_require_negative and macd_histogram >= 0:
+                                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MACD过滤：做空时MACD柱状图非负 (MACD={macd_histogram:.4f})，已过滤"
+                                                debug_info.append(msg)
+                                                logger.info(f"{symbol} {msg}")
+                                                trend_confirm_ok = False
+                                            else:
+                                                logger.debug(f"{symbol} [{buy_timeframe}]: ✅ MACD过滤通过 (MACD={macd_histogram:.4f})")
                                     
                             # 检查 KDJ 过滤
                             if trend_confirm_ok and kdj_filter_enabled:
@@ -1912,12 +1967,18 @@ class StrategyExecutor:
                                             
                                     if direction == 'long' and kdj_k > kdj_long_max_k:
                                         if not is_strong_signal:
-                                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做多时KDJ K值过高 (K={kdj_k:.2f} > {kdj_long_max_k})，已过滤")
+                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做多时KDJ K值过高 (K={kdj_k:.2f} > {kdj_long_max_k})，已过滤"
+                                            debug_info.append(msg)
+                                            logger.info(f"{symbol} {msg}")
                                             trend_confirm_ok = False
                                     elif direction == 'short' and kdj_k < kdj_short_min_k:
                                         if not is_strong_signal:
-                                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做空时KDJ K值过低 (K={kdj_k:.2f} < {kdj_short_min_k})，已过滤")
+                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做空时KDJ K值过低 (K={kdj_k:.2f} < {kdj_short_min_k})，已过滤"
+                                            debug_info.append(msg)
+                                            logger.info(f"{symbol} {msg}")
                                             trend_confirm_ok = False
+                                    else:
+                                        logger.debug(f"{symbol} [{buy_timeframe}]: ✅ KDJ过滤通过 (K={kdj_k:.2f})")
                                     
                             # 检查 MA10/EMA10 信号强度
                             if trend_confirm_ok:
