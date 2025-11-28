@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-清理所有数据脚本
-删除策略数据、回测数据、合约数据、现货数据，并重置账号
+清理模拟交易数据脚本
+删除策略数据、回测数据、模拟合约数据，并重置账号
+注意：不会删除K线数据、价格数据等市场数据
 """
 
 import sys
@@ -35,7 +36,8 @@ def load_config():
 
 def clear_all_data(account_id: int = 2, reset_balance: float = 10000.0):
     """
-    清理所有数据并重置账号
+    清理模拟交易数据并重置账号
+    注意：不会删除K线数据、价格数据等市场数据
     
     Args:
         account_id: 账户ID，默认2
@@ -100,17 +102,17 @@ def clear_all_data(account_id: int = 2, reset_balance: float = 10000.0):
         deleted_counts = {}
         
         # 1. 清理策略交易记录
-        print("\n[1/9] 清理策略交易记录...")
+        print("\n[1/7] 清理策略交易记录...")
         sys.stdout.flush()
         deleted_counts['strategy_trade_records'] = safe_delete('strategy_trade_records')
         
         # 2. 清理策略测试记录
-        print("\n[2/9] 清理策略测试记录...")
+        print("\n[2/7] 清理策略测试记录...")
         sys.stdout.flush()
         deleted_counts['strategy_test_records'] = safe_delete('strategy_test_records')
         
         # 3. 清理策略执行结果详情
-        print("\n[3/9] 清理策略执行结果详情...")
+        print("\n[3/7] 清理策略执行结果详情...")
         sys.stdout.flush()
         try:
             deleted_counts['strategy_execution_result_details'] = safe_delete('strategy_execution_result_details')
@@ -119,7 +121,7 @@ def clear_all_data(account_id: int = 2, reset_balance: float = 10000.0):
             deleted_counts['strategy_execution_result_details'] = 0
         
         # 4. 清理策略执行结果
-        print("\n[4/9] 清理策略执行结果...")
+        print("\n[4/7] 清理策略执行结果...")
         sys.stdout.flush()
         try:
             deleted_counts['strategy_execution_results'] = safe_delete('strategy_execution_results')
@@ -128,7 +130,7 @@ def clear_all_data(account_id: int = 2, reset_balance: float = 10000.0):
             deleted_counts['strategy_execution_results'] = 0
         
         # 5. 清理策略命中记录
-        print("\n[5/9] 清理策略命中记录...")
+        print("\n[5/7] 清理策略命中记录...")
         sys.stdout.flush()
         try:
             deleted_counts['strategy_hits'] = safe_delete('strategy_hits')
@@ -137,7 +139,7 @@ def clear_all_data(account_id: int = 2, reset_balance: float = 10000.0):
             deleted_counts['strategy_hits'] = 0
         
         # 6. 清理策略资金管理记录
-        print("\n[6/9] 清理策略资金管理记录...")
+        print("\n[6/7] 清理策略资金管理记录...")
         sys.stdout.flush()
         try:
             deleted_counts['strategy_capital_management'] = safe_delete('strategy_capital_management')
@@ -145,8 +147,8 @@ def clear_all_data(account_id: int = 2, reset_balance: float = 10000.0):
             print(f"  ⚠ 表 strategy_capital_management 不存在: {e}")
             deleted_counts['strategy_capital_management'] = 0
         
-        # 7. 清理合约数据
-        print("\n[7/9] 清理合约数据...")
+        # 7. 清理模拟合约数据
+        print("\n[7/7] 清理模拟合约数据...")
         sys.stdout.flush()
         
         # 清理合约持仓
@@ -191,24 +193,8 @@ def clear_all_data(account_id: int = 2, reset_balance: float = 10000.0):
             deleted_counts['futures_trades'] = 0
             sys.stdout.flush()
         
-        # 8. 清理现货数据（使用TRUNCATE，因为可能数据量很大）
-        print("\n[8/9] 清理现货数据...")
-        sys.stdout.flush()
-        
-        # 清理价格数据
-        deleted_counts['price_data'] = safe_delete('price_data', use_truncate=True)
-        
-        # 清理K线数据
-        deleted_counts['kline_data'] = safe_delete('kline_data', use_truncate=True)
-        
-        # 清理交易数据
-        deleted_counts['trade_data'] = safe_delete('trade_data', use_truncate=True)
-        
-        # 清理订单簿数据
-        deleted_counts['orderbook_data'] = safe_delete('orderbook_data', use_truncate=True)
-        
-        # 9. 重置账户余额
-        print("\n[9/9] 重置账户余额...")
+        # 8. 重置账户余额
+        print("\n[8/8] 重置账户余额...")
         cursor.execute("""
             UPDATE paper_trading_accounts 
             SET current_balance = %s,
@@ -254,7 +240,7 @@ def main():
     """主函数"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='清理所有数据并重置账号')
+    parser = argparse.ArgumentParser(description='清理模拟交易数据并重置账号（不删除K线、价格等市场数据）')
     parser.add_argument(
         '--account-id',
         type=int,
@@ -276,7 +262,8 @@ def main():
     args = parser.parse_args()
     
     if not args.confirm:
-        print("⚠️  警告：此操作将删除所有策略数据、回测数据、合约数据、现货数据，并重置账号！")
+        print("⚠️  警告：此操作将删除所有策略数据、回测数据、模拟合约数据，并重置账号！")
+        print("   注意：不会删除K线数据、价格数据等市场数据")
         print(f"   账户ID: {args.account_id}")
         print(f"   重置余额: {args.reset_balance} USDT")
         print("\n   如果确定要执行，请添加 --confirm 参数")
