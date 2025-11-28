@@ -464,7 +464,7 @@ class UnifiedDataScheduler:
             for symbol in self.symbols:
                 try:
                     # 获取合约K线数据
-                    df = await self.futures_collector.fetch_klines(symbol, timeframe=timeframe, limit=2)
+                    df = await self.futures_collector.fetch_futures_klines(symbol, timeframe=timeframe, limit=2)
 
                     if df is None or len(df) == 0:
                         logger.warning(f"  ⊗ {symbol} {timeframe}: 未获取到K线数据")
