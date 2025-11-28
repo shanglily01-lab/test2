@@ -168,6 +168,10 @@ class StrategyTestService:
                 sell_signal = request.get('sellSignals')
                 sell_volume_enabled = request.get('sellVolumeEnabled', False)
                 sell_volume = request.get('sellVolume')
+                sell_volume_long_enabled = request.get('sellVolumeLongEnabled', False)
+                sell_volume_short_enabled = request.get('sellVolumeShortEnabled', False)
+                sell_volume_long = request.get('sellVolumeLong')
+                sell_volume_short = request.get('sellVolumeShort')
                 position_size = request.get('positionSize', 10)
                 max_positions = request.get('maxPositions')  # 最大持仓数
                 max_long_positions = request.get('maxLongPositions')  # 最大做多持仓数
@@ -342,6 +346,10 @@ class StrategyTestService:
                         sell_signal=sell_signal,
                         sell_volume_enabled=sell_volume_enabled,
                         sell_volume=sell_volume,
+                        sell_volume_long_enabled=sell_volume_long_enabled,
+                        sell_volume_short_enabled=sell_volume_short_enabled,
+                        sell_volume_long=sell_volume_long,
+                        sell_volume_short=sell_volume_short,
                         position_size=position_size,
                         max_positions=max_positions,
                         long_price_type=long_price_type,
@@ -613,6 +621,10 @@ class StrategyTestService:
         sell_signal = kwargs.get('sell_signal')
         sell_volume_enabled = kwargs.get('sell_volume_enabled', False)
         sell_volume = kwargs.get('sell_volume')
+        sell_volume_long_enabled = kwargs.get('sell_volume_long_enabled', False)
+        sell_volume_short_enabled = kwargs.get('sell_volume_short_enabled', False)
+        sell_volume_long = kwargs.get('sell_volume_long')
+        sell_volume_short = kwargs.get('sell_volume_short')
         position_size = kwargs.get('position_size', 10)
         max_positions = kwargs.get('max_positions')  # 最大持仓数
         long_price_type = kwargs.get('long_price_type', 'market')
@@ -1043,44 +1055,58 @@ class StrategyTestService:
                             if buy_volume_enabled and buy_volume_long_enabled:
                                 volume_condition = buy_volume_long or buy_volume
                                 if volume_condition:
-                                    try:
-                                        required_ratio = float(volume_condition)
-                                        if volume_ratio < required_ratio:
+                                    # 支持新的范围格式: 0-1, 1-1.25, 1.25-2, >2
+                                    if volume_condition == '0-1':
+                                        if not (0 <= volume_ratio <= 1.0):
                                             volume_condition_met = False
-                                            volume_reason = f"做多成交量不足 (当前:{volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
-                                    except:
-                                        volume_condition_met = False
-                                        volume_reason = f"做多成交量条件格式错误: {volume_condition}"
+                                            volume_reason = f"做多成交量不符合 (当前:{volume_ratio:.2f}x, 需要:0-1x)"
+                                    elif volume_condition == '1-1.25':
+                                        if not (1.0 <= volume_ratio <= 1.25):
+                                            volume_condition_met = False
+                                            volume_reason = f"做多成交量不符合 (当前:{volume_ratio:.2f}x, 需要:1-1.25x)"
+                                    elif volume_condition == '1.25-2':
+                                        if not (1.25 <= volume_ratio <= 2.0):
+                                            volume_condition_met = False
+                                            volume_reason = f"做多成交量不符合 (当前:{volume_ratio:.2f}x, 需要:1.25-2x)"
+                                    elif volume_condition == '>2':
+                                        if volume_ratio <= 2.0:
+                                            volume_condition_met = False
+                                            volume_reason = f"做多成交量不符合 (当前:{volume_ratio:.2f}x, 需要:>2x)"
+                                    else:
+                                        # 尝试解析为单一数值（兼容旧格式）
+                                        try:
+                                            required_ratio = float(volume_condition)
+                                            if volume_ratio < required_ratio:
+                                                volume_condition_met = False
+                                                volume_reason = f"做多成交量不足 (当前:{volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
+                                        except:
+                                            volume_condition_met = False
+                                            volume_reason = f"做多成交量条件格式错误: {volume_condition}"
                         else:
                             if buy_volume_enabled and (buy_volume_short_enabled or buy_volume_short):
                                 volume_condition = buy_volume_short
                                 if volume_condition:
-                                    # 尝试解析为数值（支持 "0.3" 这样的格式）
-                                    try:
-                                        required_ratio = float(volume_condition)
-                                        # 如果是数值格式，检查是否 >= 该值
-                                        if volume_ratio < required_ratio:
+                                    # 支持新的范围格式: 0-0.5, 0.5-1, >1
+                                    if volume_condition == '0-0.5':
+                                        if not (0 <= volume_ratio <= 0.5):
                                             volume_condition_met = False
-                                            volume_reason = f"做空成交量不足 (当前:{volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
-                                    except (ValueError, TypeError):
-                                        # 如果不是数值，按字符串格式处理
-                                        if volume_condition == '>1':
-                                            if volume_ratio <= 1.0:
+                                            volume_reason = f"做空成交量不符合 (当前:{volume_ratio:.2f}x, 需要:0-0.5x)"
+                                    elif volume_condition == '0.5-1':
+                                        if not (0.5 <= volume_ratio <= 1.0):
+                                            volume_condition_met = False
+                                            volume_reason = f"做空成交量不符合 (当前:{volume_ratio:.2f}x, 需要:0.5-1x)"
+                                    elif volume_condition == '>1':
+                                        if volume_ratio <= 1.0:
+                                            volume_condition_met = False
+                                            volume_reason = f"做空成交量不符合 (当前:{volume_ratio:.2f}x, 需要:>1x)"
+                                    else:
+                                        # 尝试解析为单一数值（兼容旧格式）
+                                        try:
+                                            required_ratio = float(volume_condition)
+                                            if volume_ratio < required_ratio:
                                                 volume_condition_met = False
-                                                volume_reason = f"做空成交量不符合 (当前:{volume_ratio:.2f}x, 需要:>1x)"
-                                        elif volume_condition == '0.8-1':
-                                            if not (0.8 <= volume_ratio <= 1.0):
-                                                volume_condition_met = False
-                                                volume_reason = f"做空成交量不符合 (当前:{volume_ratio:.2f}x, 需要:0.8-1x)"
-                                        elif volume_condition == '0.6-0.8':
-                                            if not (0.6 <= volume_ratio < 0.8):
-                                                volume_condition_met = False
-                                                volume_reason = f"做空成交量不符合 (当前:{volume_ratio:.2f}x, 需要:0.6-0.8x)"
-                                        elif volume_condition == '<0.6':
-                                            if volume_ratio >= 0.6:
-                                                volume_condition_met = False
-                                                volume_reason = f"做空成交量不符合 (当前:{volume_ratio:.2f}x, 需要:<0.6x)"
-                                        else:
+                                                volume_reason = f"做空成交量不足 (当前:{volume_ratio:.2f}x, 需要:≥{required_ratio}x)"
+                                        except (ValueError, TypeError):
                                             volume_condition_met = False
                                             volume_reason = f"做空成交量条件格式错误: {volume_condition}"
                         
@@ -1876,9 +1902,53 @@ class StrategyTestService:
                         position_info = ', '.join([f"{p['direction']}({p['entry_price']:.4f})" for p in positions])
                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 当前持仓: {position_info}，未检测到卖出信号（{sell_signal}）")
                 
-                # 检查卖出成交量条件
-                sell_volume_condition_met = True
-                if sell_volume_enabled and sell_volume:
+                # 检查卖出成交量条件（按持仓方向分开检查）
+                # 注意：这里需要根据每个持仓的方向分别检查对应的成交量条件
+                sell_volume_condition_met_by_direction = {}
+                for pos in positions:
+                    pos_direction = pos.get('direction')
+                    if pos_direction == 'long':
+                        # 平仓做多：支持 <1, 1-2, >2
+                        if sell_volume_long_enabled and sell_volume_long:
+                            volume_condition = sell_volume_long
+                            if volume_condition == '<1':
+                                sell_volume_condition_met_by_direction['long'] = volume_ratio < 1.0
+                            elif volume_condition == '1-2':
+                                sell_volume_condition_met_by_direction['long'] = (1.0 <= volume_ratio <= 2.0)
+                            elif volume_condition == '>2':
+                                sell_volume_condition_met_by_direction['long'] = volume_ratio > 2.0
+                            else:
+                                # 兼容旧格式
+                                try:
+                                    required_ratio = float(volume_condition)
+                                    sell_volume_condition_met_by_direction['long'] = volume_ratio >= required_ratio
+                                except:
+                                    sell_volume_condition_met_by_direction['long'] = True
+                        else:
+                            sell_volume_condition_met_by_direction['long'] = True
+                    elif pos_direction == 'short':
+                        # 平仓做空：支持 >2, 1-2, <1
+                        if sell_volume_short_enabled and sell_volume_short:
+                            volume_condition = sell_volume_short
+                            if volume_condition == '>2':
+                                sell_volume_condition_met_by_direction['short'] = volume_ratio > 2.0
+                            elif volume_condition == '1-2':
+                                sell_volume_condition_met_by_direction['short'] = (1.0 <= volume_ratio <= 2.0)
+                            elif volume_condition == '<1':
+                                sell_volume_condition_met_by_direction['short'] = volume_ratio < 1.0
+                            else:
+                                # 兼容旧格式
+                                try:
+                                    required_ratio = float(volume_condition)
+                                    sell_volume_condition_met_by_direction['short'] = volume_ratio >= required_ratio
+                                except:
+                                    sell_volume_condition_met_by_direction['short'] = True
+                        else:
+                            sell_volume_condition_met_by_direction['short'] = True
+
+                # 兼容旧的单一卖出成交量设置（如果没有启用分开的设置）
+                if sell_volume_enabled and sell_volume and not sell_volume_long_enabled and not sell_volume_short_enabled:
+                    sell_volume_condition_met = True
                     if sell_volume == '>1':
                         if volume_ratio <= 1.0:
                             sell_volume_condition_met = False
@@ -1891,10 +1961,14 @@ class StrategyTestService:
                     elif sell_volume == '<0.6':
                         if volume_ratio >= 0.6:
                             sell_volume_condition_met = False
-                
+                    # 应用到所有方向
+                    sell_volume_condition_met_by_direction = {'long': sell_volume_condition_met, 'short': sell_volume_condition_met}
+
                 # 如果卖出信号触发但成交量条件不满足，记录日志
-                if sell_signal_triggered and not sell_volume_condition_met:
-                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出信号已触发，但成交量条件不满足（成交量比率={volume_ratio:.2f}x，要求={sell_volume}），跳过平仓")
+                sell_volume_check_result = all(sell_volume_condition_met_by_direction.get(p['direction'], True) for p in positions)
+                if sell_signal_triggered and not sell_volume_check_result:
+                    failed_directions = [d for d, met in sell_volume_condition_met_by_direction.items() if not met]
+                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出信号已触发，但成交量条件不满足（成交量比率={volume_ratio:.2f}x，{failed_directions}方向不满足），跳过平仓")
                 
                 # 如果持仓存在但没有卖出信号，记录日志（每10个时间点记录一次，避免日志过多）
                 if len(positions) > 0 and not sell_signal_triggered:
@@ -1904,12 +1978,16 @@ class StrategyTestService:
                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 当前持仓: {position_info}，未检测到卖出信号（{sell_signal}）")
                 
                 # 执行卖出
-                if sell_signal_triggered and sell_volume_condition_met:
+                if sell_signal_triggered:
                     for position in positions[:]:
                         entry_price = position['entry_price']
                         quantity = position['quantity']
                         direction = position['direction']
-                        
+
+                        # 检查该方向的成交量条件
+                        if not sell_volume_condition_met_by_direction.get(direction, True):
+                            continue
+
                         # 平仓价格逻辑：卖出信号触发时直接使用当前价格平仓
                         # 对于做多，使用收盘价或最高价（取较低者，更保守）
                         # 对于做空，使用收盘价或最低价（取较高者，更保守）
@@ -2070,6 +2148,10 @@ class StrategyTestService:
             'buy_volume_long': buy_volume_long,
             'buy_volume_short': buy_volume_short,
             'sell_volume_enabled': sell_volume_enabled,
-            'sell_volume': sell_volume
+            'sell_volume': sell_volume,
+            'sell_volume_long_enabled': sell_volume_long_enabled,
+            'sell_volume_short_enabled': sell_volume_short_enabled,
+            'sell_volume_long': sell_volume_long,
+            'sell_volume_short': sell_volume_short
         }
 
