@@ -1111,7 +1111,8 @@ class StrategyTestService:
                                             volume_reason = f"做空成交量条件格式错误: {volume_condition}"
                         
                         if not volume_condition_met:
-                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA金叉但{volume_reason}")
+                            signal_type = "EMA金叉" if direction == 'long' else "EMA死叉"
+                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ {signal_type}但{volume_reason}")
                             continue
                         
                         # 检查同方向持仓限制
