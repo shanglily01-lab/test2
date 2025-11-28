@@ -1905,10 +1905,12 @@ class StrategyTestService:
                 for pos in positions:
                     pos_direction = pos.get('direction')
                     if pos_direction == 'long':
-                        # 平仓做多：支持 <1, 1-2, >2
+                        # 平仓做多：支持 any, <1, 1-2, >2
                         if sell_volume_long_enabled and sell_volume_long:
                             volume_condition = sell_volume_long
-                            if volume_condition == '<1':
+                            if volume_condition == 'any':
+                                sell_volume_condition_met_by_direction['long'] = True
+                            elif volume_condition == '<1':
                                 sell_volume_condition_met_by_direction['long'] = volume_ratio < 1.0
                             elif volume_condition == '1-2':
                                 sell_volume_condition_met_by_direction['long'] = (1.0 <= volume_ratio <= 2.0)
@@ -1924,15 +1926,17 @@ class StrategyTestService:
                         else:
                             sell_volume_condition_met_by_direction['long'] = True
                     elif pos_direction == 'short':
-                        # 平仓做空：支持 >2, 1-2, <1
+                        # 平仓做空：支持 any, <1, 1-2, >2
                         if sell_volume_short_enabled and sell_volume_short:
                             volume_condition = sell_volume_short
-                            if volume_condition == '>2':
-                                sell_volume_condition_met_by_direction['short'] = volume_ratio > 2.0
-                            elif volume_condition == '1-2':
-                                sell_volume_condition_met_by_direction['short'] = (1.0 <= volume_ratio <= 2.0)
+                            if volume_condition == 'any':
+                                sell_volume_condition_met_by_direction['short'] = True
                             elif volume_condition == '<1':
                                 sell_volume_condition_met_by_direction['short'] = volume_ratio < 1.0
+                            elif volume_condition == '1-2':
+                                sell_volume_condition_met_by_direction['short'] = (1.0 <= volume_ratio <= 2.0)
+                            elif volume_condition == '>2':
+                                sell_volume_condition_met_by_direction['short'] = volume_ratio > 2.0
                             else:
                                 # 兼容旧格式
                                 try:
