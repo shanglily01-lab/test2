@@ -1055,19 +1055,15 @@ class StrategyTestService:
                             if buy_volume_enabled and buy_volume_long_enabled:
                                 volume_condition = buy_volume_long or buy_volume
                                 if volume_condition:
-                                    # 支持新的范围格式: 0-1, 1-1.25, 1.25-2, >2
-                                    if volume_condition == '0-1':
-                                        if not (0 <= volume_ratio <= 1.0):
+                                    # 支持新的范围格式: <1, 1-2, >2
+                                    if volume_condition == '<1':
+                                        if volume_ratio >= 1.0:
                                             volume_condition_met = False
-                                            volume_reason = f"做多成交量不符合 (当前:{volume_ratio:.2f}x, 需要:0-1x)"
-                                    elif volume_condition == '1-1.25':
-                                        if not (1.0 <= volume_ratio <= 1.25):
+                                            volume_reason = f"做多成交量不符合 (当前:{volume_ratio:.2f}x, 需要:<1x)"
+                                    elif volume_condition == '1-2':
+                                        if not (1.0 <= volume_ratio <= 2.0):
                                             volume_condition_met = False
-                                            volume_reason = f"做多成交量不符合 (当前:{volume_ratio:.2f}x, 需要:1-1.25x)"
-                                    elif volume_condition == '1.25-2':
-                                        if not (1.25 <= volume_ratio <= 2.0):
-                                            volume_condition_met = False
-                                            volume_reason = f"做多成交量不符合 (当前:{volume_ratio:.2f}x, 需要:1.25-2x)"
+                                            volume_reason = f"做多成交量不符合 (当前:{volume_ratio:.2f}x, 需要:1-2x)"
                                     elif volume_condition == '>2':
                                         if volume_ratio <= 2.0:
                                             volume_condition_met = False
