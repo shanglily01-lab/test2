@@ -84,7 +84,7 @@ class PriceCollector:
         since: Optional[int] = None
     ) -> Optional[pd.DataFrame]:
         """
-        获取K线数据 (OHLCV)
+        获取K线数据 (OHLCV) - 使用合约API
 
         Args:
             symbol: 交易对
@@ -96,34 +96,30 @@ class PriceCollector:
             DataFrame包含 [timestamp, open, high, low, close, volume]
         """
         try:
+            import requests
+
             # 转换交易对格式
             binance_symbol = symbol.replace('/', '')
 
-            # 币安的interval格式映射
-            interval_map = {
-                '1m': Client.KLINE_INTERVAL_1MINUTE,
-                '5m': Client.KLINE_INTERVAL_5MINUTE,
-                '15m': Client.KLINE_INTERVAL_15MINUTE,
-                '1h': Client.KLINE_INTERVAL_1HOUR,
-                '4h': Client.KLINE_INTERVAL_4HOUR,
-                '1d': Client.KLINE_INTERVAL_1DAY,
-                '1w': Client.KLINE_INTERVAL_1WEEK,
-            }
-
-            interval = interval_map.get(timeframe, Client.KLINE_INTERVAL_1HOUR)
-
-            # 构建请求参数
+            # 使用合约API获取K线数据
+            url = "https://fapi.binance.com/fapi/v1/klines"
             params = {
                 'symbol': binance_symbol,
-                'interval': interval,
-                'limit': limit
+                'interval': timeframe,
+                'limit': min(limit, 1500)  # 币安合约API限制最大1500
             }
 
             if since:
                 params['startTime'] = since
 
             # 获取K线数据
-            klines = await asyncio.to_thread(self.client.get_klines, **params)
+            response = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
+
+            if response.status_code != 200:
+                logger.error(f"获取合约K线失败: HTTP {response.status_code}")
+                return None
+
+            klines = response.json()
 
             if not klines:
                 return None

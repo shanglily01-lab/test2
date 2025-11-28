@@ -127,7 +127,7 @@ class InitialKlinesFetcher:
 
     def fetch_klines(self, symbol: str, timeframe: str = '1h', limit: int = 300):
         """
-        从 Binance 获取K线数据 (使用 REST API)
+        从 Binance 合约API 获取K线数据 (使用 REST API)
 
         Args:
             symbol: 交易对 (如 BTC/USDT)
@@ -138,17 +138,17 @@ class InitialKlinesFetcher:
             List[Dict]: K线数据列表
         """
         try:
-            print(f"📊 正在获取 {symbol} 的 {limit} 条 {timeframe} K线数据...")
+            print(f"📊 正在获取 {symbol} 的 {limit} 条 {timeframe} 合约K线数据...")
 
             # 转换币种格式
             binance_symbol = self.symbol_to_binance_format(symbol)
 
-            # 构建 API 请求
-            url = f"{self.binance_api_base}/api/v3/klines"
+            # 构建 API 请求 - 使用合约API
+            url = "https://fapi.binance.com/fapi/v1/klines"
             params = {
                 'symbol': binance_symbol,
                 'interval': timeframe,
-                'limit': limit
+                'limit': min(limit, 1500)  # 合约API限制最大1500
             }
 
             # 发送请求
@@ -184,17 +184,17 @@ class InitialKlinesFetcher:
                     'volume': volume
                 })
 
-            print(f"  ✅ 成功获取 {len(klines)} 条数据")
+            print(f"  ✅ 成功获取 {len(klines)} 条合约K线数据")
             print(f"  时间范围: {klines[0]['timestamp']} ~ {klines[-1]['timestamp']}")
             print(f"  最新价格: ${klines[-1]['close']:,.2f}")
 
             return klines
 
         except requests.exceptions.RequestException as e:
-            print(f"  ❌ 获取 {symbol} K线失败 (网络错误): {e}")
+            print(f"  ❌ 获取 {symbol} 合约K线失败 (网络错误): {e}")
             return []
         except Exception as e:
-            print(f"  ❌ 获取 {symbol} K线失败: {e}")
+            print(f"  ❌ 获取 {symbol} 合约K线失败: {e}")
             return []
 
     def save_klines(self, klines: list):
