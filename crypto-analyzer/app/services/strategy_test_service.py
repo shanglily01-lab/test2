@@ -1781,45 +1781,88 @@ class StrategyTestService:
                 ema_short = float(indicator.get('ema_short')) if indicator.get('ema_short') else None
                 ema_long = float(indicator.get('ema_long')) if indicator.get('ema_long') else None
                 
-                if current_sell_index > 0:
+                if current_sell_index > 0 and len(positions) > 0:
                     lookback_count = min(3, current_sell_index)
-                    
+
                     for lookback in range(1, lookback_count + 1):
+                        if sell_signal_triggered:
+                            break
                         prev_pair = sell_indicator_pairs[current_sell_index - lookback]
                         prev_indicator = prev_pair['indicator']
-                        
+
                         if sell_signal == 'ma_ema5':
                             prev_ma5 = float(prev_indicator.get('ma5')) if prev_indicator.get('ma5') else None
                             prev_ema5 = float(prev_indicator.get('ema5')) if prev_indicator.get('ema5') else None
-                            
+
                             if ma5 and ema5 and prev_ma5 and prev_ema5:
+                                # 检测金叉和死叉
+                                ma5_ema5_is_golden = (prev_ema5 <= prev_ma5 and ema5 > ma5) or \
+                                                     (prev_ema5 < prev_ma5 and ema5 >= ma5)
                                 ma5_ema5_is_death = (prev_ema5 >= prev_ma5 and ema5 < ma5) or \
                                                     (prev_ema5 > prev_ma5 and ema5 <= ma5)
-                                if ma5_ema5_is_death:
-                                    sell_signal_triggered = True
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5死叉，触发卖出信号")
+
+                                # 根据持仓方向决定平仓信号
+                                for pos in positions:
+                                    pos_direction = pos.get('direction')
+                                    if pos_direction == 'long' and ma5_ema5_is_death:
+                                        sell_signal_triggered = True
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5死叉 - 触发做多平仓信号")
+                                        break
+                                    elif pos_direction == 'short' and ma5_ema5_is_golden:
+                                        sell_signal_triggered = True
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5金叉 - 触发做空平仓信号")
+                                        break
+                                if sell_signal_triggered:
                                     break
+
                         elif sell_signal == 'ma_ema10':
                             prev_ma10 = float(prev_indicator.get('ma10')) if prev_indicator.get('ma10') else None
                             prev_ema10 = float(prev_indicator.get('ema10')) if prev_indicator.get('ema10') else None
-                            
+
                             if ma10 and ema10 and prev_ma10 and prev_ema10:
+                                # 检测金叉和死叉
+                                ma10_ema10_is_golden = (prev_ema10 <= prev_ma10 and ema10 > ma10) or \
+                                                       (prev_ema10 < prev_ma10 and ema10 >= ma10)
                                 ma10_ema10_is_death = (prev_ema10 >= prev_ma10 and ema10 < ma10) or \
                                                       (prev_ema10 > prev_ma10 and ema10 <= ma10)
-                                if ma10_ema10_is_death:
-                                    sell_signal_triggered = True
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10死叉，触发卖出信号")
+
+                                # 根据持仓方向决定平仓信号
+                                for pos in positions:
+                                    pos_direction = pos.get('direction')
+                                    if pos_direction == 'long' and ma10_ema10_is_death:
+                                        sell_signal_triggered = True
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10死叉 - 触发做多平仓信号")
+                                        break
+                                    elif pos_direction == 'short' and ma10_ema10_is_golden:
+                                        sell_signal_triggered = True
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10金叉 - 触发做空平仓信号")
+                                        break
+                                if sell_signal_triggered:
                                     break
+
                         elif sell_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
                             prev_ema_short = float(prev_indicator.get('ema_short')) if prev_indicator.get('ema_short') else None
                             prev_ema_long = float(prev_indicator.get('ema_long')) if prev_indicator.get('ema_long') else None
-                            
+
                             if ema_short and ema_long and prev_ema_short and prev_ema_long:
+                                # 检测金叉和死叉
+                                ema_is_golden = (prev_ema_short <= prev_ema_long and ema_short > ema_long) or \
+                                                (prev_ema_short < prev_ema_long and ema_short >= ema_long)
                                 ema_is_death = (prev_ema_short >= prev_ema_long and ema_short < ema_long) or \
                                                (prev_ema_short > prev_ema_long and ema_short <= ema_long)
-                                if ema_is_death:
-                                    sell_signal_triggered = True
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26死叉，触发卖出信号")
+
+                                # 根据持仓方向决定平仓信号
+                                for pos in positions:
+                                    pos_direction = pos.get('direction')
+                                    if pos_direction == 'long' and ema_is_death:
+                                        sell_signal_triggered = True
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26死叉 - 触发做多平仓信号")
+                                        break
+                                    elif pos_direction == 'short' and ema_is_golden:
+                                        sell_signal_triggered = True
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26金叉 - 触发做空平仓信号")
+                                        break
+                                if sell_signal_triggered:
                                     break
                 else:
                     # 如果没有历史数据，无法检测卖出信号
