@@ -253,28 +253,56 @@ class StrategyTestService:
                     # 获取买入和卖出时间周期的K线数据
                     extended_start_time = start_time - timedelta(days=30)
                     
-                    # 获取买入时间周期的K线数据
+                    # 获取买入时间周期的K线数据（优先使用合约数据）
                     cursor.execute(
-                        """SELECT timestamp, open_price, high_price, low_price, close_price, volume 
-                        FROM kline_data 
-                        WHERE symbol = %s AND timeframe = %s 
+                        """SELECT timestamp, open_price, high_price, low_price, close_price, volume
+                        FROM kline_data
+                        WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
                         AND timestamp >= %s AND timestamp <= %s
                         ORDER BY timestamp ASC""",
                         (symbol, buy_timeframe, extended_start_time, end_time)
                     )
                     buy_klines = cursor.fetchall()
-                    
-                    # 获取卖出时间周期的K线数据
+
+                    # 如果没有合约数据，回退到现货数据
+                    if not buy_klines or len(buy_klines) < 10:
+                        cursor.execute(
+                            """SELECT timestamp, open_price, high_price, low_price, close_price, volume
+                            FROM kline_data
+                            WHERE symbol = %s AND timeframe = %s
+                            AND timestamp >= %s AND timestamp <= %s
+                            ORDER BY timestamp ASC""",
+                            (symbol, buy_timeframe, extended_start_time, end_time)
+                        )
+                        buy_klines = cursor.fetchall()
+                        if buy_klines and len(buy_klines) >= 10:
+                            logger.warning(f"合约K线数据不足，使用现货数据: {symbol} {buy_timeframe}")
+
+                    # 获取卖出时间周期的K线数据（优先使用合约数据）
                     cursor.execute(
-                        """SELECT timestamp, open_price, high_price, low_price, close_price, volume 
-                        FROM kline_data 
-                        WHERE symbol = %s AND timeframe = %s 
+                        """SELECT timestamp, open_price, high_price, low_price, close_price, volume
+                        FROM kline_data
+                        WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
                         AND timestamp >= %s AND timestamp <= %s
                         ORDER BY timestamp ASC""",
                         (symbol, sell_timeframe, extended_start_time, end_time)
                     )
                     sell_klines = cursor.fetchall()
-                    
+
+                    # 如果没有合约数据，回退到现货数据
+                    if not sell_klines or len(sell_klines) < 10:
+                        cursor.execute(
+                            """SELECT timestamp, open_price, high_price, low_price, close_price, volume
+                            FROM kline_data
+                            WHERE symbol = %s AND timeframe = %s
+                            AND timestamp >= %s AND timestamp <= %s
+                            ORDER BY timestamp ASC""",
+                            (symbol, sell_timeframe, extended_start_time, end_time)
+                        )
+                        sell_klines = cursor.fetchall()
+                        if sell_klines and len(sell_klines) >= 10:
+                            logger.warning(f"合约K线数据不足，使用现货数据: {symbol} {sell_timeframe}")
+
                     # 根据时间周期确定最小K线数量要求
                     min_klines_map = {
                         '5m': 100,

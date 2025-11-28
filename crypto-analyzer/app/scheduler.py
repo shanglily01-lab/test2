@@ -445,6 +445,76 @@ class UnifiedDataScheduler:
             logger.error(f"合约数据采集任务失败: {e}")
             self.task_stats[task_name]['last_error'] = str(e)
 
+    async def collect_binance_futures_klines(self, timeframe: str):
+        """采集币安合约K线数据 - 指定时间周期
+
+        Args:
+            timeframe: 时间周期 (5m, 15m, 1h, 1d)
+        """
+        if not self.futures_collector:
+            return
+
+        task_name = f'binance_futures_kline_{timeframe}'
+        try:
+            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始采集币安合约 {timeframe} K线数据...")
+
+            collected_count = 0
+            error_count = 0
+
+            for symbol in self.symbols:
+                try:
+                    # 获取合约K线数据
+                    df = await self.futures_collector.fetch_klines(symbol, timeframe=timeframe, limit=2)
+
+                    if df is None or len(df) == 0:
+                        logger.warning(f"  ⊗ {symbol} {timeframe}: 未获取到K线数据")
+                        error_count += 1
+                        continue
+
+                    # 保存最新的K线数据
+                    for _, row in df.iterrows():
+                        kline_data = {
+                            'symbol': symbol,
+                            'exchange': 'binance_futures',
+                            'timeframe': timeframe,
+                            'open_time': int(row['open_time']),
+                            'timestamp': row['timestamp'],
+                            'open': float(row['open']),
+                            'high': float(row['high']),
+                            'low': float(row['low']),
+                            'close': float(row['close']),
+                            'volume': float(row['volume']),
+                            'quote_volume': float(row.get('quote_volume', 0))
+                        }
+                        self.db_service.save_kline_data(kline_data)
+
+                    logger.debug(f"  ✓ {symbol} {timeframe}: 保存 {len(df)} 条K线")
+                    collected_count += 1
+
+                    # 延迟避免API限流
+                    await asyncio.sleep(0.3)
+
+                except Exception as e:
+                    logger.error(f"  ✗ {symbol} {timeframe}: {e}")
+                    error_count += 1
+
+            # 更新统计
+            if task_name not in self.task_stats:
+                self.task_stats[task_name] = {'count': 0, 'last_run': None, 'last_error': None}
+            self.task_stats[task_name]['count'] += 1
+            self.task_stats[task_name]['last_run'] = datetime.now()
+
+            logger.info(
+                f"  ✓ 合约 {timeframe} K线采集完成: 成功 {collected_count}/{len(self.symbols)}, "
+                f"失败 {error_count}"
+            )
+
+        except Exception as e:
+            logger.error(f"合约 {timeframe} K线采集任务失败: {e}")
+            if task_name not in self.task_stats:
+                self.task_stats[task_name] = {'count': 0, 'last_run': None, 'last_error': None}
+            self.task_stats[task_name]['last_error'] = str(e)
+
     # ==================== 资金费率采集任务 ====================
 
     async def collect_funding_rates(self):
@@ -898,7 +968,31 @@ class UnifiedDataScheduler:
             schedule.every(5).seconds.do(
                 lambda: asyncio.run(self.collect_binance_futures_data())
             )
-            logger.info("  ✓ 币安合约数据 (价格+K线+资金费率+持仓量+多空比) - 每 5 秒")
+            logger.info("  ✓ 币安合约数据 (价格+1m K线+资金费率+持仓量+多空比) - 每 5 秒")
+
+            # 合约 5m K线
+            schedule.every(5).minutes.do(
+                lambda: asyncio.run(self.collect_binance_futures_klines('5m'))
+            )
+            logger.info("  ✓ 币安合约 5分钟K线 - 每 5 分钟")
+
+            # 合约 15m K线
+            schedule.every(15).minutes.do(
+                lambda: asyncio.run(self.collect_binance_futures_klines('15m'))
+            )
+            logger.info("  ✓ 币安合约 15分钟K线 - 每 15 分钟")
+
+            # 合约 1h K线
+            schedule.every(1).hours.do(
+                lambda: asyncio.run(self.collect_binance_futures_klines('1h'))
+            )
+            logger.info("  ✓ 币安合约 1小时K线 - 每 1 小时")
+
+            # 合约 1d K线
+            schedule.every().day.at("00:10").do(
+                lambda: asyncio.run(self.collect_binance_futures_klines('1d'))
+            )
+            logger.info("  ✓ 币安合约 1天K线 - 每天 00:10")
 
         # 2. 资金费率
         schedule.every(5).minutes.do(
