@@ -6,18 +6,13 @@ symbols:
 - SOL/USDT
 - LTC/USDT
 - HYPE/USDT
-- BERA/USDT
-- TON/USDT
-- LINK/USDT
 - BCH/USDT
-- ETC/USDT
-- SUI/USDT
-- APT/USDT
 - ZEC/USDT
-- VIRTUAL/USDT
-- PUMP/USDT
-- ORDI/USDT
-- AR/USDT
+- XRP/USDT
+- ADA/USDT
+- DOT/USDT
+- LINK/USDT
+
 demo_mode: false
 exchanges:
   binance:

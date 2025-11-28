@@ -67,6 +67,5 @@ debug_*.py
 
 # 文本文件（排除 requirements.txt）
 *.txt
-config.yaml
 ema_alerts.txt
 !requirements.txt
