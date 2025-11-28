@@ -631,6 +631,8 @@ class StrategyTestService:
         short_price_type = kwargs.get('short_price_type', 'market')
         stop_loss_pct = kwargs.get('stop_loss_pct')
         take_profit_pct = kwargs.get('take_profit_pct')
+        # 调试输出止损止盈参数
+        logger.info(f"[止损止盈参数] stop_loss_pct={stop_loss_pct} (type={type(stop_loss_pct)}), take_profit_pct={take_profit_pct} (type={type(take_profit_pct)})")
         ma10_ema10_trend_filter = kwargs.get('ma10_ema10_trend_filter', False)
         min_ema_cross_strength = kwargs.get('min_ema_cross_strength', 0.0)
         min_ma10_cross_strength = kwargs.get('min_ma10_cross_strength', 0.0)
@@ -1515,7 +1517,9 @@ class StrategyTestService:
                             
                             direction_text = "做多" if direction == 'long' else "做空"
                             qty_precision = self.get_quantity_precision(symbol)
-                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={entry_price:.4f}，数量={quantity:.{qty_precision}f}，开仓手续费={open_fee:.4f}，余额={balance:.2f}")
+                            sl_info = f"止损={stop_loss_price:.4f}" if stop_loss_price else "止损=未设置"
+                            tp_info = f"止盈={take_profit_price:.4f}" if take_profit_price else "止盈=未设置"
+                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={entry_price:.4f}，数量={quantity:.{qty_precision}f}，{sl_info}，{tp_info}，开仓手续费={open_fee:.4f}，余额={balance:.2f}")
             
             # 如果是卖出时间点，检查卖出信号
             elif time_point['type'] == 'sell' and len(positions) > 0:
@@ -1544,12 +1548,15 @@ class StrategyTestService:
                     
                     # 止损检查（不受最小持仓时间限制）
                     if stop_loss_price:
+                        direction_text = "做多" if direction == 'long' else "做空"
                         if direction == 'long' and low_price <= stop_loss_price:
                             exit_price = stop_loss_price
                             exit_reason = "止损"
+                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发止损，入场={entry_price:.4f}，止损价={stop_loss_price:.4f}，当前最低={low_price:.4f}")
                         elif direction == 'short' and high_price >= stop_loss_price:
                             exit_price = stop_loss_price
                             exit_reason = "止损"
+                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发止损，入场={entry_price:.4f}，止损价={stop_loss_price:.4f}，当前最高={high_price:.4f}")
                     
                     # 止盈检查（需要满足最小持仓时间）
                     if not exit_price and take_profit_price:

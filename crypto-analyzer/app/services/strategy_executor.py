@@ -1059,12 +1059,15 @@ class StrategyExecutor:
                 
                 # 止损检查（不受最小持仓时间限制）
                 if stop_loss_price:
+                    direction_text = "做多" if direction == 'long' else "做空"
                     if direction == 'long' and realtime_price <= stop_loss_price:
                         exit_price = stop_loss_price
                         exit_reason = "止损"
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发止损，入场={entry_price:.4f}，止损价={stop_loss_price:.4f}，当前价={realtime_price:.4f}")
                     elif direction == 'short' and realtime_price >= stop_loss_price:
                         exit_price = stop_loss_price
                         exit_reason = "止损"
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发止损，入场={entry_price:.4f}，止损价={stop_loss_price:.4f}，当前价={realtime_price:.4f}")
                 
                 # 止盈检查（需要满足最小持仓时间）
                 if not exit_price and take_profit_price:
