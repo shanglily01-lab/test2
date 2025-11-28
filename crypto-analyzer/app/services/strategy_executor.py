@@ -34,9 +34,13 @@ class StrategyExecutor:
         self.running = False
         self.task = None
         self.hit_recorder = StrategyHitRecorder(db_config)  # 策略命中记录器
-        
+
         # 定义本地时区（UTC+8）
         self.LOCAL_TZ = timezone(timedelta(hours=8))
+
+        # EMA信号检查间隔控制（60秒检查一次，止损止盈仍然5秒检查）
+        self.ema_check_interval = 60  # EMA信号检查间隔（秒）
+        self.last_ema_check_time = {}  # 记录每个策略+币种的上次EMA检查时间
         
         # 初始化数据库服务，用于保存交易记录
         try:
@@ -52,7 +56,35 @@ class StrategyExecutor:
     def get_local_time(self) -> datetime:
         """获取本地时间（UTC+8）"""
         return datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
-    
+
+    def should_check_ema_signal(self, strategy_id: int, symbol: str) -> bool:
+        """
+        检查是否需要检查EMA信号（每60秒检查一次）
+        止损止盈每5秒检查，EMA信号每60秒检查
+
+        Args:
+            strategy_id: 策略ID
+            symbol: 交易对
+
+        Returns:
+            bool: 是否需要检查EMA信号
+        """
+        key = f"{strategy_id}_{symbol}"
+        current_time = datetime.now()
+        last_check = self.last_ema_check_time.get(key)
+
+        if last_check is None:
+            # 首次检查
+            self.last_ema_check_time[key] = current_time
+            return True
+
+        elapsed = (current_time - last_check).total_seconds()
+        if elapsed >= self.ema_check_interval:
+            self.last_ema_check_time[key] = current_time
+            return True
+
+        return False
+
     def _save_trade_record(self, symbol: str, action: str, direction: str, 
                             entry_price: float, exit_price: Optional[float], quantity: float, leverage: int, 
                             fee: Optional[float] = None, realized_pnl: Optional[float] = None,
@@ -1049,13 +1081,16 @@ class StrategyExecutor:
         sell_pair = latest_sell_pair
         sell_kline = sell_pair['kline']
         sell_indicator = sell_pair['indicator']
-        
+
         # 使用实时价格
         close_price = realtime_price
         high_price = realtime_price  # 实时运行时，使用实时价格作为high和low
         low_price = realtime_price
         volume_ratio = float(sell_indicator['volume_ratio']) if sell_indicator.get('volume_ratio') else 1.0
-        
+
+        # EMA信号每60秒检查一次，止损止盈每5秒检查
+        should_check_ema = self.should_check_ema_signal(strategy_id, symbol)
+
         # 实时运行：先检查卖出信号（平仓），再检查买入信号（开仓）
         # 1. 检查卖出信号（平仓）- 使用实时价格
         if len(positions) > 0:
@@ -1377,7 +1412,8 @@ class StrategyExecutor:
                             closed_at_current_time = True
             
             # 检查卖出信号（使用实时价格）- 只检测最新K线的穿越（与买入逻辑一致）
-            if not closed_at_current_time and len(positions) > 0:
+            # EMA信号每60秒检查一次，止损止盈每5秒检查（上面已处理）
+            if not closed_at_current_time and len(positions) > 0 and should_check_ema:
                 sell_signal_triggered = False
                 current_sell_index = len(sell_indicator_pairs) - 1
 
@@ -1547,12 +1583,13 @@ class StrategyExecutor:
                             closed_at_current_time = True
         
         # 2. 检查买入信号（开仓）- 使用实时价格
+        # EMA信号每60秒检查一次（should_check_ema 在卖出信号检查时已设置）
         # 先遍历过去24小时内的所有K线对，检查是否有EMA穿越信号
         # EMA穿越信号需要比较相邻两个K线的EMA值，不能只检查当前K线
-        
+
         # 使用实时价格
         entry_price_base = realtime_price
-        
+
         # 初始化变量
         buy_signal_triggered = False
         found_golden_cross = False
@@ -1567,10 +1604,11 @@ class StrategyExecutor:
         ma10_ema10_diff = None
         ma10_ema10_diff_pct = None
         curr_diff_pct = 0
-        
+
         # 只检测最新K线是否发生穿越（使用24小时数据计算EMA，但只在当前穿越时买入）
+        # 只有当 should_check_ema 为 True 时才检查买入信号
         current_buy_index = len(buy_indicator_pairs) - 1
-        if current_buy_index > 0:
+        if current_buy_index > 0 and should_check_ema:
             # 只检测最新K线与前一根K线之间是否发生穿越
             curr_pair = buy_indicator_pairs[current_buy_index]
             prev_pair = buy_indicator_pairs[current_buy_index - 1]
