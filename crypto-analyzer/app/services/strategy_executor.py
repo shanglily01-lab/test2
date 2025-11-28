@@ -238,12 +238,7 @@ class StrategyExecutor:
             buy_volume_long = strategy.get('buyVolumeLong')
             buy_volume_short = strategy.get('buyVolumeShort')
             sell_signal = strategy.get('sellSignals')
-            sell_volume_enabled = strategy.get('sellVolumeEnabled', False)
-            sell_volume = strategy.get('sellVolume')
-            sell_volume_long_enabled = strategy.get('sellVolumeLongEnabled', False)
-            sell_volume_short_enabled = strategy.get('sellVolumeShortEnabled', False)
-            sell_volume_long = strategy.get('sellVolumeLong')
-            sell_volume_short = strategy.get('sellVolumeShort')
+            # 平仓成交量已移除，不再限制
             position_size = strategy.get('positionSize', 10)
             max_positions = strategy.get('maxPositions')  # 最大持仓数
             max_long_positions = strategy.get('maxLongPositions')  # 最大做多持仓数
@@ -469,12 +464,6 @@ class StrategyExecutor:
                     buy_volume_long=buy_volume_long,
                     buy_volume_short=buy_volume_short,
                     sell_signal=sell_signal,
-                    sell_volume_enabled=sell_volume_enabled,
-                    sell_volume=sell_volume,
-                    sell_volume_long_enabled=sell_volume_long_enabled,
-                    sell_volume_short_enabled=sell_volume_short_enabled,
-                    sell_volume_long=sell_volume_long,
-                    sell_volume_short=sell_volume_short,
                     position_size=position_size,
                     max_positions=max_positions,
                     long_price_type=long_price_type,
@@ -817,12 +806,7 @@ class StrategyExecutor:
         buy_volume_long = kwargs.get('buy_volume_long')
         buy_volume_short = kwargs.get('buy_volume_short')
         sell_signal = kwargs.get('sell_signal')
-        sell_volume_enabled = kwargs.get('sell_volume_enabled', False)
-        sell_volume = kwargs.get('sell_volume')
-        sell_volume_long_enabled = kwargs.get('sell_volume_long_enabled', False)
-        sell_volume_short_enabled = kwargs.get('sell_volume_short_enabled', False)
-        sell_volume_long = kwargs.get('sell_volume_long')
-        sell_volume_short = kwargs.get('sell_volume_short')
+        # 平仓成交量已移除，不再限制
         position_size = kwargs.get('position_size', 10)
         max_positions = kwargs.get('max_positions')  # 最大持仓数
         long_price_type = kwargs.get('long_price_type', 'market')
@@ -1503,77 +1487,8 @@ class StrategyExecutor:
                             if not sell_signal_triggered:
                                 sell_status = "多头" if sell_ema_short > sell_ema_long else "空头"
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 EMA9/26状态 - {sell_status} | EMA9={sell_ema_short:.4f}, EMA26={sell_ema_long:.4f}, 当前K线未发生反向穿越")
-                
-                # 检查卖出成交量条件（按持仓方向分开检查）
-                sell_volume_condition_met_by_direction = {}
-                for pos in positions:
-                    pos_direction = pos.get('direction')
-                    if pos_direction == 'long':
-                        # 平仓做多：支持 any, <1, 1-2, >2
-                        if sell_volume_long_enabled and sell_volume_long:
-                            volume_condition = sell_volume_long
-                            if volume_condition == 'any':
-                                sell_volume_condition_met_by_direction['long'] = True
-                            elif volume_condition == '<1':
-                                sell_volume_condition_met_by_direction['long'] = volume_ratio < 1.0
-                            elif volume_condition == '1-2':
-                                sell_volume_condition_met_by_direction['long'] = (1.0 <= volume_ratio <= 2.0)
-                            elif volume_condition == '>2':
-                                sell_volume_condition_met_by_direction['long'] = volume_ratio > 2.0
-                            else:
-                                # 兼容旧格式
-                                try:
-                                    required_ratio = float(volume_condition)
-                                    sell_volume_condition_met_by_direction['long'] = volume_ratio >= required_ratio
-                                except:
-                                    sell_volume_condition_met_by_direction['long'] = True
-                        else:
-                            sell_volume_condition_met_by_direction['long'] = True
-                    elif pos_direction == 'short':
-                        # 平仓做空：支持 any, <1, 1-2, >2
-                        if sell_volume_short_enabled and sell_volume_short:
-                            volume_condition = sell_volume_short
-                            if volume_condition == 'any':
-                                sell_volume_condition_met_by_direction['short'] = True
-                            elif volume_condition == '<1':
-                                sell_volume_condition_met_by_direction['short'] = volume_ratio < 1.0
-                            elif volume_condition == '1-2':
-                                sell_volume_condition_met_by_direction['short'] = (1.0 <= volume_ratio <= 2.0)
-                            elif volume_condition == '>2':
-                                sell_volume_condition_met_by_direction['short'] = volume_ratio > 2.0
-                            else:
-                                # 兼容旧格式
-                                try:
-                                    required_ratio = float(volume_condition)
-                                    sell_volume_condition_met_by_direction['short'] = volume_ratio >= required_ratio
-                                except:
-                                    sell_volume_condition_met_by_direction['short'] = True
-                        else:
-                            sell_volume_condition_met_by_direction['short'] = True
 
-                # 兼容旧的单一卖出成交量设置（如果没有启用分开的设置）
-                if sell_volume_enabled and sell_volume and not sell_volume_long_enabled and not sell_volume_short_enabled:
-                    sell_volume_condition_met = True
-                    if sell_volume == '>1':
-                        if volume_ratio <= 1.0:
-                            sell_volume_condition_met = False
-                    elif sell_volume == '0.8-1':
-                        if not (0.8 <= volume_ratio <= 1.0):
-                            sell_volume_condition_met = False
-                    elif sell_volume == '0.6-0.8':
-                        if not (0.6 <= volume_ratio < 0.8):
-                            sell_volume_condition_met = False
-                    elif sell_volume == '<0.6':
-                        if volume_ratio >= 0.6:
-                            sell_volume_condition_met = False
-                    # 应用到所有方向
-                    sell_volume_condition_met_by_direction = {'long': sell_volume_condition_met, 'short': sell_volume_condition_met}
-
-                # 如果卖出信号触发但成交量条件不满足，记录日志
-                sell_volume_check_result = all(sell_volume_condition_met_by_direction.get(p['direction'], True) for p in positions)
-                if sell_signal_triggered and not sell_volume_check_result:
-                    failed_directions = [d for d, met in sell_volume_condition_met_by_direction.items() if not met]
-                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出信号已触发，但成交量条件不满足（成交量比率={volume_ratio:.2f}x，{failed_directions}方向不满足），跳过平仓")
+                # 平仓成交量条件已移除，直接执行卖出
 
                 # 执行卖出（使用实时价格）
                 if sell_signal_triggered:
@@ -1582,10 +1497,6 @@ class StrategyExecutor:
                         entry_price = position['entry_price']
                         quantity = position['quantity']
                         direction = position['direction']
-
-                        # 检查该方向的成交量条件
-                        if not sell_volume_condition_met_by_direction.get(direction, True):
-                            continue
 
                         if position_id:
                             exit_price_decimal = Decimal(str(realtime_price))
@@ -2565,9 +2476,7 @@ class StrategyExecutor:
             'buy_volume_enabled': buy_volume_enabled,
             'buy_volume': buy_volume,
             'buy_volume_long': buy_volume_long,
-            'buy_volume_short': buy_volume_short,
-            'sell_volume_enabled': sell_volume_enabled,
-            'sell_volume': sell_volume
+            'buy_volume_short': buy_volume_short
         }
     
     def _get_connection(self):
