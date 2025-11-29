@@ -616,37 +616,6 @@
                                     </div>
 
                                     <div class="form-group">
-                                        <label class="form-label">预测入场（提前入场）</label>
-                                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
-                                            <input type="checkbox" id="predictiveEntry" name="predictiveEntry">
-                                            <label for="predictiveEntry" class="checkbox-label" style="margin: 0; font-weight: 500;">启用EMA差值收窄预测入场</label>
-                                        </div>
-                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 8px; display: block;">
-                                            当EMA9/26差值从负值收窄到接近0时，预测即将金叉，提前入场获得更好价格<br>
-                                            <strong>做多预测：</strong>EMA9 < EMA26，但差值收窄到阈值以内<br>
-                                            <strong>做空预测：</strong>EMA9 > EMA26，但差值收窄到阈值以内
-                                        </small>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
-                                            <div>
-                                                <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; display: block;">预测入场阈值 (%)</label>
-                                                <input type="number" id="predictiveEntryThreshold" name="predictiveEntryThreshold"
-                                                       step="0.01" min="0" max="1"
-                                                       placeholder="0.15"
-                                                       style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">差值收窄到此阈值以内时入场（推荐0.1-0.2%）</small>
-                                            </div>
-                                            <div>
-                                                <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; display: block;">差值收窄速度要求 (%)</label>
-                                                <input type="number" id="predictiveEntrySpeed" name="predictiveEntrySpeed"
-                                                       step="0.01" min="0" max="2"
-                                                       placeholder="0.1"
-                                                       style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">相比上一根K线，差值至少收窄此百分比（推荐0.05-0.15%）</small>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="form-group">
                                         <label class="form-label">趋势持续性检查</label>
                                         <input type="number" id="trendConfirmBars" name="trendConfirmBars" 
                                                step="1" min="0" max="10" 
@@ -1218,13 +1187,6 @@
                 if (minSignalStrength_ema9_26) minSignalStrength_ema9_26.value = '';
                 const minSignalStrength_ma10_ema10 = document.getElementById('minSignalStrength_ma10_ema10');
                 if (minSignalStrength_ma10_ema10) minSignalStrength_ma10_ema10.value = '';
-                // 清除预测入场
-                const predictiveEntry = document.getElementById('predictiveEntry');
-                if (predictiveEntry) predictiveEntry.checked = false;
-                const predictiveEntryThreshold = document.getElementById('predictiveEntryThreshold');
-                if (predictiveEntryThreshold) predictiveEntryThreshold.value = '';
-                const predictiveEntrySpeed = document.getElementById('predictiveEntrySpeed');
-                if (predictiveEntrySpeed) predictiveEntrySpeed.value = '';
                 // 清除趋势持续性检查
                 const trendConfirmBars = document.getElementById('trendConfirmBars');
                 if (trendConfirmBars) trendConfirmBars.value = '';
@@ -1564,9 +1526,6 @@
                     ema9_26: document.getElementById('minSignalStrength_ema9_26').value ? parseFloat(document.getElementById('minSignalStrength_ema9_26').value) : 0,
                     ma10_ema10: document.getElementById('minSignalStrength_ma10_ema10').value ? parseFloat(document.getElementById('minSignalStrength_ma10_ema10').value) : 0
                 },
-                predictiveEntry: document.getElementById('predictiveEntry') ? document.getElementById('predictiveEntry').checked : false,
-                predictiveEntryThreshold: document.getElementById('predictiveEntryThreshold') && document.getElementById('predictiveEntryThreshold').value ? parseFloat(document.getElementById('predictiveEntryThreshold').value) : 0.15,
-                predictiveEntrySpeed: document.getElementById('predictiveEntrySpeed') && document.getElementById('predictiveEntrySpeed').value ? parseFloat(document.getElementById('predictiveEntrySpeed').value) : 0.1,
                 trendConfirmBars: document.getElementById('trendConfirmBars').value ? parseInt(document.getElementById('trendConfirmBars').value) : 0,
                 trendConfirmEMAThreshold: document.getElementById('trendConfirmEMAThreshold') && document.getElementById('trendConfirmEMAThreshold').value ? parseFloat(document.getElementById('trendConfirmEMAThreshold').value) : 0,
                 exitOnMAFlip: document.getElementById('exitOnMAFlip') ? document.getElementById('exitOnMAFlip').checked : false,
@@ -1853,12 +1812,6 @@
                                     <div class="strategy-item-field-value">EMA9/26: ${strategy.minSignalStrength.ema9_26 || 0}%, MA10/EMA10: ${strategy.minSignalStrength.ma10_ema10 || 0}%</div>
                                 </div>
                             ` : ''}
-                            ${strategy.predictiveEntry ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">预测入场</div>
-                                    <div class="strategy-item-field-value">阈值: ${strategy.predictiveEntryThreshold || 0.15}%, 收窄速度: ${strategy.predictiveEntrySpeed || 0.1}%</div>
-                                </div>
-                            ` : ''}
                             ${strategy.trendConfirmBars ? `
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">趋势确认K线数</div>
@@ -2090,17 +2043,6 @@
             } else {
                 document.getElementById('minSignalStrength_ema9_26').value = '';
                 document.getElementById('minSignalStrength_ma10_ema10').value = '';
-            }
-
-            // 预测入场
-            if (document.getElementById('predictiveEntry')) {
-                document.getElementById('predictiveEntry').checked = strategy.predictiveEntry === true;
-            }
-            if (document.getElementById('predictiveEntryThreshold')) {
-                document.getElementById('predictiveEntryThreshold').value = strategy.predictiveEntryThreshold || '';
-            }
-            if (document.getElementById('predictiveEntrySpeed')) {
-                document.getElementById('predictiveEntrySpeed').value = strategy.predictiveEntrySpeed || '';
             }
 
             // 趋势持续性检查
