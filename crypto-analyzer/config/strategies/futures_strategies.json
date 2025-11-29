@@ -58,6 +58,13 @@
       "longMaxK": 80,
       "shortMinK": 20
     },
+    "earlyEntry": {
+      "enabled": true,
+      "gapThreshold": 0.3,
+      "requireUpwardSlope": true,
+      "requirePriceAboveEMA": true,
+      "slopeMinPct": 0.05
+    },
     "id": 1735123456790,
     "enabled": true
   },
@@ -120,6 +127,13 @@
       "longMaxK": 80,
       "shortMinK": 20
     },
+    "earlyEntry": {
+      "enabled": true,
+      "gapThreshold": 0.3,
+      "requireUpwardSlope": true,
+      "requirePriceAboveEMA": true,
+      "slopeMinPct": 0.05
+    },
     "id": 1763635511206,
     "enabled": true
   },
@@ -177,6 +191,13 @@
       "longMaxK": 80,
       "shortMinK": 20
     },
+    "earlyEntry": {
+      "enabled": true,
+      "gapThreshold": 0.3,
+      "requireUpwardSlope": true,
+      "requirePriceAboveEMA": true,
+      "slopeMinPct": 0.05
+    },
     "id": 1763636840333,
     "enabled": true
   },
@@ -233,6 +254,13 @@
       "enabled": false,
       "longMaxK": 80,
       "shortMinK": 20
+    },
+    "earlyEntry": {
+      "enabled": true,
+      "gapThreshold": 0.3,
+      "requireUpwardSlope": true,
+      "requirePriceAboveEMA": true,
+      "slopeMinPct": 0.05
     },
     "id": 1763639600185,
     "enabled": true
@@ -295,6 +323,13 @@
       "enabled": true,
       "longMaxK": 80,
       "shortMinK": 20
+    },
+    "earlyEntry": {
+      "enabled": true,
+      "gapThreshold": 0.3,
+      "requireUpwardSlope": true,
+      "requirePriceAboveEMA": true,
+      "slopeMinPct": 0.05
     },
     "id": 1763707707256,
     "enabled": true

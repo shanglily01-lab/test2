@@ -183,6 +183,10 @@ class StrategyTestService:
                 if min_signal_strength:
                     min_ema_cross_strength = max(min_ema_cross_strength, min_signal_strength.get('ema9_26', 0.0))
                     min_ma10_cross_strength = max(min_ma10_cross_strength, min_signal_strength.get('ma10_ema10', 0.0))
+                # 预测入场配置
+                predictive_entry = request.get('predictiveEntry', False)  # 启用EMA差值收窄预测入场
+                predictive_entry_threshold = request.get('predictiveEntryThreshold', 0.15)  # 差值收窄到此阈值以内时入场
+                predictive_entry_speed = request.get('predictiveEntrySpeed', 0.1)  # 差值收窄速度要求
                 trend_confirm_bars = request.get('trendConfirmBars', 0)
                 exit_on_ma_flip = request.get('exitOnMAFlip', False)  # MA10/EMA10反转时立即平仓
                 exit_on_ma_flip_threshold = request.get('exitOnMAFlipThreshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
@@ -215,7 +219,15 @@ class StrategyTestService:
                 
                 bollinger_filter = request.get('bollingerFilter', {})
                 bollinger_filter_enabled = bollinger_filter.get('enabled', False) if isinstance(bollinger_filter, dict) else False
-                
+
+                # 提前入场配置（预判金叉/死叉）
+                early_entry = request.get('earlyEntry', {})
+                early_entry_enabled = early_entry.get('enabled', False) if isinstance(early_entry, dict) else False
+                early_entry_gap_threshold = early_entry.get('gapThreshold', 0.3) if isinstance(early_entry, dict) else 0.3  # EMA差距阈值(%)
+                early_entry_require_upward_slope = early_entry.get('requireUpwardSlope', True) if isinstance(early_entry, dict) else True  # 要求EMA9向上斜率
+                early_entry_require_price_above_ema = early_entry.get('requirePriceAboveEMA', True) if isinstance(early_entry, dict) else True  # 要求价格在EMA上方
+                early_entry_slope_min_pct = early_entry.get('slopeMinPct', 0.05) if isinstance(early_entry, dict) else 0.05  # EMA斜率最小百分比
+
                 # 确定买入和卖出的时间周期
                 timeframe_map = {
                     'ema_5m': '5m',
@@ -376,6 +388,9 @@ class StrategyTestService:
                         ma10_ema10_trend_filter=ma10_ema10_trend_filter,
                         min_ema_cross_strength=min_ema_cross_strength,
                         min_ma10_cross_strength=min_ma10_cross_strength,
+                        predictive_entry=predictive_entry,
+                        predictive_entry_threshold=predictive_entry_threshold,
+                        predictive_entry_speed=predictive_entry_speed,
                         trend_confirm_bars=trend_confirm_bars,
                         trend_confirm_ema_threshold=trend_confirm_ema_threshold,
                         exit_on_ma_flip=exit_on_ma_flip,
@@ -648,7 +663,10 @@ class StrategyTestService:
         ma10_ema10_trend_filter = kwargs.get('ma10_ema10_trend_filter', False)
         min_ema_cross_strength = kwargs.get('min_ema_cross_strength', 0.0)
         min_ma10_cross_strength = kwargs.get('min_ma10_cross_strength', 0.0)
-        trend_confirm_bars = kwargs.get('trend_confirm_bars', 0)
+        # 预测入场配置
+        predictive_entry = kwargs.get('predictive_entry', False)  # 启用EMA差值收窄预测入场
+        predictive_entry_threshold = kwargs.get('predictive_entry_threshold', 0.15)  # 差值收窄到此阈值以内时入场
+        predictive_entry_speed = kwargs.get('predictive_entry_speed', 0.1)  # 差值收窄速度要求
         trend_confirm_bars = kwargs.get('trend_confirm_bars', 0)  # 趋势至少持续K线数（默认0表示不启用）
         trend_confirm_ema_threshold = kwargs.get('trend_confirm_ema_threshold', 0.0)  # 趋势确认EMA差值阈值（%），增强趋势确认
         exit_on_ma_flip = kwargs.get('exit_on_ma_flip', False)  # MA10/EMA10反转时立即平仓
@@ -969,8 +987,42 @@ class StrategyTestService:
                             
                             # 买入信号：根据 buySignals 配置决定使用哪个信号
                             signal_triggered = False
-                            
-                            if buy_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
+
+                            # 预测入场逻辑：检测EMA差值收窄，提前入场
+                            if predictive_entry and buy_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
+                                # 计算前一个时间点的EMA差值百分比
+                                prev_diff = prev_ema_short - prev_ema_long
+                                prev_diff_pct = (prev_diff / prev_ema_long * 100) if prev_ema_long > 0 else 0
+
+                                # 做多预测：EMA9 < EMA26（尚未金叉），但差值收窄到阈值以内
+                                if 'long' in buy_directions and ema_short < ema_long:
+                                    # 差值为负，检查是否收窄到阈值以内
+                                    if abs(curr_diff_pct) <= predictive_entry_threshold:
+                                        # 检查差值收窄速度：当前差值绝对值应该比前一个时间点小
+                                        narrowing_speed = abs(prev_diff_pct) - abs(curr_diff_pct)
+                                        if narrowing_speed >= predictive_entry_speed:
+                                            signal_triggered = True
+                                            buy_signal_triggered = True
+                                            found_golden_cross = True  # 标记为金叉（预测）
+                                            detected_cross_type = 'golden_predicted'
+                                            debug_info.append(f"   🔮🔮🔮 EMA预测金叉入场！差值={curr_diff_pct:+.2f}%（阈值{predictive_entry_threshold}%以内），收窄速度={narrowing_speed:.2f}%（要求≥{predictive_entry_speed}%）")
+                                            break
+
+                                # 做空预测：EMA9 > EMA26（尚未死叉），但差值收窄到阈值以内
+                                elif 'short' in buy_directions and ema_short > ema_long:
+                                    # 差值为正，检查是否收窄到阈值以内
+                                    if abs(curr_diff_pct) <= predictive_entry_threshold:
+                                        # 检查差值收窄速度
+                                        narrowing_speed = abs(prev_diff_pct) - abs(curr_diff_pct)
+                                        if narrowing_speed >= predictive_entry_speed:
+                                            signal_triggered = True
+                                            buy_signal_triggered = True
+                                            found_death_cross = True  # 标记为死叉（预测）
+                                            detected_cross_type = 'death_predicted'
+                                            debug_info.append(f"   🔮🔮🔮 EMA预测死叉入场！差值={curr_diff_pct:+.2f}%（阈值{predictive_entry_threshold}%以内），收窄速度={narrowing_speed:.2f}%（要求≥{predictive_entry_speed}%）")
+                                            break
+
+                            if buy_signal in ['ema_5m', 'ema_15m', 'ema_1h'] and not signal_triggered:
                                 # 检测 EMA9/26 金叉（做多）和死叉（做空）
                                 if is_golden_cross and 'long' in buy_directions:
                                     # 金叉 = 做多信号
@@ -1002,6 +1054,101 @@ class StrategyTestService:
                                     debug_info.append(f"   ✅✅✅ EMA9/26死叉检测成功（做空信号）！")
                                     if min_ema_cross_strength > 0:
                                         debug_info.append(f"   ✅ 信号强度检查通过 (差值={ema_strength_pct:.2f}% ≥ {min_ema_cross_strength:.2f}%)")
+                                # ==================== 提前入场预判逻辑 ====================
+                                # 如果启用了提前入场且当前没有检测到金叉/死叉，检查是否接近穿越点
+                                elif early_entry_enabled and not signal_triggered:
+                                    # 获取当前K线收盘价
+                                    curr_close = float(curr_pair['kline']['close_price']) if curr_pair['kline'].get('close_price') else None
+
+                                    # 计算EMA差距百分比（绝对值）
+                                    ema_gap_pct = abs(curr_diff_pct)
+
+                                    # 计算EMA9斜率（当前EMA9 vs 前一根K线EMA9）
+                                    ema9_slope = 0
+                                    ema9_slope_pct = 0
+                                    if prev_ema_short and ema_short:
+                                        ema9_slope = ema_short - prev_ema_short
+                                        ema9_slope_pct = (ema9_slope / prev_ema_short * 100) if prev_ema_short > 0 else 0
+
+                                    # 预判金叉条件（做多）：
+                                    # 1. 当前处于空头状态（EMA9 < EMA26）
+                                    # 2. EMA差距小于阈值（即将穿越）
+                                    # 3. EMA9斜率为正（向上趋势）
+                                    # 4. 价格在EMA9上方（可选）
+                                    if 'long' in buy_directions and ema_short < ema_long:
+                                        early_entry_conditions_met = True
+                                        early_entry_reasons = []
+
+                                        # 条件1：EMA差距检查
+                                        if ema_gap_pct > early_entry_gap_threshold:
+                                            early_entry_conditions_met = False
+                                            early_entry_reasons.append(f"EMA差距过大({ema_gap_pct:.2f}% > {early_entry_gap_threshold}%)")
+
+                                        # 条件2：EMA9向上斜率检查
+                                        if early_entry_require_upward_slope:
+                                            if ema9_slope_pct < early_entry_slope_min_pct:
+                                                early_entry_conditions_met = False
+                                                early_entry_reasons.append(f"EMA9斜率不足({ema9_slope_pct:.3f}% < {early_entry_slope_min_pct}%)")
+
+                                        # 条件3：价格在EMA9上方检查
+                                        if early_entry_require_price_above_ema and curr_close:
+                                            if curr_close <= ema_short:
+                                                early_entry_conditions_met = False
+                                                early_entry_reasons.append(f"价格未在EMA9上方(价格={curr_close:.4f}, EMA9={ema_short:.4f})")
+
+                                        if early_entry_conditions_met:
+                                            # 预判金叉成功！
+                                            signal_triggered = True
+                                            buy_signal_triggered = True
+                                            found_golden_cross = True
+                                            detected_cross_type = 'golden'
+                                            debug_info.append(f"   🔮🔮🔮 预判金叉信号（提前入场做多）！")
+                                            debug_info.append(f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差距={ema_gap_pct:.2f}%, EMA9斜率={ema9_slope_pct:+.3f}%")
+                                            if curr_close:
+                                                debug_info.append(f"   📊 当前价格={curr_close:.4f}, 价格/EMA9比={((curr_close/ema_short-1)*100):+.2f}%")
+                                        else:
+                                            # 预判条件不满足，记录原因（调试时可以看到）
+                                            pass  # 避免输出太多日志
+
+                                    # 预判死叉条件（做空）：
+                                    # 1. 当前处于多头状态（EMA9 > EMA26）
+                                    # 2. EMA差距小于阈值（即将穿越）
+                                    # 3. EMA9斜率为负（向下趋势）
+                                    # 4. 价格在EMA9下方（可选）
+                                    elif 'short' in buy_directions and ema_short > ema_long:
+                                        early_entry_conditions_met = True
+                                        early_entry_reasons = []
+
+                                        # 条件1：EMA差距检查
+                                        if ema_gap_pct > early_entry_gap_threshold:
+                                            early_entry_conditions_met = False
+                                            early_entry_reasons.append(f"EMA差距过大({ema_gap_pct:.2f}% > {early_entry_gap_threshold}%)")
+
+                                        # 条件2：EMA9向下斜率检查（做空时要求向下）
+                                        if early_entry_require_upward_slope:
+                                            if ema9_slope_pct > -early_entry_slope_min_pct:  # 做空时要求负斜率
+                                                early_entry_conditions_met = False
+                                                early_entry_reasons.append(f"EMA9斜率不足({ema9_slope_pct:.3f}% > -{early_entry_slope_min_pct}%)")
+
+                                        # 条件3：价格在EMA9下方检查（做空时）
+                                        if early_entry_require_price_above_ema and curr_close:
+                                            if curr_close >= ema_short:
+                                                early_entry_conditions_met = False
+                                                early_entry_reasons.append(f"价格未在EMA9下方(价格={curr_close:.4f}, EMA9={ema_short:.4f})")
+
+                                        if early_entry_conditions_met:
+                                            # 预判死叉成功！
+                                            signal_triggered = True
+                                            buy_signal_triggered = True
+                                            found_death_cross = True
+                                            detected_cross_type = 'death'
+                                            debug_info.append(f"   🔮🔮🔮 预判死叉信号（提前入场做空）！")
+                                            debug_info.append(f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差距={ema_gap_pct:.2f}%, EMA9斜率={ema9_slope_pct:+.3f}%")
+                                            if curr_close:
+                                                debug_info.append(f"   📊 当前价格={curr_close:.4f}, 价格/EMA9比={((curr_close/ema_short-1)*100):+.2f}%")
+                                        else:
+                                            # 预判条件不满足，记录原因（调试时可以看到）
+                                            pass  # 避免输出太多日志
                             elif buy_signal == 'ma_ema10':
                                 # 使用 MA10/EMA10 金叉
                                 if ma10_ema10_golden_cross:
