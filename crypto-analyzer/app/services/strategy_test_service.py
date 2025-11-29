@@ -839,23 +839,28 @@ class StrategyTestService:
             }
         
         # 合并所有时间点，按时间顺序处理
+        # 使用分钟级别的时间戳进行去重，避免毫秒差异导致的重复
         all_time_points = []
-        buy_times_added = set()  # 用于去重买入时间点
+        buy_times_added = set()  # 用于去重买入时间点（分钟级别）
         for pair in buy_indicator_pairs:
             time_key = pair['indicator']['updated_at']
-            if time_key not in buy_times_added:
-                buy_times_added.add(time_key)
+            # 转换为分钟级别的时间戳进行去重
+            time_minute_key = time_key.replace(second=0, microsecond=0) if hasattr(time_key, 'replace') else time_key
+            if time_minute_key not in buy_times_added:
+                buy_times_added.add(time_minute_key)
                 all_time_points.append({
                     'time': time_key,
                     'type': 'buy',
                     'pair': pair
                 })
 
-        sell_times_added = set()  # 用于去重卖出时间点
+        sell_times_added = set()  # 用于去重卖出时间点（分钟级别）
         for pair in sell_indicator_pairs:
             time_key = pair['indicator']['updated_at']
-            if time_key not in sell_times_added:
-                sell_times_added.add(time_key)
+            # 转换为分钟级别的时间戳进行去重
+            time_minute_key = time_key.replace(second=0, microsecond=0) if hasattr(time_key, 'replace') else time_key
+            if time_minute_key not in sell_times_added:
+                sell_times_added.add(time_minute_key)
                 all_time_points.append({
                     'time': time_key,
                     'type': 'sell',
@@ -868,7 +873,8 @@ class StrategyTestService:
         # 记录当前时间点是否已经平仓（用于防止滚仓）
         last_processed_time = None
         closed_at_current_time = False
-        last_logged_buy_time = None  # 用于防止同一时间点重复输出日志
+        last_logged_buy_time = None  # 用于防止同一时间点重复输出买入日志（分钟级别）
+        last_logged_sell_time = None  # 用于防止同一时间点重复输出卖出日志（分钟级别）
         
         # 遍历所有时间点
         for time_point in all_time_points:
@@ -914,9 +920,10 @@ class StrategyTestService:
                 ma10_ema10_diff_pct = (ma10_ema10_diff / ma10 * 100) if (ma10_ema10_diff and ma10 and ma10 > 0) else None
                 ma10_ema10_status = "多头" if (ema10 and ma10 and ema10 > ma10) else "空头" if (ema10 and ma10 and ema10 < ma10) else "中性"
 
-                # 记录EMA9/26状态（防止同一时间点重复输出）
-                if last_logged_buy_time != current_time:
-                    last_logged_buy_time = current_time
+                # 记录EMA9/26状态（防止同一时间点重复输出，使用分钟级别比较）
+                current_time_minute = current_time.replace(second=0, microsecond=0) if hasattr(current_time, 'replace') else current_time
+                if last_logged_buy_time != current_time_minute:
+                    last_logged_buy_time = current_time_minute
                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: 📊 EMA9/26状态 - {curr_status} | EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)")
 
                     # 记录MA10/EMA10状态
@@ -1923,10 +1930,12 @@ class StrategyTestService:
                     if len(positions) > 0:
                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出时间周期历史数据不足，无法检测卖出信号（需要至少1个历史数据点）")
                 
-                # 如果持仓存在但没有卖出信号，记录日志（每10个时间点记录一次，避免日志过多）
+                # 如果持仓存在但没有卖出信号，记录日志（每30分钟记录一次，避免日志过多）
                 if len(positions) > 0 and not sell_signal_triggered:
-                    # 使用时间戳的分钟数来判断是否记录（每10分钟记录一次）
-                    if current_time_local.minute % 10 == 0:
+                    # 使用时间戳的分钟数来判断是否记录（每30分钟记录一次）
+                    current_sell_time_minute = current_time.replace(second=0, microsecond=0) if hasattr(current_time, 'replace') else current_time
+                    if current_time_local.minute % 30 == 0 and last_logged_sell_time != current_sell_time_minute:
+                        last_logged_sell_time = current_sell_time_minute
                         position_info = ', '.join([f"{p['direction']}({p['entry_price']:.4f})" for p in positions])
                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: 📊 当前持仓: {position_info}，未检测到卖出信号（{sell_signal}）")
 
