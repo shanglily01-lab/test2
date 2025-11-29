@@ -840,25 +840,35 @@ class StrategyTestService:
         
         # 合并所有时间点，按时间顺序处理
         all_time_points = []
+        buy_times_added = set()  # 用于去重买入时间点
         for pair in buy_indicator_pairs:
-            all_time_points.append({
-                'time': pair['indicator']['updated_at'],
-                'type': 'buy',
-                'pair': pair
-            })
+            time_key = pair['indicator']['updated_at']
+            if time_key not in buy_times_added:
+                buy_times_added.add(time_key)
+                all_time_points.append({
+                    'time': time_key,
+                    'type': 'buy',
+                    'pair': pair
+                })
+
+        sell_times_added = set()  # 用于去重卖出时间点
         for pair in sell_indicator_pairs:
-            all_time_points.append({
-                'time': pair['indicator']['updated_at'],
-                'type': 'sell',
-                'pair': pair
-            })
-        
+            time_key = pair['indicator']['updated_at']
+            if time_key not in sell_times_added:
+                sell_times_added.add(time_key)
+                all_time_points.append({
+                    'time': time_key,
+                    'type': 'sell',
+                    'pair': pair
+                })
+
         # 按时间排序，如果时间相同，先处理卖出（type='sell'排在前面）
         all_time_points.sort(key=lambda x: (x['time'], 0 if x['type'] == 'sell' else 1))
-        
+
         # 记录当前时间点是否已经平仓（用于防止滚仓）
         last_processed_time = None
         closed_at_current_time = False
+        last_logged_buy_time = None  # 用于防止同一时间点重复输出日志
         
         # 遍历所有时间点
         for time_point in all_time_points:
@@ -896,20 +906,22 @@ class StrategyTestService:
                 curr_diff = ema_short - ema_long
                 curr_diff_pct = (curr_diff / ema_long * 100) if ema_long > 0 else 0
                 curr_status = "多头" if ema_short > ema_long else "空头"
-                
+
                 # 获取MA10/EMA10数据
                 ma10 = float(indicator.get('ma10')) if indicator.get('ma10') else None
                 ema10 = float(indicator.get('ema10')) if indicator.get('ema10') else None
                 ma10_ema10_diff = (ema10 - ma10) if (ema10 and ma10) else None
                 ma10_ema10_diff_pct = (ma10_ema10_diff / ma10 * 100) if (ma10_ema10_diff and ma10 and ma10 > 0) else None
                 ma10_ema10_status = "多头" if (ema10 and ma10 and ema10 > ma10) else "空头" if (ema10 and ma10 and ema10 < ma10) else "中性"
-                
-                # 记录EMA9/26状态
-                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: 📊 EMA9/26状态 - {curr_status} | EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)")
-                
-                # 记录MA10/EMA10状态
-                if ma10 and ema10:
-                    debug_info.append(f"   📊 MA10/EMA10状态 - {ma10_ema10_status} | MA10={ma10:.4f}, EMA10={ema10:.4f}, 差值={ma10_ema10_diff:.4f} ({ma10_ema10_diff_pct:+.2f}%)" if ma10_ema10_diff_pct else f"   📊 MA10/EMA10状态 - {ma10_ema10_status} | MA10={ma10:.4f}, EMA10={ema10:.4f}")
+
+                # 记录EMA9/26状态（防止同一时间点重复输出）
+                if last_logged_buy_time != current_time:
+                    last_logged_buy_time = current_time
+                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: 📊 EMA9/26状态 - {curr_status} | EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)")
+
+                    # 记录MA10/EMA10状态
+                    if ma10 and ema10:
+                        debug_info.append(f"   📊 MA10/EMA10状态 - {ma10_ema10_status} | MA10={ma10:.4f}, EMA10={ema10:.4f}, 差值={ma10_ema10_diff:.4f} ({ma10_ema10_diff_pct:+.2f}%)" if ma10_ema10_diff_pct else f"   📊 MA10/EMA10状态 - {ma10_ema10_status} | MA10={ma10:.4f}, EMA10={ema10:.4f}")
                 
                 # 检查MA10/EMA10交叉
                 ma10_ema10_golden_cross = False

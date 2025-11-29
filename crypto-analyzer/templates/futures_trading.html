@@ -575,7 +575,8 @@
                                             <th>平仓原因</th>
                                             <th>止盈止损</th>
                                             <th>手续费</th>
-                                            <th>时间</th>
+                                            <th>开仓时间</th>
+                                            <th>平仓时间</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tradesBody">
@@ -1879,7 +1880,18 @@
                         const isLong = trade.side === 'CLOSE_LONG';
                         const sideText = isLong ? '多' : '空';
                         const sideBadge = isLong ? 'badge-success' : 'badge-danger';
-                        
+
+                        // 格式化时间函数
+                        function formatTradeTime(timeStr) {
+                            if (!timeStr) return '--';
+                            const date = new Date(timeStr);
+                            const month = String(date.getMonth() + 1).padStart(2, '0');
+                            const day = String(date.getDate()).padStart(2, '0');
+                            const hours = String(date.getHours()).padStart(2, '0');
+                            const minutes = String(date.getMinutes()).padStart(2, '0');
+                            return `${month}-${day} ${hours}:${minutes}`;
+                        }
+
                         return `
                         <tr>
                             <td><strong>${trade.symbol}</strong></td>
@@ -1899,7 +1911,8 @@
                             <td class="text-sm">${formatCloseReason(trade.order_source)}</td>
                             <td class="text-sm">${formatStopLossTakeProfit(trade.stop_loss_price, trade.take_profit_price)}</td>
                             <td class="text-sm">${formatLargeNumber(trade.fee || 0)}</td>
-                            <td class="text-sm text-secondary">${trade.trade_time ? new Date(trade.trade_time).toLocaleString('zh-CN') : '--'}</td>
+                            <td class="text-sm text-secondary">${formatTradeTime(trade.open_time)}</td>
+                            <td class="text-sm text-secondary">${formatTradeTime(trade.close_time)}</td>
                         </tr>
                     `;
                     }).join('');
