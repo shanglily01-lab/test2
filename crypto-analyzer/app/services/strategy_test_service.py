@@ -1068,8 +1068,8 @@ class StrategyTestService:
                                 # ==================== 提前入场预判逻辑 ====================
                                 # 如果启用了提前入场且当前没有检测到金叉/死叉，检查是否接近穿越点
                                 elif early_entry_enabled and not signal_triggered:
-                                    # 获取当前K线收盘价
-                                    curr_close = float(curr_pair['kline']['close_price']) if curr_pair['kline'].get('close_price') else None
+                                    # 获取当前K线收盘价（使用已定义的 close_price 变量）
+                                    curr_close = close_price
 
                                     # 计算EMA差距百分比（绝对值）
                                     ema_gap_pct = abs(curr_diff_pct)
