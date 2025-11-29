@@ -751,10 +751,11 @@
                                             </small>
                                             <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 6px; padding: 8px 12px; margin-left: 26px; margin-bottom: 12px;">
                                                 <small style="color: #ffc107; font-size: 11px; display: block;">
-                                                    ⚡ <strong>注意：</strong>预判信号会跳过以下过滤器以实现真正的"提前入场"：
+                                                    ⚡ <strong>注意：</strong>预判信号会跳过部分过滤器以实现"提前入场"：
                                                 </small>
                                                 <small style="color: var(--text-secondary); font-size: 10px; display: block; margin-top: 4px; line-height: 1.5;">
-                                                    RSI过滤、MACD过滤、KDJ过滤、MA10/EMA10趋势确认、趋势持续性检查、反向持仓平仓(closeOppositeOnEntry)
+                                                    跳过：MACD过滤、KDJ过滤、MA10/EMA10趋势确认、趋势持续性检查、反向持仓平仓<br>
+                                                    保留：RSI极端值过滤（做多RSI&gt;80、做空RSI&lt;20时仍会过滤）
                                                 </small>
                                             </div>
                                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 8px;">
@@ -1811,7 +1812,7 @@
                             ${strategy.earlyEntry && strategy.earlyEntry.enabled ? `
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">🔮 提前入场</div>
-                                    <div class="strategy-item-field-value">✅ 已启用 (差距≤${strategy.earlyEntry.gapThreshold || 0.3}%, 斜率≥${strategy.earlyEntry.slopeMinPct || 0.05}%)<br><small style="color: #ffc107; font-size: 10px;">⚡ 跳过技术指标过滤器</small></div>
+                                    <div class="strategy-item-field-value">✅ 已启用 (差距≤${strategy.earlyEntry.gapThreshold || 0.3}%, 斜率≥${strategy.earlyEntry.slopeMinPct || 0.05}%)<br><small style="color: #ffc107; font-size: 10px;">⚡ 跳过部分过滤器，保留RSI极端值过滤</small></div>
                                 </div>
                             ` : ''}
                             ${strategy.minSignalStrength ? `

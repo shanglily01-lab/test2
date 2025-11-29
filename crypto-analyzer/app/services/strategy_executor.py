@@ -2204,22 +2204,39 @@ class StrategyExecutor:
                             trend_confirm_ok = True
                             logger.info(f"{symbol} [{buy_timeframe}]: 🔍 开始趋势确认和过滤检查 (方向: {direction})")
                                     
-                            # 检查 RSI 过滤（预判信号跳过此过滤）
-                            if rsi_filter_enabled and not is_early_entry_signal:
+                            # 检查 RSI 过滤
+                            # 预判信号只检查极端值（RSI<20或RSI>80），确认信号检查正常阈值
+                            if rsi_filter_enabled:
                                 rsi_value = float(buy_indicator.get('rsi')) if buy_indicator.get('rsi') else None
                                 if rsi_value is not None:
-                                    if direction == 'long' and rsi_value > rsi_long_max:
-                                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做多时RSI过高 (RSI={rsi_value:.2f} > {rsi_long_max})，已过滤"
-                                        debug_info.append(msg)
-                                        logger.info(f"{symbol} {msg}")
-                                        trend_confirm_ok = False
-                                    elif direction == 'short' and rsi_value < rsi_short_min:
-                                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤"
-                                        debug_info.append(msg)
-                                        logger.info(f"{symbol} {msg}")
-                                        trend_confirm_ok = False
+                                    if is_early_entry_signal:
+                                        # 预判信号：只过滤RSI极端值
+                                        if direction == 'long' and rsi_value > 80:
+                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI极端值过滤(预判)：做多时RSI过高 (RSI={rsi_value:.2f} > 80)，已过滤"
+                                            debug_info.append(msg)
+                                            logger.info(f"{symbol} {msg}")
+                                            trend_confirm_ok = False
+                                        elif direction == 'short' and rsi_value < 20:
+                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI极端值过滤(预判)：做空时RSI过低 (RSI={rsi_value:.2f} < 20)，已过滤"
+                                            debug_info.append(msg)
+                                            logger.info(f"{symbol} {msg}")
+                                            trend_confirm_ok = False
+                                        else:
+                                            logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI极端值检查通过(预判) (RSI={rsi_value:.2f})")
                                     else:
-                                        logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI过滤通过 (RSI={rsi_value:.2f})")
+                                        # 确认信号：使用正常阈值
+                                        if direction == 'long' and rsi_value > rsi_long_max:
+                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做多时RSI过高 (RSI={rsi_value:.2f} > {rsi_long_max})，已过滤"
+                                            debug_info.append(msg)
+                                            logger.info(f"{symbol} {msg}")
+                                            trend_confirm_ok = False
+                                        elif direction == 'short' and rsi_value < rsi_short_min:
+                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤"
+                                            debug_info.append(msg)
+                                            logger.info(f"{symbol} {msg}")
+                                            trend_confirm_ok = False
+                                        else:
+                                            logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI过滤通过 (RSI={rsi_value:.2f})")
                                     
                             # 检查 MACD 过滤（预判信号跳过此过滤）
                             if trend_confirm_ok and macd_filter_enabled and not is_early_entry_signal:

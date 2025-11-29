@@ -1387,16 +1387,27 @@ class StrategyTestService:
                                     qty_precision = self.get_quantity_precision(symbol)
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 开{direction}仓前平掉{opp_direction_text}持仓 | 入场价={opp_entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={opp_quantity:.{qty_precision}f}, 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%)")
                         
-                        # 检查 RSI 过滤（预判信号跳过此过滤）
-                        if rsi_filter_enabled and not is_early_entry_signal:
+                        # 检查 RSI 过滤
+                        # 预判信号只检查极端值（RSI<20或RSI>80），确认信号检查正常阈值
+                        if rsi_filter_enabled:
                             rsi_value = float(indicator.get('rsi')) if indicator.get('rsi') else None
                             if rsi_value is not None:
-                                if direction == 'long' and rsi_value > rsi_long_max:
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做多时RSI过高 (RSI={rsi_value:.2f} > {rsi_long_max})，已过滤")
-                                    continue
-                                elif direction == 'short' and rsi_value < rsi_short_min:
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤")
-                                    continue
+                                if is_early_entry_signal:
+                                    # 预判信号：只过滤RSI极端值
+                                    if direction == 'long' and rsi_value > 80:
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI极端值过滤(预判)：做多时RSI过高 (RSI={rsi_value:.2f} > 80)，已过滤")
+                                        continue
+                                    elif direction == 'short' and rsi_value < 20:
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI极端值过滤(预判)：做空时RSI过低 (RSI={rsi_value:.2f} < 20)，已过滤")
+                                        continue
+                                else:
+                                    # 确认信号：使用正常阈值
+                                    if direction == 'long' and rsi_value > rsi_long_max:
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做多时RSI过高 (RSI={rsi_value:.2f} > {rsi_long_max})，已过滤")
+                                        continue
+                                    elif direction == 'short' and rsi_value < rsi_short_min:
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤")
+                                        continue
                         
                         # 检查 MACD 过滤（预判信号跳过此过滤）
                         if macd_filter_enabled and not is_early_entry_signal:
