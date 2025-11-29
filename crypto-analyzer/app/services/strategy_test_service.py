@@ -1683,33 +1683,44 @@ class StrategyTestService:
                     prev_indicator = prev_pair['indicator']
                     
                     # 检查 MA10/EMA10 反转退出（带阈值，避免小幅波动触发）
-                    if exit_on_ma_flip:
+                    # 只有当反转方向与持仓方向相反时才触发退出
+                    if exit_on_ma_flip and positions:
                         if indicator.get('ma10') and indicator.get('ema10') and \
                            prev_indicator.get('ma10') and prev_indicator.get('ema10'):
                             ma10 = float(indicator['ma10'])
                             ema10 = float(indicator['ema10'])
                             prev_ma10 = float(prev_indicator['ma10'])
                             prev_ema10 = float(prev_indicator['ema10'])
-                            
-                            # 计算MA10/EMA10差值百分比
-                            prev_diff = prev_ema10 - prev_ma10
-                            prev_diff_pct = abs(prev_diff / prev_ma10 * 100) if prev_ma10 > 0 else 0
+
+                            # 计算MA10/EMA10差值百分比（带符号，正=多头，负=空头）
                             curr_diff = ema10 - ma10
-                            curr_diff_pct = abs(curr_diff / ma10 * 100) if ma10 > 0 else 0
-                            
-                            # 检查是否反转（从多头转为空头，或从空头转为多头）
-                            prev_bullish = prev_ema10 > prev_ma10
-                            curr_bullish = ema10 > ma10
-                            
-                            # 只有当差值百分比超过阈值时才触发反转退出（避免小幅波动）
-                            if prev_bullish != curr_bullish:
-                                # 检查差值是否超过阈值
-                                if prev_diff_pct >= exit_on_ma_flip_threshold or curr_diff_pct >= exit_on_ma_flip_threshold:
+                            curr_diff_pct = (curr_diff / ma10 * 100) if ma10 > 0 else 0
+
+                            # 检查当前MA10/EMA10状态
+                            curr_bullish = ema10 > ma10  # 当前是多头状态
+
+                            # 获取当前持仓方向（取第一个持仓的方向）
+                            position_direction = positions[0]['direction']
+
+                            # 只有当MA状态与持仓方向相反，且差值超过阈值时才触发退出
+                            # 做多时：MA转为空头（curr_bullish=False）且空头差值超过阈值
+                            # 做空时：MA转为多头（curr_bullish=True）且多头差值超过阈值
+                            if position_direction == 'long' and not curr_bullish:
+                                # 做多但MA转空头，检查空头差值是否超过阈值
+                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold:
                                     should_exit = True
-                                    exit_reason = f'MA10/EMA10反转(阈值≥{exit_on_ma_flip_threshold}%)'
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 检测到MA10/EMA10反转，触发退出机制（前差值={prev_diff_pct:.2f}%，当前差值={curr_diff_pct:.2f}%，阈值={exit_on_ma_flip_threshold}%）")
+                                    exit_reason = f'MA10/EMA10转空头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%)'
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做多持仓检测到MA10/EMA10转空头，触发退出（差值={curr_diff_pct:.2f}%，阈值={exit_on_ma_flip_threshold}%）")
                                 else:
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 📊 MA10/EMA10反转但差值过小（前差值={prev_diff_pct:.2f}%，当前差值={curr_diff_pct:.2f}% < 阈值{exit_on_ma_flip_threshold}%），忽略")
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 📊 MA10/EMA10转空头但差值过小（差值={abs(curr_diff_pct):.2f}% < 阈值{exit_on_ma_flip_threshold}%），忽略")
+                            elif position_direction == 'short' and curr_bullish:
+                                # 做空但MA转多头，检查多头差值是否超过阈值
+                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold:
+                                    should_exit = True
+                                    exit_reason = f'MA10/EMA10转多头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%)'
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做空持仓检测到MA10/EMA10转多头，触发退出（差值={curr_diff_pct:.2f}%，阈值={exit_on_ma_flip_threshold}%）")
+                                else:
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 📊 MA10/EMA10转多头但差值过小（差值={abs(curr_diff_pct):.2f}% < 阈值{exit_on_ma_flip_threshold}%），忽略")
                     
                     # 检查 EMA 弱信号退出（使用可配置阈值）
                     if not should_exit and exit_on_ema_weak:
