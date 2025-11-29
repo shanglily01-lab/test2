@@ -2204,8 +2204,8 @@ class StrategyExecutor:
                             trend_confirm_ok = True
                             logger.info(f"{symbol} [{buy_timeframe}]: 🔍 开始趋势确认和过滤检查 (方向: {direction})")
                                     
-                            # 检查 RSI 过滤
-                            if rsi_filter_enabled:
+                            # 检查 RSI 过滤（预判信号跳过此过滤）
+                            if rsi_filter_enabled and not is_early_entry_signal:
                                 rsi_value = float(buy_indicator.get('rsi')) if buy_indicator.get('rsi') else None
                                 if rsi_value is not None:
                                     if direction == 'long' and rsi_value > rsi_long_max:
@@ -2221,8 +2221,8 @@ class StrategyExecutor:
                                     else:
                                         logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI过滤通过 (RSI={rsi_value:.2f})")
                                     
-                            # 检查 MACD 过滤
-                            if trend_confirm_ok and macd_filter_enabled:
+                            # 检查 MACD 过滤（预判信号跳过此过滤）
+                            if trend_confirm_ok and macd_filter_enabled and not is_early_entry_signal:
                                 macd_histogram = float(buy_indicator.get('macd_histogram')) if buy_indicator.get('macd_histogram') else None
                                 if macd_histogram is not None:
                                             if direction == 'long' and macd_long_require_positive and macd_histogram <= 0:
@@ -2238,8 +2238,8 @@ class StrategyExecutor:
                                             else:
                                                 logger.debug(f"{symbol} [{buy_timeframe}]: ✅ MACD过滤通过 (MACD={macd_histogram:.4f})")
                                     
-                            # 检查 KDJ 过滤
-                            if trend_confirm_ok and kdj_filter_enabled:
+                            # 检查 KDJ 过滤（预判信号跳过此过滤）
+                            if trend_confirm_ok and kdj_filter_enabled and not is_early_entry_signal:
                                 kdj_k = float(buy_indicator.get('kdj_k')) if buy_indicator.get('kdj_k') else None
                                 if kdj_k is not None:
                                     ema_diff_pct_abs = abs(curr_diff_pct) if curr_diff_pct is not None else 0
@@ -2260,8 +2260,8 @@ class StrategyExecutor:
                                     else:
                                         logger.debug(f"{symbol} [{buy_timeframe}]: ✅ KDJ过滤通过 (K={kdj_k:.2f})")
                                     
-                            # 检查 MA10/EMA10 信号强度
-                            if trend_confirm_ok:
+                            # 检查 MA10/EMA10 信号强度（预判信号跳过此过滤）
+                            if trend_confirm_ok and not is_early_entry_signal:
                                 ma10_ema10_ok = True
                                 if ma10 and ema10:
                                     if min_ma10_cross_strength > 0:
@@ -2283,11 +2283,11 @@ class StrategyExecutor:
                                     if min_ma10_cross_strength > 0 or ma10_ema10_trend_filter:
                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 缺少 MA10/EMA10 数据，跳过检查")
                                     
-                            # 检查趋势持续性
+                            # 检查趋势持续性（预判信号跳过此检查）
                             # 注意：当只检测当前K线穿越时，trend_confirm_bars > 1 的配置将导致信号永远不会触发
                             # 因为金叉刚发生，无法满足"持续N根K线"的要求
                             # 如果需要趋势确认功能，建议设置 trend_confirm_bars = 0 或 1
-                            if trend_confirm_ok and trend_confirm_bars > 0:
+                            if trend_confirm_ok and trend_confirm_bars > 0 and not is_early_entry_signal:
                                 # 找到金叉发生的索引位置
                                 golden_cross_index = None
                                 for check_lookback in range(1, min(4, current_buy_index + 1)):

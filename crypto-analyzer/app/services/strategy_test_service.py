@@ -1387,8 +1387,8 @@ class StrategyTestService:
                                     qty_precision = self.get_quantity_precision(symbol)
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 开{direction}仓前平掉{opp_direction_text}持仓 | 入场价={opp_entry_price:.4f}, 平仓价={exit_price:.4f}, 数量={opp_quantity:.{qty_precision}f}, 实际盈亏={pnl:+.2f} ({pnl_pct:+.2f}%)")
                         
-                        # 检查 RSI 过滤
-                        if rsi_filter_enabled:
+                        # 检查 RSI 过滤（预判信号跳过此过滤）
+                        if rsi_filter_enabled and not is_early_entry_signal:
                             rsi_value = float(indicator.get('rsi')) if indicator.get('rsi') else None
                             if rsi_value is not None:
                                 if direction == 'long' and rsi_value > rsi_long_max:
@@ -1398,8 +1398,8 @@ class StrategyTestService:
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤")
                                     continue
                         
-                        # 检查 MACD 过滤
-                        if macd_filter_enabled:
+                        # 检查 MACD 过滤（预判信号跳过此过滤）
+                        if macd_filter_enabled and not is_early_entry_signal:
                             macd_histogram = float(indicator.get('macd_histogram')) if indicator.get('macd_histogram') else None
                             if macd_histogram is not None:
                                 if direction == 'long' and macd_long_require_positive and macd_histogram <= 0:
@@ -1409,15 +1409,15 @@ class StrategyTestService:
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MACD过滤：做空时MACD柱状图非负 (MACD={macd_histogram:.4f})，已过滤")
                                     continue
                         
-                        # 检查 KDJ 过滤
-                        if kdj_filter_enabled:
+                        # 检查 KDJ 过滤（预判信号跳过此过滤）
+                        if kdj_filter_enabled and not is_early_entry_signal:
                             kdj_k = float(indicator.get('kdj_k')) if indicator.get('kdj_k') else None
                             if kdj_k is not None:
                                 # 检查是否为强信号（EMA差值百分比）
                                 # curr_diff_pct 在前面已经计算（第790行）
                                 ema_diff_pct_abs = abs(curr_diff_pct) if 'curr_diff_pct' in locals() and curr_diff_pct is not None else 0
                                 is_strong_signal = kdj_allow_strong_signal and ema_diff_pct_abs >= kdj_strong_signal_threshold
-                                
+
                                 if direction == 'long' and kdj_k > kdj_long_max_k:
                                     if is_strong_signal:
                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做多时KDJ K值过高 (K={kdj_k:.2f} > {kdj_long_max_k})，但EMA信号强度足够 (差值={ema_diff_pct_abs:.2f}% ≥ {kdj_strong_signal_threshold}%)，允许通过")
@@ -1431,9 +1431,9 @@ class StrategyTestService:
                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做空时KDJ K值过低 (K={kdj_k:.2f} < {kdj_short_min_k})，已过滤")
                                         continue
                         
-                        # 检查 MA10/EMA10 信号强度（如果配置了）
+                        # 检查 MA10/EMA10 信号强度（如果配置了）（预判信号跳过此过滤）
                         ma10_ema10_ok = True
-                        if ma10 and ema10:
+                        if ma10 and ema10 and not is_early_entry_signal:
                             # 检查MA10/EMA10信号强度过滤（无论是否启用trend_filter都要检查）
                             if min_ma10_cross_strength > 0:
                                 ma10_ema10_diff = ema10 - ma10
@@ -1441,7 +1441,7 @@ class StrategyTestService:
                                 if ma10_ema10_strength_pct < min_ma10_cross_strength:
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MA10/EMA10信号强度不足 (差值={ma10_ema10_strength_pct:.2f}%, 需要≥{min_ma10_cross_strength:.2f}%)，已过滤")
                                     continue
-                            
+
                             # 检查 MA10/EMA10 是否与交易方向同向（如果启用了过滤）
                             if ma10_ema10_trend_filter:
                                 if direction == 'long':
@@ -1451,16 +1451,16 @@ class StrategyTestService:
                                 if not ma10_ema10_ok:
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MA10/EMA10不同向")
                                     continue
-                        else:
-                            # 如果没有 MA10/EMA10 数据，记录警告
+                        elif not is_early_entry_signal:
+                            # 如果没有 MA10/EMA10 数据，记录警告（预判信号跳过此检查）
                             if min_ma10_cross_strength > 0 or ma10_ema10_trend_filter:
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 缺少 MA10/EMA10 数据，跳过检查")
                                 if min_ma10_cross_strength > 0:
                                     continue  # 如果要求信号强度但数据缺失，跳过
                         
-                        # 检查趋势持续性
+                        # 检查趋势持续性（预判信号跳过此检查）
                         trend_confirm_ok = True
-                        if trend_confirm_bars > 0:
+                        if trend_confirm_bars > 0 and not is_early_entry_signal:
                             # 找到金叉发生的索引位置
                             golden_cross_index = None
                             for check_lookback in range(1, min(4, current_buy_index + 1)):
