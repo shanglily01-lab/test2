@@ -326,7 +326,7 @@ class StrategyExecutor:
             early_entry_gap_threshold = early_entry.get('gapThreshold', 0.3) if isinstance(early_entry, dict) else 0.3  # EMA差距阈值(%)
             early_entry_require_upward_slope = early_entry.get('requireUpwardSlope', True) if isinstance(early_entry, dict) else True  # 要求EMA9向上斜率
             early_entry_require_price_above_ema = early_entry.get('requirePriceAboveEMA', True) if isinstance(early_entry, dict) else True  # 要求价格在EMA上方
-            early_entry_slope_min_pct = early_entry.get('slopeMinPct', 0.05) if isinstance(early_entry, dict) else 0.05  # EMA斜率最小百分比
+            early_entry_slope_min_pct = early_entry.get('slopeMinPct', 0.1) if isinstance(early_entry, dict) else 0.1  # EMA斜率最小百分比（从0.05提高到0.1）
 
             # 确定买入和卖出的时间周期
             timeframe_map = {
@@ -891,7 +891,7 @@ class StrategyExecutor:
         early_entry_gap_threshold = kwargs.get('early_entry_gap_threshold', 0.3)  # EMA差距阈值(%)
         early_entry_require_upward_slope = kwargs.get('early_entry_require_upward_slope', True)  # 要求EMA9向上斜率
         early_entry_require_price_above_ema = kwargs.get('early_entry_require_price_above_ema', True)  # 要求价格在EMA上方
-        early_entry_slope_min_pct = kwargs.get('early_entry_slope_min_pct', 0.05)  # EMA斜率最小百分比
+        early_entry_slope_min_pct = kwargs.get('early_entry_slope_min_pct', 0.1)  # EMA斜率最小百分比（从0.05提高到0.1）
         strategy_id = kwargs.get('strategy_id')
         strategy_name = kwargs.get('strategy_name', '测试策略')
         account_id = kwargs.get('account_id', 0)

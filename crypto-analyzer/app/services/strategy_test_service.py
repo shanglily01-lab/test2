@@ -226,7 +226,7 @@ class StrategyTestService:
                 early_entry_gap_threshold = early_entry.get('gapThreshold', 0.3) if isinstance(early_entry, dict) else 0.3  # EMA差距阈值(%)
                 early_entry_require_upward_slope = early_entry.get('requireUpwardSlope', True) if isinstance(early_entry, dict) else True  # 要求EMA9向上斜率
                 early_entry_require_price_above_ema = early_entry.get('requirePriceAboveEMA', True) if isinstance(early_entry, dict) else True  # 要求价格在EMA上方
-                early_entry_slope_min_pct = early_entry.get('slopeMinPct', 0.05) if isinstance(early_entry, dict) else 0.05  # EMA斜率最小百分比
+                early_entry_slope_min_pct = early_entry.get('slopeMinPct', 0.1) if isinstance(early_entry, dict) else 0.1  # EMA斜率最小百分比（从0.05提高到0.1）
 
                 # 确定买入和卖出的时间周期
                 timeframe_map = {
@@ -677,7 +677,7 @@ class StrategyTestService:
         early_entry_gap_threshold = kwargs.get('early_entry_gap_threshold', 0.3)  # EMA差距阈值(%)
         early_entry_require_upward_slope = kwargs.get('early_entry_require_upward_slope', True)  # 要求EMA9向上斜率
         early_entry_require_price_above_ema = kwargs.get('early_entry_require_price_above_ema', True)  # 要求价格在EMA上方
-        early_entry_slope_min_pct = kwargs.get('early_entry_slope_min_pct', 0.05)  # EMA斜率最小百分比
+        early_entry_slope_min_pct = kwargs.get('early_entry_slope_min_pct', 0.1)  # EMA斜率最小百分比（从0.05提高到0.1）
         trend_confirm_bars = kwargs.get('trend_confirm_bars', 0)  # 趋势至少持续K线数（默认0表示不启用）
         trend_confirm_ema_threshold = kwargs.get('trend_confirm_ema_threshold', 0.0)  # 趋势确认EMA差值阈值（%），增强趋势确认
         exit_on_ma_flip = kwargs.get('exit_on_ma_flip', False)  # MA10/EMA10反转时立即平仓

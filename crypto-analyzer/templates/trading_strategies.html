@@ -766,8 +766,8 @@
                                                 </div>
                                                 <div>
                                                     <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">EMA斜率最小值(%)</label>
-                                                    <input type="number" class="form-input" id="earlyEntrySlopeMinPct" placeholder="0.05" min="0.01" max="0.5" step="0.01" value="0.05" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">EMA9斜率需大于此值（方向正确）</small>
+                                                    <input type="number" class="form-input" id="earlyEntrySlopeMinPct" placeholder="0.1" min="0.01" max="0.5" step="0.01" value="0.1" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">EMA9斜率需大于此值（默认0.1%，越大越严格）</small>
                                                 </div>
                                             </div>
                                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 12px;">
@@ -1260,7 +1260,7 @@
                     const earlyEntryGapThreshold = document.getElementById('earlyEntryGapThreshold');
                     if (earlyEntryGapThreshold) earlyEntryGapThreshold.value = '0.3';
                     const earlyEntrySlopeMinPct = document.getElementById('earlyEntrySlopeMinPct');
-                    if (earlyEntrySlopeMinPct) earlyEntrySlopeMinPct.value = '0.05';
+                    if (earlyEntrySlopeMinPct) earlyEntrySlopeMinPct.value = '0.1';
                     const earlyEntryRequireUpwardSlope = document.getElementById('earlyEntryRequireUpwardSlope');
                     if (earlyEntryRequireUpwardSlope) earlyEntryRequireUpwardSlope.checked = true;
                     const earlyEntryRequirePriceAboveEMA = document.getElementById('earlyEntryRequirePriceAboveEMA');
@@ -1564,7 +1564,7 @@
                     gapThreshold: document.getElementById('earlyEntryGapThreshold') ? parseFloat(document.getElementById('earlyEntryGapThreshold').value) : 0.3,
                     requireUpwardSlope: document.getElementById('earlyEntryRequireUpwardSlope') ? document.getElementById('earlyEntryRequireUpwardSlope').checked : true,
                     requirePriceAboveEMA: document.getElementById('earlyEntryRequirePriceAboveEMA') ? document.getElementById('earlyEntryRequirePriceAboveEMA').checked : true,
-                    slopeMinPct: document.getElementById('earlyEntrySlopeMinPct') ? parseFloat(document.getElementById('earlyEntrySlopeMinPct').value) : 0.05
+                    slopeMinPct: document.getElementById('earlyEntrySlopeMinPct') ? parseFloat(document.getElementById('earlyEntrySlopeMinPct').value) : 0.1
                 }
             };
             
@@ -2113,7 +2113,7 @@
                     document.getElementById('earlyEntryGapThreshold').value = strategy.earlyEntry.gapThreshold || 0.3;
                     document.getElementById('earlyEntryRequireUpwardSlope').checked = strategy.earlyEntry.requireUpwardSlope !== false;
                     document.getElementById('earlyEntryRequirePriceAboveEMA').checked = strategy.earlyEntry.requirePriceAboveEMA !== false;
-                    document.getElementById('earlyEntrySlopeMinPct').value = strategy.earlyEntry.slopeMinPct || 0.05;
+                    document.getElementById('earlyEntrySlopeMinPct').value = strategy.earlyEntry.slopeMinPct || 0.1;
                 }
             }
 
