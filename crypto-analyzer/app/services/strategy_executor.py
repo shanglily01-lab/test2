@@ -1622,6 +1622,7 @@ class StrategyExecutor:
 
         # 初始化变量
         buy_signal_triggered = False
+        is_early_entry_signal = False  # 是否为预判信号（预判信号不触发closeOppositeOnEntry）
         found_golden_cross = False
         found_death_cross = False
         detected_cross_type = None
@@ -1820,6 +1821,7 @@ class StrategyExecutor:
                                     buy_signal_triggered = True
                                     found_golden_cross = True
                                     detected_cross_type = 'golden'
+                                    is_early_entry_signal = True  # 标记为预判信号
                                     buy_pair = curr_pair
                                     buy_indicator = curr_indicator
                                     ema_short = curr_ema_short
@@ -1873,6 +1875,7 @@ class StrategyExecutor:
                                     buy_signal_triggered = True
                                     found_death_cross = True
                                     detected_cross_type = 'death'
+                                    is_early_entry_signal = True  # 标记为预判信号
                                     buy_pair = curr_pair
                                     buy_indicator = curr_indicator
                                     ema_short = curr_ema_short
@@ -2136,7 +2139,8 @@ class StrategyExecutor:
                                 
                         if can_open_position:
                             # 开仓前先平掉相反方向的持仓（如果启用）
-                            if close_opposite_on_entry:
+                            # 注意：预判信号不触发此功能，只有确认信号才会平掉反向持仓
+                            if close_opposite_on_entry and not is_early_entry_signal:
                                 opposite_positions = [p for p in positions if p['direction'] != direction]
                                 if opposite_positions:
                                     for opp_position in opposite_positions[:]:

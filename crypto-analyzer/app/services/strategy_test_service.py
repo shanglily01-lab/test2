@@ -998,6 +998,7 @@ class StrategyTestService:
                             
                             # 买入信号：根据 buySignals 配置决定使用哪个信号
                             signal_triggered = False
+                            is_early_entry_signal = False  # 是否为预判信号（预判信号不触发closeOppositeOnEntry）
 
                             # 预测入场逻辑：检测EMA差值收窄，提前入场
                             if predictive_entry and buy_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
@@ -1113,6 +1114,7 @@ class StrategyTestService:
                                             buy_signal_triggered = True
                                             found_golden_cross = True
                                             detected_cross_type = 'golden'
+                                            is_early_entry_signal = True  # 标记为预判信号
                                             debug_info.append(f"   🔮🔮🔮 预判金叉信号（提前入场做多）！")
                                             debug_info.append(f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差距={ema_gap_pct:.2f}%, EMA9斜率={ema9_slope_pct:+.3f}%")
                                             if curr_close:
@@ -1153,6 +1155,7 @@ class StrategyTestService:
                                             buy_signal_triggered = True
                                             found_death_cross = True
                                             detected_cross_type = 'death'
+                                            is_early_entry_signal = True  # 标记为预判信号
                                             debug_info.append(f"   🔮🔮🔮 预判死叉信号（提前入场做空）！")
                                             debug_info.append(f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差距={ema_gap_pct:.2f}%, EMA9斜率={ema9_slope_pct:+.3f}%")
                                             if curr_close:
@@ -1317,7 +1320,8 @@ class StrategyTestService:
                                 continue
                         
                         # 开仓前先平掉相反方向的持仓（如果启用）
-                        if close_opposite_on_entry:
+                        # 注意：预判信号不触发此功能，只有确认信号才会平掉反向持仓
+                        if close_opposite_on_entry and not is_early_entry_signal:
                             opposite_positions = [p for p in positions if p['direction'] != direction]
                             if opposite_positions:
                                 close_price = float(kline['close_price'])
