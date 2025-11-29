@@ -594,29 +594,7 @@
                                     </div>
                                     
                                     <div class="form-group">
-                                        <label class="form-label">信号强度过滤（旧格式，兼容用）</label>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
-                                            <div>
-                                                <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; display: block;">EMA差值最小百分比 (%)</label>
-                                                <input type="number" id="minEMACrossStrength" name="minEMACrossStrength" 
-                                                       step="0.01" min="0" max="10" 
-                                                       placeholder="0.03" 
-                                                       style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">EMA9/26差值至少达到此百分比才入场（推荐：0.03%，0表示不启用）</small>
-                                            </div>
-                                            <div>
-                                                <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; display: block;">MA10/EMA10差值最小百分比 (%)</label>
-                                                <input type="number" id="minMA10CrossStrength" name="minMA10CrossStrength" 
-                                                       step="0.01" min="0" max="10" 
-                                                       placeholder="0.02" 
-                                                       style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">MA10/EMA10差值至少达到此百分比才入场（推荐：0.02%，0表示不启用）</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label class="form-label">信号强度过滤（推荐）</label>
+                                        <label class="form-label">信号强度过滤</label>
                                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
                                             <div>
                                                 <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; display: block;">EMA9/26差值最小百分比 (%)</label>
@@ -1171,12 +1149,7 @@
                 if (ma10Ema10Filter) {
                     ma10Ema10Filter.checked = false;
                 }
-                // 清除信号强度过滤（旧格式）
-                const minEMACrossStrength = document.getElementById('minEMACrossStrength');
-                if (minEMACrossStrength) minEMACrossStrength.value = '';
-                const minMA10CrossStrength = document.getElementById('minMA10CrossStrength');
-                if (minMA10CrossStrength) minMA10CrossStrength.value = '';
-                // 清除信号强度过滤（新格式）
+                // 清除信号强度过滤
                 const minSignalStrength_ema9_26 = document.getElementById('minSignalStrength_ema9_26');
                 if (minSignalStrength_ema9_26) minSignalStrength_ema9_26.value = '';
                 const minSignalStrength_ma10_ema10 = document.getElementById('minSignalStrength_ma10_ema10');
@@ -1503,8 +1476,6 @@
                 takeProfit: document.getElementById('takeProfit').value ? parseFloat(document.getElementById('takeProfit').value) : null,
                 closeOppositeOnEntry: document.getElementById('closeOppositeOnEntry') ? document.getElementById('closeOppositeOnEntry').checked : false,
                 ma10Ema10TrendFilter: document.getElementById('ma10Ema10TrendFilter').checked,
-                minEMACrossStrength: document.getElementById('minEMACrossStrength').value ? parseFloat(document.getElementById('minEMACrossStrength').value) : 0,
-                minMA10CrossStrength: document.getElementById('minMA10CrossStrength').value ? parseFloat(document.getElementById('minMA10CrossStrength').value) : 0,
                 minSignalStrength: {
                     ema9_26: document.getElementById('minSignalStrength_ema9_26').value ? parseFloat(document.getElementById('minSignalStrength_ema9_26').value) : 0,
                     ma10_ema10: document.getElementById('minSignalStrength_ma10_ema10').value ? parseFloat(document.getElementById('minSignalStrength_ma10_ema10').value) : 0
@@ -1782,12 +1753,6 @@
                                     <div class="strategy-item-field-value">EMA9/26: ${strategy.minSignalStrength.ema9_26 || 0}%, MA10/EMA10: ${strategy.minSignalStrength.ma10_ema10 || 0}%</div>
                                 </div>
                             ` : ''}
-                            ${strategy.minEMACrossStrength || strategy.minMA10CrossStrength ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">信号强度过滤（入场时）</div>
-                                    <div class="strategy-item-field-value">EMA: ${strategy.minEMACrossStrength || 0}%, MA10: ${strategy.minMA10CrossStrength || 0}%</div>
-                                </div>
-                            ` : ''}
                             ${strategy.trendConfirmBars ? `
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">趋势确认K线数</div>
@@ -2011,12 +1976,8 @@
             
             // MA10/EMA10 同向过滤
             document.getElementById('ma10Ema10TrendFilter').checked = strategy.ma10Ema10TrendFilter === true;
-            
-            // 信号强度过滤（旧格式）
-            document.getElementById('minEMACrossStrength').value = strategy.minEMACrossStrength || '';
-            document.getElementById('minMA10CrossStrength').value = strategy.minMA10CrossStrength || '';
-            
-            // 信号强度过滤（新格式）
+
+            // 信号强度过滤
             if (strategy.minSignalStrength) {
                 document.getElementById('minSignalStrength_ema9_26').value = strategy.minSignalStrength.ema9_26 || '';
                 document.getElementById('minSignalStrength_ma10_ema10').value = strategy.minSignalStrength.ma10_ema10 || '';
