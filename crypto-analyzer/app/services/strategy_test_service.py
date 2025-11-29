@@ -391,6 +391,11 @@ class StrategyTestService:
                         predictive_entry=predictive_entry,
                         predictive_entry_threshold=predictive_entry_threshold,
                         predictive_entry_speed=predictive_entry_speed,
+                        early_entry_enabled=early_entry_enabled,
+                        early_entry_gap_threshold=early_entry_gap_threshold,
+                        early_entry_require_upward_slope=early_entry_require_upward_slope,
+                        early_entry_require_price_above_ema=early_entry_require_price_above_ema,
+                        early_entry_slope_min_pct=early_entry_slope_min_pct,
                         trend_confirm_bars=trend_confirm_bars,
                         trend_confirm_ema_threshold=trend_confirm_ema_threshold,
                         exit_on_ma_flip=exit_on_ma_flip,
@@ -667,6 +672,12 @@ class StrategyTestService:
         predictive_entry = kwargs.get('predictive_entry', False)  # 启用EMA差值收窄预测入场
         predictive_entry_threshold = kwargs.get('predictive_entry_threshold', 0.15)  # 差值收窄到此阈值以内时入场
         predictive_entry_speed = kwargs.get('predictive_entry_speed', 0.1)  # 差值收窄速度要求
+        # 提前入场配置（基于EMA差距+斜率）
+        early_entry_enabled = kwargs.get('early_entry_enabled', False)  # 启用提前入场
+        early_entry_gap_threshold = kwargs.get('early_entry_gap_threshold', 0.3)  # EMA差距阈值(%)
+        early_entry_require_upward_slope = kwargs.get('early_entry_require_upward_slope', True)  # 要求EMA9向上斜率
+        early_entry_require_price_above_ema = kwargs.get('early_entry_require_price_above_ema', True)  # 要求价格在EMA上方
+        early_entry_slope_min_pct = kwargs.get('early_entry_slope_min_pct', 0.05)  # EMA斜率最小百分比
         trend_confirm_bars = kwargs.get('trend_confirm_bars', 0)  # 趋势至少持续K线数（默认0表示不启用）
         trend_confirm_ema_threshold = kwargs.get('trend_confirm_ema_threshold', 0.0)  # 趋势确认EMA差值阈值（%），增强趋势确认
         exit_on_ma_flip = kwargs.get('exit_on_ma_flip', False)  # MA10/EMA10反转时立即平仓
