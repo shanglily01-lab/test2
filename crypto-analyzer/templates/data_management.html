@@ -229,17 +229,41 @@
                             </div>
                             <div style="display: flex; flex-direction: column; gap: var(--spacing-sm);">
                                 <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); transition: all var(--transition-base);">
-                                    <input type="checkbox" id="collectFutures" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;">
+                                    <input type="checkbox" id="collectFutures" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;" onchange="toggleFuturesTimeframes()">
                                     <div style="flex: 1;">
                                         <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
                                             <i class="bi bi-graph-up-arrow" style="color: var(--secondary-purple); font-size: 14px;"></i>
                                             <span style="color: var(--text-primary); font-size: 13px;">同时采集合约数据</span>
                                         </div>
                                         <p style="color: var(--text-secondary); font-size: 11px; margin: var(--spacing-xs) 0 0 0; line-height: 1.4;">
-                                            币安合约数据（价格、K线、资金费率等）
+                                            币安合约K线数据
                                         </p>
                                     </div>
                                 </label>
+                                <!-- 合约数据时间周期选择 -->
+                                <div id="futuresTimeframesContainer" style="display: none; padding: var(--spacing-sm); background: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); margin-left: 26px;">
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: var(--spacing-xs);">
+                                        <i class="bi bi-clock"></i> 选择合约K线周期：
+                                    </div>
+                                    <div style="display: flex; flex-wrap: wrap; gap: var(--spacing-xs);">
+                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); font-size: 12px;">
+                                            <input type="checkbox" id="futuresTf5m" checked style="width: 14px; height: 14px;">
+                                            <span>5m</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); font-size: 12px;">
+                                            <input type="checkbox" id="futuresTf15m" checked style="width: 14px; height: 14px;">
+                                            <span>15m</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); font-size: 12px;">
+                                            <input type="checkbox" id="futuresTf1h" checked style="width: 14px; height: 14px;">
+                                            <span>1h</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); font-size: 12px;">
+                                            <input type="checkbox" id="futuresTf1d" checked style="width: 14px; height: 14px;">
+                                            <span>1d</span>
+                                        </label>
+                                    </div>
+                                </div>
                                 <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); transition: all var(--transition-base);">
                                     <input type="checkbox" id="saveToConfig" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;">
                                     <div style="flex: 1;">
@@ -1031,19 +1055,39 @@
 
         // 任务轮询间隔ID
         let collectionPollInterval = null;
-        
+
+        // 切换合约时间周期选择显示
+        function toggleFuturesTimeframes() {
+            const collectFutures = document.getElementById('collectFutures').checked;
+            const container = document.getElementById('futuresTimeframesContainer');
+            container.style.display = collectFutures ? 'block' : 'none';
+        }
+
+        // 获取选中的合约时间周期
+        function getSelectedFuturesTimeframes() {
+            const timeframes = [];
+            if (document.getElementById('futuresTf5m').checked) timeframes.push('5m');
+            if (document.getElementById('futuresTf15m').checked) timeframes.push('15m');
+            if (document.getElementById('futuresTf1h').checked) timeframes.push('1h');
+            if (document.getElementById('futuresTf1d').checked) timeframes.push('1d');
+            return timeframes;
+        }
+
         // 开始数据采集
         async function startDataCollection(event) {
             event.preventDefault();
-            
+
             const symbols = document.getElementById('collectionSymbols').value.trim();
             const startTime = document.getElementById('collectionStartTime').value;
             const endTime = document.getElementById('collectionEndTime').value;
             const saveToConfig = document.getElementById('saveToConfig').checked;
             const collectFutures = document.getElementById('collectFutures').checked;
-            
+
             // 默认同时采集价格数据和K线数据（所有周期）
             const timeframes = ['1m', '5m', '15m', '1h', '1d'];
+
+            // 获取合约数据的时间周期
+            const futuresTimeframes = collectFutures ? getSelectedFuturesTimeframes() : [];
             const resultDiv = document.getElementById('collectionResult');
             const progressDiv = document.getElementById('collectionProgress');
             const submitBtn = document.getElementById('collectionSubmitBtn');
@@ -1079,7 +1123,16 @@
             
             try {
                 const symbolList = symbols.split(',').map(s => s.trim()).filter(s => s);
-                
+
+                // 验证合约时间周期
+                if (collectFutures && futuresTimeframes.length === 0) {
+                    showToast('请至少选择一个合约K线周期', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="bi bi-play-circle"></i> 开始采集';
+                    progressDiv.style.display = 'none';
+                    return;
+                }
+
                 const requestData = {
                     symbols: symbolList,
                     data_type: 'both',  // 同时采集价格和K线数据
@@ -1087,6 +1140,7 @@
                     end_time: endTime,
                     timeframes: timeframes,
                     collect_futures: collectFutures,  // 是否采集合约数据
+                    futures_timeframes: futuresTimeframes,  // 合约数据的时间周期
                     save_to_config: saveToConfig
                 };
                 
@@ -1103,7 +1157,7 @@
                 if (result.success && result.task_id) {
                     // 任务已提交，开始轮询进度
                     submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div> 采集中...';
-                    pollCollectionTask(result.task_id, symbolList, startTime, endTime, collectFutures);
+                    pollCollectionTask(result.task_id, symbolList, startTime, endTime, collectFutures, futuresTimeframes);
                 } else {
                     throw new Error(result.message || '任务提交失败');
                 }
@@ -1128,15 +1182,15 @@
         }
         
         // 轮询任务进度
-        async function pollCollectionTask(taskId, symbolList, startTime, endTime, collectFutures) {
+        async function pollCollectionTask(taskId, symbolList, startTime, endTime, collectFutures, futuresTimeframes = []) {
             const resultDiv = document.getElementById('collectionResult');
             const submitBtn = document.getElementById('collectionSubmitBtn');
-            
+
             collectionPollInterval = setInterval(async () => {
                 try {
                     const response = await fetch(`/api/data-management/collect/task/${taskId}`);
                     const task = await response.json();
-                    
+
                     // 更新进度
                     updateCollectionProgress(
                         task.progress || 0,
@@ -1145,18 +1199,19 @@
                         task.completed_steps || 0,
                         task.total_steps || 0
                     );
-                    
+
                     // 检查任务状态
                     if (task.status === 'completed') {
                         clearInterval(collectionPollInterval);
                         collectionPollInterval = null;
-                        
+
                         const result = task.result || {};
-                        const configMsg = result.config_updated ? 
+                        const configMsg = result.config_updated ?
                             '<div style="margin-top: var(--spacing-xs); color: var(--success-green); font-weight: 500;"><i class="bi bi-file-earmark-check"></i> 配置文件已更新</div>' : '';
-                        const futuresMsg = result.collect_futures ? ' + 合约数据' : '';
+                        const futuresMsg = collectFutures && futuresTimeframes.length > 0 ?
+                            ` + 合约K线数据（${futuresTimeframes.join(', ')}）` : '';
                         const timeframeMsg = `<div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">采集内容: 价格数据 + K线数据（1m, 5m, 15m, 1h, 1d）${futuresMsg}</div>`;
-                        const errorsMsg = result.errors && result.errors.length > 0 ? 
+                        const errorsMsg = result.errors && result.errors.length > 0 ?
                             `<div style="margin-top: var(--spacing-xs); color: var(--warning-yellow); font-size: 12px;">警告: ${result.errors.length} 个错误</div>` : '';
                         
                         resultDiv.innerHTML = `

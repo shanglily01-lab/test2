@@ -2042,7 +2042,7 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
     """
     try:
         task_manager.set_task_status(task_id, TaskStatus.RUNNING)
-        
+
         symbols = request_data.get('symbols', [])
         data_type = request_data.get('data_type', 'price')
         start_time_str = request_data.get('start_time')
@@ -2052,6 +2052,10 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
             timeframe = request_data.get('timeframe', '1h')
             timeframes = [timeframe] if data_type == 'kline' else []
         collect_futures = request_data.get('collect_futures', False)
+        # 合约数据的时间周期，默认使用现货的时间周期
+        futures_timeframes = request_data.get('futures_timeframes', None)
+        if collect_futures and not futures_timeframes:
+            futures_timeframes = timeframes  # 默认使用现货的时间周期
         save_to_config = request_data.get('save_to_config', False)
         
         # 解析时间（与 /collect 端点相同的逻辑）
@@ -2093,9 +2097,9 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
         collect_price = data_type in ['price', 'both']
         collect_kline = data_type in ['kline', 'both']
         total_steps = len(symbols) * (
-            (1 if collect_price else 0) + 
-            (len(timeframes) if collect_kline else 0) + 
-            (len(timeframes) if collect_futures else 0)
+            (1 if collect_price else 0) +
+            (len(timeframes) if collect_kline else 0) +
+            (len(futures_timeframes) if collect_futures and futures_timeframes else 0)
         )
         
         # 估算总数据量（用于更准确的进度计算）
@@ -2121,9 +2125,9 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                 minutes = timeframe_minutes.get(tf, 60)
                 estimated_total_records += len(symbols) * int(days * 24 * 60 / minutes)
         
-        if collect_futures:
-            # 合约K线数据：同样根据时间周期估算
-            for tf in timeframes:
+        if collect_futures and futures_timeframes:
+            # 合约K线数据：根据合约时间周期估算
+            for tf in futures_timeframes:
                 minutes = timeframe_minutes.get(tf, 60)
                 estimated_total_records += len(symbols) * int(days * 24 * 60 / minutes)
         
@@ -2503,7 +2507,7 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                         errors.append(f"{symbol}: 所有周期均未获取到K线数据")
                 
                 # 采集合约数据
-                if collect_futures:
+                if collect_futures and futures_timeframes:
                     if use_gate and gate_collector:
                         # HYPE/USDT 从Gate.io采集合约数据
                         try:
@@ -2512,11 +2516,8 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                                 current_step=f"正在采集 {symbol} 合约数据（Gate.io）..."
                             )
                             futures_saved = 0
-                            
-                            if not timeframes:
-                                timeframes = ['1m', '5m', '15m', '1h', '1d']
-                            
-                            for timeframe in timeframes:
+
+                            for timeframe in futures_timeframes:
                                 try:
                                     task_manager.update_task_progress(
                                         task_id,
@@ -2640,11 +2641,8 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                                 current_step=f"正在采集 {symbol} 合约数据..."
                             )
                             futures_saved = 0
-                            
-                            if not timeframes:
-                                timeframes = ['1m', '5m', '15m', '1h', '1d']
-                            
-                            for timeframe in timeframes:
+
+                            for timeframe in futures_timeframes:
                                 try:
                                     task_manager.update_task_progress(
                                         task_id,
