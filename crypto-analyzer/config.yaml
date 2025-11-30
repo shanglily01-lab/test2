@@ -12,6 +12,7 @@ symbols:
 - ADA/USDT
 - DOT/USDT
 - LINK/USDT
+- ASTER/USDT
 
 demo_mode: false
 exchanges:
