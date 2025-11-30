@@ -2302,11 +2302,11 @@ class StrategyExecutor:
                                     
                             # 检查趋势持续性（预判信号跳过此检查）
                             # 注意：当只检测当前K线穿越时，trend_confirm_bars > 1 的配置将导致信号永远不会触发
-                            # 因为金叉刚发生，无法满足"持续N根K线"的要求
+                            # 因为交叉刚发生，无法满足"持续N根K线"的要求
                             # 如果需要趋势确认功能，建议设置 trend_confirm_bars = 0 或 1
                             if trend_confirm_ok and trend_confirm_bars > 0 and not is_early_entry_signal:
-                                # 找到金叉发生的索引位置
-                                golden_cross_index = None
+                                # 找到金叉/死叉发生的索引位置（根据交易方向）
+                                cross_index = None
                                 for check_lookback in range(1, min(4, current_buy_index + 1)):
                                     check_prev_index = current_buy_index - check_lookback
                                     if check_prev_index >= 0 and check_prev_index < len(buy_indicator_pairs):
@@ -2314,40 +2314,51 @@ class StrategyExecutor:
                                         check_prev_indicator = check_prev_pair['indicator']
                                         check_prev_ema_short = float(check_prev_indicator.get('ema_short', 0)) if check_prev_indicator.get('ema_short') else None
                                         check_prev_ema_long = float(check_prev_indicator.get('ema_long', 0)) if check_prev_indicator.get('ema_long') else None
-                                                
+
                                         if buy_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
                                             if check_prev_ema_short and check_prev_ema_long and ema_short and ema_long:
-                                                # 检查是否在当前K线发生金叉
-                                                is_cross_now = (check_prev_ema_short <= check_prev_ema_long and ema_short > ema_long) or \
-                                                              (check_prev_ema_short < check_prev_ema_long and ema_short >= ema_long)
+                                                if direction == 'long':
+                                                    # 检查是否在当前K线发生金叉（做多）
+                                                    is_cross_now = (check_prev_ema_short <= check_prev_ema_long and ema_short > ema_long) or \
+                                                                  (check_prev_ema_short < check_prev_ema_long and ema_short >= ema_long)
+                                                else:
+                                                    # 检查是否在当前K线发生死叉（做空）
+                                                    is_cross_now = (check_prev_ema_short >= check_prev_ema_long and ema_short < ema_long) or \
+                                                                  (check_prev_ema_short > check_prev_ema_long and ema_short <= ema_long)
                                                 if is_cross_now:
-                                                    golden_cross_index = current_buy_index
+                                                    cross_index = current_buy_index
                                                     break
                                         elif buy_signal == 'ma_ema10':
                                             check_prev_ma10 = float(check_prev_indicator.get('ma10', 0)) if check_prev_indicator.get('ma10') else None
                                             check_prev_ema10 = float(check_prev_indicator.get('ema10', 0)) if check_prev_indicator.get('ema10') else None
                                             if check_prev_ma10 and check_prev_ema10 and ma10 and ema10:
-                                                is_cross_now = (check_prev_ema10 <= check_prev_ma10 and ema10 > ma10) or \
-                                                              (check_prev_ema10 < check_prev_ma10 and ema10 >= ma10)
+                                                if direction == 'long':
+                                                    # 检查是否在当前K线发生金叉（做多）
+                                                    is_cross_now = (check_prev_ema10 <= check_prev_ma10 and ema10 > ma10) or \
+                                                                  (check_prev_ema10 < check_prev_ma10 and ema10 >= ma10)
+                                                else:
+                                                    # 检查是否在当前K线发生死叉（做空）
+                                                    is_cross_now = (check_prev_ema10 >= check_prev_ma10 and ema10 < ma10) or \
+                                                                  (check_prev_ema10 > check_prev_ma10 and ema10 <= ma10)
                                                 if is_cross_now:
-                                                    golden_cross_index = current_buy_index
+                                                    cross_index = current_buy_index
                                                     break
-                                        
-                                if golden_cross_index is not None:
-                                    # 如果金叉发生在当前K线，且trend_confirm_bars=1，则当前K线已经满足条件（1根K线确认）
-                                    # 如果金叉发生在之前的K线，需要检查是否持续了足够的K线数
-                                    bars_since_cross = current_buy_index - golden_cross_index
-                                            
-                                    # 如果金叉发生在当前K线，bars_since_cross=0，但当前K线本身就算1根，所以需要 >= (trend_confirm_bars - 1)
-                                    # 如果金叉发生在之前的K线，需要 >= trend_confirm_bars
-                                    required_bars = trend_confirm_bars - 1 if golden_cross_index == current_buy_index else trend_confirm_bars
-                                            
+
+                                if cross_index is not None:
+                                    # 如果交叉发生在当前K线，且trend_confirm_bars=1，则当前K线已经满足条件（1根K线确认）
+                                    # 如果交叉发生在之前的K线，需要检查是否持续了足够的K线数
+                                    bars_since_cross = current_buy_index - cross_index
+
+                                    # 如果交叉发生在当前K线，bars_since_cross=0，但当前K线本身就算1根，所以需要 >= (trend_confirm_bars - 1)
+                                    # 如果交叉发生在之前的K线，需要 >= trend_confirm_bars
+                                    required_bars = trend_confirm_bars - 1 if cross_index == current_buy_index else trend_confirm_bars
+
                                     if bars_since_cross >= required_bars:
-                                        # 检查从金叉到当前的所有K线，趋势是否一直维持
+                                        # 检查从交叉点到当前的所有K线，趋势是否一直维持
                                         trend_maintained = True
                                         ema_strength_ok = True
-                                                
-                                        for check_index in range(golden_cross_index, current_buy_index + 1):
+
+                                        for check_index in range(cross_index, current_buy_index + 1):
                                             if check_index < len(buy_indicator_pairs):
                                                 check_pair = buy_indicator_pairs[check_index]
                                                 check_indicator = check_pair['indicator']
@@ -2402,14 +2413,16 @@ class StrategyExecutor:
                                             trend_confirm_ok = False
                                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认失败，EMA差值未达到阈值({trend_confirm_ema_threshold}%)")
                                     else:
-                                        # 金叉刚发生，还需要等待更多K线
+                                        # 交叉刚发生，还需要等待更多K线
                                         trend_confirm_ok = False
                                         wait_bars = required_bars - bars_since_cross
-                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认中，金叉发生在索引{golden_cross_index}，当前索引{current_buy_index}，已过{bars_since_cross}根K线，需要等待{wait_bars}根K线（共需{trend_confirm_bars}根）")
+                                        cross_type = "金叉" if direction == 'long' else "死叉"
+                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认中，{cross_type}发生在索引{cross_index}，当前索引{current_buy_index}，已过{bars_since_cross}根K线，需要等待{wait_bars}根K线（共需{trend_confirm_bars}根）")
                                 else:
-                                    # 未找到金叉，可能是信号触发逻辑有问题
+                                    # 未找到交叉点，可能是信号触发逻辑有问题
                                     trend_confirm_ok = False
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 未找到金叉位置，无法进行趋势确认")
+                                    cross_type = "金叉" if direction == 'long' else "死叉"
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 未找到{cross_type}位置，无法进行趋势确认")
                                                                     
                             if not trend_confirm_ok:
                                 # 趋势确认失败，跳过买入
