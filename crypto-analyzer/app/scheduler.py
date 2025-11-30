@@ -5,10 +5,9 @@
 采集频率：
 - Binance 现货数据: 1m(每5秒), 5m, 1h, 1d
 - Binance 合约数据: 每5秒 (价格、K线、资金费率、持仓量、多空比)
-- Gate.io K线数据: 1m(每5秒), 5m, 1h, 1d
 - Ethereum 链上数据: 5m, 1h, 1d
 - Hyperliquid 排行榜: 每天一次
-- 资金费率 (Binance + Gate.io): 每5分钟
+- 资金费率 (Binance): 每5分钟
 - 新闻数据: 每15分钟
 
 缓存更新频率（性能优化）：
@@ -106,9 +105,9 @@ class UnifiedDataScheduler:
 
     def _init_collectors(self):
         """初始化所有采集器"""
-        # 1. 现货价格采集器 (Binance + Gate.io)
+        # 1. 现货价格采集器 (Binance)
         self.price_collector = MultiExchangeCollector(self.config)
-        logger.info("  ✓ 现货价格采集器 (Binance + Gate.io)")
+        logger.info("  ✓ 现货价格采集器 (Binance)")
 
         # 1.5 合约数据采集器 (Binance Futures)
         futures_config = self.config.get('binance_futures', {})
@@ -175,7 +174,7 @@ class UnifiedDataScheduler:
 
     async def collect_binance_data(self, timeframe: str = '5m'):
         """
-        采集所有启用的交易所数据 (Binance + Gate.io等)
+        采集所有启用的交易所数据 (Binance)
 
         Args:
             timeframe: 时间周期 (1m, 5m, 1h, 1d)
@@ -215,7 +214,7 @@ class UnifiedDataScheduler:
     async def _collect_ticker(self, symbol: str):
         """采集实时价格数据 - 自动从所有启用的交易所采集"""
         try:
-            # fetch_price() 会自动从所有启用的交易所(Binance + Gate.io等)获取价格
+            # fetch_price() 会自动从所有启用的交易所获取价格
             prices = await self.price_collector.fetch_price(symbol)
 
             if prices:
@@ -236,8 +235,8 @@ class UnifiedDataScheduler:
             # 获取启用的交易所列表
             enabled_exchanges = list(self.price_collector.collectors.keys())
 
-            # 优先级：binance > gate > 其他
-            priority_exchanges = ['binance', 'gate'] + [e for e in enabled_exchanges if e not in ['binance', 'gate']]
+            # 优先级：binance > 其他
+            priority_exchanges = ['binance'] + [e for e in enabled_exchanges if e != 'binance']
 
             df = None
             used_exchange = None
@@ -937,7 +936,7 @@ class UnifiedDataScheduler:
         enabled_exchanges = list(self.price_collector.collectors.keys())
         exchanges_str = ' + '.join(enabled_exchanges) if enabled_exchanges else 'Binance'
 
-        # 1. 现货数据 (Binance + Gate.io等)
+        # 1. 现货数据 (Binance)
         schedule.every(5).seconds.do(
             lambda: asyncio.run(self.collect_binance_data('1m'))
         )
