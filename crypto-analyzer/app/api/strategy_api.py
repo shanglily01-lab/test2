@@ -2,7 +2,7 @@
 策略管理API
 提供策略的增删改查、激活、对比等功能
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 from dataclasses import asdict
