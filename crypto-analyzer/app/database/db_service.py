@@ -575,13 +575,31 @@ class DatabaseService:
         """
         session = self.get_session()
         try:
+            # 如果关键字段为None，使用默认值0或跳过保存
+            long_account = ls_data.get('long_account')
+            short_account = ls_data.get('short_account')
+            long_short_ratio = ls_data.get('long_short_ratio')
+            
+            # 如果所有账户数相关字段都为None，但有持仓量数据，则使用持仓量数据计算或跳过账户数字段
+            if long_account is None and short_account is None and long_short_ratio is None:
+                # 如果有持仓量数据，可以跳过保存账户数数据，或者使用0作为默认值
+                # 这里使用0作为默认值，因为数据库字段不允许NULL
+                long_account = 0.0
+                short_account = 0.0
+                long_short_ratio = 0.0
+            else:
+                # 确保不为None
+                long_account = long_account if long_account is not None else 0.0
+                short_account = short_account if short_account is not None else 0.0
+                long_short_ratio = long_short_ratio if long_short_ratio is not None else 0.0
+            
             ls_record = FuturesLongShortRatio(
                 symbol=ls_data.get('symbol'),
                 exchange=ls_data.get('exchange', 'binance_futures'),
                 period=ls_data.get('period', '5m'),
-                long_account=ls_data.get('long_account'),
-                short_account=ls_data.get('short_account'),
-                long_short_ratio=ls_data.get('long_short_ratio'),
+                long_account=long_account,
+                short_account=short_account,
+                long_short_ratio=long_short_ratio,
                 long_position=ls_data.get('long_position'),  # 持仓量比 - 新增
                 short_position=ls_data.get('short_position'),  # 持仓量比 - 新增
                 long_short_position_ratio=ls_data.get('long_short_position_ratio'),  # 持仓量比 - 新增
