@@ -2530,8 +2530,8 @@ class StrategyExecutor:
                                     else:
                                         logger.debug(f"{symbol} [{buy_timeframe}]: ✅ KDJ过滤通过 (K={kdj_k:.2f})")
                                     
-                            # 检查 MA10/EMA10 信号强度（预判信号跳过此过滤）
-                            if trend_confirm_ok and not is_early_entry_signal:
+                            # 检查 MA10/EMA10 信号强度（预判信号和持续趋势信号跳过此过滤，因为已在信号检测阶段检查过）
+                            if trend_confirm_ok and not is_early_entry_signal and not is_sustained_signal:
                                 ma10_ema10_ok = True
                                 if ma10 and ema10:
                                     if min_ma10_cross_strength > 0:
@@ -2553,11 +2553,12 @@ class StrategyExecutor:
                                     if min_ma10_cross_strength > 0 or ma10_ema10_trend_filter:
                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 缺少 MA10/EMA10 数据，跳过检查")
                                     
-                            # 检查趋势持续性（预判信号跳过此检查）
+                            # 检查趋势持续性（预判信号和持续趋势信号跳过此检查）
                             # 注意：当只检测当前K线穿越时，trend_confirm_bars > 1 的配置将导致信号永远不会触发
                             # 因为交叉刚发生，无法满足"持续N根K线"的要求
                             # 如果需要趋势确认功能，建议设置 trend_confirm_bars = 0 或 1
-                            if trend_confirm_ok and trend_confirm_bars > 0 and not is_early_entry_signal:
+                            # 持续趋势信号已经在信号检测阶段确认了趋势持续性，不需要再检查
+                            if trend_confirm_ok and trend_confirm_bars > 0 and not is_early_entry_signal and not is_sustained_signal:
                                 # 找到金叉/死叉发生的索引位置（根据交易方向）
                                 cross_index = None
                                 for check_lookback in range(1, min(4, current_buy_index + 1)):
@@ -2679,7 +2680,9 @@ class StrategyExecutor:
                                                                     
                             if not trend_confirm_ok:
                                 # 趋势确认失败，跳过买入
-                                pass
+                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ❌ 趋势确认/过滤检查未通过，跳过买入"
+                                debug_info.append(msg)
+                                logger.info(f"{symbol} {msg}")
                             else:
                                 # 添加调试信息：所有检查都通过，准备买入
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅ 所有买入条件检查通过，准备执行买入操作")
