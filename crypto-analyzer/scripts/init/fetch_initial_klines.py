@@ -213,14 +213,14 @@ class InitialKlinesFetcher:
         try:
             insert_sql = """
             INSERT INTO kline_data
-                (symbol, exchange, timeframe, open_time, timestamp, open, high, low, close, volume)
+                (symbol, exchange, timeframe, open_time, timestamp, open_price, high_price, low_price, close_price, volume)
             VALUES
                 (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
-                open = VALUES(open),
-                high = VALUES(high),
-                low = VALUES(low),
-                close = VALUES(close),
+                open_price = VALUES(open_price),
+                high_price = VALUES(high_price),
+                low_price = VALUES(low_price),
+                close_price = VALUES(close_price),
                 volume = VALUES(volume)
             """
 
