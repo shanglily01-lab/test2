@@ -192,8 +192,41 @@ if trend_confirm_bars > 0 and not is_early_entry_signal and not is_sustained_sig
 
 如果所有过滤器检查通过（`trend_confirm_ok = True`）：
 
-1. 计算入场价格（市价/限价）
-2. 执行开仓操作
+### 5.1 计算入场价格
+
+根据配置的价格类型计算入场价格：
+
+**做多入场价格**（`longPrice`）：
+
+| 选项 | 说明 | 计算公式 |
+|------|------|----------|
+| `market` | 市价买入 | `entry_price = realtime_price` |
+| `market_minus_0_2` | 低于市价0.2%买入 | `entry_price = realtime_price * 0.998` |
+| `market_minus_0_4` | 低于市价0.4%买入 | `entry_price = realtime_price * 0.996` |
+| `market_minus_0_6` | 低于市价0.6%买入 | `entry_price = realtime_price * 0.994` |
+| `market_minus_0_8` | 低于市价0.8%买入 | `entry_price = realtime_price * 0.992` |
+| `market_minus_1` | 低于市价1%买入 | `entry_price = realtime_price * 0.99` |
+
+**做空入场价格**（`shortPrice`）：
+
+| 选项 | 说明 | 计算公式 |
+|------|------|----------|
+| `market` | 市价卖出 | `entry_price = realtime_price` |
+| `market_plus_0_2` | 高于市价0.2%卖出 | `entry_price = realtime_price * 1.002` |
+| `market_plus_0_4` | 高于市价0.4%卖出 | `entry_price = realtime_price * 1.004` |
+| `market_plus_0_6` | 高于市价0.6%卖出 | `entry_price = realtime_price * 1.006` |
+| `market_plus_0_8` | 高于市价0.8%卖出 | `entry_price = realtime_price * 1.008` |
+| `market_plus_1` | 高于市价1%卖出 | `entry_price = realtime_price * 1.01` |
+
+> **说明**：
+> - 做多时使用低于市价的限价单，可以获得更好的入场价格，但可能无法成交
+> - 做空时使用高于市价的限价单，可以获得更好的入场价格，但可能无法成交
+> - 市价单（`market`）会立即成交，但价格可能有滑点
+
+### 5.2 执行开仓
+
+1. 计算仓位大小（基于账户余额和杠杆）
+2. 执行开仓操作（市价单或限价单）
 3. 保存交易记录到数据库
 4. 更新持仓信息
 
@@ -329,6 +362,21 @@ if trend_confirm_bars > 0 and not is_early_entry_signal and not is_sustained_sig
 | kdj_long_max_k | 做多KDJ K值上限 | 80 |
 | kdj_short_min_k | 做空KDJ K值下限 | 20 |
 | trend_confirm_bars | 趋势确认K线数 | 0 |
+
+### 入场价格参数
+
+| 参数 | 说明 | 可选值 |
+|------|------|--------|
+| longPrice | 做多入场价格类型 | market, market_minus_0_2, market_minus_0_4, market_minus_0_6, market_minus_0_8, market_minus_1 |
+| shortPrice | 做空入场价格类型 | market, market_plus_0_2, market_plus_0_4, market_plus_0_6, market_plus_0_8, market_plus_1 |
+
+**做多入场价格说明**：
+- `market`: 市价立即成交
+- `market_minus_X`: 以低于当前市价X%的价格挂限价单（X可选: 0.2, 0.4, 0.6, 0.8, 1）
+
+**做空入场价格说明**：
+- `market`: 市价立即成交
+- `market_plus_X`: 以高于当前市价X%的价格挂限价单（X可选: 0.2, 0.4, 0.6, 0.8, 1）
 
 ---
 
