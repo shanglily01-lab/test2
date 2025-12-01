@@ -252,10 +252,19 @@ class InitialKlinesFetcher:
             self.connection.rollback()
             return 0
 
-    def fetch_all_symbols(self):
-        """获取所有币种的K线数据"""
+    def fetch_all_symbols(self, timeframes=None):
+        """
+        获取所有币种的K线数据
+        
+        Args:
+            timeframes: 时间周期列表，默认['5m', '15m', '1h']
+        """
+        if timeframes is None:
+            timeframes = ['5m', '15m', '1h']  # 默认获取5m, 15m, 1h
+        
         print("\n" + "=" * 80)
         print("🚀 开始批量获取K线数据")
+        print(f"时间周期: {', '.join(timeframes)}")
         print("=" * 80)
 
         total_fetched = 0
@@ -263,18 +272,32 @@ class InitialKlinesFetcher:
 
         for i, symbol in enumerate(self.symbols, 1):
             print(f"\n[{i}/{len(self.symbols)}] 处理 {symbol}")
+            
+            # 为每个时间周期获取数据
+            for timeframe in timeframes:
+                # 根据时间周期调整获取数量
+                if timeframe == '5m':
+                    limit = 500  # 5分钟需要更多数据
+                elif timeframe == '15m':
+                    limit = 400  # 15分钟需要较多数据
+                else:
+                    limit = 300  # 1小时300条
+                
+                print(f"  📊 获取 {timeframe} 数据...")
+                klines = self.fetch_klines(symbol, timeframe=timeframe, limit=limit)
 
-            # 获取K线数据
-            klines = self.fetch_klines(symbol, timeframe='1h', limit=300)
+                if klines:
+                    total_fetched += len(klines)
 
-            if klines:
-                total_fetched += len(klines)
+                    # 保存到数据库
+                    saved = self.save_klines(klines)
+                    total_saved += saved
+                
+                # 小延迟，避免请求过快
+                import time
+                time.sleep(0.3)
 
-                # 保存到数据库
-                saved = self.save_klines(klines)
-                total_saved += saved
-
-            # 延迟，避免请求过快
+            # 每个币种之间稍长延迟
             import time
             if i < len(self.symbols):
                 time.sleep(0.5)
@@ -286,29 +309,40 @@ class InitialKlinesFetcher:
         print(f"成功保存: {total_saved} 条")
         print("=" * 80 + "\n")
 
-    def verify_data(self):
-        """验证数据是否正确保存"""
+    def verify_data(self, timeframes=None):
+        """
+        验证数据是否正确保存
+        
+        Args:
+            timeframes: 时间周期列表，默认['5m', '15m', '1h']
+        """
+        if timeframes is None:
+            timeframes = ['5m', '15m', '1h']
+        
         print("\n" + "=" * 80)
         print("🔍 验证数据...")
         print("=" * 80 + "\n")
 
         try:
             for symbol in self.symbols:
-                self.cursor.execute("""
-                    SELECT COUNT(*) as count,
-                           MIN(timestamp) as earliest,
-                           MAX(timestamp) as latest
-                    FROM kline_data
-                    WHERE symbol = %s AND timeframe = '1h'
-                """, (symbol,))
+                print(f"{symbol}:")
+                for timeframe in timeframes:
+                    self.cursor.execute("""
+                        SELECT COUNT(*) as count,
+                               MIN(timestamp) as earliest,
+                               MAX(timestamp) as latest
+                        FROM kline_data
+                        WHERE symbol = %s AND timeframe = %s
+                    """, (symbol, timeframe))
 
-                result = self.cursor.fetchone()
-                count, earliest, latest = result
+                    result = self.cursor.fetchone()
+                    count, earliest, latest = result
 
-                if count > 0:
-                    print(f"✅ {symbol:12s} | {count:3d} 条 | {earliest} ~ {latest}")
-                else:
-                    print(f"⚠️  {symbol:12s} | 没有数据")
+                    if count > 0:
+                        print(f"  ✅ {timeframe:4s} | {count:4d} 条 | {earliest} ~ {latest}")
+                    else:
+                        print(f"  ⚠️  {timeframe:4s} | 没有数据")
+                print()
 
             print("\n" + "=" * 80)
 
