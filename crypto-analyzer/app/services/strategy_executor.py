@@ -1654,6 +1654,7 @@ class StrategyExecutor:
         # 初始化变量
         buy_signal_triggered = False
         is_early_entry_signal = False  # 是否为预判信号（预判信号不触发closeOppositeOnEntry）
+        is_sustained_signal = False  # 是否为持续趋势信号（跳过MACD/KDJ/MA10信号强度检查）
         found_golden_cross = False
         found_death_cross = False
         detected_cross_type = None
