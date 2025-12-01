@@ -2491,8 +2491,8 @@ class StrategyExecutor:
                                         else:
                                             logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI过滤通过 (RSI={rsi_value:.2f})")
                                     
-                            # 检查 MACD 过滤（预判信号跳过此过滤）
-                            if trend_confirm_ok and macd_filter_enabled and not is_early_entry_signal:
+                            # 检查 MACD 过滤（预判信号和持续趋势信号跳过此过滤）
+                            if trend_confirm_ok and macd_filter_enabled and not is_early_entry_signal and not is_sustained_signal:
                                 macd_histogram = float(buy_indicator.get('macd_histogram')) if buy_indicator.get('macd_histogram') else None
                                 if macd_histogram is not None:
                                             if direction == 'long' and macd_long_require_positive and macd_histogram <= 0:
@@ -2508,8 +2508,8 @@ class StrategyExecutor:
                                             else:
                                                 logger.debug(f"{symbol} [{buy_timeframe}]: ✅ MACD过滤通过 (MACD={macd_histogram:.4f})")
                                     
-                            # 检查 KDJ 过滤（预判信号跳过此过滤）
-                            if trend_confirm_ok and kdj_filter_enabled and not is_early_entry_signal:
+                            # 检查 KDJ 过滤（预判信号和持续趋势信号跳过此过滤）
+                            if trend_confirm_ok and kdj_filter_enabled and not is_early_entry_signal and not is_sustained_signal:
                                 kdj_k = float(buy_indicator.get('kdj_k')) if buy_indicator.get('kdj_k') else None
                                 if kdj_k is not None:
                                     ema_diff_pct_abs = abs(curr_diff_pct) if curr_diff_pct is not None else 0
