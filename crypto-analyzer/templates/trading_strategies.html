@@ -91,15 +91,15 @@
         .checkbox-label { cursor: pointer; font-size: 14px; color: var(--text-primary); }
         
         /* Modal弹框样式 - 全屏滚动，无内部滚动条 */
-        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); z-index: 10000; display: none; justify-content: center; padding: 20px; overflow-y: auto; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); z-index: 10000; display: none; padding: 20px; overflow-y: auto; }
         .modal-overlay.show { display: block; }
-        .modal-container { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); width: 100%; max-width: 1400px; margin: 0 auto 40px auto; box-shadow: var(--shadow-xl); }
-        .modal-header { padding: var(--spacing-lg) var(--spacing-xl); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--bg-card); z-index: 10; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+        .modal-container { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); width: 100%; max-width: 1400px; margin: 20px auto 40px auto; box-shadow: var(--shadow-xl); }
+        .modal-header { padding: var(--spacing-lg) var(--spacing-xl); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
         .modal-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
         .modal-close { background: transparent; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-md); transition: all var(--transition-base); }
         .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
         .modal-body { padding: var(--spacing-xl); }
-        .modal-footer { padding: var(--spacing-lg) var(--spacing-xl); border-top: 1px solid var(--border-default); display: flex; justify-content: flex-end; gap: var(--spacing-md); position: sticky; bottom: 0; background: var(--bg-card); z-index: 10; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+        .modal-footer { padding: var(--spacing-lg) var(--spacing-xl); border-top: 1px solid var(--border-default); display: flex; justify-content: flex-end; gap: var(--spacing-md); background: var(--bg-card); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
         
         /* 多选下拉框 */
         .multi-select-wrapper { position: relative; }
