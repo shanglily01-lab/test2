@@ -1220,10 +1220,10 @@ class StrategyTestService:
                                                 sustained_reasons.append(f"价格未在EMA9下方")
 
                                         # 条件4：连续K线确认
-                                        if sustained_trend_min_bars > 0 and i >= sustained_trend_min_bars:
+                                        if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
                                             bars_in_trend = 0
                                             for check_i in range(sustained_trend_min_bars):
-                                                check_idx = i - check_i
+                                                check_idx = current_buy_index - check_i
                                                 if check_idx >= 0 and check_idx < len(buy_indicator_pairs):
                                                     check_pair = buy_indicator_pairs[check_idx]
                                                     check_ema_short = float(check_pair['indicator'].get('ema_short', 0))
@@ -1274,10 +1274,10 @@ class StrategyTestService:
                                                 sustained_conditions_met = False
 
                                         # 条件4：连续K线确认
-                                        if sustained_trend_min_bars > 0 and i >= sustained_trend_min_bars:
+                                        if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
                                             bars_in_trend = 0
                                             for check_i in range(sustained_trend_min_bars):
-                                                check_idx = i - check_i
+                                                check_idx = current_buy_index - check_i
                                                 if check_idx >= 0 and check_idx < len(buy_indicator_pairs):
                                                     check_pair = buy_indicator_pairs[check_idx]
                                                     check_ema_short = float(check_pair['indicator'].get('ema_short', 0))
