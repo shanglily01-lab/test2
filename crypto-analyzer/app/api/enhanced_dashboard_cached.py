@@ -232,7 +232,7 @@ class EnhancedDashboardCached:
                         for symbol in symbols_need_realtime:
                             latest_kline = self.db_service.get_latest_kline(symbol, '1m')
                             if latest_kline:
-                                realtime_prices[symbol] = float(latest_kline.close)
+                                realtime_prices[symbol] = float(latest_kline.close_price)
                                 logger.debug(f"🔄 从数据库实时更新 {symbol} 价格: {realtime_prices[symbol]}")
                     except Exception as e:
                         logger.warning(f"从数据库获取实时价格失败: {e}")

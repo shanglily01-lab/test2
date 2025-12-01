@@ -121,7 +121,7 @@ class EnhancedDashboard:
                     prices.append({
                         'symbol': symbol.replace('/USDT', ''),
                         'full_symbol': symbol,
-                        'price': float(latest.close),
+                        'price': float(latest.close_price),
                         'change_24h': change_24h,
                         'volume_24h': self._get_24h_volume(symbol),
                         'high_24h': self._get_24h_high(symbol),
@@ -161,7 +161,7 @@ class EnhancedDashboard:
                     # 尝试从kline_data表获取最新价格
                     latest_kline = self.db_service.get_latest_kline(symbol, '1m')
                     if latest_kline:
-                        current_price = float(latest_kline.close)
+                        current_price = float(latest_kline.close_price)
                         logger.info(f"{symbol} 从数据库获取最新价格: {current_price}")
 
                 # 生成综合分析
@@ -423,10 +423,10 @@ class EnhancedDashboard:
             # 转换为DataFrame
             df = pd.DataFrame([{
                 'timestamp': k.timestamp,
-                'open': float(k.open),
-                'high': float(k.high),
-                'low': float(k.low),
-                'close': float(k.close),
+                'open': float(k.open_price),
+                'high': float(k.high_price),
+                'low': float(k.low_price),
+                'close': float(k.close_price),
                 'volume': float(k.volume)
             } for k in reversed(klines)])  # 反转，使时间从旧到新
 
@@ -584,8 +584,8 @@ class EnhancedDashboard:
             )
 
             if now_kline and past_kline:
-                change = ((float(now_kline.close) - float(past_kline.close)) /
-                         float(past_kline.close)) * 100
+                change = ((float(now_kline.close_price) - float(past_kline.close_price)) /
+                         float(past_kline.close_price)) * 100
                 logger.debug(f"{symbol} 从数据库计算24h涨跌: {change}%")
                 return change
 
@@ -618,7 +618,7 @@ class EnhancedDashboard:
                 start_time=datetime.now() - timedelta(hours=24),
                 limit=24
             )
-            return max(float(k.high) for k in klines) if klines else 0
+            return max(float(k.high_price) for k in klines) if klines else 0
         except:
             return 0
 
@@ -631,7 +631,7 @@ class EnhancedDashboard:
                 start_time=datetime.now() - timedelta(hours=24),
                 limit=24
             )
-            return min(float(k.low) for k in klines) if klines else 0
+            return min(float(k.low_price) for k in klines) if klines else 0
         except:
             return 0
 

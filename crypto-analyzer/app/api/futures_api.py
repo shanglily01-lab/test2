@@ -1044,7 +1044,7 @@ async def get_futures_price(symbol: str):
                 db_service = DatabaseService(config.get('database', {}))
                 latest_kline = db_service.get_latest_kline(symbol, '1m')
                 if latest_kline:
-                    price = float(latest_kline.close)
+                    price = float(latest_kline.close_price)
                     source = 'database_spot'
                     logger.debug(f"从数据库获取 {symbol} 价格（现货）: {price}")
             except Exception as e:

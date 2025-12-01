@@ -100,7 +100,7 @@ class CacheUpdateService:
                 if not latest_kline:
                     continue
 
-                current_price = float(latest_kline.close)
+                current_price = float(latest_kline.close_price)
                 
                 # 如果从ticker获取到数据，优先使用ticker的24h统计数据
                 if ticker_data:
@@ -115,7 +115,7 @@ class CacheUpdateService:
                     # 获取24小时前的价格
                     past_time = datetime.now() - timedelta(hours=24)
                     past_kline = self.db_service.get_kline_at_time(symbol, '5m', past_time)
-                    price_24h_ago = float(past_kline.close) if past_kline else current_price
+                    price_24h_ago = float(past_kline.close_price) if past_kline else current_price
 
                     # 获取24小时K线数据
                     # 注意：数据库存储的是本地时间（UTC+8），不是UTC时间
@@ -147,8 +147,8 @@ class CacheUpdateService:
                         quote_volume_24h = 0
                     else:
                         # 计算统计数据
-                        high_24h = max(float(k.high) for k in klines_24h)
-                        low_24h = min(float(k.low) for k in klines_24h)
+                        high_24h = max(float(k.high_price) for k in klines_24h)
+                        low_24h = min(float(k.low_price) for k in klines_24h)
                         volume_24h = sum(float(k.volume) for k in klines_24h)
                         quote_volume_24h = sum(float(k.quote_volume) for k in klines_24h if k.quote_volume)
 
@@ -222,10 +222,10 @@ class CacheUpdateService:
                     # 转换为DataFrame
                     df = pd.DataFrame([{
                         'timestamp': k.timestamp,
-                        'open': float(k.open),
-                        'high': float(k.high),
-                        'low': float(k.low),
-                        'close': float(k.close),
+                        'open': float(k.open_price),
+                        'high': float(k.high_price),
+                        'low': float(k.low_price),
+                        'close': float(k.close_price),
                         'volume': float(k.volume)
                     } for k in reversed(klines)])
 
