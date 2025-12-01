@@ -99,7 +99,6 @@
         .modal-close { background: transparent; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-md); transition: all var(--transition-base); }
         .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
         .modal-body { padding: var(--spacing-xl); }
-        .modal-footer { padding: var(--spacing-lg) var(--spacing-xl); border-top: 1px solid var(--border-default); display: flex; justify-content: flex-end; gap: var(--spacing-md); background: var(--bg-card); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
         
         /* 多选下拉框 */
         .multi-select-wrapper { position: relative; }
@@ -1072,11 +1071,12 @@
                                 </div>
                             </div>
 
+                            <!-- 按钮区域 -->
+                            <div class="form-actions" style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-default);">
+                                <button type="button" class="btn btn-secondary" onclick="closeStrategyModal()">取消</button>
+                                <button type="submit" class="btn btn-primary">保存策略</button>
+                            </div>
                     </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" onclick="closeStrategyModal()">取消</button>
-                    <button type="submit" class="btn btn-primary" onclick="document.getElementById('strategyForm').dispatchEvent(new Event('submit'))">保存策略</button>
                 </div>
             </div>
         </div>
