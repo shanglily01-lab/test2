@@ -437,15 +437,15 @@
                                 <input type="text" class="form-input" id="strategyName" placeholder="例如：EMA多空策略" required>
                             </div>
                             
-                            <!-- 买入和卖出条件（并排显示） -->
-                            <div class="form-row">
-                                <!-- 买入条件 -->
-                                <div class="form-section" style="flex: 1;">
-                                    <div class="form-section-title">
-                                        <i class="bi bi-arrow-down-circle" style="color: var(--success-green);"></i>
-                                        买入条件
-                                    </div>
-                                    
+                            <!-- 买入条件（全宽显示） -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-arrow-down-circle" style="color: var(--success-green);"></i>
+                                    买入条件
+                                </div>
+
+                                <!-- 基础设置：方向、倍数、信号（三栏布局） -->
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
                                     <div class="form-group">
                                         <label class="form-label">交易方向<span class="required">*</span></label>
                                         <div class="checkbox-group" style="flex-direction: row; flex-wrap: wrap;">
@@ -524,7 +524,11 @@
                                             </div>
                                         </div>
                                     </div>
-                                    
+                                </div>
+                                <!-- 结束三栏布局 -->
+
+                                <!-- 成交量和价格条件（两栏布局） -->
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
                                     <div class="form-group">
                                         <div id="buyVolumeOptions" style="display: block;">
                                             <!-- 做多成交量 -->
@@ -580,19 +584,22 @@
                                             </div>
                                         </div>
                                     </div>
-                                    
+                                </div>
+                                <!-- 结束成交量两栏布局 -->
+
+                                <!-- 过滤器配置 -->
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
                                     <div class="form-group">
                                         <div style="display: flex; align-items: center; gap: 8px;">
                                             <input type="checkbox" id="ma10Ema10TrendFilter" name="ma10Ema10TrendFilter">
                                             <label for="ma10Ema10TrendFilter" class="checkbox-label" style="margin: 0; font-weight: 500;">启用 MA10/EMA10 同向过滤</label>
                                         </div>
                                         <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block; margin-left: 26px;">
-                                            <strong>做多时：</strong>要求 EMA10 > MA10（多头趋势）<br>
-                                            <strong>做空时：</strong>要求 EMA10 < MA10（空头趋势）<br>
-                                            <span style="color: var(--warning-orange); font-weight: 500;">⚠️ 注意：启用此选项可能会过滤掉很多做空信号，如果希望更多做空机会，建议关闭此选项</span>
+                                            <strong>做多时：</strong>要求 EMA10 > MA10<br>
+                                            <strong>做空时：</strong>要求 EMA10 < MA10<br>
+                                            <span style="color: var(--warning-orange); font-weight: 500;">⚠️ 可能过滤掉做空信号</span>
                                         </small>
                                     </div>
-                                    
                                     <div class="form-group">
                                         <label class="form-label">信号强度过滤</label>
                                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
@@ -614,7 +621,11 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                                <!-- 结束过滤器两栏布局 -->
 
+                                <!-- 趋势确认设置（两栏布局） -->
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
                                     <div class="form-group">
                                         <label class="form-label">趋势持续性检查</label>
                                         <input type="number" id="trendConfirmBars" name="trendConfirmBars" 
@@ -632,9 +643,11 @@
                                                style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; margin-top: 8px;">
                                         <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">趋势确认时，EMA差值必须≥此阈值（0表示不启用，建议0.1-0.3%）</small>
                                     </div>
-                                    
-                                    <div class="form-group">
-                                        <label class="form-label">趋势反转退出机制</label>
+                                </div>
+                                <!-- 结束趋势确认两栏布局 -->
+
+                                <div class="form-group" style="margin-top: 16px;">
+                                    <label class="form-label">趋势反转退出机制</label>
                                         <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
                                             <div style="display: flex; align-items: center; gap: 8px;">
                                                 <input type="checkbox" id="exitOnMAFlip" name="exitOnMAFlip">
@@ -674,10 +687,10 @@
                                                 <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">当EMA差值缩小或价格回撤达到此百分比时，触发早期止损（建议2-5%）</small>
                                             </div>
                                         </div>
-                                    </div>
-                                    
-                                    <!-- 技术指标过滤器 -->
-                                    <div class="form-group" style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default);">
+                                </div>
+
+                                <!-- 技术指标过滤器 -->
+                                <div class="form-group" style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default);">
                                         <label class="form-label" style="font-size: 14px; font-weight: 600; margin-bottom: var(--spacing-md);">
                                             <i class="bi bi-funnel"></i> 技术指标过滤器
                                         </label>
@@ -848,42 +861,8 @@
                                         </div>
                                     </div>
                                 </div>
-
-                                <!-- 卖出条件 -->
-                                <div class="form-section" style="flex: 1;">
-                                    <div class="form-section-title">
-                                        <i class="bi bi-arrow-up-circle" style="color: var(--danger-red);"></i>
-                                        卖出条件
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label class="form-label">卖出信号<span class="required">*</span></label>
-                                        <div class="radio-group">
-                                            <div class="radio-option">
-                                                <input type="radio" id="sellSignalEma5m" name="sellSignals" value="ema_5m" checked onchange="autoUpdateDirection('sell')">
-                                                <label for="sellSignalEma5m" class="radio-label">EMA 5分钟</label>
-                                            </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="sellSignalEma15m" name="sellSignals" value="ema_15m" onchange="autoUpdateDirection('sell')">
-                                                <label for="sellSignalEma15m" class="radio-label">EMA 15分钟</label>
-                                            </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="sellSignalEma1h" name="sellSignals" value="ema_1h" onchange="autoUpdateDirection('sell')">
-                                                <label for="sellSignalEma1h" class="radio-label">EMA 1小时</label>
-                                            </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="sellSignalMaEma10" name="sellSignals" value="ma_ema10" onchange="autoUpdateDirection('sell')">
-                                                <label for="sellSignalMaEma10" class="radio-label">MA/EMA 10 10</label>
-                                            </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="sellSignalMaEma5" name="sellSignals" value="ma_ema5" onchange="autoUpdateDirection('sell')">
-                                                <label for="sellSignalMaEma5" class="radio-label">MA/EMA 5 5</label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <!-- 平仓成交量条件已移除，平仓时不限制成交量 -->
-                                </div>
                             </div>
+                            <!-- 买入条件结束 -->
 
                             <!-- 交易币种 -->
                             <div class="form-section">
@@ -1055,7 +1034,44 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
+                            <!-- 卖出条件（平仓） -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-arrow-up-circle" style="color: var(--danger-red);"></i>
+                                    卖出条件（平仓）
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label">卖出信号<span class="required">*</span></label>
+                                    <small style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px; display: block;">
+                                        平仓时使用的信号周期，建议使用比买入信号更短的周期以便及时止盈止损
+                                    </small>
+                                    <div class="radio-group" style="flex-direction: row; flex-wrap: wrap;">
+                                        <div class="radio-option">
+                                            <input type="radio" id="sellSignalEma5m" name="sellSignals" value="ema_5m" checked onchange="autoUpdateDirection('sell')">
+                                            <label for="sellSignalEma5m" class="radio-label">EMA 5分钟</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="sellSignalEma15m" name="sellSignals" value="ema_15m" onchange="autoUpdateDirection('sell')">
+                                            <label for="sellSignalEma15m" class="radio-label">EMA 15分钟</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="sellSignalEma1h" name="sellSignals" value="ema_1h" onchange="autoUpdateDirection('sell')">
+                                            <label for="sellSignalEma1h" class="radio-label">EMA 1小时</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="sellSignalMaEma10" name="sellSignals" value="ma_ema10" onchange="autoUpdateDirection('sell')">
+                                            <label for="sellSignalMaEma10" class="radio-label">MA/EMA 10 10</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="sellSignalMaEma5" name="sellSignals" value="ma_ema5" onchange="autoUpdateDirection('sell')">
+                                            <label for="sellSignalMaEma5" class="radio-label">MA/EMA 5 5</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                     </form>
                 </div>
                 <div class="modal-footer">
