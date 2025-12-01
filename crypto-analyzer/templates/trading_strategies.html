@@ -781,6 +781,62 @@
                                                 </div>
                                             </div>
                                         </div>
+
+                                        <!-- 持续趋势信号配置 -->
+                                        <div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                                <input type="checkbox" id="sustainedTrendEnabled" name="sustainedTrendEnabled">
+                                                <label for="sustainedTrendEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">📉 启用持续趋势信号</label>
+                                            </div>
+                                            <small style="color: var(--text-secondary); font-size: 11px; margin-bottom: 8px; display: block; margin-left: 26px;">
+                                                在趋势已经确立后仍可开仓，而不仅仅是在穿越发生时开仓
+                                            </small>
+                                            <div style="background: rgba(76, 175, 80, 0.1); border: 1px solid rgba(76, 175, 80, 0.3); border-radius: 6px; padding: 8px 12px; margin-left: 26px; margin-bottom: 12px;">
+                                                <small style="color: #4caf50; font-size: 11px; display: block;">
+                                                    💡 <strong>使用场景：</strong>当错过穿越时机后，如果趋势持续且符合条件，策略仍然可以开仓：
+                                                </small>
+                                                <small style="color: var(--text-secondary); font-size: 10px; display: block; margin-top: 4px; line-height: 1.5;">
+                                                    • 趋势强度在合理范围内（不追高杀低）<br>
+                                                    • MA10/EMA10确认趋势方向<br>
+                                                    • 价格符合趋势方向<br>
+                                                    • 冷却时间防止频繁开仓
+                                                </small>
+                                            </div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 8px;">
+                                                <div>
+                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">最小趋势强度(%)</label>
+                                                    <input type="number" class="form-input" id="sustainedTrendMinStrength" placeholder="0.15" min="0.05" max="1.0" step="0.05" value="0.15" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">EMA差距需大于此值才触发（过滤弱势趋势）</small>
+                                                </div>
+                                                <div>
+                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">最大趋势强度(%)</label>
+                                                    <input type="number" class="form-input" id="sustainedTrendMaxStrength" placeholder="1.0" min="0.2" max="3.0" step="0.1" value="1.0" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">EMA差距需小于此值（防止追高杀低）</small>
+                                                </div>
+                                            </div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 12px;">
+                                                <div>
+                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">连续K线数</label>
+                                                    <input type="number" class="form-input" id="sustainedTrendMinBars" placeholder="2" min="0" max="10" step="1" value="2" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">连续保持趋势的K线数量（0表示不检查）</small>
+                                                </div>
+                                                <div>
+                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">冷却时间(分钟)</label>
+                                                    <input type="number" class="form-input" id="sustainedTrendCooldownMinutes" placeholder="60" min="0" max="1440" step="15" value="60" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">同方向开仓后的冷却时间（防止频繁开仓）</small>
+                                                </div>
+                                            </div>
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 12px;">
+                                                <div style="display: flex; align-items: center; gap: 8px;">
+                                                    <input type="checkbox" id="sustainedTrendRequireMA10Confirm" name="sustainedTrendRequireMA10Confirm" checked>
+                                                    <label for="sustainedTrendRequireMA10Confirm" class="checkbox-label" style="margin: 0; font-size: 12px;">要求MA10/EMA10确认趋势</label>
+                                                </div>
+                                                <div style="display: flex; align-items: center; gap: 8px;">
+                                                    <input type="checkbox" id="sustainedTrendRequirePriceConfirm" name="sustainedTrendRequirePriceConfirm" checked>
+                                                    <label for="sustainedTrendRequirePriceConfirm" class="checkbox-label" style="margin: 0; font-size: 12px;">要求价格确认趋势方向</label>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1266,6 +1322,23 @@
                     const earlyEntryRequirePriceAboveEMA = document.getElementById('earlyEntryRequirePriceAboveEMA');
                     if (earlyEntryRequirePriceAboveEMA) earlyEntryRequirePriceAboveEMA.checked = true;
                 }
+                // 清除持续趋势信号配置
+                const sustainedTrendEnabled = document.getElementById('sustainedTrendEnabled');
+                if (sustainedTrendEnabled) {
+                    sustainedTrendEnabled.checked = false;
+                    const sustainedTrendMinStrength = document.getElementById('sustainedTrendMinStrength');
+                    if (sustainedTrendMinStrength) sustainedTrendMinStrength.value = '0.15';
+                    const sustainedTrendMaxStrength = document.getElementById('sustainedTrendMaxStrength');
+                    if (sustainedTrendMaxStrength) sustainedTrendMaxStrength.value = '1.0';
+                    const sustainedTrendMinBars = document.getElementById('sustainedTrendMinBars');
+                    if (sustainedTrendMinBars) sustainedTrendMinBars.value = '2';
+                    const sustainedTrendCooldownMinutes = document.getElementById('sustainedTrendCooldownMinutes');
+                    if (sustainedTrendCooldownMinutes) sustainedTrendCooldownMinutes.value = '60';
+                    const sustainedTrendRequireMA10Confirm = document.getElementById('sustainedTrendRequireMA10Confirm');
+                    if (sustainedTrendRequireMA10Confirm) sustainedTrendRequireMA10Confirm.checked = true;
+                    const sustainedTrendRequirePriceConfirm = document.getElementById('sustainedTrendRequirePriceConfirm');
+                    if (sustainedTrendRequirePriceConfirm) sustainedTrendRequirePriceConfirm.checked = true;
+                }
 
                 editingStrategyId = null;
                 updateEmptyState();
@@ -1565,6 +1638,15 @@
                     requireUpwardSlope: document.getElementById('earlyEntryRequireUpwardSlope') ? document.getElementById('earlyEntryRequireUpwardSlope').checked : true,
                     requirePriceAboveEMA: document.getElementById('earlyEntryRequirePriceAboveEMA') ? document.getElementById('earlyEntryRequirePriceAboveEMA').checked : true,
                     slopeMinPct: document.getElementById('earlyEntrySlopeMinPct') ? parseFloat(document.getElementById('earlyEntrySlopeMinPct').value) : 0.1
+                },
+                sustainedTrend: {
+                    enabled: document.getElementById('sustainedTrendEnabled') ? document.getElementById('sustainedTrendEnabled').checked : false,
+                    minStrength: document.getElementById('sustainedTrendMinStrength') ? parseFloat(document.getElementById('sustainedTrendMinStrength').value) : 0.15,
+                    maxStrength: document.getElementById('sustainedTrendMaxStrength') ? parseFloat(document.getElementById('sustainedTrendMaxStrength').value) : 1.0,
+                    requireMA10Confirm: document.getElementById('sustainedTrendRequireMA10Confirm') ? document.getElementById('sustainedTrendRequireMA10Confirm').checked : true,
+                    requirePriceConfirm: document.getElementById('sustainedTrendRequirePriceConfirm') ? document.getElementById('sustainedTrendRequirePriceConfirm').checked : true,
+                    minBars: document.getElementById('sustainedTrendMinBars') ? parseInt(document.getElementById('sustainedTrendMinBars').value) : 2,
+                    cooldownMinutes: document.getElementById('sustainedTrendCooldownMinutes') ? parseInt(document.getElementById('sustainedTrendCooldownMinutes').value) : 60
                 }
             };
             
@@ -1813,6 +1895,12 @@
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">🔮 提前入场</div>
                                     <div class="strategy-item-field-value">✅ 已启用 (差距≤${strategy.earlyEntry.gapThreshold || 0.3}%, 斜率≥${strategy.earlyEntry.slopeMinPct || 0.05}%)<br><small style="color: #ffc107; font-size: 10px;">⚡ 跳过部分过滤器，保留RSI极端值过滤</small></div>
+                                </div>
+                            ` : ''}
+                            ${strategy.sustainedTrend && strategy.sustainedTrend.enabled ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">📉 持续趋势信号</div>
+                                    <div class="strategy-item-field-value">✅ 已启用 (强度${strategy.sustainedTrend.minStrength || 0.15}%~${strategy.sustainedTrend.maxStrength || 1.0}%, 冷却${strategy.sustainedTrend.cooldownMinutes || 60}分钟)<br><small style="color: #4caf50; font-size: 10px;">💡 错过穿越后仍可在趋势中开仓</small></div>
                                 </div>
                             ` : ''}
                             ${strategy.minSignalStrength ? `
@@ -2114,6 +2202,18 @@
                     document.getElementById('earlyEntryRequireUpwardSlope').checked = strategy.earlyEntry.requireUpwardSlope !== false;
                     document.getElementById('earlyEntryRequirePriceAboveEMA').checked = strategy.earlyEntry.requirePriceAboveEMA !== false;
                     document.getElementById('earlyEntrySlopeMinPct').value = strategy.earlyEntry.slopeMinPct || 0.1;
+                }
+            }
+            // 持续趋势信号配置
+            if (strategy.sustainedTrend) {
+                if (document.getElementById('sustainedTrendEnabled')) {
+                    document.getElementById('sustainedTrendEnabled').checked = strategy.sustainedTrend.enabled === true;
+                    document.getElementById('sustainedTrendMinStrength').value = strategy.sustainedTrend.minStrength || 0.15;
+                    document.getElementById('sustainedTrendMaxStrength').value = strategy.sustainedTrend.maxStrength || 1.0;
+                    document.getElementById('sustainedTrendMinBars').value = strategy.sustainedTrend.minBars || 2;
+                    document.getElementById('sustainedTrendCooldownMinutes').value = strategy.sustainedTrend.cooldownMinutes || 60;
+                    document.getElementById('sustainedTrendRequireMA10Confirm').checked = strategy.sustainedTrend.requireMA10Confirm !== false;
+                    document.getElementById('sustainedTrendRequirePriceConfirm').checked = strategy.sustainedTrend.requirePriceConfirm !== false;
                 }
             }
 

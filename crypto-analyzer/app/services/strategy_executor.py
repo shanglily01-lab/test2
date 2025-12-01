@@ -328,6 +328,22 @@ class StrategyExecutor:
             early_entry_require_price_above_ema = early_entry.get('requirePriceAboveEMA', True) if isinstance(early_entry, dict) else True  # 要求价格在EMA上方
             early_entry_slope_min_pct = early_entry.get('slopeMinPct', 0.1) if isinstance(early_entry, dict) else 0.1  # EMA斜率最小百分比（从0.05提高到0.1）
 
+            # 持续趋势信号配置（允许在趋势已经确立后开仓，而不仅仅是在穿越发生时）
+            sustained_trend = strategy.get('sustainedTrend', {})
+            sustained_trend_enabled = sustained_trend.get('enabled', False) if isinstance(sustained_trend, dict) else False
+            # 持续趋势的最小EMA差距（%），趋势必须足够强
+            sustained_trend_min_strength = sustained_trend.get('minStrength', 0.15) if isinstance(sustained_trend, dict) else 0.15
+            # 持续趋势的最大EMA差距（%），防止追高杀低
+            sustained_trend_max_strength = sustained_trend.get('maxStrength', 1.0) if isinstance(sustained_trend, dict) else 1.0
+            # MA10/EMA10必须确认趋势方向
+            sustained_trend_require_ma10_confirm = sustained_trend.get('requireMA10Confirm', True) if isinstance(sustained_trend, dict) else True
+            # 价格必须符合趋势方向（做多时价格在EMA9上方，做空时价格在EMA9下方）
+            sustained_trend_require_price_confirm = sustained_trend.get('requirePriceConfirm', True) if isinstance(sustained_trend, dict) else True
+            # 连续多少根K线保持趋势（防止频繁开仓，设置为0表示不检查）
+            sustained_trend_min_bars = sustained_trend.get('minBars', 2) if isinstance(sustained_trend, dict) else 2
+            # 开仓冷却时间（分钟）：在触发持续趋势信号后，多少分钟内不再触发同方向信号
+            sustained_trend_cooldown_minutes = sustained_trend.get('cooldownMinutes', 60) if isinstance(sustained_trend, dict) else 60
+
             # 确定买入和卖出的时间周期
             timeframe_map = {
                 'ema_5m': '5m',
@@ -545,7 +561,14 @@ class StrategyExecutor:
                     early_entry_gap_threshold=early_entry_gap_threshold,
                     early_entry_require_upward_slope=early_entry_require_upward_slope,
                     early_entry_require_price_above_ema=early_entry_require_price_above_ema,
-                    early_entry_slope_min_pct=early_entry_slope_min_pct
+                    early_entry_slope_min_pct=early_entry_slope_min_pct,
+                    sustained_trend_enabled=sustained_trend_enabled,
+                    sustained_trend_min_strength=sustained_trend_min_strength,
+                    sustained_trend_max_strength=sustained_trend_max_strength,
+                    sustained_trend_require_ma10_confirm=sustained_trend_require_ma10_confirm,
+                    sustained_trend_require_price_confirm=sustained_trend_require_price_confirm,
+                    sustained_trend_min_bars=sustained_trend_min_bars,
+                    sustained_trend_cooldown_minutes=sustained_trend_cooldown_minutes
                 )
 
                 results.append(result)
@@ -892,6 +915,14 @@ class StrategyExecutor:
         early_entry_require_upward_slope = kwargs.get('early_entry_require_upward_slope', True)  # 要求EMA9向上斜率
         early_entry_require_price_above_ema = kwargs.get('early_entry_require_price_above_ema', True)  # 要求价格在EMA上方
         early_entry_slope_min_pct = kwargs.get('early_entry_slope_min_pct', 0.1)  # EMA斜率最小百分比（从0.05提高到0.1）
+        # 持续趋势信号配置
+        sustained_trend_enabled = kwargs.get('sustained_trend_enabled', False)
+        sustained_trend_min_strength = kwargs.get('sustained_trend_min_strength', 0.15)  # 持续趋势的最小EMA差距(%)
+        sustained_trend_max_strength = kwargs.get('sustained_trend_max_strength', 1.0)  # 持续趋势的最大EMA差距(%)
+        sustained_trend_require_ma10_confirm = kwargs.get('sustained_trend_require_ma10_confirm', True)  # MA10/EMA10必须确认趋势方向
+        sustained_trend_require_price_confirm = kwargs.get('sustained_trend_require_price_confirm', True)  # 价格必须符合趋势方向
+        sustained_trend_min_bars = kwargs.get('sustained_trend_min_bars', 2)  # 连续多少根K线保持趋势
+        sustained_trend_cooldown_minutes = kwargs.get('sustained_trend_cooldown_minutes', 60)  # 开仓冷却时间（分钟）
         strategy_id = kwargs.get('strategy_id')
         strategy_name = kwargs.get('strategy_name', '测试策略')
         account_id = kwargs.get('account_id', 0)
@@ -1897,7 +1928,229 @@ class StrategyExecutor:
                                     debug_info.append(f"   📊 预判死叉检查: EMA差距={ema_gap_pct:.2f}%, EMA9斜率={ema9_slope_pct:+.3f}%")
                                     for reason in early_entry_reasons:
                                         debug_info.append(f"   ⚠️ 预判条件不满足: {reason}")
-                        else:
+
+                        # ==================== 持续趋势信号逻辑 ====================
+                        # 如果启用了持续趋势信号且当前没有检测到任何信号，检查是否处于强趋势中
+                        if sustained_trend_enabled and not buy_signal_triggered:
+                            # 获取当前K线收盘价
+                            curr_close = float(curr_pair['kline']['close_price']) if curr_pair['kline'].get('close_price') else None
+
+                            # 计算EMA差距百分比（绝对值）
+                            ema_strength_pct = abs(latest_diff_pct)
+
+                            # 输出持续趋势检查的基础状态日志
+                            ema_status = "空头" if curr_ema_short < curr_ema_long else "多头"
+                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: 🔄 持续趋势检查 - EMA9/26 {ema_status} | EMA9={curr_ema_short:.4f}, EMA26={curr_ema_long:.4f}, 差值={latest_diff:.4f} ({latest_diff_pct:+.2f}%)")
+                            logger.debug(f"{symbol} [{buy_timeframe}] {current_time_local.strftime('%Y-%m-%d %H:%M')}: 🔄 持续趋势检查 - EMA9/26 {ema_status}")
+
+                            if curr_ma10 and curr_ema10:
+                                ma10_diff = curr_ema10 - curr_ma10
+                                ma10_diff_pct = (ma10_diff / curr_ma10 * 100) if curr_ma10 > 0 else 0
+                                ma10_status = "多头" if curr_ema10 > curr_ma10 else "空头"
+                                debug_info.append(f"   📊 MA10/EMA10状态 - {ma10_status} | MA10={curr_ma10:.4f}, EMA10={curr_ema10:.4f}, 差值={ma10_diff:.4f} ({ma10_diff_pct:+.2f}%)")
+
+                            # 检查是否处于持续空头趋势（做空机会）
+                            if 'short' in buy_directions and curr_ema_short < curr_ema_long:
+                                sustained_conditions_met = True
+                                sustained_reasons = []
+                                is_sustained_signal = False
+
+                                # 条件1：趋势强度检查（EMA差距在合理范围内）
+                                if ema_strength_pct < sustained_trend_min_strength:
+                                    sustained_conditions_met = False
+                                    sustained_reasons.append(f"趋势强度不足({ema_strength_pct:.2f}% < {sustained_trend_min_strength}%)")
+                                elif ema_strength_pct > sustained_trend_max_strength:
+                                    sustained_conditions_met = False
+                                    sustained_reasons.append(f"趋势强度过高({ema_strength_pct:.2f}% > {sustained_trend_max_strength}%)，可能追高")
+
+                                # 条件2：MA10/EMA10趋势确认（如果启用）
+                                if sustained_trend_require_ma10_confirm and curr_ma10 and curr_ema10:
+                                    if curr_ema10 >= curr_ma10:  # 做空时要求EMA10 < MA10（空头趋势）
+                                        sustained_conditions_met = False
+                                        sustained_reasons.append(f"MA10/EMA10未确认空头趋势(EMA10={curr_ema10:.4f} >= MA10={curr_ma10:.4f})")
+
+                                # 条件3：价格确认（如果启用）
+                                if sustained_trend_require_price_confirm and curr_close:
+                                    if curr_close >= curr_ema_short:  # 做空时价格应在EMA9下方
+                                        sustained_conditions_met = False
+                                        sustained_reasons.append(f"价格未在EMA9下方(价格={curr_close:.4f} >= EMA9={curr_ema_short:.4f})")
+
+                                # 条件4：连续K线确认（检查历史K线是否持续保持趋势）
+                                if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
+                                    bars_in_trend = 0
+                                    for i in range(sustained_trend_min_bars):
+                                        check_idx = current_buy_index - i
+                                        if check_idx >= 0:
+                                            check_pair = buy_indicator_pairs[check_idx]
+                                            check_ema_short = float(check_pair['indicator'].get('ema_short', 0))
+                                            check_ema_long = float(check_pair['indicator'].get('ema_long', 0))
+                                            if check_ema_short < check_ema_long:  # 空头状态
+                                                bars_in_trend += 1
+                                    if bars_in_trend < sustained_trend_min_bars:
+                                        sustained_conditions_met = False
+                                        sustained_reasons.append(f"趋势持续性不足(连续{bars_in_trend}根K线 < 要求{sustained_trend_min_bars}根)")
+
+                                # 条件5：冷却时间检查（检查最近是否已经因持续趋势信号开过仓）
+                                if sustained_conditions_met and sustained_trend_cooldown_minutes > 0:
+                                    # 查询最近的交易记录，检查是否在冷却期内有过开仓
+                                    cooldown_start = current_time_local - timedelta(minutes=sustained_trend_cooldown_minutes)
+                                    for pos in positions:
+                                        pos_entry_time = pos.get('entry_time_local')
+                                        if pos_entry_time and pos.get('direction') == 'short':
+                                            if pos_entry_time >= cooldown_start:
+                                                sustained_conditions_met = False
+                                                remaining_minutes = sustained_trend_cooldown_minutes - int((current_time_local - pos_entry_time).total_seconds() / 60)
+                                                sustained_reasons.append(f"冷却期内(剩余{remaining_minutes}分钟)")
+                                                break
+
+                                if sustained_conditions_met:
+                                    # 持续趋势做空信号触发！
+                                    buy_signal_triggered = True
+                                    found_death_cross = True
+                                    detected_cross_type = 'death'
+                                    is_sustained_signal = True
+                                    buy_pair = curr_pair
+                                    buy_indicator = curr_indicator
+                                    ema_short = curr_ema_short
+                                    ema_long = curr_ema_long
+                                    curr_diff_pct = ema_strength_pct
+
+                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ 持续趋势做空信号触发！"
+                                    debug_info.append(msg)
+                                    logger.info(f"{symbol} {msg}")
+                                    msg_strength = f"   ✅ 趋势强度检查通过 (差值={ema_strength_pct:.2f}%, 范围={sustained_trend_min_strength}%~{sustained_trend_max_strength}%)"
+                                    debug_info.append(msg_strength)
+                                    logger.info(f"{symbol} {msg_strength}")
+                                    if curr_ma10 and curr_ema10:
+                                        ma10_diff_val = curr_ema10 - curr_ma10
+                                        ma10_diff_pct_val = (ma10_diff_val / curr_ma10 * 100) if curr_ma10 > 0 else 0
+                                        ma10_status = "空头" if curr_ema10 < curr_ma10 else "多头"
+                                        msg_ma10 = f"   ✅ MA10/EMA10趋势确认 ({ma10_status}) | MA10={curr_ma10:.4f}, EMA10={curr_ema10:.4f}, 差值={ma10_diff_pct_val:+.2f}%"
+                                        debug_info.append(msg_ma10)
+                                        logger.info(f"{symbol} {msg_ma10}")
+                                    if curr_close:
+                                        msg_price = f"   ✅ 价格确认 | 当前价格={curr_close:.4f} < EMA9={curr_ema_short:.4f}"
+                                        debug_info.append(msg_price)
+                                        logger.info(f"{symbol} {msg_price}")
+                                    if sustained_trend_min_bars > 0:
+                                        msg_bars = f"   ✅ 趋势持续性检查通过 (连续{sustained_trend_min_bars}根K线保持空头)"
+                                        debug_info.append(msg_bars)
+                                        logger.info(f"{symbol} {msg_bars}")
+                                    # 获取成交量比率
+                                    volume_ratio = float(curr_indicator.get('volume_ratio', 1.0)) if curr_indicator.get('volume_ratio') else 1.0
+                                    msg_volume = f"   📊 成交量比率: {volume_ratio:.2f}x"
+                                    debug_info.append(msg_volume)
+                                    logger.info(f"{symbol} {msg_volume}")
+                                    msg_direction = f"   📊 方向判断：持续空头趋势，选择做空"
+                                    debug_info.append(msg_direction)
+                                    logger.info(f"{symbol} {msg_direction}")
+                                else:
+                                    # 持续趋势条件不满足
+                                    for reason in sustained_reasons:
+                                        debug_info.append(f"   ⚠️ 持续空头趋势条件不满足: {reason}")
+                                        logger.debug(f"{symbol} ⚠️ 持续空头趋势条件不满足: {reason}")
+
+                            # 检查是否处于持续多头趋势（做多机会）
+                            elif 'long' in buy_directions and curr_ema_short > curr_ema_long:
+                                sustained_conditions_met = True
+                                sustained_reasons = []
+                                is_sustained_signal = False
+
+                                # 条件1：趋势强度检查
+                                if ema_strength_pct < sustained_trend_min_strength:
+                                    sustained_conditions_met = False
+                                    sustained_reasons.append(f"趋势强度不足({ema_strength_pct:.2f}% < {sustained_trend_min_strength}%)")
+                                elif ema_strength_pct > sustained_trend_max_strength:
+                                    sustained_conditions_met = False
+                                    sustained_reasons.append(f"趋势强度过高({ema_strength_pct:.2f}% > {sustained_trend_max_strength}%)，可能追高")
+
+                                # 条件2：MA10/EMA10趋势确认
+                                if sustained_trend_require_ma10_confirm and curr_ma10 and curr_ema10:
+                                    if curr_ema10 <= curr_ma10:  # 做多时要求EMA10 > MA10（多头趋势）
+                                        sustained_conditions_met = False
+                                        sustained_reasons.append(f"MA10/EMA10未确认多头趋势(EMA10={curr_ema10:.4f} <= MA10={curr_ma10:.4f})")
+
+                                # 条件3：价格确认
+                                if sustained_trend_require_price_confirm and curr_close:
+                                    if curr_close <= curr_ema_short:  # 做多时价格应在EMA9上方
+                                        sustained_conditions_met = False
+                                        sustained_reasons.append(f"价格未在EMA9上方(价格={curr_close:.4f} <= EMA9={curr_ema_short:.4f})")
+
+                                # 条件4：连续K线确认
+                                if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
+                                    bars_in_trend = 0
+                                    for i in range(sustained_trend_min_bars):
+                                        check_idx = current_buy_index - i
+                                        if check_idx >= 0:
+                                            check_pair = buy_indicator_pairs[check_idx]
+                                            check_ema_short = float(check_pair['indicator'].get('ema_short', 0))
+                                            check_ema_long = float(check_pair['indicator'].get('ema_long', 0))
+                                            if check_ema_short > check_ema_long:  # 多头状态
+                                                bars_in_trend += 1
+                                    if bars_in_trend < sustained_trend_min_bars:
+                                        sustained_conditions_met = False
+                                        sustained_reasons.append(f"趋势持续性不足(连续{bars_in_trend}根K线 < 要求{sustained_trend_min_bars}根)")
+
+                                # 条件5：冷却时间检查
+                                if sustained_conditions_met and sustained_trend_cooldown_minutes > 0:
+                                    cooldown_start = current_time_local - timedelta(minutes=sustained_trend_cooldown_minutes)
+                                    for pos in positions:
+                                        pos_entry_time = pos.get('entry_time_local')
+                                        if pos_entry_time and pos.get('direction') == 'long':
+                                            if pos_entry_time >= cooldown_start:
+                                                sustained_conditions_met = False
+                                                remaining_minutes = sustained_trend_cooldown_minutes - int((current_time_local - pos_entry_time).total_seconds() / 60)
+                                                sustained_reasons.append(f"冷却期内(剩余{remaining_minutes}分钟)")
+                                                break
+
+                                if sustained_conditions_met:
+                                    # 持续趋势做多信号触发！
+                                    buy_signal_triggered = True
+                                    found_golden_cross = True
+                                    detected_cross_type = 'golden'
+                                    is_sustained_signal = True
+                                    buy_pair = curr_pair
+                                    buy_indicator = curr_indicator
+                                    ema_short = curr_ema_short
+                                    ema_long = curr_ema_long
+                                    curr_diff_pct = ema_strength_pct
+
+                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ 持续趋势做多信号触发！"
+                                    debug_info.append(msg)
+                                    logger.info(f"{symbol} {msg}")
+                                    msg_strength = f"   ✅ 趋势强度检查通过 (差值={ema_strength_pct:.2f}%, 范围={sustained_trend_min_strength}%~{sustained_trend_max_strength}%)"
+                                    debug_info.append(msg_strength)
+                                    logger.info(f"{symbol} {msg_strength}")
+                                    if curr_ma10 and curr_ema10:
+                                        ma10_diff_val = curr_ema10 - curr_ma10
+                                        ma10_diff_pct_val = (ma10_diff_val / curr_ma10 * 100) if curr_ma10 > 0 else 0
+                                        ma10_status = "多头" if curr_ema10 > curr_ma10 else "空头"
+                                        msg_ma10 = f"   ✅ MA10/EMA10趋势确认 ({ma10_status}) | MA10={curr_ma10:.4f}, EMA10={curr_ema10:.4f}, 差值={ma10_diff_pct_val:+.2f}%"
+                                        debug_info.append(msg_ma10)
+                                        logger.info(f"{symbol} {msg_ma10}")
+                                    if curr_close:
+                                        msg_price = f"   ✅ 价格确认 | 当前价格={curr_close:.4f} > EMA9={curr_ema_short:.4f}"
+                                        debug_info.append(msg_price)
+                                        logger.info(f"{symbol} {msg_price}")
+                                    if sustained_trend_min_bars > 0:
+                                        msg_bars = f"   ✅ 趋势持续性检查通过 (连续{sustained_trend_min_bars}根K线保持多头)"
+                                        debug_info.append(msg_bars)
+                                        logger.info(f"{symbol} {msg_bars}")
+                                    # 获取成交量比率
+                                    volume_ratio = float(curr_indicator.get('volume_ratio', 1.0)) if curr_indicator.get('volume_ratio') else 1.0
+                                    msg_volume = f"   📊 成交量比率: {volume_ratio:.2f}x"
+                                    debug_info.append(msg_volume)
+                                    logger.info(f"{symbol} {msg_volume}")
+                                    msg_direction = f"   📊 方向判断：持续多头趋势，选择做多"
+                                    debug_info.append(msg_direction)
+                                    logger.info(f"{symbol} {msg_direction}")
+                                else:
+                                    # 持续趋势条件不满足
+                                    for reason in sustained_reasons:
+                                        debug_info.append(f"   ⚠️ 持续多头趋势条件不满足: {reason}")
+                                        logger.debug(f"{symbol} ⚠️ 持续多头趋势条件不满足: {reason}")
+
+                        if not buy_signal_triggered:
                             debug_info.append(f"   ⚠️ 当前K线未发生EMA穿越")
 
                 elif buy_signal == 'ma_ema10':
