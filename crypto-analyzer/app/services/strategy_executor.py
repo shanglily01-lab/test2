@@ -1695,12 +1695,12 @@ class StrategyExecutor:
                         curr_diff_pct = (curr_diff / curr_ema_long * 100) if curr_ema_long > 0 else 0
                         ema_strength_pct = abs(curr_diff_pct)
 
-                        # 检查信号强度过滤
-                        if min_ema_cross_strength > 0 and ema_strength_pct < min_ema_cross_strength:
+                        # 检查信号强度过滤（使用round避免浮点精度问题，如0.0799999显示为0.08但实际<0.08）
+                        if min_ema_cross_strength > 0 and round(ema_strength_pct, 4) < round(min_ema_cross_strength, 4):
                             # 信号强度不足，记录调试信息
                             signal_time = self.parse_time(curr_pair['kline']['timestamp'])
                             signal_time_local = self.utc_to_local(signal_time)
-                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA9/26金叉检测到，但信号强度不足 (差值={ema_strength_pct:.2f}% < {min_ema_cross_strength:.2f}%)"
+                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA9/26金叉检测到，但信号强度不足 (差值={ema_strength_pct:.4f}% < {min_ema_cross_strength:.2f}%)"
                             debug_info.append(msg)
                             logger.info(f"{symbol} {msg}")
                         else:
@@ -1735,12 +1735,12 @@ class StrategyExecutor:
                         curr_diff_pct = (curr_diff / curr_ema_long * 100) if curr_ema_long > 0 else 0
                         ema_strength_pct = abs(curr_diff_pct)
 
-                        # 检查信号强度过滤
-                        if min_ema_cross_strength > 0 and ema_strength_pct < min_ema_cross_strength:
+                        # 检查信号强度过滤（使用round避免浮点精度问题）
+                        if min_ema_cross_strength > 0 and round(ema_strength_pct, 4) < round(min_ema_cross_strength, 4):
                             # 信号强度不足，记录调试信息
                             signal_time = self.parse_time(curr_pair['kline']['timestamp'])
                             signal_time_local = self.utc_to_local(signal_time)
-                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA9/26死叉检测到，但信号强度不足 (差值={ema_strength_pct:.2f}% < {min_ema_cross_strength:.2f}%)"
+                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ EMA9/26死叉检测到，但信号强度不足 (差值={ema_strength_pct:.4f}% < {min_ema_cross_strength:.2f}%)"
                             debug_info.append(msg)
                             logger.info(f"{symbol} {msg}")
                         else:

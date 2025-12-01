@@ -1232,7 +1232,11 @@ class UnifiedDataScheduler:
         # 保持运行
         try:
             while True:
-                schedule.run_pending()
+                try:
+                    schedule.run_pending()
+                except Exception as e:
+                    # 捕获定时任务中的异常，防止整个调度器崩溃
+                    logger.error(f"定时任务执行异常: {e}", exc_info=True)
                 time.sleep(1)
 
         except KeyboardInterrupt:
@@ -1304,12 +1308,19 @@ class UnifiedDataScheduler:
         try:
             logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始更新Hyperliquid缓存...")
 
-            await self.cache_service.update_hyperliquid_aggregation(self.symbols)
+            # 添加60秒超时保护，防止无限挂起
+            await asyncio.wait_for(
+                self.cache_service.update_hyperliquid_aggregation(self.symbols),
+                timeout=60
+            )
 
             self.task_stats[task_name]['count'] += 1
             self.task_stats[task_name]['last_run'] = datetime.now()
             logger.info(f"  ✓ Hyperliquid缓存更新完成 - {len(self.symbols)} 个币种")
 
+        except asyncio.TimeoutError:
+            logger.warning(f"更新Hyperliquid缓存超时（60秒）")
+            self.task_stats[task_name]['last_error'] = "超时"
         except Exception as e:
             logger.error(f"更新Hyperliquid缓存失败: {e}")
             self.task_stats[task_name]['last_error'] = str(e)
