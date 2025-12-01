@@ -1192,7 +1192,7 @@ class StrategyTestService:
                                 # ==================== 持续趋势信号逻辑 ====================
                                 # 如果启用了持续趋势信号且当前没有检测到任何信号，检查是否处于强趋势中
                                 if sustained_trend_enabled and not signal_triggered:
-                                    ema_strength_pct = abs(ema_diff_pct)
+                                    ema_strength_pct = abs(curr_diff_pct)
 
                                     # 检查是否处于持续空头趋势（做空机会）
                                     if 'short' in buy_directions and ema_short < ema_long:
