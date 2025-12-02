@@ -196,10 +196,6 @@ class FuturesLimitOrderExecutor:
                         except (ValueError, TypeError):
                             timeout_minutes = 0
 
-                        # 调试日志
-                        strategy_name = order.get('strategy_name', '未知')
-                        logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, 策略={strategy_name}, timeout={timeout_minutes}分钟")
-
                         if timeout_minutes > 0:
                             # 使用数据库计算的时间差，避免时区问题
                             elapsed_seconds = order.get('elapsed_seconds', 0) or 0
@@ -211,10 +207,7 @@ class FuturesLimitOrderExecutor:
                                 # 超时，以市价执行
                                 should_execute = True
                                 execute_at_market = True
-                                logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟 (超时设置: {timeout_minutes} 分钟)")
-                            else:
-                                # 还未超时，显示剩余时间
-                                logger.info(f"⏳ 限价单 {order_id[:16]}... 等待中: 已等待 {elapsed_minutes:.1f} 分钟, 剩余 {remaining_minutes:.1f} 分钟")
+                                logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟")
 
                         # 如果没有超时，检查价格是否达到限价条件
                         if not should_execute:
