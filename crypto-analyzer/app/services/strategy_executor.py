@@ -18,18 +18,20 @@ from app.services.strategy_hit_recorder import StrategyHitRecorder
 
 class StrategyExecutor:
     """策略自动执行器"""
-    
+
     def __init__(self, db_config: Dict, futures_engine: FuturesTradingEngine, technical_analyzer=None):
         """
         初始化策略执行器
-        
+
         Args:
             db_config: 数据库配置
-            futures_engine: 合约交易引擎
+            futures_engine: 合约交易引擎（模拟引擎）
             technical_analyzer: 技术分析器实例（可选）
         """
         self.db_config = db_config
-        self.futures_engine = futures_engine
+        self.futures_engine = futures_engine  # 模拟引擎（保持兼容）
+        self.live_engine = None  # 实盘引擎（延迟初始化）
+        self.live_engine_error = None  # 实盘引擎初始化错误
         self.technical_analyzer = technical_analyzer if technical_analyzer else TechnicalIndicators()
         self.running = False
         self.task = None
@@ -41,7 +43,7 @@ class StrategyExecutor:
         # EMA信号检查间隔控制（60秒检查一次，止损止盈仍然5秒检查）
         self.ema_check_interval = 60  # EMA信号检查间隔（秒）
         self.last_ema_check_time = {}  # 记录每个策略+币种的上次EMA检查时间
-        
+
         # 初始化数据库服务，用于保存交易记录
         try:
             db_service_config = {
@@ -52,6 +54,39 @@ class StrategyExecutor:
         except Exception as e:
             # logger.warning(f"初始化数据库服务失败，交易记录将不会保存: {e}")
             self.db_service = None
+
+        # 尝试初始化实盘引擎
+        self._init_live_engine()
+
+    def _init_live_engine(self):
+        """初始化实盘交易引擎（延迟加载）"""
+        try:
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            self.live_engine = BinanceFuturesEngine(self.db_config)
+            logger.info("实盘交易引擎初始化成功")
+        except Exception as e:
+            self.live_engine_error = str(e)
+            logger.warning(f"实盘交易引擎初始化失败（实盘功能不可用）: {e}")
+
+    def get_engine_for_strategy(self, strategy: Dict):
+        """
+        根据策略配置获取对应的交易引擎
+
+        Args:
+            strategy: 策略配置字典
+
+        Returns:
+            交易引擎实例
+        """
+        market_type = strategy.get('market_type', 'test')
+
+        if market_type == 'live':
+            if self.live_engine is None:
+                logger.error(f"策略 {strategy.get('name')} 配置为实盘模式，但实盘引擎不可用: {self.live_engine_error}")
+                raise RuntimeError(f"实盘引擎不可用: {self.live_engine_error}")
+            return self.live_engine
+        else:
+            return self.futures_engine
     
     def get_local_time(self) -> datetime:
         """获取本地时间（UTC+8）"""
@@ -573,7 +608,8 @@ class StrategyExecutor:
                     sustained_trend_require_ma10_confirm=sustained_trend_require_ma10_confirm,
                     sustained_trend_require_price_confirm=sustained_trend_require_price_confirm,
                     sustained_trend_min_bars=sustained_trend_min_bars,
-                    sustained_trend_cooldown_minutes=sustained_trend_cooldown_minutes
+                    sustained_trend_cooldown_minutes=sustained_trend_cooldown_minutes,
+                    market_type=strategy.get('market_type', 'test')  # 市场类型: test/live
                 )
 
                 results.append(result)
@@ -933,9 +969,21 @@ class StrategyExecutor:
         strategy_id = kwargs.get('strategy_id')
         strategy_name = kwargs.get('strategy_name', '测试策略')
         account_id = kwargs.get('account_id', 0)
-        
+        market_type = kwargs.get('market_type', 'test')  # 市场类型: test/live
+
+        # 根据市场类型选择交易引擎
+        if market_type == 'live':
+            if self.live_engine is None:
+                logger.error(f"策略 {strategy_name} 配置为实盘模式，但实盘引擎不可用")
+                return {'symbol': symbol, 'error': '实盘引擎不可用', 'market_type': market_type}
+            trading_engine = self.live_engine
+            logger.debug(f"[实盘] 策略 {strategy_name} 使用实盘引擎")
+        else:
+            trading_engine = self.futures_engine
+            # logger.debug(f"[模拟] 策略 {strategy_name} 使用模拟引擎")
+
         # 从数据库获取当前持仓
-        open_positions = self.futures_engine.get_open_positions(account_id)
+        open_positions = trading_engine.get_open_positions(account_id)
         # 筛选出当前交易对的持仓
         positions = []
         for pos in open_positions:
@@ -1200,7 +1248,7 @@ class StrategyExecutor:
                     if position_id:
                         # 使用实时价格平仓
                         exit_price_decimal = Decimal(str(realtime_price))
-                        close_result = self.futures_engine.close_position(
+                        close_result = trading_engine.close_position(
                             position_id=position_id,
                             close_quantity=None,
                             reason=exit_reason,
@@ -1496,19 +1544,19 @@ class StrategyExecutor:
                         
                         if position_id:
                             exit_price_decimal = Decimal(str(realtime_price))
-                            close_result = self.futures_engine.close_position(
+                            close_result = trading_engine.close_position(
                                 position_id=position_id,
                                 close_quantity=None,
                                 reason=exit_reason,
                                 close_price=exit_price_decimal
                             )
-                            
+
                             if close_result.get('success'):
                                 actual_exit_price = float(close_result.get('exit_price', realtime_price))
                                 actual_quantity = float(close_result.get('quantity', quantity))
                                 actual_pnl = float(close_result.get('realized_pnl', 0))
                                 actual_fee = float(close_result.get('fee', 0))
-                                
+
                                 self._save_trade_record(
                                                     symbol=symbol,
                                     action='SELL',
@@ -1667,19 +1715,19 @@ class StrategyExecutor:
 
                         if position_id:
                             exit_price_decimal = Decimal(str(realtime_price))
-                            close_result = self.futures_engine.close_position(
+                            close_result = trading_engine.close_position(
                                 position_id=position_id,
                                 close_quantity=None,
                                 reason='卖出信号触发',
                                 close_price=exit_price_decimal
                             )
-                            
+
                             if close_result.get('success'):
                                 actual_exit_price = float(close_result.get('exit_price', realtime_price))
                                 actual_quantity = float(close_result.get('quantity', quantity))
                                 actual_pnl = float(close_result.get('realized_pnl', 0))
                                 actual_fee = float(close_result.get('fee', 0))
-                                
+
                                 self._save_trade_record(
                                             symbol=symbol,
                                     action='SELL',
@@ -2474,9 +2522,9 @@ class StrategyExecutor:
                                         opp_direction = opp_position['direction']
                                                 
                                         if opp_position_id:
-                                            # 使用 futures_engine 执行真实平仓（使用实时价格）
+                                            # 使用交易引擎执行平仓（使用实时价格）
                                             exit_price_decimal = Decimal(str(realtime_price))
-                                            close_result = self.futures_engine.close_position(
+                                            close_result = trading_engine.close_position(
                                                 position_id=opp_position_id,
                                                 close_quantity=None,  # None表示全部平仓
                                                 reason=f'开{direction}仓前平仓',
@@ -2880,9 +2928,10 @@ class StrategyExecutor:
                                             use_limit_price = True
 
                                         # 添加开仓调试日志
-                                        logger.info(f"🔔 {symbol} 准备开仓: 方向={direction}, 实时价格={realtime_price:.4f}, 入场价格={entry_price:.4f}, 使用限价={use_limit_price}")
+                                        market_label = "[实盘]" if market_type == 'live' else "[模拟]"
+                                        logger.info(f"🔔 {market_label} {symbol} 准备开仓: 方向={direction}, 实时价格={realtime_price:.4f}, 入场价格={entry_price:.4f}, 使用限价={use_limit_price}")
 
-                                        open_result = self.futures_engine.open_position(
+                                        open_result = trading_engine.open_position(
                                             account_id=account_id,
                                             symbol=symbol,
                                             position_side=position_side,
@@ -3073,6 +3122,7 @@ class StrategyExecutor:
                             'name': strategy.get('name', '未命名策略'),
                             'account_id': strategy.get('account_id', 2),
                             'enabled': strategy.get('enabled', 0),
+                            'market_type': strategy.get('market_type', 'test'),  # 市场类型: test/live
                             **config  # 合并配置
                         }
                         result.append(strategy_dict)

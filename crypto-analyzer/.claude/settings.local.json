@@ -3,7 +3,8 @@
     "allow": [
       "Bash(echo \"尝试以下命令安装 lrzsz：\n\n# 方法1：使用 dnf\nsudo dnf install lrzsz -y\n\n# 如果找不到，尝试启用 EPEL\nsudo dnf install epel-release -y\nsudo dnf install lrzsz -y\n\n# 或者直接用 SCP 下载（在 Windows 终端运行）：\n# scp ec2-user@13.212.252.171:/home/ec2-user/crypto-analyzer/logs/app.log C:\\Users\\你的用户名\\Desktop\\\n\n# 或者用 sz 的替代方案 - 直接 cat 输出到本地：\n# ssh ec2-user@13.212.252.171 ''cat /path/to/logs/app.log'' > app.log\n\")",
       "Bash(git --no-pager diff:*)",
-      "Bash(pip3 show:*)"
+      "Bash(pip3 show:*)",
+      "Bash(ssh:*)"
     ],
     "deny": [],
     "ask": []
