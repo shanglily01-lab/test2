@@ -1801,7 +1801,8 @@ async def get_strategy_execution_list(
     status: Optional[str] = Query(None, description="订单状态: FILLED, PENDING, CANCELLED, all"),
     symbol: Optional[str] = Query(None, description="交易对"),
     time_range: str = Query("24h", description="时间范围: 1h, 24h, 7d, 30d"),
-    limit: int = Query(100, description="返回数量限制")
+    limit: int = Query(1000, description="返回数量限制"),
+    offset: int = Query(0, description="偏移量，用于分页")
 ):
     """
     获取策略执行清单（整合现货和合约订单）

@@ -487,12 +487,38 @@
                     </div>
 
                     <!-- 执行结果列表 -->
-                    <div id="executionListContainer">
+                    <div id="executionListContainer" style="max-height: 600px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-md);">
                         <div class="placeholder-content">
                             <div class="placeholder-icon">
                                 <i class="bi bi-hourglass-split"></i>
                             </div>
                             <div class="placeholder-text">正在加载执行记录...</div>
+                        </div>
+                    </div>
+
+                    <!-- 分页控件 -->
+                    <div id="executionPagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: var(--spacing-lg); padding: var(--spacing-md); background: var(--bg-tertiary); border-radius: var(--radius-md);">
+                        <div id="executionPageInfo" style="color: var(--text-secondary); font-size: 13px;">
+                            共 <span id="executionTotalCount">0</span> 条记录
+                        </div>
+                        <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+                            <button class="btn btn-secondary btn-sm" id="executionPrevPage" onclick="changeExecutionPage(-1)" disabled>
+                                <i class="bi bi-chevron-left"></i> 上一页
+                            </button>
+                            <span id="executionCurrentPage" style="padding: 0 var(--spacing-md); color: var(--text-primary);">1</span>
+                            <span style="color: var(--text-secondary);">/</span>
+                            <span id="executionTotalPages" style="padding: 0 var(--spacing-md); color: var(--text-secondary);">1</span>
+                            <button class="btn btn-secondary btn-sm" id="executionNextPage" onclick="changeExecutionPage(1)" disabled>
+                                下一页 <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                        <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+                            <label style="color: var(--text-secondary); font-size: 13px;">每页显示:</label>
+                            <select class="form-select" id="executionPageSize" onchange="loadExecutionList()" style="width: auto; padding: 4px 8px;">
+                                <option value="20">20</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -3180,153 +3206,208 @@
             }
         }
 
+        // 执行清单分页相关变量
+        let executionCurrentPage = 1;
+        let executionTotalPages = 1;
+        let executionAllData = [];  // 存储所有执行记录
+
+        // 切换执行清单页码
+        function changeExecutionPage(delta) {
+            const newPage = executionCurrentPage + delta;
+            if (newPage >= 1 && newPage <= executionTotalPages) {
+                executionCurrentPage = newPage;
+                renderExecutionList();
+            }
+        }
+
+        // 渲染执行清单（当前页）
+        function renderExecutionList() {
+            const container = document.getElementById('executionListContainer');
+            if (!container || executionAllData.length === 0) return;
+
+            const pageSize = parseInt(document.getElementById('executionPageSize')?.value || 50);
+            const startIndex = (executionCurrentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, executionAllData.length);
+            const pageData = executionAllData.slice(startIndex, endIndex);
+
+            // 渲染当前页数据
+            container.innerHTML = pageData.map(item => {
+                const actionIcon = item.action === 'buy' || item.action === 'BUY' || item.action === 'OPEN' || item.action === 'LONG' || item.action === 'SHORT'
+                    ? '<i class="bi bi-arrow-down-circle" style="color: var(--success-green);"></i>'
+                    : '<i class="bi bi-arrow-up-circle" style="color: var(--danger-red);"></i>';
+                const actionText = item.action === 'buy' || item.action === 'BUY' || item.action === 'OPEN' || item.action === 'LONG'
+                    ? '买入/开仓'
+                    : item.action === 'SHORT' ? '做空' : '卖出/平仓';
+                const statusColor = item.status === 'FILLED' ? 'var(--success-green)' : item.status === 'PENDING' ? 'var(--warning-yellow)' : 'var(--text-secondary)';
+                const marketTypeText = item.market_type === 'test' ? '测试' : item.market_type === 'futures' ? '合约' : '现货';
+
+                return `
+                    <div class="strategy-item" style="margin-bottom: var(--spacing-md);">
+                        <div class="strategy-item-header">
+                            <div class="strategy-item-title">
+                                ${actionIcon} ${actionText} - ${item.symbol || 'N/A'}
+                            </div>
+                            <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
+                                <span style="padding: 4px 12px; background: ${statusColor}20; color: ${statusColor}; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;">
+                                    ${item.status || 'N/A'}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="strategy-item-body">
+                            ${item.strategy_name ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">策略名称</div>
+                                <div class="strategy-item-field-value">${item.strategy_name}</div>
+                            </div>
+                            ` : ''}
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">类型</div>
+                                <div class="strategy-item-field-value">${marketTypeText}</div>
+                            </div>
+                            ${item.direction ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">方向</div>
+                                <div class="strategy-item-field-value">${item.direction === 'long' ? '做多' : '做空'}</div>
+                            </div>
+                            ` : ''}
+                            ${item.action === 'sell' && item.entry_price ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">开仓价</div>
+                                <div class="strategy-item-field-value">${parseFloat(item.entry_price).toFixed(4)}</div>
+                            </div>
+                            ` : ''}
+                            ${item.action === 'sell' && item.exit_price ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">平仓价</div>
+                                <div class="strategy-item-field-value">${parseFloat(item.exit_price).toFixed(4)}</div>
+                            </div>
+                            ` : ''}
+                            ${item.action === 'buy' ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">价格</div>
+                                <div class="strategy-item-field-value">${item.price ? parseFloat(item.price).toFixed(4) : 'N/A'}</div>
+                            </div>
+                            ` : ''}
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">数量</div>
+                                <div class="strategy-item-field-value">${item.quantity ? parseFloat(item.quantity).toFixed(4) : 'N/A'}</div>
+                            </div>
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">金额</div>
+                                <div class="strategy-item-field-value">${item.amount ? parseFloat(item.amount).toFixed(2) : 'N/A'} USDT</div>
+                            </div>
+                            ${item.leverage ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">杠杆</div>
+                                <div class="strategy-item-field-value">${item.leverage}x</div>
+                            </div>
+                            ` : ''}
+                            ${item.pnl !== undefined && item.pnl !== null ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">盈亏</div>
+                                <div class="strategy-item-field-value" style="color: ${parseFloat(item.pnl) >= 0 ? 'var(--success-green)' : 'var(--danger-red)'};">
+                                    ${parseFloat(item.pnl) >= 0 ? '+' : ''}${parseFloat(item.pnl).toFixed(2)} USDT
+                                </div>
+                            </div>
+                            ` : ''}
+                            ${item.fee ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">手续费</div>
+                                <div class="strategy-item-field-value">${parseFloat(item.fee).toFixed(4)} USDT</div>
+                            </div>
+                            ` : ''}
+                            ${item.reason ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">交易原因</div>
+                                <div class="strategy-item-field-value">${item.reason}</div>
+                            </div>
+                            ` : ''}
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">时间</div>
+                                <div class="strategy-item-field-value">${item.created_at || 'N/A'}</div>
+                            </div>
+                            ${item.order_source ? `
+                            <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">来源</div>
+                                <div class="strategy-item-field-value">${item.order_source}</div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // 滚动到顶部
+            container.scrollTop = 0;
+
+            // 更新分页控件
+            updateExecutionPagination();
+        }
+
+        // 更新分页控件状态
+        function updateExecutionPagination() {
+            const pageSize = parseInt(document.getElementById('executionPageSize')?.value || 50);
+            executionTotalPages = Math.ceil(executionAllData.length / pageSize) || 1;
+
+            document.getElementById('executionTotalCount').textContent = executionAllData.length;
+            document.getElementById('executionCurrentPage').textContent = executionCurrentPage;
+            document.getElementById('executionTotalPages').textContent = executionTotalPages;
+
+            document.getElementById('executionPrevPage').disabled = executionCurrentPage <= 1;
+            document.getElementById('executionNextPage').disabled = executionCurrentPage >= executionTotalPages;
+        }
+
         // 加载策略执行清单
         async function loadExecutionList() {
             const container = document.getElementById('executionListContainer');
             if (!container) return;
-            
+
+            // 重置分页
+            executionCurrentPage = 1;
+            executionAllData = [];
+
             container.innerHTML = '<div class="placeholder-content"><div class="placeholder-icon"><i class="bi bi-hourglass-split"></i></div><div class="placeholder-text">正在加载执行记录...</div></div>';
-            
+
             try {
                 const marketType = document.getElementById('executionMarketType')?.value || 'all';
                 const actionType = document.getElementById('executionActionType')?.value || 'all';
                 const status = document.getElementById('executionStatus')?.value || 'all';
                 const symbol = document.getElementById('executionSymbol')?.value || '';
                 const timeRange = document.getElementById('executionTimeRange')?.value || '30d';
-                
-                // 构建查询参数
+
+                // 构建查询参数，获取较多数据用于前端分页
                 const params = new URLSearchParams();
                 if (marketType !== 'all') params.append('market_type', marketType);
                 if (actionType !== 'all') params.append('action_type', actionType);
                 if (status !== 'all') params.append('status', status);
                 if (symbol) params.append('symbol', symbol);
                 if (timeRange) params.append('time_range', timeRange);
-                
+                params.append('limit', '1000');  // 获取较多数据用于前端分页
+
                 const response = await fetch(`/api/strategy/execution/list?${params.toString()}`);
                 const result = await response.json();
-                
+
                 if (!result.success) {
                     container.innerHTML = `<div class="placeholder-content"><div class="placeholder-icon" style="color: var(--danger-red);"><i class="bi bi-exclamation-triangle"></i></div><div class="placeholder-text">加载失败</div><div class="placeholder-subtext">${result.error || '未知错误'}</div></div>`;
+                    updateExecutionPagination();
                     return;
                 }
-                
-                const executions = result.data || [];
-                
-                if (executions.length === 0) {
+
+                executionAllData = result.data || [];
+
+                if (executionAllData.length === 0) {
                     container.innerHTML = '<div class="placeholder-content"><div class="placeholder-icon"><i class="bi bi-inbox"></i></div><div class="placeholder-text">暂无执行记录</div><div class="placeholder-subtext">策略执行记录将显示在这里</div></div>';
+                    updateExecutionPagination();
                     return;
                 }
-                
-                // 渲染执行记录列表
-                container.innerHTML = executions.map(item => {
-                    const actionIcon = item.action === 'buy' || item.action === 'BUY' || item.action === 'OPEN' || item.action === 'LONG' || item.action === 'SHORT' 
-                        ? '<i class="bi bi-arrow-down-circle" style="color: var(--success-green);"></i>' 
-                        : '<i class="bi bi-arrow-up-circle" style="color: var(--danger-red);"></i>';
-                    const actionText = item.action === 'buy' || item.action === 'BUY' || item.action === 'OPEN' || item.action === 'LONG' 
-                        ? '买入/开仓' 
-                        : item.action === 'SHORT' ? '做空' : '卖出/平仓';
-                    const statusColor = item.status === 'FILLED' ? 'var(--success-green)' : item.status === 'PENDING' ? 'var(--warning-yellow)' : 'var(--text-secondary)';
-                    const marketTypeText = item.market_type === 'test' ? '测试' : item.market_type === 'futures' ? '合约' : '现货';
-                    
-                    return `
-                        <div class="strategy-item" style="margin-bottom: var(--spacing-md);">
-                            <div class="strategy-item-header">
-                                <div class="strategy-item-title">
-                                    ${actionIcon} ${actionText} - ${item.symbol || 'N/A'}
-                                </div>
-                                <div style="display: flex; gap: var(--spacing-sm); align-items: center;">
-                                    <span style="padding: 4px 12px; background: ${statusColor}20; color: ${statusColor}; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;">
-                                        ${item.status || 'N/A'}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="strategy-item-body">
-                                ${item.strategy_name ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">策略名称</div>
-                                    <div class="strategy-item-field-value">${item.strategy_name}</div>
-                                </div>
-                                ` : ''}
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">类型</div>
-                                    <div class="strategy-item-field-value">${marketTypeText}</div>
-                                </div>
-                                ${item.direction ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">方向</div>
-                                    <div class="strategy-item-field-value">${item.direction === 'long' ? '做多' : '做空'}</div>
-                                </div>
-                                ` : ''}
-                                ${item.action === 'sell' && item.entry_price ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">开仓价</div>
-                                    <div class="strategy-item-field-value">${parseFloat(item.entry_price).toFixed(4)}</div>
-                                </div>
-                                ` : ''}
-                                ${item.action === 'sell' && item.exit_price ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">平仓价</div>
-                                    <div class="strategy-item-field-value">${parseFloat(item.exit_price).toFixed(4)}</div>
-                                </div>
-                                ` : ''}
-                                ${item.action === 'buy' ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">价格</div>
-                                    <div class="strategy-item-field-value">${item.price ? parseFloat(item.price).toFixed(4) : 'N/A'}</div>
-                                </div>
-                                ` : ''}
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">数量</div>
-                                    <div class="strategy-item-field-value">${item.quantity ? parseFloat(item.quantity).toFixed(4) : 'N/A'}</div>
-                                </div>
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">金额</div>
-                                    <div class="strategy-item-field-value">${item.amount ? parseFloat(item.amount).toFixed(2) : 'N/A'} USDT</div>
-                                </div>
-                                ${item.leverage ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">杠杆</div>
-                                    <div class="strategy-item-field-value">${item.leverage}x</div>
-                                </div>
-                                ` : ''}
-                                ${item.pnl !== undefined && item.pnl !== null ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">盈亏</div>
-                                    <div class="strategy-item-field-value" style="color: ${parseFloat(item.pnl) >= 0 ? 'var(--success-green)' : 'var(--danger-red)'};">
-                                        ${parseFloat(item.pnl) >= 0 ? '+' : ''}${parseFloat(item.pnl).toFixed(2)} USDT
-                                    </div>
-                                </div>
-                                ` : ''}
-                                ${item.fee ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">手续费</div>
-                                    <div class="strategy-item-field-value">${parseFloat(item.fee).toFixed(4)} USDT</div>
-                                </div>
-                                ` : ''}
-                                ${item.reason ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">交易原因</div>
-                                    <div class="strategy-item-field-value">${item.reason}</div>
-                                </div>
-                                ` : ''}
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">时间</div>
-                                    <div class="strategy-item-field-value">${item.created_at || 'N/A'}</div>
-                                </div>
-                                ${item.order_source ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">来源</div>
-                                    <div class="strategy-item-field-value">${item.order_source}</div>
-                                </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-                
+
+                // 渲染第一页数据
+                renderExecutionList();
+
             } catch (error) {
                 console.error('加载执行清单失败:', error);
                 container.innerHTML = `<div class="placeholder-content"><div class="placeholder-icon" style="color: var(--danger-red);"><i class="bi bi-exclamation-triangle"></i></div><div class="placeholder-text">加载失败</div><div class="placeholder-subtext">${error.message}</div></div>`;
+                updateExecutionPagination();
             }
         }
         
