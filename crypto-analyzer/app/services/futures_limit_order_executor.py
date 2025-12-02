@@ -137,10 +137,12 @@ class FuturesLimitOrderExecutor:
             
             try:
                 with connection.cursor() as cursor:
+                    # 设置会话时区为 UTC+8（与存储的时间一致）
+                    cursor.execute("SET time_zone = '+08:00'")
+
                     # 获取所有待成交的限价单（只处理开仓订单）
                     # 同时获取策略的超时配置
                     # 注意：使用 strategy_timeout 避免与 futures_orders.timeout_minutes 字段冲突
-                    # 使用数据库的 NOW() 确保时区一致
                     cursor.execute(
                         """SELECT o.*,
                                COALESCE(
