@@ -139,16 +139,17 @@ class FuturesLimitOrderExecutor:
                 with connection.cursor() as cursor:
                     # 获取所有待成交的限价单（只处理开仓订单）
                     # 同时获取策略的超时配置
-                    # 使用 JSON_EXTRACT 直接获取数值，避免 JSON_UNQUOTE 把数字变成 null
+                    # 使用 CAST 确保 strategy_id 类型匹配（BIGINT vs INT）
                     cursor.execute(
                         """SELECT o.*,
                                COALESCE(
                                    CAST(JSON_EXTRACT(s.config, '$.limitOrderTimeoutMinutes') AS UNSIGNED),
                                    0
                                ) as timeout_minutes,
-                               s.config as strategy_config
+                               s.config as strategy_config,
+                               s.name as strategy_name
                         FROM futures_orders o
-                        LEFT JOIN trading_strategies s ON o.strategy_id = s.id
+                        LEFT JOIN trading_strategies s ON CAST(o.strategy_id AS UNSIGNED) = CAST(s.id AS UNSIGNED)
                         WHERE o.status = 'PENDING'
                         AND o.order_type = 'LIMIT'
                         AND o.side IN ('OPEN_LONG', 'OPEN_SHORT')
@@ -189,8 +190,8 @@ class FuturesLimitOrderExecutor:
 
                         # 调试日志：显示超时配置（使用info级别便于排查）
                         strategy_id_in_order = order.get('strategy_id')
-                        strategy_config = order.get('strategy_config')
-                        logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, strategy_id={strategy_id_in_order}, timeout={timeout_minutes}分钟")
+                        strategy_name = order.get('strategy_name', '未知')
+                        logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, 策略={strategy_name}, timeout={timeout_minutes}分钟")
 
                         if timeout_minutes > 0:
                             from datetime import datetime, timedelta
