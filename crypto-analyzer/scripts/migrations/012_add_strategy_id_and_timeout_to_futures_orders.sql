@@ -22,7 +22,7 @@ SET @column_exists_strategy_id = (
 );
 
 SET @sql_strategy_id = IF(@column_exists_strategy_id = 0,
-    'ALTER TABLE `futures_orders` ADD COLUMN `strategy_id` INT NULL COMMENT ''策略ID'' AFTER `account_id`',
+    'ALTER TABLE `futures_orders` ADD COLUMN `strategy_id` BIGINT NULL COMMENT ''策略ID'' AFTER `account_id`',
     'SELECT ''Column strategy_id already exists'' AS message'
 );
 
