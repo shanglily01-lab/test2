@@ -277,6 +277,8 @@ class StrategyExecutor:
             max_short_positions = strategy.get('maxShortPositions')  # 最大做空持仓数
             long_price_type = strategy.get('longPrice', 'market')
             short_price_type = strategy.get('shortPrice', 'market')
+            # 限价单超时自动转市价（分钟），0表示不转换
+            limit_order_timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 0)
             stop_loss_pct = strategy.get('stopLoss')
             take_profit_pct = strategy.get('takeProfit')
             ma10_ema10_trend_filter = strategy.get('ma10Ema10TrendFilter', False)
@@ -290,6 +292,7 @@ class StrategyExecutor:
             trend_confirm_bars = strategy.get('trendConfirmBars', 0)
             exit_on_ma_flip = strategy.get('exitOnMAFlip', False)  # MA10/EMA10反转时立即平仓
             exit_on_ma_flip_threshold = strategy.get('exitOnMAFlipThreshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
+            exit_on_ma_flip_confirm_bars = strategy.get('exitOnMAFlipConfirmBars', 1)  # MA10/EMA10反转确认K线数，连续几根K线反转才触发平仓
             exit_on_ema_weak = strategy.get('exitOnEMAWeak', False)  # EMA差值<0.05%时平仓
             exit_on_ema_weak_threshold = strategy.get('exitOnEMAWeakThreshold', 0.05)  # EMA弱信号阈值（%），默认0.05%
             early_stop_loss_pct = strategy.get('earlyStopLossPct', None)  # 早期止损百分比，基于EMA差值或价格回撤
@@ -536,6 +539,8 @@ class StrategyExecutor:
                     strategy_name=strategy.get('name', '未命名策略'),
                     account_id=account_id,
                     exit_on_ma_flip_threshold=exit_on_ma_flip_threshold,
+                    exit_on_ma_flip_confirm_bars=exit_on_ma_flip_confirm_bars,
+                    limit_order_timeout_minutes=limit_order_timeout_minutes,
                     exit_on_ema_weak=exit_on_ema_weak,
                     exit_on_ema_weak_threshold=exit_on_ema_weak_threshold,
                     early_stop_loss_pct=early_stop_loss_pct,
@@ -888,6 +893,8 @@ class StrategyExecutor:
         trend_confirm_ema_threshold = kwargs.get('trend_confirm_ema_threshold', 0.0)  # 趋势确认EMA差值阈值（%），增强趋势确认
         exit_on_ma_flip = kwargs.get('exit_on_ma_flip', False)  # MA10/EMA10反转时立即平仓
         exit_on_ma_flip_threshold = kwargs.get('exit_on_ma_flip_threshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
+        exit_on_ma_flip_confirm_bars = kwargs.get('exit_on_ma_flip_confirm_bars', 1)  # MA10/EMA10反转确认K线数
+        limit_order_timeout_minutes = kwargs.get('limit_order_timeout_minutes', 0)  # 限价单超时自动转市价（分钟）
         exit_on_ema_weak = kwargs.get('exit_on_ema_weak', False)  # EMA差值<0.05%时平仓
         exit_on_ema_weak_threshold = kwargs.get('exit_on_ema_weak_threshold', 0.05)  # EMA弱信号阈值（%），默认0.05%
         early_stop_loss_pct = kwargs.get('early_stop_loss_pct', None)  # 早期止损百分比，基于EMA差值或价格回撤
@@ -1364,17 +1371,45 @@ class StrategyExecutor:
                             # 获取当前持仓方向（取第一个持仓的方向）
                             position_direction = positions[0]['direction']
 
-                            # 只有当MA状态与持仓方向相反，且差值超过阈值时才触发退出
+                            # 连续K线确认检查
+                            confirm_bars_needed = max(1, exit_on_ma_flip_confirm_bars)
+                            confirmed_bars = 0
+
+                            # 检查最近N根K线是否都满足反转条件
+                            for bar_offset in range(confirm_bars_needed):
+                                check_idx = current_sell_index - bar_offset
+                                if check_idx < 0:
+                                    break
+                                check_pair = sell_indicator_pairs[check_idx]
+                                check_indicator = check_pair['indicator']
+                                if check_indicator.get('ma10') and check_indicator.get('ema10'):
+                                    check_ma10 = float(check_indicator['ma10'])
+                                    check_ema10 = float(check_indicator['ema10'])
+                                    check_diff = check_ema10 - check_ma10
+                                    check_diff_pct = (check_diff / check_ma10 * 100) if check_ma10 > 0 else 0
+                                    check_bullish = check_ema10 > check_ma10
+
+                                    # 判断该K线是否满足反转条件
+                                    if position_direction == 'long' and not check_bullish and abs(check_diff_pct) >= exit_on_ma_flip_threshold:
+                                        confirmed_bars += 1
+                                    elif position_direction == 'short' and check_bullish and abs(check_diff_pct) >= exit_on_ma_flip_threshold:
+                                        confirmed_bars += 1
+
+                            # 只有当MA状态与持仓方向相反，且差值超过阈值，且连续确认K线数满足要求时才触发退出
                             if position_direction == 'long' and not curr_bullish:
                                 # 做多但MA转空头，检查空头差值是否超过阈值
-                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold:
+                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars >= confirm_bars_needed:
                                     should_exit = True
-                                    exit_reason = f'MA10/EMA10转空头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%)'
+                                    exit_reason = f'MA10/EMA10转空头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%,连续{confirmed_bars}根K线确认)'
+                                elif abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars < confirm_bars_needed:
+                                    debug_info.append(f"   📊 MA10/EMA10转空头但确认K线数不足({confirmed_bars}/{confirm_bars_needed}根)")
                             elif position_direction == 'short' and curr_bullish:
                                 # 做空但MA转多头，检查多头差值是否超过阈值
-                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold:
+                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars >= confirm_bars_needed:
                                     should_exit = True
-                                    exit_reason = f'MA10/EMA10转多头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%)'
+                                    exit_reason = f'MA10/EMA10转多头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%,连续{confirmed_bars}根K线确认)'
+                                elif abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars < confirm_bars_needed:
+                                    debug_info.append(f"   📊 MA10/EMA10转多头但确认K线数不足({confirmed_bars}/{confirm_bars_needed}根)")
                     
                     # 检查 EMA 弱信号退出
                     if not should_exit and exit_on_ema_weak:
@@ -1970,11 +2005,11 @@ class StrategyExecutor:
                                         sustained_conditions_met = False
                                         sustained_reasons.append(f"MA10/EMA10未确认空头趋势(EMA10={curr_ema10:.4f} >= MA10={curr_ma10:.4f})")
 
-                                # 条件3：价格确认（如果启用）
-                                if sustained_trend_require_price_confirm and curr_close:
-                                    if curr_close >= curr_ema_short:  # 做空时价格应在EMA9下方
+                                # 条件3：价格确认（如果启用）- 使用实时价格而非历史K线收盘价
+                                if sustained_trend_require_price_confirm and realtime_price:
+                                    if realtime_price >= curr_ema_short:  # 做空时价格应在EMA9下方
                                         sustained_conditions_met = False
-                                        sustained_reasons.append(f"价格未在EMA9下方(价格={curr_close:.4f} >= EMA9={curr_ema_short:.4f})")
+                                        sustained_reasons.append(f"价格未在EMA9下方(实时价格={realtime_price:.4f} >= EMA9={curr_ema_short:.4f})")
 
                                 # 条件4：连续K线确认（检查历史K线是否持续保持趋势）
                                 if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
@@ -2029,8 +2064,8 @@ class StrategyExecutor:
                                         msg_ma10 = f"   ✅ MA10/EMA10趋势确认 ({ma10_status}) | MA10={curr_ma10:.4f}, EMA10={curr_ema10:.4f}, 差值={ma10_diff_pct_val:+.2f}%"
                                         debug_info.append(msg_ma10)
                                         logger.info(f"{symbol} {msg_ma10}")
-                                    if curr_close:
-                                        msg_price = f"   ✅ 价格确认 | 当前价格={curr_close:.4f} < EMA9={curr_ema_short:.4f}"
+                                    if realtime_price:
+                                        msg_price = f"   ✅ 价格确认 | 实时价格={realtime_price:.4f} < EMA9={curr_ema_short:.4f}"
                                         debug_info.append(msg_price)
                                         logger.info(f"{symbol} {msg_price}")
                                     if sustained_trend_min_bars > 0:
@@ -2071,11 +2106,11 @@ class StrategyExecutor:
                                         sustained_conditions_met = False
                                         sustained_reasons.append(f"MA10/EMA10未确认多头趋势(EMA10={curr_ema10:.4f} <= MA10={curr_ma10:.4f})")
 
-                                # 条件3：价格确认
-                                if sustained_trend_require_price_confirm and curr_close:
-                                    if curr_close <= curr_ema_short:  # 做多时价格应在EMA9上方
+                                # 条件3：价格确认 - 使用实时价格而非历史K线收盘价
+                                if sustained_trend_require_price_confirm and realtime_price:
+                                    if realtime_price <= curr_ema_short:  # 做多时价格应在EMA9上方
                                         sustained_conditions_met = False
-                                        sustained_reasons.append(f"价格未在EMA9上方(价格={curr_close:.4f} <= EMA9={curr_ema_short:.4f})")
+                                        sustained_reasons.append(f"价格未在EMA9上方(实时价格={realtime_price:.4f} <= EMA9={curr_ema_short:.4f})")
 
                                 # 条件4：连续K线确认
                                 if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
@@ -2129,8 +2164,8 @@ class StrategyExecutor:
                                         msg_ma10 = f"   ✅ MA10/EMA10趋势确认 ({ma10_status}) | MA10={curr_ma10:.4f}, EMA10={curr_ema10:.4f}, 差值={ma10_diff_pct_val:+.2f}%"
                                         debug_info.append(msg_ma10)
                                         logger.info(f"{symbol} {msg_ma10}")
-                                    if curr_close:
-                                        msg_price = f"   ✅ 价格确认 | 当前价格={curr_close:.4f} > EMA9={curr_ema_short:.4f}"
+                                    if realtime_price:
+                                        msg_price = f"   ✅ 价格确认 | 实时价格={realtime_price:.4f} > EMA9={curr_ema_short:.4f}"
                                         debug_info.append(msg_price)
                                         logger.info(f"{symbol} {msg_price}")
                                     if sustained_trend_min_bars > 0:
@@ -2822,7 +2857,8 @@ class StrategyExecutor:
                                             stop_loss_pct=Decimal(str(stop_loss_pct)) if stop_loss_pct else None,
                                             take_profit_pct=Decimal(str(take_profit_pct)) if take_profit_pct else None,
                                             source='strategy',
-                                            signal_id=None
+                                            signal_id=None,
+                                            strategy_id=strategy_id
                                         )
                                                 
                                         if open_result.get('success'):

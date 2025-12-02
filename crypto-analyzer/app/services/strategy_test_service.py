@@ -190,6 +190,7 @@ class StrategyTestService:
                 trend_confirm_bars = request.get('trendConfirmBars', 0)
                 exit_on_ma_flip = request.get('exitOnMAFlip', False)  # MA10/EMA10反转时立即平仓
                 exit_on_ma_flip_threshold = request.get('exitOnMAFlipThreshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
+                exit_on_ma_flip_confirm_bars = request.get('exitOnMAFlipConfirmBars', 1)  # MA10/EMA10反转确认K线数
                 exit_on_ema_weak = request.get('exitOnEMAWeak', False)  # EMA差值<0.05%时平仓
                 exit_on_ema_weak_threshold = request.get('exitOnEMAWeakThreshold', 0.05)  # EMA弱信号阈值（%），默认0.05%
                 early_stop_loss_pct = request.get('earlyStopLossPct', None)  # 早期止损百分比，基于EMA差值或价格回撤
@@ -413,6 +414,7 @@ class StrategyTestService:
                         strategy_name=request.get('name', '测试策略'),
                         account_id=0,  # 测试时使用0作为账户ID
                         exit_on_ma_flip_threshold=exit_on_ma_flip_threshold,
+                        exit_on_ma_flip_confirm_bars=exit_on_ma_flip_confirm_bars,
                         exit_on_ema_weak=exit_on_ema_weak,
                         exit_on_ema_weak_threshold=exit_on_ema_weak_threshold,
                         early_stop_loss_pct=early_stop_loss_pct,
@@ -699,6 +701,7 @@ class StrategyTestService:
         trend_confirm_ema_threshold = kwargs.get('trend_confirm_ema_threshold', 0.0)  # 趋势确认EMA差值阈值（%），增强趋势确认
         exit_on_ma_flip = kwargs.get('exit_on_ma_flip', False)  # MA10/EMA10反转时立即平仓
         exit_on_ma_flip_threshold = kwargs.get('exit_on_ma_flip_threshold', 0.1)  # MA10/EMA10反转阈值（%），避免小幅波动触发
+        exit_on_ma_flip_confirm_bars = kwargs.get('exit_on_ma_flip_confirm_bars', 1)  # MA10/EMA10反转确认K线数
         exit_on_ema_weak = kwargs.get('exit_on_ema_weak', False)  # EMA差值<0.05%时平仓
         exit_on_ema_weak_threshold = kwargs.get('exit_on_ema_weak_threshold', 0.05)  # EMA弱信号阈值（%），默认0.05%
         early_stop_loss_pct = kwargs.get('early_stop_loss_pct', None)  # 早期止损百分比，基于EMA差值或价格回撤
@@ -2032,23 +2035,49 @@ class StrategyTestService:
                             # 获取当前持仓方向（取第一个持仓的方向）
                             position_direction = positions[0]['direction']
 
-                            # 只有当MA状态与持仓方向相反，且差值超过阈值时才触发退出
-                            # 做多时：MA转为空头（curr_bullish=False）且空头差值超过阈值
-                            # 做空时：MA转为多头（curr_bullish=True）且多头差值超过阈值
+                            # 连续K线确认检查
+                            confirm_bars_needed = max(1, exit_on_ma_flip_confirm_bars)
+                            confirmed_bars = 0
+
+                            # 检查最近N根K线是否都满足反转条件
+                            for bar_offset in range(confirm_bars_needed):
+                                check_idx = current_sell_index - bar_offset
+                                if check_idx < 0:
+                                    break
+                                check_pair = sell_indicator_pairs[check_idx]
+                                check_indicator = check_pair['indicator']
+                                if check_indicator.get('ma10') and check_indicator.get('ema10'):
+                                    check_ma10 = float(check_indicator['ma10'])
+                                    check_ema10 = float(check_indicator['ema10'])
+                                    check_diff = check_ema10 - check_ma10
+                                    check_diff_pct = (check_diff / check_ma10 * 100) if check_ma10 > 0 else 0
+                                    check_bullish = check_ema10 > check_ma10
+
+                                    # 判断该K线是否满足反转条件
+                                    if position_direction == 'long' and not check_bullish and abs(check_diff_pct) >= exit_on_ma_flip_threshold:
+                                        confirmed_bars += 1
+                                    elif position_direction == 'short' and check_bullish and abs(check_diff_pct) >= exit_on_ma_flip_threshold:
+                                        confirmed_bars += 1
+
+                            # 只有当MA状态与持仓方向相反，且差值超过阈值，且连续确认K线数满足要求时才触发退出
                             if position_direction == 'long' and not curr_bullish:
                                 # 做多但MA转空头，检查空头差值是否超过阈值
-                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold:
+                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars >= confirm_bars_needed:
                                     should_exit = True
-                                    exit_reason = f'MA10/EMA10转空头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%)'
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做多持仓检测到MA10/EMA10转空头，触发退出（差值={curr_diff_pct:.2f}%，阈值={exit_on_ma_flip_threshold}%）")
+                                    exit_reason = f'MA10/EMA10转空头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%,连续{confirmed_bars}根K线确认)'
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做多持仓检测到MA10/EMA10转空头，触发退出（差值={curr_diff_pct:.2f}%，阈值={exit_on_ma_flip_threshold}%，确认{confirmed_bars}根K线）")
+                                elif abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars < confirm_bars_needed:
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 📊 MA10/EMA10转空头但确认K线数不足({confirmed_bars}/{confirm_bars_needed}根)")
                                 else:
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 📊 MA10/EMA10转空头但差值过小（差值={abs(curr_diff_pct):.2f}% < 阈值{exit_on_ma_flip_threshold}%），忽略")
                             elif position_direction == 'short' and curr_bullish:
                                 # 做空但MA转多头，检查多头差值是否超过阈值
-                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold:
+                                if abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars >= confirm_bars_needed:
                                     should_exit = True
-                                    exit_reason = f'MA10/EMA10转多头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%)'
-                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做空持仓检测到MA10/EMA10转多头，触发退出（差值={curr_diff_pct:.2f}%，阈值={exit_on_ma_flip_threshold}%）")
+                                    exit_reason = f'MA10/EMA10转多头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%,连续{confirmed_bars}根K线确认)'
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 做空持仓检测到MA10/EMA10转多头，触发退出（差值={curr_diff_pct:.2f}%，阈值={exit_on_ma_flip_threshold}%，确认{confirmed_bars}根K线）")
+                                elif abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars < confirm_bars_needed:
+                                    debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 📊 MA10/EMA10转多头但确认K线数不足({confirmed_bars}/{confirm_bars_needed}根)")
                                 else:
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 📊 MA10/EMA10转多头但差值过小（差值={abs(curr_diff_pct):.2f}% < 阈值{exit_on_ma_flip_threshold}%），忽略")
                     

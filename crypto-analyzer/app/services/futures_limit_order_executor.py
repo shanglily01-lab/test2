@@ -138,12 +138,16 @@ class FuturesLimitOrderExecutor:
             try:
                 with connection.cursor() as cursor:
                     # 获取所有待成交的限价单（只处理开仓订单）
+                    # 同时获取策略的超时配置
                     cursor.execute(
-                        """SELECT * FROM futures_orders
-                        WHERE status = 'PENDING' 
-                        AND order_type = 'LIMIT'
-                        AND side IN ('OPEN_LONG', 'OPEN_SHORT')
-                        ORDER BY created_at ASC"""
+                        """SELECT o.*,
+                               COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.config, '$.limitOrderTimeoutMinutes')), '0') as timeout_minutes
+                        FROM futures_orders o
+                        LEFT JOIN trading_strategies s ON o.strategy_id = s.id
+                        WHERE o.status = 'PENDING'
+                        AND o.order_type = 'LIMIT'
+                        AND o.side IN ('OPEN_LONG', 'OPEN_SHORT')
+                        ORDER BY o.created_at ASC"""
                     )
                     pending_orders = cursor.fetchall()
                 
@@ -164,26 +168,44 @@ class FuturesLimitOrderExecutor:
                         
                         # 获取当前价格（限价单扫描使用实时价格）
                         current_price = self.get_current_price(symbol, use_realtime=True)
-                        
+
                         if current_price == 0:
                             logger.warning(f"无法获取 {symbol} 的价格，跳过订单 {order_id}")
                             continue
-                        
+
                         # 检查是否达到触发条件
                         should_execute = False
+                        execute_at_market = False  # 是否以市价执行（超时转市价）
                         position_side = 'LONG' if side == 'OPEN_LONG' else 'SHORT'
-                        
-                        
-                        if side == 'OPEN_LONG':
-                            # 做多：当前价格 <= 限价时触发
-                            if current_price <= limit_price:
-                                should_execute = True
-                                logger.info(f"✅ 做多限价单触发: {symbol} @ {current_price} <= {limit_price}")
-                        elif side == 'OPEN_SHORT':
-                            # 做空：当前价格 >= 限价时触发
-                            if current_price >= limit_price:
-                                should_execute = True
-                                logger.info(f"✅ 做空限价单触发: {symbol} @ {current_price} >= {limit_price}")
+
+                        # 检查超时转市价
+                        timeout_minutes = int(order.get('timeout_minutes', 0) or 0)
+                        if timeout_minutes > 0:
+                            from datetime import datetime, timedelta
+                            created_at = order.get('created_at')
+                            if created_at:
+                                # 计算超时时间
+                                timeout_time = created_at + timedelta(minutes=timeout_minutes)
+                                now = datetime.now()
+                                if now >= timeout_time:
+                                    # 超时，以市价执行
+                                    should_execute = True
+                                    execute_at_market = True
+                                    elapsed_minutes = (now - created_at).total_seconds() / 60
+                                    logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟 (超时设置: {timeout_minutes} 分钟)")
+
+                        # 如果没有超时，检查价格是否达到限价条件
+                        if not should_execute:
+                            if side == 'OPEN_LONG':
+                                # 做多：当前价格 <= 限价时触发
+                                if current_price <= limit_price:
+                                    should_execute = True
+                                    logger.info(f"✅ 做多限价单触发: {symbol} @ {current_price} <= {limit_price}")
+                            elif side == 'OPEN_SHORT':
+                                # 做空：当前价格 >= 限价时触发
+                                if current_price >= limit_price:
+                                    should_execute = True
+                                    logger.info(f"✅ 做空限价单触发: {symbol} @ {current_price} >= {limit_price}")
                         
                         if should_execute:
                             # 执行开仓（使用限价作为成交价）
@@ -204,37 +226,47 @@ class FuturesLimitOrderExecutor:
                                 # 提交解冻操作
                                 connection.commit()
                                 
-                                # 执行开仓（使用限价作为成交价）
-                                # 注意：由于价格已经达到限价，open_position 会立即成交
+                                # 执行开仓
                                 # 保留原始订单的来源和信号ID（如果是策略订单）
                                 original_source = order.get('order_source', 'limit_order')
                                 original_signal_id = order.get('signal_id')
-                                
+
+                                # 根据是否超时决定使用限价还是市价
+                                if execute_at_market:
+                                    # 超时转市价：使用当前市价执行
+                                    execution_price = current_price
+                                    logger.info(f"⏰ 以市价执行: {symbol} {position_side} @ {current_price} (原限价: {limit_price})")
+                                else:
+                                    # 正常限价单触发：使用限价
+                                    execution_price = limit_price
+
                                 result = self.trading_engine.open_position(
                                     account_id=account_id,
                                     symbol=symbol,
                                     position_side=position_side,
                                     quantity=quantity,
                                     leverage=leverage,
-                                    limit_price=limit_price,  # 使用限价作为成交价
+                                    limit_price=execution_price,  # 使用执行价格
                                     stop_loss_price=stop_loss_price,
                                     take_profit_price=take_profit_price,
                                     source=original_source,  # 保留原始来源（strategy 或 limit_order）
                                     signal_id=original_signal_id  # 保留原始信号ID
                                 )
-                                
+
                                 if result.get('success'):
                                     # 从结果中获取实际的 symbol（确保一致性）
                                     actual_symbol = result.get('symbol', symbol)
-                                    
+
                                     # 验证 symbol 是否匹配
                                     if actual_symbol != symbol:
                                         logger.warning(f"⚠️  限价单 {order_id} symbol 不匹配: 订单中为 {symbol}, 开仓结果为 {actual_symbol}")
-                                    
+
                                     # 计算已成交价值
-                                    executed_value = float(limit_price * quantity)
-                                    
-                                    # 更新订单状态为已成交（不更新 symbol，保持原订单的 symbol）
+                                    executed_value = float(execution_price * quantity)
+
+                                    # 更新订单状态为已成交
+                                    # 如果是超时转市价，添加备注
+                                    fill_note = 'TIMEOUT_MARKET' if execute_at_market else None
                                     with connection.cursor() as update_cursor:
                                         update_cursor.execute(
                                             """UPDATE futures_orders
@@ -242,14 +274,18 @@ class FuturesLimitOrderExecutor:
                                                 executed_quantity = %s,
                                                 executed_value = %s,
                                                 avg_fill_price = %s,
-                                                fill_time = NOW()
+                                                fill_time = NOW(),
+                                                notes = CASE WHEN %s IS NOT NULL THEN %s ELSE notes END
                                             WHERE order_id = %s""",
-                                            (float(quantity), executed_value, float(limit_price), order_id)
+                                            (float(quantity), executed_value, float(execution_price), fill_note, fill_note, order_id)
                                         )
-                                    
+
                                     connection.commit()
-                                    
-                                    logger.info(f"✅ 限价单执行成功: {symbol} {position_side} {quantity} @ {limit_price}")
+
+                                    if execute_at_market:
+                                        logger.info(f"✅ 限价单超时转市价执行成功: {symbol} {position_side} {quantity} @ {execution_price} (原限价: {limit_price})")
+                                    else:
+                                        logger.info(f"✅ 限价单执行成功: {symbol} {position_side} {quantity} @ {execution_price}")
                                 else:
                                     # 如果开仓失败，恢复冻结的保证金
                                     if frozen_margin > 0:

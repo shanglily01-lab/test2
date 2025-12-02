@@ -299,7 +299,8 @@ class FuturesTradingEngine:
         stop_loss_price: Optional[Decimal] = None,
         take_profit_price: Optional[Decimal] = None,
         source: str = 'manual',
-        signal_id: Optional[int] = None
+        signal_id: Optional[int] = None,
+        strategy_id: Optional[int] = None
     ) -> Dict:
         """
         开仓
@@ -431,7 +432,7 @@ class FuturesTradingEngine:
                         (float(new_balance), float(total_frozen), account_id)
                     )
                     
-                    # 创建订单记录（包含止盈止损）
+                    # 创建订单记录（包含止盈止损和策略ID）
                     order_sql = """
                         INSERT INTO futures_orders (
                             account_id, order_id, symbol,
@@ -440,7 +441,7 @@ class FuturesTradingEngine:
                             margin, total_value, executed_value,
                             fee, fee_rate, status,
                             stop_loss_price, take_profit_price,
-                            order_source, signal_id, created_at
+                            order_source, signal_id, strategy_id, created_at
                         ) VALUES (
                             %s, %s, %s,
                             %s, 'LIMIT', %s,
@@ -448,10 +449,10 @@ class FuturesTradingEngine:
                             %s, %s, 0,
                             %s, %s, 'PENDING',
                             %s, %s,
-                            %s, %s, %s
+                            %s, %s, %s, %s
                         )
                     """
-                    
+
                     cursor.execute(order_sql, (
                         account_id, order_id, symbol,
                         side, leverage,
@@ -460,7 +461,7 @@ class FuturesTradingEngine:
                         float(limit_fee), float(Decimal('0.0004')),
                         float(limit_stop_loss_price) if limit_stop_loss_price else None,
                         float(limit_take_profit_price) if limit_take_profit_price else None,
-                        source, signal_id, get_local_time()
+                        source, signal_id, strategy_id, get_local_time()
                     ))
                     
                     # 更新总权益（限价单时还没有持仓，未实现盈亏为0）

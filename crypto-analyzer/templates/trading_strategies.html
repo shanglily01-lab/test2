@@ -738,11 +738,22 @@
                                             </div>
                                             <div style="margin-left: 26px; margin-top: 4px;">
                                                 <small style="color: var(--text-secondary); font-size: 12px; display: block;">当MA10/EMA10从多头转为空头（或相反）时，立即平仓退出</small>
-                                                <input type="number" id="exitOnMAFlipThreshold" name="exitOnMAFlipThreshold" 
-                                                       step="0.01" min="0" max="5" 
-                                                       placeholder="0.1" 
-                                                       style="width: 120px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; margin-top: 4px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; margin-left: 4px;">阈值（%），避免小幅波动触发</small>
+                                                <div style="display: flex; gap: 12px; margin-top: 4px;">
+                                                    <div>
+                                                        <input type="number" id="exitOnMAFlipThreshold" name="exitOnMAFlipThreshold"
+                                                               step="0.01" min="0" max="5"
+                                                               placeholder="0.1"
+                                                               style="width: 80px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                                        <small style="color: var(--text-secondary); font-size: 11px; display: block;">阈值（%）</small>
+                                                    </div>
+                                                    <div>
+                                                        <input type="number" id="exitOnMAFlipConfirmBars" name="exitOnMAFlipConfirmBars"
+                                                               step="1" min="1" max="10"
+                                                               placeholder="1"
+                                                               style="width: 80px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                                        <small style="color: var(--text-secondary); font-size: 11px; display: block;">确认K线数</small>
+                                                    </div>
+                                                </div>
                                             </div>
                                             
                                             <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
@@ -1116,6 +1127,21 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- 限价单超时转市价 -->
+                                <div class="form-group" id="limitOrderTimeoutGroup">
+                                    <label class="form-label">限价单超时转市价</label>
+                                    <small style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px; display: block;">
+                                        限价单在指定时间内未成交时，自动以市价成交（0表示不转换）
+                                    </small>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="number" id="limitOrderTimeoutMinutes" name="limitOrderTimeoutMinutes"
+                                               step="1" min="0" max="120"
+                                               placeholder="0"
+                                               style="width: 80px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                        <small style="color: var(--text-secondary); font-size: 11px;">分钟（建议5-15分钟）</small>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- 卖出条件（平仓） -->
@@ -1288,6 +1314,8 @@
                 if (exitOnMAFlip) exitOnMAFlip.checked = false;
                 const exitOnMAFlipThreshold = document.getElementById('exitOnMAFlipThreshold');
                 if (exitOnMAFlipThreshold) exitOnMAFlipThreshold.value = '';
+                const exitOnMAFlipConfirmBars = document.getElementById('exitOnMAFlipConfirmBars');
+                if (exitOnMAFlipConfirmBars) exitOnMAFlipConfirmBars.value = '';
                 const exitOnEMAWeak = document.getElementById('exitOnEMAWeak');
                 if (exitOnEMAWeak) exitOnEMAWeak.checked = false;
                 const exitOnEMAWeakThreshold = document.getElementById('exitOnEMAWeakThreshold');
@@ -1308,7 +1336,11 @@
                 if (maxLongPositions) maxLongPositions.value = '';
                 const maxShortPositions = document.getElementById('maxShortPositions');
                 if (maxShortPositions) maxShortPositions.value = '';
-                
+
+                // 清除限价单超时
+                const limitOrderTimeoutMinutes = document.getElementById('limitOrderTimeoutMinutes');
+                if (limitOrderTimeoutMinutes) limitOrderTimeoutMinutes.value = '';
+
                 // 清除技术指标过滤器
                 const rsiFilterEnabled = document.getElementById('rsiFilterEnabled');
                 if (rsiFilterEnabled) {
@@ -1625,6 +1657,7 @@
                 maxShortPositions: document.getElementById('maxShortPositions').value ? parseInt(document.getElementById('maxShortPositions').value) : null,
                 longPrice: longPriceRadio ? longPriceRadio.value : null,
                 shortPrice: shortPriceRadio ? shortPriceRadio.value : null,
+                limitOrderTimeoutMinutes: document.getElementById('limitOrderTimeoutMinutes') && document.getElementById('limitOrderTimeoutMinutes').value ? parseInt(document.getElementById('limitOrderTimeoutMinutes').value) : 0,
                 stopLoss: document.getElementById('stopLoss').value ? parseFloat(document.getElementById('stopLoss').value) : null,
                 takeProfit: document.getElementById('takeProfit').value ? parseFloat(document.getElementById('takeProfit').value) : null,
                 closeOppositeOnEntry: document.getElementById('closeOppositeOnEntry') ? document.getElementById('closeOppositeOnEntry').checked : false,
@@ -1637,6 +1670,7 @@
                 trendConfirmEMAThreshold: document.getElementById('trendConfirmEMAThreshold') && document.getElementById('trendConfirmEMAThreshold').value ? parseFloat(document.getElementById('trendConfirmEMAThreshold').value) : 0,
                 exitOnMAFlip: document.getElementById('exitOnMAFlip') ? document.getElementById('exitOnMAFlip').checked : false,
                 exitOnMAFlipThreshold: document.getElementById('exitOnMAFlipThreshold') && document.getElementById('exitOnMAFlipThreshold').value ? parseFloat(document.getElementById('exitOnMAFlipThreshold').value) : 0.1,
+                exitOnMAFlipConfirmBars: document.getElementById('exitOnMAFlipConfirmBars') && document.getElementById('exitOnMAFlipConfirmBars').value ? parseInt(document.getElementById('exitOnMAFlipConfirmBars').value) : 1,
                 exitOnEMAWeak: document.getElementById('exitOnEMAWeak') ? document.getElementById('exitOnEMAWeak').checked : false,
                 exitOnEMAWeakThreshold: document.getElementById('exitOnEMAWeakThreshold') && document.getElementById('exitOnEMAWeakThreshold').value ? parseFloat(document.getElementById('exitOnEMAWeakThreshold').value) : 0.05,
                 earlyStopLossPct: document.getElementById('earlyStopLossPct') && document.getElementById('earlyStopLossPct').value ? parseFloat(document.getElementById('earlyStopLossPct').value) : null,
@@ -2178,6 +2212,9 @@
             if (document.getElementById('exitOnMAFlipThreshold')) {
                 document.getElementById('exitOnMAFlipThreshold').value = strategy.exitOnMAFlipThreshold || '0.1';
             }
+            if (document.getElementById('exitOnMAFlipConfirmBars')) {
+                document.getElementById('exitOnMAFlipConfirmBars').value = strategy.exitOnMAFlipConfirmBars || '1';
+            }
             document.getElementById('exitOnEMAWeak').checked = strategy.exitOnEMAWeak === true;
             if (document.getElementById('exitOnEMAWeakThreshold')) {
                 document.getElementById('exitOnEMAWeakThreshold').value = strategy.exitOnEMAWeakThreshold || '0.05';
@@ -2253,7 +2290,12 @@
                 const shortPriceRadio = document.querySelector(`input[name="shortPrice"][value="${strategy.shortPrice}"]`);
                 if (shortPriceRadio) shortPriceRadio.checked = true;
             }
-            
+
+            // 限价单超时
+            if (document.getElementById('limitOrderTimeoutMinutes')) {
+                document.getElementById('limitOrderTimeoutMinutes').value = strategy.limitOrderTimeoutMinutes || '';
+            }
+
             // 显示Modal表单
             showAddStrategyModal();
             
