@@ -186,12 +186,16 @@ class FuturesLimitOrderExecutor:
 
                         # 检查超时转市价
                         timeout_minutes_raw = order.get('timeout_minutes')
-                        timeout_minutes = int(timeout_minutes_raw or 0) if timeout_minutes_raw not in (None, '', 'null') else 0
+                        # 直接转换，不做复杂判断
+                        try:
+                            timeout_minutes = int(timeout_minutes_raw) if timeout_minutes_raw else 0
+                        except (ValueError, TypeError):
+                            timeout_minutes = 0
 
                         # 调试日志：显示超时配置（使用info级别便于排查）
                         strategy_id_in_order = order.get('strategy_id')
                         strategy_name = order.get('strategy_name', '未知')
-                        logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, 策略={strategy_name}, timeout={timeout_minutes}分钟")
+                        logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, 策略={strategy_name}, timeout_raw={timeout_minutes_raw}, timeout={timeout_minutes}分钟")
 
                         if timeout_minutes > 0:
                             from datetime import datetime, timedelta
