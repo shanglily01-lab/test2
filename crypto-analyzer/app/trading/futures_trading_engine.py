@@ -5,7 +5,7 @@
 
 import uuid
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 from loguru import logger
@@ -1210,10 +1210,14 @@ class FuturesTradingEngine:
                     pos['unrealized_pnl'] = float(pos.get('unrealized_pnl', 0))
                     pos['unrealized_pnl_pct'] = float(pos.get('unrealized_pnl_pct', 0))
                 
-                # 转换 Decimal 类型为 float，确保所有数值字段都能正确序列化
+                # 转换 Decimal 和 datetime 类型，确保所有字段都能正确序列化为 JSON
                 for key, value in pos.items():
                     if isinstance(value, Decimal):
                         pos[key] = float(value)
+                    elif isinstance(value, datetime):
+                        pos[key] = value.isoformat()
+                    elif isinstance(value, date):
+                        pos[key] = value.isoformat()
         
         finally:
             cursor_update.close()
