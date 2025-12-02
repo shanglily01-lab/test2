@@ -196,12 +196,15 @@ class FuturesLimitOrderExecutor:
                         logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, 策略={strategy_name}, timeout={timeout_minutes}分钟")
 
                         if timeout_minutes > 0:
-                            from datetime import datetime, timedelta
+                            from datetime import datetime, timedelta, timezone
                             created_at = order.get('created_at')
                             if created_at:
+                                # 使用 UTC+8 时区计算（服务器是 UTC，数据库存储的是 UTC+8）
+                                utc_plus_8 = timezone(timedelta(hours=8))
+                                now = datetime.now(utc_plus_8).replace(tzinfo=None)
+
                                 # 计算超时时间
                                 timeout_time = created_at + timedelta(minutes=timeout_minutes)
-                                now = datetime.now()
                                 elapsed_minutes = (now - created_at).total_seconds() / 60
                                 remaining_minutes = timeout_minutes - elapsed_minutes
 
