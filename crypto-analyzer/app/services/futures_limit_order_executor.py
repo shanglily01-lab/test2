@@ -187,10 +187,10 @@ class FuturesLimitOrderExecutor:
                         timeout_minutes_raw = order.get('timeout_minutes')
                         timeout_minutes = int(timeout_minutes_raw or 0) if timeout_minutes_raw not in (None, '', 'null') else 0
 
-                        # 调试日志：显示超时配置
+                        # 调试日志：显示超时配置（使用info级别便于排查）
                         strategy_id_in_order = order.get('strategy_id')
                         strategy_config = order.get('strategy_config')
-                        logger.debug(f"🔍 限价单 {order_id}: strategy_id={strategy_id_in_order}, timeout_raw={timeout_minutes_raw}, timeout={timeout_minutes}, has_config={bool(strategy_config)}")
+                        logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, strategy_id={strategy_id_in_order}, timeout={timeout_minutes}分钟")
 
                         if timeout_minutes > 0:
                             from datetime import datetime, timedelta
@@ -209,7 +209,7 @@ class FuturesLimitOrderExecutor:
                                     logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟 (超时设置: {timeout_minutes} 分钟)")
                                 else:
                                     # 还未超时，显示剩余时间
-                                    logger.debug(f"⏳ 限价单 {order_id} 等待中: 已等待 {elapsed_minutes:.1f} 分钟, 剩余 {remaining_minutes:.1f} 分钟")
+                                    logger.info(f"⏳ 限价单 {order_id[:16]}... 等待中: 已等待 {elapsed_minutes:.1f} 分钟, 剩余 {remaining_minutes:.1f} 分钟")
 
                         # 如果没有超时，检查价格是否达到限价条件
                         if not should_execute:
