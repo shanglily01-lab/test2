@@ -1396,31 +1396,66 @@ class StrategyExecutor:
                                         confirmed_bars += 1
 
                             # 只有当MA状态与持仓方向相反，且差值超过阈值，且连续确认K线数满足要求时才触发退出
+                            # 同时需要满足最小持仓时间要求
+                            can_exit_ma_flip = True
+                            if min_holding_time_hours > 0 and positions:
+                                for pos in positions:
+                                    entry_time = pos.get('entry_time')
+                                    if entry_time:
+                                        holding_time = current_time - entry_time
+                                        min_holding_time = timedelta(hours=min_holding_time_hours)
+                                        if holding_time < min_holding_time:
+                                            can_exit_ma_flip = False
+                                            break
+
                             if position_direction == 'long' and not curr_bullish:
                                 # 做多但MA转空头，检查空头差值是否超过阈值
                                 if abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars >= confirm_bars_needed:
-                                    should_exit = True
-                                    exit_reason = f'MA10/EMA10转空头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%,连续{confirmed_bars}根K线确认)'
+                                    if can_exit_ma_flip:
+                                        should_exit = True
+                                        exit_reason = f'MA10/EMA10转空头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%)'
+                                    else:
+                                        remaining_hours = (min_holding_time - holding_time).total_seconds() / 3600
+                                        debug_info.append(f"   ⏳ MA10/EMA10转空头但持仓时间不足，已持仓{holding_time.total_seconds()/3600:.1f}小时，需要至少{min_holding_time_hours}小时")
                                 elif abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars < confirm_bars_needed:
                                     debug_info.append(f"   📊 MA10/EMA10转空头但确认K线数不足({confirmed_bars}/{confirm_bars_needed}根)")
                             elif position_direction == 'short' and curr_bullish:
                                 # 做空但MA转多头，检查多头差值是否超过阈值
                                 if abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars >= confirm_bars_needed:
-                                    should_exit = True
-                                    exit_reason = f'MA10/EMA10转多头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%,连续{confirmed_bars}根K线确认)'
+                                    if can_exit_ma_flip:
+                                        should_exit = True
+                                        exit_reason = f'MA10/EMA10转多头(差值{abs(curr_diff_pct):.2f}%≥{exit_on_ma_flip_threshold}%)'
+                                    else:
+                                        remaining_hours = (min_holding_time - holding_time).total_seconds() / 3600
+                                        debug_info.append(f"   ⏳ MA10/EMA10转多头但持仓时间不足，已持仓{holding_time.total_seconds()/3600:.1f}小时，需要至少{min_holding_time_hours}小时")
                                 elif abs(curr_diff_pct) >= exit_on_ma_flip_threshold and confirmed_bars < confirm_bars_needed:
                                     debug_info.append(f"   📊 MA10/EMA10转多头但确认K线数不足({confirmed_bars}/{confirm_bars_needed}根)")
                     
-                    # 检查 EMA 弱信号退出
+                    # 检查 EMA 弱信号退出（需要满足最小持仓时间）
                     if not should_exit and exit_on_ema_weak:
                         if sell_indicator.get('ema_short') and sell_indicator.get('ema_long'):
                             ema_short = float(sell_indicator['ema_short'])
                             ema_long = float(sell_indicator['ema_long'])
                             ema_diff_pct = abs(ema_short - ema_long) / ema_long * 100 if ema_long > 0 else 0
-                            
+
                             if ema_diff_pct < exit_on_ema_weak_threshold:
-                                should_exit = True
-                                exit_reason = f'EMA信号过弱(差值<{exit_on_ema_weak_threshold}%)'
+                                # 检查是否满足最小持仓时间要求
+                                can_exit_ema_weak = True
+                                if min_holding_time_hours > 0 and positions:
+                                    for pos in positions:
+                                        entry_time = pos.get('entry_time')
+                                        if entry_time:
+                                            holding_time = current_time - entry_time
+                                            min_holding_time = timedelta(hours=min_holding_time_hours)
+                                            if holding_time < min_holding_time:
+                                                can_exit_ema_weak = False
+                                                remaining_hours = (min_holding_time - holding_time).total_seconds() / 3600
+                                                debug_info.append(f"   ⏳ EMA信号过弱但持仓时间不足，已持仓{holding_time.total_seconds()/3600:.1f}小时，需要至少{min_holding_time_hours}小时，还需等待{remaining_hours:.1f}小时")
+                                                break
+
+                                if can_exit_ema_weak:
+                                    should_exit = True
+                                    exit_reason = f'EMA信号过弱(差值<{exit_on_ema_weak_threshold}%)'
                     
                     # 检查早期止损
                     if not should_exit and early_stop_loss_pct is not None and early_stop_loss_pct > 0:
