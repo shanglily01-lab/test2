@@ -140,6 +140,7 @@ class FuturesLimitOrderExecutor:
                     # 获取所有待成交的限价单（只处理开仓订单）
                     # 同时获取策略的超时配置
                     # 注意：使用 strategy_timeout 避免与 futures_orders.timeout_minutes 字段冲突
+                    # 使用数据库的 NOW() 确保时区一致
                     cursor.execute(
                         """SELECT o.*,
                                COALESCE(
@@ -147,7 +148,9 @@ class FuturesLimitOrderExecutor:
                                    0
                                ) as strategy_timeout,
                                s.config as strategy_config,
-                               s.name as strategy_name
+                               s.name as strategy_name,
+                               NOW() as db_now,
+                               TIMESTAMPDIFF(SECOND, o.created_at, NOW()) as elapsed_seconds
                         FROM futures_orders o
                         LEFT JOIN trading_strategies s ON CAST(o.strategy_id AS UNSIGNED) = CAST(s.id AS UNSIGNED)
                         WHERE o.status = 'PENDING'
@@ -196,26 +199,20 @@ class FuturesLimitOrderExecutor:
                         logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, 策略={strategy_name}, timeout={timeout_minutes}分钟")
 
                         if timeout_minutes > 0:
-                            from datetime import datetime, timedelta, timezone
-                            created_at = order.get('created_at')
-                            if created_at:
-                                # 使用 UTC+8 时区计算（服务器是 UTC，数据库存储的是 UTC+8）
-                                utc_plus_8 = timezone(timedelta(hours=8))
-                                now = datetime.now(utc_plus_8).replace(tzinfo=None)
+                            # 使用数据库计算的时间差，避免时区问题
+                            elapsed_seconds = order.get('elapsed_seconds', 0) or 0
+                            elapsed_minutes = elapsed_seconds / 60
+                            timeout_seconds = timeout_minutes * 60
+                            remaining_minutes = (timeout_seconds - elapsed_seconds) / 60
 
-                                # 计算超时时间
-                                timeout_time = created_at + timedelta(minutes=timeout_minutes)
-                                elapsed_minutes = (now - created_at).total_seconds() / 60
-                                remaining_minutes = timeout_minutes - elapsed_minutes
-
-                                if now >= timeout_time:
-                                    # 超时，以市价执行
-                                    should_execute = True
-                                    execute_at_market = True
-                                    logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟 (超时设置: {timeout_minutes} 分钟)")
-                                else:
-                                    # 还未超时，显示剩余时间
-                                    logger.info(f"⏳ 限价单 {order_id[:16]}... 等待中: 已等待 {elapsed_minutes:.1f} 分钟, 剩余 {remaining_minutes:.1f} 分钟")
+                            if elapsed_seconds >= timeout_seconds:
+                                # 超时，以市价执行
+                                should_execute = True
+                                execute_at_market = True
+                                logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟 (超时设置: {timeout_minutes} 分钟)")
+                            else:
+                                # 还未超时，显示剩余时间
+                                logger.info(f"⏳ 限价单 {order_id[:16]}... 等待中: 已等待 {elapsed_minutes:.1f} 分钟, 剩余 {remaining_minutes:.1f} 分钟")
 
                         # 如果没有超时，检查价格是否达到限价条件
                         if not should_execute:
