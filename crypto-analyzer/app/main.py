@@ -80,6 +80,10 @@ futures_monitor_service = None  # 合约止盈止损监控服务
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    # 禁用 uvicorn 访问日志（无论通过何种方式启动都生效）
+    import logging
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
     # 启动时初始化
     logger.info("🚀 启动加密货币交易分析系统...")
 
