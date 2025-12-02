@@ -722,6 +722,18 @@ async def futures_trading_page():
         raise HTTPException(status_code=404, detail="Futures trading page not found")
 
 
+@app.get("/live_trading")
+async def live_trading_page():
+    """
+    实盘合约交易页面
+    """
+    live_path = project_root / "templates" / "live_trading.html"
+    if live_path.exists():
+        return FileResponse(str(live_path))
+    else:
+        raise HTTPException(status_code=404, detail="Live trading page not found")
+
+
 @app.get("/strategy_manager")
 async def strategy_manager_page_alt():
     """
