@@ -139,13 +139,13 @@ class FuturesLimitOrderExecutor:
                 with connection.cursor() as cursor:
                     # 获取所有待成交的限价单（只处理开仓订单）
                     # 同时获取策略的超时配置
-                    # 使用 CAST 确保 strategy_id 类型匹配（BIGINT vs INT）
+                    # 注意：使用 strategy_timeout 避免与 futures_orders.timeout_minutes 字段冲突
                     cursor.execute(
                         """SELECT o.*,
                                COALESCE(
                                    CAST(JSON_EXTRACT(s.config, '$.limitOrderTimeoutMinutes') AS UNSIGNED),
                                    0
-                               ) as timeout_minutes,
+                               ) as strategy_timeout,
                                s.config as strategy_config,
                                s.name as strategy_name
                         FROM futures_orders o
@@ -184,18 +184,16 @@ class FuturesLimitOrderExecutor:
                         execute_at_market = False  # 是否以市价执行（超时转市价）
                         position_side = 'LONG' if side == 'OPEN_LONG' else 'SHORT'
 
-                        # 检查超时转市价
-                        timeout_minutes_raw = order.get('timeout_minutes')
-                        # 直接转换，不做复杂判断
+                        # 检查超时转市价（从策略配置中读取）
+                        strategy_timeout_raw = order.get('strategy_timeout')
                         try:
-                            timeout_minutes = int(timeout_minutes_raw) if timeout_minutes_raw else 0
+                            timeout_minutes = int(strategy_timeout_raw) if strategy_timeout_raw else 0
                         except (ValueError, TypeError):
                             timeout_minutes = 0
 
-                        # 调试日志：显示超时配置（使用info级别便于排查）
-                        strategy_id_in_order = order.get('strategy_id')
+                        # 调试日志
                         strategy_name = order.get('strategy_name', '未知')
-                        logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, 策略={strategy_name}, timeout_raw={timeout_minutes_raw}, timeout={timeout_minutes}分钟")
+                        logger.info(f"🔍 检查限价单 {order_id[:16]}...: symbol={symbol}, 策略={strategy_name}, timeout={timeout_minutes}分钟")
 
                         if timeout_minutes > 0:
                             from datetime import datetime, timedelta
