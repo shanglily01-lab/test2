@@ -2983,132 +2983,175 @@ class StrategyExecutor:
                                         market_label = "[实盘]" if market_type == 'live' else "[模拟]"
                                         logger.info(f"🔔 {market_label} {symbol} 准备开仓: 方向={direction}, 实时价格={realtime_price:.4f}, 入场价格={entry_price:.4f}, 使用限价={use_limit_price}")
 
-                                        open_result = trading_engine.open_position(
-                                            account_id=account_id,
-                                            symbol=symbol,
-                                            position_side=position_side,
-                                            quantity=quantity_decimal,
-                                            leverage=leverage,
-                                            limit_price=entry_price_decimal if use_limit_price else None,
-                                            stop_loss_pct=Decimal(str(stop_loss_pct)) if stop_loss_pct else None,
-                                            take_profit_pct=Decimal(str(take_profit_pct)) if take_profit_pct else None,
-                                            source='strategy',
-                                            signal_id=None,
-                                            strategy_id=strategy_id
-                                        )
-                                                
-                                        if open_result.get('success'):
-                                            position_id = open_result.get('position_id')
-                                            order_id = open_result.get('order_id')
-                                            actual_entry_price = float(open_result.get('entry_price', entry_price))
-                                            actual_quantity = float(open_result.get('quantity', quantity))
-                                            actual_fee = float(open_result.get('fee', open_fee))
-                                            actual_margin = float(open_result.get('margin', (actual_entry_price * actual_quantity) / leverage))
-                                                    
-                                            # 从开仓结果中获取余额信息（futures_engine 已返回）
-                                            balance_before = open_result.get('balance_before')
-                                            balance_after = open_result.get('balance_after')
-                                            frozen_before = open_result.get('frozen_before')
-                                            frozen_after = open_result.get('frozen_after')
-                                            available_before = open_result.get('available_before')
-                                            available_after = open_result.get('available_after')
-                                                    
-                                            # 保存交易记录到数据库
-                                            self._save_trade_record(
-                                                symbol=symbol,
-                                                action='BUY',
-                                                direction=direction,
-                                                entry_price=actual_entry_price,
-                                                exit_price=None,
-                                                quantity=actual_quantity,
-                                                leverage=leverage,
-                                                fee=actual_fee,
-                                                realized_pnl=None,
-                                                strategy_id=strategy_id,
-                                                strategy_name=strategy_name,
+                                        # ========== 开仓前再次检查（防止并发重复开仓） ==========
+                                        # 由于策略执行器可能被并发调用，需要在真正开仓前再次检查
+                                        # 1. 检查当前K线内是否已有交易记录
+                                        # 2. 检查当前是否已有持仓（针对该交易对和策略）
+                                        skip_open = False
+                                        try:
+                                            check_conn = self._get_connection()
+                                            check_cursor = check_conn.cursor(pymysql.cursors.DictCursor)
+
+                                            # 检查当前K线内是否已有开仓记录
+                                            check_cursor.execute("""
+                                                SELECT COUNT(*) as cnt FROM strategy_trade_records
+                                                WHERE symbol = %s AND strategy_id = %s AND action = 'BUY'
+                                                AND trade_time >= %s AND trade_time < %s
+                                            """, (symbol, strategy_id, current_kline_time, current_kline_time + timedelta(minutes=timeframe_minutes)))
+                                            trade_count = check_cursor.fetchone()['cnt']
+
+                                            # 检查当前是否已有该交易对的持仓
+                                            check_cursor.execute("""
+                                                SELECT COUNT(*) as cnt FROM futures_positions
+                                                WHERE account_id = %s AND symbol = %s AND status = 'OPEN'
+                                                AND strategy_id = %s
+                                            """, (account_id, symbol, strategy_id))
+                                            position_count = check_cursor.fetchone()['cnt']
+
+                                            check_cursor.close()
+                                            check_conn.close()
+
+                                            if trade_count > 0:
+                                                skip_open = True
+                                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 开仓前检查发现当前K线已有{trade_count}条交易记录，跳过开仓"
+                                                debug_info.append(msg)
+                                                logger.info(f"{symbol} {msg}")
+                                            elif position_count > 0 and prevent_duplicate_entry:
+                                                skip_open = True
+                                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 开仓前检查发现已有{position_count}个持仓，跳过开仓"
+                                                debug_info.append(msg)
+                                                logger.info(f"{symbol} {msg}")
+                                        except Exception as e:
+                                            logger.warning(f"{symbol} 开仓前检查失败: {e}")
+                                        # ========== 开仓前检查结束 ==========
+
+                                        if not skip_open:
+                                            open_result = trading_engine.open_position(
                                                 account_id=account_id,
-                                                reason='买入信号触发',
-                                                trade_time=current_time_local,
-                                                position_id=position_id,
-                                                order_id=order_id
+                                                symbol=symbol,
+                                                position_side=position_side,
+                                                quantity=quantity_decimal,
+                                                leverage=leverage,
+                                                limit_price=entry_price_decimal if use_limit_price else None,
+                                                stop_loss_pct=Decimal(str(stop_loss_pct)) if stop_loss_pct else None,
+                                                take_profit_pct=Decimal(str(take_profit_pct)) if take_profit_pct else None,
+                                                source='strategy',
+                                                signal_id=None,
+                                                strategy_id=strategy_id
                                             )
-                                                    
-                                            # 记录冻结保证金
-                                            if actual_margin > 0:
-                                                self._save_capital_record(
+
+                                            if open_result.get('success'):
+                                                position_id = open_result.get('position_id')
+                                                order_id = open_result.get('order_id')
+                                                actual_entry_price = float(open_result.get('entry_price', entry_price))
+                                                actual_quantity = float(open_result.get('quantity', quantity))
+                                                actual_fee = float(open_result.get('fee', open_fee))
+                                                actual_margin = float(open_result.get('margin', (actual_entry_price * actual_quantity) / leverage))
+
+                                                # 从开仓结果中获取余额信息（futures_engine 已返回）
+                                                balance_before = open_result.get('balance_before')
+                                                balance_after = open_result.get('balance_after')
+                                                frozen_before = open_result.get('frozen_before')
+                                                frozen_after = open_result.get('frozen_after')
+                                                available_before = open_result.get('available_before')
+                                                available_after = open_result.get('available_after')
+
+                                                # 保存交易记录到数据库
+                                                self._save_trade_record(
                                                     symbol=symbol,
-                                                    change_type='FROZEN',
-                                                    amount_change=-actual_margin,  # 负数表示减少可用余额
-                                                    balance_before=balance_before,
-                                                    balance_after=balance_after,
-                                                    frozen_before=frozen_before,
-                                                    frozen_after=frozen_after,
-                                                    available_before=available_before,
-                                                    available_after=available_after,
-                                                    strategy_id=strategy_id,
-                                                    strategy_name=strategy_name,
-                                                    account_id=account_id,
                                                     action='BUY',
                                                     direction=direction,
                                                     entry_price=actual_entry_price,
-                                                    quantity=actual_quantity,
-                                                    leverage=leverage,
-                                                    margin=actual_margin,
-                                                    reason='开仓冻结保证金',
-                                                    position_id=position_id,
-                                                    order_id=order_id,
-                                                    change_time=current_time_local
-                                                )
-                                                    
-                                            # 记录开仓手续费
-                                            if actual_fee > 0:
-                                                self._save_capital_record(
-                                                    symbol=symbol,
-                                                    change_type='FEE',
-                                                    amount_change=-actual_fee,  # 负数表示减少余额
-                                                    balance_before=balance_after,  # 使用冻结后的余额
-                                                    balance_after=balance_after - actual_fee if balance_after else None,
-                                                    frozen_before=frozen_after,
-                                                    frozen_after=frozen_after,
-                                                    available_before=available_after,
-                                                    available_after=available_after - actual_fee if available_after else None,
-                                                    strategy_id=strategy_id,
-                                                    strategy_name=strategy_name,
-                                                    account_id=account_id,
-                                                    action='BUY',
-                                                    direction=direction,
-                                                    entry_price=actual_entry_price,
+                                                    exit_price=None,
                                                     quantity=actual_quantity,
                                                     leverage=leverage,
                                                     fee=actual_fee,
-                                                    reason='开仓手续费',
+                                                    realized_pnl=None,
+                                                    strategy_id=strategy_id,
+                                                    strategy_name=strategy_name,
+                                                    account_id=account_id,
+                                                    reason='买入信号触发',
+                                                    trade_time=current_time_local,
                                                     position_id=position_id,
-                                                    order_id=order_id,
-                                                    change_time=current_time_local
+                                                    order_id=order_id
                                                 )
-                                                    
-                                            # 添加到模拟持仓列表（用于后续卖出逻辑）
-                                            position = {
-                                                'position_id': position_id,
-                                                'direction': direction,
-                                                'entry_price': actual_entry_price,
-                                                'quantity': actual_quantity,
-                                                'entry_time': current_time,
-                                                'entry_time_local': current_time_local,
-                                                'leverage': leverage,
-                                                'open_fee': actual_fee,
-                                                'stop_loss_price': stop_loss_price,
-                                                'take_profit_price': take_profit_price
-                                            }
-                                            positions.append(position)
-                                                    
-                                            direction_text = "做多" if direction == 'long' else "做空"
-                                            qty_precision = self.get_quantity_precision(symbol)
-                                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={actual_entry_price:.4f}，数量={actual_quantity:.{qty_precision}f}，开仓手续费={actual_fee:.4f}，持仓ID={position_id}")
-                                        else:
-                                            error_msg = open_result.get('message', '未知错误')
-                                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ❌ 开仓失败: {error_msg}")
-                                            logger.error(f"{symbol} 开仓失败: {error_msg}")
+
+                                                # 记录冻结保证金
+                                                if actual_margin > 0:
+                                                    self._save_capital_record(
+                                                        symbol=symbol,
+                                                        change_type='FROZEN',
+                                                        amount_change=-actual_margin,  # 负数表示减少可用余额
+                                                        balance_before=balance_before,
+                                                        balance_after=balance_after,
+                                                        frozen_before=frozen_before,
+                                                        frozen_after=frozen_after,
+                                                        available_before=available_before,
+                                                        available_after=available_after,
+                                                        strategy_id=strategy_id,
+                                                        strategy_name=strategy_name,
+                                                        account_id=account_id,
+                                                        action='BUY',
+                                                        direction=direction,
+                                                        entry_price=actual_entry_price,
+                                                        quantity=actual_quantity,
+                                                        leverage=leverage,
+                                                        margin=actual_margin,
+                                                        reason='开仓冻结保证金',
+                                                        position_id=position_id,
+                                                        order_id=order_id,
+                                                        change_time=current_time_local
+                                                    )
+
+                                                # 记录开仓手续费
+                                                if actual_fee > 0:
+                                                    self._save_capital_record(
+                                                        symbol=symbol,
+                                                        change_type='FEE',
+                                                        amount_change=-actual_fee,  # 负数表示减少余额
+                                                        balance_before=balance_after,  # 使用冻结后的余额
+                                                        balance_after=balance_after - actual_fee if balance_after else None,
+                                                        frozen_before=frozen_after,
+                                                        frozen_after=frozen_after,
+                                                        available_before=available_after,
+                                                        available_after=available_after - actual_fee if available_after else None,
+                                                        strategy_id=strategy_id,
+                                                        strategy_name=strategy_name,
+                                                        account_id=account_id,
+                                                        action='BUY',
+                                                        direction=direction,
+                                                        entry_price=actual_entry_price,
+                                                        quantity=actual_quantity,
+                                                        leverage=leverage,
+                                                        fee=actual_fee,
+                                                        reason='开仓手续费',
+                                                        position_id=position_id,
+                                                        order_id=order_id,
+                                                        change_time=current_time_local
+                                                    )
+
+                                                # 添加到模拟持仓列表（用于后续卖出逻辑）
+                                                position = {
+                                                    'position_id': position_id,
+                                                    'direction': direction,
+                                                    'entry_price': actual_entry_price,
+                                                    'quantity': actual_quantity,
+                                                    'entry_time': current_time,
+                                                    'entry_time_local': current_time_local,
+                                                    'leverage': leverage,
+                                                    'open_fee': actual_fee,
+                                                    'stop_loss_price': stop_loss_price,
+                                                    'take_profit_price': take_profit_price
+                                                }
+                                                positions.append(position)
+
+                                                direction_text = "做多" if direction == 'long' else "做空"
+                                                qty_precision = self.get_quantity_precision(symbol)
+                                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={actual_entry_price:.4f}，数量={actual_quantity:.{qty_precision}f}，开仓手续费={actual_fee:.4f}，持仓ID={position_id}")
+                                            else:
+                                                error_msg = open_result.get('message', '未知错误')
+                                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ❌ 开仓失败: {error_msg}")
+                                                logger.error(f"{symbol} 开仓失败: {error_msg}")
         
         # 实时运行：不再强制平仓，让策略自然执行
         # 统计信号检测情况
