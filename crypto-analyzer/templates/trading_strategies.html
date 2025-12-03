@@ -1178,7 +1178,7 @@
                                 <div class="form-group" id="limitOrderTimeoutGroup">
                                     <label class="form-label">限价单超时转市价</label>
                                     <small style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px; display: block;">
-                                        限价单在指定时间内未成交时，自动以市价成交（0表示不转换）
+                                        限价单超时后：价格偏离≤0.5%则市价成交，偏离>0.5%则取消订单（0表示不超时）
                                     </small>
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <input type="number" id="limitOrderTimeoutMinutes" name="limitOrderTimeoutMinutes"
