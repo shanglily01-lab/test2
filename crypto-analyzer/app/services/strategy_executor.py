@@ -2331,9 +2331,13 @@ class StrategyExecutor:
         can_open_position = True
 
         # 获取当前K线的时间戳（用于防止同一根K线重复触发）
+        # 注意：使用最新K线的时间戳，而不是信号触发K线的时间戳
+        # 因为信号可能是在几根K线前触发的（例如趋势确认时），但我们要防止的是在当前K线重复开仓
         current_kline_time = None
-        if buy_signal_triggered and buy_pair:
-            current_kline_time = self.parse_time(buy_pair['kline']['timestamp'])
+        if buy_signal_triggered and buy_indicator_pairs:
+            # 使用最新K线的时间戳
+            latest_buy_pair = buy_indicator_pairs[-1]
+            current_kline_time = self.parse_time(latest_buy_pair['kline']['timestamp'])
 
         # 检查是否在同一根K线内已经开过仓（防止重复触发）
         # 注意：需要查询数据库中最近的交易记录，而不是只检查当前持仓（因为可能已平仓）
@@ -2359,13 +2363,15 @@ class StrategyExecutor:
                     connection = self._get_connection()
                     cursor = connection.cursor(pymysql.cursors.DictCursor)
                     # 查询该策略在当前K线时间范围内是否有开仓记录
+                    # 注意：需要同时检查开始时间和结束时间，确保只匹配当前K线范围内的交易
                     kline_start_time = current_kline_time
+                    kline_end_time = current_kline_time + timedelta(minutes=timeframe_minutes)
                     cursor.execute("""
                         SELECT trade_time FROM strategy_trade_records
                         WHERE symbol = %s AND strategy_id = %s AND action = 'BUY'
-                        AND trade_time >= %s
+                        AND trade_time >= %s AND trade_time < %s
                         ORDER BY trade_time DESC LIMIT 1
-                    """, (symbol, strategy_id, kline_start_time))
+                    """, (symbol, strategy_id, kline_start_time, kline_end_time))
                     recent_trade = cursor.fetchone()
                     cursor.close()
                     connection.close()
