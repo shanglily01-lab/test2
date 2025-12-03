@@ -201,13 +201,51 @@ class FuturesLimitOrderExecutor:
                             elapsed_seconds = order.get('elapsed_seconds', 0) or 0
                             elapsed_minutes = elapsed_seconds / 60
                             timeout_seconds = timeout_minutes * 60
-                            remaining_minutes = (timeout_seconds - elapsed_seconds) / 60
 
                             if elapsed_seconds >= timeout_seconds:
-                                # 超时，以市价执行
-                                should_execute = True
-                                execute_at_market = True
-                                logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟")
+                                # 超时，检查价格偏离是否过大
+                                # 做多：当前价格高于限价太多则取消（避免追高）
+                                # 做空：当前价格低于限价太多则取消（避免杀低）
+                                max_deviation_pct = Decimal('0.5')  # 最大允许偏离 0.5%
+
+                                if side == 'OPEN_LONG':
+                                    deviation_pct = (current_price - limit_price) / limit_price * 100
+                                else:  # OPEN_SHORT
+                                    deviation_pct = (limit_price - current_price) / limit_price * 100
+
+                                if deviation_pct > max_deviation_pct:
+                                    # 价格偏离过大，取消订单
+                                    logger.info(f"⏰ 限价单超时取消: {symbol} {position_side} 价格偏离过大 ({deviation_pct:.2f}% > {max_deviation_pct}%), 限价={limit_price}, 当前={current_price}")
+
+                                    # 解冻保证金
+                                    frozen_margin = Decimal(str(order.get('margin', 0)))
+                                    if frozen_margin > 0:
+                                        with connection.cursor() as update_cursor:
+                                            update_cursor.execute(
+                                                """UPDATE paper_trading_accounts
+                                                SET current_balance = current_balance + %s,
+                                                    frozen_balance = frozen_balance - %s
+                                                WHERE id = %s""",
+                                                (float(frozen_margin), float(frozen_margin), account_id)
+                                            )
+
+                                    # 更新订单状态为已取消
+                                    with connection.cursor() as update_cursor:
+                                        update_cursor.execute(
+                                            """UPDATE futures_orders
+                                            SET status = 'CANCELLED',
+                                                notes = CONCAT(COALESCE(notes, ''), ' TIMEOUT_PRICE_DEVIATION')
+                                            WHERE order_id = %s""",
+                                            (order_id,)
+                                        )
+
+                                    connection.commit()
+                                    continue  # 跳过此订单
+                                else:
+                                    # 价格偏离在可接受范围内，以市价执行
+                                    should_execute = True
+                                    execute_at_market = True
+                                    logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟, 偏离 {deviation_pct:.2f}%")
 
                         # 如果没有超时，检查价格是否达到限价条件
                         if not should_execute:
