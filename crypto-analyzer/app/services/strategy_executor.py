@@ -2818,40 +2818,13 @@ class StrategyExecutor:
                                 debug_info.append(msg)
                                 logger.info(f"{symbol} {msg}")
                             else:
-                                # 检查价格距离EMA限制（防止追高杀低）
-                                if price_distance_limit_enabled and realtime_price and ema_short:
-                                    price_ema_distance_pct = ((realtime_price - ema_short) / ema_short) * 100
-
-                                    if direction == 'long':
-                                        # 做多时，检查价格是否高于EMA9太多（追高）
-                                        if price_ema_distance_pct > price_distance_max_above_ema:
-                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 价格距离EMA过远，跳过做多 | 价格={realtime_price:.4f}, EMA9={ema_short:.4f}, 偏离={price_ema_distance_pct:+.2f}% > {price_distance_max_above_ema}%（等待回调）"
-                                            debug_info.append(msg)
-                                            logger.info(f"{symbol} {msg}")
-                                            trend_confirm_ok = False
-                                        else:
-                                            logger.debug(f"{symbol} [{buy_timeframe}]: ✅ 价格距离EMA检查通过 (偏离={price_ema_distance_pct:+.2f}%)")
-                                    else:  # direction == 'short'
-                                        # 做空时，检查价格是否低于EMA9太多（杀低）
-                                        if price_ema_distance_pct < -price_distance_max_below_ema:
-                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 价格距离EMA过远，跳过做空 | 价格={realtime_price:.4f}, EMA9={ema_short:.4f}, 偏离={price_ema_distance_pct:+.2f}% < -{price_distance_max_below_ema}%（等待反弹）"
-                                            debug_info.append(msg)
-                                            logger.info(f"{symbol} {msg}")
-                                            trend_confirm_ok = False
-                                        else:
-                                            logger.debug(f"{symbol} [{buy_timeframe}]: ✅ 价格距离EMA检查通过 (偏离={price_ema_distance_pct:+.2f}%)")
-
-                            if not trend_confirm_ok:
-                                # 再次检查，因为价格距离检查可能修改了trend_confirm_ok
-                                pass
-                            else:
                                 # 添加调试信息：所有检查都通过，准备买入
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅ 所有买入条件检查通过，准备执行买入操作")
 
                                 # 计算入场价格（使用实时价格）
                                 entry_price = None
                                 can_execute = False
-                                        
+
                                 if direction == 'long':
                                     if long_price_type == 'market':
                                         entry_price = realtime_price
@@ -2894,6 +2867,37 @@ class StrategyExecutor:
                                 if not can_execute or entry_price is None:
                                     # 无法执行，跳过
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 无法确定入场价格或执行条件不满足")
+                                else:
+                                    # 检查价格距离EMA限制（防止追高杀低）
+                                    # 使用入场价格（限价单用限价，市价单用实时价格）来计算距离
+                                    if price_distance_limit_enabled and entry_price and ema_short:
+                                        entry_ema_distance_pct = ((entry_price - ema_short) / ema_short) * 100
+                                        is_limit_order = (direction == 'long' and long_price_type != 'market') or \
+                                                        (direction == 'short' and short_price_type != 'market')
+                                        order_type_text = "限价" if is_limit_order else "市价"
+
+                                        if direction == 'long':
+                                            # 做多时，检查入场价格是否高于EMA9太多
+                                            if entry_ema_distance_pct > price_distance_max_above_ema:
+                                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 价格距离EMA过远，跳过做多 | {order_type_text}入场价={entry_price:.4f}, EMA9={ema_short:.4f}, 偏离={entry_ema_distance_pct:+.2f}% > {price_distance_max_above_ema}%（等待回调）"
+                                                debug_info.append(msg)
+                                                logger.info(f"{symbol} {msg}")
+                                                can_execute = False
+                                            else:
+                                                logger.debug(f"{symbol} [{buy_timeframe}]: ✅ 价格距离EMA检查通过 ({order_type_text}入场价偏离={entry_ema_distance_pct:+.2f}%)")
+                                        else:  # direction == 'short'
+                                            # 做空时，检查入场价格是否低于EMA9太多
+                                            if entry_ema_distance_pct < -price_distance_max_below_ema:
+                                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 价格距离EMA过远，跳过做空 | {order_type_text}入场价={entry_price:.4f}, EMA9={ema_short:.4f}, 偏离={entry_ema_distance_pct:+.2f}% < -{price_distance_max_below_ema}%（等待反弹）"
+                                                debug_info.append(msg)
+                                                logger.info(f"{symbol} {msg}")
+                                                can_execute = False
+                                            else:
+                                                logger.debug(f"{symbol} [{buy_timeframe}]: ✅ 价格距离EMA检查通过 ({order_type_text}入场价偏离={entry_ema_distance_pct:+.2f}%)")
+
+                                if not can_execute:
+                                    # 价格距离检查未通过或其他原因无法执行
+                                    pass
                                 else:
                                     # 计算仓位大小
                                     # 从数据库获取账户余额
