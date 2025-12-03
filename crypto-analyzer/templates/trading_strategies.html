@@ -1010,20 +1010,25 @@
                                             <label for="priceDistanceLimitEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">📏 价格距离EMA限制</label>
                                         </div>
                                         <small style="color: var(--text-secondary); font-size: 11px; margin-left: auto;">
-                                            防止追高杀低：价格偏离EMA9过多时不开仓，等待回调/反弹
+                                            防止追高杀低：入场价偏离EMA9过多时不开仓
+                                        </small>
+                                    </div>
+                                    <div style="margin-left: 26px; margin-top: 8px; padding: 8px; background: rgba(33, 150, 243, 0.1); border-radius: 4px; border-left: 3px solid #2196f3;">
+                                        <small style="font-size: 10px; color: #2196f3;">
+                                            💡 市价单用实时价格判断，限价单用限价判断（如-0.2%后的价格）
                                         </small>
                                     </div>
                                     <div id="priceDistanceLimitConfig" style="margin-left: 26px; margin-top: 12px;">
                                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
                                             <div style="display: flex; flex-direction: column; gap: 4px;">
-                                                <label style="font-size: 12px; color: var(--text-secondary);">做多：价格高于EMA9最大%</label>
+                                                <label style="font-size: 12px; color: var(--text-secondary);">做多：入场价高于EMA9最大%</label>
                                                 <input type="number" class="form-input" id="priceDistanceMaxAboveEMA" placeholder="1.0" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                <small style="font-size: 10px; color: var(--text-secondary);">价格高于EMA9超过此值时等待回调</small>
+                                                <small style="font-size: 10px; color: var(--text-secondary);">入场价高于EMA9超过此值时不开仓</small>
                                             </div>
                                             <div style="display: flex; flex-direction: column; gap: 4px;">
-                                                <label style="font-size: 12px; color: var(--text-secondary);">做空：价格低于EMA9最大%</label>
+                                                <label style="font-size: 12px; color: var(--text-secondary);">做空：入场价低于EMA9最大%</label>
                                                 <input type="number" class="form-input" id="priceDistanceMaxBelowEMA" placeholder="1.0" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                <small style="font-size: 10px; color: var(--text-secondary);">价格低于EMA9超过此值时等待反弹</small>
+                                                <small style="font-size: 10px; color: var(--text-secondary);">入场价低于EMA9超过此值时不开仓</small>
                                             </div>
                                         </div>
                                     </div>
@@ -2052,7 +2057,7 @@
                             ${strategy.priceDistanceLimit && strategy.priceDistanceLimit.enabled ? `
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">📏 价格距离EMA限制</div>
-                                    <div class="strategy-item-field-value">✅ 已启用 (做多≤+${strategy.priceDistanceLimit.maxAboveEMA || 1.0}%, 做空≤-${strategy.priceDistanceLimit.maxBelowEMA || 1.0}%)<br><small style="color: #2196f3; font-size: 10px;">⚠️ 防止追高杀低，等待回调/反弹入场</small></div>
+                                    <div class="strategy-item-field-value">✅ 已启用 (做多≤+${strategy.priceDistanceLimit.maxAboveEMA || 1.0}%, 做空≤-${strategy.priceDistanceLimit.maxBelowEMA || 1.0}%)<br><small style="color: #2196f3; font-size: 10px;">💡 限价单用限价判断，市价单用实时价格</small></div>
                                 </div>
                             ` : ''}
                             ${strategy.minSignalStrength ? `
