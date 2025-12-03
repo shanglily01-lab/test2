@@ -1922,25 +1922,14 @@ class StrategyTestService:
                             exit_reason = "止损"
                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发止损，入场={entry_price:.4f}，止损价={stop_loss_price:.4f}，当前最高={high_price:.4f}")
                     
-                    # 止盈检查（需要满足最小持仓时间）
+                    # 止盈检查（止盈不受最小持仓时间限制，触发即执行）
                     if not exit_price and take_profit_price:
-                        # 检查最小持仓时间
-                        can_exit = True
-                        if min_holding_time_hours > 0 and entry_time:
-                            holding_time = current_time - entry_time
-                            min_holding_time = timedelta(hours=min_holding_time_hours)
-                            if holding_time < min_holding_time:
-                                can_exit = False
-                                remaining_time = min_holding_time - holding_time
-                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⏳ 止盈触发但持仓时间不足，已持仓{holding_time.total_seconds()/3600:.1f}小时，需要至少{min_holding_time_hours}小时，还需等待{remaining_time.total_seconds()/3600:.1f}小时")
-                        
-                        if can_exit:
-                            if direction == 'long' and high_price >= take_profit_price:
-                                exit_price = take_profit_price
-                                exit_reason = "止盈"
-                            elif direction == 'short' and low_price <= take_profit_price:
-                                exit_price = take_profit_price
-                                exit_reason = "止盈"
+                        if direction == 'long' and high_price >= take_profit_price:
+                            exit_price = take_profit_price
+                            exit_reason = "止盈"
+                        elif direction == 'short' and low_price <= take_profit_price:
+                            exit_price = take_profit_price
+                            exit_reason = "止盈"
                     
                     if exit_price and exit_reason:
                         quantity = position['quantity']
