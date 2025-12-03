@@ -2986,7 +2986,8 @@ class StrategyExecutor:
                                         # ========== 开仓前再次检查（防止并发重复开仓） ==========
                                         # 由于策略执行器可能被并发调用，需要在真正开仓前再次检查
                                         # 1. 检查当前K线内是否已有交易记录
-                                        # 2. 检查当前是否已有持仓（针对该交易对和策略）
+                                        # 2. 检查当前是否已有持仓（针对该交易对）
+                                        # 3. 检查是否已有待成交的限价单（针对该交易对和策略）
                                         skip_open = False
                                         try:
                                             check_conn = self._get_connection()
@@ -3008,6 +3009,14 @@ class StrategyExecutor:
                                             """, (account_id, symbol))
                                             position_count = check_cursor.fetchone()['cnt']
 
+                                            # 检查是否已有待成交的限价单（防止重复下限价单）
+                                            check_cursor.execute("""
+                                                SELECT COUNT(*) as cnt FROM futures_orders
+                                                WHERE account_id = %s AND symbol = %s AND status = 'PENDING'
+                                                AND strategy_id = %s
+                                            """, (account_id, symbol, strategy_id))
+                                            pending_order_count = check_cursor.fetchone()['cnt']
+
                                             check_cursor.close()
                                             check_conn.close()
 
@@ -3019,6 +3028,11 @@ class StrategyExecutor:
                                             elif position_count > 0 and prevent_duplicate_entry:
                                                 skip_open = True
                                                 msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 开仓前检查发现已有{position_count}个持仓，跳过开仓"
+                                                debug_info.append(msg)
+                                                logger.info(f"{symbol} {msg}")
+                                            elif pending_order_count > 0:
+                                                skip_open = True
+                                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 开仓前检查发现已有{pending_order_count}个待成交限价单，跳过开仓"
                                                 debug_info.append(msg)
                                                 logger.info(f"{symbol} {msg}")
                                         except Exception as e:
