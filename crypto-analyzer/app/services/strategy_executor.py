@@ -3001,11 +3001,11 @@ class StrategyExecutor:
                                             trade_count = check_cursor.fetchone()['cnt']
 
                                             # 检查当前是否已有该交易对的持仓
+                                            # 注意：futures_positions 表没有 strategy_id 列，只检查交易对级别的持仓
                                             check_cursor.execute("""
                                                 SELECT COUNT(*) as cnt FROM futures_positions
-                                                WHERE account_id = %s AND symbol = %s AND status = 'OPEN'
-                                                AND strategy_id = %s
-                                            """, (account_id, symbol, strategy_id))
+                                                WHERE account_id = %s AND symbol = %s AND status = 'open'
+                                            """, (account_id, symbol))
                                             position_count = check_cursor.fetchone()['cnt']
 
                                             check_cursor.close()
