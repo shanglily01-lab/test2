@@ -2357,7 +2357,7 @@ class StrategyExecutor:
                         logger.info(f"{symbol} {msg}")
                         break
 
-            # 如果当前没有持仓，还需要查询最近的交易记录（防止平仓后立即重新开仓）
+            # 如果当前没有持仓，还需要查询最近的交易记录和待成交订单（防止平仓后立即重新开仓）
             if can_open_position:
                 try:
                     connection = self._get_connection()
@@ -2373,8 +2373,6 @@ class StrategyExecutor:
                         ORDER BY trade_time DESC LIMIT 1
                     """, (symbol, strategy_id, kline_start_time, kline_end_time))
                     recent_trade = cursor.fetchone()
-                    cursor.close()
-                    connection.close()
 
                     if recent_trade:
                         can_open_position = False
@@ -2382,6 +2380,25 @@ class StrategyExecutor:
                         msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 同一根K线内已有交易记录，跳过重复信号（上次交易: {recent_time.strftime('%Y-%m-%d %H:%M:%S')}）"
                         debug_info.append(msg)
                         logger.info(f"{symbol} {msg}")
+                    else:
+                        # 检查是否有待成交的限价单（限价单创建时不写入交易记录）
+                        cursor.execute("""
+                            SELECT order_id, created_at FROM futures_orders
+                            WHERE symbol = %s AND strategy_id = %s AND status = 'PENDING'
+                            AND account_id = %s
+                            ORDER BY created_at DESC LIMIT 1
+                        """, (symbol, strategy_id, account_id))
+                        pending_order = cursor.fetchone()
+
+                        if pending_order:
+                            can_open_position = False
+                            order_time = pending_order['created_at']
+                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 已有待成交的限价单，跳过重复信号（订单创建: {order_time.strftime('%Y-%m-%d %H:%M:%S')}）"
+                            debug_info.append(msg)
+                            logger.info(f"{symbol} {msg}")
+
+                    cursor.close()
+                    connection.close()
                 except Exception as e:
                     logger.warning(f"{symbol} 查询最近交易记录失败: {e}")
 
