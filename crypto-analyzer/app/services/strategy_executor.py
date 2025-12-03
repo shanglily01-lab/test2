@@ -382,6 +382,14 @@ class StrategyExecutor:
             # 开仓冷却时间（分钟）：在触发持续趋势信号后，多少分钟内不再触发同方向信号
             sustained_trend_cooldown_minutes = sustained_trend.get('cooldownMinutes', 60) if isinstance(sustained_trend, dict) else 60
 
+            # 价格距离EMA限制配置（防止追高杀低）
+            price_distance_limit = strategy.get('priceDistanceLimit', {})
+            price_distance_limit_enabled = price_distance_limit.get('enabled', False) if isinstance(price_distance_limit, dict) else False
+            # 做多时，价格高于EMA9的最大百分比（超过则不开仓，等回调）
+            price_distance_max_above_ema = price_distance_limit.get('maxAboveEMA', 1.0) if isinstance(price_distance_limit, dict) else 1.0
+            # 做空时，价格低于EMA9的最大百分比（超过则不开仓，等反弹）
+            price_distance_max_below_ema = price_distance_limit.get('maxBelowEMA', 1.0) if isinstance(price_distance_limit, dict) else 1.0
+
             # 确定买入和卖出的时间周期
             timeframe_map = {
                 'ema_5m': '5m',
@@ -609,6 +617,9 @@ class StrategyExecutor:
                     sustained_trend_require_price_confirm=sustained_trend_require_price_confirm,
                     sustained_trend_min_bars=sustained_trend_min_bars,
                     sustained_trend_cooldown_minutes=sustained_trend_cooldown_minutes,
+                    price_distance_limit_enabled=price_distance_limit_enabled,
+                    price_distance_max_above_ema=price_distance_max_above_ema,
+                    price_distance_max_below_ema=price_distance_max_below_ema,
                     market_type=strategy.get('market_type', 'test')  # 市场类型: test/live
                 )
 
@@ -966,6 +977,10 @@ class StrategyExecutor:
         sustained_trend_require_price_confirm = kwargs.get('sustained_trend_require_price_confirm', True)  # 价格必须符合趋势方向
         sustained_trend_min_bars = kwargs.get('sustained_trend_min_bars', 2)  # 连续多少根K线保持趋势
         sustained_trend_cooldown_minutes = kwargs.get('sustained_trend_cooldown_minutes', 60)  # 开仓冷却时间（分钟）
+        # 价格距离EMA限制配置（防止追高杀低）
+        price_distance_limit_enabled = kwargs.get('price_distance_limit_enabled', False)
+        price_distance_max_above_ema = kwargs.get('price_distance_max_above_ema', 1.0)  # 做多时价格高于EMA9的最大%
+        price_distance_max_below_ema = kwargs.get('price_distance_max_below_ema', 1.0)  # 做空时价格低于EMA9的最大%
         strategy_id = kwargs.get('strategy_id')
         strategy_name = kwargs.get('strategy_name', '测试策略')
         account_id = kwargs.get('account_id', 0)
@@ -2803,9 +2818,36 @@ class StrategyExecutor:
                                 debug_info.append(msg)
                                 logger.info(f"{symbol} {msg}")
                             else:
+                                # 检查价格距离EMA限制（防止追高杀低）
+                                if price_distance_limit_enabled and realtime_price and ema_short:
+                                    price_ema_distance_pct = ((realtime_price - ema_short) / ema_short) * 100
+
+                                    if direction == 'long':
+                                        # 做多时，检查价格是否高于EMA9太多（追高）
+                                        if price_ema_distance_pct > price_distance_max_above_ema:
+                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 价格距离EMA过远，跳过做多 | 价格={realtime_price:.4f}, EMA9={ema_short:.4f}, 偏离={price_ema_distance_pct:+.2f}% > {price_distance_max_above_ema}%（等待回调）"
+                                            debug_info.append(msg)
+                                            logger.info(f"{symbol} {msg}")
+                                            trend_confirm_ok = False
+                                        else:
+                                            logger.debug(f"{symbol} [{buy_timeframe}]: ✅ 价格距离EMA检查通过 (偏离={price_ema_distance_pct:+.2f}%)")
+                                    else:  # direction == 'short'
+                                        # 做空时，检查价格是否低于EMA9太多（杀低）
+                                        if price_ema_distance_pct < -price_distance_max_below_ema:
+                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 价格距离EMA过远，跳过做空 | 价格={realtime_price:.4f}, EMA9={ema_short:.4f}, 偏离={price_ema_distance_pct:+.2f}% < -{price_distance_max_below_ema}%（等待反弹）"
+                                            debug_info.append(msg)
+                                            logger.info(f"{symbol} {msg}")
+                                            trend_confirm_ok = False
+                                        else:
+                                            logger.debug(f"{symbol} [{buy_timeframe}]: ✅ 价格距离EMA检查通过 (偏离={price_ema_distance_pct:+.2f}%)")
+
+                            if not trend_confirm_ok:
+                                # 再次检查，因为价格距离检查可能修改了trend_confirm_ok
+                                pass
+                            else:
                                 # 添加调试信息：所有检查都通过，准备买入
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅ 所有买入条件检查通过，准备执行买入操作")
-                                        
+
                                 # 计算入场价格（使用实时价格）
                                 entry_price = None
                                 can_execute = False

@@ -1001,6 +1001,33 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- 价格距离EMA限制配置（防止追高杀低） -->
+                                <div class="form-section" style="margin-top: 16px; padding: 12px; background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <input type="checkbox" id="priceDistanceLimitEnabled" name="priceDistanceLimitEnabled">
+                                            <label for="priceDistanceLimitEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">📏 价格距离EMA限制</label>
+                                        </div>
+                                        <small style="color: var(--text-secondary); font-size: 11px; margin-left: auto;">
+                                            防止追高杀低：价格偏离EMA9过多时不开仓，等待回调/反弹
+                                        </small>
+                                    </div>
+                                    <div id="priceDistanceLimitConfig" style="margin-left: 26px; margin-top: 12px;">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                                <label style="font-size: 12px; color: var(--text-secondary);">做多：价格高于EMA9最大%</label>
+                                                <input type="number" class="form-input" id="priceDistanceMaxAboveEMA" placeholder="1.0" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                <small style="font-size: 10px; color: var(--text-secondary);">价格高于EMA9超过此值时等待回调</small>
+                                            </div>
+                                            <div style="display: flex; flex-direction: column; gap: 4px;">
+                                                <label style="font-size: 12px; color: var(--text-secondary);">做空：价格低于EMA9最大%</label>
+                                                <input type="number" class="form-input" id="priceDistanceMaxBelowEMA" placeholder="1.0" min="0.1" max="5.0" step="0.1" value="1.0" style="width: 100%; padding: 6px; font-size: 13px;">
+                                                <small style="font-size: 10px; color: var(--text-secondary);">价格低于EMA9超过此值时等待反弹</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <!-- 买入条件结束 -->
 
@@ -1442,6 +1469,15 @@
                     const sustainedTrendRequirePriceConfirm = document.getElementById('sustainedTrendRequirePriceConfirm');
                     if (sustainedTrendRequirePriceConfirm) sustainedTrendRequirePriceConfirm.checked = true;
                 }
+                // 清除价格距离EMA限制配置
+                const priceDistanceLimitEnabled = document.getElementById('priceDistanceLimitEnabled');
+                if (priceDistanceLimitEnabled) {
+                    priceDistanceLimitEnabled.checked = false;
+                    const priceDistanceMaxAboveEMA = document.getElementById('priceDistanceMaxAboveEMA');
+                    if (priceDistanceMaxAboveEMA) priceDistanceMaxAboveEMA.value = '1.0';
+                    const priceDistanceMaxBelowEMA = document.getElementById('priceDistanceMaxBelowEMA');
+                    if (priceDistanceMaxBelowEMA) priceDistanceMaxBelowEMA.value = '1.0';
+                }
 
                 editingStrategyId = null;
                 updateEmptyState();
@@ -1752,9 +1788,14 @@
                     requirePriceConfirm: document.getElementById('sustainedTrendRequirePriceConfirm') ? document.getElementById('sustainedTrendRequirePriceConfirm').checked : true,
                     minBars: document.getElementById('sustainedTrendMinBars') ? parseInt(document.getElementById('sustainedTrendMinBars').value) : 2,
                     cooldownMinutes: document.getElementById('sustainedTrendCooldownMinutes') ? parseInt(document.getElementById('sustainedTrendCooldownMinutes').value) : 60
+                },
+                priceDistanceLimit: {
+                    enabled: document.getElementById('priceDistanceLimitEnabled') ? document.getElementById('priceDistanceLimitEnabled').checked : false,
+                    maxAboveEMA: document.getElementById('priceDistanceMaxAboveEMA') ? parseFloat(document.getElementById('priceDistanceMaxAboveEMA').value) : 1.0,
+                    maxBelowEMA: document.getElementById('priceDistanceMaxBelowEMA') ? parseFloat(document.getElementById('priceDistanceMaxBelowEMA').value) : 1.0
                 }
             };
-            
+
             // 验证
             if (buyDirections.length === 0) {
                 showToast('请至少选择一个交易方向（做多或做空）', 'warning');
@@ -2006,6 +2047,12 @@
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">📉 持续趋势信号</div>
                                     <div class="strategy-item-field-value">✅ 已启用 (强度${strategy.sustainedTrend.minStrength || 0.15}%~${strategy.sustainedTrend.maxStrength || 1.0}%, 冷却${strategy.sustainedTrend.cooldownMinutes || 60}分钟)<br><small style="color: #4caf50; font-size: 10px;">💡 错过穿越后仍可在趋势中开仓</small></div>
+                                </div>
+                            ` : ''}
+                            ${strategy.priceDistanceLimit && strategy.priceDistanceLimit.enabled ? `
+                                <div class="strategy-item-field">
+                                    <div class="strategy-item-field-label">📏 价格距离EMA限制</div>
+                                    <div class="strategy-item-field-value">✅ 已启用 (做多≤+${strategy.priceDistanceLimit.maxAboveEMA || 1.0}%, 做空≤-${strategy.priceDistanceLimit.maxBelowEMA || 1.0}%)<br><small style="color: #2196f3; font-size: 10px;">⚠️ 防止追高杀低，等待回调/反弹入场</small></div>
                                 </div>
                             ` : ''}
                             ${strategy.minSignalStrength ? `
@@ -2322,6 +2369,14 @@
                     document.getElementById('sustainedTrendCooldownMinutes').value = strategy.sustainedTrend.cooldownMinutes || 60;
                     document.getElementById('sustainedTrendRequireMA10Confirm').checked = strategy.sustainedTrend.requireMA10Confirm !== false;
                     document.getElementById('sustainedTrendRequirePriceConfirm').checked = strategy.sustainedTrend.requirePriceConfirm !== false;
+                }
+            }
+            // 价格距离EMA限制配置
+            if (strategy.priceDistanceLimit) {
+                if (document.getElementById('priceDistanceLimitEnabled')) {
+                    document.getElementById('priceDistanceLimitEnabled').checked = strategy.priceDistanceLimit.enabled === true;
+                    document.getElementById('priceDistanceMaxAboveEMA').value = strategy.priceDistanceLimit.maxAboveEMA || 1.0;
+                    document.getElementById('priceDistanceMaxBelowEMA').value = strategy.priceDistanceLimit.maxBelowEMA || 1.0;
                 }
             }
 
