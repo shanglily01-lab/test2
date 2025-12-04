@@ -501,6 +501,7 @@ class BinanceFuturesEngine:
             params = {
                 'symbol': binance_symbol,
                 'side': side,
+                'positionSide': position_side,  # 双向持仓模式必须指定
                 'type': order_type,
                 'quantity': str(quantity)
             }
@@ -618,10 +619,10 @@ class BinanceFuturesEngine:
         params = {
             'symbol': binance_symbol,
             'side': side,
+            'positionSide': position_side,  # 双向持仓模式必须指定
             'type': 'STOP_MARKET',
             'stopPrice': str(stop_price),
-            'quantity': str(quantity),
-            'reduceOnly': 'true'
+            'quantity': str(quantity)
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
@@ -648,10 +649,10 @@ class BinanceFuturesEngine:
         params = {
             'symbol': binance_symbol,
             'side': side,
+            'positionSide': position_side,  # 双向持仓模式必须指定
             'type': 'TAKE_PROFIT_MARKET',
             'stopPrice': str(take_profit_price),
-            'quantity': str(quantity),
-            'reduceOnly': 'true'
+            'quantity': str(quantity)
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
@@ -719,9 +720,9 @@ class BinanceFuturesEngine:
             params = {
                 'symbol': binance_symbol,
                 'side': side,
+                'positionSide': position_side,  # 双向持仓模式必须指定
                 'type': 'MARKET',
-                'quantity': str(close_quantity),
-                'reduceOnly': 'true'
+                'quantity': str(close_quantity)
             }
 
             logger.info(f"[实盘] 发送平仓订单: {symbol} {side} {close_quantity} (reason: {reason})")
