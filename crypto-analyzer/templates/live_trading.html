@@ -445,13 +445,18 @@
                                 预计保证金: <span id="estimated-margin" class="font-mono">0.00</span> USDT
                             </small>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" id="sl-tp-group">
                             <label class="form-label">止损价（可选）</label>
                             <input type="number" class="form-control" id="stop-loss-price" step="0.01" placeholder="设置止损价格">
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" id="tp-group">
                             <label class="form-label">止盈价（可选）</label>
                             <input type="number" class="form-control" id="take-profit-price" step="0.01" placeholder="设置止盈价格">
+                        </div>
+                        <div id="limit-order-note" style="display: none; background: rgba(249, 115, 22, 0.1); border: 1px solid var(--warning-yellow); border-radius: var(--radius-md); padding: var(--spacing-md); margin-bottom: var(--spacing-lg);">
+                            <small style="color: var(--warning-yellow);">
+                                <i class="bi bi-info-circle"></i> 限价单的止损止盈将在订单成交后自动设置
+                            </small>
                         </div>
                         <div style="margin-top: var(--spacing-xl);">
                             <button type="button" class="btn btn-primary" style="width: 100%;" onclick="openPosition()">
@@ -720,8 +725,8 @@
                             <td class="font-mono">${formatNumber(order.price || order.stopPrice)}</td>
                             <td class="font-mono">${formatNumber(order.origQty, 4)}</td>
                             <td>
-                                <button class="btn btn-sm btn-ghost" onclick="cancelOrder('${order.symbol}', '${order.orderId}')">
-                                    <i class="bi bi-x"></i>
+                                <button class="btn btn-sm btn-danger" onclick="cancelOrder('${order.symbol}', '${order.orderId}')" title="撤销此订单">
+                                    <i class="bi bi-x-circle"></i> 撤单
                                 </button>
                             </td>
                         </tr>
@@ -782,10 +787,12 @@
                 document.getElementById('market-btn').className = 'btn btn-primary';
                 document.getElementById('limit-btn').className = 'btn btn-secondary';
                 document.getElementById('limit-price-group').style.display = 'none';
+                document.getElementById('limit-order-note').style.display = 'none';
             } else {
                 document.getElementById('market-btn').className = 'btn btn-secondary';
                 document.getElementById('limit-btn').className = 'btn btn-primary';
                 document.getElementById('limit-price-group').style.display = 'block';
+                document.getElementById('limit-order-note').style.display = 'block';
                 // 设置默认限价为当前价格
                 if (currentPrice > 0) {
                     document.getElementById('limit-price').value = currentPrice;
@@ -954,6 +961,14 @@
 
         // 取消订单
         async function cancelOrder(symbol, orderId) {
+            const confirmed = await showConfirmDialog(
+                '撤销订单',
+                `确定要撤销 ${symbol} 的订单 #${orderId} 吗？`,
+                'danger'
+            );
+
+            if (!confirmed) return;
+
             try {
                 const response = await fetch(`${API_BASE}/order`, {
                     method: 'DELETE',
@@ -964,13 +979,13 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    showToast('订单已取消', 'success');
+                    showToast('订单已撤销', 'success');
                     loadOrders();
                 } else {
-                    showToast('取消失败: ' + data.message, 'error');
+                    showToast('撤单失败: ' + (data.message || data.detail), 'error');
                 }
             } catch (error) {
-                showToast('取消请求失败: ' + error.message, 'error');
+                showToast('撤单请求失败: ' + error.message, 'error');
             }
         }
 
