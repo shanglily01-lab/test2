@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
 
     global config, price_collector, news_aggregator
     global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
-    global pending_order_executor, futures_limit_order_executor, futures_monitor_service
+    global pending_order_executor, futures_limit_order_executor, futures_monitor_service, live_order_monitor
 
     # 加载配置
     config_path = project_root / "config.yaml"
@@ -226,7 +226,7 @@ async def lifespan(app: FastAPI):
         # 初始化合约止盈止损监控服务
         try:
             from app.trading.futures_monitor_service import FuturesMonitorService
-            
+
             futures_monitor_service = FuturesMonitorService(config_path=str(project_root / 'config.yaml'))
             futures_monitor_service.start_monitor()
             logger.info("✅ 合约止盈止损监控服务初始化成功")
@@ -235,6 +235,21 @@ async def lifespan(app: FastAPI):
             import traceback
             traceback.print_exc()
             futures_monitor_service = None
+
+        # 初始化实盘订单监控服务（限价单成交后自动设置止损止盈）
+        try:
+            from app.services.live_order_monitor import init_live_order_monitor
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+
+            db_config = config.get('database', {}).get('mysql', {})
+            live_engine = BinanceFuturesEngine(db_config)
+            live_order_monitor = init_live_order_monitor(db_config, live_engine)
+            logger.info("✅ 实盘订单监控服务初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  实盘订单监控服务初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+            live_order_monitor = None
 
         logger.info("🎉 分析模块初始化完成！")
 
@@ -253,6 +268,7 @@ async def lifespan(app: FastAPI):
         pending_order_executor = None
         futures_limit_order_executor = None
         futures_monitor_service = None
+        live_order_monitor = None
         logger.warning("⚠️  系统以降级模式运行")
 
     logger.info("🚀 FastAPI 启动完成")
@@ -290,12 +306,21 @@ async def lifespan(app: FastAPI):
                     except Exception as e:
                         logger.error(f"合约止盈止损监控出错: {e}")
                     await asyncio.sleep(5)
-            
+
             asyncio.create_task(monitor_futures_positions_loop())
             logger.info("✅ 合约止盈止损监控服务已启动（每5秒检查）")
         except Exception as e:
             logger.warning(f"⚠️  启动合约止盈止损监控任务失败: {e}")
             futures_monitor_service = None
+
+    # 启动实盘订单监控服务（限价单成交后自动设置止损止盈）
+    if live_order_monitor:
+        try:
+            live_order_monitor.start()
+            logger.info("✅ 实盘订单监控服务已启动（每10秒检查限价单成交状态）")
+        except Exception as e:
+            logger.warning(f"⚠️  启动实盘订单监控任务失败: {e}")
+            live_order_monitor = None
 
     yield
 
@@ -325,6 +350,14 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 合约止盈止损监控服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止合约止盈止损监控服务失败: {e}")
+
+    # 停止实盘订单监控服务
+    if live_order_monitor:
+        try:
+            live_order_monitor.stop()
+            logger.info("✅ 实盘订单监控服务已停止")
+        except Exception as e:
+            logger.warning(f"⚠️  停止实盘订单监控服务失败: {e}")
 
     # 停止价格缓存服务
     if price_cache_service:
