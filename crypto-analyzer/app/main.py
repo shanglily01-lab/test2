@@ -459,6 +459,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册行情识别API路由
+try:
+    from app.api.market_regime_api import router as market_regime_router
+    app.include_router(market_regime_router)
+    logger.info("✅ 行情识别API路由已注册（/api/market-regime）")
+except Exception as e:
+    logger.warning(f"⚠️  行情识别API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 
 # ==================== API路由 ====================
 
@@ -736,6 +746,18 @@ async def live_trading_page():
         return FileResponse(str(live_path))
     else:
         raise HTTPException(status_code=404, detail="Live trading page not found")
+
+
+@app.get("/market_regime")
+async def market_regime_page():
+    """
+    行情识别与策略自适应页面
+    """
+    regime_path = project_root / "templates" / "market_regime.html"
+    if regime_path.exists():
+        return FileResponse(str(regime_path))
+    else:
+        raise HTTPException(status_code=404, detail="Market regime page not found")
 
 
 @app.get("/strategy_manager")

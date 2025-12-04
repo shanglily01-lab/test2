@@ -14,6 +14,7 @@ from app.database.db_service import DatabaseService
 from app.trading.futures_trading_engine import FuturesTradingEngine
 from app.analyzers.technical_indicators import TechnicalIndicators
 from app.services.strategy_hit_recorder import StrategyHitRecorder
+from app.services.market_regime_detector import MarketRegimeDetector, get_regime_display_name
 
 
 class StrategyExecutor:
@@ -36,6 +37,7 @@ class StrategyExecutor:
         self.running = False
         self.task = None
         self.hit_recorder = StrategyHitRecorder(db_config)  # 策略命中记录器
+        self.regime_detector = MarketRegimeDetector(db_config)  # 行情类型检测器
 
         # 定义本地时区（UTC+8）
         self.LOCAL_TZ = timezone(timedelta(hours=8))
@@ -87,7 +89,117 @@ class StrategyExecutor:
             return self.live_engine
         else:
             return self.futures_engine
-    
+
+    def apply_regime_adaptive_params(self, strategy: Dict, symbol: str,
+                                      timeframe: str, kline_data: List[Dict] = None) -> Dict:
+        """
+        应用行情自适应参数
+
+        根据当前行情类型（趋势/震荡），自动调整策略参数
+
+        Args:
+            strategy: 原始策略配置
+            symbol: 交易对符号
+            timeframe: 时间周期
+            kline_data: K线数据（可选）
+
+        Returns:
+            调整后的策略配置
+        """
+        # 检查是否启用行情自适应
+        adaptive_regime = strategy.get('adaptiveRegime', False)
+        if not adaptive_regime:
+            return strategy
+
+        strategy_id = strategy.get('id')
+        if not strategy_id:
+            return strategy
+
+        try:
+            # 检测当前行情类型
+            regime_result = self.regime_detector.detect_regime(symbol, timeframe, kline_data)
+            regime_type = regime_result.get('regime_type', 'ranging')
+            regime_score = regime_result.get('regime_score', 0)
+
+            # 获取该行情类型对应的参数配置
+            regime_params = self.regime_detector.get_regime_params(strategy_id, regime_type)
+
+            if regime_params:
+                # 检查是否在该行情类型下启用交易
+                if not regime_params.get('enabled', True):
+                    logger.info(f"📊 {symbol} [{timeframe}] 当前行情: {get_regime_display_name(regime_type)} "
+                               f"(得分:{regime_score:.1f}) - 该行情类型已禁用交易")
+                    # 返回一个禁用交易的策略配置
+                    modified_strategy = strategy.copy()
+                    modified_strategy['_regime_disabled'] = True
+                    modified_strategy['_regime_type'] = regime_type
+                    modified_strategy['_regime_score'] = regime_score
+                    return modified_strategy
+
+                # 应用行情参数覆盖
+                params = regime_params.get('params', {})
+                modified_strategy = strategy.copy()
+
+                # 覆盖相关参数
+                for key, value in params.items():
+                    # 转换驼峰命名
+                    if key == 'sustainedTrend':
+                        if isinstance(modified_strategy.get('sustainedTrend'), dict):
+                            modified_strategy['sustainedTrend']['enabled'] = value
+                        else:
+                            modified_strategy['sustainedTrend'] = {'enabled': value}
+                    elif key == 'sustainedTrendMinStrength':
+                        if isinstance(modified_strategy.get('sustainedTrend'), dict):
+                            modified_strategy['sustainedTrend']['minStrength'] = value
+                        else:
+                            modified_strategy['sustainedTrend'] = {'minStrength': value}
+                    elif key == 'sustainedTrendMaxStrength':
+                        if isinstance(modified_strategy.get('sustainedTrend'), dict):
+                            modified_strategy['sustainedTrend']['maxStrength'] = value
+                        else:
+                            modified_strategy['sustainedTrend'] = {'maxStrength': value}
+                    elif key == 'allowLong':
+                        # 调整买入方向
+                        buy_directions = modified_strategy.get('buyDirection', [])
+                        if value and 'long' not in buy_directions:
+                            buy_directions.append('long')
+                        elif not value and 'long' in buy_directions:
+                            buy_directions.remove('long')
+                        modified_strategy['buyDirection'] = buy_directions
+                    elif key == 'allowShort':
+                        buy_directions = modified_strategy.get('buyDirection', [])
+                        if value and 'short' not in buy_directions:
+                            buy_directions.append('short')
+                        elif not value and 'short' in buy_directions:
+                            buy_directions.remove('short')
+                        modified_strategy['buyDirection'] = buy_directions
+                    elif key == 'stopLossPercent':
+                        modified_strategy['stopLoss'] = value
+                    elif key == 'takeProfitPercent':
+                        modified_strategy['takeProfit'] = value
+                    else:
+                        modified_strategy[key] = value
+
+                # 记录行情信息
+                modified_strategy['_regime_type'] = regime_type
+                modified_strategy['_regime_score'] = regime_score
+
+                logger.info(f"📊 {symbol} [{timeframe}] 行情自适应: {get_regime_display_name(regime_type)} "
+                           f"(得分:{regime_score:.1f}) - 已应用对应参数")
+
+                return modified_strategy
+            else:
+                # 没有配置该行情类型的参数，使用默认策略
+                logger.debug(f"📊 {symbol} [{timeframe}] 当前行情: {get_regime_display_name(regime_type)} "
+                            f"- 未配置对应参数，使用默认配置")
+                strategy['_regime_type'] = regime_type
+                strategy['_regime_score'] = regime_score
+                return strategy
+
+        except Exception as e:
+            logger.warning(f"应用行情自适应参数失败: {e}")
+            return strategy
+
     def get_local_time(self) -> datetime:
         """获取本地时间（UTC+8）"""
         return datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
@@ -543,6 +655,38 @@ class StrategyExecutor:
                         'klines_count': 0
                     })
                     continue
+
+                # 应用行情自适应参数（如果启用）
+                adaptive_strategy = self.apply_regime_adaptive_params(
+                    strategy, symbol, buy_timeframe, buy_klines
+                )
+
+                # 检查是否因行情类型被禁用交易
+                if adaptive_strategy.get('_regime_disabled'):
+                    regime_type = adaptive_strategy.get('_regime_type', 'unknown')
+                    regime_score = adaptive_strategy.get('_regime_score', 0)
+                    results.append({
+                        'symbol': symbol,
+                        'status': 'skipped',
+                        'reason': f'行情类型({regime_type})已禁用交易',
+                        'regime_type': regime_type,
+                        'regime_score': regime_score
+                    })
+                    continue
+
+                # 如果行情自适应调整了参数，更新相关变量
+                if adaptive_strategy.get('_regime_type'):
+                    # 更新受行情影响的参数
+                    buy_directions = adaptive_strategy.get('buyDirection', buy_directions)
+                    stop_loss_pct = adaptive_strategy.get('stopLoss', stop_loss_pct)
+                    take_profit_pct = adaptive_strategy.get('takeProfit', take_profit_pct)
+
+                    # 更新持续趋势参数
+                    sustained_trend = adaptive_strategy.get('sustainedTrend', {})
+                    if isinstance(sustained_trend, dict):
+                        sustained_trend_enabled = sustained_trend.get('enabled', sustained_trend_enabled)
+                        sustained_trend_min_strength = sustained_trend.get('minStrength', sustained_trend_min_strength)
+                        sustained_trend_max_strength = sustained_trend.get('maxStrength', sustained_trend_max_strength)
 
                 # 调用内部方法执行实时逻辑
                 result = await self._execute_symbol_strategy(

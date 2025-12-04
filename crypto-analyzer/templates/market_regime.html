@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行情识别与策略自适应</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        h1 { color: #58a6ff; margin-bottom: 20px; }
+        h2 { color: #8b949e; margin: 20px 0 10px; font-size: 18px; }
+
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .regime-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .regime-card {
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .regime-card.strong_uptrend { border-left: 4px solid #3fb950; }
+        .regime-card.weak_uptrend { border-left: 4px solid #7ee787; }
+        .regime-card.ranging { border-left: 4px solid #8b949e; }
+        .regime-card.weak_downtrend { border-left: 4px solid #f0883e; }
+        .regime-card.strong_downtrend { border-left: 4px solid #f85149; }
+
+        .regime-icon { font-size: 32px; margin-bottom: 10px; }
+        .regime-name { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
+        .regime-count { font-size: 24px; color: #58a6ff; }
+        .regime-desc { font-size: 12px; color: #8b949e; margin-top: 5px; }
+
+        .symbol-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+            justify-content: center;
+        }
+
+        .symbol-tag {
+            background: #30363d;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #30363d;
+        }
+
+        th {
+            background: #21262d;
+            color: #8b949e;
+            font-weight: 500;
+        }
+
+        tr:hover { background: #21262d; }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+
+        .btn-primary { background: #238636; color: white; }
+        .btn-primary:hover { background: #2ea043; }
+        .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+        .btn-secondary:hover { background: #30363d; }
+        .btn-danger { background: #f85149; color: white; }
+        .btn-danger:hover { background: #da3633; }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #8b949e;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .toggle-switch input { display: none; }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #30363d;
+            transition: .3s;
+            border-radius: 26px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider { background-color: #238636; }
+        input:checked + .toggle-slider:before { transform: translateX(24px); }
+
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+
+        .status-enabled { background: #238636; color: white; }
+        .status-disabled { background: #f85149; color: white; }
+
+        .score-bar {
+            width: 100%;
+            height: 8px;
+            background: #30363d;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            transition: width 0.3s;
+        }
+
+        .score-positive { background: linear-gradient(90deg, #238636, #3fb950); }
+        .score-negative { background: linear-gradient(90deg, #f85149, #da3633); }
+        .score-neutral { background: #8b949e; }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #30363d;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #8b949e;
+        }
+
+        .tab:hover { color: #c9d1d9; }
+        .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .refresh-btn {
+            float: right;
+            margin-top: -45px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #8b949e;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #161b22;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: #8b949e;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .back-link {
+            color: #58a6ff;
+            text-decoration: none;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/futures-trading" class="back-link">&larr; 返回合约交易</a>
+        <h1>行情识别与策略自适应</h1>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('overview')">行情总览</div>
+            <div class="tab" onclick="showTab('params')">策略参数配置</div>
+            <div class="tab" onclick="showTab('history')">行情切换历史</div>
+        </div>
+
+        <!-- 行情总览 -->
+        <div id="overview" class="tab-content active">
+            <div class="card">
+                <h2>当前行情分布
+                    <button class="btn btn-secondary refresh-btn" onclick="loadSummary()">刷新</button>
+                </h2>
+                <div id="regime-summary" class="regime-grid">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>检测单个交易对</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>交易对</label>
+                        <input type="text" id="detect-symbol" placeholder="BTC/USDT" value="BTC/USDT">
+                    </div>
+                    <div class="form-group">
+                        <label>时间周期</label>
+                        <select id="detect-timeframe">
+                            <option value="5m">5分钟</option>
+                            <option value="15m" selected>15分钟</option>
+                            <option value="1h">1小时</option>
+                            <option value="4h">4小时</option>
+                            <option value="1d">1天</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="detectRegime()">检测行情</button>
+                <div id="detect-result" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+
+        <!-- 策略参数配置 -->
+        <div id="params" class="tab-content">
+            <div class="card">
+                <h2>选择策略</h2>
+                <select id="strategy-select" onchange="loadStrategyParams()">
+                    <option value="">-- 请选择策略 --</option>
+                </select>
+            </div>
+
+            <div id="params-config" style="display: none;">
+                <div class="card">
+                    <h2>行情参数配置
+                        <button class="btn btn-primary refresh-btn" onclick="openAddParamModal()">添加配置</button>
+                    </h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>行情类型</th>
+                                <th>状态</th>
+                                <th>参数配置</th>
+                                <th>说明</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="params-table">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 行情切换历史 -->
+        <div id="history" class="tab-content">
+            <div class="card">
+                <h2>查询条件</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>交易对</label>
+                        <input type="text" id="history-symbol" placeholder="BTC/USDT" value="BTC/USDT">
+                    </div>
+                    <div class="form-group">
+                        <label>时间周期</label>
+                        <select id="history-timeframe">
+                            <option value="15m" selected>15分钟</option>
+                            <option value="1h">1小时</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="loadHistory()">查询</button>
+            </div>
+
+            <div class="card">
+                <h2>切换记录</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>原行情</th>
+                            <th>新行情</th>
+                            <th>得分变化</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table">
+                        <tr><td colspan="4" class="loading">请先查询</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑参数模态框 -->
+    <div id="param-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">添加行情参数</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="param-form">
+                <div class="form-group">
+                    <label>行情类型</label>
+                    <select id="param-regime-type" required>
+                        <option value="strong_uptrend">强趋势上涨</option>
+                        <option value="weak_uptrend">弱趋势上涨</option>
+                        <option value="ranging">震荡行情</option>
+                        <option value="weak_downtrend">弱趋势下跌</option>
+                        <option value="strong_downtrend">强趋势下跌</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>启用交易</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="param-enabled" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>启用持续趋势信号 (sustainedTrend)</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="param-sustained-trend">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>趋势最小强度 (%)</label>
+                        <input type="number" id="param-min-strength" step="0.1" value="0.3">
+                    </div>
+                    <div class="form-group">
+                        <label>趋势最大强度 (%)</label>
+                        <input type="number" id="param-max-strength" step="0.1" value="2.0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>允许做多</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="param-allow-long" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>允许做空</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="param-allow-short" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>止损 (%)</label>
+                        <input type="number" id="param-stop-loss" step="0.1" value="3.0">
+                    </div>
+                    <div class="form-group">
+                        <label>止盈 (%)</label>
+                        <input type="number" id="param-take-profit" step="0.1" value="6.0">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>说明</label>
+                    <textarea id="param-description" rows="2" placeholder="参数配置说明"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">保存</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentStrategyId = null;
+
+        // Tab切换
+        function showTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        // 加载行情汇总
+        async function loadSummary() {
+            const container = document.getElementById('regime-summary');
+            container.innerHTML = '<div class="loading">加载中...</div>';
+
+            try {
+                const resp = await fetch('/api/market-regime/summary?timeframe=15m');
+                const data = await resp.json();
+
+                if (data.success) {
+                    let html = '';
+                    const order = ['strong_uptrend', 'weak_uptrend', 'ranging', 'weak_downtrend', 'strong_downtrend'];
+                    const icons = {
+                        'strong_uptrend': '📈',
+                        'weak_uptrend': '↗️',
+                        'ranging': '↔️',
+                        'weak_downtrend': '↘️',
+                        'strong_downtrend': '📉'
+                    };
+
+                    for (const type of order) {
+                        const info = data.data[type];
+                        html += `
+                            <div class="regime-card ${type}">
+                                <div class="regime-icon">${icons[type]}</div>
+                                <div class="regime-name">${info.display.replace(/[📈↗️↔️↘️📉]/g, '')}</div>
+                                <div class="regime-count">${info.count}</div>
+                                <div class="regime-desc">${info.suggestion}</div>
+                                <div class="symbol-list">
+                                    ${info.symbols.slice(0, 5).map(s => `<span class="symbol-tag">${s.symbol}</span>`).join('')}
+                                    ${info.count > 5 ? `<span class="symbol-tag">+${info.count - 5}</span>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<div class="loading">暂无数据</div>';
+                }
+            } catch (e) {
+                container.innerHTML = '<div class="loading">加载失败: ' + e.message + '</div>';
+            }
+        }
+
+        // 检测单个交易对行情
+        async function detectRegime() {
+            const symbol = document.getElementById('detect-symbol').value;
+            const timeframe = document.getElementById('detect-timeframe').value;
+            const resultDiv = document.getElementById('detect-result');
+
+            resultDiv.innerHTML = '<div class="loading">检测中...</div>';
+
+            try {
+                const resp = await fetch(`/api/market-regime/detect/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
+                const data = await resp.json();
+
+                if (data.success) {
+                    const r = data.data;
+                    const scoreColor = r.regime_score > 20 ? 'score-positive' : (r.regime_score < -20 ? 'score-negative' : 'score-neutral');
+                    const scoreWidth = Math.min(Math.abs(r.regime_score), 100);
+
+                    resultDiv.innerHTML = `
+                        <div class="card" style="margin: 0;">
+                            <h3>${r.regime_display}</h3>
+                            <p>得分: ${r.regime_score}</p>
+                            <div class="score-bar">
+                                <div class="score-fill ${scoreColor}" style="width: ${scoreWidth}%;"></div>
+                            </div>
+                            <p style="margin-top: 10px; color: #8b949e;">${r.trading_suggestion}</p>
+                            <p style="margin-top: 10px; font-size: 12px; color: #6e7681;">
+                                EMA差值: ${(r.ema_diff_pct || 0).toFixed(4)}% |
+                                ADX: ${(r.adx_value || 0).toFixed(2)} |
+                                趋势K线: ${r.trend_bars || 0}
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="loading">${data.error || '检测失败'}</div>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = '<div class="loading">检测失败: ' + e.message + '</div>';
+            }
+        }
+
+        // 加载策略列表
+        async function loadStrategies() {
+            try {
+                const resp = await fetch('/api/futures/strategies');
+                const data = await resp.json();
+
+                const select = document.getElementById('strategy-select');
+                select.innerHTML = '<option value="">-- 请选择策略 --</option>';
+
+                if (data.success && data.strategies) {
+                    for (const s of data.strategies) {
+                        select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+                    }
+                }
+            } catch (e) {
+                console.error('加载策略失败:', e);
+            }
+        }
+
+        // 加载策略的行情参数
+        async function loadStrategyParams() {
+            const strategyId = document.getElementById('strategy-select').value;
+            if (!strategyId) {
+                document.getElementById('params-config').style.display = 'none';
+                return;
+            }
+
+            currentStrategyId = strategyId;
+            document.getElementById('params-config').style.display = 'block';
+
+            try {
+                const resp = await fetch(`/api/market-regime/params/${strategyId}`);
+                const data = await resp.json();
+
+                const tbody = document.getElementById('params-table');
+
+                if (data.success && data.data.length > 0) {
+                    tbody.innerHTML = data.data.map(p => `
+                        <tr>
+                            <td>${p.regime_display}</td>
+                            <td>
+                                <span class="status-badge ${p.enabled ? 'status-enabled' : 'status-disabled'}">
+                                    ${p.enabled ? '启用交易' : '禁用交易'}
+                                </span>
+                            </td>
+                            <td style="font-size: 12px; max-width: 300px; overflow: hidden;">
+                                ${formatParams(p.params)}
+                            </td>
+                            <td style="font-size: 12px; color: #8b949e;">${p.description || '-'}</td>
+                            <td>
+                                <button class="btn btn-secondary" onclick="editParam('${p.regime_type}', ${JSON.stringify(p).replace(/"/g, '&quot;')})">编辑</button>
+                                <button class="btn btn-danger" onclick="deleteParam('${p.regime_type}')">删除</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="loading">暂无配置，点击"添加配置"创建</td></tr>';
+                }
+            } catch (e) {
+                console.error('加载参数失败:', e);
+            }
+        }
+
+        function formatParams(params) {
+            if (!params) return '-';
+            const items = [];
+            if (params.sustainedTrend !== undefined) items.push(`持续趋势: ${params.sustainedTrend ? '是' : '否'}`);
+            if (params.sustainedTrendMinStrength) items.push(`最小强度: ${params.sustainedTrendMinStrength}%`);
+            if (params.allowLong !== undefined) items.push(`做多: ${params.allowLong ? '是' : '否'}`);
+            if (params.allowShort !== undefined) items.push(`做空: ${params.allowShort ? '是' : '否'}`);
+            if (params.stopLossPercent) items.push(`止损: ${params.stopLossPercent}%`);
+            if (params.takeProfitPercent) items.push(`止盈: ${params.takeProfitPercent}%`);
+            return items.join(' | ') || JSON.stringify(params);
+        }
+
+        // 打开添加参数模态框
+        function openAddParamModal() {
+            document.getElementById('modal-title').textContent = '添加行情参数';
+            document.getElementById('param-regime-type').disabled = false;
+            document.getElementById('param-form').reset();
+            document.getElementById('param-enabled').checked = true;
+            document.getElementById('param-allow-long').checked = true;
+            document.getElementById('param-allow-short').checked = true;
+            document.getElementById('param-modal').style.display = 'block';
+        }
+
+        // 编辑参数
+        function editParam(regimeType, paramData) {
+            document.getElementById('modal-title').textContent = '编辑行情参数';
+            document.getElementById('param-regime-type').value = regimeType;
+            document.getElementById('param-regime-type').disabled = true;
+            document.getElementById('param-enabled').checked = paramData.enabled;
+
+            const p = paramData.params || {};
+            document.getElementById('param-sustained-trend').checked = p.sustainedTrend || false;
+            document.getElementById('param-min-strength').value = p.sustainedTrendMinStrength || 0.3;
+            document.getElementById('param-max-strength').value = p.sustainedTrendMaxStrength || 2.0;
+            document.getElementById('param-allow-long').checked = p.allowLong !== false;
+            document.getElementById('param-allow-short').checked = p.allowShort !== false;
+            document.getElementById('param-stop-loss').value = p.stopLossPercent || 3.0;
+            document.getElementById('param-take-profit').value = p.takeProfitPercent || 6.0;
+            document.getElementById('param-description').value = paramData.description || '';
+
+            document.getElementById('param-modal').style.display = 'block';
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('param-modal').style.display = 'none';
+        }
+
+        // 保存参数
+        document.getElementById('param-form').onsubmit = async function(e) {
+            e.preventDefault();
+
+            const params = {
+                sustainedTrend: document.getElementById('param-sustained-trend').checked,
+                sustainedTrendMinStrength: parseFloat(document.getElementById('param-min-strength').value),
+                sustainedTrendMaxStrength: parseFloat(document.getElementById('param-max-strength').value),
+                allowLong: document.getElementById('param-allow-long').checked,
+                allowShort: document.getElementById('param-allow-short').checked,
+                stopLossPercent: parseFloat(document.getElementById('param-stop-loss').value),
+                takeProfitPercent: parseFloat(document.getElementById('param-take-profit').value)
+            };
+
+            const body = {
+                strategy_id: parseInt(currentStrategyId),
+                regime_type: document.getElementById('param-regime-type').value,
+                enabled: document.getElementById('param-enabled').checked,
+                params: params,
+                description: document.getElementById('param-description').value
+            };
+
+            try {
+                const resp = await fetch('/api/market-regime/params', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    alert('保存成功');
+                    closeModal();
+                    loadStrategyParams();
+                } else {
+                    alert('保存失败: ' + (data.detail || data.message));
+                }
+            } catch (e) {
+                alert('保存失败: ' + e.message);
+            }
+        };
+
+        // 删除参数
+        async function deleteParam(regimeType) {
+            if (!confirm(`确定删除 ${regimeType} 的参数配置？`)) return;
+
+            try {
+                const resp = await fetch(`/api/market-regime/params/${currentStrategyId}/${regimeType}`, {
+                    method: 'DELETE'
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    loadStrategyParams();
+                } else {
+                    alert('删除失败: ' + (data.detail || data.message));
+                }
+            } catch (e) {
+                alert('删除失败: ' + e.message);
+            }
+        }
+
+        // 加载历史记录
+        async function loadHistory() {
+            const symbol = document.getElementById('history-symbol').value;
+            const timeframe = document.getElementById('history-timeframe').value;
+            const tbody = document.getElementById('history-table');
+
+            tbody.innerHTML = '<tr><td colspan="4" class="loading">加载中...</td></tr>';
+
+            try {
+                const resp = await fetch(`/api/market-regime/changes/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
+                const data = await resp.json();
+
+                if (data.success && data.data.length > 0) {
+                    tbody.innerHTML = data.data.map(r => `
+                        <tr>
+                            <td>${formatTime(r.changed_at)}</td>
+                            <td>${r.old_regime_display || '-'}</td>
+                            <td>${r.new_regime_display}</td>
+                            <td>${r.old_score || 0} &rarr; ${r.new_score || 0}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="loading">暂无切换记录</td></tr>';
+                }
+            } catch (e) {
+                tbody.innerHTML = '<tr><td colspan="4" class="loading">加载失败: ' + e.message + '</td></tr>';
+            }
+        }
+
+        function formatTime(t) {
+            if (!t) return '-';
+            const d = new Date(t);
+            return d.toLocaleString('zh-CN');
+        }
+
+        // 页面加载
+        window.onload = function() {
+            loadSummary();
+            loadStrategies();
+        };
+    </script>
+</body>
+</html>
