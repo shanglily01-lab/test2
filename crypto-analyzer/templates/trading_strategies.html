@@ -1033,6 +1033,43 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- 行情自适应配置 -->
+                                <div class="form-section" style="margin-top: 16px; padding: 12px; background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(43, 111, 237, 0.1)); border-radius: var(--radius-md); border: 1px solid rgba(124, 58, 237, 0.3);">
+                                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <input type="checkbox" id="adaptiveRegimeEnabled" name="adaptiveRegimeEnabled">
+                                            <label for="adaptiveRegimeEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">🎯 行情自适应</label>
+                                        </div>
+                                        <small style="color: var(--text-secondary); font-size: 11px; margin-left: auto;">
+                                            自动识别趋势/震荡行情，切换策略参数
+                                        </small>
+                                    </div>
+                                    <div style="margin-left: 26px; margin-top: 8px; padding: 10px; background: rgba(124, 58, 237, 0.1); border-radius: 6px; border-left: 3px solid #7c3aed;">
+                                        <small style="font-size: 11px; color: #a78bfa; display: block; margin-bottom: 6px;">
+                                            <strong>📊 功能说明：</strong>
+                                        </small>
+                                        <small style="font-size: 10px; color: var(--text-secondary); display: block; line-height: 1.6;">
+                                            • <strong>强趋势</strong>：积极交易，启用持续趋势信号<br>
+                                            • <strong>弱趋势</strong>：谨慎交易，只在金叉/死叉时开仓<br>
+                                            • <strong>震荡行情</strong>：可选择暂停交易，避免追高杀低<br>
+                                            • 系统自动检测行情类型并应用对应参数
+                                        </small>
+                                    </div>
+                                    <div id="adaptiveRegimeConfig" style="margin-left: 26px; margin-top: 12px;">
+                                        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                                            <a href="/market_regime" target="_blank" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">
+                                                <i class="bi bi-gear"></i> 配置行情参数
+                                            </a>
+                                            <a href="/market_regime" target="_blank" class="btn btn-secondary" style="font-size: 12px; padding: 6px 12px;">
+                                                <i class="bi bi-bar-chart"></i> 查看当前行情
+                                            </a>
+                                        </div>
+                                        <small style="font-size: 10px; color: var(--text-tertiary); display: block; margin-top: 8px;">
+                                            💡 需要先在"行情参数配置"页面为不同行情类型设置策略参数
+                                        </small>
+                                    </div>
+                                </div>
                             </div>
                             <!-- 买入条件结束 -->
 
@@ -1484,6 +1521,12 @@
                     if (priceDistanceMaxBelowEMA) priceDistanceMaxBelowEMA.value = '1.0';
                 }
 
+                // 清除行情自适应配置
+                const adaptiveRegimeEnabled = document.getElementById('adaptiveRegimeEnabled');
+                if (adaptiveRegimeEnabled) {
+                    adaptiveRegimeEnabled.checked = false;
+                }
+
                 editingStrategyId = null;
                 updateEmptyState();
             } catch (error) {
@@ -1798,7 +1841,9 @@
                     enabled: document.getElementById('priceDistanceLimitEnabled') ? document.getElementById('priceDistanceLimitEnabled').checked : false,
                     maxAboveEMA: document.getElementById('priceDistanceMaxAboveEMA') ? parseFloat(document.getElementById('priceDistanceMaxAboveEMA').value) : 1.0,
                     maxBelowEMA: document.getElementById('priceDistanceMaxBelowEMA') ? parseFloat(document.getElementById('priceDistanceMaxBelowEMA').value) : 1.0
-                }
+                },
+                // 行情自适应开关
+                adaptiveRegime: document.getElementById('adaptiveRegimeEnabled') ? document.getElementById('adaptiveRegimeEnabled').checked : false
             };
 
             // 验证
@@ -2383,6 +2428,11 @@
                     document.getElementById('priceDistanceMaxAboveEMA').value = strategy.priceDistanceLimit.maxAboveEMA || 1.0;
                     document.getElementById('priceDistanceMaxBelowEMA').value = strategy.priceDistanceLimit.maxBelowEMA || 1.0;
                 }
+            }
+
+            // 行情自适应配置
+            if (document.getElementById('adaptiveRegimeEnabled')) {
+                document.getElementById('adaptiveRegimeEnabled').checked = strategy.adaptiveRegime === true;
             }
 
             // 做多价格
