@@ -713,16 +713,34 @@
                     document.getElementById('ordersEmpty').style.display = 'none';
 
                     const tbody = document.getElementById('ordersBody');
-                    tbody.innerHTML = data.data.map(order => `
+                    tbody.innerHTML = data.data.map(order => {
+                        // 获取价格：限价单用price，止损止盈单用stopPrice
+                        let displayPrice = 0;
+                        if (order.type === 'LIMIT') {
+                            displayPrice = parseFloat(order.price) || 0;
+                        } else if (order.type === 'STOP_MARKET' || order.type === 'TAKE_PROFIT_MARKET') {
+                            displayPrice = parseFloat(order.stopPrice) || 0;
+                        } else {
+                            displayPrice = parseFloat(order.price) || parseFloat(order.stopPrice) || 0;
+                        }
+
+                        // 订单类型显示
+                        let typeDisplay = order.type;
+                        if (order.type === 'STOP_MARKET') typeDisplay = '止损';
+                        else if (order.type === 'TAKE_PROFIT_MARKET') typeDisplay = '止盈';
+                        else if (order.type === 'LIMIT') typeDisplay = '限价';
+                        else if (order.type === 'MARKET') typeDisplay = '市价';
+
+                        return `
                         <tr>
                             <td><strong>${order.symbol}</strong></td>
-                            <td>${order.type}</td>
+                            <td>${typeDisplay}</td>
                             <td>
                                 <span class="badge ${order.side === 'BUY' ? 'badge-success' : 'badge-danger'}">
                                     ${order.side}
                                 </span>
                             </td>
-                            <td class="font-mono">${formatNumber(order.price || order.stopPrice)}</td>
+                            <td class="font-mono">${formatNumber(displayPrice)}</td>
                             <td class="font-mono">${formatNumber(order.origQty, 4)}</td>
                             <td>
                                 <button class="btn btn-sm btn-danger" onclick="cancelOrder('${order.symbol}', '${order.orderId}')" title="撤销此订单">
@@ -730,7 +748,7 @@
                                 </button>
                             </td>
                         </tr>
-                    `).join('');
+                    `}).join('');
                 } else {
                     document.getElementById('ordersTable').style.display = 'none';
                     document.getElementById('ordersEmpty').style.display = 'block';
