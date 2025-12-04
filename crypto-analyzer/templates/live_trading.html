@@ -420,6 +420,25 @@
                             </small>
                         </div>
                         <div class="form-group">
+                            <label class="form-label">订单类型</label>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
+                                <button type="button" class="btn btn-primary" id="market-btn" onclick="selectOrderType('MARKET')" style="width: 100%;">
+                                    <i class="bi bi-lightning"></i> 市价
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="limit-btn" onclick="selectOrderType('LIMIT')" style="width: 100%;">
+                                    <i class="bi bi-tag"></i> 限价
+                                </button>
+                            </div>
+                            <input type="hidden" id="order-type" value="MARKET">
+                        </div>
+                        <div class="form-group" id="limit-price-group" style="display: none;">
+                            <label class="form-label">限价价格</label>
+                            <input type="number" class="form-control" id="limit-price" step="0.01" placeholder="输入限价">
+                            <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
+                                当前价: <span id="limit-price-hint" class="font-mono text-gold">--</span>
+                            </small>
+                        </div>
+                        <div class="form-group">
                             <label class="form-label">数量</label>
                             <input type="number" class="form-control" id="quantity" step="0.001" required placeholder="请输入数量">
                             <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
@@ -755,13 +774,37 @@
             }
         }
 
+        // 选择订单类型
+        function selectOrderType(type) {
+            document.getElementById('order-type').value = type;
+
+            if (type === 'MARKET') {
+                document.getElementById('market-btn').className = 'btn btn-primary';
+                document.getElementById('limit-btn').className = 'btn btn-secondary';
+                document.getElementById('limit-price-group').style.display = 'none';
+            } else {
+                document.getElementById('market-btn').className = 'btn btn-secondary';
+                document.getElementById('limit-btn').className = 'btn btn-primary';
+                document.getElementById('limit-price-group').style.display = 'block';
+                // 设置默认限价为当前价格
+                if (currentPrice > 0) {
+                    document.getElementById('limit-price').value = currentPrice;
+                    document.getElementById('limit-price-hint').textContent = formatNumber(currentPrice);
+                }
+            }
+        }
+
         // 更新预计保证金
         function updateEstimatedMargin() {
             const quantity = parseFloat(document.getElementById('quantity').value) || 0;
             const leverage = parseInt(document.getElementById('leverage').value) || 1;
+            const orderType = document.getElementById('order-type').value;
+            const limitPrice = parseFloat(document.getElementById('limit-price').value) || 0;
 
-            if (currentPrice > 0 && quantity > 0) {
-                const margin = (currentPrice * quantity) / leverage;
+            const price = orderType === 'LIMIT' && limitPrice > 0 ? limitPrice : currentPrice;
+
+            if (price > 0 && quantity > 0) {
+                const margin = (price * quantity) / leverage;
                 document.getElementById('estimated-margin').textContent = margin.toFixed(2);
             } else {
                 document.getElementById('estimated-margin').textContent = '0.00';
@@ -771,6 +814,7 @@
         // 监听输入
         document.getElementById('quantity').addEventListener('input', updateEstimatedMargin);
         document.getElementById('leverage').addEventListener('change', updateEstimatedMargin);
+        document.getElementById('limit-price').addEventListener('input', updateEstimatedMargin);
 
         // 开仓
         async function openPosition() {
@@ -778,6 +822,8 @@
             const positionSide = document.getElementById('position-side').value;
             const quantity = parseFloat(document.getElementById('quantity').value);
             const leverage = parseInt(document.getElementById('leverage').value);
+            const orderType = document.getElementById('order-type').value;
+            const limitPrice = parseFloat(document.getElementById('limit-price').value) || null;
             const stopLossPrice = parseFloat(document.getElementById('stop-loss-price').value) || null;
             const takeProfitPrice = parseFloat(document.getElementById('take-profit-price').value) || null;
 
@@ -789,8 +835,13 @@
                 showToast('请输入有效的数量', 'error');
                 return;
             }
+            if (orderType === 'LIMIT' && (!limitPrice || limitPrice <= 0)) {
+                showToast('限价单请输入有效的价格', 'error');
+                return;
+            }
 
-            const estimatedMargin = ((currentPrice * quantity) / leverage).toFixed(2);
+            const priceForMargin = orderType === 'LIMIT' ? limitPrice : currentPrice;
+            const estimatedMargin = ((priceForMargin * quantity) / leverage).toFixed(2);
 
             // 双重确认
             const confirmed = await showConfirmDialog(
@@ -801,6 +852,8 @@
                     </p>
                     <strong>交易对:</strong> ${symbol}<br>
                     <strong>方向:</strong> ${positionSide === 'LONG' ? '做多' : '做空'}<br>
+                    <strong>订单类型:</strong> ${orderType === 'LIMIT' ? '限价单' : '市价单'}<br>
+                    ${orderType === 'LIMIT' ? `<strong>限价:</strong> ${limitPrice}<br>` : ''}
                     <strong>数量:</strong> ${quantity}<br>
                     <strong>杠杆:</strong> ${leverage}x<br>
                     <strong>预计保证金:</strong> ${estimatedMargin} USDT<br>
@@ -823,6 +876,7 @@
                         position_side: positionSide,
                         quantity: quantity,
                         leverage: leverage,
+                        limit_price: orderType === 'LIMIT' ? limitPrice : null,
                         stop_loss_price: stopLossPrice,
                         take_profit_price: takeProfitPrice,
                         source: 'manual'
@@ -836,6 +890,7 @@
 
                     // 清空表单
                     document.getElementById('quantity').value = '';
+                    document.getElementById('limit-price').value = '';
                     document.getElementById('stop-loss-price').value = '';
                     document.getElementById('take-profit-price').value = '';
                     updateEstimatedMargin();
