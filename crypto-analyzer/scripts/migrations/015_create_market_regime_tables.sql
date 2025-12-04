@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS `market_regime` (
 -- 存储不同行情类型对应的策略参数配置
 CREATE TABLE IF NOT EXISTS `strategy_regime_params` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
-    `strategy_id` INT NOT NULL COMMENT '关联的策略ID',
+    `strategy_id` BIGINT NOT NULL COMMENT '关联的策略ID (支持时间戳ID)',
     `regime_type` VARCHAR(30) NOT NULL COMMENT '行情类型',
 
     -- 是否启用该行情类型的交易
