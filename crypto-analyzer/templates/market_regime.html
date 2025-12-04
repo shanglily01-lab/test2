@@ -561,8 +561,10 @@
                 const select = document.getElementById('strategy-select');
                 select.innerHTML = '<option value="">-- 请选择策略 --</option>';
 
-                if (data.success && data.strategies) {
-                    for (const s of data.strategies) {
+                // API返回的是 data.data，不是 data.strategies
+                const strategies = data.data || data.strategies || [];
+                if (data.success && strategies.length > 0) {
+                    for (const s of strategies) {
                         select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
                     }
                 }
