@@ -140,24 +140,19 @@ class StrategyExecutor:
                 params = regime_params.get('params', {})
                 modified_strategy = strategy.copy()
 
+                # 确保 sustainedTrend 是字典类型
+                if not isinstance(modified_strategy.get('sustainedTrend'), dict):
+                    modified_strategy['sustainedTrend'] = {'enabled': False, 'minStrength': 0.15, 'maxStrength': 1.0}
+
                 # 覆盖相关参数
                 for key, value in params.items():
                     # 转换驼峰命名
                     if key == 'sustainedTrend':
-                        if isinstance(modified_strategy.get('sustainedTrend'), dict):
-                            modified_strategy['sustainedTrend']['enabled'] = value
-                        else:
-                            modified_strategy['sustainedTrend'] = {'enabled': value}
+                        modified_strategy['sustainedTrend']['enabled'] = value
                     elif key == 'sustainedTrendMinStrength':
-                        if isinstance(modified_strategy.get('sustainedTrend'), dict):
-                            modified_strategy['sustainedTrend']['minStrength'] = value
-                        else:
-                            modified_strategy['sustainedTrend'] = {'minStrength': value}
+                        modified_strategy['sustainedTrend']['minStrength'] = value
                     elif key == 'sustainedTrendMaxStrength':
-                        if isinstance(modified_strategy.get('sustainedTrend'), dict):
-                            modified_strategy['sustainedTrend']['maxStrength'] = value
-                        else:
-                            modified_strategy['sustainedTrend'] = {'maxStrength': value}
+                        modified_strategy['sustainedTrend']['maxStrength'] = value
                     elif key == 'allowLong':
                         # 调整买入方向
                         buy_directions = modified_strategy.get('buyDirection', [])
