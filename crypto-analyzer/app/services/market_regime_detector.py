@@ -37,6 +37,10 @@ class MarketRegimeDetector:
     WEAK_ADX_THRESHOLD = 25      # 弱趋势ADX阈值
     MIN_TREND_BARS = 3           # 趋势确认最小K线数
 
+    # 滞后机制配置 - 防止频繁切换
+    HYSTERESIS_SCORE = 5.0       # 切换需要超过的得分差距
+    MIN_REGIME_DURATION = 3      # 新状态需要持续的检测次数
+
     def __init__(self, db_config: Dict):
         """
         初始化检测器
@@ -45,6 +49,8 @@ class MarketRegimeDetector:
             db_config: 数据库配置
         """
         self.db_config = db_config
+        # 状态缓存：记录每个交易对的上一次状态
+        self._regime_cache = {}  # {symbol_timeframe: {'type': str, 'score': float, 'count': int}}
 
     def detect_regime(self, symbol: str, timeframe: str = '15m',
                       kline_data: List[Dict] = None) -> Dict:
@@ -76,8 +82,11 @@ class MarketRegimeDetector:
             # 计算技术指标
             indicators = self._calculate_indicators(kline_data)
 
-            # 判断行情类型
-            regime_type, regime_score = self._classify_regime(indicators)
+            # 判断行情类型（原始判断）
+            raw_regime_type, regime_score = self._classify_regime(indicators)
+
+            # 应用滞后机制防止频繁切换
+            regime_type = self._apply_hysteresis(symbol, timeframe, raw_regime_type, regime_score)
 
             # 构建结果
             result = {
@@ -247,6 +256,120 @@ class MarketRegimeDetector:
             regime_type = self.RANGING
 
         return regime_type, round(regime_score, 2)
+
+    def _apply_hysteresis(self, symbol: str, timeframe: str,
+                          new_regime: str, new_score: float) -> str:
+        """
+        应用滞后机制防止行情类型频繁切换
+
+        规则：
+        1. 从震荡切换到趋势：得分绝对值需要 > 15 (原来是自动切换)
+        2. 从趋势切换到震荡：得分绝对值需要 < 10 (原来是自动切换)
+        3. 新状态需要连续出现 MIN_REGIME_DURATION 次才确认切换
+        """
+        cache_key = f"{symbol}_{timeframe}"
+        cached = self._regime_cache.get(cache_key)
+
+        # 行情类型分组
+        trend_types = {self.STRONG_UPTREND, self.WEAK_UPTREND,
+                       self.STRONG_DOWNTREND, self.WEAK_DOWNTREND}
+
+        # 如果没有缓存，直接使用新状态
+        if cached is None:
+            self._regime_cache[cache_key] = {
+                'type': new_regime,
+                'score': new_score,
+                'count': 1,
+                'pending_type': None,
+                'pending_count': 0
+            }
+            return new_regime
+
+        old_regime = cached['type']
+        old_score = cached['score']
+
+        # 判断是否需要切换
+        should_switch = False
+        abs_new_score = abs(new_score)
+
+        # 情况1: 类型相同，更新缓存
+        if new_regime == old_regime:
+            cached['score'] = new_score
+            cached['count'] += 1
+            cached['pending_type'] = None
+            cached['pending_count'] = 0
+            return new_regime
+
+        # 情况2: 从震荡切换到趋势 - 需要得分足够强
+        if old_regime == self.RANGING and new_regime in trend_types:
+            # 只有当得分绝对值 > 15 才允许切换
+            if abs_new_score > 15:
+                should_switch = True
+            else:
+                # 得分不够，维持震荡
+                logger.debug(f"[行情滞后] {symbol} 趋势信号不够强 (得分:{new_score:.1f})，维持震荡")
+                return old_regime
+
+        # 情况3: 从趋势切换到震荡 - 需要得分足够弱
+        elif old_regime in trend_types and new_regime == self.RANGING:
+            # 只有当得分绝对值 < 10 才允许切换到震荡
+            if abs_new_score < 10:
+                should_switch = True
+            else:
+                # 得分还不够弱，维持趋势
+                logger.debug(f"[行情滞后] {symbol} 趋势未完全消失 (得分:{new_score:.1f})，维持{old_regime}")
+                return old_regime
+
+        # 情况4: 趋势方向切换（如从看多变看空）- 需要得分差距足够大
+        elif old_regime in trend_types and new_regime in trend_types:
+            # 检查方向是否改变
+            old_is_bull = old_regime in {self.STRONG_UPTREND, self.WEAK_UPTREND}
+            new_is_bull = new_regime in {self.STRONG_UPTREND, self.WEAK_UPTREND}
+
+            if old_is_bull != new_is_bull:
+                # 方向改变，需要更大的得分差距
+                score_diff = abs(new_score - old_score)
+                if score_diff > self.HYSTERESIS_SCORE * 2:
+                    should_switch = True
+                else:
+                    logger.debug(f"[行情滞后] {symbol} 方向切换信号不够强 (差距:{score_diff:.1f})，维持{old_regime}")
+                    return old_regime
+            else:
+                # 同方向强度变化，可以直接切换
+                should_switch = True
+
+        # 情况5: 其他切换
+        else:
+            score_diff = abs(new_score - old_score)
+            if score_diff > self.HYSTERESIS_SCORE:
+                should_switch = True
+
+        # 应用状态持续要求
+        if should_switch:
+            if cached.get('pending_type') == new_regime:
+                cached['pending_count'] += 1
+                if cached['pending_count'] >= self.MIN_REGIME_DURATION:
+                    # 确认切换
+                    logger.info(f"[行情切换] {symbol} {old_regime} → {new_regime} (得分:{new_score:.1f})")
+                    cached['type'] = new_regime
+                    cached['score'] = new_score
+                    cached['count'] = 1
+                    cached['pending_type'] = None
+                    cached['pending_count'] = 0
+                    return new_regime
+                else:
+                    # 还需要更多确认
+                    logger.debug(f"[行情滞后] {symbol} 等待切换确认 ({cached['pending_count']}/{self.MIN_REGIME_DURATION})")
+                    return old_regime
+            else:
+                # 新的待定状态
+                cached['pending_type'] = new_regime
+                cached['pending_count'] = 1
+                return old_regime
+
+        # 不需要切换
+        cached['score'] = new_score
+        return old_regime
 
     def _calculate_ema(self, data: List[float], period: int) -> float:
         """计算EMA"""
