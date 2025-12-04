@@ -140,6 +140,10 @@ class StrategyExecutor:
                 params = regime_params.get('params', {})
                 modified_strategy = strategy.copy()
 
+                # 深拷贝列表类型的字段，避免修改原始策略
+                if 'buyDirection' in modified_strategy:
+                    modified_strategy['buyDirection'] = list(modified_strategy['buyDirection'])
+
                 # 确保 sustainedTrend 是字典类型
                 if not isinstance(modified_strategy.get('sustainedTrend'), dict):
                     modified_strategy['sustainedTrend'] = {'enabled': False, 'minStrength': 0.15, 'maxStrength': 1.0}
@@ -153,25 +157,39 @@ class StrategyExecutor:
                         modified_strategy['sustainedTrend']['minStrength'] = value
                     elif key == 'sustainedTrendMaxStrength':
                         modified_strategy['sustainedTrend']['maxStrength'] = value
+                    elif key == 'allowDirection':
+                        # 新的方向控制格式（优先级高于allowLong/allowShort）
+                        # both: 双向, long_only: 仅多, short_only: 仅空, none: 禁止
+                        if value == 'both':
+                            modified_strategy['buyDirection'] = ['long', 'short']
+                        elif value == 'long_only':
+                            modified_strategy['buyDirection'] = ['long']
+                        elif value == 'short_only':
+                            modified_strategy['buyDirection'] = ['short']
+                        elif value == 'none':
+                            modified_strategy['buyDirection'] = []
                     elif key == 'allowLong':
-                        # 调整买入方向 - 使用列表副本避免覆盖问题
-                        if 'buyDirection' not in modified_strategy:
-                            modified_strategy['buyDirection'] = []
-                        buy_directions = list(modified_strategy['buyDirection'])
-                        if value and 'long' not in buy_directions:
-                            buy_directions.append('long')
-                        elif not value and 'long' in buy_directions:
-                            buy_directions.remove('long')
-                        modified_strategy['buyDirection'] = buy_directions
+                        # 兼容旧格式 - 只在没有设置allowDirection时生效
+                        if 'allowDirection' not in params:
+                            if 'buyDirection' not in modified_strategy:
+                                modified_strategy['buyDirection'] = []
+                            buy_directions = list(modified_strategy['buyDirection'])
+                            if value and 'long' not in buy_directions:
+                                buy_directions.append('long')
+                            elif not value and 'long' in buy_directions:
+                                buy_directions.remove('long')
+                            modified_strategy['buyDirection'] = buy_directions
                     elif key == 'allowShort':
-                        if 'buyDirection' not in modified_strategy:
-                            modified_strategy['buyDirection'] = []
-                        buy_directions = list(modified_strategy['buyDirection'])
-                        if value and 'short' not in buy_directions:
-                            buy_directions.append('short')
-                        elif not value and 'short' in buy_directions:
-                            buy_directions.remove('short')
-                        modified_strategy['buyDirection'] = buy_directions
+                        # 兼容旧格式 - 只在没有设置allowDirection时生效
+                        if 'allowDirection' not in params:
+                            if 'buyDirection' not in modified_strategy:
+                                modified_strategy['buyDirection'] = []
+                            buy_directions = list(modified_strategy['buyDirection'])
+                            if value and 'short' not in buy_directions:
+                                buy_directions.append('short')
+                            elif not value and 'short' in buy_directions:
+                                buy_directions.remove('short')
+                            modified_strategy['buyDirection'] = buy_directions
                     elif key == 'stopLossPercent':
                         modified_strategy['stopLoss'] = value
                     elif key == 'takeProfitPercent':
@@ -540,7 +558,21 @@ class StrategyExecutor:
             # results 已在函数开始处初始化，这里重置为空列表
             results = []
 
+            # 保存原始策略参数（在循环外），避免行情自适应修改后污染下一个symbol
+            original_buy_directions = strategy.get('buyDirection', [])
+            original_stop_loss_pct = strategy.get('stopLoss')
+            original_take_profit_pct = strategy.get('takeProfit')
+            original_sustained_trend = strategy.get('sustainedTrend', {})
+
             for symbol in symbols:
+                # 每次循环重置为原始策略参数，避免上一个symbol的行情自适应影响当前symbol
+                buy_directions = list(original_buy_directions) if original_buy_directions else []
+                stop_loss_pct = original_stop_loss_pct
+                take_profit_pct = original_take_profit_pct
+                sustained_trend_enabled = original_sustained_trend.get('enabled', False) if isinstance(original_sustained_trend, dict) else False
+                sustained_trend_min_strength = original_sustained_trend.get('minStrength', 0.15) if isinstance(original_sustained_trend, dict) else 0.15
+                sustained_trend_max_strength = original_sustained_trend.get('maxStrength', 1.0) if isinstance(original_sustained_trend, dict) else 1.0
+
                 # 获取买入时间周期的K线数据（优先使用合约数据）
                 cursor.execute(
                     """SELECT timestamp, open_price, high_price, low_price, close_price, volume
