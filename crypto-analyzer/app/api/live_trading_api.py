@@ -182,10 +182,40 @@ async def get_account_info():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/price/{symbol}")
+@router.get("/price/{symbol:path}")
 async def get_price(symbol: str):
     """
     获取当前价格
+
+    Args:
+        symbol: 交易对，如 BTCUSDT 或 BTC/USDT
+    """
+    try:
+        # 统一格式
+        if '/' not in symbol:
+            if 'USDT' in symbol.upper():
+                base = symbol.upper().replace('USDT', '')
+                symbol = f"{base}/USDT"
+
+        engine = get_live_engine()
+        price = engine.get_current_price(symbol)
+
+        return {
+            "success": True,
+            "data": {
+                "symbol": symbol,
+                "price": float(price)
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取价格失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/price")
+async def get_price_by_query(symbol: str = Query(..., description="交易对，如 BTC/USDT")):
+    """
+    获取当前价格（查询参数版本）
 
     Args:
         symbol: 交易对，如 BTCUSDT 或 BTC/USDT
