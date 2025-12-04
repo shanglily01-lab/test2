@@ -18,8 +18,8 @@ demo_mode: false
 exchanges:
   binance:
     enabled: true
-    api_key: qipAB06CHXkpKhAmWtNWAtBq5TO3OQRtVeLZAk4wVqttp6REZdNNE7KJfDiiMhRV
-    api_secret: SzpJhzSElikCDTdEEXgaR48oh8cSJHLpNjLfOgV2aTLlwH1iMERiZYpsQWBlplDY
+    api_key: iIPpaIv5nUGVUJFJc5UVTEU02rMt7KXMbevJKTPxWCxm88yoVieMEUvSTOmMrV1N
+    api_secret: pQXcz2v66R2tLYZDan2FC2swTjm1G1ML5FyzfpCk3DsQrRe2bewgrfvPE2fQOZbB
     options:
       defaultType: spot
   gate:
