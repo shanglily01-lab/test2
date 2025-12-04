@@ -130,7 +130,8 @@ class BinanceFuturesEngine:
 
     def _generate_signature(self, params: dict) -> str:
         """生成请求签名"""
-        query_string = '&'.join([f"{k}={v}" for k, v in sorted(params.items())])
+        # 按原始顺序拼接参数（不排序）
+        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
         signature = hmac.new(
             self.api_secret.encode('utf-8'),
             query_string.encode('utf-8'),
