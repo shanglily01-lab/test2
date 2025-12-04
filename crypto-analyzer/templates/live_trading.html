@@ -668,13 +668,13 @@
                                 </span>
                             </td>
                             <td class="font-mono">${formatNumber(pos.quantity, 4)}</td>
-                            <td class="font-mono">${formatNumber(pos.entry_price)}</td>
-                            <td class="font-mono">${formatNumber(pos.mark_price)}</td>
+                            <td class="font-mono">${formatPrice(pos.entry_price)}</td>
+                            <td class="font-mono">${formatPrice(pos.mark_price)}</td>
                             <td class="font-mono ${pos.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
                                 ${pos.unrealized_pnl >= 0 ? '+' : ''}${formatNumber(pos.unrealized_pnl)}
                             </td>
                             <td>${pos.leverage}x</td>
-                            <td class="font-mono text-danger">${formatNumber(pos.liquidation_price)}</td>
+                            <td class="font-mono text-danger">${formatPrice(pos.liquidation_price)}</td>
                             <td>
                                 <button class="btn btn-sm btn-danger" onclick="closePositionBySymbol('${pos.symbol}', '${pos.position_side}')">
                                     平仓
@@ -740,7 +740,7 @@
                                     ${order.side}
                                 </span>
                             </td>
-                            <td class="font-mono">${formatNumber(displayPrice)}</td>
+                            <td class="font-mono">${formatPrice(displayPrice)}</td>
                             <td class="font-mono">${formatNumber(order.origQty, 4)}</td>
                             <td>
                                 <button class="btn btn-sm btn-danger" onclick="cancelOrder('${order.symbol}', '${order.orderId}')" title="撤销此订单">
@@ -771,7 +771,7 @@
 
                 if (data.success) {
                     currentPrice = data.data.price;
-                    document.getElementById('current-price-display').textContent = formatNumber(currentPrice);
+                    document.getElementById('current-price-display').textContent = formatPrice(currentPrice);
                     updateEstimatedMargin();
                 }
             } catch (error) {
@@ -814,7 +814,7 @@
                 // 设置默认限价为当前价格
                 if (currentPrice > 0) {
                     document.getElementById('limit-price').value = currentPrice;
-                    document.getElementById('limit-price-hint').textContent = formatNumber(currentPrice);
+                    document.getElementById('limit-price-hint').textContent = formatPrice(currentPrice);
                 }
             }
         }
@@ -878,12 +878,12 @@
                     <strong>交易对:</strong> ${symbol}<br>
                     <strong>方向:</strong> ${positionSide === 'LONG' ? '做多' : '做空'}<br>
                     <strong>订单类型:</strong> ${orderType === 'LIMIT' ? '限价单' : '市价单'}<br>
-                    ${orderType === 'LIMIT' ? `<strong>限价:</strong> ${limitPrice}<br>` : ''}
+                    ${orderType === 'LIMIT' ? `<strong>限价:</strong> ${formatPrice(limitPrice)}<br>` : ''}
                     <strong>数量:</strong> ${quantity}<br>
                     <strong>杠杆:</strong> ${leverage}x<br>
                     <strong>预计保证金:</strong> ${estimatedMargin} USDT<br>
-                    ${stopLossPrice ? `<strong>止损价:</strong> ${stopLossPrice}<br>` : ''}
-                    ${takeProfitPrice ? `<strong>止盈价:</strong> ${takeProfitPrice}<br>` : ''}
+                    ${stopLossPrice ? `<strong>止损价:</strong> ${formatPrice(stopLossPrice)}<br>` : ''}
+                    ${takeProfitPrice ? `<strong>止盈价:</strong> ${formatPrice(takeProfitPrice)}<br>` : ''}
                 </div>
                 <p style="color: var(--warning-yellow);">确定要执行此交易吗？</p>`,
                 'danger'
@@ -1054,6 +1054,29 @@
         function formatNumber(num, decimals = 2) {
             if (num === null || num === undefined || isNaN(num)) return '--';
             return parseFloat(num).toLocaleString('en-US', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+
+        // 智能格式化价格（根据价格大小自动选择小数位）
+        function formatPrice(num) {
+            if (num === null || num === undefined || isNaN(num)) return '--';
+            const price = parseFloat(num);
+            if (price === 0) return '0';
+
+            let decimals;
+            if (price >= 1000) {
+                decimals = 2;       // BTC等大币: 65432.12
+            } else if (price >= 1) {
+                decimals = 4;       // ETH等中等币: 3500.1234
+            } else if (price >= 0.01) {
+                decimals = 5;       // DOGE等小币: 0.40123
+            } else {
+                decimals = 6;       // 更小的币: 0.001234
+            }
+
+            return price.toLocaleString('en-US', {
                 minimumFractionDigits: decimals,
                 maximumFractionDigits: decimals
             });
