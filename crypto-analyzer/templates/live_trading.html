@@ -868,10 +868,33 @@
 
             showToast('正在执行平仓...', 'info');
 
-            // TODO: 需要从本地数据库获取position_id
-            // 目前币安API返回的持仓没有本地position_id
-            // 可以通过symbol和方向查询本地数据库获取
-            showToast('平仓功能待完善，请在币安APP中操作', 'info');
+            try {
+                const response = await fetch(`${API_BASE}/close-by-symbol`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        position_side: positionSide,
+                        reason: 'manual'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showToast(`平仓成功！${data.message || ''}`, 'success');
+
+                    // 刷新数据
+                    setTimeout(() => {
+                        loadPositions();
+                        loadAccountBalance();
+                    }, 1000);
+                } else {
+                    showToast('平仓失败: ' + (data.message || data.detail), 'error');
+                }
+            } catch (error) {
+                showToast('平仓请求失败: ' + error.message, 'error');
+            }
         }
 
         // 取消订单

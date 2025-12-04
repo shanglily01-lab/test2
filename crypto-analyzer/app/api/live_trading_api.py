@@ -385,6 +385,107 @@ async def close_position(request: ClosePositionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class CloseBySymbolRequest(BaseModel):
+    """通过交易对平仓请求"""
+    symbol: str = Field(..., description="交易对，如 BTC/USDT")
+    position_side: str = Field(..., description="持仓方向: LONG 或 SHORT")
+    quantity: Optional[float] = Field(default=None, description="平仓数量（None为全部）")
+    reason: str = Field(default="manual", description="平仓原因")
+
+
+@router.post("/close-by-symbol")
+async def close_position_by_symbol(request: CloseBySymbolRequest):
+    """
+    通过交易对和方向平仓
+
+    直接向币安发送平仓订单，不依赖本地数据库
+
+    注意：这是实盘交易！
+    """
+    try:
+        engine = get_live_engine()
+
+        # 验证方向
+        position_side = request.position_side.upper()
+        if position_side not in ['LONG', 'SHORT']:
+            raise HTTPException(status_code=400, detail="position_side 必须是 LONG 或 SHORT")
+
+        logger.info(f"[实盘API] 收到按交易对平仓请求: {request.symbol} {position_side}")
+
+        # 获取当前持仓
+        positions = engine.get_open_positions()
+        target_position = None
+
+        for pos in positions:
+            if pos['symbol'] == request.symbol and pos['position_side'] == position_side:
+                target_position = pos
+                break
+
+        if not target_position:
+            raise HTTPException(status_code=400, detail=f"未找到 {request.symbol} {position_side} 持仓")
+
+        # 确定平仓数量
+        close_quantity = request.quantity
+        if close_quantity is None:
+            close_quantity = float(target_position['quantity'])
+
+        # 发送平仓订单
+        binance_symbol = request.symbol.replace('/', '').upper()
+        side = 'SELL' if position_side == 'LONG' else 'BUY'
+
+        params = {
+            'symbol': binance_symbol,
+            'side': side,
+            'positionSide': position_side,
+            'type': 'MARKET',
+            'quantity': str(close_quantity)
+        }
+
+        result = engine._request('POST', '/fapi/v1/order', params)
+
+        if isinstance(result, dict) and result.get('success') == False:
+            raise HTTPException(status_code=400, detail=result.get('error'))
+
+        # 解析结果
+        order_id = str(result.get('orderId', ''))
+        executed_qty = Decimal(str(result.get('executedQty', '0')))
+        avg_price = Decimal(str(result.get('avgPrice', '0')))
+
+        if avg_price == 0:
+            avg_price = engine.get_current_price(request.symbol)
+
+        # 计算盈亏
+        entry_price = Decimal(str(target_position['entry_price']))
+        if position_side == 'LONG':
+            pnl = (avg_price - entry_price) * executed_qty
+        else:
+            pnl = (entry_price - avg_price) * executed_qty
+
+        logger.info(f"[实盘API] 平仓成功: {request.symbol} {executed_qty} @ {avg_price}, PnL={pnl:.2f}")
+
+        return {
+            "success": True,
+            "message": f"平仓成功: PnL={pnl:.2f} USDT",
+            "data": {
+                "order_id": order_id,
+                "symbol": request.symbol,
+                "position_side": position_side,
+                "close_quantity": float(executed_qty),
+                "close_price": float(avg_price),
+                "realized_pnl": float(pnl),
+                "reason": request.reason
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"平仓失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/orders")
 async def get_open_orders(symbol: Optional[str] = None):
     """
