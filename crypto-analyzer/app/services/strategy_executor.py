@@ -2785,8 +2785,9 @@ class StrategyExecutor:
                                             positions.remove(opp_position)
                                             closed_at_current_time = True
                                     
-                            # 初始化趋势确认标志
+                            # 初始化趋势确认标志和失败原因收集
                             trend_confirm_ok = True
+                            filter_failure_reasons = []  # 收集所有过滤器失败的原因
                             logger.info(f"{symbol} [{buy_timeframe}]: 🔍 开始趋势确认和过滤检查 (方向: {direction})")
                                     
                             # 检查 RSI 过滤
@@ -2801,11 +2802,13 @@ class StrategyExecutor:
                                             debug_info.append(msg)
                                             logger.info(f"{symbol} {msg}")
                                             trend_confirm_ok = False
+                                            filter_failure_reasons.append(f"RSI极端值(预判): {rsi_value:.2f}>80")
                                         elif direction == 'short' and rsi_value < 20:
                                             msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI极端值过滤(预判)：做空时RSI过低 (RSI={rsi_value:.2f} < 20)，已过滤"
                                             debug_info.append(msg)
                                             logger.info(f"{symbol} {msg}")
                                             trend_confirm_ok = False
+                                            filter_failure_reasons.append(f"RSI极端值(预判): {rsi_value:.2f}<20")
                                         else:
                                             logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI极端值检查通过(预判) (RSI={rsi_value:.2f})")
                                     else:
@@ -2815,11 +2818,13 @@ class StrategyExecutor:
                                             debug_info.append(msg)
                                             logger.info(f"{symbol} {msg}")
                                             trend_confirm_ok = False
+                                            filter_failure_reasons.append(f"RSI过滤: {rsi_value:.2f}>{rsi_long_max}")
                                         elif direction == 'short' and rsi_value < rsi_short_min:
                                             msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤"
                                             debug_info.append(msg)
                                             logger.info(f"{symbol} {msg}")
                                             trend_confirm_ok = False
+                                            filter_failure_reasons.append(f"RSI过滤: {rsi_value:.2f}<{rsi_short_min}")
                                         else:
                                             logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI过滤通过 (RSI={rsi_value:.2f})")
                                     
@@ -2832,11 +2837,13 @@ class StrategyExecutor:
                                                 debug_info.append(msg)
                                                 logger.info(f"{symbol} {msg}")
                                                 trend_confirm_ok = False
+                                                filter_failure_reasons.append(f"MACD过滤: 柱状图={macd_histogram:.4f}≤0")
                                             elif direction == 'short' and macd_short_require_negative and macd_histogram >= 0:
                                                 msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MACD过滤：做空时MACD柱状图非负 (MACD={macd_histogram:.4f})，已过滤"
                                                 debug_info.append(msg)
                                                 logger.info(f"{symbol} {msg}")
                                                 trend_confirm_ok = False
+                                                filter_failure_reasons.append(f"MACD过滤: 柱状图={macd_histogram:.4f}≥0")
                                             else:
                                                 logger.debug(f"{symbol} [{buy_timeframe}]: ✅ MACD过滤通过 (MACD={macd_histogram:.4f})")
                                     
@@ -2846,19 +2853,21 @@ class StrategyExecutor:
                                 if kdj_k is not None:
                                     ema_diff_pct_abs = abs(curr_diff_pct) if curr_diff_pct is not None else 0
                                     is_strong_signal = kdj_allow_strong_signal and ema_diff_pct_abs >= kdj_strong_signal_threshold
-                                            
+
                                     if direction == 'long' and kdj_k > kdj_long_max_k:
                                         if not is_strong_signal:
                                             msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做多时KDJ K值过高 (K={kdj_k:.2f} > {kdj_long_max_k})，已过滤"
                                             debug_info.append(msg)
                                             logger.info(f"{symbol} {msg}")
                                             trend_confirm_ok = False
+                                            filter_failure_reasons.append(f"KDJ过滤: K={kdj_k:.2f}>{kdj_long_max_k}")
                                     elif direction == 'short' and kdj_k < kdj_short_min_k:
                                         if not is_strong_signal:
                                             msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ KDJ过滤：做空时KDJ K值过低 (K={kdj_k:.2f} < {kdj_short_min_k})，已过滤"
                                             debug_info.append(msg)
                                             logger.info(f"{symbol} {msg}")
                                             trend_confirm_ok = False
+                                            filter_failure_reasons.append(f"KDJ过滤: K={kdj_k:.2f}<{kdj_short_min_k}")
                                     else:
                                         logger.debug(f"{symbol} [{buy_timeframe}]: ✅ KDJ过滤通过 (K={kdj_k:.2f})")
                                     
@@ -2871,6 +2880,7 @@ class StrategyExecutor:
                                         if ma10_ema10_strength_pct < min_ma10_cross_strength:
                                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MA10/EMA10信号强度不足 (差值={ma10_ema10_strength_pct:.2f}%, 需要≥{min_ma10_cross_strength:.2f}%)，已过滤")
                                             trend_confirm_ok = False
+                                            filter_failure_reasons.append(f"MA10/EMA10强度不足: {ma10_ema10_strength_pct:.2f}%<{min_ma10_cross_strength:.2f}%")
                                         else:
                                             # 信号强度通过，检查趋势过滤
                                             if ma10_ema10_trend_filter:
@@ -2881,6 +2891,7 @@ class StrategyExecutor:
                                                 if not ma10_ema10_ok:
                                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MA10/EMA10不同向")
                                                     trend_confirm_ok = False
+                                                    filter_failure_reasons.append(f"MA10/EMA10趋势不同向: MA10={ma10:.2f}, EMA10={ema10:.2f}")
                                 else:
                                     if min_ma10_cross_strength > 0 or ma10_ema10_trend_filter:
                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 缺少 MA10/EMA10 数据，跳过检查")
@@ -2995,26 +3006,33 @@ class StrategyExecutor:
                                         if not trend_maintained:
                                             trend_confirm_ok = False
                                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认失败，趋势未持续{trend_confirm_bars}根K线")
+                                            filter_failure_reasons.append(f"趋势确认: 趋势未持续{trend_confirm_bars}根K线")
                                         elif not ema_strength_ok:
                                             trend_confirm_ok = False
                                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认失败，EMA差值未达到阈值({trend_confirm_ema_threshold}%)")
+                                            filter_failure_reasons.append(f"趋势确认: EMA差值<{trend_confirm_ema_threshold}%")
                                     else:
                                         # 交叉刚发生，还需要等待更多K线
                                         trend_confirm_ok = False
                                         wait_bars = required_bars - bars_since_cross
                                         cross_type = "金叉" if direction == 'long' else "死叉"
                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 趋势确认中，{cross_type}发生在索引{cross_index}，当前索引{current_buy_index}，已过{bars_since_cross}根K线，需要等待{wait_bars}根K线（共需{trend_confirm_bars}根）")
+                                        filter_failure_reasons.append(f"趋势确认: {cross_type}后需等待{wait_bars}根K线(共需{trend_confirm_bars}根)")
                                 else:
                                     # 未找到交叉点，可能是信号触发逻辑有问题
                                     trend_confirm_ok = False
                                     cross_type = "金叉" if direction == 'long' else "死叉"
                                     debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 未找到{cross_type}位置，无法进行趋势确认")
+                                    filter_failure_reasons.append(f"趋势确认: 未找到{cross_type}位置")
                                                                     
                             if not trend_confirm_ok:
-                                # 趋势确认失败，跳过买入
+                                # 趋势确认失败，跳过买入，显示具体失败原因
+                                failure_detail = ", ".join(filter_failure_reasons) if filter_failure_reasons else "未知原因"
                                 msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ❌ 趋势确认/过滤检查未通过，跳过买入"
                                 debug_info.append(msg)
                                 logger.info(f"{symbol} {msg}")
+                                # 单独输出失败原因，便于排查
+                                logger.info(f"{symbol} [{buy_timeframe}]: 📋 失败原因: {failure_detail}")
                             else:
                                 # 添加调试信息：所有检查都通过，准备买入
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅ 所有买入条件检查通过，准备执行买入操作")
