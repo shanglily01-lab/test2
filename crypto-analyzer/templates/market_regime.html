@@ -421,21 +421,17 @@
                         <input type="number" id="param-max-strength" step="0.1" value="2.0">
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>允许做多</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="param-allow-long" checked>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label>允许做空</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" id="param-allow-short" checked>
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
+                <div class="form-group">
+                    <label>允许交易方向</label>
+                    <select id="param-allow-direction">
+                        <option value="both">双向（跟随策略配置）</option>
+                        <option value="long_only">仅做多</option>
+                        <option value="short_only">仅做空</option>
+                        <option value="none">禁止交易</option>
+                    </select>
+                    <p style="font-size: 11px; color: #6e7681; margin-top: 5px;">
+                        此设置会覆盖策略的交易方向配置。选择"禁止交易"相当于在该行情下暂停策略。
+                    </p>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
@@ -622,8 +618,20 @@
             const items = [];
             if (params.sustainedTrend !== undefined) items.push(`持续趋势: ${params.sustainedTrend ? '是' : '否'}`);
             if (params.sustainedTrendMinStrength) items.push(`最小强度: ${params.sustainedTrendMinStrength}%`);
-            if (params.allowLong !== undefined) items.push(`做多: ${params.allowLong ? '是' : '否'}`);
-            if (params.allowShort !== undefined) items.push(`做空: ${params.allowShort ? '是' : '否'}`);
+            // 处理新的 allowDirection 格式
+            if (params.allowDirection) {
+                const dirMap = {
+                    'both': '双向',
+                    'long_only': '仅做多',
+                    'short_only': '仅做空',
+                    'none': '禁止交易'
+                };
+                items.push(`方向: ${dirMap[params.allowDirection] || params.allowDirection}`);
+            } else {
+                // 兼容旧格式
+                if (params.allowLong !== undefined) items.push(`做多: ${params.allowLong ? '是' : '否'}`);
+                if (params.allowShort !== undefined) items.push(`做空: ${params.allowShort ? '是' : '否'}`);
+            }
             if (params.stopLossPercent) items.push(`止损: ${params.stopLossPercent}%`);
             if (params.takeProfitPercent) items.push(`止盈: ${params.takeProfitPercent}%`);
             return items.join(' | ') || JSON.stringify(params);
@@ -635,8 +643,7 @@
             document.getElementById('param-regime-type').disabled = false;
             document.getElementById('param-form').reset();
             document.getElementById('param-enabled').checked = true;
-            document.getElementById('param-allow-long').checked = true;
-            document.getElementById('param-allow-short').checked = true;
+            document.getElementById('param-allow-direction').value = 'both';
             document.getElementById('param-modal').style.display = 'block';
         }
 
@@ -651,8 +658,23 @@
             document.getElementById('param-sustained-trend').checked = p.sustainedTrend || false;
             document.getElementById('param-min-strength').value = p.sustainedTrendMinStrength || 0.3;
             document.getElementById('param-max-strength').value = p.sustainedTrendMaxStrength || 2.0;
-            document.getElementById('param-allow-long').checked = p.allowLong !== false;
-            document.getElementById('param-allow-short').checked = p.allowShort !== false;
+
+            // 处理新的 allowDirection 格式，兼容旧格式
+            if (p.allowDirection) {
+                document.getElementById('param-allow-direction').value = p.allowDirection;
+            } else {
+                // 从旧的 allowLong/allowShort 转换
+                if (p.allowLong === false && p.allowShort === false) {
+                    document.getElementById('param-allow-direction').value = 'none';
+                } else if (p.allowLong === false) {
+                    document.getElementById('param-allow-direction').value = 'short_only';
+                } else if (p.allowShort === false) {
+                    document.getElementById('param-allow-direction').value = 'long_only';
+                } else {
+                    document.getElementById('param-allow-direction').value = 'both';
+                }
+            }
+
             document.getElementById('param-stop-loss').value = p.stopLossPercent || 3.0;
             document.getElementById('param-take-profit').value = p.takeProfitPercent || 6.0;
             document.getElementById('param-description').value = paramData.description || '';
@@ -669,12 +691,15 @@
         document.getElementById('param-form').onsubmit = async function(e) {
             e.preventDefault();
 
+            const allowDirection = document.getElementById('param-allow-direction').value;
             const params = {
                 sustainedTrend: document.getElementById('param-sustained-trend').checked,
                 sustainedTrendMinStrength: parseFloat(document.getElementById('param-min-strength').value),
                 sustainedTrendMaxStrength: parseFloat(document.getElementById('param-max-strength').value),
-                allowLong: document.getElementById('param-allow-long').checked,
-                allowShort: document.getElementById('param-allow-short').checked,
+                allowDirection: allowDirection,
+                // 同时保存兼容格式
+                allowLong: allowDirection === 'both' || allowDirection === 'long_only',
+                allowShort: allowDirection === 'both' || allowDirection === 'short_only',
                 stopLossPercent: parseFloat(document.getElementById('param-stop-loss').value),
                 takeProfitPercent: parseFloat(document.getElementById('param-take-profit').value)
             };
