@@ -6,7 +6,7 @@
 import json
 import pymysql
 import yaml
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Path
 from pydantic import BaseModel
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -41,9 +41,9 @@ class RegimeParamsRequest(BaseModel):
     description: Optional[str] = None
 
 
-@router.get('/detect/{symbol}')
+@router.get('/detect/{symbol:path}')
 async def detect_market_regime(
-    symbol: str,
+    symbol: str = Path(..., description='交易对符号 (如 BTC/USDT)'),
     timeframe: str = Query('15m', description='时间周期')
 ):
     """
@@ -115,9 +115,9 @@ async def detect_batch_market_regime(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get('/latest/{symbol}')
+@router.get('/latest/{symbol:path}')
 async def get_latest_regime(
-    symbol: str,
+    symbol: str = Path(..., description='交易对符号 (如 BTC/USDT)'),
     timeframe: str = Query('15m', description='时间周期')
 ):
     """
@@ -150,9 +150,9 @@ async def get_latest_regime(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get('/history/{symbol}')
+@router.get('/history/{symbol:path}')
 async def get_regime_history(
-    symbol: str,
+    symbol: str = Path(..., description='交易对符号 (如 BTC/USDT)'),
     timeframe: str = Query('15m', description='时间周期'),
     limit: int = Query(50, description='返回记录数')
 ):
@@ -205,9 +205,9 @@ async def get_regime_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get('/changes/{symbol}')
+@router.get('/changes/{symbol:path}')
 async def get_regime_changes(
-    symbol: str,
+    symbol: str = Path(..., description='交易对符号 (如 BTC/USDT)'),
     timeframe: str = Query('15m', description='时间周期'),
     limit: int = Query(20, description='返回记录数')
 ):
