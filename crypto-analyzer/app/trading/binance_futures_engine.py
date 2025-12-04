@@ -549,21 +549,49 @@ class BinanceFuturesEngine:
                 else:
                     take_profit_price = entry_price * (1 - take_profit_pct / 100)
 
-            # 9. 设置止损止盈订单
+            # 9. 设置止损止盈订单（仅市价单立即设置，限价单由监控服务处理）
             sl_order_id = None
             tp_order_id = None
 
             if stop_loss_price and executed_qty > 0:
-                sl_result = self._place_stop_loss(symbol, position_side, executed_qty, stop_loss_price)
-                if sl_result.get('success'):
-                    sl_order_id = sl_result.get('order_id')
-                    logger.info(f"[实盘] 止损单已设置: {stop_loss_price}")
+                # 验证止损价格
+                # 做多：止损价必须低于入场价
+                # 做空：止损价必须高于入场价
+                sl_valid = False
+                if position_side == 'LONG' and stop_loss_price < entry_price:
+                    sl_valid = True
+                elif position_side == 'SHORT' and stop_loss_price > entry_price:
+                    sl_valid = True
+
+                if sl_valid:
+                    sl_result = self._place_stop_loss(symbol, position_side, executed_qty, stop_loss_price)
+                    if sl_result.get('success'):
+                        sl_order_id = sl_result.get('order_id')
+                        logger.info(f"[实盘] 止损单已设置: {stop_loss_price}")
+                    else:
+                        logger.warning(f"[实盘] 止损单设置失败: {sl_result.get('error')}")
+                else:
+                    logger.warning(f"[实盘] 止损价 {stop_loss_price} 无效 ({position_side} 入场价 {entry_price})，跳过止损设置")
 
             if take_profit_price and executed_qty > 0:
-                tp_result = self._place_take_profit(symbol, position_side, executed_qty, take_profit_price)
-                if tp_result.get('success'):
-                    tp_order_id = tp_result.get('order_id')
-                    logger.info(f"[实盘] 止盈单已设置: {take_profit_price}")
+                # 验证止盈价格
+                # 做多：止盈价必须高于入场价
+                # 做空：止盈价必须低于入场价
+                tp_valid = False
+                if position_side == 'LONG' and take_profit_price > entry_price:
+                    tp_valid = True
+                elif position_side == 'SHORT' and take_profit_price < entry_price:
+                    tp_valid = True
+
+                if tp_valid:
+                    tp_result = self._place_take_profit(symbol, position_side, executed_qty, take_profit_price)
+                    if tp_result.get('success'):
+                        tp_order_id = tp_result.get('order_id')
+                        logger.info(f"[实盘] 止盈单已设置: {take_profit_price}")
+                    else:
+                        logger.warning(f"[实盘] 止盈单设置失败: {tp_result.get('error')}")
+                else:
+                    logger.warning(f"[实盘] 止盈价 {take_profit_price} 无效 ({position_side} 入场价 {entry_price})，跳过止盈设置")
 
             # 10. 保存到本地数据库
             position_id = self._save_position_to_db(

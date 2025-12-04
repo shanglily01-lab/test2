@@ -202,37 +202,73 @@ class LiveOrderMonitor:
         stop_loss_price = position.get('stop_loss_price')
         take_profit_price = position.get('take_profit_price')
 
+        # 获取当前价格用于验证
+        try:
+            current_price = self.live_engine.get_current_price(symbol)
+            if current_price == 0:
+                logger.warning(f"[实盘监控] 无法获取 {symbol} 当前价格，跳过止损止盈设置")
+                return
+        except Exception as e:
+            logger.error(f"[实盘监控] 获取价格失败: {e}")
+            return
+
         # 设置止损
         if stop_loss_price:
-            try:
-                sl_result = self.live_engine._place_stop_loss(
-                    symbol=symbol,
-                    position_side=position_side,
-                    quantity=executed_qty,
-                    stop_price=Decimal(str(stop_loss_price))
-                )
-                if sl_result.get('success'):
-                    logger.info(f"[实盘监控] ✓ 止损单已设置: {symbol} @ {stop_loss_price}")
-                else:
-                    logger.error(f"[实盘监控] ✗ 止损单设置失败: {sl_result.get('error')}")
-            except Exception as e:
-                logger.error(f"[实盘监控] 设置止损单异常: {e}")
+            stop_loss_price = Decimal(str(stop_loss_price))
+            # 验证止损价格是否合理
+            # 做多：止损价必须低于当前价
+            # 做空：止损价必须高于当前价
+            is_valid = False
+            if position_side == 'LONG' and stop_loss_price < current_price:
+                is_valid = True
+            elif position_side == 'SHORT' and stop_loss_price > current_price:
+                is_valid = True
+
+            if is_valid:
+                try:
+                    sl_result = self.live_engine._place_stop_loss(
+                        symbol=symbol,
+                        position_side=position_side,
+                        quantity=executed_qty,
+                        stop_price=stop_loss_price
+                    )
+                    if sl_result.get('success'):
+                        logger.info(f"[实盘监控] ✓ 止损单已设置: {symbol} @ {stop_loss_price}")
+                    else:
+                        logger.error(f"[实盘监控] ✗ 止损单设置失败: {sl_result.get('error')}")
+                except Exception as e:
+                    logger.error(f"[实盘监控] 设置止损单异常: {e}")
+            else:
+                logger.warning(f"[实盘监控] 止损价 {stop_loss_price} 无效 ({position_side} 当前价 {current_price})，跳过止损设置")
 
         # 设置止盈
         if take_profit_price:
-            try:
-                tp_result = self.live_engine._place_take_profit(
-                    symbol=symbol,
-                    position_side=position_side,
-                    quantity=executed_qty,
-                    take_profit_price=Decimal(str(take_profit_price))
-                )
-                if tp_result.get('success'):
-                    logger.info(f"[实盘监控] ✓ 止盈单已设置: {symbol} @ {take_profit_price}")
-                else:
-                    logger.error(f"[实盘监控] ✗ 止盈单设置失败: {tp_result.get('error')}")
-            except Exception as e:
-                logger.error(f"[实盘监控] 设置止盈单异常: {e}")
+            take_profit_price = Decimal(str(take_profit_price))
+            # 验证止盈价格是否合理
+            # 做多：止盈价必须高于当前价
+            # 做空：止盈价必须低于当前价
+            is_valid = False
+            if position_side == 'LONG' and take_profit_price > current_price:
+                is_valid = True
+            elif position_side == 'SHORT' and take_profit_price < current_price:
+                is_valid = True
+
+            if is_valid:
+                try:
+                    tp_result = self.live_engine._place_take_profit(
+                        symbol=symbol,
+                        position_side=position_side,
+                        quantity=executed_qty,
+                        take_profit_price=take_profit_price
+                    )
+                    if tp_result.get('success'):
+                        logger.info(f"[实盘监控] ✓ 止盈单已设置: {symbol} @ {take_profit_price}")
+                    else:
+                        logger.error(f"[实盘监控] ✗ 止盈单设置失败: {tp_result.get('error')}")
+                except Exception as e:
+                    logger.error(f"[实盘监控] 设置止盈单异常: {e}")
+            else:
+                logger.warning(f"[实盘监控] 止盈价 {take_profit_price} 无效 ({position_side} 当前价 {current_price})，跳过止盈设置")
 
 
 # 全局监控实例
