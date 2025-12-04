@@ -205,6 +205,58 @@ async def get_regime_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get('/changes-all')
+async def get_all_regime_changes(
+    timeframe: str = Query('15m', description='时间周期'),
+    limit: int = Query(50, description='返回记录数')
+):
+    """
+    获取所有交易对的行情切换记录
+
+    Args:
+        timeframe: 时间周期
+        limit: 返回记录数
+
+    Returns:
+        所有交易对的行情切换记录列表
+    """
+    try:
+        connection = pymysql.connect(
+            host=db_config.get('host', 'localhost'),
+            port=db_config.get('port', 3306),
+            user=db_config.get('user', 'root'),
+            password=db_config.get('password', ''),
+            database=db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT * FROM market_regime_changes
+                WHERE timeframe = %s
+                ORDER BY changed_at DESC
+                LIMIT %s
+            """, (timeframe, limit))
+            rows = cursor.fetchall()
+
+        connection.close()
+
+        # 添加显示名称
+        for row in rows:
+            row['old_regime_display'] = get_regime_display_name(row.get('old_regime', ''))
+            row['new_regime_display'] = get_regime_display_name(row.get('new_regime', ''))
+
+        return {
+            'success': True,
+            'count': len(rows),
+            'data': rows
+        }
+    except Exception as e:
+        logger.error(f"获取所有行情切换记录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get('/changes/{symbol:path}')
 async def get_regime_changes(
     symbol: str = Path(..., description='交易对符号 (如 BTC/USDT)'),

@@ -3383,6 +3383,7 @@ class StrategyExecutor:
                             'account_id': strategy.get('account_id', 2),
                             'enabled': strategy.get('enabled', 0),
                             'market_type': strategy.get('market_type', 'test'),  # 市场类型: test/live
+                            'adaptiveRegime': strategy.get('adaptive_regime', False),  # 行情自适应开关
                             **config  # 合并配置
                         }
                         result.append(strategy_dict)

@@ -266,7 +266,7 @@
 </head>
 <body>
     <div class="container">
-        <a href="/futures-trading" class="back-link">&larr; 返回合约交易</a>
+        <a href="/futures_trading" class="back-link">&larr; 返回合约交易</a>
         <h1>行情识别与策略自适应</h1>
 
         <div class="tabs">
@@ -343,11 +343,13 @@
         <!-- 行情切换历史 -->
         <div id="history" class="tab-content">
             <div class="card">
-                <h2>查询条件</h2>
+                <h2>筛选条件
+                    <button class="btn btn-secondary refresh-btn" onclick="loadAllHistory()">刷新</button>
+                </h2>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>交易对</label>
-                        <input type="text" id="history-symbol" placeholder="BTC/USDT" value="BTC/USDT">
+                        <label>交易对（留空显示全部）</label>
+                        <input type="text" id="history-symbol" placeholder="留空显示全部" value="">
                     </div>
                     <div class="form-group">
                         <label>时间周期</label>
@@ -357,22 +359,23 @@
                         </select>
                     </div>
                 </div>
-                <button class="btn btn-primary" onclick="loadHistory()">查询</button>
+                <button class="btn btn-primary" onclick="loadAllHistory()">筛选</button>
             </div>
 
             <div class="card">
-                <h2>切换记录</h2>
+                <h2>切换记录（最近50条）</h2>
                 <table>
                     <thead>
                         <tr>
                             <th>时间</th>
+                            <th>交易对</th>
                             <th>原行情</th>
                             <th>新行情</th>
                             <th>得分变化</th>
                         </tr>
                     </thead>
                     <tbody id="history-table">
-                        <tr><td colspan="4" class="loading">请先查询</td></tr>
+                        <tr><td colspan="5" class="loading">加载中...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -752,32 +755,39 @@
             }
         }
 
-        // 加载历史记录
-        async function loadHistory() {
-            const symbol = document.getElementById('history-symbol').value;
+        // 加载所有历史记录（支持按交易对筛选）
+        async function loadAllHistory() {
+            const symbol = document.getElementById('history-symbol').value.trim();
             const timeframe = document.getElementById('history-timeframe').value;
             const tbody = document.getElementById('history-table');
 
-            tbody.innerHTML = '<tr><td colspan="4" class="loading">加载中...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="loading">加载中...</td></tr>';
 
             try {
-                const resp = await fetch(`/api/market-regime/changes/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
+                // 如果有指定symbol则按symbol查询，否则查询全部
+                let url = `/api/market-regime/changes-all?timeframe=${timeframe}&limit=50`;
+                if (symbol) {
+                    url = `/api/market-regime/changes/${encodeURIComponent(symbol)}?timeframe=${timeframe}&limit=50`;
+                }
+
+                const resp = await fetch(url);
                 const data = await resp.json();
 
-                if (data.success && data.data.length > 0) {
+                if (data.success && data.data && data.data.length > 0) {
                     tbody.innerHTML = data.data.map(r => `
                         <tr>
                             <td>${formatTime(r.changed_at)}</td>
+                            <td><strong>${r.symbol || '-'}</strong></td>
                             <td>${r.old_regime_display || '-'}</td>
                             <td>${r.new_regime_display}</td>
                             <td>${r.old_score || 0} &rarr; ${r.new_score || 0}</td>
                         </tr>
                     `).join('');
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="4" class="loading">暂无切换记录</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" class="loading">暂无切换记录</td></tr>';
                 }
             } catch (e) {
-                tbody.innerHTML = '<tr><td colspan="4" class="loading">加载失败: ' + e.message + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="loading">加载失败: ' + e.message + '</td></tr>';
             }
         }
 
@@ -791,6 +801,7 @@
         window.onload = function() {
             loadSummary();
             loadStrategies();
+            loadAllHistory();  // 自动加载切换历史
         };
     </script>
 </body>
