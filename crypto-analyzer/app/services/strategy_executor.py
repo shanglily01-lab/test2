@@ -154,15 +154,19 @@ class StrategyExecutor:
                     elif key == 'sustainedTrendMaxStrength':
                         modified_strategy['sustainedTrend']['maxStrength'] = value
                     elif key == 'allowLong':
-                        # 调整买入方向
-                        buy_directions = modified_strategy.get('buyDirection', [])
+                        # 调整买入方向 - 使用列表副本避免覆盖问题
+                        if 'buyDirection' not in modified_strategy:
+                            modified_strategy['buyDirection'] = []
+                        buy_directions = list(modified_strategy['buyDirection'])
                         if value and 'long' not in buy_directions:
                             buy_directions.append('long')
                         elif not value and 'long' in buy_directions:
                             buy_directions.remove('long')
                         modified_strategy['buyDirection'] = buy_directions
                     elif key == 'allowShort':
-                        buy_directions = modified_strategy.get('buyDirection', [])
+                        if 'buyDirection' not in modified_strategy:
+                            modified_strategy['buyDirection'] = []
+                        buy_directions = list(modified_strategy['buyDirection'])
                         if value and 'short' not in buy_directions:
                             buy_directions.append('short')
                         elif not value and 'short' in buy_directions:
@@ -179,8 +183,18 @@ class StrategyExecutor:
                 modified_strategy['_regime_type'] = regime_type
                 modified_strategy['_regime_score'] = regime_score
 
+                # 记录应用的参数详情
+                applied_params = []
+                if params.get('sustainedTrend') is not None:
+                    applied_params.append(f"持续趋势={'开' if params['sustainedTrend'] else '关'}")
+                if params.get('allowDirection'):
+                    dir_map = {'both': '双向', 'long_only': '仅多', 'short_only': '仅空', 'none': '禁止'}
+                    applied_params.append(f"方向={dir_map.get(params['allowDirection'], params['allowDirection'])}")
+                final_directions = modified_strategy.get('buyDirection', [])
+                applied_params.append(f"最终方向={final_directions}")
+
                 logger.info(f"📊 {symbol} [{timeframe}] 行情自适应: {get_regime_display_name(regime_type)} "
-                           f"(得分:{regime_score:.1f}) - 已应用对应参数")
+                           f"(得分:{regime_score:.1f}) - {', '.join(applied_params)}")
 
                 return modified_strategy
             else:
