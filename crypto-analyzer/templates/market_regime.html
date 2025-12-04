@@ -291,7 +291,9 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>交易对</label>
-                        <input type="text" id="detect-symbol" placeholder="BTC/USDT" value="BTC/USDT">
+                        <select id="detect-symbol">
+                            <option value="">加载中...</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>时间周期</label>
@@ -797,10 +799,36 @@
             return d.toLocaleString('zh-CN');
         }
 
+        // 加载配置的交易对列表
+        async function loadSymbols() {
+            try {
+                const resp = await fetch('/api/futures/symbols');
+                const data = await resp.json();
+
+                const select = document.getElementById('detect-symbol');
+                select.innerHTML = '';
+
+                if (data.success && data.symbols && data.symbols.length > 0) {
+                    for (const symbol of data.symbols) {
+                        const option = document.createElement('option');
+                        option.value = symbol;
+                        option.textContent = symbol;
+                        select.appendChild(option);
+                    }
+                } else {
+                    select.innerHTML = '<option value="BTC/USDT">BTC/USDT</option>';
+                }
+            } catch (e) {
+                console.error('加载交易对失败:', e);
+                document.getElementById('detect-symbol').innerHTML = '<option value="BTC/USDT">BTC/USDT</option>';
+            }
+        }
+
         // 页面加载
         window.onload = function() {
             loadSummary();
             loadStrategies();
+            loadSymbols();  // 加载交易对列表
             loadAllHistory();  // 自动加载切换历史
         };
     </script>
