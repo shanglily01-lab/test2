@@ -573,13 +573,14 @@
                     <div class="card-header">
                         <span class="card-title">优化建议</span>
                         <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-success" onclick="applyOptimizedParams()" id="btn-apply-optimized" style="display: none;">应用优化参数</button>
                             <button class="btn btn-secondary" onclick="saveOptimizedParams()" id="btn-save-optimized" style="display: none;">保存到本地</button>
                         </div>
                     </div>
                     <!-- 优化参数预览 -->
                     <div id="optimized-params-preview" style="display: none; margin-bottom: 16px;">
                         <div style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px;">
-                            <div style="font-size: 13px; color: var(--accent-green); margin-bottom: 8px; font-weight: 600;">推荐参数（已自动填入表单）:</div>
+                            <div style="font-size: 13px; color: var(--accent-green); margin-bottom: 8px; font-weight: 600;">推荐参数:</div>
                             <div class="param-comparison" id="param-changes">
                                 <!-- 动态生成 -->
                             </div>
@@ -749,6 +750,28 @@
             document.getElementById('btn-load-saved').style.display = 'none';
             closeDialog();
             showToast('已清除保存的优化参数', 'info');
+        }
+
+        // 应用当前分析结果中的优化参数
+        function applyOptimizedParams() {
+            if (!analysisData || !analysisData.optimized_params) {
+                showToast('没有可应用的优化参数', 'error');
+                return;
+            }
+
+            const opt = analysisData.optimized_params;
+
+            document.getElementById('ema-short').value = opt.ema_short;
+            document.getElementById('ema-long').value = opt.ema_long;
+            document.getElementById('stop-loss').value = opt.stop_loss_pct;
+            document.getElementById('take-profit').value = opt.take_profit_pct;
+
+            // 如果有推荐的出场模式
+            if (opt.exit_mode) {
+                switchMode(opt.exit_mode);
+            }
+
+            showToast('已应用优化参数，点击"开始分析"重新测试', 'success');
         }
 
         // 切换出场模式
@@ -926,7 +949,7 @@
             renderChart(data.klines);
         }
 
-        // 渲染优化参数预览并自动填入表单
+        // 渲染优化参数预览（不自动填入，需用户手动点击应用）
         function renderOptimizedParams(data) {
             const current = data.current_params;
             const optimized = data.optimized_params;
@@ -940,11 +963,13 @@
 
             if (!hasChanges) {
                 document.getElementById('optimized-params-preview').style.display = 'none';
+                document.getElementById('btn-apply-optimized').style.display = 'none';
                 document.getElementById('btn-save-optimized').style.display = 'none';
                 return;
             }
 
-            // 显示保存按钮
+            // 显示按钮
+            document.getElementById('btn-apply-optimized').style.display = 'inline-block';
             document.getElementById('btn-save-optimized').style.display = 'inline-block';
             document.getElementById('optimized-params-preview').style.display = 'block';
 
@@ -992,20 +1017,6 @@
             }
 
             document.getElementById('param-changes').innerHTML = html;
-
-            // 自动填入优化参数到表单
-            document.getElementById('ema-short').value = optimized.ema_short;
-            document.getElementById('ema-long').value = optimized.ema_long;
-            document.getElementById('stop-loss').value = optimized.stop_loss_pct;
-            document.getElementById('take-profit').value = optimized.take_profit_pct;
-
-            // 如果有推荐的出场模式
-            if (optimized.exit_mode) {
-                switchMode(optimized.exit_mode);
-            }
-
-            // 提示用户
-            showToast('优化参数已自动填入，可直接点击"开始分析"重新测试', 'info');
         }
 
         // 渲染模式对比
