@@ -162,11 +162,26 @@ class FuturesLimitOrderExecutor:
             if not strategy_config:
                 return None
 
-            # 解析策略配置
-            if isinstance(strategy_config, str):
-                config = json.loads(strategy_config)
-            else:
-                config = strategy_config
+            # 解析策略配置（可能是双重JSON编码）
+            config = strategy_config
+            # 循环解析直到不再是字符串
+            parse_attempts = 0
+            while isinstance(config, str) and parse_attempts < 3:
+                try:
+                    config = json.loads(config)
+                    parse_attempts += 1
+                except json.JSONDecodeError:
+                    break
+
+            # 如果解析后仍然是字符串，则无法处理
+            if isinstance(config, str):
+                logger.warning(f"无法解析策略配置: {strategy_config[:100]}...")
+                return None
+
+            # 检查是否是有效的字典
+            if not isinstance(config, dict):
+                logger.warning(f"策略配置不是字典类型: {type(config)}")
+                return None
 
             # 检查是否启用趋势转向取消功能
             cancel_on_trend_reversal = config.get('cancelOnTrendReversal', True)
