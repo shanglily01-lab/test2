@@ -380,6 +380,9 @@
                 <div style="display: flex; gap: 10px;">
                     <button class="btn btn-secondary" onclick="loadStrategies()">加载策略配置</button>
                     <button class="btn btn-primary" onclick="runAnalysis()">开始分析</button>
+                    <button class="btn btn-success" onclick="showLiveTradeDialog()" id="btn-live-trade" style="display: none;">
+                        实盘交易
+                    </button>
                 </div>
             </div>
             <div class="controls">
@@ -826,6 +829,8 @@
         // 渲染结果
         function renderResults(data) {
             document.getElementById('results').style.display = 'block';
+            // 显示实盘交易按钮
+            document.getElementById('btn-live-trade').style.display = 'inline-block';
 
             // 数据统计信息
             renderDataStats(data.data_stats);
@@ -1226,6 +1231,240 @@
             if (currentDialog) {
                 currentDialog.remove();
                 currentDialog = null;
+            }
+        }
+
+        // ==================== 实盘交易功能 ====================
+
+        let liveTradeCurrentPrice = 0;
+
+        // 显示实盘交易对话框
+        async function showLiveTradeDialog() {
+            if (!analysisData) {
+                showToast('请先运行分析', 'error');
+                return;
+            }
+
+            const symbol = document.getElementById('symbol').value;
+            const stopLoss = document.getElementById('stop-loss').value;
+            const takeProfit = document.getElementById('take-profit').value;
+
+            // 获取当前价格
+            try {
+                const priceResp = await fetch(`/api/live-trading/price?symbol=${encodeURIComponent(symbol)}`);
+                const priceData = await priceResp.json();
+                if (priceData.success) {
+                    liveTradeCurrentPrice = priceData.data.price;
+                }
+            } catch (e) {
+                console.error('获取价格失败:', e);
+            }
+
+            const html = `
+                <div style="padding: 20px; min-width: 400px;">
+                    <div style="background: rgba(248, 81, 73, 0.1); border: 1px solid var(--accent-red); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                        <div style="color: var(--accent-red); font-weight: 600; margin-bottom: 4px;">⚠️ 实盘交易警告</div>
+                        <div style="font-size: 12px; color: var(--text-secondary);">此操作将使用真实资金进行交易，请谨慎操作！</div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label">交易对</label>
+                        <input type="text" class="form-control" id="live-symbol" value="${symbol}" readonly style="background: var(--bg-primary);">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label">当前价格</label>
+                        <input type="text" class="form-control" id="live-current-price" value="${liveTradeCurrentPrice.toFixed(4)}" readonly style="background: var(--bg-primary);">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label">交易方向</label>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-success" id="btn-direction-long" onclick="setLiveDirection('LONG')" style="flex: 1;">做多 LONG</button>
+                            <button class="btn btn-secondary" id="btn-direction-short" onclick="setLiveDirection('SHORT')" style="flex: 1;">做空 SHORT</button>
+                        </div>
+                        <input type="hidden" id="live-direction" value="LONG">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label">订单类型</label>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-primary" id="btn-order-market" onclick="setLiveOrderType('market')" style="flex: 1;">市价单</button>
+                            <button class="btn btn-secondary" id="btn-order-limit" onclick="setLiveOrderType('limit')" style="flex: 1;">限价单</button>
+                        </div>
+                        <input type="hidden" id="live-order-type" value="market">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px; display: none;" id="limit-price-group">
+                        <label class="form-label">限价价格</label>
+                        <input type="number" class="form-control" id="live-limit-price" value="${liveTradeCurrentPrice.toFixed(4)}" step="0.0001">
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <div class="form-group">
+                            <label class="form-label">开仓数量</label>
+                            <input type="number" class="form-control" id="live-quantity" value="0.001" step="0.001" min="0.001">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">杠杆倍数</label>
+                            <select class="form-control" id="live-leverage">
+                                <option value="5">5x</option>
+                                <option value="10" selected>10x</option>
+                                <option value="20">20x</option>
+                                <option value="50">50x</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                        <div class="form-group">
+                            <label class="form-label">止损 %</label>
+                            <input type="number" class="form-control" id="live-stop-loss" value="${stopLoss}" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">止盈 %</label>
+                            <input type="number" class="form-control" id="live-take-profit" value="${takeProfit}" step="0.1">
+                        </div>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-secondary);">预计保证金</span>
+                            <span id="live-margin-estimate">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-secondary);">止损价格</span>
+                            <span id="live-sl-price" style="color: var(--accent-red);">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">止盈价格</span>
+                            <span id="live-tp-price" style="color: var(--accent-green);">--</span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary" onclick="closeDialog()" style="flex: 1;">取消</button>
+                        <button class="btn btn-success" onclick="executeLiveTrade()" style="flex: 1;">确认下单</button>
+                    </div>
+                </div>
+            `;
+
+            showDialog('实盘交易', html);
+
+            // 绑定输入事件计算预估值
+            setTimeout(() => {
+                const inputs = ['live-quantity', 'live-leverage', 'live-stop-loss', 'live-take-profit', 'live-limit-price', 'live-direction'];
+                inputs.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.addEventListener('change', updateLiveTradeEstimate);
+                        el.addEventListener('input', updateLiveTradeEstimate);
+                    }
+                });
+                updateLiveTradeEstimate();
+            }, 100);
+        }
+
+        // 设置交易方向
+        function setLiveDirection(direction) {
+            document.getElementById('live-direction').value = direction;
+            document.getElementById('btn-direction-long').className = direction === 'LONG' ? 'btn btn-success' : 'btn btn-secondary';
+            document.getElementById('btn-direction-short').className = direction === 'SHORT' ? 'btn btn-danger' : 'btn btn-secondary';
+            updateLiveTradeEstimate();
+        }
+
+        // 设置订单类型
+        function setLiveOrderType(type) {
+            document.getElementById('live-order-type').value = type;
+            document.getElementById('btn-order-market').className = type === 'market' ? 'btn btn-primary' : 'btn btn-secondary';
+            document.getElementById('btn-order-limit').className = type === 'limit' ? 'btn btn-primary' : 'btn btn-secondary';
+            document.getElementById('limit-price-group').style.display = type === 'limit' ? 'block' : 'none';
+            updateLiveTradeEstimate();
+        }
+
+        // 更新预估值
+        function updateLiveTradeEstimate() {
+            const orderType = document.getElementById('live-order-type').value;
+            const price = orderType === 'limit' ?
+                parseFloat(document.getElementById('live-limit-price').value) :
+                liveTradeCurrentPrice;
+            const quantity = parseFloat(document.getElementById('live-quantity').value) || 0;
+            const leverage = parseInt(document.getElementById('live-leverage').value) || 10;
+            const stopLossPct = parseFloat(document.getElementById('live-stop-loss').value) || 0;
+            const takeProfitPct = parseFloat(document.getElementById('live-take-profit').value) || 0;
+            const direction = document.getElementById('live-direction').value;
+
+            // 计算保证金
+            const positionValue = price * quantity;
+            const margin = positionValue / leverage;
+            document.getElementById('live-margin-estimate').textContent = `${margin.toFixed(4)} USDT`;
+
+            // 计算止损止盈价格
+            let slPrice, tpPrice;
+            if (direction === 'LONG') {
+                slPrice = price * (1 - stopLossPct / 100);
+                tpPrice = price * (1 + takeProfitPct / 100);
+            } else {
+                slPrice = price * (1 + stopLossPct / 100);
+                tpPrice = price * (1 - takeProfitPct / 100);
+            }
+
+            document.getElementById('live-sl-price').textContent = slPrice.toFixed(4);
+            document.getElementById('live-tp-price').textContent = tpPrice.toFixed(4);
+        }
+
+        // 执行实盘交易
+        async function executeLiveTrade() {
+            const symbol = document.getElementById('live-symbol').value;
+            const direction = document.getElementById('live-direction').value;
+            const orderType = document.getElementById('live-order-type').value;
+            const quantity = parseFloat(document.getElementById('live-quantity').value);
+            const leverage = parseInt(document.getElementById('live-leverage').value);
+            const stopLossPct = parseFloat(document.getElementById('live-stop-loss').value);
+            const takeProfitPct = parseFloat(document.getElementById('live-take-profit').value);
+            const limitPrice = orderType === 'limit' ? parseFloat(document.getElementById('live-limit-price').value) : null;
+
+            // 确认对话框
+            const orderTypeText = orderType === 'market' ? '市价单' : `限价单 @ ${limitPrice}`;
+            const confirmMsg = `确认以下交易？\n\n交易对: ${symbol}\n方向: ${direction === 'LONG' ? '做多' : '做空'}\n类型: ${orderTypeText}\n数量: ${quantity}\n杠杆: ${leverage}x\n止损: ${stopLossPct}%\n止盈: ${takeProfitPct}%`;
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            closeDialog();
+            showToast('正在提交订单...', 'info');
+
+            try {
+                const requestBody = {
+                    symbol: symbol,
+                    position_side: direction,
+                    quantity: quantity,
+                    leverage: leverage,
+                    stop_loss_pct: stopLossPct,
+                    take_profit_pct: takeProfitPct,
+                    source: 'strategy_analyzer'
+                };
+
+                if (limitPrice) {
+                    requestBody.limit_price = limitPrice;
+                }
+
+                const resp = await fetch('/api/live-trading/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const result = await resp.json();
+
+                if (result.success) {
+                    showToast(`开仓成功！${result.message || ''}`, 'success');
+                } else {
+                    showToast(`开仓失败: ${result.detail || result.message || '未知错误'}`, 'error');
+                }
+            } catch (e) {
+                showToast(`请求失败: ${e.message}`, 'error');
             }
         }
     </script>
