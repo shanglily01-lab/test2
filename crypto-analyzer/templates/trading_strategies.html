@@ -1173,14 +1173,107 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
+                            <!-- 智能出场 -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-graph-down-arrow"></i>
+                                    智能出场
+                                    <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal; margin-left: 8px;">优化出场时机，保护利润</span>
+                                </div>
+
+                                <!-- 动态止盈 -->
+                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <input type="checkbox" id="dynamicTakeProfitEnabled" style="margin-right: 8px;">
+                                        <label for="dynamicTakeProfitEnabled" style="font-weight: 600; cursor: pointer;">动态止盈</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">根据趋势强度自动调整止盈目标</span>
+                                    </div>
+                                    <div id="dynamicTakeProfitParams" style="display: none; margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">弱趋势阈值（%）</label>
+                                                <input type="number" class="form-input" id="dynamicTpWeakThreshold" value="0.5" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">EMA差值低于此值为弱趋势</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">弱趋势止盈比例</label>
+                                                <input type="number" class="form-input" id="dynamicTpWeakRatio" value="0.6" step="0.1" min="0.1" max="1" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">止盈×此比例（如0.6=60%）</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">强趋势阈值（%）</label>
+                                                <input type="number" class="form-input" id="dynamicTpStrongThreshold" value="1.5" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">EMA差值高于此值为强趋势</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">强趋势止盈比例</label>
+                                                <input type="number" class="form-input" id="dynamicTpStrongRatio" value="1.5" step="0.1" min="1" max="3" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">止盈×此比例（如1.5=150%）</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 盈利保护 -->
+                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <input type="checkbox" id="profitProtectionEnabled" style="margin-right: 8px;">
+                                        <label for="profitProtectionEnabled" style="font-weight: 600; cursor: pointer;">盈利保护</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">盈利达到阈值后启用紧凑止损</span>
+                                    </div>
+                                    <div id="profitProtectionParams" style="display: none; margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">激活阈值（%）</label>
+                                                <input type="number" class="form-input" id="profitProtectionActivatePct" value="1.0" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">盈利超过此值激活保护</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">回撤比例（%）</label>
+                                                <input type="number" class="form-input" id="profitProtectionTrailingPct" value="0.5" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">从高点回撤此比例触发</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">保底盈利（%）</label>
+                                                <input type="number" class="form-input" id="profitProtectionMinLockPct" value="0.3" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">至少锁定的盈利比例</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 价格穿越EMA出场 -->
+                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <input type="checkbox" id="exitOnPriceCrossEmaEnabled" style="margin-right: 8px;">
+                                        <label for="exitOnPriceCrossEmaEnabled" style="font-weight: 600; cursor: pointer;">价格穿越EMA出场</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">价格跌破/突破EMA9时提前出场</span>
+                                    </div>
+                                    <div id="exitOnPriceCrossEmaParams" style="display: none; margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">最小盈利要求（%）</label>
+                                                <input type="number" class="form-input" id="exitPriceCrossEmaMinProfit" value="0.5" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">盈利达到此值才触发</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">确认K线数</label>
+                                                <input type="number" class="form-input" id="exitPriceCrossEmaConfirmBars" value="1" step="1" min="1" max="5" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">连续N根K线确认</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- 交易价格 -->
                             <div class="form-section">
                                 <div class="form-section-title">
                                     <i class="bi bi-currency-dollar"></i>
                                     交易价格
                                 </div>
-                                
+
                                 <!-- 做多价格选项 -->
                                 <div class="form-group" id="longPriceGroup">
                                     <label class="form-label">做多价格<span class="required">*</span></label>
@@ -1651,6 +1744,37 @@
             }
         }
 
+        // 智能出场相关切换函数
+        function toggleDynamicTakeProfitParams() {
+            const enabled = document.getElementById('dynamicTakeProfitEnabled').checked;
+            const params = document.getElementById('dynamicTakeProfitParams');
+            params.style.display = enabled ? 'block' : 'none';
+        }
+
+        function toggleProfitProtectionParams() {
+            const enabled = document.getElementById('profitProtectionEnabled').checked;
+            const params = document.getElementById('profitProtectionParams');
+            params.style.display = enabled ? 'block' : 'none';
+        }
+
+        function toggleExitOnPriceCrossEmaParams() {
+            const enabled = document.getElementById('exitOnPriceCrossEmaEnabled').checked;
+            const params = document.getElementById('exitOnPriceCrossEmaParams');
+            params.style.display = enabled ? 'block' : 'none';
+        }
+
+        // 绑定智能出场复选框事件
+        document.addEventListener('DOMContentLoaded', function() {
+            const dynamicTpCheckbox = document.getElementById('dynamicTakeProfitEnabled');
+            if (dynamicTpCheckbox) dynamicTpCheckbox.addEventListener('change', toggleDynamicTakeProfitParams);
+
+            const profitProtectionCheckbox = document.getElementById('profitProtectionEnabled');
+            if (profitProtectionCheckbox) profitProtectionCheckbox.addEventListener('change', toggleProfitProtectionParams);
+
+            const exitPriceCrossEmaCheckbox = document.getElementById('exitOnPriceCrossEmaEnabled');
+            if (exitPriceCrossEmaCheckbox) exitPriceCrossEmaCheckbox.addEventListener('change', toggleExitOnPriceCrossEmaParams);
+        });
+
         // 加载可用币种（从配置文件/API获取）
         async function loadAvailableSymbols() {
             try {
@@ -1841,6 +1965,25 @@
                     enabled: document.getElementById('priceDistanceLimitEnabled') ? document.getElementById('priceDistanceLimitEnabled').checked : false,
                     maxAboveEMA: document.getElementById('priceDistanceMaxAboveEMA') ? parseFloat(document.getElementById('priceDistanceMaxAboveEMA').value) : 1.0,
                     maxBelowEMA: document.getElementById('priceDistanceMaxBelowEMA') ? parseFloat(document.getElementById('priceDistanceMaxBelowEMA').value) : 1.0
+                },
+                // 智能出场配置
+                dynamicTakeProfit: {
+                    enabled: document.getElementById('dynamicTakeProfitEnabled') ? document.getElementById('dynamicTakeProfitEnabled').checked : false,
+                    weakTrendThreshold: document.getElementById('dynamicTpWeakThreshold') ? parseFloat(document.getElementById('dynamicTpWeakThreshold').value) : 0.5,
+                    weakRatio: document.getElementById('dynamicTpWeakRatio') ? parseFloat(document.getElementById('dynamicTpWeakRatio').value) : 0.6,
+                    strongTrendThreshold: document.getElementById('dynamicTpStrongThreshold') ? parseFloat(document.getElementById('dynamicTpStrongThreshold').value) : 1.5,
+                    strongRatio: document.getElementById('dynamicTpStrongRatio') ? parseFloat(document.getElementById('dynamicTpStrongRatio').value) : 1.5
+                },
+                profitProtection: {
+                    enabled: document.getElementById('profitProtectionEnabled') ? document.getElementById('profitProtectionEnabled').checked : false,
+                    activatePct: document.getElementById('profitProtectionActivatePct') ? parseFloat(document.getElementById('profitProtectionActivatePct').value) : 1.0,
+                    trailingPct: document.getElementById('profitProtectionTrailingPct') ? parseFloat(document.getElementById('profitProtectionTrailingPct').value) : 0.5,
+                    minLockPct: document.getElementById('profitProtectionMinLockPct') ? parseFloat(document.getElementById('profitProtectionMinLockPct').value) : 0.3
+                },
+                exitOnPriceCrossEMA: {
+                    enabled: document.getElementById('exitOnPriceCrossEmaEnabled') ? document.getElementById('exitOnPriceCrossEmaEnabled').checked : false,
+                    minProfitPct: document.getElementById('exitPriceCrossEmaMinProfit') ? parseFloat(document.getElementById('exitPriceCrossEmaMinProfit').value) : 0.5,
+                    confirmBars: document.getElementById('exitPriceCrossEmaConfirmBars') ? parseInt(document.getElementById('exitPriceCrossEmaConfirmBars').value) : 1
                 },
                 // 行情自适应开关
                 adaptiveRegime: document.getElementById('adaptiveRegimeEnabled') ? document.getElementById('adaptiveRegimeEnabled').checked : false
@@ -2427,6 +2570,38 @@
                     document.getElementById('priceDistanceLimitEnabled').checked = strategy.priceDistanceLimit.enabled === true;
                     document.getElementById('priceDistanceMaxAboveEMA').value = strategy.priceDistanceLimit.maxAboveEMA || 1.0;
                     document.getElementById('priceDistanceMaxBelowEMA').value = strategy.priceDistanceLimit.maxBelowEMA || 1.0;
+                }
+            }
+
+            // 智能出场配置
+            // 动态止盈
+            if (strategy.dynamicTakeProfit) {
+                if (document.getElementById('dynamicTakeProfitEnabled')) {
+                    document.getElementById('dynamicTakeProfitEnabled').checked = strategy.dynamicTakeProfit.enabled === true;
+                    document.getElementById('dynamicTpWeakThreshold').value = strategy.dynamicTakeProfit.weakTrendThreshold || 0.5;
+                    document.getElementById('dynamicTpWeakRatio').value = strategy.dynamicTakeProfit.weakRatio || 0.6;
+                    document.getElementById('dynamicTpStrongThreshold').value = strategy.dynamicTakeProfit.strongTrendThreshold || 1.5;
+                    document.getElementById('dynamicTpStrongRatio').value = strategy.dynamicTakeProfit.strongRatio || 1.5;
+                    toggleDynamicTakeProfitParams();
+                }
+            }
+            // 盈利保护
+            if (strategy.profitProtection) {
+                if (document.getElementById('profitProtectionEnabled')) {
+                    document.getElementById('profitProtectionEnabled').checked = strategy.profitProtection.enabled === true;
+                    document.getElementById('profitProtectionActivatePct').value = strategy.profitProtection.activatePct || 1.0;
+                    document.getElementById('profitProtectionTrailingPct').value = strategy.profitProtection.trailingPct || 0.5;
+                    document.getElementById('profitProtectionMinLockPct').value = strategy.profitProtection.minLockPct || 0.3;
+                    toggleProfitProtectionParams();
+                }
+            }
+            // 价格穿越EMA出场
+            if (strategy.exitOnPriceCrossEMA) {
+                if (document.getElementById('exitOnPriceCrossEmaEnabled')) {
+                    document.getElementById('exitOnPriceCrossEmaEnabled').checked = strategy.exitOnPriceCrossEMA.enabled === true;
+                    document.getElementById('exitPriceCrossEmaMinProfit').value = strategy.exitOnPriceCrossEMA.minProfitPct || 0.5;
+                    document.getElementById('exitPriceCrossEmaConfirmBars').value = strategy.exitOnPriceCrossEMA.confirmBars || 1;
+                    toggleExitOnPriceCrossEmaParams();
                 }
             }
 

@@ -529,6 +529,37 @@ class StrategyExecutor:
             # 做空时，价格低于EMA9的最大百分比（超过则不开仓，等反弹）
             price_distance_max_below_ema = price_distance_limit.get('maxBelowEMA', 1.0) if isinstance(price_distance_limit, dict) else 1.0
 
+            # ================== 智能出场配置 ==================
+            # 1. 动态止盈：根据趋势强度自动调整止盈目标
+            dynamic_take_profit = strategy.get('dynamicTakeProfit', {})
+            dynamic_tp_enabled = dynamic_take_profit.get('enabled', False) if isinstance(dynamic_take_profit, dict) else False
+            # 趋势强度阈值（%），低于此值使用较低止盈
+            dynamic_tp_weak_trend_threshold = dynamic_take_profit.get('weakTrendThreshold', 0.5) if isinstance(dynamic_take_profit, dict) else 0.5
+            # 弱趋势时的止盈比例（相对于原止盈的百分比，如0.6表示60%）
+            dynamic_tp_weak_ratio = dynamic_take_profit.get('weakRatio', 0.6) if isinstance(dynamic_take_profit, dict) else 0.6
+            # 强趋势阈值（%），高于此值使用较高止盈
+            dynamic_tp_strong_trend_threshold = dynamic_take_profit.get('strongTrendThreshold', 1.5) if isinstance(dynamic_take_profit, dict) else 1.5
+            # 强趋势时的止盈比例（相对于原止盈的百分比，如1.5表示150%）
+            dynamic_tp_strong_ratio = dynamic_take_profit.get('strongRatio', 1.5) if isinstance(dynamic_take_profit, dict) else 1.5
+
+            # 2. 盈利保护止损：盈利超过阈值后启用更紧的移动止损
+            profit_protection = strategy.get('profitProtection', {})
+            profit_protection_enabled = profit_protection.get('enabled', False) if isinstance(profit_protection, dict) else False
+            # 激活阈值（%），盈利超过此比例时启用保护
+            profit_protection_activate_pct = profit_protection.get('activatePct', 1.0) if isinstance(profit_protection, dict) else 1.0
+            # 保护回撤比例（%），从最高盈利回撤此比例时平仓
+            profit_protection_trailing_pct = profit_protection.get('trailingPct', 0.5) if isinstance(profit_protection, dict) else 0.5
+            # 保底盈利（%），至少保住的盈利比例
+            profit_protection_min_lock_pct = profit_protection.get('minLockPct', 0.3) if isinstance(profit_protection, dict) else 0.3
+
+            # 3. 提前出场信号：价格跌破/突破EMA9时提前出场
+            exit_on_price_cross_ema = strategy.get('exitOnPriceCrossEMA', {})
+            exit_price_cross_ema_enabled = exit_on_price_cross_ema.get('enabled', False) if isinstance(exit_on_price_cross_ema, dict) else False
+            # 要求盈利多少才触发（%），避免在亏损时因震荡出场
+            exit_price_cross_ema_min_profit = exit_on_price_cross_ema.get('minProfitPct', 0.5) if isinstance(exit_on_price_cross_ema, dict) else 0.5
+            # 穿越确认K线数，连续几根K线在EMA下方/上方才触发
+            exit_price_cross_ema_confirm_bars = exit_on_price_cross_ema.get('confirmBars', 1) if isinstance(exit_on_price_cross_ema, dict) else 1
+
             # 确定买入和卖出的时间周期
             timeframe_map = {
                 'ema_5m': '5m',
@@ -805,6 +836,19 @@ class StrategyExecutor:
                     price_distance_limit_enabled=price_distance_limit_enabled,
                     price_distance_max_above_ema=price_distance_max_above_ema,
                     price_distance_max_below_ema=price_distance_max_below_ema,
+                    # 智能出场配置
+                    dynamic_tp_enabled=dynamic_tp_enabled,
+                    dynamic_tp_weak_trend_threshold=dynamic_tp_weak_trend_threshold,
+                    dynamic_tp_weak_ratio=dynamic_tp_weak_ratio,
+                    dynamic_tp_strong_trend_threshold=dynamic_tp_strong_trend_threshold,
+                    dynamic_tp_strong_ratio=dynamic_tp_strong_ratio,
+                    profit_protection_enabled=profit_protection_enabled,
+                    profit_protection_activate_pct=profit_protection_activate_pct,
+                    profit_protection_trailing_pct=profit_protection_trailing_pct,
+                    profit_protection_min_lock_pct=profit_protection_min_lock_pct,
+                    exit_price_cross_ema_enabled=exit_price_cross_ema_enabled,
+                    exit_price_cross_ema_min_profit=exit_price_cross_ema_min_profit,
+                    exit_price_cross_ema_confirm_bars=exit_price_cross_ema_confirm_bars,
                     market_type=strategy.get('market_type', 'test')  # 市场类型: test/live
                 )
 
@@ -1166,6 +1210,25 @@ class StrategyExecutor:
         price_distance_limit_enabled = kwargs.get('price_distance_limit_enabled', False)
         price_distance_max_above_ema = kwargs.get('price_distance_max_above_ema', 1.0)  # 做多时价格高于EMA9的最大%
         price_distance_max_below_ema = kwargs.get('price_distance_max_below_ema', 1.0)  # 做空时价格低于EMA9的最大%
+
+        # ================== 智能出场配置 ==================
+        # 1. 动态止盈：根据趋势强度自动调整止盈目标
+        dynamic_tp_enabled = kwargs.get('dynamic_tp_enabled', False)
+        dynamic_tp_weak_trend_threshold = kwargs.get('dynamic_tp_weak_trend_threshold', 0.5)  # 弱趋势阈值(%)
+        dynamic_tp_weak_ratio = kwargs.get('dynamic_tp_weak_ratio', 0.6)  # 弱趋势止盈比例
+        dynamic_tp_strong_trend_threshold = kwargs.get('dynamic_tp_strong_trend_threshold', 1.5)  # 强趋势阈值(%)
+        dynamic_tp_strong_ratio = kwargs.get('dynamic_tp_strong_ratio', 1.5)  # 强趋势止盈比例
+
+        # 2. 盈利保护止损：盈利超过阈值后启用更紧的移动止损
+        profit_protection_enabled = kwargs.get('profit_protection_enabled', False)
+        profit_protection_activate_pct = kwargs.get('profit_protection_activate_pct', 1.0)  # 激活阈值(%)
+        profit_protection_trailing_pct = kwargs.get('profit_protection_trailing_pct', 0.5)  # 回撤比例(%)
+        profit_protection_min_lock_pct = kwargs.get('profit_protection_min_lock_pct', 0.3)  # 保底盈利(%)
+
+        # 3. 提前出场信号：价格跌破/突破EMA9时提前出场
+        exit_price_cross_ema_enabled = kwargs.get('exit_price_cross_ema_enabled', False)
+        exit_price_cross_ema_min_profit = kwargs.get('exit_price_cross_ema_min_profit', 0.5)  # 最小盈利要求(%)
+        exit_price_cross_ema_confirm_bars = kwargs.get('exit_price_cross_ema_confirm_bars', 1)  # 确认K线数
         strategy_id = kwargs.get('strategy_id')
         strategy_name = kwargs.get('strategy_name', '测试策略')
         account_id = kwargs.get('account_id', 0)
@@ -1422,14 +1485,125 @@ class StrategyExecutor:
                         exit_reason = "止损"
                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发止损，入场={entry_price:.4f}，止损价={stop_loss_price:.4f}，当前价={realtime_price:.4f}")
                 
+                # ================== 智能出场逻辑 ==================
+                # 计算当前盈利百分比（用于智能出场判断）
+                if direction == 'long':
+                    current_profit_pct = (realtime_price - entry_price) / entry_price * 100
+                else:  # short
+                    current_profit_pct = (entry_price - realtime_price) / entry_price * 100
+
+                # 获取当前EMA趋势强度（用于动态止盈）
+                current_trend_strength = 0.0
+                if sell_indicator.get('ema_short') and sell_indicator.get('ema_long'):
+                    ema_short = float(sell_indicator['ema_short'])
+                    ema_long = float(sell_indicator['ema_long'])
+                    current_trend_strength = abs(ema_short - ema_long) / ema_long * 100 if ema_long > 0 else 0
+
+                # 动态调整止盈价格（根据趋势强度）
+                effective_take_profit_price = take_profit_price
+                dynamic_tp_reason = ""
+                if dynamic_tp_enabled and take_profit_price and take_profit_pct:
+                    if current_trend_strength < dynamic_tp_weak_trend_threshold:
+                        # 弱趋势：降低止盈目标
+                        adjusted_tp_pct = take_profit_pct * dynamic_tp_weak_ratio
+                        if direction == 'long':
+                            effective_take_profit_price = entry_price * (1 + adjusted_tp_pct / 100)
+                        else:
+                            effective_take_profit_price = entry_price * (1 - adjusted_tp_pct / 100)
+                        dynamic_tp_reason = f"弱趋势({current_trend_strength:.2f}%<{dynamic_tp_weak_trend_threshold}%)动态止盈"
+                    elif current_trend_strength > dynamic_tp_strong_trend_threshold:
+                        # 强趋势：提高止盈目标
+                        adjusted_tp_pct = take_profit_pct * dynamic_tp_strong_ratio
+                        if direction == 'long':
+                            effective_take_profit_price = entry_price * (1 + adjusted_tp_pct / 100)
+                        else:
+                            effective_take_profit_price = entry_price * (1 - adjusted_tp_pct / 100)
+                        dynamic_tp_reason = f"强趋势({current_trend_strength:.2f}%>{dynamic_tp_strong_trend_threshold}%)动态止盈"
+
                 # 止盈检查（止盈不受最小持仓时间限制，触发即执行）
-                if not exit_price and take_profit_price:
-                    if direction == 'long' and realtime_price >= take_profit_price:
-                        exit_price = take_profit_price
-                        exit_reason = "止盈"
-                    elif direction == 'short' and realtime_price <= take_profit_price:
-                        exit_price = take_profit_price
-                        exit_reason = "止盈"
+                if not exit_price and effective_take_profit_price:
+                    if direction == 'long' and realtime_price >= effective_take_profit_price:
+                        exit_price = effective_take_profit_price
+                        exit_reason = dynamic_tp_reason if dynamic_tp_reason else "止盈"
+                    elif direction == 'short' and realtime_price <= effective_take_profit_price:
+                        exit_price = effective_take_profit_price
+                        exit_reason = dynamic_tp_reason if dynamic_tp_reason else "止盈"
+
+                # 盈利保护止损检查（盈利达到阈值后，如果盈利回落到保底线则平仓）
+                # 逻辑：当盈利曾达到 activatePct%，如果回落到 minLockPct% 则触发保护出场
+                # 注意：这是简化版本，不需要追踪历史最高盈利
+                if not exit_price and profit_protection_enabled:
+                    # 当前盈利在激活阈值和保底盈利之间时，检查是否触发保护
+                    # 条件：盈利曾超过激活阈值，但现在已回落接近保底线
+                    if current_profit_pct >= profit_protection_min_lock_pct and current_profit_pct < profit_protection_activate_pct:
+                        # 检查趋势是否正在逆转（通过EMA方向判断）
+                        trend_reversing = False
+                        if sell_indicator.get('ema_short') and sell_indicator.get('ema_long'):
+                            ema_short = float(sell_indicator['ema_short'])
+                            ema_long = float(sell_indicator['ema_long'])
+                            if direction == 'long' and ema_short < ema_long:
+                                trend_reversing = True
+                            elif direction == 'short' and ema_short > ema_long:
+                                trend_reversing = True
+
+                        # 如果趋势正在逆转且盈利在保护区间内，触发保护出场
+                        if trend_reversing:
+                            exit_price = realtime_price
+                            exit_reason = f"盈利保护(盈{current_profit_pct:.2f}%≥{profit_protection_min_lock_pct}%且趋势逆转)"
+
+                    # 另一种保护：盈利已达激活阈值但趋势突然逆转
+                    elif current_profit_pct >= profit_protection_activate_pct:
+                        # 检查价格是否快速回撤（当前K线跌幅超过回撤阈值）
+                        if direction == 'long':
+                            # 做多时，检查价格是否从最高点回撤
+                            kline_high = float(sell_kline.get('high_price', realtime_price)) if sell_kline else realtime_price
+                            if kline_high > 0:
+                                current_drawdown = (kline_high - realtime_price) / kline_high * 100
+                                if current_drawdown >= profit_protection_trailing_pct:
+                                    exit_price = realtime_price
+                                    exit_reason = f"盈利保护(从K线高点回撤{current_drawdown:.2f}%≥{profit_protection_trailing_pct}%)"
+                        else:  # short
+                            kline_low = float(sell_kline.get('low_price', realtime_price)) if sell_kline else realtime_price
+                            if kline_low > 0:
+                                current_drawdown = (realtime_price - kline_low) / kline_low * 100
+                                if current_drawdown >= profit_protection_trailing_pct:
+                                    exit_price = realtime_price
+                                    exit_reason = f"盈利保护(从K线低点反弹{current_drawdown:.2f}%≥{profit_protection_trailing_pct}%)"
+
+                # 价格穿越EMA9提前出场检查
+                if not exit_price and exit_price_cross_ema_enabled:
+                    if current_profit_pct >= exit_price_cross_ema_min_profit:
+                        # 获取EMA9价格
+                        ema9_price = float(sell_indicator.get('ema_short', 0)) if sell_indicator.get('ema_short') else None
+                        if ema9_price:
+                            # 检查价格是否穿越EMA9
+                            bars_below_ema = 0
+                            bars_above_ema = 0
+
+                            # 检查最近N根K线
+                            for bar_offset in range(exit_price_cross_ema_confirm_bars):
+                                check_idx = len(sell_indicator_pairs) - 1 - bar_offset
+                                if check_idx >= 0:
+                                    check_pair = sell_indicator_pairs[check_idx]
+                                    check_indicator = check_pair['indicator']
+                                    check_kline = check_pair['kline']
+                                    check_ema9 = float(check_indicator.get('ema_short', 0)) if check_indicator.get('ema_short') else None
+                                    check_close = float(check_kline.get('close', 0)) if check_kline.get('close') else realtime_price
+
+                                    if check_ema9:
+                                        if check_close < check_ema9:
+                                            bars_below_ema += 1
+                                        elif check_close > check_ema9:
+                                            bars_above_ema += 1
+
+                            # 做多时，价格跌破EMA9触发出场
+                            if direction == 'long' and bars_below_ema >= exit_price_cross_ema_confirm_bars:
+                                exit_price = realtime_price
+                                exit_reason = f"价格跌破EMA9({bars_below_ema}根K线确认)"
+                            # 做空时，价格突破EMA9触发出场
+                            elif direction == 'short' and bars_above_ema >= exit_price_cross_ema_confirm_bars:
+                                exit_price = realtime_price
+                                exit_reason = f"价格突破EMA9({bars_above_ema}根K线确认)"
                 
                 if exit_price and exit_reason:
                     position_id = position.get('position_id')

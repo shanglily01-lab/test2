@@ -71,7 +71,14 @@ async def analyze_symbol(
     ema_short: int = Query(default=9, description="短期EMA周期"),
     ema_long: int = Query(default=26, description="长期EMA周期"),
     stop_loss_pct: float = Query(default=2.5, description="止损百分比"),
-    take_profit_pct: float = Query(default=4.0, description="止盈百分比")
+    take_profit_pct: float = Query(default=4.0, description="止盈百分比"),
+    # 持续趋势模式参数
+    sustained_trend_enabled: bool = Query(default=True, description="启用持续趋势模式"),
+    sustained_trend_min_strength: float = Query(default=0.3, description="趋势最小强度(%)"),
+    sustained_trend_max_strength: float = Query(default=2.0, description="趋势最大强度(%)"),
+    sustained_trend_require_ma10_confirm: bool = Query(default=True, description="要求MA10/EMA10确认"),
+    sustained_trend_require_price_confirm: bool = Query(default=True, description="要求价格确认"),
+    sustained_trend_min_bars: int = Query(default=3, description="趋势持续最小K线数")
 ):
     """
     分析指定交易对的K线和EMA信号
@@ -117,11 +124,13 @@ async def analyze_symbol(
         df['ema_short'] = df['close'].ewm(span=ema_short, adjust=False).mean()
         df['ema_long'] = df['close'].ewm(span=ema_long, adjust=False).mean()
 
-        # 计算MA10
+        # 计算MA10和EMA10（用于趋势确认）
         df['ma10'] = df['close'].rolling(window=10).mean()
+        df['ema10'] = df['close'].ewm(span=10, adjust=False).mean()
 
-        # 计算EMA差值百分比
+        # 计算EMA差值百分比（绝对值用于趋势强度判断）
         df['ema_diff_pct'] = ((df['ema_short'] - df['ema_long']) / df['ema_long'] * 100).round(4)
+        df['ema_strength_pct'] = df['ema_diff_pct'].abs()  # 趋势强度（绝对值）
 
         # 3. 检测金叉/死叉信号
         df['signal'] = 0
