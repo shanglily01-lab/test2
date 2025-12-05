@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>48小时策略分析 - 参数优化</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-red: #f85149;
+            --accent-yellow: #d29922;
+            --accent-purple: #a371f7;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .back-link {
+            color: var(--accent-blue);
+            text-decoration: none;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+        .back-link:hover { text-decoration: underline; }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* 控制面板 */
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .form-control {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+        .btn-primary:hover { filter: brightness(1.1); }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .stat-positive { color: var(--accent-green); }
+        .stat-negative { color: var(--accent-red); }
+        .stat-neutral { color: var(--accent-yellow); }
+
+        /* 图表 */
+        .chart-container {
+            height: 400px;
+            position: relative;
+        }
+
+        /* 交易记录表格 */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        tr:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .badge-success { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+        .badge-danger { background: rgba(248, 81, 73, 0.2); color: var(--accent-red); }
+        .badge-warning { background: rgba(210, 153, 34, 0.2); color: var(--accent-yellow); }
+        .badge-info { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); }
+
+        /* 建议列表 */
+        .suggestion {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .suggestion-warning {
+            background: rgba(210, 153, 34, 0.1);
+            border-left: 3px solid var(--accent-yellow);
+        }
+
+        .suggestion-success {
+            background: rgba(63, 185, 80, 0.1);
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .suggestion-info {
+            background: rgba(88, 166, 255, 0.1);
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .suggestion-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .suggestion-content h4 {
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .suggestion-content p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* 行情类型 */
+        .regime-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .regime-strong_uptrend { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+        .regime-weak_uptrend { background: rgba(63, 185, 80, 0.1); color: #7ee787; }
+        .regime-ranging { background: rgba(210, 153, 34, 0.2); color: var(--accent-yellow); }
+        .regime-weak_downtrend { background: rgba(248, 81, 73, 0.1); color: #ffa198; }
+        .regime-strong_downtrend { background: rgba(248, 81, 73, 0.2); color: var(--accent-red); }
+
+        /* 加载动画 */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 12px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 两栏布局 */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .two-col {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+        }
+        .toast.success { background: linear-gradient(135deg, #238636, #2ea043); }
+        .toast.error { background: linear-gradient(135deg, #da3633, #f85149); }
+        .toast.info { background: linear-gradient(135deg, #1f6feb, #388bfd); }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* 参数对比 */
+        .param-comparison {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 12px;
+        }
+
+        .param-item {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .param-item .label {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .param-item .value {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        /* 信号标记 */
+        .signal-marker {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .signal-golden { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+        .signal-death { background: rgba(248, 81, 73, 0.2); color: var(--accent-red); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/futures_trading" class="back-link">&larr; 返回合约交易</a>
+        <h1>48小时策略分析与参数优化</h1>
+
+        <!-- 控制面板 -->
+        <div class="card">
+            <div class="card-header">
+                <span class="card-title">分析参数</span>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-secondary" onclick="loadStrategies()">加载策略配置</button>
+                    <button class="btn btn-primary" onclick="runAnalysis()">开始分析</button>
+                </div>
+            </div>
+            <div class="controls">
+                <div class="form-group">
+                    <label class="form-label">交易对</label>
+                    <select class="form-control" id="symbol">
+                        <option value="">加载中...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">K线周期</label>
+                    <select class="form-control" id="timeframe">
+                        <option value="5m">5分钟</option>
+                        <option value="15m" selected>15分钟</option>
+                        <option value="30m">30分钟</option>
+                        <option value="1h">1小时</option>
+                        <option value="4h">4小时</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">分析时长（小时）</label>
+                    <select class="form-control" id="hours">
+                        <option value="24">24小时</option>
+                        <option value="48" selected>48小时</option>
+                        <option value="72">72小时</option>
+                        <option value="168">7天</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">短期EMA</label>
+                    <input type="number" class="form-control" id="ema-short" value="9" min="3" max="50">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">长期EMA</label>
+                    <input type="number" class="form-control" id="ema-long" value="26" min="10" max="100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">止损 %</label>
+                    <input type="number" class="form-control" id="stop-loss" value="2.5" step="0.1" min="0.5" max="10">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">止盈 %</label>
+                    <input type="number" class="form-control" id="take-profit" value="4.0" step="0.1" min="1" max="20">
+                </div>
+            </div>
+        </div>
+
+        <!-- 结果区域 -->
+        <div id="results" style="display: none;">
+            <!-- 行情概览 -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">行情概览</span>
+                    <span id="regime-badge" class="regime-badge"></span>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="price-change">--</div>
+                        <div class="stat-label">价格变化</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="volatility">--</div>
+                        <div class="stat-label">波动率</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="golden-crosses">--</div>
+                        <div class="stat-label">金叉次数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="death-crosses">--</div>
+                        <div class="stat-label">死叉次数</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 交易统计 -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">模拟交易统计</span>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-trades">--</div>
+                        <div class="stat-label">总交易次数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value stat-positive" id="win-rate">--</div>
+                        <div class="stat-label">胜率</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-pnl">--</div>
+                        <div class="stat-label">总盈亏</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value stat-positive" id="avg-win">--</div>
+                        <div class="stat-label">平均盈利</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value stat-negative" id="avg-loss">--</div>
+                        <div class="stat-label">平均亏损</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="exit-breakdown">--</div>
+                        <div class="stat-label">止损/止盈/信号出场</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 图表和建议 -->
+            <div class="two-col">
+                <!-- K线图表 -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">K线与EMA走势</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="priceChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 优化建议 -->
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title">优化建议</span>
+                    </div>
+                    <div id="suggestions">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 交易记录 -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">模拟交易记录</span>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>类型</th>
+                                <th>入场时间</th>
+                                <th>入场价</th>
+                                <th>出场时间</th>
+                                <th>出场价</th>
+                                <th>出场原因</th>
+                                <th>盈亏</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trades-table">
+                            <!-- 动态生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 加载中 -->
+        <div id="loading" class="card" style="display: none;">
+            <div class="loading">
+                <div class="spinner"></div>
+                <span>正在分析数据，请稍候...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let priceChart = null;
+        let analysisData = null;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSymbols();
+        });
+
+        // 加载交易对
+        async function loadSymbols() {
+            try {
+                const resp = await fetch('/api/strategy-analyzer/symbols');
+                const data = await resp.json();
+
+                if (data.success && data.data.length > 0) {
+                    const select = document.getElementById('symbol');
+                    select.innerHTML = data.data.map(s =>
+                        `<option value="${s}">${s}</option>`
+                    ).join('');
+                }
+            } catch (e) {
+                console.error('加载交易对失败:', e);
+            }
+        }
+
+        // 加载策略配置
+        async function loadStrategies() {
+            try {
+                const resp = await fetch('/api/strategy-analyzer/strategies');
+                const data = await resp.json();
+
+                if (data.success && data.data.length > 0) {
+                    // 显示策略选择对话框
+                    const strategies = data.data;
+                    let html = '<div style="padding: 20px;">';
+                    html += '<h3 style="margin-bottom: 16px;">选择策略配置</h3>';
+                    strategies.forEach(s => {
+                        html += `
+                            <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 8px; margin-bottom: 10px; cursor: pointer;"
+                                 onclick="applyStrategy('${s.id}', ${s.stop_loss}, ${s.take_profit}, '${s.buy_timeframe}')">
+                                <strong>${s.name}</strong>
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                                    止损: ${s.stop_loss}% | 止盈: ${s.take_profit}% | 周期: ${s.buy_timeframe}
+                                </div>
+                                <div style="font-size: 11px; color: var(--text-secondary);">
+                                    交易对: ${s.symbols.join(', ')}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+
+                    showDialog('加载策略配置', html);
+                }
+            } catch (e) {
+                showToast('加载策略失败: ' + e.message, 'error');
+            }
+        }
+
+        // 应用策略配置
+        function applyStrategy(id, stopLoss, takeProfit, timeframe) {
+            document.getElementById('stop-loss').value = stopLoss;
+            document.getElementById('take-profit').value = takeProfit;
+            document.getElementById('timeframe').value = timeframe;
+            closeDialog();
+            showToast('已应用策略配置', 'success');
+        }
+
+        // 运行分析
+        async function runAnalysis() {
+            const symbol = document.getElementById('symbol').value;
+            if (!symbol) {
+                showToast('请选择交易对', 'error');
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+
+            try {
+                const params = new URLSearchParams({
+                    symbol: symbol,
+                    timeframe: document.getElementById('timeframe').value,
+                    hours: document.getElementById('hours').value,
+                    ema_short: document.getElementById('ema-short').value,
+                    ema_long: document.getElementById('ema-long').value,
+                    stop_loss_pct: document.getElementById('stop-loss').value,
+                    take_profit_pct: document.getElementById('take-profit').value
+                });
+
+                const resp = await fetch(`/api/strategy-analyzer/analyze?${params}`);
+                const data = await resp.json();
+
+                if (data.success) {
+                    analysisData = data.data;
+                    renderResults(data.data);
+                } else {
+                    showToast(data.error || '分析失败', 'error');
+                }
+            } catch (e) {
+                showToast('分析请求失败: ' + e.message, 'error');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // 渲染结果
+        function renderResults(data) {
+            document.getElementById('results').style.display = 'block';
+
+            // 行情概览
+            const regime = data.regime;
+            const regimeBadge = document.getElementById('regime-badge');
+            regimeBadge.className = `regime-badge regime-${regime.type}`;
+            regimeBadge.textContent = regime.name;
+
+            document.getElementById('price-change').textContent = `${regime.price_change_pct > 0 ? '+' : ''}${regime.price_change_pct}%`;
+            document.getElementById('price-change').className = `stat-value ${regime.price_change_pct >= 0 ? 'stat-positive' : 'stat-negative'}`;
+
+            document.getElementById('volatility').textContent = `${regime.volatility}%`;
+            document.getElementById('golden-crosses').textContent = data.signals.golden_crosses;
+            document.getElementById('death-crosses').textContent = data.signals.death_crosses;
+
+            // 交易统计
+            const stats = data.statistics;
+            document.getElementById('total-trades').textContent = stats.total_trades;
+
+            const winRateEl = document.getElementById('win-rate');
+            winRateEl.textContent = `${stats.win_rate}%`;
+            winRateEl.className = `stat-value ${stats.win_rate >= 50 ? 'stat-positive' : 'stat-negative'}`;
+
+            const pnlEl = document.getElementById('total-pnl');
+            pnlEl.textContent = `${stats.total_pnl_pct > 0 ? '+' : ''}${stats.total_pnl_pct}%`;
+            pnlEl.className = `stat-value ${stats.total_pnl_pct >= 0 ? 'stat-positive' : 'stat-negative'}`;
+
+            document.getElementById('avg-win').textContent = `+${stats.avg_win_pct}%`;
+            document.getElementById('avg-loss').textContent = `${stats.avg_loss_pct}%`;
+            document.getElementById('exit-breakdown').textContent = `${stats.stop_loss_exits}/${stats.take_profit_exits}/${stats.signal_exits}`;
+
+            // 优化建议
+            renderSuggestions(data.suggestions);
+
+            // 交易记录
+            renderTrades(data.trades);
+
+            // 图表
+            renderChart(data.klines);
+        }
+
+        // 渲染建议
+        function renderSuggestions(suggestions) {
+            const container = document.getElementById('suggestions');
+
+            if (!suggestions || suggestions.length === 0) {
+                container.innerHTML = `
+                    <div class="suggestion suggestion-success">
+                        <span class="suggestion-icon">✓</span>
+                        <div class="suggestion-content">
+                            <h4>参数表现良好</h4>
+                            <p>当前参数配置在该时间段表现不错，无需调整</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = suggestions.map(s => {
+                const icons = { warning: '⚠', success: '✓', info: 'ℹ' };
+                return `
+                    <div class="suggestion suggestion-${s.type}">
+                        <span class="suggestion-icon">${icons[s.type] || 'ℹ'}</span>
+                        <div class="suggestion-content">
+                            <h4>${s.title}</h4>
+                            <p>${s.content}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 渲染交易记录
+        function renderTrades(trades) {
+            const tbody = document.getElementById('trades-table');
+
+            if (!trades || trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">暂无交易记录</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = trades.map(t => {
+                const exitReasons = {
+                    'STOP_LOSS': '止损',
+                    'TAKE_PROFIT': '止盈',
+                    'SIGNAL_EXIT': '信号出场'
+                };
+                const exitClass = {
+                    'STOP_LOSS': 'badge-danger',
+                    'TAKE_PROFIT': 'badge-success',
+                    'SIGNAL_EXIT': 'badge-info'
+                };
+
+                return `
+                    <tr>
+                        <td><span class="badge ${t.type === 'LONG' ? 'badge-success' : 'badge-danger'}">${t.type === 'LONG' ? '做多' : '做空'}</span></td>
+                        <td>${t.entry_time}</td>
+                        <td>${t.entry_price}</td>
+                        <td>${t.exit_time}</td>
+                        <td>${t.exit_price}</td>
+                        <td><span class="badge ${exitClass[t.exit_reason]}">${exitReasons[t.exit_reason]}</span></td>
+                        <td class="${t.pnl_pct >= 0 ? 'stat-positive' : 'stat-negative'}">${t.pnl_pct > 0 ? '+' : ''}${t.pnl_pct}%</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 渲染图表
+        function renderChart(klines) {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+
+            if (priceChart) {
+                priceChart.destroy();
+            }
+
+            const labels = klines.map(k => k.timestamp.split(' ')[1] || k.timestamp);
+            const closeData = klines.map(k => k.close);
+            const emaShortData = klines.map(k => k.ema_short);
+            const emaLongData = klines.map(k => k.ema_long);
+
+            // 找出信号点
+            const goldenCrossPoints = [];
+            const deathCrossPoints = [];
+            klines.forEach((k, i) => {
+                if (k.signal === 1) {
+                    goldenCrossPoints.push({ x: i, y: k.close });
+                } else if (k.signal === -1) {
+                    deathCrossPoints.push({ x: i, y: k.close });
+                }
+            });
+
+            priceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '收盘价',
+                            data: closeData,
+                            borderColor: '#58a6ff',
+                            backgroundColor: 'rgba(88, 166, 255, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.1,
+                            pointRadius: 0
+                        },
+                        {
+                            label: `EMA${document.getElementById('ema-short').value}`,
+                            data: emaShortData,
+                            borderColor: '#3fb950',
+                            borderWidth: 1.5,
+                            fill: false,
+                            tension: 0.1,
+                            pointRadius: 0
+                        },
+                        {
+                            label: `EMA${document.getElementById('ema-long').value}`,
+                            data: emaLongData,
+                            borderColor: '#f85149',
+                            borderWidth: 1.5,
+                            fill: false,
+                            tension: 0.1,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#c9d1d9' }
+                        },
+                        tooltip: {
+                            backgroundColor: '#21262d',
+                            titleColor: '#c9d1d9',
+                            bodyColor: '#8b949e',
+                            borderColor: '#30363d',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#8b949e', maxRotation: 45 },
+                            grid: { color: 'rgba(48, 54, 61, 0.5)' }
+                        },
+                        y: {
+                            ticks: { color: '#8b949e' },
+                            grid: { color: 'rgba(48, 54, 61, 0.5)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Toast通知
+        function showToast(message, type = 'info') {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // 对话框
+        let currentDialog = null;
+
+        function showDialog(title, content) {
+            if (currentDialog) closeDialog();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'dialog-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            `;
+
+            overlay.innerHTML = `
+                <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; max-width: 500px; max-height: 80vh; overflow-y: auto;">
+                    <div style="padding: 16px 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="font-size: 16px;">${title}</h3>
+                        <button onclick="closeDialog()" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 20px;">&times;</button>
+                    </div>
+                    ${content}
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+            currentDialog = overlay;
+
+            overlay.onclick = (e) => {
+                if (e.target === overlay) closeDialog();
+            };
+        }
+
+        function closeDialog() {
+            if (currentDialog) {
+                currentDialog.remove();
+                currentDialog = null;
+            }
+        }
+    </script>
+</body>
+</html>

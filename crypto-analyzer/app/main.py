@@ -502,6 +502,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册策略分析API路由
+try:
+    from app.api.strategy_analyzer_api import router as strategy_analyzer_router
+    app.include_router(strategy_analyzer_router)
+    logger.info("✅ 策略分析API路由已注册（/api/strategy-analyzer）")
+except Exception as e:
+    logger.warning(f"⚠️  策略分析API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 
 # ==================== API路由 ====================
 
@@ -791,6 +801,18 @@ async def market_regime_page():
         return FileResponse(str(regime_path))
     else:
         raise HTTPException(status_code=404, detail="Market regime page not found")
+
+
+@app.get("/strategy_analyzer")
+async def strategy_analyzer_page():
+    """
+    48小时策略分析与参数优化页面
+    """
+    analyzer_path = project_root / "templates" / "strategy_analyzer.html"
+    if analyzer_path.exists():
+        return FileResponse(str(analyzer_path))
+    else:
+        raise HTTPException(status_code=404, detail="Strategy analyzer page not found")
 
 
 @app.get("/strategy_manager")
