@@ -88,7 +88,8 @@ async def analyze_symbol(
 
         # 1. 获取K线数据
         cursor.execute("""
-            SELECT timestamp, open, high, low, close, volume
+            SELECT timestamp, open_price as open, high_price as high,
+                   low_price as low, close_price as close, volume
             FROM kline_data
             WHERE symbol = %s AND timeframe = %s
               AND timestamp > DATE_SUB(NOW(), INTERVAL %s HOUR)
@@ -594,7 +595,7 @@ async def get_strategies():
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT id, name, symbols, config
+            SELECT id, name, config
             FROM trading_strategies
             WHERE enabled = 1
         """)
@@ -605,10 +606,14 @@ async def get_strategies():
         result = []
         for s in strategies:
             config = json.loads(s['config']) if s['config'] else {}
+            # symbols 从 config.symbols 中获取
+            symbols = config.get('symbols', [])
+            if isinstance(symbols, str):
+                symbols = [symbols]
             result.append({
                 'id': str(s['id']),
                 'name': s['name'],
-                'symbols': json.loads(s['symbols']) if s['symbols'] else [],
+                'symbols': symbols,
                 'stop_loss': config.get('stopLoss', 2.5),
                 'take_profit': config.get('takeProfit', 4.0),
                 'buy_timeframe': config.get('buyTimeframe', '15m'),
