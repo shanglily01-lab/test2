@@ -455,10 +455,77 @@
                 </div>
             </div>
 
-            <!-- 交易统计 -->
+            <!-- 模式对比 -->
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">模拟交易统计</span>
+                    <span class="card-title">出场模式对比</span>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary" id="btn-mode-fixed" onclick="switchMode('fixed')">固定止盈止损</button>
+                        <button class="btn btn-primary" id="btn-mode-trend" onclick="switchMode('trend')">趋势跟踪</button>
+                    </div>
+                </div>
+                <div class="two-col" style="margin-bottom: 16px;">
+                    <!-- 固定止盈止损模式 -->
+                    <div class="stat-card" style="border: 2px solid var(--border-color);" id="mode-fixed-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <span style="font-weight: 600; color: var(--accent-yellow);">固定止盈止损</span>
+                            <span class="badge badge-warning" id="fixed-winner-badge" style="display: none;">更优</span>
+                        </div>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">到达固定止盈/止损价格或反向信号时出场</p>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;">
+                            <div>
+                                <div class="stat-value" style="font-size: 18px;" id="fixed-pnl">--</div>
+                                <div class="stat-label">总盈亏</div>
+                            </div>
+                            <div>
+                                <div class="stat-value" style="font-size: 18px;" id="fixed-winrate">--</div>
+                                <div class="stat-label">胜率</div>
+                            </div>
+                            <div>
+                                <div class="stat-value" style="font-size: 18px;" id="fixed-trades">--</div>
+                                <div class="stat-label">交易数</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 11px; color: var(--text-secondary);">
+                            出场: <span id="fixed-exits">止损 0 / 止盈 0 / 信号 0</span>
+                        </div>
+                    </div>
+                    <!-- 趋势跟踪模式 -->
+                    <div class="stat-card" style="border: 2px solid var(--accent-green);" id="mode-trend-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <span style="font-weight: 600; color: var(--accent-green);">趋势跟踪（推荐）</span>
+                            <span class="badge badge-success" id="trend-winner-badge" style="display: none;">更优</span>
+                        </div>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">只在趋势反转时出场，移动止损仅作保护</p>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center;">
+                            <div>
+                                <div class="stat-value" style="font-size: 18px;" id="trend-pnl">--</div>
+                                <div class="stat-label">总盈亏</div>
+                            </div>
+                            <div>
+                                <div class="stat-value" style="font-size: 18px;" id="trend-winrate">--</div>
+                                <div class="stat-label">胜率</div>
+                            </div>
+                            <div>
+                                <div class="stat-value" style="font-size: 18px;" id="trend-trades">--</div>
+                                <div class="stat-label">交易数</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 11px; color: var(--text-secondary);">
+                            出场: <span id="trend-exits">趋势反转 0 / 移动止损 0</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="mode-diff" style="text-align: center; padding: 10px; background: var(--bg-tertiary); border-radius: 8px;">
+                    <span style="color: var(--text-secondary);">对比差异: </span>
+                    <span id="pnl-diff" style="font-weight: 600;">--</span>
+                </div>
+            </div>
+
+            <!-- 当前模式交易统计 -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">当前模式统计 (<span id="current-mode-name">趋势跟踪</span>)</span>
                 </div>
                 <div class="stats-grid">
                     <div class="stat-card">
@@ -483,7 +550,7 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-value" id="exit-breakdown">--</div>
-                        <div class="stat-label">止损/止盈/信号出场</div>
+                        <div class="stat-label">出场分布</div>
                     </div>
                 </div>
             </div>
@@ -549,11 +616,36 @@
     <script>
         let priceChart = null;
         let analysisData = null;
+        let currentMode = 'trend';  // 当前选中的模式
 
         // 初始化
         document.addEventListener('DOMContentLoaded', () => {
             loadSymbols();
         });
+
+        // 切换出场模式
+        function switchMode(mode) {
+            currentMode = mode;
+
+            // 更新按钮样式
+            document.getElementById('btn-mode-fixed').className = mode === 'fixed' ? 'btn btn-primary' : 'btn btn-secondary';
+            document.getElementById('btn-mode-trend').className = mode === 'trend' ? 'btn btn-primary' : 'btn btn-secondary';
+
+            // 更新卡片边框
+            document.getElementById('mode-fixed-card').style.border = mode === 'fixed' ? '2px solid var(--accent-blue)' : '2px solid var(--border-color)';
+            document.getElementById('mode-trend-card').style.border = mode === 'trend' ? '2px solid var(--accent-green)' : '2px solid var(--border-color)';
+
+            // 更新模式名称
+            document.getElementById('current-mode-name').textContent = mode === 'trend' ? '趋势跟踪' : '固定止盈止损';
+
+            // 重新渲染统计和交易记录
+            if (analysisData) {
+                const stats = mode === 'trend' ? analysisData.statistics_trend : analysisData.statistics_fixed;
+                const trades = mode === 'trend' ? analysisData.trades_trend : analysisData.trades_fixed;
+                renderStats(stats);
+                renderTrades(trades);
+            }
+        }
 
         // 加载交易对
         async function loadSymbols() {
@@ -670,8 +762,60 @@
             document.getElementById('golden-crosses').textContent = data.signals.golden_crosses;
             document.getElementById('death-crosses').textContent = data.signals.death_crosses;
 
-            // 交易统计
-            const stats = data.statistics;
+            // 模式对比
+            renderModeComparison(data);
+
+            // 当前模式统计
+            const stats = currentMode === 'trend' ? data.statistics_trend : data.statistics_fixed;
+            renderStats(stats);
+
+            // 优化建议
+            renderSuggestions(data.suggestions);
+
+            // 交易记录
+            const trades = currentMode === 'trend' ? data.trades_trend : data.trades_fixed;
+            renderTrades(trades);
+
+            // 图表
+            renderChart(data.klines);
+        }
+
+        // 渲染模式对比
+        function renderModeComparison(data) {
+            const comp = data.mode_comparison;
+            const statsFixed = data.statistics_fixed;
+            const statsTrend = data.statistics_trend;
+
+            // 固定模式统计
+            const fixedPnl = document.getElementById('fixed-pnl');
+            fixedPnl.textContent = `${comp.fixed.total_pnl > 0 ? '+' : ''}${comp.fixed.total_pnl}%`;
+            fixedPnl.className = `stat-value ${comp.fixed.total_pnl >= 0 ? 'stat-positive' : 'stat-negative'}`;
+            document.getElementById('fixed-winrate').textContent = `${comp.fixed.win_rate}%`;
+            document.getElementById('fixed-trades').textContent = comp.fixed.trades;
+            document.getElementById('fixed-exits').textContent = `止损 ${statsFixed.stop_loss_exits} / 止盈 ${statsFixed.take_profit_exits} / 信号 ${statsFixed.signal_exits}`;
+
+            // 趋势跟踪模式统计
+            const trendPnl = document.getElementById('trend-pnl');
+            trendPnl.textContent = `${comp.trend.total_pnl > 0 ? '+' : ''}${comp.trend.total_pnl}%`;
+            trendPnl.className = `stat-value ${comp.trend.total_pnl >= 0 ? 'stat-positive' : 'stat-negative'}`;
+            document.getElementById('trend-winrate').textContent = `${comp.trend.win_rate}%`;
+            document.getElementById('trend-trades').textContent = comp.trend.trades;
+            document.getElementById('trend-exits').textContent = `趋势反转 ${statsTrend.trend_reverse_exits} / 移动止损 ${statsTrend.trailing_stop_exits}`;
+
+            // 显示更优标签
+            document.getElementById('fixed-winner-badge').style.display = comp.better_mode === 'fixed' ? 'inline' : 'none';
+            document.getElementById('trend-winner-badge').style.display = comp.better_mode === 'trend' ? 'inline' : 'none';
+
+            // 对比差异
+            const diffEl = document.getElementById('pnl-diff');
+            const diff = comp.pnl_diff;
+            const betterName = comp.better_mode === 'trend' ? '趋势跟踪' : '固定止盈止损';
+            diffEl.textContent = `${betterName} 多赚 ${diff}%`;
+            diffEl.className = comp.better_mode === 'trend' ? 'stat-positive' : 'stat-neutral';
+        }
+
+        // 渲染统计数据
+        function renderStats(stats) {
             document.getElementById('total-trades').textContent = stats.total_trades;
 
             const winRateEl = document.getElementById('win-rate');
@@ -684,16 +828,13 @@
 
             document.getElementById('avg-win').textContent = `+${stats.avg_win_pct}%`;
             document.getElementById('avg-loss').textContent = `${stats.avg_loss_pct}%`;
-            document.getElementById('exit-breakdown').textContent = `${stats.stop_loss_exits}/${stats.take_profit_exits}/${stats.signal_exits}`;
 
-            // 优化建议
-            renderSuggestions(data.suggestions);
-
-            // 交易记录
-            renderTrades(data.trades);
-
-            // 图表
-            renderChart(data.klines);
+            // 根据模式显示不同的出场分布
+            if (currentMode === 'trend') {
+                document.getElementById('exit-breakdown').textContent = `反转${stats.trend_reverse_exits}/止损${stats.trailing_stop_exits}`;
+            } else {
+                document.getElementById('exit-breakdown').textContent = `止损${stats.stop_loss_exits}/止盈${stats.take_profit_exits}/信号${stats.signal_exits}`;
+            }
         }
 
         // 渲染建议
@@ -732,7 +873,7 @@
             const tbody = document.getElementById('trades-table');
 
             if (!trades || trades.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-secondary);">暂无交易记录</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">暂无交易记录</td></tr>';
                 return;
             }
 
@@ -740,13 +881,20 @@
                 const exitReasons = {
                     'STOP_LOSS': '止损',
                     'TAKE_PROFIT': '止盈',
-                    'SIGNAL_EXIT': '信号出场'
+                    'SIGNAL_EXIT': '信号出场',
+                    'TREND_REVERSE': '趋势反转',
+                    'TRAILING_STOP': '移动止损'
                 };
                 const exitClass = {
                     'STOP_LOSS': 'badge-danger',
                     'TAKE_PROFIT': 'badge-success',
-                    'SIGNAL_EXIT': 'badge-info'
+                    'SIGNAL_EXIT': 'badge-info',
+                    'TREND_REVERSE': 'badge-warning',
+                    'TRAILING_STOP': 'badge-danger'
                 };
+
+                // 显示最大盈利（趋势跟踪模式）
+                const maxProfit = t.max_profit !== undefined ? `<br><span style="font-size:11px;color:var(--text-secondary);">最高${t.max_profit}%</span>` : '';
 
                 return `
                     <tr>
@@ -755,8 +903,8 @@
                         <td>${t.entry_price}</td>
                         <td>${t.exit_time}</td>
                         <td>${t.exit_price}</td>
-                        <td><span class="badge ${exitClass[t.exit_reason]}">${exitReasons[t.exit_reason]}</span></td>
-                        <td class="${t.pnl_pct >= 0 ? 'stat-positive' : 'stat-negative'}">${t.pnl_pct > 0 ? '+' : ''}${t.pnl_pct}%</td>
+                        <td><span class="badge ${exitClass[t.exit_reason] || 'badge-info'}">${exitReasons[t.exit_reason] || t.exit_reason}</span></td>
+                        <td class="${t.pnl_pct >= 0 ? 'stat-positive' : 'stat-negative'}">${t.pnl_pct > 0 ? '+' : ''}${t.pnl_pct}%${maxProfit}</td>
                     </tr>
                 `;
             }).join('');

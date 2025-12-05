@@ -141,13 +141,13 @@ async def analyze_symbol(
                 df.at[df.index[i], 'signal'] = -1
                 df.at[df.index[i], 'signal_type'] = 'DEATH_CROSS'
 
-        # 4. 模拟交易
-        trades = []
+        # 4. 模拟交易 - 两种模式对比
+        # 模式1: 固定止盈止损（传统模式）
+        trades_fixed = []
         position = None
 
         for i, row in df.iterrows():
             if row['signal'] == 1 and position is None:
-                # 做多入场
                 position = {
                     'type': 'LONG',
                     'entry_time': row['timestamp'],
@@ -156,7 +156,6 @@ async def analyze_symbol(
                     'take_profit': row['close'] * (1 + take_profit_pct / 100)
                 }
             elif row['signal'] == -1 and position is None:
-                # 做空入场
                 position = {
                     'type': 'SHORT',
                     'entry_time': row['timestamp'],
@@ -166,7 +165,6 @@ async def analyze_symbol(
                 }
 
             if position:
-                # 检查止损止盈
                 exit_reason = None
                 exit_price = None
 
@@ -177,28 +175,27 @@ async def analyze_symbol(
                     elif row['high'] >= position['take_profit']:
                         exit_reason = 'TAKE_PROFIT'
                         exit_price = position['take_profit']
-                    elif row['signal'] == -1:  # 反向信号
+                    elif row['signal'] == -1:
                         exit_reason = 'SIGNAL_EXIT'
                         exit_price = row['close']
-                else:  # SHORT
+                else:
                     if row['high'] >= position['stop_loss']:
                         exit_reason = 'STOP_LOSS'
                         exit_price = position['stop_loss']
                     elif row['low'] <= position['take_profit']:
                         exit_reason = 'TAKE_PROFIT'
                         exit_price = position['take_profit']
-                    elif row['signal'] == 1:  # 反向信号
+                    elif row['signal'] == 1:
                         exit_reason = 'SIGNAL_EXIT'
                         exit_price = row['close']
 
                 if exit_reason:
-                    # 计算盈亏
                     if position['type'] == 'LONG':
                         pnl_pct = (exit_price - position['entry_price']) / position['entry_price'] * 100
                     else:
                         pnl_pct = (position['entry_price'] - exit_price) / position['entry_price'] * 100
 
-                    trades.append({
+                    trades_fixed.append({
                         'type': position['type'],
                         'entry_time': position['entry_time'].strftime('%Y-%m-%d %H:%M'),
                         'entry_price': round(position['entry_price'], 4),
@@ -209,17 +206,133 @@ async def analyze_symbol(
                     })
                     position = None
 
-        # 5. 统计分析
+        # 模式2: 趋势跟踪模式（只在趋势反转时出场，止损仅作保护）
+        trades_trend = []
+        position = None
+
+        for i, row in df.iterrows():
+            if row['signal'] == 1 and position is None:
+                position = {
+                    'type': 'LONG',
+                    'entry_time': row['timestamp'],
+                    'entry_price': row['close'],
+                    'stop_loss': row['close'] * (1 - stop_loss_pct / 100),  # 保护性止损
+                    'max_price': row['close']  # 跟踪最高价
+                }
+            elif row['signal'] == -1 and position is None:
+                position = {
+                    'type': 'SHORT',
+                    'entry_time': row['timestamp'],
+                    'entry_price': row['close'],
+                    'stop_loss': row['close'] * (1 + stop_loss_pct / 100),
+                    'min_price': row['close']  # 跟踪最低价
+                }
+
+            if position:
+                exit_reason = None
+                exit_price = None
+
+                if position['type'] == 'LONG':
+                    # 更新最高价（用于移动止损）
+                    if row['high'] > position.get('max_price', position['entry_price']):
+                        position['max_price'] = row['high']
+                        # 移动止损：最高价回撤止损比例时触发
+                        position['trailing_stop'] = position['max_price'] * (1 - stop_loss_pct / 100)
+
+                    trailing_stop = position.get('trailing_stop', position['stop_loss'])
+
+                    # 只在趋势反转（死叉）或触及移动止损时出场
+                    if row['signal'] == -1:
+                        exit_reason = 'TREND_REVERSE'  # 趋势反转
+                        exit_price = row['close']
+                    elif row['low'] <= trailing_stop:
+                        exit_reason = 'TRAILING_STOP'  # 移动止损
+                        exit_price = trailing_stop
+                else:  # SHORT
+                    if row['low'] < position.get('min_price', position['entry_price']):
+                        position['min_price'] = row['low']
+                        position['trailing_stop'] = position['min_price'] * (1 + stop_loss_pct / 100)
+
+                    trailing_stop = position.get('trailing_stop', position['stop_loss'])
+
+                    if row['signal'] == 1:
+                        exit_reason = 'TREND_REVERSE'
+                        exit_price = row['close']
+                    elif row['high'] >= trailing_stop:
+                        exit_reason = 'TRAILING_STOP'
+                        exit_price = trailing_stop
+
+                if exit_reason:
+                    if position['type'] == 'LONG':
+                        pnl_pct = (exit_price - position['entry_price']) / position['entry_price'] * 100
+                    else:
+                        pnl_pct = (position['entry_price'] - exit_price) / position['entry_price'] * 100
+
+                    trades_trend.append({
+                        'type': position['type'],
+                        'entry_time': position['entry_time'].strftime('%Y-%m-%d %H:%M'),
+                        'entry_price': round(position['entry_price'], 4),
+                        'exit_time': row['timestamp'].strftime('%Y-%m-%d %H:%M'),
+                        'exit_price': round(exit_price, 4),
+                        'exit_reason': exit_reason,
+                        'pnl_pct': round(pnl_pct, 2),
+                        'max_profit': round((position.get('max_price', position['entry_price']) - position['entry_price']) / position['entry_price'] * 100, 2) if position['type'] == 'LONG' else round((position['entry_price'] - position.get('min_price', position['entry_price'])) / position['entry_price'] * 100, 2)
+                    })
+                    position = None
+
+        # 5. 统计分析 - 两种模式分别计算
         golden_crosses = len(df[df['signal'] == 1])
         death_crosses = len(df[df['signal'] == -1])
 
+        def calc_stats(trades_list, mode_name):
+            """计算交易统计"""
+            if not trades_list:
+                return {
+                    "mode": mode_name,
+                    "total_trades": 0,
+                    "winning_trades": 0,
+                    "losing_trades": 0,
+                    "win_rate": 0,
+                    "total_pnl_pct": 0,
+                    "avg_win_pct": 0,
+                    "avg_loss_pct": 0,
+                    "stop_loss_exits": 0,
+                    "take_profit_exits": 0,
+                    "signal_exits": 0,
+                    "trend_reverse_exits": 0,
+                    "trailing_stop_exits": 0
+                }
+
+            winning = [t for t in trades_list if t['pnl_pct'] > 0]
+            losing = [t for t in trades_list if t['pnl_pct'] <= 0]
+
+            return {
+                "mode": mode_name,
+                "total_trades": len(trades_list),
+                "winning_trades": len(winning),
+                "losing_trades": len(losing),
+                "win_rate": round(len(winning) / len(trades_list) * 100, 1),
+                "total_pnl_pct": round(sum(t['pnl_pct'] for t in trades_list), 2),
+                "avg_win_pct": round(np.mean([t['pnl_pct'] for t in winning]), 2) if winning else 0,
+                "avg_loss_pct": round(np.mean([t['pnl_pct'] for t in losing]), 2) if losing else 0,
+                "stop_loss_exits": len([t for t in trades_list if t['exit_reason'] == 'STOP_LOSS']),
+                "take_profit_exits": len([t for t in trades_list if t['exit_reason'] == 'TAKE_PROFIT']),
+                "signal_exits": len([t for t in trades_list if t['exit_reason'] == 'SIGNAL_EXIT']),
+                "trend_reverse_exits": len([t for t in trades_list if t['exit_reason'] == 'TREND_REVERSE']),
+                "trailing_stop_exits": len([t for t in trades_list if t['exit_reason'] == 'TRAILING_STOP'])
+            }
+
+        stats_fixed = calc_stats(trades_fixed, "固定止盈止损")
+        stats_trend = calc_stats(trades_trend, "趋势跟踪")
+
+        # 主统计使用趋势跟踪模式
+        trades = trades_trend
         winning_trades = [t for t in trades if t['pnl_pct'] > 0]
         losing_trades = [t for t in trades if t['pnl_pct'] <= 0]
-
-        win_rate = len(winning_trades) / len(trades) * 100 if trades else 0
-        total_pnl = sum(t['pnl_pct'] for t in trades)
-        avg_win = np.mean([t['pnl_pct'] for t in winning_trades]) if winning_trades else 0
-        avg_loss = np.mean([t['pnl_pct'] for t in losing_trades]) if losing_trades else 0
+        win_rate = stats_trend['win_rate']
+        total_pnl = stats_trend['total_pnl_pct']
+        avg_win = stats_trend['avg_win_pct']
+        avg_loss = stats_trend['avg_loss_pct']
 
         # 6. 行情分析
         price_change = (df.iloc[-1]['close'] - df.iloc[0]['close']) / df.iloc[0]['close'] * 100
@@ -250,22 +363,30 @@ async def analyze_symbol(
                 'content': f'当前胜率仅 {win_rate:.1f}%，建议增加趋势确认条件（如MA10确认）'
             })
 
-        # 根据止损触发次数
-        stop_loss_count = len([t for t in trades if t['exit_reason'] == 'STOP_LOSS'])
-        if stop_loss_count > len(trades) * 0.5 and trades:
+        # 根据止损触发次数（趋势跟踪模式）
+        trailing_stop_count = stats_trend['trailing_stop_exits']
+        trend_reverse_count = stats_trend['trend_reverse_exits']
+        if trailing_stop_count > len(trades_trend) * 0.5 and trades_trend:
             suggestions.append({
                 'type': 'warning',
-                'title': '止损触发频繁',
-                'content': f'止损触发次数占 {stop_loss_count}/{len(trades)}，建议适当放宽止损（当前 {stop_loss_pct}% → 建议 {stop_loss_pct + 0.5}%）'
+                'title': '移动止损触发频繁',
+                'content': f'移动止损触发 {trailing_stop_count}/{len(trades_trend)} 次，建议适当放宽止损比例（当前 {stop_loss_pct}% → 建议 {stop_loss_pct + 0.5}%）'
             })
 
-        # 根据止盈触发次数
-        take_profit_count = len([t for t in trades if t['exit_reason'] == 'TAKE_PROFIT'])
-        if take_profit_count == 0 and trades:
+        # 模式对比建议
+        if stats_trend['total_pnl_pct'] > stats_fixed['total_pnl_pct']:
+            pnl_diff = stats_trend['total_pnl_pct'] - stats_fixed['total_pnl_pct']
+            suggestions.append({
+                'type': 'success',
+                'title': '趋势跟踪模式更优',
+                'content': f'趋势跟踪模式收益 {stats_trend["total_pnl_pct"]:.2f}% 高于固定止盈止损 {stats_fixed["total_pnl_pct"]:.2f}%，多赚 {pnl_diff:.2f}%'
+            })
+        elif stats_fixed['total_pnl_pct'] > stats_trend['total_pnl_pct']:
+            pnl_diff = stats_fixed['total_pnl_pct'] - stats_trend['total_pnl_pct']
             suggestions.append({
                 'type': 'info',
-                'title': '止盈未触发',
-                'content': f'止盈从未触发，建议降低止盈目标（当前 {take_profit_pct}% → 建议 {take_profit_pct - 1}%）'
+                'title': '固定止盈止损模式更优',
+                'content': f'固定模式收益 {stats_fixed["total_pnl_pct"]:.2f}% 高于趋势跟踪 {stats_trend["total_pnl_pct"]:.2f}%，多赚 {pnl_diff:.2f}%。当前行情可能更适合固定目标'
             })
 
         # 根据行情类型给建议
@@ -323,18 +444,29 @@ async def analyze_symbol(
                     "death_crosses": death_crosses,
                     "total": golden_crosses + death_crosses
                 },
-                "trades": trades,
-                "statistics": {
-                    "total_trades": len(trades),
-                    "winning_trades": len(winning_trades),
-                    "losing_trades": len(losing_trades),
-                    "win_rate": round(win_rate, 1),
-                    "total_pnl_pct": round(total_pnl, 2),
-                    "avg_win_pct": round(avg_win, 2),
-                    "avg_loss_pct": round(avg_loss, 2),
-                    "stop_loss_exits": stop_loss_count,
-                    "take_profit_exits": take_profit_count,
-                    "signal_exits": len([t for t in trades if t['exit_reason'] == 'SIGNAL_EXIT'])
+                "trades": trades_trend,  # 主要显示趋势跟踪模式
+                "trades_fixed": trades_fixed,  # 固定止盈止损模式
+                "trades_trend": trades_trend,  # 趋势跟踪模式
+                "statistics": stats_trend,  # 主统计使用趋势跟踪
+                "statistics_fixed": stats_fixed,  # 固定模式统计
+                "statistics_trend": stats_trend,  # 趋势跟踪统计
+                "mode_comparison": {
+                    "fixed": {
+                        "name": "固定止盈止损",
+                        "description": "到达固定止盈/止损价格或反向信号时出场",
+                        "total_pnl": stats_fixed['total_pnl_pct'],
+                        "win_rate": stats_fixed['win_rate'],
+                        "trades": stats_fixed['total_trades']
+                    },
+                    "trend": {
+                        "name": "趋势跟踪",
+                        "description": "只在趋势反转时出场，移动止损仅作保护",
+                        "total_pnl": stats_trend['total_pnl_pct'],
+                        "win_rate": stats_trend['win_rate'],
+                        "trades": stats_trend['total_trades']
+                    },
+                    "better_mode": "trend" if stats_trend['total_pnl_pct'] >= stats_fixed['total_pnl_pct'] else "fixed",
+                    "pnl_diff": round(abs(stats_trend['total_pnl_pct'] - stats_fixed['total_pnl_pct']), 2)
                 },
                 "regime": {
                     "type": regime,
