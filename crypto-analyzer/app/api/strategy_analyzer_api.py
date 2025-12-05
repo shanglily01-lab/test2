@@ -655,6 +655,8 @@ async def get_strategies():
                 'stop_loss': config.get('stopLoss', 2.5),
                 'take_profit': config.get('takeProfit', 4.0),
                 'buy_timeframe': config.get('buyTimeframe', '15m'),
+                'ema_short': config.get('emaShortPeriod', 9),
+                'ema_long': config.get('emaLongPeriod', 26),
                 'adaptive_regime': config.get('adaptiveRegime', False)
             })
 
