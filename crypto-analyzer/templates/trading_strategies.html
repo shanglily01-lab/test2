@@ -2383,7 +2383,7 @@
                 const data = await response.json();
                 if (data.success) {
                     strategy.syncLive = newSyncLive;
-                    renderStrategies();
+                    loadStrategies();  // 重新加载策略列表
                     showToast(data.message || `已${actionText}`, 'success');
                 } else {
                     showToast(data.detail || `${actionText}失败`, 'error');
