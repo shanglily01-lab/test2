@@ -450,7 +450,17 @@ async def analyze_symbol(
             optimized_params['ema_short'] = new_ema_short
             optimized_params['ema_long'] = new_ema_long
 
-        # 8. 准备K线数据（只返回最近100条用于绘图）
+        # 8. 数据统计信息
+        data_stats = {
+            "total_klines": len(df),  # 实际加载的K线数量
+            "start_time": df.iloc[0]['timestamp'].strftime('%Y-%m-%d %H:%M'),
+            "end_time": df.iloc[-1]['timestamp'].strftime('%Y-%m-%d %H:%M'),
+            "hours_covered": round((df.iloc[-1]['timestamp'] - df.iloc[0]['timestamp']).total_seconds() / 3600, 1),
+            "expected_klines": hours * 4 if timeframe == '15m' else hours,  # 15分钟周期48小时约192条
+            "data_completeness": round(len(df) / (hours * 4 if timeframe == '15m' else hours) * 100, 1)
+        }
+
+        # 9. 准备K线数据（只返回最近100条用于绘图）
         kline_data = []
         for _, row in df.tail(100).iterrows():
             kline_data.append({
@@ -476,6 +486,7 @@ async def analyze_symbol(
                 "symbol": symbol,
                 "timeframe": timeframe,
                 "hours": hours,
+                "data_stats": data_stats,  # 数据统计信息
                 "klines": kline_data,
                 "signals": {
                     "golden_crosses": golden_crosses,

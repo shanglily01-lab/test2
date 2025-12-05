@@ -262,6 +262,108 @@
         }
 
         .back-link:hover { text-decoration: underline; }
+
+        /* Toast 通知样式 */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 2000;
+            animation: slideIn 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .toast.success {
+            background: linear-gradient(135deg, #238636, #2ea043);
+            border: 1px solid #3fb950;
+        }
+
+        .toast.error {
+            background: linear-gradient(135deg, #da3633, #f85149);
+            border: 1px solid #f85149;
+        }
+
+        .toast.info {
+            background: linear-gradient(135deg, #1f6feb, #388bfd);
+            border: 1px solid #58a6ff;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* 确认对话框样式 */
+        .confirm-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1500;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .confirm-dialog {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 420px;
+            width: 90%;
+            animation: scaleIn 0.2s ease;
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .confirm-dialog h3 {
+            color: #c9d1d9;
+            margin-bottom: 16px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .confirm-dialog h3.success { color: #3fb950; }
+        .confirm-dialog h3.error { color: #f85149; }
+        .confirm-dialog h3.warning { color: #d29922; }
+
+        .confirm-dialog .content {
+            color: #8b949e;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .confirm-dialog .buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .confirm-dialog .btn {
+            min-width: 80px;
+        }
     </style>
 </head>
 <body>
@@ -460,6 +562,108 @@
 
     <script>
         let currentStrategyId = null;
+
+        // Toast 通知
+        function showToast(message, type = 'info', duration = 3000) {
+            const existingToast = document.querySelector('.toast');
+            if (existingToast) existingToast.remove();
+
+            const icons = {
+                success: '✓',
+                error: '✗',
+                info: 'ℹ'
+            };
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `<span style="font-size: 18px;">${icons[type] || icons.info}</span> ${message}`;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        // 确认对话框
+        function showConfirmDialog(title, content, type = 'warning') {
+            return new Promise((resolve) => {
+                const icons = {
+                    success: '✓',
+                    error: '✗',
+                    warning: '⚠',
+                    danger: '⚠'
+                };
+
+                const overlay = document.createElement('div');
+                overlay.className = 'confirm-overlay';
+                overlay.innerHTML = `
+                    <div class="confirm-dialog">
+                        <h3 class="${type}">
+                            <span style="font-size: 22px;">${icons[type] || icons.warning}</span>
+                            ${title}
+                        </h3>
+                        <div class="content">${content}</div>
+                        <div class="buttons">
+                            <button class="btn btn-secondary" onclick="this.closest('.confirm-overlay').remove()">取消</button>
+                            <button class="btn ${type === 'danger' ? 'btn-danger' : 'btn-primary'}" id="confirm-yes-btn">确定</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                overlay.querySelector('#confirm-yes-btn').onclick = () => {
+                    overlay.remove();
+                    resolve(true);
+                };
+                overlay.querySelector('.btn-secondary').onclick = () => {
+                    overlay.remove();
+                    resolve(false);
+                };
+
+                // 点击背景关闭
+                overlay.onclick = (e) => {
+                    if (e.target === overlay) {
+                        overlay.remove();
+                        resolve(false);
+                    }
+                };
+            });
+        }
+
+        // 成功提示对话框（只有确定按钮）
+        function showSuccessDialog(title, content) {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'confirm-overlay';
+                overlay.innerHTML = `
+                    <div class="confirm-dialog">
+                        <h3 class="success">
+                            <span style="font-size: 22px;">✓</span>
+                            ${title}
+                        </h3>
+                        <div class="content">${content}</div>
+                        <div class="buttons">
+                            <button class="btn btn-primary" id="success-ok-btn">确定</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                overlay.querySelector('#success-ok-btn').onclick = () => {
+                    overlay.remove();
+                    resolve(true);
+                };
+
+                // 点击背景关闭
+                overlay.onclick = (e) => {
+                    if (e.target === overlay) {
+                        overlay.remove();
+                        resolve(true);
+                    }
+                };
+            });
+        }
 
         // Tab切换
         function showTab(tabId) {
@@ -726,20 +930,58 @@
                 const data = await resp.json();
 
                 if (data.success) {
-                    alert('保存成功');
                     closeModal();
+                    // 显示成功对话框
+                    const regimeNames = {
+                        'strong_uptrend': '强趋势上涨',
+                        'weak_uptrend': '弱趋势上涨',
+                        'ranging': '震荡行情',
+                        'weak_downtrend': '弱趋势下跌',
+                        'strong_downtrend': '强趋势下跌'
+                    };
+                    const regimeType = document.getElementById('param-regime-type').value;
+                    const regimeName = regimeNames[regimeType] || regimeType;
+                    const enabled = document.getElementById('param-enabled').checked;
+
+                    await showSuccessDialog(
+                        '保存成功',
+                        `<div style="text-align: left;">
+                            <p style="margin-bottom: 12px;"><strong>${regimeName}</strong> 参数配置已保存</p>
+                            <div style="background: #21262d; padding: 12px; border-radius: 6px; font-size: 13px;">
+                                <p>• 交易状态: <span style="color: ${enabled ? '#3fb950' : '#f85149'};">${enabled ? '启用' : '禁用'}</span></p>
+                                <p>• 持续趋势: ${params.sustainedTrend ? '是' : '否'}</p>
+                                <p>• 强度范围: ${params.sustainedTrendMinStrength}% ~ ${params.sustainedTrendMaxStrength}%</p>
+                                <p>• 止损/止盈: ${params.stopLossPercent}% / ${params.takeProfitPercent}%</p>
+                            </div>
+                        </div>`
+                    );
                     loadStrategyParams();
                 } else {
-                    alert('保存失败: ' + (data.detail || data.message));
+                    showToast('保存失败: ' + (data.detail || data.message), 'error', 5000);
                 }
             } catch (e) {
-                alert('保存失败: ' + e.message);
+                showToast('保存失败: ' + e.message, 'error', 5000);
             }
         };
 
         // 删除参数
         async function deleteParam(regimeType) {
-            if (!confirm(`确定删除 ${regimeType} 的参数配置？`)) return;
+            const regimeNames = {
+                'strong_uptrend': '强趋势上涨',
+                'weak_uptrend': '弱趋势上涨',
+                'ranging': '震荡行情',
+                'weak_downtrend': '弱趋势下跌',
+                'strong_downtrend': '强趋势下跌'
+            };
+            const regimeName = regimeNames[regimeType] || regimeType;
+
+            const confirmed = await showConfirmDialog(
+                '删除确认',
+                `确定要删除 <strong>${regimeName}</strong> 的参数配置吗？<br><br><span style="color: #8b949e;">删除后该行情类型将使用默认策略参数。</span>`,
+                'danger'
+            );
+
+            if (!confirmed) return;
 
             try {
                 const resp = await fetch(`/api/market-regime/params/${currentStrategyId}/${regimeType}`, {
@@ -748,12 +990,13 @@
                 const data = await resp.json();
 
                 if (data.success) {
+                    showToast(`${regimeName} 配置已删除`, 'success');
                     loadStrategyParams();
                 } else {
-                    alert('删除失败: ' + (data.detail || data.message));
+                    showToast('删除失败: ' + (data.detail || data.message), 'error', 5000);
                 }
             } catch (e) {
-                alert('删除失败: ' + e.message);
+                showToast('删除失败: ' + e.message, 'error', 5000);
             }
         }
 

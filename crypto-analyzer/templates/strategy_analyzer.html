@@ -379,7 +379,6 @@
                 <span class="card-title">分析参数</span>
                 <div style="display: flex; gap: 10px;">
                     <button class="btn btn-secondary" onclick="loadStrategies()">加载策略配置</button>
-                    <button class="btn btn-secondary" onclick="loadSavedParams()" id="btn-load-saved" style="display: none;">加载优化参数</button>
                     <button class="btn btn-primary" onclick="runAnalysis()">开始分析</button>
                 </div>
             </div>
@@ -430,6 +429,35 @@
 
         <!-- 结果区域 -->
         <div id="results" style="display: none;">
+            <!-- 数据统计信息 -->
+            <div class="card" style="background: linear-gradient(135deg, rgba(88, 166, 255, 0.1), rgba(63, 185, 80, 0.1));">
+                <div class="card-header" style="border-bottom: none; padding-bottom: 8px;">
+                    <span class="card-title" style="color: var(--accent-blue);">📊 分析数据范围</span>
+                </div>
+                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+                    <div class="stat-card" style="background: var(--bg-secondary);">
+                        <div class="stat-value stat-positive" id="data-klines">--</div>
+                        <div class="stat-label">实际K线数量</div>
+                    </div>
+                    <div class="stat-card" style="background: var(--bg-secondary);">
+                        <div class="stat-value" id="data-hours">--</div>
+                        <div class="stat-label">覆盖时长</div>
+                    </div>
+                    <div class="stat-card" style="background: var(--bg-secondary);">
+                        <div class="stat-value" id="data-start">--</div>
+                        <div class="stat-label">起始时间</div>
+                    </div>
+                    <div class="stat-card" style="background: var(--bg-secondary);">
+                        <div class="stat-value" id="data-end">--</div>
+                        <div class="stat-label">结束时间</div>
+                    </div>
+                    <div class="stat-card" style="background: var(--bg-secondary);">
+                        <div class="stat-value" id="data-completeness">--</div>
+                        <div class="stat-label">数据完整度</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 行情概览 -->
             <div class="card">
                 <div class="card-header">
@@ -572,10 +600,7 @@
                 <div class="card">
                     <div class="card-header">
                         <span class="card-title">优化建议</span>
-                        <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-success" onclick="applyOptimizedParams()" id="btn-apply-optimized" style="display: none;">应用优化参数</button>
-                            <button class="btn btn-secondary" onclick="saveOptimizedParams()" id="btn-save-optimized" style="display: none;">保存到本地</button>
-                        </div>
+                        <button class="btn btn-success" onclick="applyOptimizedParams()" id="btn-apply-optimized" style="display: none;">应用优化参数</button>
                     </div>
                     <!-- 优化参数预览 -->
                     <div id="optimized-params-preview" style="display: none; margin-bottom: 16px;">
@@ -631,126 +656,11 @@
         let priceChart = null;
         let analysisData = null;
         let currentMode = 'trend';  // 当前选中的模式
-        const STORAGE_KEY = 'strategy_analyzer_optimized_params';
 
         // 初始化
         document.addEventListener('DOMContentLoaded', () => {
             loadSymbols();
-            checkSavedParams();
         });
-
-        // 检查是否有保存的优化参数
-        function checkSavedParams() {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved) {
-                document.getElementById('btn-load-saved').style.display = 'inline-block';
-            }
-        }
-
-        // 保存优化参数到本地
-        function saveOptimizedParams() {
-            if (!analysisData || !analysisData.optimized_params) {
-                showToast('没有可保存的优化参数', 'error');
-                return;
-            }
-
-            const saveData = {
-                symbol: analysisData.symbol,
-                timeframe: analysisData.timeframe,
-                current_params: analysisData.current_params,
-                optimized_params: analysisData.optimized_params,
-                suggestions: analysisData.suggestions,
-                statistics: analysisData.statistics,
-                saved_at: new Date().toISOString()
-            };
-
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
-            document.getElementById('btn-load-saved').style.display = 'inline-block';
-            showToast('优化参数已保存到本地', 'success');
-        }
-
-        // 加载保存的优化参数
-        function loadSavedParams() {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (!saved) {
-                showToast('没有保存的优化参数', 'error');
-                return;
-            }
-
-            const data = JSON.parse(saved);
-            const savedTime = new Date(data.saved_at).toLocaleString('zh-CN');
-
-            let html = '<div style="padding: 20px;">';
-            html += `<p style="color: var(--text-secondary); margin-bottom: 16px;">保存时间: ${savedTime}</p>`;
-            html += `<p style="margin-bottom: 12px;">交易对: <strong>${data.symbol}</strong> | 周期: <strong>${data.timeframe}</strong></p>`;
-
-            html += '<div style="margin-bottom: 16px;">';
-            html += '<h4 style="margin-bottom: 8px; color: var(--accent-yellow);">原始参数:</h4>';
-            html += '<div class="param-comparison">';
-            html += `<div class="param-item"><span class="label">短期EMA</span><span class="value">${data.current_params.ema_short}</span></div>`;
-            html += `<div class="param-item"><span class="label">长期EMA</span><span class="value">${data.current_params.ema_long}</span></div>`;
-            html += `<div class="param-item"><span class="label">止损</span><span class="value">${data.current_params.stop_loss_pct}%</span></div>`;
-            html += `<div class="param-item"><span class="label">止盈</span><span class="value">${data.current_params.take_profit_pct}%</span></div>`;
-            html += '</div></div>';
-
-            html += '<div style="margin-bottom: 16px;">';
-            html += '<h4 style="margin-bottom: 8px; color: var(--accent-green);">优化参数:</h4>';
-            html += '<div class="param-comparison">';
-            html += `<div class="param-item"><span class="label">短期EMA</span><span class="value" style="color: ${data.optimized_params.ema_short !== data.current_params.ema_short ? 'var(--accent-green)' : 'inherit'};">${data.optimized_params.ema_short}</span></div>`;
-            html += `<div class="param-item"><span class="label">长期EMA</span><span class="value" style="color: ${data.optimized_params.ema_long !== data.current_params.ema_long ? 'var(--accent-green)' : 'inherit'};">${data.optimized_params.ema_long}</span></div>`;
-            html += `<div class="param-item"><span class="label">止损</span><span class="value" style="color: ${data.optimized_params.stop_loss_pct !== data.current_params.stop_loss_pct ? 'var(--accent-green)' : 'inherit'};">${data.optimized_params.stop_loss_pct}%</span></div>`;
-            html += `<div class="param-item"><span class="label">止盈</span><span class="value" style="color: ${data.optimized_params.take_profit_pct !== data.current_params.take_profit_pct ? 'var(--accent-green)' : 'inherit'};">${data.optimized_params.take_profit_pct}%</span></div>`;
-            if (data.optimized_params.exit_mode) {
-                html += `<div class="param-item"><span class="label">出场模式</span><span class="value" style="color: var(--accent-green);">${data.optimized_params.exit_mode === 'trend' ? '趋势跟踪' : '固定止盈止损'}</span></div>`;
-            }
-            html += '</div></div>';
-
-            html += '<div style="display: flex; gap: 10px; margin-top: 20px;">';
-            html += '<button class="btn btn-success" onclick="applySavedParams()">应用优化参数</button>';
-            html += '<button class="btn btn-secondary" onclick="clearSavedParams()">清除保存</button>';
-            html += '<button class="btn btn-secondary" onclick="closeDialog()">取消</button>';
-            html += '</div></div>';
-
-            showDialog('加载保存的优化参数', html);
-        }
-
-        // 应用保存的优化参数
-        function applySavedParams() {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (!saved) return;
-
-            const data = JSON.parse(saved);
-            const opt = data.optimized_params;
-
-            document.getElementById('ema-short').value = opt.ema_short;
-            document.getElementById('ema-long').value = opt.ema_long;
-            document.getElementById('stop-loss').value = opt.stop_loss_pct;
-            document.getElementById('take-profit').value = opt.take_profit_pct;
-
-            // 如果有保存的交易对，也设置它
-            const symbolSelect = document.getElementById('symbol');
-            const options = Array.from(symbolSelect.options);
-            const matchOption = options.find(o => o.value === data.symbol);
-            if (matchOption) {
-                symbolSelect.value = data.symbol;
-            }
-
-            // 如果有周期
-            if (data.timeframe) {
-                document.getElementById('timeframe').value = data.timeframe;
-            }
-
-            closeDialog();
-            showToast('已应用优化参数，点击"开始分析"进行测试', 'success');
-        }
-
-        // 清除保存的参数
-        function clearSavedParams() {
-            localStorage.removeItem(STORAGE_KEY);
-            document.getElementById('btn-load-saved').style.display = 'none';
-            closeDialog();
-            showToast('已清除保存的优化参数', 'info');
-        }
 
         // 应用当前分析结果中的优化参数
         function applyOptimizedParams() {
@@ -917,6 +827,9 @@
         function renderResults(data) {
             document.getElementById('results').style.display = 'block';
 
+            // 数据统计信息
+            renderDataStats(data.data_stats);
+
             // 行情概览
             const regime = data.regime;
             const regimeBadge = document.getElementById('regime-badge');
@@ -949,6 +862,21 @@
             renderChart(data.klines);
         }
 
+        // 渲染数据统计信息
+        function renderDataStats(stats) {
+            if (!stats) return;
+
+            document.getElementById('data-klines').textContent = `${stats.total_klines} 条`;
+            document.getElementById('data-hours').textContent = `${stats.hours_covered} 小时`;
+            document.getElementById('data-start').textContent = stats.start_time;
+            document.getElementById('data-end').textContent = stats.end_time;
+
+            const completeness = stats.data_completeness;
+            const completenessEl = document.getElementById('data-completeness');
+            completenessEl.textContent = `${completeness}%`;
+            completenessEl.className = `stat-value ${completeness >= 90 ? 'stat-positive' : completeness >= 70 ? 'stat-neutral' : 'stat-negative'}`;
+        }
+
         // 渲染优化参数预览（不自动填入，需用户手动点击应用）
         function renderOptimizedParams(data) {
             const current = data.current_params;
@@ -964,13 +892,11 @@
             if (!hasChanges) {
                 document.getElementById('optimized-params-preview').style.display = 'none';
                 document.getElementById('btn-apply-optimized').style.display = 'none';
-                document.getElementById('btn-save-optimized').style.display = 'none';
                 return;
             }
 
             // 显示按钮
             document.getElementById('btn-apply-optimized').style.display = 'inline-block';
-            document.getElementById('btn-save-optimized').style.display = 'inline-block';
             document.getElementById('optimized-params-preview').style.display = 'block';
 
             // 生成参数变化对比

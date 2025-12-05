@@ -1,12 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(echo \"尝试以下命令安装 lrzsz：\n\n# 方法1：使用 dnf\nsudo dnf install lrzsz -y\n\n# 如果找不到，尝试启用 EPEL\nsudo dnf install epel-release -y\nsudo dnf install lrzsz -y\n\n# 或者直接用 SCP 下载（在 Windows 终端运行）：\n# scp ec2-user@13.212.252.171:/home/ec2-user/crypto-analyzer/logs/app.log C:\\Users\\你的用户名\\Desktop\\\n\n# 或者用 sz 的替代方案 - 直接 cat 输出到本地：\n# ssh ec2-user@13.212.252.171 ''cat /path/to/logs/app.log'' > app.log\n\")",
-      "Bash(git --no-pager diff:*)",
-      "Bash(pip3 show:*)",
-      "Bash(ssh:*)",
-      "Bash(git --no-pager log:*)",
-      "Bash(pip3 list:*)"
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix: 修复实盘交易价格接口URL路径问题\n\n- 路径参数改为 {symbol:path} 支持带斜杠的交易对\n- 添加查询参数版本接口 /price?symbol=XXX 作为备选\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix: 添加positionSide参数支持双向持仓模式\n\n- 开仓订单添加 positionSide 参数\n- 止损/止盈订单添加 positionSide 参数\n- 平仓订单添加 positionSide 参数\n- 移除 reduceOnly 参数（双向模式不需要）\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: 完善实盘交易平仓功能\n\n- 新增 /close-by-symbol API，支持通过交易对和方向直接平仓\n- 前端平仓按钮改为调用新API，不再依赖本地position_id\n- 平仓成功后自动刷新持仓和余额\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: 实盘交易添加限价单支持\n\n- 新增订单类型选择（市价/限价）\n- 限价模式显示价格输入框\n- 默认使用当前市价作为限价\n- 预计保证金计算支持限价\n- 确认对话框显示订单类型和限价\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: 改进挂单撤单功能和限价单提示\n\n- 单个订单撤单按钮改为红色按钮+文字，更醒目\n- 撤单前添加确认对话框\n- 限价单模式显示提示：止损止盈将在成交后设置\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: 实盘限价单成交后自动设置止损止盈\n\n- 新增 LiveOrderMonitor 服务监控限价单成交状态\n- 每10秒检查 PENDING 状态的仓位\n- 限价单成交后自动设置止损止盈订单\n- 在 main.py 中集成监控服务的启动和停止\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix: 修复止损止盈价格验证逻辑\n\n- 做多时：止损价必须低于入场价/当前价，止盈价必须高于入场价/当前价\n- 做空时：止损价必须高于入场价/当前价，止盈价必须低于入场价/当前价\n- 无效价格会跳过设置并记录警告日志\n- 防止 \"Order would immediately trigger\" 错误\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix: 修复挂单列表止损止盈价格显示为0的问题\n\n- 止损/止盈订单使用 stopPrice 字段而非 price 字段\n- 根据订单类型正确获取价格\n- 订单类型显示为中文：止损、止盈、限价、市价\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit:*)",
+      "Bash(mysql:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []
