@@ -194,10 +194,20 @@ class FuturesLimitOrderExecutor:
             # 获取买入时间周期（默认15m）
             buy_signals = config.get('buySignals', {})
             buy_timeframe = '15m'
-            if buy_signals.get('ema_5m', {}).get('enabled'):
-                buy_timeframe = '5m'
-            elif buy_signals.get('ema_1h', {}).get('enabled'):
-                buy_timeframe = '1h'
+
+            # buySignals 可能是字符串（如 "ema_15m"）或字典
+            if isinstance(buy_signals, str):
+                # 如果是字符串，根据字符串内容判断时间周期
+                if '5m' in buy_signals:
+                    buy_timeframe = '5m'
+                elif '1h' in buy_signals:
+                    buy_timeframe = '1h'
+                # 默认 15m
+            elif isinstance(buy_signals, dict):
+                if buy_signals.get('ema_5m', {}).get('enabled'):
+                    buy_timeframe = '5m'
+                elif buy_signals.get('ema_1h', {}).get('enabled'):
+                    buy_timeframe = '1h'
 
             # 查询最近的K线数据（至少需要30根来计算EMA26）
             with connection.cursor() as cursor:
