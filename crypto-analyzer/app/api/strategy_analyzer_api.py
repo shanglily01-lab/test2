@@ -355,24 +355,46 @@ async def analyze_symbol(
 
         # 7. 优化建议
         suggestions = []
+        optimized_params = {
+            'ema_short': ema_short,
+            'ema_long': ema_long,
+            'stop_loss_pct': stop_loss_pct,
+            'take_profit_pct': take_profit_pct
+        }
 
         # 根据胜率给建议
         if win_rate < 40:
             suggestions.append({
                 'type': 'warning',
                 'title': '胜率偏低',
-                'content': f'当前胜率仅 {win_rate:.1f}%，建议增加趋势确认条件（如MA10确认）'
+                'content': f'当前胜率仅 {win_rate:.1f}%，建议增加趋势确认条件（如MA10确认）',
+                'param_change': None
             })
 
         # 根据止损触发次数（趋势跟踪模式）
         trailing_stop_count = stats_trend['trailing_stop_exits']
         trend_reverse_count = stats_trend['trend_reverse_exits']
         if trailing_stop_count > len(trades_trend) * 0.5 and trades_trend:
+            new_sl = round(stop_loss_pct + 0.5, 1)
             suggestions.append({
                 'type': 'warning',
                 'title': '移动止损触发频繁',
-                'content': f'移动止损触发 {trailing_stop_count}/{len(trades_trend)} 次，建议适当放宽止损比例（当前 {stop_loss_pct}% → 建议 {stop_loss_pct + 0.5}%）'
+                'content': f'移动止损触发 {trailing_stop_count}/{len(trades_trend)} 次，建议适当放宽止损比例（当前 {stop_loss_pct}% → 建议 {new_sl}%）',
+                'param_change': {'stop_loss_pct': new_sl}
             })
+            optimized_params['stop_loss_pct'] = new_sl
+
+        # 根据止盈触发情况（固定模式）
+        if stats_fixed['take_profit_exits'] == 0 and stats_fixed['total_trades'] > 2:
+            # 没有触发止盈，可能止盈设置过高
+            new_tp = round(take_profit_pct * 0.8, 1)
+            suggestions.append({
+                'type': 'warning',
+                'title': '止盈未触发',
+                'content': f'固定模式下止盈从未触发，建议降低止盈目标（当前 {take_profit_pct}% → 建议 {new_tp}%）',
+                'param_change': {'take_profit_pct': new_tp}
+            })
+            optimized_params['take_profit_pct'] = new_tp
 
         # 模式对比建议
         if stats_trend['total_pnl_pct'] > stats_fixed['total_pnl_pct']:
@@ -380,38 +402,53 @@ async def analyze_symbol(
             suggestions.append({
                 'type': 'success',
                 'title': '趋势跟踪模式更优',
-                'content': f'趋势跟踪模式收益 {stats_trend["total_pnl_pct"]:.2f}% 高于固定止盈止损 {stats_fixed["total_pnl_pct"]:.2f}%，多赚 {pnl_diff:.2f}%'
+                'content': f'趋势跟踪模式收益 {stats_trend["total_pnl_pct"]:.2f}% 高于固定止盈止损 {stats_fixed["total_pnl_pct"]:.2f}%，多赚 {pnl_diff:.2f}%',
+                'param_change': {'exit_mode': 'trend'}
             })
+            optimized_params['exit_mode'] = 'trend'
         elif stats_fixed['total_pnl_pct'] > stats_trend['total_pnl_pct']:
             pnl_diff = stats_fixed['total_pnl_pct'] - stats_trend['total_pnl_pct']
             suggestions.append({
                 'type': 'info',
                 'title': '固定止盈止损模式更优',
-                'content': f'固定模式收益 {stats_fixed["total_pnl_pct"]:.2f}% 高于趋势跟踪 {stats_trend["total_pnl_pct"]:.2f}%，多赚 {pnl_diff:.2f}%。当前行情可能更适合固定目标'
+                'content': f'固定模式收益 {stats_fixed["total_pnl_pct"]:.2f}% 高于趋势跟踪 {stats_trend["total_pnl_pct"]:.2f}%，多赚 {pnl_diff:.2f}%。当前行情可能更适合固定目标',
+                'param_change': {'exit_mode': 'fixed'}
             })
+            optimized_params['exit_mode'] = 'fixed'
 
         # 根据行情类型给建议
         if regime == 'ranging':
             suggestions.append({
                 'type': 'info',
                 'title': '震荡行情',
-                'content': '当前处于震荡行情，EMA信号容易假突破，建议启用sustainedTrend过滤或暂停交易'
+                'content': '当前处于震荡行情，EMA信号容易假突破，建议启用sustainedTrend过滤或暂停交易',
+                'param_change': {'sustainedTrend_enabled': True}
             })
+            optimized_params['sustainedTrend_enabled'] = True
         elif regime in ['strong_uptrend', 'strong_downtrend']:
+            # 强趋势时可以放大止盈
+            new_tp = round(take_profit_pct * 1.2, 1)
             suggestions.append({
                 'type': 'success',
                 'title': '强趋势行情',
-                'content': '当前处于强趋势行情，适合EMA策略，可以适当提高止盈目标'
+                'content': f'当前处于强趋势行情，适合EMA策略，可以适当提高止盈目标（当前 {take_profit_pct}% → 建议 {new_tp}%）',
+                'param_change': {'take_profit_pct': new_tp}
             })
+            optimized_params['take_profit_pct'] = new_tp
 
         # 根据信号频率
         hours_per_signal = hours / (golden_crosses + death_crosses) if (golden_crosses + death_crosses) > 0 else hours
         if hours_per_signal < 2:
+            new_ema_short = ema_short + 2
+            new_ema_long = ema_long + 4
             suggestions.append({
                 'type': 'warning',
                 'title': '信号过于频繁',
-                'content': f'平均每 {hours_per_signal:.1f} 小时产生一次信号，建议增加EMA周期或启用minEmaCrossStrength过滤'
+                'content': f'平均每 {hours_per_signal:.1f} 小时产生一次信号，建议增加EMA周期（短期 {ema_short} → {new_ema_short}，长期 {ema_long} → {new_ema_long}）或启用minEmaCrossStrength过滤',
+                'param_change': {'ema_short': new_ema_short, 'ema_long': new_ema_long}
             })
+            optimized_params['ema_short'] = new_ema_short
+            optimized_params['ema_long'] = new_ema_long
 
         # 8. 准备K线数据（只返回最近100条用于绘图）
         kline_data = []
@@ -481,6 +518,7 @@ async def analyze_symbol(
                     "stop_loss_pct": stop_loss_pct,
                     "take_profit_pct": take_profit_pct
                 },
+                "optimized_params": optimized_params,
                 "suggestions": suggestions
             }
         }

@@ -379,6 +379,7 @@
                 <span class="card-title">分析参数</span>
                 <div style="display: flex; gap: 10px;">
                     <button class="btn btn-secondary" onclick="loadStrategies()">加载策略配置</button>
+                    <button class="btn btn-secondary" onclick="loadSavedParams()" id="btn-load-saved" style="display: none;">加载优化参数</button>
                     <button class="btn btn-primary" onclick="runAnalysis()">开始分析</button>
                 </div>
             </div>
@@ -571,6 +572,19 @@
                 <div class="card">
                     <div class="card-header">
                         <span class="card-title">优化建议</span>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-success" onclick="applyOptimizedParams()" id="btn-apply-optimized" style="display: none;">应用优化参数</button>
+                            <button class="btn btn-secondary" onclick="saveOptimizedParams()" id="btn-save-optimized" style="display: none;">保存到本地</button>
+                        </div>
+                    </div>
+                    <!-- 优化参数预览 -->
+                    <div id="optimized-params-preview" style="display: none; margin-bottom: 16px;">
+                        <div style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px;">
+                            <div style="font-size: 13px; color: var(--accent-green); margin-bottom: 8px; font-weight: 600;">推荐参数:</div>
+                            <div class="param-comparison" id="param-changes">
+                                <!-- 动态生成 -->
+                            </div>
+                        </div>
                     </div>
                     <div id="suggestions">
                         <!-- 动态生成 -->
@@ -617,11 +631,148 @@
         let priceChart = null;
         let analysisData = null;
         let currentMode = 'trend';  // 当前选中的模式
+        const STORAGE_KEY = 'strategy_analyzer_optimized_params';
 
         // 初始化
         document.addEventListener('DOMContentLoaded', () => {
             loadSymbols();
+            checkSavedParams();
         });
+
+        // 检查是否有保存的优化参数
+        function checkSavedParams() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                document.getElementById('btn-load-saved').style.display = 'inline-block';
+            }
+        }
+
+        // 保存优化参数到本地
+        function saveOptimizedParams() {
+            if (!analysisData || !analysisData.optimized_params) {
+                showToast('没有可保存的优化参数', 'error');
+                return;
+            }
+
+            const saveData = {
+                symbol: analysisData.symbol,
+                timeframe: analysisData.timeframe,
+                current_params: analysisData.current_params,
+                optimized_params: analysisData.optimized_params,
+                suggestions: analysisData.suggestions,
+                statistics: analysisData.statistics,
+                saved_at: new Date().toISOString()
+            };
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(saveData));
+            document.getElementById('btn-load-saved').style.display = 'inline-block';
+            showToast('优化参数已保存到本地', 'success');
+        }
+
+        // 加载保存的优化参数
+        function loadSavedParams() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) {
+                showToast('没有保存的优化参数', 'error');
+                return;
+            }
+
+            const data = JSON.parse(saved);
+            const savedTime = new Date(data.saved_at).toLocaleString('zh-CN');
+
+            let html = '<div style="padding: 20px;">';
+            html += `<p style="color: var(--text-secondary); margin-bottom: 16px;">保存时间: ${savedTime}</p>`;
+            html += `<p style="margin-bottom: 12px;">交易对: <strong>${data.symbol}</strong> | 周期: <strong>${data.timeframe}</strong></p>`;
+
+            html += '<div style="margin-bottom: 16px;">';
+            html += '<h4 style="margin-bottom: 8px; color: var(--accent-yellow);">原始参数:</h4>';
+            html += '<div class="param-comparison">';
+            html += `<div class="param-item"><span class="label">短期EMA</span><span class="value">${data.current_params.ema_short}</span></div>`;
+            html += `<div class="param-item"><span class="label">长期EMA</span><span class="value">${data.current_params.ema_long}</span></div>`;
+            html += `<div class="param-item"><span class="label">止损</span><span class="value">${data.current_params.stop_loss_pct}%</span></div>`;
+            html += `<div class="param-item"><span class="label">止盈</span><span class="value">${data.current_params.take_profit_pct}%</span></div>`;
+            html += '</div></div>';
+
+            html += '<div style="margin-bottom: 16px;">';
+            html += '<h4 style="margin-bottom: 8px; color: var(--accent-green);">优化参数:</h4>';
+            html += '<div class="param-comparison">';
+            html += `<div class="param-item"><span class="label">短期EMA</span><span class="value" style="color: ${data.optimized_params.ema_short !== data.current_params.ema_short ? 'var(--accent-green)' : 'inherit'};">${data.optimized_params.ema_short}</span></div>`;
+            html += `<div class="param-item"><span class="label">长期EMA</span><span class="value" style="color: ${data.optimized_params.ema_long !== data.current_params.ema_long ? 'var(--accent-green)' : 'inherit'};">${data.optimized_params.ema_long}</span></div>`;
+            html += `<div class="param-item"><span class="label">止损</span><span class="value" style="color: ${data.optimized_params.stop_loss_pct !== data.current_params.stop_loss_pct ? 'var(--accent-green)' : 'inherit'};">${data.optimized_params.stop_loss_pct}%</span></div>`;
+            html += `<div class="param-item"><span class="label">止盈</span><span class="value" style="color: ${data.optimized_params.take_profit_pct !== data.current_params.take_profit_pct ? 'var(--accent-green)' : 'inherit'};">${data.optimized_params.take_profit_pct}%</span></div>`;
+            if (data.optimized_params.exit_mode) {
+                html += `<div class="param-item"><span class="label">出场模式</span><span class="value" style="color: var(--accent-green);">${data.optimized_params.exit_mode === 'trend' ? '趋势跟踪' : '固定止盈止损'}</span></div>`;
+            }
+            html += '</div></div>';
+
+            html += '<div style="display: flex; gap: 10px; margin-top: 20px;">';
+            html += '<button class="btn btn-success" onclick="applySavedParams()">应用优化参数</button>';
+            html += '<button class="btn btn-secondary" onclick="clearSavedParams()">清除保存</button>';
+            html += '<button class="btn btn-secondary" onclick="closeDialog()">取消</button>';
+            html += '</div></div>';
+
+            showDialog('加载保存的优化参数', html);
+        }
+
+        // 应用保存的优化参数
+        function applySavedParams() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (!saved) return;
+
+            const data = JSON.parse(saved);
+            const opt = data.optimized_params;
+
+            document.getElementById('ema-short').value = opt.ema_short;
+            document.getElementById('ema-long').value = opt.ema_long;
+            document.getElementById('stop-loss').value = opt.stop_loss_pct;
+            document.getElementById('take-profit').value = opt.take_profit_pct;
+
+            // 如果有保存的交易对，也设置它
+            const symbolSelect = document.getElementById('symbol');
+            const options = Array.from(symbolSelect.options);
+            const matchOption = options.find(o => o.value === data.symbol);
+            if (matchOption) {
+                symbolSelect.value = data.symbol;
+            }
+
+            // 如果有周期
+            if (data.timeframe) {
+                document.getElementById('timeframe').value = data.timeframe;
+            }
+
+            closeDialog();
+            showToast('已应用优化参数，点击"开始分析"进行测试', 'success');
+        }
+
+        // 清除保存的参数
+        function clearSavedParams() {
+            localStorage.removeItem(STORAGE_KEY);
+            document.getElementById('btn-load-saved').style.display = 'none';
+            closeDialog();
+            showToast('已清除保存的优化参数', 'info');
+        }
+
+        // 应用当前分析结果中的优化参数
+        function applyOptimizedParams() {
+            if (!analysisData || !analysisData.optimized_params) {
+                showToast('没有可应用的优化参数', 'error');
+                return;
+            }
+
+            const opt = analysisData.optimized_params;
+
+            document.getElementById('ema-short').value = opt.ema_short;
+            document.getElementById('ema-long').value = opt.ema_long;
+            document.getElementById('stop-loss').value = opt.stop_loss_pct;
+            document.getElementById('take-profit').value = opt.take_profit_pct;
+
+            // 如果有推荐的出场模式
+            if (opt.exit_mode) {
+                switchMode(opt.exit_mode);
+            }
+
+            showToast('已应用优化参数，点击"开始分析"重新测试', 'success');
+        }
 
         // 切换出场模式
         function switchMode(mode) {
@@ -769,8 +920,9 @@
             const stats = currentMode === 'trend' ? data.statistics_trend : data.statistics_fixed;
             renderStats(stats);
 
-            // 优化建议
+            // 优化建议和参数预览
             renderSuggestions(data.suggestions);
+            renderOptimizedParams(data);
 
             // 交易记录
             const trades = currentMode === 'trend' ? data.trades_trend : data.trades_fixed;
@@ -778,6 +930,76 @@
 
             // 图表
             renderChart(data.klines);
+        }
+
+        // 渲染优化参数预览
+        function renderOptimizedParams(data) {
+            const current = data.current_params;
+            const optimized = data.optimized_params;
+
+            // 检查是否有参数变化
+            const hasChanges = optimized.ema_short !== current.ema_short ||
+                              optimized.ema_long !== current.ema_long ||
+                              optimized.stop_loss_pct !== current.stop_loss_pct ||
+                              optimized.take_profit_pct !== current.take_profit_pct ||
+                              optimized.exit_mode;
+
+            if (!hasChanges) {
+                document.getElementById('optimized-params-preview').style.display = 'none';
+                document.getElementById('btn-apply-optimized').style.display = 'none';
+                document.getElementById('btn-save-optimized').style.display = 'none';
+                return;
+            }
+
+            // 显示按钮
+            document.getElementById('btn-apply-optimized').style.display = 'inline-block';
+            document.getElementById('btn-save-optimized').style.display = 'inline-block';
+            document.getElementById('optimized-params-preview').style.display = 'block';
+
+            // 生成参数变化对比
+            let html = '';
+            const paramLabels = {
+                'ema_short': '短期EMA',
+                'ema_long': '长期EMA',
+                'stop_loss_pct': '止损 %',
+                'take_profit_pct': '止盈 %'
+            };
+
+            ['ema_short', 'ema_long', 'stop_loss_pct', 'take_profit_pct'].forEach(key => {
+                const oldVal = current[key];
+                const newVal = optimized[key];
+                const changed = oldVal !== newVal;
+
+                html += `<div class="param-item">
+                    <span class="label">${paramLabels[key]}</span>
+                    <span class="value">
+                        ${changed ?
+                            `<span style="text-decoration: line-through; color: var(--text-secondary);">${oldVal}</span>
+                             <span style="color: var(--accent-green);"> → ${newVal}</span>` :
+                            oldVal
+                        }
+                    </span>
+                </div>`;
+            });
+
+            // 如果有出场模式建议
+            if (optimized.exit_mode) {
+                const modeLabel = optimized.exit_mode === 'trend' ? '趋势跟踪' : '固定止盈止损';
+                html += `<div class="param-item">
+                    <span class="label">推荐出场模式</span>
+                    <span class="value" style="color: var(--accent-green);">${modeLabel}</span>
+                </div>`;
+            }
+
+            // 如果有行情过滤建议
+            if (optimized.sustainedTrend_enabled) {
+                html += `<div class="param-item">
+                    <span class="label">行情过滤</span>
+                    <span class="value" style="color: var(--accent-yellow);">建议启用 sustainedTrend</span>
+                </div>`;
+            }
+
+            document.getElementById('param-changes').innerHTML = html;
         }
 
         // 渲染模式对比
