@@ -363,7 +363,7 @@ class FuturesLimitOrderExecutor:
                                 # 超时，检查价格偏离是否过大
                                 # 做多：当前价格高于限价太多则取消（避免追高）
                                 # 做空：当前价格低于限价太多则取消（避免杀低）
-                                max_deviation_pct = Decimal('0.5')  # 最大允许偏离 0.5%
+                                max_deviation_pct = Decimal('1.0')  # 最大允许偏离 1%
 
                                 if side == 'OPEN_LONG':
                                     deviation_pct = (current_price - limit_price) / limit_price * 100
@@ -371,8 +371,8 @@ class FuturesLimitOrderExecutor:
                                     deviation_pct = (limit_price - current_price) / limit_price * 100
 
                                 if deviation_pct > max_deviation_pct:
-                                    # 价格偏离过大，取消订单
-                                    logger.info(f"⏰ 限价单超时取消: {symbol} {position_side} 价格偏离过大 ({deviation_pct:.2f}% > {max_deviation_pct}%), 限价={limit_price}, 当前={current_price}")
+                                    # 价格偏离过大，取消订单而不是转市价
+                                    logger.info(f"⏰ 限价单超时取消: {symbol} {position_side} 价格偏离超过1% ({deviation_pct:.2f}%), 限价={limit_price}, 当前={current_price}")
 
                                     # 解冻保证金
                                     frozen_margin = Decimal(str(order.get('margin', 0)))
