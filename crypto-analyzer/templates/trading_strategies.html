@@ -2124,6 +2124,9 @@
                                 <button class="btn btn-sm ${strategy.enabled ? 'btn-success' : 'btn-secondary'}" onclick="toggleStrategy(${strategy.id})">
                                     ${strategy.enabled ? '<i class="bi bi-pause-circle"></i> 暂停' : '<i class="bi bi-play-circle"></i> 启用'}
                                 </button>
+                                <button class="btn btn-sm ${strategy.syncLive ? 'btn-danger' : 'btn-outline-secondary'}" onclick="toggleSyncLive(${strategy.id})" title="${strategy.syncLive ? '点击关闭实盘同步' : '点击启用实盘同步'}">
+                                    <i class="bi bi-lightning-charge"></i> ${strategy.syncLive ? '关闭实盘' : '启用实盘'}
+                                </button>
                                 <button class="btn btn-sm btn-secondary" onclick="editStrategy(${strategy.id})">
                                     <i class="bi bi-pencil"></i> 编辑
                                 </button>
@@ -2343,7 +2346,54 @@
                 showToast('策略未找到', 'error');
             }
         }
-        
+
+        // 切换实盘同步状态
+        async function toggleSyncLive(id) {
+            const strategyId = typeof id === 'string' ? parseInt(id) : id;
+            const strategy = strategies.find(s => {
+                const sId = typeof s.id === 'string' ? parseInt(s.id) : s.id;
+                return sId === strategyId;
+            });
+
+            if (!strategy) {
+                showToast('策略未找到', 'error');
+                return;
+            }
+
+            const newSyncLive = !strategy.syncLive;
+            const actionText = newSyncLive ? '启用实盘同步' : '关闭实盘同步';
+
+            // 启用时显示确认对话框
+            if (newSyncLive) {
+                const confirmed = await showConfirmDialog(
+                    '确认启用实盘同步',
+                    `确定要为策略 "${strategy.name}" ${actionText}吗？<br><br><span style="color: var(--danger-red); font-weight: bold;">⚠️ 警告：启用后，模拟交易信号将同时在币安实盘下单！</span>`,
+                    'danger'
+                );
+                if (!confirmed) return;
+            }
+
+            try {
+                const response = await fetch(`/api/futures/strategies/${strategyId}/sync-live`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sync_live: newSyncLive })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    strategy.syncLive = newSyncLive;
+                    renderStrategies();
+                    showToast(data.message || `已${actionText}`, 'success');
+                } else {
+                    showToast(data.detail || `${actionText}失败`, 'error');
+                }
+            } catch (error) {
+                console.error('切换实盘同步失败:', error);
+                showToast(`${actionText}失败: ${error.message}`, 'error');
+            }
+        }
+
         // 执行策略
         async function executeStrategy(strategy) {
             try {

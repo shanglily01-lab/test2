@@ -476,6 +476,10 @@ class StrategyExecutor:
             min_holding_time_hours = strategy.get('minHoldingTimeHours', 0)  # 最小持仓时间（小时）
             fee_rate = strategy.get('feeRate', 0.0004)
 
+            # 同步实盘交易配置
+            sync_live = strategy.get('syncLive', False)  # 是否同步实盘
+            live_quantity_pct = strategy.get('liveQuantityPct', 100)  # 实盘下单数量百分比
+
             # 新指标过滤配置
             rsi_filter = strategy.get('rsiFilter', {})
             rsi_filter_enabled = rsi_filter.get('enabled', False) if isinstance(rsi_filter, dict) else False
@@ -3541,6 +3545,41 @@ class StrategyExecutor:
                                                 direction_text = "做多" if direction == 'long' else "做空"
                                                 qty_precision = self.get_quantity_precision(symbol)
                                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={actual_entry_price:.4f}，数量={actual_quantity:.{qty_precision}f}，开仓手续费={actual_fee:.4f}，持仓ID={position_id}")
+
+                                                # ========== 同步实盘交易 ==========
+                                                if sync_live and self.live_engine is not None:
+                                                    try:
+                                                        # 计算实盘下单数量
+                                                        live_quantity = Decimal(str(actual_quantity)) * Decimal(str(live_quantity_pct)) / Decimal('100')
+                                                        live_quantity = live_quantity.quantize(Decimal(f'0.{"0" * qty_precision}'))
+
+                                                        logger.info(f"[同步实盘] {symbol} {direction_text} 开始同步: 模拟数量={actual_quantity}, 实盘数量={live_quantity} ({live_quantity_pct}%)")
+
+                                                        # 调用实盘引擎开仓
+                                                        live_result = self.live_engine.open_position(
+                                                            symbol=symbol,
+                                                            position_side=position_side,
+                                                            quantity=live_quantity,
+                                                            leverage=leverage,
+                                                            limit_price=entry_price_decimal if use_limit_price else None,
+                                                            stop_loss_pct=Decimal(str(stop_loss_pct)) if stop_loss_pct else None,
+                                                            take_profit_pct=Decimal(str(take_profit_pct)) if take_profit_pct else None,
+                                                            source='strategy_sync'
+                                                        )
+
+                                                        if live_result.get('success'):
+                                                            live_entry_price = live_result.get('entry_price', actual_entry_price)
+                                                            live_position_id = live_result.get('position_id')
+                                                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🔴 实盘同步成功: 数量={float(live_quantity):.{qty_precision}f}, 价格={live_entry_price:.4f}, 持仓ID={live_position_id}")
+                                                            logger.info(f"[同步实盘] ✅ {symbol} {direction_text} 成功: 数量={live_quantity}, 价格={live_entry_price}")
+                                                        else:
+                                                            live_error = live_result.get('error', live_result.get('message', '未知错误'))
+                                                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 实盘同步失败: {live_error}")
+                                                            logger.error(f"[同步实盘] ❌ {symbol} {direction_text} 失败: {live_error}")
+                                                    except Exception as live_ex:
+                                                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 实盘同步异常: {str(live_ex)}")
+                                                        logger.error(f"[同步实盘] ❌ {symbol} {direction_text} 异常: {live_ex}")
+                                                # ========== 同步实盘交易结束 ==========
                                             else:
                                                 error_msg = open_result.get('message', '未知错误')
                                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ❌ 开仓失败: {error_msg}")
@@ -3612,6 +3651,8 @@ class StrategyExecutor:
                             'enabled': strategy.get('enabled', 0),
                             'market_type': strategy.get('market_type', 'test'),  # 市场类型: test/live
                             'adaptiveRegime': strategy.get('adaptive_regime', False),  # 行情自适应开关
+                            'syncLive': strategy.get('sync_live', False),  # 同步实盘交易开关
+                            'liveQuantityPct': float(strategy.get('live_quantity_pct', 100) or 100),  # 实盘下单数量百分比
                             **config  # 合并配置
                         }
                         result.append(strategy_dict)

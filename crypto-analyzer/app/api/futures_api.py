@@ -1216,8 +1216,8 @@ async def get_futures_strategies():
         try:
             # 从数据库读取策略配置
             cursor.execute("""
-                SELECT id, name, description, account_id, enabled, config, 
-                       created_at, updated_at
+                SELECT id, name, description, account_id, enabled, config,
+                       sync_live, live_quantity_pct, created_at, updated_at
                 FROM trading_strategies
                 ORDER BY id ASC
             """)
@@ -1232,6 +1232,8 @@ async def get_futures_strategies():
                     'description': row.get('description', ''),
                     'account_id': row.get('account_id', 2),
                     'enabled': bool(row.get('enabled', 0)),
+                    'syncLive': bool(row.get('sync_live', 0)),
+                    'liveQuantityPct': float(row.get('live_quantity_pct', 100) or 100),
                     'created_at': row.get('created_at').isoformat() if row.get('created_at') else None,
                     'updated_at': row.get('updated_at').isoformat() if row.get('updated_at') else None
                 }
@@ -1458,6 +1460,65 @@ async def toggle_futures_strategy(strategy_id: int):
         raise
     except Exception as e:
         logger.error(f"切换策略状态失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch('/strategies/{strategy_id}/sync-live')
+async def toggle_strategy_sync_live(strategy_id: int, request: Request):
+    """
+    切换策略的实盘同步状态
+
+    - **strategy_id**: 策略ID
+    - **sync_live**: 是否同步实盘交易
+    """
+    try:
+        body = await request.json()
+        sync_live = body.get('sync_live', False)
+
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+        try:
+            # 检查策略是否存在
+            cursor.execute("SELECT id, name, sync_live FROM trading_strategies WHERE id = %s", (strategy_id,))
+            strategy = cursor.fetchone()
+
+            if not strategy:
+                raise HTTPException(status_code=404, detail=f"策略 ID {strategy_id} 不存在")
+
+            # 更新同步状态
+            cursor.execute("""
+                UPDATE trading_strategies
+                SET sync_live = %s, updated_at = NOW()
+                WHERE id = %s
+            """, (1 if sync_live else 0, strategy_id))
+            connection.commit()
+
+            status_text = '启用' if sync_live else '关闭'
+            logger.info(f"策略实盘同步已{status_text}: ID={strategy_id}, Name={strategy['name']}")
+
+            return {
+                'success': True,
+                'message': f'已{status_text}实盘同步',
+                'id': strategy_id,
+                'sync_live': sync_live
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            connection.rollback()
+            raise
+        finally:
+            cursor.close()
+            connection.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"切换实盘同步状态失败: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
