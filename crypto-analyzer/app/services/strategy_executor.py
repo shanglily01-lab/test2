@@ -853,7 +853,10 @@ class StrategyExecutor:
                     exit_price_cross_ema_enabled=exit_price_cross_ema_enabled,
                     exit_price_cross_ema_min_profit=exit_price_cross_ema_min_profit,
                     exit_price_cross_ema_confirm_bars=exit_price_cross_ema_confirm_bars,
-                    market_type=strategy.get('market_type', 'test')  # 市场类型: test/live
+                    market_type=strategy.get('market_type', 'test'),  # 市场类型: test/live
+                    # 同步实盘交易配置
+                    sync_live=sync_live,
+                    live_quantity_pct=live_quantity_pct
                 )
 
                 results.append(result)
@@ -1175,6 +1178,9 @@ class StrategyExecutor:
         fee_rate = kwargs.get('fee_rate', 0.0004)
         max_long_positions = kwargs.get('max_long_positions')  # 最大做多持仓数
         max_short_positions = kwargs.get('max_short_positions')  # 最大做空持仓数
+        # 同步实盘交易配置
+        sync_live = kwargs.get('sync_live', False)  # 是否同步实盘
+        live_quantity_pct = kwargs.get('live_quantity_pct', 100)  # 实盘下单数量百分比
         rsi_filter_enabled = kwargs.get('rsi_filter_enabled', False)
         rsi_long_max = kwargs.get('rsi_long_max', 70)
         rsi_short_min = kwargs.get('rsi_short_min', 30)
