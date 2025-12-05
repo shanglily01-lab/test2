@@ -6,8 +6,9 @@
 
 import asyncio
 from decimal import Decimal
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import pymysql
+import json
 from loguru import logger
 
 
@@ -116,7 +117,133 @@ class FuturesLimitOrderExecutor:
         except Exception as e:
             logger.error(f"获取 {symbol} 价格失败: {e}")
             return Decimal('0')
-    
+
+    def _calculate_ema(self, prices: List[float], period: int) -> List[float]:
+        """
+        计算EMA（指数移动平均）
+
+        Args:
+            prices: 价格列表
+            period: EMA周期
+
+        Returns:
+            EMA值列表
+        """
+        if len(prices) < period:
+            return []
+
+        ema_values = []
+        multiplier = 2 / (period + 1)
+
+        # 初始EMA使用SMA
+        sma = sum(prices[:period]) / period
+        ema_values.append(sma)
+
+        # 计算后续EMA
+        for i in range(period, len(prices)):
+            ema = prices[i] * multiplier + ema_values[-1] * (1 - multiplier)
+            ema_values.append(ema)
+
+        return ema_values
+
+    def _check_trend_reversal(self, connection, order: Dict) -> Optional[str]:
+        """
+        检查趋势是否已转向（出现反向EMA交叉信号）
+
+        Args:
+            connection: 数据库连接
+            order: 订单信息（包含 strategy_config, symbol, side）
+
+        Returns:
+            取消原因（如果需要取消），否则返回 None
+        """
+        try:
+            strategy_config = order.get('strategy_config')
+            if not strategy_config:
+                return None
+
+            # 解析策略配置
+            if isinstance(strategy_config, str):
+                config = json.loads(strategy_config)
+            else:
+                config = strategy_config
+
+            # 检查是否启用趋势转向取消功能
+            cancel_on_trend_reversal = config.get('cancelOnTrendReversal', True)
+            if not cancel_on_trend_reversal:
+                return None
+
+            symbol = order['symbol']
+            side = order['side']  # OPEN_LONG 或 OPEN_SHORT
+
+            # 获取买入时间周期（默认15m）
+            buy_signals = config.get('buySignals', {})
+            buy_timeframe = '15m'
+            if buy_signals.get('ema_5m', {}).get('enabled'):
+                buy_timeframe = '5m'
+            elif buy_signals.get('ema_1h', {}).get('enabled'):
+                buy_timeframe = '1h'
+
+            # 查询最近的K线数据（至少需要30根来计算EMA26）
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY timestamp DESC
+                    LIMIT 50""",
+                    (symbol, buy_timeframe)
+                )
+                klines = cursor.fetchall()
+
+            if not klines or len(klines) < 30:
+                return None  # K线数据不足，跳过检查
+
+            # 将K线反转为正序（从旧到新）
+            prices = [float(k['close_price']) for k in reversed(klines)]
+
+            # 计算EMA9和EMA26
+            ema9_values = self._calculate_ema(prices, 9)
+            ema26_values = self._calculate_ema(prices, 26)
+
+            if len(ema9_values) < 2 or len(ema26_values) < 2:
+                return None
+
+            # 取最后两个EMA值来判断交叉
+            # EMA26从第26根K线开始，所以需要对齐索引
+            # ema9_values 从第9根开始，长度为 len(prices) - 8
+            # ema26_values 从第26根开始，长度为 len(prices) - 25
+            # 两者最后的共同索引：取最后两个
+
+            curr_ema9 = ema9_values[-1]
+            prev_ema9 = ema9_values[-2]
+            curr_ema26 = ema26_values[-1]
+            prev_ema26 = ema26_values[-2]
+
+            # 检测死叉（EMA9下穿EMA26）
+            is_death_cross = (prev_ema9 >= prev_ema26 and curr_ema9 < curr_ema26) or \
+                            (prev_ema9 > prev_ema26 and curr_ema9 <= curr_ema26)
+
+            # 检测金叉（EMA9上穿EMA26）
+            is_golden_cross = (prev_ema9 <= prev_ema26 and curr_ema9 > curr_ema26) or \
+                             (prev_ema9 < prev_ema26 and curr_ema9 >= curr_ema26)
+
+            # 做多限价单，出现死叉则取消
+            if side == 'OPEN_LONG' and is_death_cross:
+                ema_diff_pct = abs((curr_ema9 - curr_ema26) / curr_ema26 * 100)
+                return f"趋势转向(死叉): EMA9={curr_ema9:.4f} < EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
+
+            # 做空限价单，出现金叉则取消
+            if side == 'OPEN_SHORT' and is_golden_cross:
+                ema_diff_pct = abs((curr_ema9 - curr_ema26) / curr_ema26 * 100)
+                return f"趋势转向(金叉): EMA9={curr_ema9:.4f} > EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
+
+            return None
+
+        except Exception as e:
+            logger.error(f"检查趋势转向时出错: {e}")
+            return None
+
     async def check_and_execute_limit_orders(self):
         """检查并执行限价单（每次查询都创建新连接，确保获取最新数据）"""
         if not self.running:
@@ -188,6 +315,36 @@ class FuturesLimitOrderExecutor:
                         should_execute = False
                         execute_at_market = False  # 是否以市价执行（超时转市价）
                         position_side = 'LONG' if side == 'OPEN_LONG' else 'SHORT'
+
+                        # ===== 趋势转向检测：在趋势转向时取消限价单 =====
+                        trend_reversal_reason = self._check_trend_reversal(connection, order)
+                        if trend_reversal_reason:
+                            logger.info(f"📉 限价单趋势转向取消: {symbol} {position_side} - {trend_reversal_reason}")
+
+                            # 解冻保证金
+                            frozen_margin = Decimal(str(order.get('margin', 0)))
+                            if frozen_margin > 0:
+                                with connection.cursor() as update_cursor:
+                                    update_cursor.execute(
+                                        """UPDATE paper_trading_accounts
+                                        SET current_balance = current_balance + %s,
+                                            frozen_balance = frozen_balance - %s
+                                        WHERE id = %s""",
+                                        (float(frozen_margin), float(frozen_margin), account_id)
+                                    )
+
+                            # 更新订单状态为已取消
+                            with connection.cursor() as update_cursor:
+                                update_cursor.execute(
+                                    """UPDATE futures_orders
+                                    SET status = 'CANCELLED',
+                                        notes = CONCAT(COALESCE(notes, ''), ' TREND_REVERSAL: ', %s)
+                                    WHERE order_id = %s""",
+                                    (trend_reversal_reason, order_id)
+                                )
+
+                            connection.commit()
+                            continue  # 跳过此订单
 
                         # 检查超时转市价（从策略配置中读取）
                         strategy_timeout_raw = order.get('strategy_timeout')

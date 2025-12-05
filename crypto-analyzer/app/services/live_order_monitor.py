@@ -2,12 +2,14 @@
 """
 实盘订单监控服务
 监控限价单成交后自动设置止损止盈
+支持趋势转向时自动取消未成交限价单
 """
 
 import asyncio
 from decimal import Decimal
 from typing import Dict, Optional, List
 import pymysql
+import json
 from loguru import logger
 from datetime import datetime
 
@@ -62,6 +64,134 @@ class LiveOrderMonitor:
                     autocommit=True
                 )
         return self.connection
+
+    def _calculate_ema(self, prices: List[float], period: int) -> List[float]:
+        """
+        计算EMA（指数移动平均）
+
+        Args:
+            prices: 价格列表
+            period: EMA周期
+
+        Returns:
+            EMA值列表
+        """
+        if len(prices) < period:
+            return []
+
+        ema_values = []
+        multiplier = 2 / (period + 1)
+
+        # 初始EMA使用SMA
+        sma = sum(prices[:period]) / period
+        ema_values.append(sma)
+
+        # 计算后续EMA
+        for i in range(period, len(prices)):
+            ema = prices[i] * multiplier + ema_values[-1] * (1 - multiplier)
+            ema_values.append(ema)
+
+        return ema_values
+
+    def _check_trend_reversal(self, position: Dict) -> Optional[str]:
+        """
+        检查趋势是否已转向（出现反向EMA交叉信号）
+
+        Args:
+            position: 仓位信息
+
+        Returns:
+            取消原因（如果需要取消），否则返回 None
+        """
+        try:
+            symbol = position['symbol']
+            position_side = position['position_side']  # LONG 或 SHORT
+
+            # 默认使用15分钟时间周期
+            timeframe = '15m'
+
+            # 查询最近的K线数据
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """SELECT close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s
+                ORDER BY timestamp DESC
+                LIMIT 50""",
+                (symbol, timeframe)
+            )
+            klines = cursor.fetchall()
+
+            if not klines or len(klines) < 30:
+                return None  # K线数据不足，跳过检查
+
+            # 将K线反转为正序（从旧到新）
+            prices = [float(k['close_price']) for k in reversed(klines)]
+
+            # 计算EMA9和EMA26
+            ema9_values = self._calculate_ema(prices, 9)
+            ema26_values = self._calculate_ema(prices, 26)
+
+            if len(ema9_values) < 2 or len(ema26_values) < 2:
+                return None
+
+            # 取最后两个EMA值来判断交叉
+            curr_ema9 = ema9_values[-1]
+            prev_ema9 = ema9_values[-2]
+            curr_ema26 = ema26_values[-1]
+            prev_ema26 = ema26_values[-2]
+
+            # 检测死叉（EMA9下穿EMA26）
+            is_death_cross = (prev_ema9 >= prev_ema26 and curr_ema9 < curr_ema26) or \
+                            (prev_ema9 > prev_ema26 and curr_ema9 <= curr_ema26)
+
+            # 检测金叉（EMA9上穿EMA26）
+            is_golden_cross = (prev_ema9 <= prev_ema26 and curr_ema9 > curr_ema26) or \
+                             (prev_ema9 < prev_ema26 and curr_ema9 >= curr_ema26)
+
+            # 做多限价单，出现死叉则取消
+            if position_side == 'LONG' and is_death_cross:
+                ema_diff_pct = abs((curr_ema9 - curr_ema26) / curr_ema26 * 100)
+                return f"趋势转向(死叉): EMA9={curr_ema9:.4f} < EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
+
+            # 做空限价单，出现金叉则取消
+            if position_side == 'SHORT' and is_golden_cross:
+                ema_diff_pct = abs((curr_ema9 - curr_ema26) / curr_ema26 * 100)
+                return f"趋势转向(金叉): EMA9={curr_ema9:.4f} > EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
+
+            return None
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 检查趋势转向时出错: {e}")
+            return None
+
+    async def _cancel_binance_order(self, position: Dict, reason: str):
+        """
+        取消币安订单
+
+        Args:
+            position: 仓位信息
+            reason: 取消原因
+        """
+        try:
+            symbol = position['symbol']
+            order_id = position['binance_order_id']
+
+            # 调用交易引擎取消订单
+            result = self.live_engine.cancel_order(symbol, order_id)
+
+            if result.get('success'):
+                logger.info(f"[实盘监控] ✓ 币安订单已取消: {symbol} #{order_id} - {reason}")
+
+                # 更新数据库状态
+                await self._update_position_canceled(position, f'TREND_REVERSAL: {reason}')
+            else:
+                logger.error(f"[实盘监控] ✗ 取消币安订单失败: {result.get('error', '未知错误')}")
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 取消币安订单异常: {e}")
 
     def start(self):
         """启动监控"""
@@ -148,6 +278,13 @@ class LiveOrderMonitor:
 
                 # 设置止损止盈
                 await self._place_sl_tp_orders(position, executed_qty)
+
+            elif status == 'NEW':
+                # 订单尚未成交，检查趋势是否转向
+                trend_reversal_reason = self._check_trend_reversal(position)
+                if trend_reversal_reason:
+                    logger.info(f"[实盘监控] 📉 检测到趋势转向，准备取消限价单: {symbol} #{order_id}")
+                    await self._cancel_binance_order(position, trend_reversal_reason)
 
             elif status in ['CANCELED', 'EXPIRED', 'REJECTED']:
                 # 订单已取消/过期/拒绝，更新数据库
