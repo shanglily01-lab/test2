@@ -1214,13 +1214,30 @@ async def get_futures_strategies():
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
         try:
-            # 从数据库读取策略配置
+            # 检查 sync_live 列是否存在
             cursor.execute("""
-                SELECT id, name, description, account_id, enabled, config,
-                       sync_live, live_quantity_pct, created_at, updated_at
-                FROM trading_strategies
-                ORDER BY id ASC
+                SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = 'trading_strategies'
+                AND COLUMN_NAME = 'sync_live'
             """)
+            has_sync_live = cursor.fetchone()['cnt'] > 0
+
+            # 从数据库读取策略配置
+            if has_sync_live:
+                cursor.execute("""
+                    SELECT id, name, description, account_id, enabled, config,
+                           sync_live, live_quantity_pct, created_at, updated_at
+                    FROM trading_strategies
+                    ORDER BY id ASC
+                """)
+            else:
+                cursor.execute("""
+                    SELECT id, name, description, account_id, enabled, config,
+                           FALSE as sync_live, 100.00 as live_quantity_pct, created_at, updated_at
+                    FROM trading_strategies
+                    ORDER BY id ASC
+                """)
             rows = cursor.fetchall()
             
             # 转换为前端需要的格式
