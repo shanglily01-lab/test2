@@ -408,7 +408,8 @@
                         </div>
                         <input type="number" class="form-control" id="current-price" step="0.00000001" placeholder="输入限价价格（可选）">
                         <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
-                            上方显示实时合约价格，下方可输入限价单价格
+                            上方显示实时合约价格，下方可输入限价单价格<br>
+                            <span style="color: var(--warning-yellow);">⚠ 限价单超时后，若价格偏离超过1%将自动取消</span>
                         </small>
                     </div>
                         <div class="form-group">
@@ -951,7 +952,8 @@
                             `限价: ${formatPrice(limitPrice)}\n` +
                             `当前价: ${formatPrice(currentPrice)}\n` +
                             `杠杆: ${leverage}x\n` +
-                            `状态: 未成交，等待价格达到限价`;
+                            `状态: 未成交，等待价格达到限价\n` +
+                            `⚠ 超时后若价格偏离超过1%将自动取消`;
                         showToast(limitMsg, 'info');
                     } else {
                         // 市价单立即成交

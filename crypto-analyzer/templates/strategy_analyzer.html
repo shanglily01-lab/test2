@@ -1298,6 +1298,9 @@
                     <div class="form-group" style="margin-bottom: 16px; display: none;" id="limit-price-group">
                         <label class="form-label">限价价格</label>
                         <input type="number" class="form-control" id="live-limit-price" value="${liveTradeCurrentPrice.toFixed(4)}" step="0.0001">
+                        <small style="color: var(--warning-yellow); display: block; margin-top: 4px;">
+                            <i class="bi bi-exclamation-triangle"></i> 限价单会提交到币安，若趋势转向将自动取消
+                        </small>
                     </div>
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
