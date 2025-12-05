@@ -1096,15 +1096,6 @@ class StrategyExecutor:
                 else:
                     logger.error(f"保存执行结果到数据库失败: {e}", exc_info=True)
                     connection.rollback()
-            except pymysql.err.OperationalError as e:
-                # 处理锁等待超时等操作错误
-                error_code = e.args[0] if e.args else 0
-                if error_code == 1205:  # Lock wait timeout exceeded
-                    logger.error(f"保存执行结果到数据库失败: 锁等待超时，可能是清理脚本正在运行。错误: {e}")
-                    connection.rollback()
-                else:
-                    logger.error(f"保存执行结果到数据库失败: {e}", exc_info=True)
-                    connection.rollback()
             except Exception as e:
                 logger.error(f"保存执行结果到数据库失败: {e}", exc_info=True)
                 connection.rollback()
@@ -1530,12 +1521,33 @@ class StrategyExecutor:
                         exit_reason = dynamic_tp_reason if dynamic_tp_reason else "止盈"
 
                 # 盈利保护止损检查（盈利达到阈值后，如果盈利回落到保底线则平仓）
-                # 逻辑：当盈利曾达到 activatePct%，如果回落到 minLockPct% 则触发保护出场
-                # 注意：这是简化版本，不需要追踪历史最高盈利
+                # 逻辑：追踪历史最高盈利，当盈利曾达到 activatePct%，如果回落到 minLockPct% 则触发保护出场
                 if not exit_price and profit_protection_enabled:
-                    # 当前盈利在激活阈值和保底盈利之间时，检查是否触发保护
-                    # 条件：盈利曾超过激活阈值，但现在已回落接近保底线
-                    if current_profit_pct >= profit_protection_min_lock_pct and current_profit_pct < profit_protection_activate_pct:
+                    # 更新并获取历史最高盈利（在position中追踪）
+                    peak_profit = position.get('peak_profit', 0.0)
+                    if current_profit_pct > peak_profit:
+                        position['peak_profit'] = current_profit_pct
+                        peak_profit = current_profit_pct
+
+                    # 标记盈利保护是否已激活（盈利曾达到激活阈值）
+                    protection_activated = position.get('protection_activated', False)
+                    if peak_profit >= profit_protection_activate_pct:
+                        position['protection_activated'] = True
+                        protection_activated = True
+
+                    # 只有在保护已激活的情况下才检查是否触发保护出场
+                    if protection_activated:
+                        # 当前盈利回落到保底盈利线时触发
+                        if current_profit_pct <= profit_protection_min_lock_pct:
+                            exit_price = realtime_price
+                            exit_reason = f"盈利保护(峰值盈{peak_profit:.2f}%回落至{current_profit_pct:.2f}%≤{profit_protection_min_lock_pct}%)"
+                        # 或者从峰值回撤超过trailing阈值时触发
+                        elif peak_profit - current_profit_pct >= profit_protection_trailing_pct:
+                            exit_price = realtime_price
+                            exit_reason = f"盈利保护(从峰值{peak_profit:.2f}%回撤{peak_profit - current_profit_pct:.2f}%≥{profit_protection_trailing_pct}%)"
+
+                    # 保护未激活但趋势逆转时的预警出场（可选：当盈利在min_lock以上但趋势逆转）
+                    elif current_profit_pct >= profit_protection_min_lock_pct and not protection_activated:
                         # 检查趋势是否正在逆转（通过EMA方向判断）
                         trend_reversing = False
                         if sell_indicator.get('ema_short') and sell_indicator.get('ema_long'):
@@ -1546,29 +1558,10 @@ class StrategyExecutor:
                             elif direction == 'short' and ema_short > ema_long:
                                 trend_reversing = True
 
-                        # 如果趋势正在逆转且盈利在保护区间内，触发保护出场
+                        # 如果趋势正在逆转且有盈利，提前保护出场
                         if trend_reversing:
                             exit_price = realtime_price
                             exit_reason = f"盈利保护(盈{current_profit_pct:.2f}%≥{profit_protection_min_lock_pct}%且趋势逆转)"
-
-                    # 另一种保护：盈利已达激活阈值但趋势突然逆转
-                    elif current_profit_pct >= profit_protection_activate_pct:
-                        # 检查价格是否快速回撤（当前K线跌幅超过回撤阈值）
-                        if direction == 'long':
-                            # 做多时，检查价格是否从最高点回撤
-                            kline_high = float(sell_kline.get('high_price', realtime_price)) if sell_kline else realtime_price
-                            if kline_high > 0:
-                                current_drawdown = (kline_high - realtime_price) / kline_high * 100
-                                if current_drawdown >= profit_protection_trailing_pct:
-                                    exit_price = realtime_price
-                                    exit_reason = f"盈利保护(从K线高点回撤{current_drawdown:.2f}%≥{profit_protection_trailing_pct}%)"
-                        else:  # short
-                            kline_low = float(sell_kline.get('low_price', realtime_price)) if sell_kline else realtime_price
-                            if kline_low > 0:
-                                current_drawdown = (realtime_price - kline_low) / kline_low * 100
-                                if current_drawdown >= profit_protection_trailing_pct:
-                                    exit_price = realtime_price
-                                    exit_reason = f"盈利保护(从K线低点反弹{current_drawdown:.2f}%≥{profit_protection_trailing_pct}%)"
 
                 # 价格穿越EMA9提前出场检查
                 if not exit_price and exit_price_cross_ema_enabled:
@@ -1588,7 +1581,7 @@ class StrategyExecutor:
                                     check_indicator = check_pair['indicator']
                                     check_kline = check_pair['kline']
                                     check_ema9 = float(check_indicator.get('ema_short', 0)) if check_indicator.get('ema_short') else None
-                                    check_close = float(check_kline.get('close', 0)) if check_kline.get('close') else realtime_price
+                                    check_close = float(check_kline.get('close_price', 0)) if check_kline.get('close_price') else realtime_price
 
                                     if check_ema9:
                                         if check_close < check_ema9:
@@ -3050,7 +3043,9 @@ class StrategyExecutor:
                                 ma10_ema10_ok = True
                                 if ma10 and ema10:
                                     if min_ma10_cross_strength > 0:
-                                        ma10_ema10_strength_pct = abs(ma10_ema10_diff / ma10 * 100) if ma10 > 0 else 0
+                                        # 确保 ma10_ema10_diff 不为 None
+                                        actual_ma10_diff = ma10_ema10_diff if ma10_ema10_diff is not None else (ema10 - ma10)
+                                        ma10_ema10_strength_pct = abs(actual_ma10_diff / ma10 * 100) if ma10 > 0 else 0
                                         if ma10_ema10_strength_pct < min_ma10_cross_strength:
                                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ MA10/EMA10信号强度不足 (差值={ma10_ema10_strength_pct:.2f}%, 需要≥{min_ma10_cross_strength:.2f}%)，已过滤")
                                             trend_confirm_ok = False
