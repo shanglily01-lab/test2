@@ -815,6 +815,9 @@ class StrategyExecutor:
                         if old_sustained_trend_enabled != sustained_trend_enabled:
                             logger.info(f"📊 {symbol} 行情自适应更新持续趋势: {old_sustained_trend_enabled} -> {sustained_trend_enabled}")
 
+                    # 强制日志：确认传递给执行函数的值
+                    logger.info(f"📊 {symbol} 最终 sustained_trend_enabled={sustained_trend_enabled} (将传递给执行函数)")
+
                 # 调用内部方法执行实时逻辑
                 result = await self._execute_symbol_strategy(
                     symbol=symbol,
@@ -2662,7 +2665,8 @@ class StrategyExecutor:
 
                         # ==================== 持续趋势信号逻辑 ====================
                         # 如果启用了持续趋势信号且当前没有检测到任何信号，检查是否处于强趋势中
-                        logger.debug(f"{symbol} [{buy_timeframe}]: 🔍 持续趋势开关状态: sustained_trend_enabled={sustained_trend_enabled}, buy_signal_triggered={buy_signal_triggered}")
+                        # 强制INFO日志以便追踪问题
+                        logger.info(f"{symbol} [{buy_timeframe}]: 🔍 持续趋势开关检查: enabled={sustained_trend_enabled}, triggered={buy_signal_triggered}")
                         if sustained_trend_enabled and not buy_signal_triggered:
                             # 获取当前K线收盘价
                             curr_close = float(curr_pair['kline']['close_price']) if curr_pair['kline'].get('close_price') else None
