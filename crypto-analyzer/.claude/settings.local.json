@@ -12,7 +12,10 @@
       "Bash(git commit:*)",
       "Bash(mysql:*)",
       "Bash(find:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git show:*)",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "ask": []

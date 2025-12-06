@@ -3563,6 +3563,7 @@ class StrategyExecutor:
 
                                                         # 调用实盘引擎开仓
                                                         live_result = self.live_engine.open_position(
+                                                            account_id=1,  # 使用默认实盘账户
                                                             symbol=symbol,
                                                             position_side=position_side,
                                                             quantity=live_quantity,
