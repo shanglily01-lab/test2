@@ -1181,7 +1181,6 @@ class StrategyExecutor:
         # 同步实盘交易配置
         sync_live = kwargs.get('sync_live', False)  # 是否同步实盘
         live_quantity_pct = kwargs.get('live_quantity_pct', 100)  # 实盘下单数量百分比
-        logger.debug(f"[代码版本验证] sync_live已定义: {sync_live}, live_quantity_pct: {live_quantity_pct}")
         rsi_filter_enabled = kwargs.get('rsi_filter_enabled', False)
         rsi_long_max = kwargs.get('rsi_long_max', 70)
         rsi_short_min = kwargs.get('rsi_short_min', 30)
