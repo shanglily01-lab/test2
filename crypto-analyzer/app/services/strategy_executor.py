@@ -144,15 +144,22 @@ class StrategyExecutor:
                 if 'buyDirection' in modified_strategy:
                     modified_strategy['buyDirection'] = list(modified_strategy['buyDirection'])
 
-                # 确保 sustainedTrend 是字典类型
-                if not isinstance(modified_strategy.get('sustainedTrend'), dict):
+                # 深拷贝 sustainedTrend 字典，避免修改原始策略
+                if isinstance(modified_strategy.get('sustainedTrend'), dict):
+                    modified_strategy['sustainedTrend'] = dict(modified_strategy['sustainedTrend'])
+                else:
                     modified_strategy['sustainedTrend'] = {'enabled': False, 'minStrength': 0.15, 'maxStrength': 1.0}
+
+                # 记录原始策略的持续趋势设置
+                original_sustained = strategy.get('sustainedTrend', {}).get('enabled', False) if isinstance(strategy.get('sustainedTrend'), dict) else False
+                logger.debug(f"📊 {symbol} 行情自适应应用参数: regime={regime_type}, 原始sustainedTrend={original_sustained}, params={params}")
 
                 # 覆盖相关参数
                 for key, value in params.items():
                     # 转换驼峰命名
                     if key == 'sustainedTrend':
                         modified_strategy['sustainedTrend']['enabled'] = value
+                        logger.info(f"📊 {symbol} 行情自适应覆盖 sustainedTrend: {original_sustained} -> {value}")
                     elif key == 'sustainedTrendMinStrength':
                         modified_strategy['sustainedTrend']['minStrength'] = value
                     elif key == 'sustainedTrendMaxStrength':
@@ -801,9 +808,12 @@ class StrategyExecutor:
                     # 更新持续趋势参数
                     sustained_trend = adaptive_strategy.get('sustainedTrend', {})
                     if isinstance(sustained_trend, dict):
+                        old_sustained_trend_enabled = sustained_trend_enabled
                         sustained_trend_enabled = sustained_trend.get('enabled', sustained_trend_enabled)
                         sustained_trend_min_strength = sustained_trend.get('minStrength', sustained_trend_min_strength)
                         sustained_trend_max_strength = sustained_trend.get('maxStrength', sustained_trend_max_strength)
+                        if old_sustained_trend_enabled != sustained_trend_enabled:
+                            logger.info(f"📊 {symbol} 行情自适应更新持续趋势: {old_sustained_trend_enabled} -> {sustained_trend_enabled}")
 
                 # 调用内部方法执行实时逻辑
                 result = await self._execute_symbol_strategy(
@@ -2652,6 +2662,7 @@ class StrategyExecutor:
 
                         # ==================== 持续趋势信号逻辑 ====================
                         # 如果启用了持续趋势信号且当前没有检测到任何信号，检查是否处于强趋势中
+                        logger.debug(f"{symbol} [{buy_timeframe}]: 🔍 持续趋势开关状态: sustained_trend_enabled={sustained_trend_enabled}, buy_signal_triggered={buy_signal_triggered}")
                         if sustained_trend_enabled and not buy_signal_triggered:
                             # 获取当前K线收盘价
                             curr_close = float(curr_pair['kline']['close_price']) if curr_pair['kline'].get('close_price') else None
