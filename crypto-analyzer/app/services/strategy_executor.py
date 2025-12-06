@@ -527,14 +527,6 @@ class StrategyExecutor:
             bollinger_filter = strategy.get('bollingerFilter', {})
             bollinger_filter_enabled = bollinger_filter.get('enabled', False) if isinstance(bollinger_filter, dict) else False
 
-            # 提前入场配置（预判金叉/死叉）
-            early_entry = strategy.get('earlyEntry', {})
-            early_entry_enabled = early_entry.get('enabled', False) if isinstance(early_entry, dict) else False
-            early_entry_gap_threshold = early_entry.get('gapThreshold', 0.3) if isinstance(early_entry, dict) else 0.3  # EMA差距阈值(%)
-            early_entry_require_upward_slope = early_entry.get('requireUpwardSlope', True) if isinstance(early_entry, dict) else True  # 要求EMA9向上斜率
-            early_entry_require_price_above_ema = early_entry.get('requirePriceAboveEMA', True) if isinstance(early_entry, dict) else True  # 要求价格在EMA上方
-            early_entry_slope_min_pct = early_entry.get('slopeMinPct', 0.1) if isinstance(early_entry, dict) else 0.1  # EMA斜率最小百分比（从0.05提高到0.1）
-
             # 持续趋势信号配置（允许在趋势已经确立后开仓，而不仅仅是在穿越发生时）
             sustained_trend = strategy.get('sustainedTrend', {})
             sustained_trend_enabled = sustained_trend.get('enabled', False) if isinstance(sustained_trend, dict) else False
@@ -898,11 +890,6 @@ class StrategyExecutor:
                     kdj_allow_strong_signal=kdj_allow_strong_signal,
                     kdj_strong_signal_threshold=kdj_strong_signal_threshold,
                     bollinger_filter_enabled=bollinger_filter_enabled,
-                    early_entry_enabled=early_entry_enabled,
-                    early_entry_gap_threshold=early_entry_gap_threshold,
-                    early_entry_require_upward_slope=early_entry_require_upward_slope,
-                    early_entry_require_price_above_ema=early_entry_require_price_above_ema,
-                    early_entry_slope_min_pct=early_entry_slope_min_pct,
                     sustained_trend_enabled=sustained_trend_enabled,
                     sustained_trend_min_strength=sustained_trend_min_strength,
                     sustained_trend_max_strength=sustained_trend_max_strength,
@@ -1282,12 +1269,6 @@ class StrategyExecutor:
         kdj_allow_strong_signal = kwargs.get('kdj_allow_strong_signal', False)
         kdj_strong_signal_threshold = kwargs.get('kdj_strong_signal_threshold', 1.0)
         bollinger_filter_enabled = kwargs.get('bollinger_filter_enabled', False)
-        # 提前入场配置（预判金叉/死叉）
-        early_entry_enabled = kwargs.get('early_entry_enabled', False)
-        early_entry_gap_threshold = kwargs.get('early_entry_gap_threshold', 0.3)  # EMA差距阈值(%)
-        early_entry_require_upward_slope = kwargs.get('early_entry_require_upward_slope', True)  # 要求EMA9向上斜率
-        early_entry_require_price_above_ema = kwargs.get('early_entry_require_price_above_ema', True)  # 要求价格在EMA上方
-        early_entry_slope_min_pct = kwargs.get('early_entry_slope_min_pct', 0.1)  # EMA斜率最小百分比（从0.05提高到0.1）
         # 持续趋势信号配置
         sustained_trend_enabled = kwargs.get('sustained_trend_enabled', False)
         sustained_trend_min_strength = kwargs.get('sustained_trend_min_strength', 0.15)  # 持续趋势的最小EMA差距(%)
@@ -2417,7 +2398,6 @@ class StrategyExecutor:
 
         # 初始化变量
         buy_signal_triggered = False
-        is_early_entry_signal = False  # 是否为预判信号（预判信号不触发closeOppositeOnEntry）
         is_sustained_signal = False  # 是否为持续趋势信号（跳过MACD/KDJ/MA10信号强度检查）
         found_golden_cross = False
         found_death_cross = False
@@ -2569,130 +2549,6 @@ class StrategyExecutor:
                         latest_diff_pct = (latest_diff / curr_ema_long * 100) if curr_ema_long > 0 else 0
                         latest_status = "多头" if curr_ema_short > curr_ema_long else "空头"
                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: 📊 EMA9/26状态 - {latest_status} | EMA9={curr_ema_short:.4f}, EMA26={curr_ema_long:.4f}, 差值={latest_diff:.4f} ({latest_diff_pct:+.2f}%)")
-
-                        # ==================== 提前入场预判逻辑 ====================
-                        # 如果启用了提前入场且当前没有检测到金叉/死叉，检查是否接近穿越点
-                        if early_entry_enabled and not buy_signal_triggered:
-                            # 获取当前K线收盘价
-                            curr_close = float(curr_pair['kline']['close_price']) if curr_pair['kline'].get('close_price') else None
-
-                            # 计算EMA差距百分比（绝对值）
-                            ema_gap_pct = abs(latest_diff_pct)
-
-                            # 计算EMA9斜率（当前EMA9 vs 前一根K线EMA9）
-                            ema9_slope = 0
-                            ema9_slope_pct = 0
-                            if prev_ema_short and curr_ema_short:
-                                ema9_slope = curr_ema_short - prev_ema_short
-                                ema9_slope_pct = (ema9_slope / prev_ema_short * 100) if prev_ema_short > 0 else 0
-
-                            # 预判金叉条件（做多）：
-                            # 1. 当前处于空头状态（EMA9 < EMA26）
-                            # 2. EMA差距小于阈值（即将穿越）
-                            # 3. EMA9斜率为正（向上趋势）
-                            # 4. 价格在EMA9上方（可选）
-                            if 'long' in buy_directions and curr_ema_short < curr_ema_long:
-                                early_entry_conditions_met = True
-                                early_entry_reasons = []
-
-                                # 条件1：EMA差距检查
-                                if ema_gap_pct > early_entry_gap_threshold:
-                                    early_entry_conditions_met = False
-                                    early_entry_reasons.append(f"EMA差距过大({ema_gap_pct:.2f}% > {early_entry_gap_threshold}%)")
-
-                                # 条件2：EMA9向上斜率检查
-                                if early_entry_require_upward_slope:
-                                    if ema9_slope_pct < early_entry_slope_min_pct:
-                                        early_entry_conditions_met = False
-                                        early_entry_reasons.append(f"EMA9斜率不足({ema9_slope_pct:.3f}% < {early_entry_slope_min_pct}%)")
-
-                                # 条件3：价格在EMA9上方检查
-                                if early_entry_require_price_above_ema and curr_close:
-                                    if curr_close <= curr_ema_short:
-                                        early_entry_conditions_met = False
-                                        early_entry_reasons.append(f"价格未在EMA9上方(价格={curr_close:.4f}, EMA9={curr_ema_short:.4f})")
-
-                                if early_entry_conditions_met:
-                                    # 预判金叉成功！
-                                    buy_signal_triggered = True
-                                    found_golden_cross = True
-                                    detected_cross_type = 'golden'
-                                    is_early_entry_signal = True  # 标记为预判信号
-                                    buy_pair = curr_pair
-                                    buy_indicator = curr_indicator
-                                    ema_short = curr_ema_short
-                                    ema_long = curr_ema_long
-                                    curr_diff_pct = ema_gap_pct
-
-                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: 🔮🔮🔮 预判金叉信号（提前入场做多）！"
-                                    debug_info.append(msg)
-                                    logger.info(f"{symbol} {msg}")
-                                    msg_detail = f"   📊 EMA9={curr_ema_short:.4f}, EMA26={curr_ema_long:.4f}, 差距={ema_gap_pct:.2f}%, EMA9斜率={ema9_slope_pct:+.3f}%"
-                                    debug_info.append(msg_detail)
-                                    logger.info(f"{symbol} {msg_detail}")
-                                    if curr_close:
-                                        msg_price = f"   📊 当前价格={curr_close:.4f}, 价格/EMA9比={((curr_close/curr_ema_short-1)*100):+.2f}%"
-                                        debug_info.append(msg_price)
-                                        logger.info(f"{symbol} {msg_price}")
-                                else:
-                                    # 预判条件不满足，记录原因
-                                    debug_info.append(f"   📊 预判金叉检查: EMA差距={ema_gap_pct:.2f}%, EMA9斜率={ema9_slope_pct:+.3f}%")
-                                    for reason in early_entry_reasons:
-                                        debug_info.append(f"   ⚠️ 预判条件不满足: {reason}")
-
-                            # 预判死叉条件（做空）：
-                            # 1. 当前处于多头状态（EMA9 > EMA26）
-                            # 2. EMA差距小于阈值（即将穿越）
-                            # 3. EMA9斜率为负（向下趋势）
-                            # 4. 价格在EMA9下方（可选）
-                            elif 'short' in buy_directions and curr_ema_short > curr_ema_long:
-                                early_entry_conditions_met = True
-                                early_entry_reasons = []
-
-                                # 条件1：EMA差距检查
-                                if ema_gap_pct > early_entry_gap_threshold:
-                                    early_entry_conditions_met = False
-                                    early_entry_reasons.append(f"EMA差距过大({ema_gap_pct:.2f}% > {early_entry_gap_threshold}%)")
-
-                                # 条件2：EMA9向下斜率检查（做空时要求向下）
-                                if early_entry_require_upward_slope:
-                                    if ema9_slope_pct > -early_entry_slope_min_pct:  # 做空时要求负斜率
-                                        early_entry_conditions_met = False
-                                        early_entry_reasons.append(f"EMA9斜率不足({ema9_slope_pct:.3f}% > -{early_entry_slope_min_pct}%)")
-
-                                # 条件3：价格在EMA9下方检查（做空时）
-                                if early_entry_require_price_above_ema and curr_close:
-                                    if curr_close >= curr_ema_short:
-                                        early_entry_conditions_met = False
-                                        early_entry_reasons.append(f"价格未在EMA9下方(价格={curr_close:.4f}, EMA9={curr_ema_short:.4f})")
-
-                                if early_entry_conditions_met:
-                                    # 预判死叉成功！
-                                    buy_signal_triggered = True
-                                    found_death_cross = True
-                                    detected_cross_type = 'death'
-                                    is_early_entry_signal = True  # 标记为预判信号
-                                    buy_pair = curr_pair
-                                    buy_indicator = curr_indicator
-                                    ema_short = curr_ema_short
-                                    ema_long = curr_ema_long
-                                    curr_diff_pct = ema_gap_pct
-
-                                    msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: 🔮🔮🔮 预判死叉信号（提前入场做空）！"
-                                    debug_info.append(msg)
-                                    logger.info(f"{symbol} {msg}")
-                                    msg_detail = f"   📊 EMA9={curr_ema_short:.4f}, EMA26={curr_ema_long:.4f}, 差距={ema_gap_pct:.2f}%, EMA9斜率={ema9_slope_pct:+.3f}%"
-                                    debug_info.append(msg_detail)
-                                    logger.info(f"{symbol} {msg_detail}")
-                                    if curr_close:
-                                        msg_price = f"   📊 当前价格={curr_close:.4f}, 价格/EMA9比={((curr_close/curr_ema_short-1)*100):+.2f}%"
-                                        debug_info.append(msg_price)
-                                        logger.info(f"{symbol} {msg_price}")
-                                else:
-                                    # 预判条件不满足，记录原因
-                                    debug_info.append(f"   📊 预判死叉检查: EMA差距={ema_gap_pct:.2f}%, EMA9斜率={ema9_slope_pct:+.3f}%")
-                                    for reason in early_entry_reasons:
-                                        debug_info.append(f"   ⚠️ 预判条件不满足: {reason}")
 
                         # ==================== 持续趋势信号逻辑 ====================
                         # 如果启用了持续趋势信号且当前没有检测到任何信号，检查是否处于强趋势中
@@ -3182,8 +3038,7 @@ class StrategyExecutor:
                                 
                         if can_open_position:
                             # 开仓前先平掉相反方向的持仓（如果启用）
-                            # 注意：预判信号不触发此功能，只有确认信号才会平掉反向持仓
-                            if close_opposite_on_entry and not is_early_entry_signal:
+                            if close_opposite_on_entry:
                                 opposite_positions = [p for p in positions if p['direction'] != direction]
                                 if opposite_positions:
                                     for opp_position in opposite_positions[:]:
@@ -3249,45 +3104,26 @@ class StrategyExecutor:
                             logger.info(f"{symbol} [{buy_timeframe}]: 🔍 开始趋势确认和过滤检查 (方向: {direction})")
                                     
                             # 检查 RSI 过滤
-                            # 预判信号只检查极端值（RSI<20或RSI>80），确认信号检查正常阈值
                             if rsi_filter_enabled:
                                 rsi_value = float(buy_indicator.get('rsi')) if buy_indicator.get('rsi') else None
                                 if rsi_value is not None:
-                                    if is_early_entry_signal:
-                                        # 预判信号：只过滤RSI极端值
-                                        if direction == 'long' and rsi_value > 80:
-                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI极端值过滤(预判)：做多时RSI过高 (RSI={rsi_value:.2f} > 80)，已过滤"
-                                            debug_info.append(msg)
-                                            logger.info(f"{symbol} {msg}")
-                                            trend_confirm_ok = False
-                                            filter_failure_reasons.append(f"RSI极端值(预判): {rsi_value:.2f}>80")
-                                        elif direction == 'short' and rsi_value < 20:
-                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI极端值过滤(预判)：做空时RSI过低 (RSI={rsi_value:.2f} < 20)，已过滤"
-                                            debug_info.append(msg)
-                                            logger.info(f"{symbol} {msg}")
-                                            trend_confirm_ok = False
-                                            filter_failure_reasons.append(f"RSI极端值(预判): {rsi_value:.2f}<20")
-                                        else:
-                                            logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI极端值检查通过(预判) (RSI={rsi_value:.2f})")
+                                    if direction == 'long' and rsi_value > rsi_long_max:
+                                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做多时RSI过高 (RSI={rsi_value:.2f} > {rsi_long_max})，已过滤"
+                                        debug_info.append(msg)
+                                        logger.info(f"{symbol} {msg}")
+                                        trend_confirm_ok = False
+                                        filter_failure_reasons.append(f"RSI过滤: {rsi_value:.2f}>{rsi_long_max}")
+                                    elif direction == 'short' and rsi_value < rsi_short_min:
+                                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤"
+                                        debug_info.append(msg)
+                                        logger.info(f"{symbol} {msg}")
+                                        trend_confirm_ok = False
+                                        filter_failure_reasons.append(f"RSI过滤: {rsi_value:.2f}<{rsi_short_min}")
                                     else:
-                                        # 确认信号：使用正常阈值
-                                        if direction == 'long' and rsi_value > rsi_long_max:
-                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做多时RSI过高 (RSI={rsi_value:.2f} > {rsi_long_max})，已过滤"
-                                            debug_info.append(msg)
-                                            logger.info(f"{symbol} {msg}")
-                                            trend_confirm_ok = False
-                                            filter_failure_reasons.append(f"RSI过滤: {rsi_value:.2f}>{rsi_long_max}")
-                                        elif direction == 'short' and rsi_value < rsi_short_min:
-                                            msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ RSI过滤：做空时RSI过低 (RSI={rsi_value:.2f} < {rsi_short_min})，已过滤"
-                                            debug_info.append(msg)
-                                            logger.info(f"{symbol} {msg}")
-                                            trend_confirm_ok = False
-                                            filter_failure_reasons.append(f"RSI过滤: {rsi_value:.2f}<{rsi_short_min}")
-                                        else:
-                                            logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI过滤通过 (RSI={rsi_value:.2f})")
-                                    
-                            # 检查 MACD 过滤（预判信号和持续趋势信号跳过此过滤）
-                            if trend_confirm_ok and macd_filter_enabled and not is_early_entry_signal and not is_sustained_signal:
+                                        logger.debug(f"{symbol} [{buy_timeframe}]: ✅ RSI过滤通过 (RSI={rsi_value:.2f})")
+
+                            # 检查 MACD 过滤（持续趋势信号跳过此过滤）
+                            if trend_confirm_ok and macd_filter_enabled and not is_sustained_signal:
                                 macd_histogram = float(buy_indicator.get('macd_histogram')) if buy_indicator.get('macd_histogram') else None
                                 if macd_histogram is not None:
                                             if direction == 'long' and macd_long_require_positive and macd_histogram <= 0:
@@ -3305,8 +3141,8 @@ class StrategyExecutor:
                                             else:
                                                 logger.debug(f"{symbol} [{buy_timeframe}]: ✅ MACD过滤通过 (MACD={macd_histogram:.4f})")
                                     
-                            # 检查 KDJ 过滤（预判信号和持续趋势信号跳过此过滤）
-                            if trend_confirm_ok and kdj_filter_enabled and not is_early_entry_signal and not is_sustained_signal:
+                            # 检查 KDJ 过滤（持续趋势信号跳过此过滤）
+                            if trend_confirm_ok and kdj_filter_enabled and not is_sustained_signal:
                                 kdj_k = float(buy_indicator.get('kdj_k')) if buy_indicator.get('kdj_k') else None
                                 if kdj_k is not None:
                                     ema_diff_pct_abs = abs(curr_diff_pct) if curr_diff_pct is not None else 0
@@ -3329,8 +3165,8 @@ class StrategyExecutor:
                                     else:
                                         logger.debug(f"{symbol} [{buy_timeframe}]: ✅ KDJ过滤通过 (K={kdj_k:.2f})")
                                     
-                            # 检查 MA10/EMA10 信号强度（预判信号和持续趋势信号跳过此过滤，因为已在信号检测阶段检查过）
-                            if trend_confirm_ok and not is_early_entry_signal and not is_sustained_signal:
+                            # 检查 MA10/EMA10 信号强度（持续趋势信号跳过此过滤，因为已在信号检测阶段检查过）
+                            if trend_confirm_ok and not is_sustained_signal:
                                 ma10_ema10_ok = True
                                 if ma10 and ema10:
                                     if min_ma10_cross_strength > 0:
@@ -3356,12 +3192,12 @@ class StrategyExecutor:
                                     if min_ma10_cross_strength > 0 or ma10_ema10_trend_filter:
                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 缺少 MA10/EMA10 数据，跳过检查")
                                     
-                            # 检查趋势持续性（预判信号和持续趋势信号跳过此检查）
+                            # 检查趋势持续性（持续趋势信号跳过此检查）
                             # 注意：当只检测当前K线穿越时，trend_confirm_bars > 1 的配置将导致信号永远不会触发
                             # 因为交叉刚发生，无法满足"持续N根K线"的要求
                             # 如果需要趋势确认功能，建议设置 trend_confirm_bars = 0 或 1
                             # 持续趋势信号已经在信号检测阶段确认了趋势持续性，不需要再检查
-                            if trend_confirm_ok and trend_confirm_bars > 0 and not is_early_entry_signal and not is_sustained_signal:
+                            if trend_confirm_ok and trend_confirm_bars > 0 and not is_sustained_signal:
                                 # 找到金叉/死叉发生的索引位置（根据交易方向）
                                 cross_index = None
                                 for check_lookback in range(1, min(4, current_buy_index + 1)):

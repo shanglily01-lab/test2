@@ -893,48 +893,6 @@
                                             </div>
                                         </div>
 
-                                        <!-- 提前入场配置 -->
-                                        <div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
-                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                                <input type="checkbox" id="earlyEntryEnabled" name="earlyEntryEnabled">
-                                                <label for="earlyEntryEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">🔮 启用提前入场（预判金叉/死叉）</label>
-                                            </div>
-                                            <small style="color: var(--text-secondary); font-size: 11px; margin-bottom: 8px; display: block; margin-left: 26px;">
-                                                在金叉/死叉即将形成时提前入场，避免追高买入
-                                            </small>
-                                            <div style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 6px; padding: 8px 12px; margin-left: 26px; margin-bottom: 12px;">
-                                                <small style="color: #ffc107; font-size: 11px; display: block;">
-                                                    ⚡ <strong>注意：</strong>预判信号会跳过部分过滤器以实现"提前入场"：
-                                                </small>
-                                                <small style="color: var(--text-secondary); font-size: 10px; display: block; margin-top: 4px; line-height: 1.5;">
-                                                    跳过：MACD过滤、KDJ过滤、MA10/EMA10趋势确认、趋势持续性检查、反向持仓平仓<br>
-                                                    保留：RSI极端值过滤（做多RSI&gt;80、做空RSI&lt;20时仍会过滤）
-                                                </small>
-                                            </div>
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 8px;">
-                                                <div>
-                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">EMA差距阈值(%)</label>
-                                                    <input type="number" class="form-input" id="earlyEntryGapThreshold" placeholder="0.3" min="0.1" max="1.0" step="0.05" value="0.3" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">EMA9与EMA26差距低于此值时考虑入场</small>
-                                                </div>
-                                                <div>
-                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">EMA斜率最小值(%)</label>
-                                                    <input type="number" class="form-input" id="earlyEntrySlopeMinPct" placeholder="0.1" min="0.01" max="0.5" step="0.01" value="0.1" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">EMA9斜率需大于此值（默认0.1%，越大越严格）</small>
-                                                </div>
-                                            </div>
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 12px;">
-                                                <div style="display: flex; align-items: center; gap: 8px;">
-                                                    <input type="checkbox" id="earlyEntryRequireUpwardSlope" name="earlyEntryRequireUpwardSlope" checked>
-                                                    <label for="earlyEntryRequireUpwardSlope" class="checkbox-label" style="margin: 0; font-size: 12px;">要求EMA斜率方向正确</label>
-                                                </div>
-                                                <div style="display: flex; align-items: center; gap: 8px;">
-                                                    <input type="checkbox" id="earlyEntryRequirePriceAboveEMA" name="earlyEntryRequirePriceAboveEMA" checked>
-                                                    <label for="earlyEntryRequirePriceAboveEMA" class="checkbox-label" style="margin: 0; font-size: 12px;">要求价格领先于EMA</label>
-                                                </div>
-                                            </div>
-                                        </div>
-
                                         <!-- 持续趋势信号配置 -->
                                         <div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
                                             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -1825,19 +1783,6 @@
                     const kdjShortMinK = document.getElementById('kdjShortMinK');
                     if (kdjShortMinK) kdjShortMinK.value = '20';
                 }
-                // 清除提前入场配置
-                const earlyEntryEnabled = document.getElementById('earlyEntryEnabled');
-                if (earlyEntryEnabled) {
-                    earlyEntryEnabled.checked = false;
-                    const earlyEntryGapThreshold = document.getElementById('earlyEntryGapThreshold');
-                    if (earlyEntryGapThreshold) earlyEntryGapThreshold.value = '0.3';
-                    const earlyEntrySlopeMinPct = document.getElementById('earlyEntrySlopeMinPct');
-                    if (earlyEntrySlopeMinPct) earlyEntrySlopeMinPct.value = '0.1';
-                    const earlyEntryRequireUpwardSlope = document.getElementById('earlyEntryRequireUpwardSlope');
-                    if (earlyEntryRequireUpwardSlope) earlyEntryRequireUpwardSlope.checked = true;
-                    const earlyEntryRequirePriceAboveEMA = document.getElementById('earlyEntryRequirePriceAboveEMA');
-                    if (earlyEntryRequirePriceAboveEMA) earlyEntryRequirePriceAboveEMA.checked = true;
-                }
                 // 清除持续趋势信号配置
                 const sustainedTrendEnabled = document.getElementById('sustainedTrendEnabled');
                 if (sustainedTrendEnabled) {
@@ -2307,13 +2252,6 @@
                     longMaxK: document.getElementById('kdjLongMaxK') ? parseFloat(document.getElementById('kdjLongMaxK').value) : 80,
                     shortMinK: document.getElementById('kdjShortMinK') ? parseFloat(document.getElementById('kdjShortMinK').value) : 20
                 },
-                earlyEntry: {
-                    enabled: document.getElementById('earlyEntryEnabled') ? document.getElementById('earlyEntryEnabled').checked : false,
-                    gapThreshold: document.getElementById('earlyEntryGapThreshold') ? parseFloat(document.getElementById('earlyEntryGapThreshold').value) : 0.3,
-                    requireUpwardSlope: document.getElementById('earlyEntryRequireUpwardSlope') ? document.getElementById('earlyEntryRequireUpwardSlope').checked : true,
-                    requirePriceAboveEMA: document.getElementById('earlyEntryRequirePriceAboveEMA') ? document.getElementById('earlyEntryRequirePriceAboveEMA').checked : true,
-                    slopeMinPct: document.getElementById('earlyEntrySlopeMinPct') ? parseFloat(document.getElementById('earlyEntrySlopeMinPct').value) : 0.1
-                },
                 sustainedTrend: {
                     enabled: document.getElementById('sustainedTrendEnabled') ? document.getElementById('sustainedTrendEnabled').checked : false,
                     minStrength: document.getElementById('sustainedTrendMinStrength') ? parseFloat(document.getElementById('sustainedTrendMinStrength').value) : 0.15,
@@ -2621,12 +2559,6 @@
                                 <div class="strategy-item-field">
                                     <div class="strategy-item-field-label">KDJ过滤</div>
                                     <div class="strategy-item-field-value">✅ 已启用 (做多K≤${strategy.kdjFilter.longMaxK || 80}, 做空K≥${strategy.kdjFilter.shortMinK || 20})</div>
-                                </div>
-                            ` : ''}
-                            ${strategy.earlyEntry && strategy.earlyEntry.enabled ? `
-                                <div class="strategy-item-field">
-                                    <div class="strategy-item-field-label">🔮 提前入场</div>
-                                    <div class="strategy-item-field-value">✅ 已启用 (差距≤${strategy.earlyEntry.gapThreshold || 0.3}%, 斜率≥${strategy.earlyEntry.slopeMinPct || 0.05}%)<br><small style="color: #ffc107; font-size: 10px;">⚡ 跳过部分过滤器，保留RSI极端值过滤</small></div>
                                 </div>
                             ` : ''}
                             ${strategy.sustainedTrend && strategy.sustainedTrend.enabled ? `
@@ -2980,16 +2912,6 @@
                     document.getElementById('kdjFilterEnabled').checked = strategy.kdjFilter.enabled === true;
                     document.getElementById('kdjLongMaxK').value = strategy.kdjFilter.longMaxK || 80;
                     document.getElementById('kdjShortMinK').value = strategy.kdjFilter.shortMinK || 20;
-                }
-            }
-            // 提前入场配置
-            if (strategy.earlyEntry) {
-                if (document.getElementById('earlyEntryEnabled')) {
-                    document.getElementById('earlyEntryEnabled').checked = strategy.earlyEntry.enabled === true;
-                    document.getElementById('earlyEntryGapThreshold').value = strategy.earlyEntry.gapThreshold || 0.3;
-                    document.getElementById('earlyEntryRequireUpwardSlope').checked = strategy.earlyEntry.requireUpwardSlope !== false;
-                    document.getElementById('earlyEntryRequirePriceAboveEMA').checked = strategy.earlyEntry.requirePriceAboveEMA !== false;
-                    document.getElementById('earlyEntrySlopeMinPct').value = strategy.earlyEntry.slopeMinPct || 0.1;
                 }
             }
             // 持续趋势信号配置
