@@ -1237,6 +1237,7 @@
         // ==================== 实盘交易功能 ====================
 
         let liveTradeCurrentPrice = 0;
+        let liveTradeAvailableBalance = 0;
 
         // 显示实盘交易对话框
         async function showLiveTradeDialog() {
@@ -1249,15 +1250,22 @@
             const stopLoss = document.getElementById('stop-loss').value;
             const takeProfit = document.getElementById('take-profit').value;
 
-            // 获取当前价格
+            // 获取当前价格和账户余额
             try {
-                const priceResp = await fetch(`/api/live-trading/price?symbol=${encodeURIComponent(symbol)}`);
+                const [priceResp, balanceResp] = await Promise.all([
+                    fetch(`/api/live-trading/price?symbol=${encodeURIComponent(symbol)}`),
+                    fetch('/api/live-trading/account/balance')
+                ]);
                 const priceData = await priceResp.json();
+                const balanceData = await balanceResp.json();
                 if (priceData.success) {
                     liveTradeCurrentPrice = priceData.data.price;
                 }
+                if (balanceData.success) {
+                    liveTradeAvailableBalance = balanceData.data.available;
+                }
             } catch (e) {
-                console.error('获取价格失败:', e);
+                console.error('获取价格/余额失败:', e);
             }
 
             const html = `
@@ -1305,8 +1313,21 @@
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
                         <div class="form-group">
-                            <label class="form-label">开仓数量</label>
-                            <input type="number" class="form-control" id="live-quantity" value="0.001" step="0.001" min="0.001">
+                            <label class="form-label">资金占比 (%)</label>
+                            <select class="form-control" id="live-quantity-pct">
+                                <option value="1">1%</option>
+                                <option value="2">2%</option>
+                                <option value="3">3%</option>
+                                <option value="5" selected>5%</option>
+                                <option value="10">10%</option>
+                                <option value="15">15%</option>
+                                <option value="20">20%</option>
+                                <option value="25">25%</option>
+                                <option value="30">30%</option>
+                            </select>
+                            <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
+                                按可用余额百分比下单
+                            </small>
                         </div>
                         <div class="form-group">
                             <label class="form-label">杠杆倍数</label>
@@ -1332,6 +1353,14 @@
 
                     <div style="background: var(--bg-tertiary); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-secondary);">可用余额</span>
+                            <span id="live-available-balance">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="color: var(--text-secondary);">开仓数量</span>
+                            <span id="live-calc-quantity" style="color: var(--accent-blue);">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span style="color: var(--text-secondary);">预计保证金</span>
                             <span id="live-margin-estimate">--</span>
                         </div>
@@ -1356,7 +1385,7 @@
 
             // 绑定输入事件计算预估值
             setTimeout(() => {
-                const inputs = ['live-quantity', 'live-leverage', 'live-stop-loss', 'live-take-profit', 'live-limit-price', 'live-direction'];
+                const inputs = ['live-quantity-pct', 'live-leverage', 'live-stop-loss', 'live-take-profit', 'live-limit-price', 'live-direction'];
                 inputs.forEach(id => {
                     const el = document.getElementById(id);
                     if (el) {
@@ -1391,16 +1420,34 @@
             const price = orderType === 'limit' ?
                 parseFloat(document.getElementById('live-limit-price').value) :
                 liveTradeCurrentPrice;
-            const quantity = parseFloat(document.getElementById('live-quantity').value) || 0;
+            const quantityPct = parseFloat(document.getElementById('live-quantity-pct').value) || 5;
             const leverage = parseInt(document.getElementById('live-leverage').value) || 10;
             const stopLossPct = parseFloat(document.getElementById('live-stop-loss').value) || 0;
             const takeProfitPct = parseFloat(document.getElementById('live-take-profit').value) || 0;
             const direction = document.getElementById('live-direction').value;
 
-            // 计算保证金
-            const positionValue = price * quantity;
-            const margin = positionValue / leverage;
-            document.getElementById('live-margin-estimate').textContent = `${margin.toFixed(4)} USDT`;
+            // 显示可用余额
+            document.getElementById('live-available-balance').textContent = `${liveTradeAvailableBalance.toFixed(2)} USDT`;
+
+            // 根据百分比和杠杆计算数量
+            // 公式: margin = balance * pct% => positionValue = margin * leverage => quantity = positionValue / price
+            const marginToUse = liveTradeAvailableBalance * (quantityPct / 100);
+            const positionValue = marginToUse * leverage;
+            const quantity = price > 0 ? positionValue / price : 0;
+
+            // 显示计算出的数量（保留合理精度）
+            let quantityDisplay;
+            if (quantity >= 1) {
+                quantityDisplay = quantity.toFixed(4);
+            } else if (quantity >= 0.01) {
+                quantityDisplay = quantity.toFixed(5);
+            } else {
+                quantityDisplay = quantity.toFixed(6);
+            }
+            document.getElementById('live-calc-quantity').textContent = quantityDisplay;
+
+            // 显示保证金
+            document.getElementById('live-margin-estimate').textContent = `${marginToUse.toFixed(2)} USDT`;
 
             // 计算止损止盈价格
             let slPrice, tpPrice;
@@ -1421,15 +1468,21 @@
             const symbol = document.getElementById('live-symbol').value;
             const direction = document.getElementById('live-direction').value;
             const orderType = document.getElementById('live-order-type').value;
-            const quantity = parseFloat(document.getElementById('live-quantity').value);
+            const quantityPct = parseFloat(document.getElementById('live-quantity-pct').value);
             const leverage = parseInt(document.getElementById('live-leverage').value);
             const stopLossPct = parseFloat(document.getElementById('live-stop-loss').value);
             const takeProfitPct = parseFloat(document.getElementById('live-take-profit').value);
             const limitPrice = orderType === 'limit' ? parseFloat(document.getElementById('live-limit-price').value) : null;
 
+            // 计算实际数量用于显示确认
+            const price = limitPrice || liveTradeCurrentPrice;
+            const marginToUse = liveTradeAvailableBalance * (quantityPct / 100);
+            const positionValue = marginToUse * leverage;
+            const calcQuantity = price > 0 ? positionValue / price : 0;
+
             // 确认对话框
             const orderTypeText = orderType === 'market' ? '市价单' : `限价单 @ ${limitPrice}`;
-            const confirmMsg = `确认以下交易？\n\n交易对: ${symbol}\n方向: ${direction === 'LONG' ? '做多' : '做空'}\n类型: ${orderTypeText}\n数量: ${quantity}\n杠杆: ${leverage}x\n止损: ${stopLossPct}%\n止盈: ${takeProfitPct}%`;
+            const confirmMsg = `确认以下交易？\n\n交易对: ${symbol}\n方向: ${direction === 'LONG' ? '做多' : '做空'}\n类型: ${orderTypeText}\n资金占比: ${quantityPct}%\n预计数量: ${calcQuantity.toFixed(6)}\n预计保证金: ${marginToUse.toFixed(2)} USDT\n杠杆: ${leverage}x\n止损: ${stopLossPct}%\n止盈: ${takeProfitPct}%`;
 
             if (!confirm(confirmMsg)) {
                 return;
@@ -1442,7 +1495,7 @@
                 const requestBody = {
                     symbol: symbol,
                     position_side: direction,
-                    quantity: quantity,
+                    quantity_pct: quantityPct,
                     leverage: leverage,
                     stop_loss_pct: stopLossPct,
                     take_profit_pct: takeProfitPct,

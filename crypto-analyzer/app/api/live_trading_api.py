@@ -54,7 +54,8 @@ class OpenPositionRequest(BaseModel):
     account_id: int = Field(default=1, description="账户ID")
     symbol: str = Field(..., description="交易对，如 BTC/USDT")
     position_side: str = Field(..., description="持仓方向: LONG 或 SHORT")
-    quantity: float = Field(..., gt=0, description="开仓数量")
+    quantity: Optional[float] = Field(default=None, gt=0, description="开仓数量（与quantity_pct二选一）")
+    quantity_pct: Optional[float] = Field(default=None, gt=0, le=50, description="资金占比百分比（1-50%）")
     leverage: int = Field(default=5, ge=1, le=125, description="杠杆倍数")
     limit_price: Optional[float] = Field(default=None, description="限价（None为市价）")
     stop_loss_pct: Optional[float] = Field(default=None, description="止损百分比")
@@ -302,6 +303,10 @@ async def open_position(request: OpenPositionRequest):
 
     执行实盘开仓操作
 
+    支持两种方式指定数量：
+    - quantity: 直接指定数量
+    - quantity_pct: 按可用余额百分比计算（1-50%）
+
     注意：这是实盘交易，会使用真实资金！
     """
     try:
@@ -312,14 +317,44 @@ async def open_position(request: OpenPositionRequest):
         if position_side not in ['LONG', 'SHORT']:
             raise HTTPException(status_code=400, detail="position_side 必须是 LONG 或 SHORT")
 
+        # 验证必须提供 quantity 或 quantity_pct
+        if request.quantity is None and request.quantity_pct is None:
+            raise HTTPException(status_code=400, detail="必须提供 quantity 或 quantity_pct")
+
+        # 如果使用百分比，需要计算实际数量
+        quantity = request.quantity
+        if request.quantity_pct is not None:
+            # 获取账户可用余额
+            balance_result = engine.get_account_balance()
+            if not balance_result.get('success'):
+                raise HTTPException(status_code=400, detail=f"获取账户余额失败: {balance_result.get('error')}")
+
+            available_balance = Decimal(str(balance_result.get('available', 0)))
+
+            # 获取当前价格
+            price = request.limit_price
+            if price is None:
+                price = float(engine.get_current_price(request.symbol))
+
+            if price <= 0:
+                raise HTTPException(status_code=400, detail="无法获取有效价格")
+
+            # 计算数量: margin = balance * pct% => positionValue = margin * leverage => quantity = positionValue / price
+            margin_to_use = available_balance * Decimal(str(request.quantity_pct / 100))
+            position_value = margin_to_use * Decimal(str(request.leverage))
+            quantity = float(position_value / Decimal(str(price)))
+
+            logger.info(f"[实盘API] 按百分比计算数量: {request.quantity_pct}% 余额={available_balance:.2f} "
+                       f"保证金={margin_to_use:.2f} 数量={quantity:.6f}")
+
         logger.info(f"[实盘API] 收到开仓请求: {request.symbol} {position_side} "
-                   f"{request.quantity} @ {request.limit_price or '市价'}")
+                   f"{quantity} @ {request.limit_price or '市价'}")
 
         result = engine.open_position(
             account_id=request.account_id,
             symbol=request.symbol,
             position_side=position_side,
-            quantity=Decimal(str(request.quantity)),
+            quantity=Decimal(str(quantity)),
             leverage=request.leverage,
             limit_price=Decimal(str(request.limit_price)) if request.limit_price else None,
             stop_loss_pct=Decimal(str(request.stop_loss_pct)) if request.stop_loss_pct else None,
