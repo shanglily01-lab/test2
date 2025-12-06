@@ -3805,11 +3805,31 @@ class StrategyExecutor:
                                                 # ========== 同步实盘交易 ==========
                                                 if sync_live and self.live_engine is not None:
                                                     try:
-                                                        # 计算实盘下单数量
-                                                        live_quantity = Decimal(str(actual_quantity)) * Decimal(str(live_quantity_pct)) / Decimal('100')
+                                                        # 获取实盘账户可用余额
+                                                        live_balance_info = self.live_engine.get_account_balance()
+                                                        if not live_balance_info.get('success'):
+                                                            raise Exception(f"获取实盘余额失败: {live_balance_info.get('error', '未知错误')}")
+
+                                                        live_available = float(live_balance_info.get('available', 0))
+
+                                                        # 基于实盘账户余额计算下单数量
+                                                        # live_quantity_pct 表示使用实盘可用余额的百分比
+                                                        live_margin_to_use = live_available * float(live_quantity_pct) / 100.0
+
+                                                        # 计算实盘下单数量: 保证金 * 杠杆 / 价格 = 数量
+                                                        live_notional = live_margin_to_use * float(leverage)
+                                                        live_quantity = Decimal(str(live_notional / float(entry_price_decimal)))
                                                         live_quantity = live_quantity.quantize(Decimal(f'0.{"0" * qty_precision}'))
 
-                                                        logger.info(f"[同步实盘] {symbol} {direction_text} 开始同步: 模拟数量={actual_quantity}, 实盘数量={live_quantity} ({live_quantity_pct}%)")
+                                                        # 检查最小名义价值（币安合约一般最小5 USDT）
+                                                        if live_notional < 5.0:
+                                                            raise Exception(f"实盘名义价值({live_notional:.2f} USDT)小于最小要求(5 USDT)")
+
+                                                        # 检查实盘可用余额是否足够
+                                                        if live_margin_to_use > live_available:
+                                                            raise Exception(f"实盘保证金({live_margin_to_use:.2f} USDT)超过可用余额({live_available:.2f} USDT)")
+
+                                                        logger.info(f"[同步实盘] {symbol} {direction_text} 开始同步: 实盘可用余额={live_available:.2f} USDT, 使用{live_quantity_pct}%={live_margin_to_use:.2f} USDT, 杠杆={leverage}x, 实盘数量={live_quantity}")
 
                                                         # 调用实盘引擎开仓
                                                         live_result = self.live_engine.open_position(
@@ -3827,8 +3847,8 @@ class StrategyExecutor:
                                                         if live_result.get('success'):
                                                             live_entry_price = live_result.get('entry_price', actual_entry_price)
                                                             live_position_id = live_result.get('position_id')
-                                                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🔴 实盘同步成功: 数量={float(live_quantity):.{qty_precision}f}, 价格={live_entry_price:.4f}, 持仓ID={live_position_id}")
-                                                            logger.info(f"[同步实盘] ✅ {symbol} {direction_text} 成功: 数量={live_quantity}, 价格={live_entry_price}")
+                                                            debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🔴 实盘同步成功: 保证金={live_margin_to_use:.2f} USDT, 数量={float(live_quantity):.{qty_precision}f}, 价格={live_entry_price:.4f}")
+                                                            logger.info(f"[同步实盘] ✅ {symbol} {direction_text} 成功: 保证金={live_margin_to_use:.2f} USDT, 数量={live_quantity}, 价格={live_entry_price}")
                                                         else:
                                                             live_error = live_result.get('error', live_result.get('message', '未知错误'))
                                                             debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ⚠️ 实盘同步失败: {live_error}")
