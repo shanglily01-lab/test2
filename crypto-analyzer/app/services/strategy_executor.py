@@ -564,6 +564,47 @@ class StrategyExecutor:
             # 穿越确认K线数，连续几根K线在EMA下方/上方才触发
             exit_price_cross_ema_confirm_bars = exit_on_price_cross_ema.get('confirmBars', 1) if isinstance(exit_on_price_cross_ema, dict) else 1
 
+            # ================== 智能止损配置 ==================
+            smart_stop_loss = strategy.get('smartStopLoss', {})
+
+            # 1. ATR动态止损：根据市场波动率动态调整止损距离
+            atr_stop_loss = smart_stop_loss.get('atrStopLoss', {}) if isinstance(smart_stop_loss, dict) else {}
+            atr_stop_loss_enabled = atr_stop_loss.get('enabled', False) if isinstance(atr_stop_loss, dict) else False
+            # ATR倍数：止损距离 = ATR * multiplier
+            atr_stop_loss_multiplier = atr_stop_loss.get('multiplier', 2.0) if isinstance(atr_stop_loss, dict) else 2.0
+            # 最小止损百分比：ATR计算的止损不能低于此值
+            atr_stop_loss_min_pct = atr_stop_loss.get('minPct', 0.5) if isinstance(atr_stop_loss, dict) else 0.5
+            # 最大止损百分比：ATR计算的止损不能高于此值
+            atr_stop_loss_max_pct = atr_stop_loss.get('maxPct', 5.0) if isinstance(atr_stop_loss, dict) else 5.0
+
+            # 2. 移动止损（追踪止损）：止损价随盈利上移，只升不降
+            trailing_stop_loss = smart_stop_loss.get('trailingStopLoss', {}) if isinstance(smart_stop_loss, dict) else {}
+            trailing_stop_loss_enabled = trailing_stop_loss.get('enabled', False) if isinstance(trailing_stop_loss, dict) else False
+            # 激活阈值：盈利超过此百分比时启动追踪止损
+            trailing_stop_loss_activate_pct = trailing_stop_loss.get('activatePct', 1.0) if isinstance(trailing_stop_loss, dict) else 1.0
+            # 追踪距离：从最高盈利点回撤此百分比时触发止损
+            trailing_stop_loss_distance_pct = trailing_stop_loss.get('distancePct', 0.5) if isinstance(trailing_stop_loss, dict) else 0.5
+            # 步进值：止损价格每次移动的最小幅度（%）
+            trailing_stop_loss_step_pct = trailing_stop_loss.get('stepPct', 0.1) if isinstance(trailing_stop_loss, dict) else 0.1
+
+            # 3. 时间衰减止损：持仓时间越长，止损越紧
+            time_decay_stop_loss = smart_stop_loss.get('timeDecayStopLoss', {}) if isinstance(smart_stop_loss, dict) else {}
+            time_decay_stop_loss_enabled = time_decay_stop_loss.get('enabled', False) if isinstance(time_decay_stop_loss, dict) else False
+            # 初始止损百分比
+            time_decay_initial_pct = time_decay_stop_loss.get('initialPct', 3.0) if isinstance(time_decay_stop_loss, dict) else 3.0
+            # 最终止损百分比（衰减到的最小值）
+            time_decay_final_pct = time_decay_stop_loss.get('finalPct', 1.0) if isinstance(time_decay_stop_loss, dict) else 1.0
+            # 完全衰减所需时间（小时）
+            time_decay_hours = time_decay_stop_loss.get('decayHours', 24) if isinstance(time_decay_stop_loss, dict) else 24
+
+            # 4. EMA支撑止损：使用EMA26作为动态止损支撑位
+            ema_support_stop_loss = smart_stop_loss.get('emaSupportStopLoss', {}) if isinstance(smart_stop_loss, dict) else {}
+            ema_support_stop_loss_enabled = ema_support_stop_loss.get('enabled', False) if isinstance(ema_support_stop_loss, dict) else False
+            # EMA支撑缓冲区：价格低于EMA多少百分比触发止损
+            ema_support_buffer_pct = ema_support_stop_loss.get('bufferPct', 0.3) if isinstance(ema_support_stop_loss, dict) else 0.3
+            # 要求最小盈利才启用（避免开仓即触发）
+            ema_support_min_profit_pct = ema_support_stop_loss.get('minProfitPct', 0.0) if isinstance(ema_support_stop_loss, dict) else 0.0
+
             # 确定买入和卖出的时间周期
             timeframe_map = {
                 'ema_5m': '5m',
@@ -853,6 +894,22 @@ class StrategyExecutor:
                     exit_price_cross_ema_enabled=exit_price_cross_ema_enabled,
                     exit_price_cross_ema_min_profit=exit_price_cross_ema_min_profit,
                     exit_price_cross_ema_confirm_bars=exit_price_cross_ema_confirm_bars,
+                    # 智能止损配置
+                    atr_stop_loss_enabled=atr_stop_loss_enabled,
+                    atr_stop_loss_multiplier=atr_stop_loss_multiplier,
+                    atr_stop_loss_min_pct=atr_stop_loss_min_pct,
+                    atr_stop_loss_max_pct=atr_stop_loss_max_pct,
+                    trailing_stop_loss_enabled=trailing_stop_loss_enabled,
+                    trailing_stop_loss_activate_pct=trailing_stop_loss_activate_pct,
+                    trailing_stop_loss_distance_pct=trailing_stop_loss_distance_pct,
+                    trailing_stop_loss_step_pct=trailing_stop_loss_step_pct,
+                    time_decay_stop_loss_enabled=time_decay_stop_loss_enabled,
+                    time_decay_initial_pct=time_decay_initial_pct,
+                    time_decay_final_pct=time_decay_final_pct,
+                    time_decay_hours=time_decay_hours,
+                    ema_support_stop_loss_enabled=ema_support_stop_loss_enabled,
+                    ema_support_buffer_pct=ema_support_buffer_pct,
+                    ema_support_min_profit_pct=ema_support_min_profit_pct,
                     market_type=strategy.get('market_type', 'test'),  # 市场类型: test/live
                     # 同步实盘交易配置
                     sync_live=sync_live,
@@ -1230,6 +1287,31 @@ class StrategyExecutor:
         exit_price_cross_ema_enabled = kwargs.get('exit_price_cross_ema_enabled', False)
         exit_price_cross_ema_min_profit = kwargs.get('exit_price_cross_ema_min_profit', 0.5)  # 最小盈利要求(%)
         exit_price_cross_ema_confirm_bars = kwargs.get('exit_price_cross_ema_confirm_bars', 1)  # 确认K线数
+
+        # ================== 智能止损配置 ==================
+        # 1. ATR动态止损
+        atr_stop_loss_enabled = kwargs.get('atr_stop_loss_enabled', False)
+        atr_stop_loss_multiplier = kwargs.get('atr_stop_loss_multiplier', 2.0)  # ATR倍数
+        atr_stop_loss_min_pct = kwargs.get('atr_stop_loss_min_pct', 0.5)  # 最小止损%
+        atr_stop_loss_max_pct = kwargs.get('atr_stop_loss_max_pct', 5.0)  # 最大止损%
+
+        # 2. 移动止损（追踪止损）
+        trailing_stop_loss_enabled = kwargs.get('trailing_stop_loss_enabled', False)
+        trailing_stop_loss_activate_pct = kwargs.get('trailing_stop_loss_activate_pct', 1.0)  # 激活阈值%
+        trailing_stop_loss_distance_pct = kwargs.get('trailing_stop_loss_distance_pct', 0.5)  # 追踪距离%
+        trailing_stop_loss_step_pct = kwargs.get('trailing_stop_loss_step_pct', 0.1)  # 步进值%
+
+        # 3. 时间衰减止损
+        time_decay_stop_loss_enabled = kwargs.get('time_decay_stop_loss_enabled', False)
+        time_decay_initial_pct = kwargs.get('time_decay_initial_pct', 3.0)  # 初始止损%
+        time_decay_final_pct = kwargs.get('time_decay_final_pct', 1.0)  # 最终止损%
+        time_decay_hours = kwargs.get('time_decay_hours', 24)  # 衰减时间（小时）
+
+        # 4. EMA支撑止损
+        ema_support_stop_loss_enabled = kwargs.get('ema_support_stop_loss_enabled', False)
+        ema_support_buffer_pct = kwargs.get('ema_support_buffer_pct', 0.3)  # 缓冲区%
+        ema_support_min_profit_pct = kwargs.get('ema_support_min_profit_pct', 0.0)  # 最小盈利%
+
         strategy_id = kwargs.get('strategy_id')
         strategy_name = kwargs.get('strategy_name', '测试策略')
         account_id = kwargs.get('account_id', 0)
@@ -1473,18 +1555,171 @@ class StrategyExecutor:
                 
                 exit_price = None
                 exit_reason = None
-                
+
+                # ================== 智能止损计算 ==================
+                # 计算有效止损价格（综合各种智能止损策略）
+                effective_stop_loss_price = stop_loss_price
+                smart_sl_reason = ""
+
+                # 1. ATR动态止损：根据市场波动率调整止损距离
+                if atr_stop_loss_enabled and sell_indicator.get('atr'):
+                    atr_value = float(sell_indicator['atr'])
+                    if atr_value > 0:
+                        # ATR止损距离 = ATR * 倍数
+                        atr_stop_distance = atr_value * atr_stop_loss_multiplier
+                        # 转换为百分比
+                        atr_stop_pct = (atr_stop_distance / entry_price) * 100
+                        # 限制在最小和最大范围内
+                        atr_stop_pct = max(atr_stop_loss_min_pct, min(atr_stop_pct, atr_stop_loss_max_pct))
+
+                        # 计算ATR止损价格
+                        if direction == 'long':
+                            atr_stop_price = entry_price * (1 - atr_stop_pct / 100)
+                        else:
+                            atr_stop_price = entry_price * (1 + atr_stop_pct / 100)
+
+                        # 使用ATR止损（如果比固定止损更紧则使用固定止损）
+                        if effective_stop_loss_price:
+                            if direction == 'long':
+                                # 做多：取更高的止损价（更紧）
+                                if atr_stop_price > effective_stop_loss_price:
+                                    effective_stop_loss_price = atr_stop_price
+                                    smart_sl_reason = f"ATR动态止损({atr_stop_pct:.2f}%)"
+                            else:
+                                # 做空：取更低的止损价（更紧）
+                                if atr_stop_price < effective_stop_loss_price:
+                                    effective_stop_loss_price = atr_stop_price
+                                    smart_sl_reason = f"ATR动态止损({atr_stop_pct:.2f}%)"
+                        else:
+                            effective_stop_loss_price = atr_stop_price
+                            smart_sl_reason = f"ATR动态止损({atr_stop_pct:.2f}%)"
+
+                # 2. 时间衰减止损：持仓时间越长，止损越紧
+                if time_decay_stop_loss_enabled and entry_time:
+                    # 计算持仓时间（小时）
+                    entry_datetime = entry_time if isinstance(entry_time, datetime) else datetime.strptime(str(entry_time), '%Y-%m-%d %H:%M:%S')
+                    holding_time_hours = (current_time - entry_datetime).total_seconds() / 3600
+
+                    # 计算衰减后的止损百分比
+                    if holding_time_hours >= time_decay_hours:
+                        decay_stop_pct = time_decay_final_pct
+                    else:
+                        # 线性衰减
+                        decay_ratio = holding_time_hours / time_decay_hours
+                        decay_stop_pct = time_decay_initial_pct - (time_decay_initial_pct - time_decay_final_pct) * decay_ratio
+
+                    # 计算时间衰减止损价格
+                    if direction == 'long':
+                        time_decay_stop_price = entry_price * (1 - decay_stop_pct / 100)
+                    else:
+                        time_decay_stop_price = entry_price * (1 + decay_stop_pct / 100)
+
+                    # 使用更紧的止损
+                    if effective_stop_loss_price:
+                        if direction == 'long' and time_decay_stop_price > effective_stop_loss_price:
+                            effective_stop_loss_price = time_decay_stop_price
+                            smart_sl_reason = f"时间衰减止损({decay_stop_pct:.2f}%,持仓{holding_time_hours:.1f}h)"
+                        elif direction == 'short' and time_decay_stop_price < effective_stop_loss_price:
+                            effective_stop_loss_price = time_decay_stop_price
+                            smart_sl_reason = f"时间衰减止损({decay_stop_pct:.2f}%,持仓{holding_time_hours:.1f}h)"
+                    else:
+                        effective_stop_loss_price = time_decay_stop_price
+                        smart_sl_reason = f"时间衰减止损({decay_stop_pct:.2f}%,持仓{holding_time_hours:.1f}h)"
+
+                # 3. 移动止损（追踪止损）：止损价随盈利上移
+                if trailing_stop_loss_enabled:
+                    # 计算当前盈利百分比
+                    if direction == 'long':
+                        current_pnl_pct = (realtime_price - entry_price) / entry_price * 100
+                    else:
+                        current_pnl_pct = (entry_price - realtime_price) / entry_price * 100
+
+                    # 更新并获取历史最高价格（用于追踪止损）
+                    trailing_high_price = position.get('trailing_high_price', entry_price)
+                    trailing_low_price = position.get('trailing_low_price', entry_price)
+
+                    if direction == 'long' and realtime_price > trailing_high_price:
+                        position['trailing_high_price'] = realtime_price
+                        trailing_high_price = realtime_price
+                    elif direction == 'short' and realtime_price < trailing_low_price:
+                        position['trailing_low_price'] = realtime_price
+                        trailing_low_price = realtime_price
+
+                    # 只有盈利超过激活阈值才启用追踪止损
+                    if current_pnl_pct >= trailing_stop_loss_activate_pct:
+                        # 标记追踪止损已激活
+                        if not position.get('trailing_sl_activated'):
+                            position['trailing_sl_activated'] = True
+                            logger.info(f"[{symbol}] 追踪止损已激活，当前盈利={current_pnl_pct:.2f}%")
+
+                        # 计算追踪止损价格
+                        if direction == 'long':
+                            # 做多：止损价 = 最高价 * (1 - 追踪距离%)
+                            trailing_stop_price = trailing_high_price * (1 - trailing_stop_loss_distance_pct / 100)
+                            # 确保止损价格只升不降
+                            current_trailing_sl = position.get('trailing_stop_price', 0)
+                            if trailing_stop_price > current_trailing_sl:
+                                # 检查步进值
+                                if current_trailing_sl == 0 or (trailing_stop_price - current_trailing_sl) / entry_price * 100 >= trailing_stop_loss_step_pct:
+                                    position['trailing_stop_price'] = trailing_stop_price
+                        else:
+                            # 做空：止损价 = 最低价 * (1 + 追踪距离%)
+                            trailing_stop_price = trailing_low_price * (1 + trailing_stop_loss_distance_pct / 100)
+                            # 确保止损价格只降不升
+                            current_trailing_sl = position.get('trailing_stop_price', float('inf'))
+                            if trailing_stop_price < current_trailing_sl:
+                                if current_trailing_sl == float('inf') or (current_trailing_sl - trailing_stop_price) / entry_price * 100 >= trailing_stop_loss_step_pct:
+                                    position['trailing_stop_price'] = trailing_stop_price
+
+                        # 使用追踪止损价格
+                        trailing_sl = position.get('trailing_stop_price')
+                        if trailing_sl:
+                            if direction == 'long' and (not effective_stop_loss_price or trailing_sl > effective_stop_loss_price):
+                                effective_stop_loss_price = trailing_sl
+                                smart_sl_reason = f"追踪止损(距离{trailing_stop_loss_distance_pct}%)"
+                            elif direction == 'short' and (not effective_stop_loss_price or trailing_sl < effective_stop_loss_price):
+                                effective_stop_loss_price = trailing_sl
+                                smart_sl_reason = f"追踪止损(距离{trailing_stop_loss_distance_pct}%)"
+
+                # 4. EMA支撑止损：使用EMA26作为动态止损支撑位
+                if ema_support_stop_loss_enabled and sell_indicator.get('ema_long'):
+                    ema26_price = float(sell_indicator['ema_long'])
+
+                    # 计算当前盈利
+                    if direction == 'long':
+                        current_pnl_pct = (realtime_price - entry_price) / entry_price * 100
+                    else:
+                        current_pnl_pct = (entry_price - realtime_price) / entry_price * 100
+
+                    # 只有盈利超过最小要求才启用EMA支撑止损
+                    if current_pnl_pct >= ema_support_min_profit_pct:
+                        # 计算EMA支撑止损价格（带缓冲区）
+                        if direction == 'long':
+                            # 做多：止损价 = EMA26 * (1 - 缓冲%)
+                            ema_support_stop_price = ema26_price * (1 - ema_support_buffer_pct / 100)
+                            # 只有当EMA止损高于固定止损时才使用
+                            if not effective_stop_loss_price or ema_support_stop_price > effective_stop_loss_price:
+                                effective_stop_loss_price = ema_support_stop_price
+                                smart_sl_reason = f"EMA26支撑止损(EMA={ema26_price:.2f})"
+                        else:
+                            # 做空：止损价 = EMA26 * (1 + 缓冲%)
+                            ema_support_stop_price = ema26_price * (1 + ema_support_buffer_pct / 100)
+                            # 只有当EMA止损低于固定止损时才使用
+                            if not effective_stop_loss_price or ema_support_stop_price < effective_stop_loss_price:
+                                effective_stop_loss_price = ema_support_stop_price
+                                smart_sl_reason = f"EMA26支撑止损(EMA={ema26_price:.2f})"
+
                 # 止损检查（不受最小持仓时间限制）
-                if stop_loss_price:
+                if effective_stop_loss_price:
                     direction_text = "做多" if direction == 'long' else "做空"
-                    if direction == 'long' and realtime_price <= stop_loss_price:
-                        exit_price = stop_loss_price
-                        exit_reason = "止损"
-                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发止损，入场={entry_price:.4f}，止损价={stop_loss_price:.4f}，当前价={realtime_price:.4f}")
-                    elif direction == 'short' and realtime_price >= stop_loss_price:
-                        exit_price = stop_loss_price
-                        exit_reason = "止损"
-                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发止损，入场={entry_price:.4f}，止损价={stop_loss_price:.4f}，当前价={realtime_price:.4f}")
+                    if direction == 'long' and realtime_price <= effective_stop_loss_price:
+                        exit_price = effective_stop_loss_price
+                        exit_reason = smart_sl_reason if smart_sl_reason else "止损"
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发{exit_reason}，入场={entry_price:.4f}，止损价={effective_stop_loss_price:.4f}，当前价={realtime_price:.4f}")
+                    elif direction == 'short' and realtime_price >= effective_stop_loss_price:
+                        exit_price = effective_stop_loss_price
+                        exit_reason = smart_sl_reason if smart_sl_reason else "止损"
+                        debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: 🛑 {direction_text}触发{exit_reason}，入场={entry_price:.4f}，止损价={effective_stop_loss_price:.4f}，当前价={realtime_price:.4f}")
                 
                 # ================== 智能出场逻辑 ==================
                 # 计算当前盈利百分比（用于智能出场判断）

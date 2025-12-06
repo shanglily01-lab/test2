@@ -1267,6 +1267,122 @@
                                 </div>
                             </div>
 
+                            <!-- 智能止损 -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-shield-exclamation"></i>
+                                    智能止损
+                                    <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal; margin-left: 8px;">根据市场条件动态调整止损</span>
+                                </div>
+
+                                <!-- ATR动态止损 -->
+                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <input type="checkbox" id="atrStopLossEnabled" style="margin-right: 8px;">
+                                        <label for="atrStopLossEnabled" style="font-weight: 600; cursor: pointer;">ATR动态止损</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">根据市场波动率自动调整止损距离</span>
+                                    </div>
+                                    <div id="atrStopLossParams" style="display: none; margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">ATR倍数</label>
+                                                <input type="number" class="form-input" id="atrStopLossMultiplier" value="2.0" step="0.1" min="0.5" max="5" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">止损距离=ATR×倍数</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">最小止损%</label>
+                                                <input type="number" class="form-input" id="atrStopLossMinPct" value="0.5" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">ATR止损下限</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">最大止损%</label>
+                                                <input type="number" class="form-input" id="atrStopLossMaxPct" value="5.0" step="0.5" min="1" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">ATR止损上限</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 移动止损（追踪止损） -->
+                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <input type="checkbox" id="trailingStopLossEnabled" style="margin-right: 8px;">
+                                        <label for="trailingStopLossEnabled" style="font-weight: 600; cursor: pointer;">移动止损（追踪止损）</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">止损价随盈利上移，只升不降</span>
+                                    </div>
+                                    <div id="trailingStopLossParams" style="display: none; margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">激活阈值（%）</label>
+                                                <input type="number" class="form-input" id="trailingStopLossActivatePct" value="1.0" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">盈利超此值激活</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">追踪距离（%）</label>
+                                                <input type="number" class="form-input" id="trailingStopLossDistancePct" value="0.5" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">从高点回撤触发</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">步进值（%）</label>
+                                                <input type="number" class="form-input" id="trailingStopLossStepPct" value="0.1" step="0.05" min="0.05" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">最小移动幅度</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 时间衰减止损 -->
+                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <input type="checkbox" id="timeDecayStopLossEnabled" style="margin-right: 8px;">
+                                        <label for="timeDecayStopLossEnabled" style="font-weight: 600; cursor: pointer;">时间衰减止损</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">持仓时间越长，止损越紧</span>
+                                    </div>
+                                    <div id="timeDecayStopLossParams" style="display: none; margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">初始止损（%）</label>
+                                                <input type="number" class="form-input" id="timeDecayInitialPct" value="3.0" step="0.5" min="0.5" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">开仓时的止损</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">最终止损（%）</label>
+                                                <input type="number" class="form-input" id="timeDecayFinalPct" value="1.0" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">衰减后的止损</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">衰减时间（小时）</label>
+                                                <input type="number" class="form-input" id="timeDecayHours" value="24" step="1" min="1" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">完全衰减所需时间</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- EMA支撑止损 -->
+                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <input type="checkbox" id="emaSupportStopLossEnabled" style="margin-right: 8px;">
+                                        <label for="emaSupportStopLossEnabled" style="font-weight: 600; cursor: pointer;">EMA支撑止损</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">使用EMA26作为动态止损支撑位</span>
+                                    </div>
+                                    <div id="emaSupportStopLossParams" style="display: none; margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">缓冲区（%）</label>
+                                                <input type="number" class="form-input" id="emaSupportBufferPct" value="0.3" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">低于EMA多少触发</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">最小盈利要求（%）</label>
+                                                <input type="number" class="form-input" id="emaSupportMinProfitPct" value="0" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">达到此盈利才启用</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- 交易价格 -->
                             <div class="form-section">
                                 <div class="form-section-title">
@@ -1763,6 +1879,31 @@
             params.style.display = enabled ? 'block' : 'none';
         }
 
+        // 智能止损相关切换函数
+        function toggleAtrStopLossParams() {
+            const enabled = document.getElementById('atrStopLossEnabled').checked;
+            const params = document.getElementById('atrStopLossParams');
+            params.style.display = enabled ? 'block' : 'none';
+        }
+
+        function toggleTrailingStopLossParams() {
+            const enabled = document.getElementById('trailingStopLossEnabled').checked;
+            const params = document.getElementById('trailingStopLossParams');
+            params.style.display = enabled ? 'block' : 'none';
+        }
+
+        function toggleTimeDecayStopLossParams() {
+            const enabled = document.getElementById('timeDecayStopLossEnabled').checked;
+            const params = document.getElementById('timeDecayStopLossParams');
+            params.style.display = enabled ? 'block' : 'none';
+        }
+
+        function toggleEmaSupportStopLossParams() {
+            const enabled = document.getElementById('emaSupportStopLossEnabled').checked;
+            const params = document.getElementById('emaSupportStopLossParams');
+            params.style.display = enabled ? 'block' : 'none';
+        }
+
         // 绑定智能出场复选框事件
         document.addEventListener('DOMContentLoaded', function() {
             const dynamicTpCheckbox = document.getElementById('dynamicTakeProfitEnabled');
@@ -1773,6 +1914,19 @@
 
             const exitPriceCrossEmaCheckbox = document.getElementById('exitOnPriceCrossEmaEnabled');
             if (exitPriceCrossEmaCheckbox) exitPriceCrossEmaCheckbox.addEventListener('change', toggleExitOnPriceCrossEmaParams);
+
+            // 智能止损复选框事件绑定
+            const atrStopLossCheckbox = document.getElementById('atrStopLossEnabled');
+            if (atrStopLossCheckbox) atrStopLossCheckbox.addEventListener('change', toggleAtrStopLossParams);
+
+            const trailingStopLossCheckbox = document.getElementById('trailingStopLossEnabled');
+            if (trailingStopLossCheckbox) trailingStopLossCheckbox.addEventListener('change', toggleTrailingStopLossParams);
+
+            const timeDecayStopLossCheckbox = document.getElementById('timeDecayStopLossEnabled');
+            if (timeDecayStopLossCheckbox) timeDecayStopLossCheckbox.addEventListener('change', toggleTimeDecayStopLossParams);
+
+            const emaSupportStopLossCheckbox = document.getElementById('emaSupportStopLossEnabled');
+            if (emaSupportStopLossCheckbox) emaSupportStopLossCheckbox.addEventListener('change', toggleEmaSupportStopLossParams);
         });
 
         // 加载可用币种（从配置文件/API获取）
@@ -1984,6 +2138,32 @@
                     enabled: document.getElementById('exitOnPriceCrossEmaEnabled') ? document.getElementById('exitOnPriceCrossEmaEnabled').checked : false,
                     minProfitPct: document.getElementById('exitPriceCrossEmaMinProfit') ? parseFloat(document.getElementById('exitPriceCrossEmaMinProfit').value) : 0.5,
                     confirmBars: document.getElementById('exitPriceCrossEmaConfirmBars') ? parseInt(document.getElementById('exitPriceCrossEmaConfirmBars').value) : 1
+                },
+                // 智能止损配置
+                smartStopLoss: {
+                    atrStopLoss: {
+                        enabled: document.getElementById('atrStopLossEnabled') ? document.getElementById('atrStopLossEnabled').checked : false,
+                        multiplier: document.getElementById('atrStopLossMultiplier') ? parseFloat(document.getElementById('atrStopLossMultiplier').value) : 2.0,
+                        minPct: document.getElementById('atrStopLossMinPct') ? parseFloat(document.getElementById('atrStopLossMinPct').value) : 0.5,
+                        maxPct: document.getElementById('atrStopLossMaxPct') ? parseFloat(document.getElementById('atrStopLossMaxPct').value) : 5.0
+                    },
+                    trailingStopLoss: {
+                        enabled: document.getElementById('trailingStopLossEnabled') ? document.getElementById('trailingStopLossEnabled').checked : false,
+                        activatePct: document.getElementById('trailingStopLossActivatePct') ? parseFloat(document.getElementById('trailingStopLossActivatePct').value) : 1.0,
+                        distancePct: document.getElementById('trailingStopLossDistancePct') ? parseFloat(document.getElementById('trailingStopLossDistancePct').value) : 0.5,
+                        stepPct: document.getElementById('trailingStopLossStepPct') ? parseFloat(document.getElementById('trailingStopLossStepPct').value) : 0.1
+                    },
+                    timeDecayStopLoss: {
+                        enabled: document.getElementById('timeDecayStopLossEnabled') ? document.getElementById('timeDecayStopLossEnabled').checked : false,
+                        initialPct: document.getElementById('timeDecayInitialPct') ? parseFloat(document.getElementById('timeDecayInitialPct').value) : 3.0,
+                        finalPct: document.getElementById('timeDecayFinalPct') ? parseFloat(document.getElementById('timeDecayFinalPct').value) : 1.0,
+                        decayHours: document.getElementById('timeDecayHours') ? parseInt(document.getElementById('timeDecayHours').value) : 24
+                    },
+                    emaSupportStopLoss: {
+                        enabled: document.getElementById('emaSupportStopLossEnabled') ? document.getElementById('emaSupportStopLossEnabled').checked : false,
+                        bufferPct: document.getElementById('emaSupportBufferPct') ? parseFloat(document.getElementById('emaSupportBufferPct').value) : 0.3,
+                        minProfitPct: document.getElementById('emaSupportMinProfitPct') ? parseFloat(document.getElementById('emaSupportMinProfitPct').value) : 0.0
+                    }
                 },
                 // 行情自适应开关
                 adaptiveRegime: document.getElementById('adaptiveRegimeEnabled') ? document.getElementById('adaptiveRegimeEnabled').checked : false
@@ -2652,6 +2832,41 @@
                     document.getElementById('exitPriceCrossEmaMinProfit').value = strategy.exitOnPriceCrossEMA.minProfitPct || 0.5;
                     document.getElementById('exitPriceCrossEmaConfirmBars').value = strategy.exitOnPriceCrossEMA.confirmBars || 1;
                     toggleExitOnPriceCrossEmaParams();
+                }
+            }
+
+            // 智能止损配置
+            if (strategy.smartStopLoss) {
+                // ATR动态止损
+                if (strategy.smartStopLoss.atrStopLoss && document.getElementById('atrStopLossEnabled')) {
+                    document.getElementById('atrStopLossEnabled').checked = strategy.smartStopLoss.atrStopLoss.enabled === true;
+                    document.getElementById('atrStopLossMultiplier').value = strategy.smartStopLoss.atrStopLoss.multiplier || 2.0;
+                    document.getElementById('atrStopLossMinPct').value = strategy.smartStopLoss.atrStopLoss.minPct || 0.5;
+                    document.getElementById('atrStopLossMaxPct').value = strategy.smartStopLoss.atrStopLoss.maxPct || 5.0;
+                    toggleAtrStopLossParams();
+                }
+                // 移动止损（追踪止损）
+                if (strategy.smartStopLoss.trailingStopLoss && document.getElementById('trailingStopLossEnabled')) {
+                    document.getElementById('trailingStopLossEnabled').checked = strategy.smartStopLoss.trailingStopLoss.enabled === true;
+                    document.getElementById('trailingStopLossActivatePct').value = strategy.smartStopLoss.trailingStopLoss.activatePct || 1.0;
+                    document.getElementById('trailingStopLossDistancePct').value = strategy.smartStopLoss.trailingStopLoss.distancePct || 0.5;
+                    document.getElementById('trailingStopLossStepPct').value = strategy.smartStopLoss.trailingStopLoss.stepPct || 0.1;
+                    toggleTrailingStopLossParams();
+                }
+                // 时间衰减止损
+                if (strategy.smartStopLoss.timeDecayStopLoss && document.getElementById('timeDecayStopLossEnabled')) {
+                    document.getElementById('timeDecayStopLossEnabled').checked = strategy.smartStopLoss.timeDecayStopLoss.enabled === true;
+                    document.getElementById('timeDecayInitialPct').value = strategy.smartStopLoss.timeDecayStopLoss.initialPct || 3.0;
+                    document.getElementById('timeDecayFinalPct').value = strategy.smartStopLoss.timeDecayStopLoss.finalPct || 1.0;
+                    document.getElementById('timeDecayHours').value = strategy.smartStopLoss.timeDecayStopLoss.decayHours || 24;
+                    toggleTimeDecayStopLossParams();
+                }
+                // EMA支撑止损
+                if (strategy.smartStopLoss.emaSupportStopLoss && document.getElementById('emaSupportStopLossEnabled')) {
+                    document.getElementById('emaSupportStopLossEnabled').checked = strategy.smartStopLoss.emaSupportStopLoss.enabled === true;
+                    document.getElementById('emaSupportBufferPct').value = strategy.smartStopLoss.emaSupportStopLoss.bufferPct || 0.3;
+                    document.getElementById('emaSupportMinProfitPct').value = strategy.smartStopLoss.emaSupportStopLoss.minProfitPct || 0.0;
+                    toggleEmaSupportStopLossParams();
                 }
             }
 
