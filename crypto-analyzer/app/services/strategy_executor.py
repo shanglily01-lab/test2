@@ -121,8 +121,27 @@ class StrategyExecutor:
             regime_type = regime_result.get('regime_type', 'ranging')
             regime_score = regime_result.get('regime_score', 0)
 
-            # 获取该行情类型对应的参数配置
-            regime_params = self.regime_detector.get_regime_params(strategy_id, regime_type)
+            # 优先使用策略配置中的regimeParams（前端配置的行情参数）
+            strategy_regime_params = strategy.get('regimeParams', {})
+            regime_config = strategy_regime_params.get(regime_type) if strategy_regime_params else None
+
+            # 如果策略配置了行情参数，直接使用
+            if regime_config:
+                regime_params = {
+                    'enabled': regime_config.get('allowDirection') != 'none',
+                    'params': {
+                        'allowDirection': regime_config.get('allowDirection', 'both'),
+                        'sustainedTrend': regime_config.get('sustainedTrend', False)
+                    }
+                }
+                # 只有配置了值的参数才覆盖
+                if regime_config.get('stopLossPercent') is not None:
+                    regime_params['params']['stopLossPercent'] = regime_config['stopLossPercent']
+                if regime_config.get('takeProfitPercent') is not None:
+                    regime_params['params']['takeProfitPercent'] = regime_config['takeProfitPercent']
+            else:
+                # 回退到数据库中的配置（兼容旧版本）
+                regime_params = self.regime_detector.get_regime_params(strategy_id, regime_type)
 
             if regime_params:
                 # 检查是否在该行情类型下启用交易
