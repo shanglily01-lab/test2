@@ -15,7 +15,10 @@
       "Bash(ls:*)",
       "Bash(git rev-parse:*)",
       "Bash(git show:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(sudo systemctl restart:*)",
+      "Bash(tmux list-sessions:*)",
+      "Bash(screen:*)"
     ],
     "deny": [],
     "ask": []

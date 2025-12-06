@@ -2228,6 +2228,7 @@ class StrategyExecutor:
             # EMA信号每60秒检查一次，止损止盈每5秒检查（上面已处理）
             if not closed_at_current_time and len(positions) > 0 and should_check_ema:
                 sell_signal_triggered = False
+                sell_close_direction = None  # 记录应该平仓的方向，防止平错方向
                 current_sell_index = len(sell_indicator_pairs) - 1
 
                 # 只检测最新K线与前一根K线之间是否发生穿越
@@ -2255,12 +2256,14 @@ class StrategyExecutor:
                                 pos_direction = pos.get('direction')
                                 if pos_direction == 'long' and ma5_ema5_is_death:
                                     sell_signal_triggered = True
+                                    sell_close_direction = 'long'  # 只平多头
                                     msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5死叉 - 触发做多平仓信号"
                                     debug_info.append(msg)
                                     logger.info(f"{symbol} {msg}")
                                     break
                                 elif pos_direction == 'short' and ma5_ema5_is_golden:
                                     sell_signal_triggered = True
+                                    sell_close_direction = 'short'  # 只平空头
                                     msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA5/EMA5金叉 - 触发做空平仓信号"
                                     debug_info.append(msg)
                                     logger.info(f"{symbol} {msg}")
@@ -2287,12 +2290,14 @@ class StrategyExecutor:
                                 pos_direction = pos.get('direction')
                                 if pos_direction == 'long' and ma10_ema10_is_death:
                                     sell_signal_triggered = True
+                                    sell_close_direction = 'long'  # 只平多头
                                     msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10死叉 - 触发做多平仓信号"
                                     debug_info.append(msg)
                                     logger.info(f"{symbol} {msg}")
                                     break
                                 elif pos_direction == 'short' and ma10_ema10_is_golden:
                                     sell_signal_triggered = True
+                                    sell_close_direction = 'short'  # 只平空头
                                     msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到MA10/EMA10金叉 - 触发做空平仓信号"
                                     debug_info.append(msg)
                                     logger.info(f"{symbol} {msg}")
@@ -2317,17 +2322,20 @@ class StrategyExecutor:
                             # 根据持仓方向决定平仓信号：
                             # - 做多持仓：检测到死叉时平仓
                             # - 做空持仓：检测到金叉时平仓
-                            # 遍历所有持仓，只要有反向信号就触发平仓
+                            # 记录应该平仓的方向，而不是直接触发所有平仓
+                            sell_close_direction = None  # 记录应该平仓的方向
                             for pos in positions:
                                 pos_direction = pos.get('direction')
                                 if pos_direction == 'long' and ema_is_death:
                                     sell_signal_triggered = True
+                                    sell_close_direction = 'long'  # 只平多头
                                     msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26死叉 - 触发做多平仓信号"
                                     debug_info.append(msg)
                                     logger.info(f"{symbol} {msg}")
                                     break
                                 elif pos_direction == 'short' and ema_is_golden:
                                     sell_signal_triggered = True
+                                    sell_close_direction = 'short'  # 只平空头
                                     msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ✅ 检测到EMA9/26金叉 - 触发做空平仓信号"
                                     debug_info.append(msg)
                                     logger.info(f"{symbol} {msg}")
@@ -2339,13 +2347,17 @@ class StrategyExecutor:
 
                 # 平仓成交量条件已移除，直接执行卖出
 
-                # 执行卖出（使用实时价格）
-                if sell_signal_triggered:
+                # 执行卖出（使用实时价格）- 只平对应方向的仓位
+                if sell_signal_triggered and sell_close_direction:
                     for position in positions[:]:
                         position_id = position.get('position_id')
                         entry_price = position['entry_price']
                         quantity = position['quantity']
                         direction = position['direction']
+
+                        # 只平对应方向的仓位（死叉平多头，金叉平空头）
+                        if direction != sell_close_direction:
+                            continue
 
                         if position_id:
                             exit_price_decimal = Decimal(str(realtime_price))
