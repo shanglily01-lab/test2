@@ -353,7 +353,7 @@ class FuturesLimitOrderExecutor:
                                     update_cursor.execute(
                                         """UPDATE paper_trading_accounts
                                         SET current_balance = current_balance + %s,
-                                            frozen_balance = frozen_balance - %s
+                                            frozen_balance = GREATEST(0, frozen_balance - %s)
                                         WHERE id = %s""",
                                         (float(frozen_margin), float(frozen_margin), account_id)
                                     )
@@ -406,7 +406,7 @@ class FuturesLimitOrderExecutor:
                                             update_cursor.execute(
                                                 """UPDATE paper_trading_accounts
                                                 SET current_balance = current_balance + %s,
-                                                    frozen_balance = frozen_balance - %s
+                                                    frozen_balance = GREATEST(0, frozen_balance - %s)
                                                 WHERE id = %s""",
                                                 (float(frozen_margin), float(frozen_margin), account_id)
                                             )
@@ -453,11 +453,11 @@ class FuturesLimitOrderExecutor:
                                         update_cursor.execute(
                                             """UPDATE paper_trading_accounts
                                             SET current_balance = current_balance + %s,
-                                                frozen_balance = frozen_balance - %s
+                                                frozen_balance = GREATEST(0, frozen_balance - %s)
                                             WHERE id = %s""",
                                             (float(frozen_margin), float(frozen_margin), account_id)
                                         )
-                                
+
                                 # 提交解冻操作
                                 connection.commit()
                                 
