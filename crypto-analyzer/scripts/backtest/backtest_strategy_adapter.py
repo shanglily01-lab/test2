@@ -6,20 +6,39 @@
     python scripts/backtest/backtest_strategy_adapter.py --session bt_xxx --strategy-id 1
 """
 
-import os
 import sys
 import argparse
 import asyncio
 import json
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from decimal import Decimal
 import pymysql
+import yaml
 
 # 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
-from config.settings import load_config
+# 确保控制台输出使用UTF-8编码 (Windows兼容)
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
+
+def load_config() -> Dict:
+    """加载配置文件"""
+    config_path = project_root / 'config.yaml'
+    if not config_path.exists():
+        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
 from scripts.backtest.backtest_runner import BacktestEngine, BacktestDataProvider
 
 
