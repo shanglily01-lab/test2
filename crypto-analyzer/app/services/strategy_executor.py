@@ -3012,18 +3012,18 @@ class StrategyExecutor:
                     if entry_cooldown_per_direction:
                         # 按方向独立冷却：只查同方向的开仓
                         cursor.execute("""
-                            SELECT entry_time, direction FROM positions
-                            WHERE symbol = %s AND strategy_id = %s AND direction = %s
-                            AND entry_time >= %s
-                            ORDER BY entry_time DESC LIMIT 1
-                        """, (symbol, strategy_id, pending_direction, cooldown_start))
+                            SELECT open_time as entry_time, position_side as direction FROM futures_positions
+                            WHERE symbol = %s AND strategy_id = %s AND position_side = %s
+                            AND open_time >= %s
+                            ORDER BY open_time DESC LIMIT 1
+                        """, (symbol, strategy_id, pending_direction.upper(), cooldown_start))
                     else:
                         # 全局冷却：查任意方向的开仓
                         cursor.execute("""
-                            SELECT entry_time, direction FROM positions
+                            SELECT open_time as entry_time, position_side as direction FROM futures_positions
                             WHERE symbol = %s AND strategy_id = %s
-                            AND entry_time >= %s
-                            ORDER BY entry_time DESC LIMIT 1
+                            AND open_time >= %s
+                            ORDER BY open_time DESC LIMIT 1
                         """, (symbol, strategy_id, cooldown_start))
 
                     recent_entry = cursor.fetchone()
