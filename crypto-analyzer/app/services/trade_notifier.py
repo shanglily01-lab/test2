@@ -28,7 +28,7 @@ class TradeNotifier:
 
         self.enabled = telegram_config.get('enabled', False)
         self.bot_token = telegram_config.get('bot_token', '')
-        self.chat_id = telegram_config.get('chat_id', '')
+        self.chat_id = str(telegram_config.get('chat_id', ''))  # 确保是字符串
 
         # 通知事件过滤
         notify_events = telegram_config.get('notify_events', [])
