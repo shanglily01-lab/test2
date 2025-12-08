@@ -259,6 +259,18 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"⚠️  实盘交易Telegram通知服务初始化失败: {e}")
 
+        # 初始化用户认证服务
+        try:
+            from app.auth.auth_service import init_auth_service
+            db_config = config.get('database', {}).get('mysql', {})
+            jwt_config = config.get('auth', {})
+            init_auth_service(db_config, jwt_config)
+            logger.info("✅ 用户认证服务初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  用户认证服务初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+
         logger.info("🎉 分析模块初始化完成！")
 
     except Exception as e:
@@ -406,6 +418,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册用户认证API路由
+try:
+    from app.api.auth_api import router as auth_router
+    app.include_router(auth_router, prefix="/api")
+    logger.info("✅ 用户认证API路由已注册 (/api/auth)")
+except Exception as e:
+    logger.warning(f"⚠️  用户认证API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册策略管理API路由
 try:
     from app.api.strategy_api import router as strategy_router
@@ -543,6 +565,26 @@ async def root():
                 "批量信号": "/api/signals/batch"
             }
         }
+
+
+@app.get("/login")
+async def login_page():
+    """登录页面"""
+    login_path = project_root / "templates" / "login.html"
+    if login_path.exists():
+        return FileResponse(str(login_path))
+    else:
+        raise HTTPException(status_code=404, detail="登录页面未找到")
+
+
+@app.get("/register")
+async def register_page():
+    """注册页面"""
+    register_path = project_root / "templates" / "register.html"
+    if register_path.exists():
+        return FileResponse(str(register_path))
+    else:
+        raise HTTPException(status_code=404, detail="注册页面未找到")
 
 
 @app.get("/favicon.ico")

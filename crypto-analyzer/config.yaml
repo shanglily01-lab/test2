@@ -358,3 +358,10 @@ notification:
   alert_file: signals/ema_alerts.txt
   email: false
   telegram: false
+
+# JWT认证配置
+auth:
+  secret_key: 'your-super-secret-key-change-in-production-2024'
+  algorithm: 'HS256'
+  access_token_expire_minutes: 60    # 访问令牌有效期(分钟)
+  refresh_token_expire_days: 30      # 刷新令牌有效期(天)
