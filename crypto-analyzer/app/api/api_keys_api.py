@@ -41,18 +41,23 @@ async def list_api_keys(current_user: dict = Depends(get_current_user)):
     """
     获取当前用户的所有API密钥（不含密钥内容）
     """
-    service = get_api_key_service()
-    if not service:
-        raise HTTPException(status_code=500, detail="API密钥服务未初始化")
-
     try:
-        keys = service.get_user_api_keys(current_user['id'])
+        service = get_api_key_service()
+        if not service:
+            logger.error("API密钥服务未初始化")
+            raise HTTPException(status_code=500, detail="API密钥服务未初始化，请检查服务器日志")
+
+        keys = service.get_user_api_keys(current_user['user_id'])
         return {
             'success': True,
             'api_keys': keys
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取API密钥列表失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -64,13 +69,14 @@ async def save_api_key(
     """
     保存API密钥（新增或更新）
     """
-    service = get_api_key_service()
-    if not service:
-        raise HTTPException(status_code=500, detail="API密钥服务未初始化")
-
     try:
+        service = get_api_key_service()
+        if not service:
+            logger.error("API密钥服务未初始化")
+            raise HTTPException(status_code=500, detail="API密钥服务未初始化，请检查服务器日志")
+
         result = service.save_api_key(
-            user_id=current_user['id'],
+            user_id=current_user['user_id'],
             exchange=request.exchange,
             account_name=request.account_name,
             api_key=request.api_key,
@@ -95,6 +101,8 @@ async def save_api_key(
         raise
     except Exception as e:
         logger.error(f"保存API密钥失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -112,7 +120,7 @@ async def delete_api_key(
 
     try:
         result = service.delete_api_key(
-            user_id=current_user['id'],
+            user_id=current_user['user_id'],
             api_key_id=request.api_key_id
         )
 
@@ -142,7 +150,7 @@ async def verify_api_key(
 
     try:
         result = service.verify_api_key(
-            user_id=current_user['id'],
+            user_id=current_user['user_id'],
             exchange=exchange
         )
 
@@ -166,7 +174,7 @@ async def has_api_key(
         raise HTTPException(status_code=500, detail="API密钥服务未初始化")
 
     try:
-        api_key = service.get_api_key(current_user['id'], exchange)
+        api_key = service.get_api_key(current_user['user_id'], exchange)
         return {
             'success': True,
             'has_key': api_key is not None,
