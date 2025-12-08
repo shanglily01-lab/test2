@@ -615,15 +615,21 @@ class LiveOrderMonitor:
         try:
             symbol = position['symbol']
             position_id = position['id']
-            entry_price = float(position['entry_price'])
-            quantity = float(position['quantity'])
+            entry_price = float(position['entry_price']) if position['entry_price'] else 0
+            quantity = float(position['quantity']) if position['quantity'] else 0
             position_side = position['position_side']  # LONG or SHORT
             strategy_config = position.get('strategy_config')
+
+            if entry_price == 0:
+                return
 
             # 获取当前价格
             current_price = self.live_engine.get_current_price(symbol)
             if current_price == 0:
                 return
+
+            # 确保 current_price 也是 float
+            current_price = float(current_price)
 
             # 计算当前盈亏
             if position_side == 'LONG':
