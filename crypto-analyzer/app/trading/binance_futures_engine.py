@@ -627,6 +627,8 @@ class BinanceFuturesEngine:
                 if notifier:
                     actual_qty = float(executed_qty if executed_qty > 0 else quantity)
                     margin = (float(entry_price) * actual_qty) / leverage
+                    order_type_str = 'LIMIT' if limit_price else 'MARKET'
+                    logger.info(f"[实盘] 发送Telegram开仓通知: {symbol} {position_side} {actual_qty} @ {entry_price} ({order_type_str})")
                     notifier.notify_open_position(
                         symbol=symbol,
                         direction=position_side,
@@ -636,10 +638,14 @@ class BinanceFuturesEngine:
                         stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
                         take_profit_price=float(take_profit_price) if take_profit_price else None,
                         margin=margin,
-                        order_type='LIMIT' if limit_price else 'MARKET'
+                        order_type=order_type_str
                     )
+                else:
+                    logger.warning(f"[实盘] Telegram通知器未初始化，跳过开仓通知")
             except Exception as notify_err:
                 logger.warning(f"发送开仓通知失败: {notify_err}")
+                import traceback
+                traceback.print_exc()
 
             return {
                 'success': True,
