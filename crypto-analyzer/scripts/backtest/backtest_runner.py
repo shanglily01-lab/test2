@@ -527,25 +527,27 @@ _last_signal = {}  # {symbol: 'long'/'short'/None}
 
 async def simple_ema_strategy(engine: BacktestEngine, symbol: str, current_time: datetime):
     """
-    优化版EMA交叉策略 v2.0
+    优化版EMA交叉策略 v3.0
 
     改进点:
-    1. 增加入场冷却期 - 平仓后30分钟内不再开仓
-    2. 增加趋势强度过滤 - EMA差值需要超过0.5%
+    1. 增加入场冷却期 - 平仓后15分钟内不再开仓
+    2. 两种入场模式:
+       - 交叉入场: 金叉/死叉发生时立即入场
+       - 趋势入场: 趋势已确立(EMA差值>0.3%) + RSI确认
     3. 增加RSI过滤 - 避免超买超卖区域逆势入场
-    4. 调整止损止盈比例 - 止损3%, 止盈9% (1:3盈亏比)
-    5. 信号确认 - 需要连续2根K线确认趋势
+    4. 调整止损止盈比例 - 止损2.5%, 止盈7.5% (1:3盈亏比)
+    5. 加入趋势确认 - 价格需要在EMA方向上
     """
     global _last_trade_time, _last_signal
 
     # ===== 策略参数 =====
-    COOLDOWN_MINUTES = 30       # 入场冷却期(分钟)
-    MIN_EMA_DIFF_PCT = 0.5      # 最小EMA差值百分比
-    STOP_LOSS_PCT = 0.03        # 止损百分比 3%
-    TAKE_PROFIT_PCT = 0.09      # 止盈百分比 9%
-    POSITION_SIZE_PCT = 0.08    # 仓位大小 8%
-    RSI_OVERSOLD = 30           # RSI超卖
-    RSI_OVERBOUGHT = 70         # RSI超买
+    COOLDOWN_MINUTES = 15       # 入场冷却期(分钟) - 缩短冷却时间
+    MIN_EMA_DIFF_PCT = 0.3      # 趋势入场的最小EMA差值百分比 - 降低阈值
+    STOP_LOSS_PCT = 0.025       # 止损百分比 2.5%
+    TAKE_PROFIT_PCT = 0.075     # 止盈百分比 7.5%
+    POSITION_SIZE_PCT = 0.10    # 仓位大小 10%
+    RSI_OVERSOLD = 35           # RSI超卖 - 放宽条件
+    RSI_OVERBOUGHT = 65         # RSI超买 - 放宽条件
 
     # 获取15分钟K线
     klines = engine.get_klines(symbol, '15m', limit=50)
@@ -621,30 +623,39 @@ async def simple_ema_strategy(engine: BacktestEngine, symbol: str, current_time:
     # 检查是否已有持仓
     has_position = symbol in engine.positions
 
-    # ===== 金叉信号判断 =====
-    # 条件1: EMA9上穿EMA26 (当前金叉)
+    # ===== 信号判断 =====
+    # 金叉: EMA9上穿EMA26
     golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
-    # 条件2: EMA差值足够大 (趋势强度)
-    strong_bullish = ema_diff_pct > MIN_EMA_DIFF_PCT
-    # 条件3: RSI不在超买区 (避免追高)
-    rsi_ok_for_long = rsi < RSI_OVERBOUGHT
-    # 条件4: 趋势确认 (前一根也是多头排列)
-    trend_confirmed_long = prev_ema9 > prev_ema26 or golden_cross
-
-    # ===== 死叉信号判断 =====
-    # 条件1: EMA9下穿EMA26 (当前死叉)
+    # 死叉: EMA9下穿EMA26
     death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
-    # 条件2: EMA差值足够大 (趋势强度)
-    strong_bearish = ema_diff_pct < -MIN_EMA_DIFF_PCT
-    # 条件3: RSI不在超卖区 (避免追空)
-    rsi_ok_for_short = rsi > RSI_OVERSOLD
-    # 条件4: 趋势确认
-    trend_confirmed_short = prev_ema9 < prev_ema26 or death_cross
+
+    # 多头趋势: EMA9 > EMA26 且差值足够大
+    bullish_trend = ema9 > ema26 and ema_diff_pct > MIN_EMA_DIFF_PCT
+    # 空头趋势: EMA9 < EMA26 且差值足够大
+    bearish_trend = ema9 < ema26 and ema_diff_pct < -MIN_EMA_DIFF_PCT
+
+    # RSI过滤
+    rsi_ok_for_long = rsi < RSI_OVERBOUGHT and rsi > RSI_OVERSOLD
+    rsi_ok_for_short = rsi > RSI_OVERSOLD and rsi < RSI_OVERBOUGHT
+
+    # 价格确认
+    price_above_ema = current_price > ema26
+    price_below_ema = current_price < ema26
+
+    # ===== 做多信号 =====
+    # 方式1: 金叉入场 (交叉发生时立即入场，不需要EMA差值)
+    # 方式2: 趋势入场 (趋势已确立，差值足够大)
+    long_signal = (golden_cross and rsi_ok_for_long) or \
+                  (bullish_trend and rsi_ok_for_long and price_above_ema and _last_signal.get(symbol) != 'long')
+
+    # ===== 做空信号 =====
+    short_signal = (death_cross and rsi_ok_for_short) or \
+                   (bearish_trend and rsi_ok_for_short and price_below_ema and _last_signal.get(symbol) != 'short')
 
     # ===== 交易逻辑 =====
 
-    # 金叉: 做多
-    if golden_cross and strong_bullish and rsi_ok_for_long:
+    # 做多
+    if long_signal:
         if has_position:
             # 如果持有空仓，先平仓
             if engine.positions[symbol]['direction'] == 'short':
@@ -666,8 +677,8 @@ async def simple_ema_strategy(engine: BacktestEngine, symbol: str, current_time:
             _last_trade_time[symbol] = current_time
             _last_signal[symbol] = 'long'
 
-    # 死叉: 做空
-    elif death_cross and strong_bearish and rsi_ok_for_short:
+    # 做空
+    elif short_signal:
         if has_position:
             # 如果持有多仓，先平仓
             if engine.positions[symbol]['direction'] == 'long':

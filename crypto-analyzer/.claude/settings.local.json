@@ -18,7 +18,11 @@
       "Bash(awk:*)",
       "Bash(sudo systemctl restart:*)",
       "Bash(tmux list-sessions:*)",
-      "Bash(screen:*)"
+      "Bash(screen:*)",
+      "Bash(python3:*)",
+      "Bash(source venv/bin/activate)",
+      "Bash(git add:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
