@@ -3853,8 +3853,8 @@ class StrategyExecutor:
                                                         # live_quantity_pct 表示使用实盘可用余额的百分比
                                                         live_margin_to_use = live_available * float(live_quantity_pct) / 100.0
 
-                                                        # 应用最大仓位限制 (live_max_position_usdt)
-                                                        max_margin = float(live_max_position_usdt) / float(leverage)  # 将名义价值限制转换为保证金限制
+                                                        # 应用最大保证金限制 (live_max_position_usdt 表示最大保证金，如200U)
+                                                        max_margin = float(live_max_position_usdt)
                                                         if live_margin_to_use > max_margin:
                                                             logger.info(f"[同步实盘] {symbol} 保证金限制: {live_margin_to_use:.2f} USDT 超过上限 {max_margin:.2f} USDT，调整为 {max_margin:.2f} USDT")
                                                             live_margin_to_use = max_margin
