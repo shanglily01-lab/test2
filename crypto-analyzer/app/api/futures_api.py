@@ -24,10 +24,9 @@ from app.trading.futures_trading_engine import FuturesTradingEngine
 # 创建 Router
 router = APIRouter(prefix='/api/futures', tags=['futures'])
 
-# 加载配置
-config_path = Path(__file__).parent.parent.parent / 'config.yaml'
-with open(config_path, 'r', encoding='utf-8') as f:
-    config = yaml.safe_load(f)
+# 加载配置（支持环境变量）
+from app.utils.config_loader import load_config
+config = load_config()
 
 db_config = config['database']['mysql']
 

@@ -22,13 +22,8 @@ def get_db_service():
     """获取数据库服务单例"""
     global _db_service
     if _db_service is None:
-        import yaml
-        from pathlib import Path
-        # 使用绝对路径
-        project_root = Path(__file__).parent.parent.parent
-        config_path = project_root / 'config.yaml'
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
+        from app.utils.config_loader import load_config
+        config = load_config()
         _db_service = DatabaseService(config.get('database', {}))
     return _db_service
 
@@ -542,16 +537,12 @@ async def get_hyperliquid_smart_money_trades(
         交易列表及统计信息
     """
     try:
-        import yaml
-        from pathlib import Path
         from app.collectors.hyperliquid_collector import HyperliquidCollector
+        from app.utils.config_loader import load_config
         import asyncio
 
-        # 加载配置
-        project_root = Path(__file__).parent.parent.parent
-        config_path = project_root / 'config.yaml'
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
+        # 加载配置（支持环境变量）
+        config = load_config()
 
         # 创建采集器
         collector = HyperliquidCollector(config)

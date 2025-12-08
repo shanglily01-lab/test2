@@ -40,13 +40,12 @@ class StrategyScheduler:
         Args:
             config_path: 配置文件路径
         """
-        # 加载配置
+        # 加载配置（支持环境变量）
+        from app.utils.config_loader import load_config
         config_file = Path(config_path)
         if not config_file.exists():
             config_file = project_root / 'config.yaml'
-        
-        with open(config_file, 'r', encoding='utf-8') as f:
-            self.config = yaml.safe_load(f)
+        self.config = load_config(config_file)
 
         # 初始化数据库配置
         db_config = self.config.get('database', {}).get('mysql', {})

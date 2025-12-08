@@ -19,10 +19,8 @@ router = APIRouter(prefix="/api/strategy-analyzer", tags=["策略分析"])
 
 # 加载配置
 def get_db_config():
-    project_root = Path(__file__).parent.parent.parent
-    config_path = project_root / 'config.yaml'
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
+    from app.utils.config_loader import load_config
+    config = load_config()
     return config.get('database', {}).get('mysql', {})
 
 

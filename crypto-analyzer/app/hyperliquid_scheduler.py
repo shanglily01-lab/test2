@@ -38,9 +38,9 @@ class HyperliquidScheduler:
         Args:
             config_path: 配置文件路径
         """
-        # 加载配置
-        with open(config_path, 'r', encoding='utf-8') as f:
-            self.config = yaml.safe_load(f)
+        # 加载配置（支持环境变量）
+        from app.utils.config_loader import load_config
+        self.config = load_config(Path(config_path))
 
         # 初始化数据库服务
         logger.info("初始化数据库服务...")

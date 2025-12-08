@@ -56,9 +56,9 @@ class UnifiedDataScheduler:
         Args:
             config_path: 配置文件路径
         """
-        # 加载配置
-        with open(config_path, 'r', encoding='utf-8') as f:
-            self.config = yaml.safe_load(f)
+        # 加载配置（支持环境变量）
+        from app.utils.config_loader import load_config
+        self.config = load_config(Path(config_path))
 
         # 获取监控币种列表
         self.symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])

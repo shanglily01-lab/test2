@@ -75,17 +75,17 @@ class BinanceFuturesEngine:
     def _load_api_config(self):
         """从配置文件加载API配置"""
         try:
-            with open('config.yaml', 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
+            from app.utils.config_loader import load_config
+            config = load_config()
 
             binance_config = config.get('exchanges', {}).get('binance', {})
             self.api_key = binance_config.get('api_key', '').strip()
             self.api_secret = binance_config.get('api_secret', '').strip()
 
             if self.api_key and self.api_secret:
-                logger.info("已从config.yaml加载币安API配置")
+                logger.info("已从配置加载币安API配置")
             else:
-                logger.warning("config.yaml中未找到有效的币安API配置")
+                logger.warning("配置中未找到有效的币安API配置")
         except Exception as e:
             logger.error(f"加载API配置失败: {e}")
             self.api_key = None

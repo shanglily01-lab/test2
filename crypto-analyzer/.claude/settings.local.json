@@ -22,7 +22,13 @@
       "Bash(python3:*)",
       "Bash(source venv/bin/activate)",
       "Bash(git add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(curl -s -X POST \"https://api.telegram.org/bot8518383275:AAGPS4pB2RK_2yzcGVfQgbZVhjf82helpfo/sendMessage\" )",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(pip3 list:*)",
+      "Bash(sudo systemctl list-units:*)"
     ],
     "deny": [],
     "ask": []

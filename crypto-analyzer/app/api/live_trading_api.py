@@ -23,8 +23,8 @@ def get_db_config():
     global _db_config
     if _db_config is None:
         try:
-            with open('config.yaml', 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
+            from app.utils.config_loader import load_config
+            config = load_config()
             _db_config = config.get('database', {}).get('mysql', {})
         except Exception as e:
             logger.error(f"加载数据库配置失败: {e}")

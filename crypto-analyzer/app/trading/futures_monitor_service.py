@@ -32,9 +32,9 @@ class FuturesMonitorService:
         if config_path is None:
             config_path = Path(__file__).parent.parent.parent / 'config.yaml'
 
-        # 加载配置
-        with open(config_path, 'r', encoding='utf-8') as f:
-            self.config = yaml.safe_load(f)
+        # 加载配置（支持环境变量）
+        from app.utils.config_loader import load_config
+        self.config = load_config(Path(config_path))
 
         self.db_config = self.config['database']['mysql']
         self.monitor = None

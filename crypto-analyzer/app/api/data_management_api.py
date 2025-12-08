@@ -32,13 +32,9 @@ def get_db_config():
     """获取数据库配置（缓存）"""
     global _db_config
     if _db_config is None:
-        config_path = Path(__file__).parent.parent.parent / "config.yaml"
-        if config_path.exists():
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
-            _db_config = config.get('database', {}).get('mysql', {})
-        else:
-            _db_config = {}
+        from app.utils.config_loader import load_config
+        config = load_config()
+        _db_config = config.get('database', {}).get('mysql', {})
     return _db_config
 
 
@@ -2149,11 +2145,10 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
         from app.collectors.binance_futures_collector import BinanceFuturesCollector
         from app.collectors.gate_collector import GateCollector
         
-        # 加载配置
-        config_path = Path(__file__).parent.parent.parent / "config.yaml"
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        
+        # 加载配置（支持环境变量）
+        from app.utils.config_loader import load_config
+        config = load_config()
+
         # 初始化采集器
         collector = MultiExchangeCollector(config)
         
@@ -2961,14 +2956,10 @@ async def collect_historical_data_sync(request: Dict):
         import yaml
         from pathlib import Path
         
-        # 加载配置
-        config_path = Path(__file__).parent.parent.parent / "config.yaml"
-        if not config_path.exists():
-            raise HTTPException(status_code=500, detail="配置文件不存在")
-        
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        
+        # 加载配置（支持环境变量）
+        from app.utils.config_loader import load_config
+        config = load_config()
+
         # 初始化采集器
         collector = MultiExchangeCollector(config)
         

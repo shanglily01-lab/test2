@@ -24,8 +24,8 @@ router = APIRouter(prefix='/api/market-regime', tags=['Market Regime'])
 
 # 加载数据库配置
 try:
-    with open('config.yaml', 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
+    from app.utils.config_loader import load_config
+    config = load_config()
     db_config = config.get('database', {}).get('mysql', {})
 except Exception as e:
     logger.error(f"加载配置文件失败: {e}")
