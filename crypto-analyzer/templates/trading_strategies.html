@@ -1387,6 +1387,38 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- 连续下跌K线提前止盈 -->
+                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-top: 12px; border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <input type="checkbox" id="consecutiveBearishExitEnabled" style="margin-right: 8px;">
+                                        <label for="consecutiveBearishExitEnabled" style="font-weight: 600; cursor: pointer;">连续下跌K线止盈</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">连续N根阴线/阳线时提前锁定利润</span>
+                                    </div>
+                                    <div id="consecutiveBearishExitParams" style="display: none; margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">连续K线数</label>
+                                                <input type="number" class="form-input" id="consecutiveBearishBars" value="3" step="1" min="2" max="10" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">做多检测阴线，做空检测阳线</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">检测周期</label>
+                                                <select class="form-input" id="consecutiveBearishTimeframe" style="padding: 6px 10px; font-size: 13px;">
+                                                    <option value="1m">1分钟</option>
+                                                    <option value="5m" selected>5分钟</option>
+                                                    <option value="15m">15分钟</option>
+                                                </select>
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">检测K线的时间周期</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">最小盈利要求（%）</label>
+                                                <input type="number" class="form-input" id="consecutiveBearishMinProfit" value="0.3" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">避免亏损时出场</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- 智能止损 -->
@@ -1998,6 +2030,12 @@
             params.style.display = enabled ? 'block' : 'none';
         }
 
+        function toggleConsecutiveBearishExitParams() {
+            const enabled = document.getElementById('consecutiveBearishExitEnabled').checked;
+            const params = document.getElementById('consecutiveBearishExitParams');
+            params.style.display = enabled ? 'block' : 'none';
+        }
+
         // 智能止损相关切换函数
         function toggleAtrStopLossParams() {
             const enabled = document.getElementById('atrStopLossEnabled').checked;
@@ -2104,6 +2142,9 @@
 
             const exitPriceCrossEmaCheckbox = document.getElementById('exitOnPriceCrossEmaEnabled');
             if (exitPriceCrossEmaCheckbox) exitPriceCrossEmaCheckbox.addEventListener('change', toggleExitOnPriceCrossEmaParams);
+
+            const consecutiveBearishExitCheckbox = document.getElementById('consecutiveBearishExitEnabled');
+            if (consecutiveBearishExitCheckbox) consecutiveBearishExitCheckbox.addEventListener('change', toggleConsecutiveBearishExitParams);
 
             // 智能止损复选框事件绑定
             const atrStopLossCheckbox = document.getElementById('atrStopLossEnabled');
@@ -2326,6 +2367,12 @@
                     enabled: document.getElementById('exitOnPriceCrossEmaEnabled') ? document.getElementById('exitOnPriceCrossEmaEnabled').checked : false,
                     minProfitPct: document.getElementById('exitPriceCrossEmaMinProfit') ? parseFloat(document.getElementById('exitPriceCrossEmaMinProfit').value) : 0.5,
                     confirmBars: document.getElementById('exitPriceCrossEmaConfirmBars') ? parseInt(document.getElementById('exitPriceCrossEmaConfirmBars').value) : 1
+                },
+                consecutiveBearishExit: {
+                    enabled: document.getElementById('consecutiveBearishExitEnabled') ? document.getElementById('consecutiveBearishExitEnabled').checked : false,
+                    bars: document.getElementById('consecutiveBearishBars') ? parseInt(document.getElementById('consecutiveBearishBars').value) : 3,
+                    timeframe: document.getElementById('consecutiveBearishTimeframe') ? document.getElementById('consecutiveBearishTimeframe').value : '5m',
+                    minProfitPct: document.getElementById('consecutiveBearishMinProfit') ? parseFloat(document.getElementById('consecutiveBearishMinProfit').value) : 0.3
                 },
                 // 智能止损配置
                 smartStopLoss: {
@@ -3039,6 +3086,16 @@
                     document.getElementById('exitPriceCrossEmaMinProfit').value = strategy.exitOnPriceCrossEMA.minProfitPct || 0.5;
                     document.getElementById('exitPriceCrossEmaConfirmBars').value = strategy.exitOnPriceCrossEMA.confirmBars || 1;
                     toggleExitOnPriceCrossEmaParams();
+                }
+            }
+            // 连续下跌K线提前止盈
+            if (strategy.consecutiveBearishExit) {
+                if (document.getElementById('consecutiveBearishExitEnabled')) {
+                    document.getElementById('consecutiveBearishExitEnabled').checked = strategy.consecutiveBearishExit.enabled === true;
+                    document.getElementById('consecutiveBearishBars').value = strategy.consecutiveBearishExit.bars || 3;
+                    document.getElementById('consecutiveBearishTimeframe').value = strategy.consecutiveBearishExit.timeframe || '5m';
+                    document.getElementById('consecutiveBearishMinProfit').value = strategy.consecutiveBearishExit.minProfitPct || 0.3;
+                    toggleConsecutiveBearishExitParams();
                 }
             }
 
