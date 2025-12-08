@@ -160,6 +160,7 @@ signals:
     max_position: 0.5
     stop_loss_pct: 0.02
     take_profit_pct: 0.06
+    live_max_position_usdt: 200  # 实盘单笔最大仓位(USDT)
 api:
   host: 0.0.0.0
   port: 9020

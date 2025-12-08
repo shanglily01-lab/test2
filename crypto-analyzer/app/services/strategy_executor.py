@@ -512,6 +512,7 @@ class StrategyExecutor:
             # 同步实盘交易配置
             sync_live = strategy.get('syncLive', False)  # 是否同步实盘
             live_quantity_pct = strategy.get('liveQuantityPct', 100)  # 实盘下单数量百分比
+            live_max_position_usdt = strategy.get('liveMaxPositionUsdt', 200)  # 实盘单笔最大仓位(USDT)
 
             # 新指标过滤配置
             rsi_filter = strategy.get('rsiFilter', {})
@@ -942,7 +943,8 @@ class StrategyExecutor:
                     market_type=strategy.get('market_type', 'test'),  # 市场类型: test/live
                     # 同步实盘交易配置
                     sync_live=sync_live,
-                    live_quantity_pct=live_quantity_pct
+                    live_quantity_pct=live_quantity_pct,
+                    live_max_position_usdt=live_max_position_usdt  # 实盘单笔最大仓位
                 )
 
                 results.append(result)
@@ -1343,6 +1345,7 @@ class StrategyExecutor:
         strategy_name = kwargs.get('strategy_name', '测试策略')
         account_id = kwargs.get('account_id', 0)
         market_type = kwargs.get('market_type', 'test')  # 市场类型: test/live
+        live_max_position_usdt = kwargs.get('live_max_position_usdt', 200)  # 实盘单笔最大仓位(USDT)
 
         # 根据市场类型选择交易引擎
         if market_type == 'live':
@@ -3545,7 +3548,20 @@ class StrategyExecutor:
                                                 except:
                                                     pass
 
+                                    # 计算仓位价值
                                     position_value = account_equity * (position_size / 100)
+
+                                    # 实盘模式：限制单笔最大仓位，余额不足时按实际余额下单
+                                    if market_type == 'live':
+                                        max_position = float(live_max_position_usdt)
+                                        if position_value > max_position:
+                                            logger.info(f"[实盘] {symbol} 仓位限制: {position_value:.2f} USDT 超过单笔上限 {max_position:.0f} USDT，调整为 {max_position:.0f} USDT")
+                                            position_value = max_position
+                                        # 如果可用余额不足，则按实际可用余额下单
+                                        if account_equity < position_value:
+                                            logger.info(f"[实盘] {symbol} 余额不足: 可用={account_equity:.2f} USDT < 目标={position_value:.2f} USDT，按实际余额下单")
+                                            position_value = account_equity
+
                                     logger.info(f"[{market_type.upper()}] {symbol} 仓位计算: 余额={account_equity:.2f} × {position_size}% = {position_value:.2f} USDT")
                                     quantity = (position_value * leverage) / entry_price
                                     quantity = self.round_quantity(quantity, symbol)
