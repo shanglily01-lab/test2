@@ -73,17 +73,46 @@ def substitute_env_vars(config: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         替换后的配置字典
     """
-    env_pattern = re.compile(r'\$\{([^}:]+)(?::([^}]*))?\}')
+    env_pattern = re.compile(r'^\$\{([^}:]+)(?::([^}]*))?\}$')  # 完整匹配
+
+    def try_convert_type(value: str) -> Any:
+        """尝试将字符串转换为合适的类型"""
+        if not value:
+            return value
+        # 尝试转换为整数
+        try:
+            return int(value)
+        except ValueError:
+            pass
+        # 尝试转换为浮点数
+        try:
+            return float(value)
+        except ValueError:
+            pass
+        # 布尔值
+        if value.lower() in ('true', 'yes', 'on'):
+            return True
+        if value.lower() in ('false', 'no', 'off'):
+            return False
+        return value
 
     def substitute_value(value: Any) -> Any:
         if isinstance(value, str):
-            def replace_match(match):
+            match = env_pattern.match(value)
+            if match:
+                # 完整的环境变量占位符
                 env_name = match.group(1)
                 default = match.group(2) if match.group(2) is not None else ''
                 env_value = os.environ.get(env_name, default)
-                return env_value
-
-            return env_pattern.sub(replace_match, value)
+                return try_convert_type(env_value)
+            else:
+                # 可能是部分替换（字符串中包含环境变量）
+                partial_pattern = re.compile(r'\$\{([^}:]+)(?::([^}]*))?\}')
+                def replace_match(m):
+                    env_name = m.group(1)
+                    default = m.group(2) if m.group(2) is not None else ''
+                    return os.environ.get(env_name, default)
+                return partial_pattern.sub(replace_match, value)
         elif isinstance(value, dict):
             return {k: substitute_value(v) for k, v in value.items()}
         elif isinstance(value, list):
