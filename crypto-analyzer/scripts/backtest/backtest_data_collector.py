@@ -48,18 +48,16 @@ class BacktestDataCollector:
         self.connection = None
 
     async def init_exchange(self):
-        """初始化交易所连接"""
-        binance_config = self.config.get('exchanges', {}).get('binance', {})
-
+        """初始化交易所连接（无需API Key，使用公开接口获取K线）"""
+        # K线数据是公开的，不需要API Key认证
+        # 这样可以避免IP白名单限制问题
         self.exchange = ccxt.binance({
-            'apiKey': binance_config.get('api_key', ''),
-            'secret': binance_config.get('api_secret', ''),
             'enableRateLimit': True,
             'options': {
                 'defaultType': 'future',  # 使用合约市场
             }
         })
-        print("✅ 交易所连接初始化完成 (合约模式)")
+        print("✅ 交易所连接初始化完成 (合约模式, 公开接口)")
 
     def init_db(self):
         """初始化数据库连接"""
