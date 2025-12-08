@@ -3,6 +3,9 @@
 实盘订单监控服务
 监控限价单成交后自动设置止损止盈
 支持趋势转向时自动取消未成交限价单
+支持智能止盈功能：
+  - 连续K线止盈：检测到连续N根阴线/阳线时提前止盈
+  - 移动止盈：价格回撤一定比例后提前止盈
 """
 
 import asyncio
@@ -13,9 +16,15 @@ import json
 from loguru import logger
 from datetime import datetime
 
+# 导入交易通知器
+try:
+    from app.services.trade_notifier import get_trade_notifier
+except ImportError:
+    get_trade_notifier = None
+
 
 class LiveOrderMonitor:
-    """实盘订单监控器 - 监控限价单成交后设置止损止盈"""
+    """实盘订单监控器 - 监控限价单成交后设置止损止盈，支持智能止盈"""
 
     def __init__(self, db_config: Dict, live_engine):
         """
@@ -31,6 +40,9 @@ class LiveOrderMonitor:
         self.task = None
         self.connection = None
         self.check_interval = 10  # 检查间隔（秒）
+
+        # 移动止盈状态追踪: {position_id: {'max_profit_pct': float, 'trailing_activated': bool}}
+        self.trailing_state = {}
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -214,9 +226,13 @@ class LiveOrderMonitor:
         """监控循环"""
         while self.running:
             try:
+                # 1. 检查待成交的限价单
                 await self._check_pending_orders()
+
+                # 2. 检查已开仓位的智能止盈
+                await self._check_smart_exit_for_open_positions()
             except Exception as e:
-                logger.error(f"[实盘监控] 检查待处理订单时出错: {e}")
+                logger.error(f"[实盘监控] 监控循环出错: {e}")
 
             await asyncio.sleep(self.check_interval)
 
@@ -226,14 +242,24 @@ class LiveOrderMonitor:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 查询状态为 PENDING 且有止损止盈设置的仓位
+            # 设置会话时区为 UTC+8
+            cursor.execute("SET time_zone = '+08:00'")
+
+            # 查询状态为 PENDING 的限价单，同时获取策略配置和等待时间
             cursor.execute("""
-                SELECT id, binance_order_id, symbol, position_side, quantity,
-                       stop_loss_price, take_profit_price, leverage
-                FROM live_futures_positions
-                WHERE status = 'PENDING'
-                  AND (stop_loss_price IS NOT NULL OR take_profit_price IS NOT NULL)
-                  AND binance_order_id IS NOT NULL
+                SELECT p.id, p.account_id, p.binance_order_id, p.symbol, p.position_side, p.quantity,
+                       p.stop_loss_price, p.take_profit_price, p.leverage, p.entry_price,
+                       p.strategy_id, p.created_at, p.source,
+                       COALESCE(
+                           CAST(JSON_EXTRACT(s.config, '$.limitOrderTimeoutMinutes') AS UNSIGNED),
+                           0
+                       ) as timeout_minutes,
+                       TIMESTAMPDIFF(SECOND, p.created_at, NOW()) as elapsed_seconds,
+                       s.config as strategy_config
+                FROM live_futures_positions p
+                LEFT JOIN trading_strategies s ON p.strategy_id = s.id
+                WHERE p.status = 'PENDING'
+                  AND p.binance_order_id IS NOT NULL
             """)
 
             pending_positions = cursor.fetchall()
@@ -255,6 +281,7 @@ class LiveOrderMonitor:
             order_id = position['binance_order_id']
             symbol = position['symbol']
             binance_symbol = symbol.replace('/', '').upper()
+            position_side = position['position_side']
 
             # 查询币安订单状态
             result = self.live_engine._request('GET', '/fapi/v1/order', {
@@ -280,11 +307,27 @@ class LiveOrderMonitor:
                 await self._place_sl_tp_orders(position, executed_qty)
 
             elif status == 'NEW':
-                # 订单尚未成交，检查趋势是否转向
+                # 订单尚未成交
+
+                # 1. 检查趋势是否转向
                 trend_reversal_reason = self._check_trend_reversal(position)
                 if trend_reversal_reason:
                     logger.info(f"[实盘监控] 📉 检测到趋势转向，准备取消限价单: {symbol} #{order_id}")
                     await self._cancel_binance_order(position, trend_reversal_reason)
+                    return
+
+                # 2. 检查限价单超时转市价
+                timeout_minutes = position.get('timeout_minutes', 0) or 0
+                elapsed_seconds = position.get('elapsed_seconds', 0) or 0
+
+                if timeout_minutes > 0:
+                    elapsed_minutes = elapsed_seconds / 60
+                    timeout_seconds = timeout_minutes * 60
+
+                    if elapsed_seconds >= timeout_seconds:
+                        # 超时，检查价格偏离
+                        await self._handle_limit_order_timeout(position, order_id, elapsed_minutes)
+                        return
 
             elif status in ['CANCELED', 'EXPIRED', 'REJECTED']:
                 # 订单已取消/过期/拒绝，更新数据库
@@ -300,14 +343,15 @@ class LiveOrderMonitor:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            cursor.execute("""
-                UPDATE live_futures_positions
+            update_sql = """UPDATE live_futures_positions
                 SET status = 'OPEN',
                     quantity = %s,
                     entry_price = %s,
                     updated_at = NOW()
-                WHERE id = %s
-            """, (float(executed_qty), float(avg_price), position['id']))
+                WHERE id = %s"""
+            update_params = (float(executed_qty), float(avg_price), position['id'])
+
+            cursor.execute(update_sql, update_params)
 
             logger.info(f"[实盘监控] 仓位 {position['id']} 已更新为 OPEN")
 
@@ -320,17 +364,141 @@ class LiveOrderMonitor:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            cursor.execute("""
-                UPDATE live_futures_positions
+            update_sql = """UPDATE live_futures_positions
                 SET status = %s,
                     updated_at = NOW()
-                WHERE id = %s
-            """, (status, position['id']))
+                WHERE id = %s"""
+            update_params = (status, position['id'])
+
+            cursor.execute(update_sql, update_params)
 
             logger.info(f"[实盘监控] 仓位 {position['id']} 已更新为 {status}")
 
         except Exception as e:
             logger.error(f"[实盘监控] 更新仓位状态失败: {e}")
+
+    async def _handle_limit_order_timeout(self, position: Dict, order_id: str, elapsed_minutes: float):
+        """
+        处理限价单超时
+
+        超时后的处理逻辑：
+        - 价格偏离 ≤0.5%: 取消限价单，以市价重新开仓
+        - 价格偏离 >0.5%: 取消限价单，不开仓（避免追高/杀低）
+
+        Args:
+            position: 仓位信息
+            order_id: 币安订单ID
+            elapsed_minutes: 已等待分钟数
+        """
+        try:
+            symbol = position['symbol']
+            binance_symbol = symbol.replace('/', '').upper()
+            position_side = position['position_side']
+            limit_price = Decimal(str(position.get('entry_price', 0)))
+
+            # 获取当前价格
+            current_price = self.live_engine.get_current_price(symbol)
+            if current_price == 0:
+                logger.warning(f"[实盘监控] 无法获取 {symbol} 当前价格，跳过超时处理")
+                return
+
+            current_price = Decimal(str(current_price))
+
+            # 计算价格偏离
+            # 做多：当前价高于限价太多（追高）
+            # 做空：当前价低于限价太多（杀低）
+            if position_side == 'LONG':
+                deviation_pct = (current_price - limit_price) / limit_price * 100
+            else:  # SHORT
+                deviation_pct = (limit_price - current_price) / limit_price * 100
+
+            max_deviation_pct = Decimal('0.5')  # 最大允许偏离 0.5%
+
+            # 先取消币安上的限价单
+            cancel_result = self.live_engine.cancel_order(symbol, order_id)
+            if not cancel_result.get('success'):
+                logger.error(f"[实盘监控] 取消限价单失败: {cancel_result.get('error')}")
+                return
+
+            if deviation_pct > max_deviation_pct:
+                # 价格偏离过大，取消订单不开仓
+                logger.info(f"[实盘监控] ⏰ 限价单超时取消: {symbol} {position_side} "
+                           f"已等待 {elapsed_minutes:.1f} 分钟, "
+                           f"价格偏离 {deviation_pct:.2f}% > {max_deviation_pct}%, "
+                           f"限价={limit_price}, 当前={current_price}")
+
+                # 更新数据库状态为超时取消
+                await self._update_position_canceled(position, 'TIMEOUT_PRICE_DEVIATION')
+
+            else:
+                # 价格偏离在可接受范围内，以市价重新开仓
+                logger.info(f"[实盘监控] ⏰ 限价单超时转市价: {symbol} {position_side} "
+                           f"已等待 {elapsed_minutes:.1f} 分钟, "
+                           f"价格偏离 {deviation_pct:.2f}% ≤ {max_deviation_pct}%")
+
+                # 以市价重新开仓
+                await self._execute_market_order_after_timeout(position, current_price)
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 处理限价单超时失败: {e}")
+
+    async def _execute_market_order_after_timeout(self, position: Dict, current_price: Decimal):
+        """
+        限价单超时后以市价执行开仓
+
+        Args:
+            position: 原限价单仓位信息
+            current_price: 当前价格
+        """
+        try:
+            symbol = position['symbol']
+            position_side = position['position_side']
+            quantity = Decimal(str(position['quantity']))
+            leverage = position.get('leverage', 1)
+            stop_loss_price = position.get('stop_loss_price')
+            take_profit_price = position.get('take_profit_price')
+            strategy_id = position.get('strategy_id')
+            account_id = position.get('account_id', 1)  # 默认账户ID为1
+            source = position.get('source', 'timeout_convert')
+
+            logger.info(f"[实盘监控] 📈 执行市价开仓: {symbol} {position_side} "
+                       f"数量={quantity}, 杠杆={leverage}x")
+
+            # 调用实盘引擎以市价开仓
+            result = self.live_engine.open_position(
+                account_id=account_id,
+                symbol=symbol,
+                position_side=position_side,  # 直接使用 'LONG' 或 'SHORT'
+                quantity=quantity,
+                leverage=leverage,
+                limit_price=None,  # 市价单不需要限价
+                stop_loss_price=Decimal(str(stop_loss_price)) if stop_loss_price else None,
+                take_profit_price=Decimal(str(take_profit_price)) if take_profit_price else None,
+                source=f"{source}_timeout_market",
+                strategy_id=strategy_id
+            )
+
+            if result.get('success'):
+                actual_price = result.get('entry_price', float(current_price))
+                logger.info(f"[实盘监控] ✅ 市价开仓成功: {symbol} @ {actual_price}")
+
+                # 删除原来的 PENDING 仓位记录（因为 open_position 会创建新记录）
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    DELETE FROM live_futures_positions
+                    WHERE id = %s AND status = 'PENDING'
+                """, (position['id'],))
+                logger.debug(f"[实盘监控] 已删除原 PENDING 仓位记录 #{position['id']}")
+
+            else:
+                logger.error(f"[实盘监控] ❌ 市价开仓失败: {result.get('error')}")
+                # 更新原仓位状态为失败
+                await self._update_position_canceled(position, 'TIMEOUT_MARKET_FAILED')
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 市价开仓异常: {e}")
+            await self._update_position_canceled(position, 'TIMEOUT_MARKET_ERROR')
 
     async def _place_sl_tp_orders(self, position: Dict, executed_qty: Decimal):
         """设置止损止盈订单"""
@@ -406,6 +574,271 @@ class LiveOrderMonitor:
                     logger.error(f"[实盘监控] 设置止盈单异常: {e}")
             else:
                 logger.warning(f"[实盘监控] 止盈价 {take_profit_price} 无效 ({position_side} 当前价 {current_price})，跳过止盈设置")
+
+    async def _check_smart_exit_for_open_positions(self):
+        """
+        检查已开仓位的智能止盈条件
+        包括：连续K线止盈、移动止盈
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 查询状态为 OPEN 且关联了策略的仓位
+            cursor.execute("""
+                SELECT p.id, p.symbol, p.position_side, p.quantity, p.entry_price,
+                       p.stop_loss_price, p.take_profit_price, p.strategy_id,
+                       s.config as strategy_config
+                FROM live_futures_positions p
+                LEFT JOIN trading_strategies s ON p.strategy_id = s.id
+                WHERE p.status = 'OPEN'
+            """)
+
+            open_positions = cursor.fetchall()
+
+            if not open_positions:
+                return
+
+            for position in open_positions:
+                await self._check_position_smart_exit(position)
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 检查智能止盈失败: {e}")
+
+    async def _check_position_smart_exit(self, position: Dict):
+        """
+        检查单个仓位的智能止盈条件
+
+        Args:
+            position: 仓位信息
+        """
+        try:
+            symbol = position['symbol']
+            position_id = position['id']
+            entry_price = float(position['entry_price'])
+            quantity = float(position['quantity'])
+            position_side = position['position_side']  # LONG or SHORT
+            strategy_config = position.get('strategy_config')
+
+            # 获取当前价格
+            current_price = self.live_engine.get_current_price(symbol)
+            if current_price == 0:
+                return
+
+            # 计算当前盈亏
+            if position_side == 'LONG':
+                current_profit_pct = (current_price - entry_price) / entry_price * 100
+            else:
+                current_profit_pct = (entry_price - current_price) / entry_price * 100
+
+            # 解析策略配置
+            if strategy_config:
+                if isinstance(strategy_config, str):
+                    try:
+                        strategy_config = json.loads(strategy_config)
+                    except json.JSONDecodeError:
+                        strategy_config = {}
+            else:
+                strategy_config = {}
+
+            exit_price = None
+            exit_reason = None
+
+            # ===== 1. 检查连续K线止盈 =====
+            consecutive_bearish_exit = strategy_config.get('consecutiveBearishExit', {})
+            if isinstance(consecutive_bearish_exit, dict) and consecutive_bearish_exit.get('enabled', False):
+                exit_price, exit_reason = await self._check_consecutive_kline_exit(
+                    position, current_price, current_profit_pct, consecutive_bearish_exit
+                )
+
+            # ===== 2. 检查盈利保护（移动止盈） =====
+            if not exit_price:
+                profit_protection = strategy_config.get('profitProtection', {})
+                if isinstance(profit_protection, dict) and profit_protection.get('enabled', False):
+                    exit_price, exit_reason = await self._check_profit_protection(
+                        position, current_price, current_profit_pct, profit_protection
+                    )
+
+            # 如果触发智能止盈，执行平仓
+            if exit_price and exit_reason:
+                await self._execute_smart_exit(position, current_price, exit_reason)
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 检查仓位 {position.get('id')} 智能止盈失败: {e}")
+
+    async def _check_consecutive_kline_exit(
+        self,
+        position: Dict,
+        current_price: float,
+        current_profit_pct: float,
+        config: Dict
+    ) -> tuple:
+        """
+        检查连续K线止盈条件
+
+        做多时：连续N根阴线（收盘<开盘）则提前止盈
+        做空时：连续N根阳线（收盘>开盘）则提前止盈
+
+        Returns:
+            (exit_price, exit_reason) 或 (None, None)
+        """
+        try:
+            bars = config.get('bars', 3)
+            timeframe = config.get('timeframe', '5m')
+            min_profit_pct = config.get('minProfitPct', 0.3)
+
+            # 检查最小盈利要求
+            if current_profit_pct < min_profit_pct:
+                return None, None
+
+            symbol = position['symbol']
+            position_side = position['position_side']
+
+            # 获取K线数据
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT open_price, close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (symbol, timeframe, bars))
+
+            klines = cursor.fetchall()
+
+            if not klines or len(klines) < bars:
+                return None, None
+
+            # 检查连续K线
+            if position_side == 'LONG':
+                # 做多：检查连续阴线
+                consecutive_bearish = all(
+                    float(k['close_price']) < float(k['open_price'])
+                    for k in klines[:bars]
+                )
+                if consecutive_bearish:
+                    logger.info(f"[实盘监控] {symbol}: 🔻 检测到连续{bars}根阴线，当前盈利{current_profit_pct:.2f}%，触发提前止盈")
+                    return current_price, f"连续{bars}根阴线提前止盈(盈利{current_profit_pct:.2f}%)"
+            else:
+                # 做空：检查连续阳线
+                consecutive_bullish = all(
+                    float(k['close_price']) > float(k['open_price'])
+                    for k in klines[:bars]
+                )
+                if consecutive_bullish:
+                    logger.info(f"[实盘监控] {symbol}: 🔺 检测到连续{bars}根阳线，当前盈利{current_profit_pct:.2f}%，触发提前止盈")
+                    return current_price, f"连续{bars}根阳线提前止盈(盈利{current_profit_pct:.2f}%)"
+
+            return None, None
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 连续K线检测失败: {e}")
+            return None, None
+
+    async def _check_profit_protection(
+        self,
+        position: Dict,
+        current_price: float,
+        current_profit_pct: float,
+        config: Dict
+    ) -> tuple:
+        """
+        检查盈利保护（移动止盈）条件
+
+        当盈利达到激活阈值后，记录最高盈利
+        如果从最高点回撤超过设定比例，触发止盈
+
+        配置参数（与前端一致）:
+        - activatePct: 激活阈值（默认1%）
+        - trailingPct: 回撤比例（默认0.5%）
+        - minLockPct: 最小锁定利润（默认0.3%）
+
+        Returns:
+            (exit_price, exit_reason) 或 (None, None)
+        """
+        try:
+            activate_pct = config.get('activatePct', 1.0)  # 激活阈值（默认1%）
+            trailing_pct = config.get('trailingPct', 0.5)  # 回撤比例（默认0.5%）
+            min_lock_pct = config.get('minLockPct', 0.3)  # 最小锁定利润（默认0.3%）
+
+            position_id = position['id']
+            symbol = position['symbol']
+
+            # 初始化追踪状态
+            if position_id not in self.trailing_state:
+                self.trailing_state[position_id] = {
+                    'max_profit_pct': 0,
+                    'trailing_activated': False
+                }
+
+            state = self.trailing_state[position_id]
+
+            # 检查是否达到激活阈值
+            if current_profit_pct >= activate_pct:
+                if not state['trailing_activated']:
+                    state['trailing_activated'] = True
+                    logger.info(f"[实盘监控] {symbol}: 📈 盈利保护已激活，当前盈利{current_profit_pct:.2f}% >= 阈值{activate_pct}%")
+
+                # 更新最高盈利
+                if current_profit_pct > state['max_profit_pct']:
+                    state['max_profit_pct'] = current_profit_pct
+                    logger.debug(f"[实盘监控] {symbol}: 最高盈利更新为 {current_profit_pct:.2f}%")
+
+                # 检查是否触发回撤止盈
+                if state['trailing_activated'] and state['max_profit_pct'] > 0:
+                    drawdown = state['max_profit_pct'] - current_profit_pct
+                    # 触发条件：回撤超过设定比例 且 当前盈利仍高于最小锁定利润
+                    if drawdown >= trailing_pct and current_profit_pct >= min_lock_pct:
+                        logger.info(f"[实盘监控] {symbol}: 📉 盈利保护触发！最高盈利{state['max_profit_pct']:.2f}%，当前{current_profit_pct:.2f}%，回撤{drawdown:.2f}%")
+                        # 清理状态
+                        del self.trailing_state[position_id]
+                        return current_price, f"盈利保护(最高{state['max_profit_pct']:.2f}%→回撤{drawdown:.2f}%)"
+
+            return None, None
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 盈利保护检测失败: {e}")
+            return None, None
+
+    async def _execute_smart_exit(self, position: Dict, exit_price: float, reason: str):
+        """
+        执行智能止盈平仓
+
+        Args:
+            position: 仓位信息
+            exit_price: 出场价格
+            reason: 平仓原因
+        """
+        try:
+            symbol = position['symbol']
+            position_id = position['id']
+
+            logger.info(f"[实盘监控] 🎯 执行智能止盈: {symbol} 仓位#{position_id}, 原因: {reason}")
+
+            # 调用实盘引擎平仓（使用 position_id）
+            # 注意：close_position 方法会自动更新数据库状态并发送Telegram通知
+            result = self.live_engine.close_position(
+                position_id=position_id,
+                close_quantity=None,  # 全部平仓
+                reason=reason
+            )
+
+            if result.get('success'):
+                pnl = result.get('realized_pnl', 0)
+                roi = result.get('roi', 0)
+                logger.info(f"[实盘监控] ✅ 智能止盈成功: {symbol} 盈亏={pnl:.2f} USDT ({roi:+.2f}%)")
+
+                # 清理追踪状态
+                if position_id in self.trailing_state:
+                    del self.trailing_state[position_id]
+
+            else:
+                logger.error(f"[实盘监控] ❌ 智能止盈失败: {result.get('error', '未知错误')}")
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 执行智能止盈异常: {e}")
 
 
 # 全局监控实例

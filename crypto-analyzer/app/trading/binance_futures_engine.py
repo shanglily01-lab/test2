@@ -810,18 +810,18 @@ class BinanceFuturesEngine:
             remaining_qty = quantity - executed_qty
             new_status = 'CLOSED' if remaining_qty <= 0 else 'OPEN'
 
-            cursor.execute(
-                """UPDATE live_futures_positions
+            update_sql = """UPDATE live_futures_positions
                 SET quantity = %s,
                     status = %s,
                     realized_pnl = COALESCE(realized_pnl, 0) + %s,
                     close_price = %s,
                     close_time = %s,
                     close_reason = %s
-                WHERE id = %s""",
-                (float(remaining_qty), new_status, float(pnl),
+                WHERE id = %s"""
+            update_params = (float(remaining_qty), new_status, float(pnl),
                  float(avg_price), get_local_time(), reason, position_id)
-            )
+
+            cursor.execute(update_sql, update_params)
 
             # 7. 取消相关止盈止损单
             self._cancel_position_orders(position)
@@ -1030,19 +1030,19 @@ class BinanceFuturesEngine:
             notional_value = quantity * entry_price
             margin = notional_value / leverage
 
-            cursor.execute(
-                """INSERT INTO live_futures_positions
+            insert_sql = """INSERT INTO live_futures_positions
                 (account_id, symbol, position_side, leverage, quantity,
                  notional_value, margin, entry_price, stop_loss_price,
                  take_profit_price, open_time, status, source, signal_id,
                  strategy_id, binance_order_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (account_id, symbol, position_side, leverage, float(quantity),
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+            insert_params = (account_id, symbol, position_side, leverage, float(quantity),
                  float(notional_value), float(margin), float(entry_price),
                  float(stop_loss_price) if stop_loss_price else None,
                  float(take_profit_price) if take_profit_price else None,
                  get_local_time(), status, source, signal_id, strategy_id, binance_order_id)
-            )
+
+            cursor.execute(insert_sql, insert_params)
 
             position_id = cursor.lastrowid
             logger.info(f"[实盘] 持仓已保存到数据库: ID={position_id}")
@@ -1052,6 +1052,243 @@ class BinanceFuturesEngine:
         except Exception as e:
             logger.error(f"保存持仓到数据库失败: {e}")
             return 0
+
+    # ==================== 从币安同步数据 ====================
+
+    def sync_positions_from_binance(self, account_id: int = 1) -> Dict:
+        """
+        从币安同步持仓状态到本地数据库
+
+        处理以下情况：
+        1. 在币安APP手动平仓的订单 -> 更新状态为CLOSED
+        2. 在币安APP撤销的限价单 -> 更新状态为CANCELED
+        3. 在币安APP手动开的仓 -> 新增记录到数据库
+
+        Args:
+            account_id: 账户ID
+
+        Returns:
+            同步结果
+        """
+        try:
+            cursor = self._get_cursor()
+            synced_count = 0
+            closed_count = 0
+            canceled_count = 0
+            new_count = 0
+
+            # 1. 获取币安当前实际持仓
+            binance_positions = self._get_binance_positions()
+            binance_position_map = {}  # {symbol_side: position}
+
+            for pos in binance_positions:
+                key = f"{pos['symbol']}_{pos['position_side']}"
+                binance_position_map[key] = pos
+
+            # 2. 获取本地数据库中状态为 OPEN 的持仓
+            cursor.execute("""
+                SELECT id, symbol, position_side, quantity, entry_price, binance_order_id
+                FROM live_futures_positions
+                WHERE status = 'OPEN' AND account_id = %s
+            """, (account_id,))
+            local_open_positions = cursor.fetchall()
+
+            # 3. 检查本地OPEN持仓是否在币安已平仓
+            for local_pos in local_open_positions:
+                key = f"{local_pos['symbol']}_{local_pos['position_side']}"
+
+                if key not in binance_position_map:
+                    # 币安已没有这个持仓，说明已被平仓
+                    # 获取最近的成交记录来确定平仓价格
+                    binance_symbol = self._convert_symbol(local_pos['symbol'])
+                    trades = self._get_recent_trades(binance_symbol, limit=50)
+
+                    close_price = Decimal('0')
+                    realized_pnl = Decimal('0')
+
+                    # 尝试找到平仓的成交记录
+                    for trade in trades:
+                        # 平仓方向：做多平仓是SELL，做空平仓是BUY
+                        expected_side = 'SELL' if local_pos['position_side'] == 'LONG' else 'BUY'
+                        if trade.get('side') == expected_side:
+                            close_price = Decimal(str(trade.get('price', '0')))
+                            realized_pnl = Decimal(str(trade.get('realizedPnl', '0')))
+                            break
+
+                    # 如果没找到成交记录，使用当前价格
+                    if close_price == 0:
+                        close_price = self.get_current_price(local_pos['symbol'])
+
+                    # 计算盈亏
+                    if realized_pnl == 0 and close_price > 0:
+                        entry_price = Decimal(str(local_pos['entry_price']))
+                        quantity = Decimal(str(local_pos['quantity']))
+                        if local_pos['position_side'] == 'LONG':
+                            realized_pnl = (close_price - entry_price) * quantity
+                        else:
+                            realized_pnl = (entry_price - close_price) * quantity
+
+                    # 更新本地数据库
+                    cursor.execute("""
+                        UPDATE live_futures_positions
+                        SET status = 'CLOSED',
+                            close_price = %s,
+                            realized_pnl = %s,
+                            close_time = NOW(),
+                            close_reason = 'binance_sync'
+                        WHERE id = %s
+                    """, (float(close_price), float(realized_pnl), local_pos['id']))
+
+                    logger.info(f"[同步] 检测到已平仓: {local_pos['symbol']} {local_pos['position_side']} "
+                               f"@ {close_price}, PnL={realized_pnl:.2f}")
+                    closed_count += 1
+
+            # 4. 获取本地数据库中状态为 PENDING 的限价单
+            cursor.execute("""
+                SELECT id, symbol, position_side, binance_order_id
+                FROM live_futures_positions
+                WHERE status = 'PENDING' AND account_id = %s AND binance_order_id IS NOT NULL
+            """, (account_id,))
+            local_pending_positions = cursor.fetchall()
+
+            # 5. 检查PENDING限价单在币安的状态
+            for local_pos in local_pending_positions:
+                binance_symbol = self._convert_symbol(local_pos['symbol'])
+                order_id = local_pos['binance_order_id']
+
+                # 查询币安订单状态
+                order_status = self._request('GET', '/fapi/v1/order', {
+                    'symbol': binance_symbol,
+                    'orderId': order_id
+                })
+
+                if isinstance(order_status, dict) and order_status.get('success') == False:
+                    continue
+
+                status = order_status.get('status', '')
+
+                if status == 'FILLED':
+                    # 已成交，更新为OPEN
+                    executed_qty = Decimal(str(order_status.get('executedQty', '0')))
+                    avg_price = Decimal(str(order_status.get('avgPrice', '0')))
+
+                    cursor.execute("""
+                        UPDATE live_futures_positions
+                        SET status = 'OPEN',
+                            quantity = %s,
+                            entry_price = %s,
+                            updated_at = NOW()
+                        WHERE id = %s
+                    """, (float(executed_qty), float(avg_price), local_pos['id']))
+
+                    logger.info(f"[同步] 限价单已成交: {local_pos['symbol']} @ {avg_price}")
+                    synced_count += 1
+
+                elif status in ['CANCELED', 'EXPIRED', 'REJECTED']:
+                    # 已取消/过期/拒绝
+                    cursor.execute("""
+                        UPDATE live_futures_positions
+                        SET status = %s,
+                            updated_at = NOW()
+                        WHERE id = %s
+                    """, (status, local_pos['id']))
+
+                    logger.info(f"[同步] 限价单已取消: {local_pos['symbol']} #{order_id} -> {status}")
+                    canceled_count += 1
+
+            # 6. 检查币安是否有本地没有的持仓（在APP手动开的仓）
+            cursor.execute("""
+                SELECT symbol, position_side FROM live_futures_positions
+                WHERE status = 'OPEN' AND account_id = %s
+            """, (account_id,))
+            local_open_keys = {f"{r['symbol']}_{r['position_side']}" for r in cursor.fetchall()}
+
+            for key, binance_pos in binance_position_map.items():
+                if key not in local_open_keys:
+                    # 本地没有这个持仓，是在APP手动开的
+                    position_id = self._save_position_to_db(
+                        account_id=account_id,
+                        symbol=binance_pos['symbol'],
+                        position_side=binance_pos['position_side'],
+                        quantity=binance_pos['quantity'],
+                        entry_price=binance_pos['entry_price'],
+                        leverage=binance_pos['leverage'],
+                        stop_loss_price=None,
+                        take_profit_price=None,
+                        status='OPEN',
+                        source='binance_sync',
+                        signal_id=None,
+                        strategy_id=None,
+                        binance_order_id=None
+                    )
+
+                    logger.info(f"[同步] 检测到新持仓: {binance_pos['symbol']} {binance_pos['position_side']} "
+                               f"数量={binance_pos['quantity']} @ {binance_pos['entry_price']}")
+                    new_count += 1
+
+            total_synced = closed_count + canceled_count + synced_count + new_count
+
+            return {
+                'success': True,
+                'message': f'同步完成',
+                'closed': closed_count,
+                'canceled': canceled_count,
+                'filled': synced_count,
+                'new': new_count,
+                'total': total_synced
+            }
+
+        except Exception as e:
+            logger.error(f"从币安同步持仓失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'success': False, 'error': str(e)}
+
+    def _get_binance_positions(self) -> List[Dict]:
+        """获取币安当前实际持仓（内部方法）"""
+        result = self._request('GET', '/fapi/v2/positionRisk')
+
+        if isinstance(result, dict) and result.get('success') == False:
+            return []
+
+        positions = []
+        for pos in result:
+            position_amt = Decimal(str(pos.get('positionAmt', '0')))
+
+            # 跳过空仓
+            if position_amt == 0:
+                continue
+
+            symbol = self._reverse_symbol(pos.get('symbol', ''))
+            position_side = 'LONG' if position_amt > 0 else 'SHORT'
+            entry_price = Decimal(str(pos.get('entryPrice', '0')))
+            leverage = int(pos.get('leverage', 1))
+
+            positions.append({
+                'symbol': symbol,
+                'position_side': position_side,
+                'quantity': abs(position_amt),
+                'entry_price': entry_price,
+                'leverage': leverage
+            })
+
+        return positions
+
+    def _get_recent_trades(self, symbol: str, limit: int = 50) -> List[Dict]:
+        """获取最近成交记录（内部方法）"""
+        try:
+            result = self._request('GET', '/fapi/v1/userTrades', {
+                'symbol': symbol,
+                'limit': limit
+            })
+
+            if isinstance(result, dict) and result.get('success') == False:
+                return []
+
+            return result
+        except Exception as e:
+            logger.error(f"获取成交记录失败: {e}")
+            return []
 
     # ==================== 测试连接 ====================
 

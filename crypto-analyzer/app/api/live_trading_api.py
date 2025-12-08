@@ -793,3 +793,43 @@ async def update_risk_config(account_id: int, request: RiskConfigRequest):
     except Exception as e:
         logger.error(f"更新风控配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 币安同步 ====================
+
+@router.post("/sync-from-binance")
+async def sync_from_binance(account_id: int = 1):
+    """
+    从币安同步持仓状态到本地数据库
+
+    处理以下情况：
+    1. 在币安APP手动平仓的订单 -> 更新状态为CLOSED
+    2. 在币安APP撤销的限价单 -> 更新状态为CANCELED
+    3. 在币安APP手动开的仓 -> 新增记录到数据库
+
+    Args:
+        account_id: 账户ID，默认为1
+    """
+    try:
+        engine = get_live_engine()
+        result = engine.sync_positions_from_binance(account_id)
+
+        if result.get('success'):
+            return {
+                "success": True,
+                "message": f"同步完成: 已平仓{result.get('closed', 0)}个, "
+                          f"已取消{result.get('canceled', 0)}个, "
+                          f"已成交{result.get('filled', 0)}个, "
+                          f"新增{result.get('new', 0)}个",
+                "data": result
+            }
+        else:
+            raise HTTPException(status_code=400, detail=result.get('error'))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"从币安同步失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
