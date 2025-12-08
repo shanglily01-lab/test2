@@ -19,14 +19,14 @@ demo_mode: false
 exchanges:
   binance:
     enabled: true
-    api_key: iIPpaIv5nUGVUJFJc5UVTEU02rMt7KXMbevJKTPxWCxm88yoVieMEUvSTOmMrV1N
-    api_secret: pQXcz2v66R2tLYZDan2FC2swTjm1G1ML5FyzfpCk3DsQrRe2bewgrfvPE2fQOZbB
+    api_key: ${BINANCE_API_KEY:}
+    api_secret: ${BINANCE_API_SECRET:}
     options:
       defaultType: spot
   gate:
     enabled: false
-    api_key: 4808622a3af8bda94a5ee270193db5d5
-    api_secret: 560cd4fcc044a7c5ad7a3a136c77e038536fa983d6c3eb9492763502750303f3
+    api_key: ${GATE_API_KEY:}
+    api_secret: ${GATE_API_SECRET:}
     options:
       defaultType: spot
 collector:
@@ -57,7 +57,7 @@ news:
   news_interval: 15
   cryptopanic:
     enabled: true
-    api_key: 826a79a401aa14ec3e346b7ba84d2cd57299a99c
+    api_key: ${CRYPTOPANIC_API_KEY:}
     filter: hot
   rss:
     enabled: true
@@ -68,9 +68,9 @@ news:
     - cryptoslate
   reddit:
     enabled: true
-    client_id: 3wDsL3raqIviY2_oWqc-BQ
-    client_secret: vd2RKRAIBwAqhfzIncka1hB8BN_sNA
-    proxy: http://127.0.0.1:7897
+    client_id: ${REDDIT_CLIENT_ID:}
+    client_secret: ${REDDIT_CLIENT_SECRET:}
+    proxy: ${HTTP_PROXY:http://127.0.0.1:7897}
     subreddits:
     - CryptoCurrency
     - Bitcoin
@@ -84,10 +84,10 @@ news:
     - administrative
   twitter:
     enabled: false
-    bearer_token: AAAAAAAAAAAAAAAAAAAAAIyy4wEAAAAAPNUMv1mZeCTVJ%2FQ9xz0K3XaHxb4%3D9UuKff6pLBTojcb8VHcllLeK2QM0y15w0kyKyiA1JlfKW72uI3
-    api_key: kROtWxKFuSIDgu8PI5Eld9KSQ
-    api_secret: AerreoyB5i0b6IzVuNNDfTCUgEinkl9sTOe5TPTmxwtsTl8DkK
-    proxy: http://127.0.0.1:7897
+    bearer_token: ${TWITTER_BEARER_TOKEN:}
+    api_key: ${TWITTER_API_KEY:}
+    api_secret: ${TWITTER_API_SECRET:}
+    proxy: ${HTTP_PROXY:http://127.0.0.1:7897}
     vip_accounts:
     - username: elonmusk
       name: Elon Musk
@@ -173,11 +173,11 @@ api:
 database:
   type: mysql
   mysql:
-    host: localhost
-    port: 3306
-    user: root
-    password: Tonny@1000
-    database: binance-data
+    host: ${DB_HOST:localhost}
+    port: ${DB_PORT:3306}
+    user: ${DB_USER:root}
+    password: ${DB_PASSWORD:}
+    database: ${DB_NAME:binance-data}
   sqlite:
     path: ./data/crypto.db
   postgresql:
@@ -193,8 +193,8 @@ database:
 notifications:
   telegram:
     enabled: true
-    bot_token: '8518383275:AAGPS4pB2RK_2yzcGVfQgbZVhjf82helpfo'
-    chat_id: '6059784801'
+    bot_token: ${TELEGRAM_BOT_TOKEN:}
+    chat_id: ${TELEGRAM_CHAT_ID:}
     notify_events:
     - strong_signal
     - major_news
@@ -233,9 +233,9 @@ backtest:
   commission: 0.001
 smart_money:
   enabled: true
-  etherscan_api_key: IZQFMDIK16MHNG9TKU8ZWKE13SVJ7279Z7
-  bscscan_api_key: IZQFMDIK16MHNG9TKU8ZWKE13SVJ7279Z7
-  proxy: http://127.0.0.1:7897
+  etherscan_api_key: ${ETHERSCAN_API_KEY:}
+  bscscan_api_key: ${BSCSCAN_API_KEY:}
+  proxy: ${HTTP_PROXY:http://127.0.0.1:7897}
   min_transaction_usd: 100000
   addresses:
   - address: '0x28C6c06298d514Db089934071355E5743bf21d60'
@@ -361,7 +361,7 @@ notification:
 
 # JWT认证配置
 auth:
-  secret_key: 'your-super-secret-key-change-in-production-2024'
-  algorithm: 'HS256'
-  access_token_expire_minutes: 60    # 访问令牌有效期(分钟)
-  refresh_token_expire_days: 30      # 刷新令牌有效期(天)
+  secret_key: ${JWT_SECRET_KEY:}
+  algorithm: ${JWT_ALGORITHM:HS256}
+  access_token_expire_minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:60}
+  refresh_token_expire_days: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:30}

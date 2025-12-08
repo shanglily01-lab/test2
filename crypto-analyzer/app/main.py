@@ -91,20 +91,22 @@ async def lifespan(app: FastAPI):
     global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
     global pending_order_executor, futures_limit_order_executor, futures_monitor_service, live_order_monitor
 
-    # 加载配置
-    config_path = project_root / "config.yaml"
-    if config_path.exists():
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        logger.info("✅ 配置文件加载成功")
-    else:
-        logger.warning("⚠️  config.yaml 不存在，使用默认配置")
+    # 加载配置（支持环境变量）
+    from app.utils.config_loader import load_config, get_config_summary
+    config = load_config(project_root / "config.yaml")
+
+    if not config:
+        logger.warning("⚠️ config.yaml 不存在，使用默认配置")
         config = {
             'exchanges': {
                 'binance': {'enabled': True}
             },
             'symbols': ['BTC/USDT', 'ETH/USDT']
         }
+    else:
+        # 输出配置摘要（敏感信息已掩码）
+        summary = get_config_summary(config)
+        logger.debug(f"配置摘要: {summary}")
 
     # 使用延迟导入，避免模块级别的初始化代码
     try:
