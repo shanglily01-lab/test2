@@ -590,6 +590,16 @@ class StrategyExecutor:
             # 穿越确认K线数，连续几根K线在EMA下方/上方才触发
             exit_price_cross_ema_confirm_bars = exit_on_price_cross_ema.get('confirmBars', 1) if isinstance(exit_on_price_cross_ema, dict) else 1
 
+            # 4. 连续下跌K线提前止盈：连续N根K线收跌时提前止盈锁定利润
+            consecutive_bearish_exit = strategy.get('consecutiveBearishExit', {})
+            consecutive_bearish_exit_enabled = consecutive_bearish_exit.get('enabled', False) if isinstance(consecutive_bearish_exit, dict) else False
+            # 连续下跌K线数量（做多时）
+            consecutive_bearish_bars = consecutive_bearish_exit.get('bars', 3) if isinstance(consecutive_bearish_exit, dict) else 3
+            # 检测使用的时间周期（默认5m）
+            consecutive_bearish_timeframe = consecutive_bearish_exit.get('timeframe', '5m') if isinstance(consecutive_bearish_exit, dict) else '5m'
+            # 要求最小盈利才触发（%），避免亏损出场
+            consecutive_bearish_min_profit = consecutive_bearish_exit.get('minProfitPct', 0.3) if isinstance(consecutive_bearish_exit, dict) else 0.3
+
             # ================== 智能止损配置 ==================
             smart_stop_loss = strategy.get('smartStopLoss', {})
 
@@ -924,6 +934,11 @@ class StrategyExecutor:
                     exit_price_cross_ema_enabled=exit_price_cross_ema_enabled,
                     exit_price_cross_ema_min_profit=exit_price_cross_ema_min_profit,
                     exit_price_cross_ema_confirm_bars=exit_price_cross_ema_confirm_bars,
+                    # 连续下跌K线提前止盈配置
+                    consecutive_bearish_exit_enabled=consecutive_bearish_exit_enabled,
+                    consecutive_bearish_bars=consecutive_bearish_bars,
+                    consecutive_bearish_timeframe=consecutive_bearish_timeframe,
+                    consecutive_bearish_min_profit=consecutive_bearish_min_profit,
                     # 智能止损配置
                     atr_stop_loss_enabled=atr_stop_loss_enabled,
                     atr_stop_loss_multiplier=atr_stop_loss_multiplier,
@@ -1316,6 +1331,12 @@ class StrategyExecutor:
         exit_price_cross_ema_enabled = kwargs.get('exit_price_cross_ema_enabled', False)
         exit_price_cross_ema_min_profit = kwargs.get('exit_price_cross_ema_min_profit', 0.5)  # 最小盈利要求(%)
         exit_price_cross_ema_confirm_bars = kwargs.get('exit_price_cross_ema_confirm_bars', 1)  # 确认K线数
+
+        # 4. 连续下跌K线提前止盈
+        consecutive_bearish_exit_enabled = kwargs.get('consecutive_bearish_exit_enabled', False)
+        consecutive_bearish_bars = kwargs.get('consecutive_bearish_bars', 3)  # 连续下跌K线数量
+        consecutive_bearish_timeframe = kwargs.get('consecutive_bearish_timeframe', '5m')  # 检测周期
+        consecutive_bearish_min_profit = kwargs.get('consecutive_bearish_min_profit', 0.3)  # 最小盈利要求(%)
 
         # ================== 智能止损配置 ==================
         # 1. ATR动态止损
@@ -1794,6 +1815,44 @@ class StrategyExecutor:
                     elif direction == 'short' and realtime_price <= effective_take_profit_price:
                         exit_price = effective_take_profit_price
                         exit_reason = dynamic_tp_reason if dynamic_tp_reason else "止盈"
+
+                # 连续下跌K线提前止盈检查（做多时连续N根阴线则提前止盈，做空时连续N根阳线）
+                if not exit_price and consecutive_bearish_exit_enabled:
+                    if current_profit_pct >= consecutive_bearish_min_profit:
+                        # 获取最近N根K线来检查连续下跌/上涨
+                        # 使用卖出周期的K线数据（通常是5m）
+                        recent_klines = []
+                        kline_count = len(sell_indicator_pairs)
+                        bars_to_check = min(consecutive_bearish_bars, kline_count)
+
+                        for i in range(bars_to_check):
+                            idx = kline_count - 1 - i
+                            if idx >= 0:
+                                kline = sell_indicator_pairs[idx].get('kline', {})
+                                recent_klines.append(kline)
+
+                        if len(recent_klines) >= consecutive_bearish_bars:
+                            # 做多时：检查连续阴线（收盘<开盘）
+                            if direction == 'long':
+                                consecutive_bearish = all(
+                                    float(k.get('close', k.get('close_price', 0))) < float(k.get('open', k.get('open_price', 0)))
+                                    for k in recent_klines[:consecutive_bearish_bars]
+                                )
+                                if consecutive_bearish:
+                                    exit_price = realtime_price
+                                    exit_reason = f"连续{consecutive_bearish_bars}根阴线提前止盈(盈利{current_profit_pct:.2f}%)"
+                                    logger.info(f"{symbol}: 🔻 检测到连续{consecutive_bearish_bars}根阴线，当前盈利{current_profit_pct:.2f}%，提前止盈")
+
+                            # 做空时：检查连续阳线（收盘>开盘）
+                            else:
+                                consecutive_bullish = all(
+                                    float(k.get('close', k.get('close_price', 0))) > float(k.get('open', k.get('open_price', 0)))
+                                    for k in recent_klines[:consecutive_bearish_bars]
+                                )
+                                if consecutive_bullish:
+                                    exit_price = realtime_price
+                                    exit_reason = f"连续{consecutive_bearish_bars}根阳线提前止盈(盈利{current_profit_pct:.2f}%)"
+                                    logger.info(f"{symbol}: 🔺 检测到连续{consecutive_bearish_bars}根阳线，当前盈利{current_profit_pct:.2f}%，提前止盈")
 
                 # 盈利保护止损检查（盈利达到阈值后，如果盈利回落到保底线则平仓）
                 # 逻辑：追踪历史最高盈利，当盈利曾达到 activatePct%，如果回落到 minLockPct% 则触发保护出场
