@@ -3,11 +3,17 @@
 自动识别趋势/震荡行情，并为策略执行提供参数建议
 
 行情类型：
-- strong_uptrend: 强趋势上涨 (EMA差值>1%, ADX>40)
-- weak_uptrend: 弱趋势上涨 (EMA差值0.3-1%, ADX 25-40)
-- strong_downtrend: 强趋势下跌 (EMA差值<-1%, ADX>40)
-- weak_downtrend: 弱趋势下跌 (EMA差值-0.3 ~ -1%, ADX 25-40)
-- ranging: 震荡行情 (EMA差值<0.3%, ADX<25)
+- strong_uptrend: 强趋势上涨 (EMA差值>1.5%, ADX>40, 大周期确认)
+- weak_uptrend: 弱趋势上涨 (EMA差值0.8-1.5%, ADX 25-40)
+- strong_downtrend: 强趋势下跌 (EMA差值<-1.5%, ADX>40, 大周期确认)
+- weak_downtrend: 弱趋势下跌 (EMA差值-0.8 ~ -1.5%, ADX 25-40)
+- ranging: 震荡行情 (EMA差值<0.8%, ADX<25)
+
+v2.0 改进：
+- 增加大周期过滤（4H/日线确认）
+- 增加BTC大盘参考（BTC牛市时限制山寨币做空）
+- 提高趋势判断阈值（更稳健）
+- 增加多周期一致性检查
 """
 
 import logging
@@ -21,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class MarketRegimeDetector:
-    """行情类型检测器"""
+    """行情类型检测器 v2.0"""
 
     # 行情类型常量
     STRONG_UPTREND = 'strong_uptrend'
@@ -30,16 +36,26 @@ class MarketRegimeDetector:
     WEAK_DOWNTREND = 'weak_downtrend'
     RANGING = 'ranging'
 
-    # 阈值配置
-    STRONG_TREND_EMA_DIFF = 1.0  # 强趋势EMA差值阈值(%)
-    WEAK_TREND_EMA_DIFF = 0.3    # 弱趋势EMA差值阈值(%)
+    # 阈值配置 - v2.0 提高阈值，更稳健
+    STRONG_TREND_EMA_DIFF = 1.5  # 强趋势EMA差值阈值(%) - 从1.0提高到1.5
+    WEAK_TREND_EMA_DIFF = 0.8    # 弱趋势EMA差值阈值(%) - 从0.3提高到0.8
     STRONG_ADX_THRESHOLD = 40    # 强趋势ADX阈值
     WEAK_ADX_THRESHOLD = 25      # 弱趋势ADX阈值
-    MIN_TREND_BARS = 3           # 趋势确认最小K线数
+    MIN_TREND_BARS = 5           # 趋势确认最小K线数 - 从3提高到5
 
     # 滞后机制配置 - 防止频繁切换
-    HYSTERESIS_SCORE = 5.0       # 切换需要超过的得分差距
-    MIN_REGIME_DURATION = 3      # 新状态需要持续的检测次数
+    HYSTERESIS_SCORE = 8.0       # 切换需要超过的得分差距 - 从5.0提高到8.0
+    MIN_REGIME_DURATION = 4      # 新状态需要持续的检测次数 - 从3提高到4
+
+    # 大周期过滤配置
+    ENABLE_MULTI_TIMEFRAME = True  # 启用多周期过滤
+    HIGHER_TIMEFRAMES = ['4h', '1d']  # 参考的大周期
+
+    # BTC大盘参考配置
+    ENABLE_BTC_FILTER = True  # 启用BTC大盘过滤
+    BTC_SYMBOL = 'BTC/USDT'
+    BTC_BULL_THRESHOLD = 20  # BTC得分>20视为牛市
+    BTC_BEAR_THRESHOLD = -20  # BTC得分<-20视为熊市
 
     def __init__(self, db_config: Dict):
         """
@@ -51,11 +67,19 @@ class MarketRegimeDetector:
         self.db_config = db_config
         # 状态缓存：记录每个交易对的上一次状态
         self._regime_cache = {}  # {symbol_timeframe: {'type': str, 'score': float, 'count': int}}
+        # BTC行情缓存
+        self._btc_regime_cache = None
+        self._btc_cache_time = None
 
     def detect_regime(self, symbol: str, timeframe: str = '15m',
                       kline_data: List[Dict] = None) -> Dict:
         """
         检测单个交易对的行情类型
+
+        v2.0 改进：
+        - 增加大周期过滤（4H/日线确认）
+        - 增加BTC大盘参考
+        - 小周期趋势必须与大周期一致才能确认
 
         Args:
             symbol: 交易对符号
@@ -82,8 +106,22 @@ class MarketRegimeDetector:
             # 计算技术指标
             indicators = self._calculate_indicators(kline_data)
 
-            # 判断行情类型（原始判断）
+            # 判断行情类型（原始判断，基于当前周期）
             raw_regime_type, regime_score = self._classify_regime(indicators)
+
+            # ===== v2.0 新增：大周期过滤 =====
+            higher_tf_info = {}
+            if self.ENABLE_MULTI_TIMEFRAME:
+                raw_regime_type, regime_score, higher_tf_info = self._apply_multi_timeframe_filter(
+                    symbol, raw_regime_type, regime_score
+                )
+
+            # ===== v2.0 新增：BTC大盘参考 =====
+            btc_info = {}
+            if self.ENABLE_BTC_FILTER and symbol != self.BTC_SYMBOL:
+                raw_regime_type, regime_score, btc_info = self._apply_btc_filter(
+                    symbol, raw_regime_type, regime_score
+                )
 
             # 应用滞后机制防止频繁切换
             regime_type = self._apply_hysteresis(symbol, timeframe, raw_regime_type, regime_score)
@@ -107,7 +145,10 @@ class MarketRegimeDetector:
                     'rsi': indicators.get('rsi'),
                     'price': indicators.get('current_price'),
                     'trend_direction': indicators.get('trend_direction'),
-                    'price_position': indicators.get('price_position')
+                    'price_position': indicators.get('price_position'),
+                    # v2.0 新增字段
+                    'higher_timeframe': higher_tf_info,
+                    'btc_reference': btc_info
                 }
             }
 
@@ -125,6 +166,187 @@ class MarketRegimeDetector:
                 'regime_score': 0,
                 'error': str(e)
             }
+
+    def _apply_multi_timeframe_filter(self, symbol: str, regime_type: str,
+                                       regime_score: float) -> Tuple[str, float, Dict]:
+        """
+        应用多周期过滤
+
+        规则：
+        1. 如果大周期（4H/日线）是强多头，小周期的空头信号降级为震荡
+        2. 如果大周期是强空头，小周期的多头信号降级为震荡
+        3. 只有大小周期方向一致时，才确认趋势
+
+        Returns:
+            (调整后的regime_type, 调整后的score, 大周期信息)
+        """
+        higher_tf_info = {}
+        original_regime = regime_type
+
+        try:
+            # 获取4H和日线的行情
+            for tf in self.HIGHER_TIMEFRAMES:
+                kline_data = self._get_kline_data(symbol, tf)
+                if kline_data and len(kline_data) >= 30:
+                    indicators = self._calculate_indicators(kline_data)
+                    tf_regime, tf_score = self._classify_regime(indicators)
+                    higher_tf_info[tf] = {
+                        'regime': tf_regime,
+                        'score': tf_score,
+                        'ema_diff_pct': indicators.get('ema_diff_pct', 0)
+                    }
+
+            if not higher_tf_info:
+                return regime_type, regime_score, higher_tf_info
+
+            # 判断大周期整体方向
+            h4_info = higher_tf_info.get('4h', {})
+            d1_info = higher_tf_info.get('1d', {})
+
+            h4_score = h4_info.get('score', 0)
+            d1_score = d1_info.get('score', 0)
+
+            # 综合大周期得分（日线权重更高）
+            higher_score = d1_score * 0.6 + h4_score * 0.4 if d1_info else h4_score
+
+            # 判断大周期是否是强趋势
+            is_higher_bullish = higher_score > self.BTC_BULL_THRESHOLD
+            is_higher_bearish = higher_score < self.BTC_BEAR_THRESHOLD
+
+            # 小周期是否与大周期冲突
+            is_small_bearish = regime_type in [self.STRONG_DOWNTREND, self.WEAK_DOWNTREND]
+            is_small_bullish = regime_type in [self.STRONG_UPTREND, self.WEAK_UPTREND]
+
+            # 规则1：大周期强多头 + 小周期空头 → 降级为震荡
+            if is_higher_bullish and is_small_bearish:
+                logger.info(f"🔄 {symbol} 多周期冲突: 大周期多头(得分:{higher_score:.1f}) vs 小周期空头 → 降级为震荡")
+                regime_type = self.RANGING
+                regime_score = regime_score * 0.3  # 大幅降低得分
+
+            # 规则2：大周期强空头 + 小周期多头 → 降级为震荡
+            elif is_higher_bearish and is_small_bullish:
+                logger.info(f"🔄 {symbol} 多周期冲突: 大周期空头(得分:{higher_score:.1f}) vs 小周期多头 → 降级为震荡")
+                regime_type = self.RANGING
+                regime_score = regime_score * 0.3
+
+            # 规则3：大小周期一致，增强信号
+            elif (is_higher_bullish and is_small_bullish) or (is_higher_bearish and is_small_bearish):
+                logger.debug(f"✅ {symbol} 多周期一致: 大周期(得分:{higher_score:.1f}) 与小周期方向一致")
+                regime_score = regime_score * 1.2  # 增强得分
+
+            higher_tf_info['combined_score'] = higher_score
+            higher_tf_info['adjustment'] = 'downgraded' if regime_type != original_regime else 'none'
+
+        except Exception as e:
+            logger.warning(f"多周期过滤失败 {symbol}: {e}")
+
+        return regime_type, regime_score, higher_tf_info
+
+    def _apply_btc_filter(self, symbol: str, regime_type: str,
+                          regime_score: float) -> Tuple[str, float, Dict]:
+        """
+        应用BTC大盘过滤
+
+        规则：
+        1. BTC强牛市时，禁止山寨币做空（空头信号降级为震荡）
+        2. BTC强熊市时，禁止山寨币做多（多头信号降级为震荡）
+        3. 山寨币应该跟随BTC大方向
+
+        Returns:
+            (调整后的regime_type, 调整后的score, BTC信息)
+        """
+        btc_info = {}
+        original_regime = regime_type
+
+        try:
+            # 获取BTC行情（使用缓存，5分钟更新一次）
+            btc_regime = self._get_btc_regime()
+            if not btc_regime:
+                return regime_type, regime_score, btc_info
+
+            btc_score = btc_regime.get('regime_score', 0)
+            btc_type = btc_regime.get('regime_type', self.RANGING)
+
+            btc_info = {
+                'regime': btc_type,
+                'score': btc_score,
+                'is_bull': btc_score > self.BTC_BULL_THRESHOLD,
+                'is_bear': btc_score < self.BTC_BEAR_THRESHOLD
+            }
+
+            is_btc_bull = btc_score > self.BTC_BULL_THRESHOLD
+            is_btc_bear = btc_score < self.BTC_BEAR_THRESHOLD
+
+            is_small_bearish = regime_type in [self.STRONG_DOWNTREND, self.WEAK_DOWNTREND]
+            is_small_bullish = regime_type in [self.STRONG_UPTREND, self.WEAK_UPTREND]
+
+            # 规则1：BTC强牛市 + 山寨币空头信号 → 降级
+            if is_btc_bull and is_small_bearish:
+                logger.info(f"🚫 {symbol} BTC牛市过滤: BTC得分={btc_score:.1f} > {self.BTC_BULL_THRESHOLD}，"
+                           f"禁止做空 → 降级为震荡")
+                regime_type = self.RANGING
+                regime_score = regime_score * 0.2  # 大幅降低
+                btc_info['action'] = 'blocked_short'
+
+            # 规则2：BTC强熊市 + 山寨币多头信号 → 降级
+            elif is_btc_bear and is_small_bullish:
+                logger.info(f"🚫 {symbol} BTC熊市过滤: BTC得分={btc_score:.1f} < {self.BTC_BEAR_THRESHOLD}，"
+                           f"禁止做多 → 降级为震荡")
+                regime_type = self.RANGING
+                regime_score = regime_score * 0.2
+                btc_info['action'] = 'blocked_long'
+
+            # 规则3：方向一致，增强信号
+            elif (is_btc_bull and is_small_bullish) or (is_btc_bear and is_small_bearish):
+                logger.debug(f"✅ {symbol} 与BTC方向一致 (BTC得分:{btc_score:.1f})")
+                regime_score = regime_score * 1.1
+                btc_info['action'] = 'confirmed'
+            else:
+                btc_info['action'] = 'neutral'
+
+            btc_info['adjustment'] = 'downgraded' if regime_type != original_regime else 'none'
+
+        except Exception as e:
+            logger.warning(f"BTC过滤失败 {symbol}: {e}")
+
+        return regime_type, regime_score, btc_info
+
+    def _get_btc_regime(self) -> Optional[Dict]:
+        """
+        获取BTC行情（带缓存）
+
+        缓存5分钟，避免频繁查询
+        """
+        now = datetime.now()
+
+        # 检查缓存是否有效（5分钟内）
+        if (self._btc_regime_cache is not None and
+            self._btc_cache_time is not None and
+            (now - self._btc_cache_time).total_seconds() < 300):
+            return self._btc_regime_cache
+
+        try:
+            # 获取BTC的4H行情作为大盘参考
+            kline_data = self._get_kline_data(self.BTC_SYMBOL, '4h')
+            if kline_data and len(kline_data) >= 30:
+                indicators = self._calculate_indicators(kline_data)
+                btc_regime, btc_score = self._classify_regime(indicators)
+
+                self._btc_regime_cache = {
+                    'regime_type': btc_regime,
+                    'regime_score': btc_score,
+                    'ema_diff_pct': indicators.get('ema_diff_pct', 0),
+                    'updated_at': now
+                }
+                self._btc_cache_time = now
+
+                logger.debug(f"📊 BTC大盘: {btc_regime} (得分:{btc_score:.1f})")
+                return self._btc_regime_cache
+
+        except Exception as e:
+            logger.warning(f"获取BTC行情失败: {e}")
+
+        return None
 
     def _calculate_indicators(self, kline_data: List[Dict]) -> Dict:
         """计算技术指标"""

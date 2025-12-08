@@ -500,6 +500,13 @@ class StrategyExecutor:
             prevent_duplicate_entry = strategy.get('preventDuplicateEntry', False)  # 防止重复开仓
             close_opposite_on_entry = strategy.get('closeOppositeOnEntry', False)  # 开仓前先平掉相反方向的持仓
             min_holding_time_hours = strategy.get('minHoldingTimeHours', 0)  # 最小持仓时间（小时）
+
+            # ================== v2.0 全局开仓冷却配置 ==================
+            # 适用于所有信号类型（金叉/死叉/持续趋势），防止短时间内频繁开仓
+            entry_cooldown = strategy.get('entryCooldown', {})
+            entry_cooldown_enabled = entry_cooldown.get('enabled', True) if isinstance(entry_cooldown, dict) else True  # 默认启用
+            entry_cooldown_minutes = entry_cooldown.get('minutes', 30) if isinstance(entry_cooldown, dict) else 30  # 默认30分钟冷却
+            entry_cooldown_per_direction = entry_cooldown.get('perDirection', True) if isinstance(entry_cooldown, dict) else True  # 是否按方向独立冷却
             fee_rate = strategy.get('feeRate', 0.0004)
 
             # 同步实盘交易配置
@@ -876,6 +883,9 @@ class StrategyExecutor:
                     close_opposite_on_entry=close_opposite_on_entry,
                     min_holding_time_hours=min_holding_time_hours,
                     fee_rate=fee_rate,
+                    entry_cooldown_enabled=entry_cooldown_enabled,
+                    entry_cooldown_minutes=entry_cooldown_minutes,
+                    entry_cooldown_per_direction=entry_cooldown_per_direction,
                     max_long_positions=max_long_positions,
                     max_short_positions=max_short_positions,
                     rsi_filter_enabled=rsi_filter_enabled,
@@ -1252,6 +1262,10 @@ class StrategyExecutor:
         close_opposite_on_entry = kwargs.get('close_opposite_on_entry', False)  # 开仓前先平掉相反方向的持仓
         min_holding_time_hours = kwargs.get('min_holding_time_hours', 0)  # 最小持仓时间（小时）
         fee_rate = kwargs.get('fee_rate', 0.0004)
+        # v2.0 全局开仓冷却
+        entry_cooldown_enabled = kwargs.get('entry_cooldown_enabled', True)  # 默认启用
+        entry_cooldown_minutes = kwargs.get('entry_cooldown_minutes', 30)  # 默认30分钟冷却
+        entry_cooldown_per_direction = kwargs.get('entry_cooldown_per_direction', True)  # 按方向独立冷却
         max_long_positions = kwargs.get('max_long_positions')  # 最大做多持仓数
         max_short_positions = kwargs.get('max_short_positions')  # 最大做空持仓数
         # 同步实盘交易配置
@@ -2901,6 +2915,76 @@ class StrategyExecutor:
             msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 已达到最大持仓数限制（{max_positions}个），当前持仓{len(positions)}个，跳过买入信号"
             debug_info.append(msg)
             logger.info(f"{symbol} {msg}")
+
+        # ================== v2.0 全局开仓冷却检查 ==================
+        # 检查是否在冷却期内，防止短时间内频繁开仓
+        if buy_signal_triggered and can_open_position and entry_cooldown_enabled:
+            try:
+                # 预判开仓方向
+                pending_direction = None
+                if detected_cross_type == 'golden':
+                    pending_direction = 'long'
+                elif detected_cross_type == 'death':
+                    pending_direction = 'short'
+                else:
+                    # 根据EMA状态判断
+                    if ema_short and ema_long:
+                        pending_direction = 'long' if ema_short > ema_long else 'short'
+
+                if pending_direction:
+                    cooldown_start = current_time_local - timedelta(minutes=entry_cooldown_minutes)
+
+                    # 查询最近的开仓记录
+                    db_config = self.config.get('database', {}).get('mysql', {})
+                    connection = pymysql.connect(
+                        host=db_config.get('host', 'localhost'),
+                        port=db_config.get('port', 3306),
+                        user=db_config.get('user', 'root'),
+                        password=db_config.get('password', ''),
+                        database=db_config.get('database', 'binance-data'),
+                        charset='utf8mb4',
+                        cursorclass=pymysql.cursors.DictCursor
+                    )
+                    cursor = connection.cursor()
+
+                    # 查询冷却期内的开仓记录
+                    if entry_cooldown_per_direction:
+                        # 按方向独立冷却：只查同方向的开仓
+                        cursor.execute("""
+                            SELECT entry_time, direction FROM positions
+                            WHERE symbol = %s AND strategy_id = %s AND direction = %s
+                            AND entry_time >= %s
+                            ORDER BY entry_time DESC LIMIT 1
+                        """, (symbol, strategy_id, pending_direction, cooldown_start))
+                    else:
+                        # 全局冷却：查任意方向的开仓
+                        cursor.execute("""
+                            SELECT entry_time, direction FROM positions
+                            WHERE symbol = %s AND strategy_id = %s
+                            AND entry_time >= %s
+                            ORDER BY entry_time DESC LIMIT 1
+                        """, (symbol, strategy_id, cooldown_start))
+
+                    recent_entry = cursor.fetchone()
+                    cursor.close()
+                    connection.close()
+
+                    if recent_entry:
+                        last_entry_time = recent_entry['entry_time']
+                        last_direction = recent_entry['direction']
+                        if isinstance(last_entry_time, str):
+                            last_entry_time = datetime.strptime(last_entry_time, '%Y-%m-%d %H:%M:%S')
+                        time_since_entry = (current_time_local - last_entry_time).total_seconds() / 60
+                        remaining_cooldown = entry_cooldown_minutes - time_since_entry
+
+                        can_open_position = False
+                        direction_text = f"同方向({last_direction})" if entry_cooldown_per_direction else "任意方向"
+                        msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⏳ 开仓冷却中 - 距离上次{direction_text}开仓仅{time_since_entry:.0f}分钟，需等待{remaining_cooldown:.0f}分钟"
+                        debug_info.append(msg)
+                        logger.info(f"{symbol} {msg}")
+
+            except Exception as e:
+                logger.warning(f"{symbol} 检查开仓冷却失败: {e}")
         
         if buy_signal_triggered and can_open_position and not closed_at_current_time:
             if len(buy_directions) > 0:
