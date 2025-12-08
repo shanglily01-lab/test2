@@ -251,6 +251,14 @@ async def lifespan(app: FastAPI):
             traceback.print_exc()
             live_order_monitor = None
 
+        # 初始化实盘交易Telegram通知服务
+        try:
+            from app.services.trade_notifier import init_trade_notifier
+            trade_notifier = init_trade_notifier(config)
+            logger.info("✅ 实盘交易Telegram通知服务初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  实盘交易Telegram通知服务初始化失败: {e}")
+
         logger.info("🎉 分析模块初始化完成！")
 
     except Exception as e:

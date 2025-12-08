@@ -15,6 +15,12 @@ import requests
 import pymysql
 import yaml
 
+# 导入交易通知器
+try:
+    from app.services.trade_notifier import get_trade_notifier
+except ImportError:
+    get_trade_notifier = None
+
 # 定义本地时区（UTC+8）
 LOCAL_TIMEZONE = timezone(timedelta(hours=8))
 
@@ -610,6 +616,26 @@ class BinanceFuturesEngine:
                 status='OPEN' if status == 'FILLED' else 'PENDING'
             )
 
+            # 发送Telegram通知
+            try:
+                notifier = get_trade_notifier() if get_trade_notifier else None
+                if notifier:
+                    actual_qty = float(executed_qty if executed_qty > 0 else quantity)
+                    margin = (float(entry_price) * actual_qty) / leverage
+                    notifier.notify_open_position(
+                        symbol=symbol,
+                        direction=position_side,
+                        quantity=actual_qty,
+                        entry_price=float(entry_price),
+                        leverage=leverage,
+                        stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
+                        take_profit_price=float(take_profit_price) if take_profit_price else None,
+                        margin=margin,
+                        order_type='LIMIT' if limit_price else 'MARKET'
+                    )
+            except Exception as notify_err:
+                logger.warning(f"发送开仓通知失败: {notify_err}")
+
             return {
                 'success': True,
                 'position_id': position_id,
@@ -799,6 +825,42 @@ class BinanceFuturesEngine:
 
             # 7. 取消相关止盈止损单
             self._cancel_position_orders(position)
+
+            # 8. 发送Telegram通知
+            try:
+                notifier = get_trade_notifier() if get_trade_notifier else None
+                if notifier:
+                    # 计算持仓时间
+                    hold_time = None
+                    if position.get('open_time'):
+                        open_time = position['open_time']
+                        if isinstance(open_time, str):
+                            open_time = datetime.strptime(open_time, '%Y-%m-%d %H:%M:%S')
+                        hold_duration = get_local_time() - open_time
+                        hours, remainder = divmod(hold_duration.total_seconds(), 3600)
+                        minutes = remainder // 60
+                        if hours >= 24:
+                            days = int(hours // 24)
+                            hours = int(hours % 24)
+                            hold_time = f"{days}天{int(hours)}小时{int(minutes)}分钟"
+                        elif hours >= 1:
+                            hold_time = f"{int(hours)}小时{int(minutes)}分钟"
+                        else:
+                            hold_time = f"{int(minutes)}分钟"
+
+                    notifier.notify_close_position(
+                        symbol=symbol,
+                        direction=position_side,
+                        quantity=float(executed_qty),
+                        entry_price=float(entry_price),
+                        exit_price=float(avg_price),
+                        pnl=float(pnl),
+                        pnl_pct=float(roi),
+                        reason=reason,
+                        hold_time=hold_time
+                    )
+            except Exception as notify_err:
+                logger.warning(f"发送平仓通知失败: {notify_err}")
 
             return {
                 'success': True,

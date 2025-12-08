@@ -191,13 +191,17 @@ database:
     signals_data_days: 180
 notifications:
   telegram:
-    enabled: false
-    bot_token: ''
-    chat_id: ''
+    enabled: true
+    bot_token: '8518383275:AAGPS4pB2RK_2yzcGVfQgbZVhjf82helpfo'
+    chat_id: '6059784801'
     notify_events:
     - strong_signal
     - major_news
     - price_alert
+    - live_open
+    - live_close
+    - stop_loss
+    - take_profit
   email:
     enabled: false
     smtp_host: smtp.gmail.com
