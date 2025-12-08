@@ -2935,13 +2935,12 @@ class StrategyExecutor:
                     cooldown_start = current_time_local - timedelta(minutes=entry_cooldown_minutes)
 
                     # 查询最近的开仓记录
-                    db_config = self.config.get('database', {}).get('mysql', {})
                     connection = pymysql.connect(
-                        host=db_config.get('host', 'localhost'),
-                        port=db_config.get('port', 3306),
-                        user=db_config.get('user', 'root'),
-                        password=db_config.get('password', ''),
-                        database=db_config.get('database', 'binance-data'),
+                        host=self.db_config.get('host', 'localhost'),
+                        port=self.db_config.get('port', 3306),
+                        user=self.db_config.get('user', 'root'),
+                        password=self.db_config.get('password', ''),
+                        database=self.db_config.get('database', 'binance-data'),
                         charset='utf8mb4',
                         cursorclass=pymysql.cursors.DictCursor
                     )
