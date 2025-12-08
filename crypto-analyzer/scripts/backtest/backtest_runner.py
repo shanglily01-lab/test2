@@ -520,13 +520,33 @@ class BacktestEngine:
 
 # ===================== 示例策略 =====================
 
+# 策略全局状态（记录每个交易对的最后交易时间）
+_last_trade_time = {}  # {symbol: datetime}
+_last_signal = {}  # {symbol: 'long'/'short'/None}
+
+
 async def simple_ema_strategy(engine: BacktestEngine, symbol: str, current_time: datetime):
     """
-    简单EMA交叉策略示例
+    优化版EMA交叉策略 v2.0
 
-    - EMA9 上穿 EMA26: 做多
-    - EMA9 下穿 EMA26: 做空
+    改进点:
+    1. 增加入场冷却期 - 平仓后30分钟内不再开仓
+    2. 增加趋势强度过滤 - EMA差值需要超过0.5%
+    3. 增加RSI过滤 - 避免超买超卖区域逆势入场
+    4. 调整止损止盈比例 - 止损3%, 止盈9% (1:3盈亏比)
+    5. 信号确认 - 需要连续2根K线确认趋势
     """
+    global _last_trade_time, _last_signal
+
+    # ===== 策略参数 =====
+    COOLDOWN_MINUTES = 30       # 入场冷却期(分钟)
+    MIN_EMA_DIFF_PCT = 0.5      # 最小EMA差值百分比
+    STOP_LOSS_PCT = 0.03        # 止损百分比 3%
+    TAKE_PROFIT_PCT = 0.09      # 止盈百分比 9%
+    POSITION_SIZE_PCT = 0.08    # 仓位大小 8%
+    RSI_OVERSOLD = 30           # RSI超卖
+    RSI_OVERBOUGHT = 70         # RSI超买
+
     # 获取15分钟K线
     klines = engine.get_klines(symbol, '15m', limit=50)
 
@@ -545,59 +565,127 @@ async def simple_ema_strategy(engine: BacktestEngine, symbol: str, current_time:
             ema = (price - ema) * multiplier + ema
         return ema
 
+    def calc_rsi(data, period=14):
+        """计算RSI"""
+        if len(data) < period + 1:
+            return 50  # 默认中性
+        gains = []
+        losses = []
+        for i in range(1, len(data)):
+            change = data[i] - data[i-1]
+            if change > 0:
+                gains.append(change)
+                losses.append(0)
+            else:
+                gains.append(0)
+                losses.append(abs(change))
+
+        avg_gain = sum(gains[-period:]) / period
+        avg_loss = sum(losses[-period:]) / period
+
+        if avg_loss == 0:
+            return 100
+        rs = avg_gain / avg_loss
+        return 100 - (100 / (1 + rs))
+
     ema9 = calc_ema(closes, 9)
     ema26 = calc_ema(closes, 26)
+    rsi = calc_rsi(closes)
 
     # 前一根K线的EMA
     prev_closes = closes[:-1]
     prev_ema9 = calc_ema(prev_closes, 9)
     prev_ema26 = calc_ema(prev_closes, 26)
 
-    if not all([ema9, ema26, prev_ema9, prev_ema26]):
+    # 前两根K线的EMA (用于信号确认)
+    prev2_closes = closes[:-2]
+    prev2_ema9 = calc_ema(prev2_closes, 9)
+    prev2_ema26 = calc_ema(prev2_closes, 26)
+
+    if not all([ema9, ema26, prev_ema9, prev_ema26, prev2_ema9, prev2_ema26]):
         return
 
     current_price = engine.get_current_price(symbol)
 
+    # 计算EMA差值百分比
+    ema_diff_pct = (ema9 - ema26) / ema26 * 100
+
+    # 检查冷却期
+    last_trade = _last_trade_time.get(symbol)
+    in_cooldown = False
+    if last_trade:
+        cooldown_delta = timedelta(minutes=COOLDOWN_MINUTES)
+        if current_time - last_trade < cooldown_delta:
+            in_cooldown = True
+
     # 检查是否已有持仓
     has_position = symbol in engine.positions
 
+    # ===== 金叉信号判断 =====
+    # 条件1: EMA9上穿EMA26 (当前金叉)
+    golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
+    # 条件2: EMA差值足够大 (趋势强度)
+    strong_bullish = ema_diff_pct > MIN_EMA_DIFF_PCT
+    # 条件3: RSI不在超买区 (避免追高)
+    rsi_ok_for_long = rsi < RSI_OVERBOUGHT
+    # 条件4: 趋势确认 (前一根也是多头排列)
+    trend_confirmed_long = prev_ema9 > prev_ema26 or golden_cross
+
+    # ===== 死叉信号判断 =====
+    # 条件1: EMA9下穿EMA26 (当前死叉)
+    death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
+    # 条件2: EMA差值足够大 (趋势强度)
+    strong_bearish = ema_diff_pct < -MIN_EMA_DIFF_PCT
+    # 条件3: RSI不在超卖区 (避免追空)
+    rsi_ok_for_short = rsi > RSI_OVERSOLD
+    # 条件4: 趋势确认
+    trend_confirmed_short = prev_ema9 < prev_ema26 or death_cross
+
+    # ===== 交易逻辑 =====
+
     # 金叉: 做多
-    if prev_ema9 <= prev_ema26 and ema9 > ema26:
+    if golden_cross and strong_bullish and rsi_ok_for_long:
         if has_position:
             # 如果持有空仓，先平仓
             if engine.positions[symbol]['direction'] == 'short':
                 engine.close_position(symbol, reason='signal_reverse')
+                _last_trade_time[symbol] = current_time
                 has_position = False
 
-        if not has_position:
-            # 计算仓位 (使用10%资金)
-            position_value = engine.balance * 0.1
+        if not has_position and not in_cooldown:
+            # 计算仓位
+            position_value = engine.balance * POSITION_SIZE_PCT
             quantity = position_value / current_price
 
-            # 止损2%, 止盈6%
-            stop_loss = current_price * 0.98
-            take_profit = current_price * 1.06
+            # 止损止盈
+            stop_loss = current_price * (1 - STOP_LOSS_PCT)
+            take_profit = current_price * (1 + TAKE_PROFIT_PCT)
 
             engine.open_position(symbol, 'long', quantity,
                                  stop_loss=stop_loss, take_profit=take_profit)
+            _last_trade_time[symbol] = current_time
+            _last_signal[symbol] = 'long'
 
     # 死叉: 做空
-    elif prev_ema9 >= prev_ema26 and ema9 < ema26:
+    elif death_cross and strong_bearish and rsi_ok_for_short:
         if has_position:
             # 如果持有多仓，先平仓
             if engine.positions[symbol]['direction'] == 'long':
                 engine.close_position(symbol, reason='signal_reverse')
+                _last_trade_time[symbol] = current_time
                 has_position = False
 
-        if not has_position:
-            position_value = engine.balance * 0.1
+        if not has_position and not in_cooldown:
+            position_value = engine.balance * POSITION_SIZE_PCT
             quantity = position_value / current_price
 
-            stop_loss = current_price * 1.02
-            take_profit = current_price * 0.94
+            stop_loss = current_price * (1 + STOP_LOSS_PCT)
+            take_profit = current_price * (1 - TAKE_PROFIT_PCT)
 
             engine.open_position(symbol, 'short', quantity,
                                  stop_loss=stop_loss, take_profit=take_profit)
+            _last_trade_time[symbol] = current_time
+            _last_signal[symbol] = 'short'
 
 
 async def main():
