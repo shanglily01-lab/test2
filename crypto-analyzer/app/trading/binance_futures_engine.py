@@ -188,7 +188,12 @@ class BinanceFuturesEngine:
             if response.status_code != 200:
                 error_msg = result.get('msg', '未知错误')
                 error_code = result.get('code', -1)
-                logger.error(f"币安API错误 [{error_code}]: {error_msg}")
+                # 某些错误码是可忽略的，使用较低的日志级别
+                ignorable_codes = [-4046]  # No need to change margin type
+                if error_code in ignorable_codes:
+                    logger.debug(f"币安API提示 [{error_code}]: {error_msg}")
+                else:
+                    logger.error(f"币安API错误 [{error_code}]: {error_msg}")
                 return {'success': False, 'error': error_msg, 'code': error_code}
 
             return result
