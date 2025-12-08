@@ -273,6 +273,28 @@ async def lifespan(app: FastAPI):
             import traceback
             traceback.print_exc()
 
+        # 初始化API密钥管理服务
+        try:
+            from app.services.api_key_service import init_api_key_service
+            db_config = config.get('database', {}).get('mysql', {})
+            init_api_key_service(db_config)
+            logger.info("✅ API密钥管理服务初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  API密钥管理服务初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+        # 初始化用户交易引擎管理器
+        try:
+            from app.services.user_trading_engine_manager import init_engine_manager
+            db_config = config.get('database', {}).get('mysql', {})
+            init_engine_manager(db_config)
+            logger.info("✅ 用户交易引擎管理器初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  用户交易引擎管理器初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+
         logger.info("🎉 分析模块初始化完成！")
 
     except Exception as e:
@@ -427,6 +449,16 @@ try:
     logger.info("✅ 用户认证API路由已注册 (/api/auth)")
 except Exception as e:
     logger.warning(f"⚠️  用户认证API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
+# 注册API密钥管理路由
+try:
+    from app.api.api_keys_api import router as api_keys_router
+    app.include_router(api_keys_router)
+    logger.info("✅ API密钥管理路由已注册 (/api/api-keys)")
+except Exception as e:
+    logger.warning(f"⚠️  API密钥管理路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
@@ -587,6 +619,16 @@ async def register_page():
         return FileResponse(str(register_path))
     else:
         raise HTTPException(status_code=404, detail="注册页面未找到")
+
+
+@app.get("/api-keys")
+async def api_keys_page():
+    """API密钥管理页面"""
+    page_path = project_root / "templates" / "api-keys.html"
+    if page_path.exists():
+        return FileResponse(str(page_path))
+    else:
+        raise HTTPException(status_code=404, detail="API密钥管理页面未找到")
 
 
 @app.get("/favicon.ico")
