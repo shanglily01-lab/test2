@@ -2688,7 +2688,7 @@ class StrategyExecutor:
                                     # 持续趋势条件不满足
                                     for reason in sustained_reasons:
                                         debug_info.append(f"   ⚠️ 持续空头趋势条件不满足: {reason}")
-                                        logger.debug(f"{symbol} ⚠️ 持续空头趋势条件不满足: {reason}")
+                                        logger.info(f"{symbol} [{buy_timeframe}]: ⚠️ 持续空头趋势条件不满足: {reason}")
 
                             # 检查是否处于持续多头趋势（做多机会）
                             elif 'long' in buy_directions and curr_ema_short > curr_ema_long:
@@ -2788,7 +2788,7 @@ class StrategyExecutor:
                                     # 持续趋势条件不满足
                                     for reason in sustained_reasons:
                                         debug_info.append(f"   ⚠️ 持续多头趋势条件不满足: {reason}")
-                                        logger.debug(f"{symbol} ⚠️ 持续多头趋势条件不满足: {reason}")
+                                        logger.info(f"{symbol} [{buy_timeframe}]: ⚠️ 持续多头趋势条件不满足: {reason}")
 
                         if not buy_signal_triggered:
                             debug_info.append(f"   ⚠️ 当前K线未发生EMA穿越")
