@@ -146,7 +146,7 @@ INSERT INTO users (username, email, password_hash, role, status)
 VALUES (
     'admin',
     'admin@example.com',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.i4ERvl6.dqLmCK',  -- admin123
+    '$2b$12$VAOoH5ZhOP9UE2e1xtpl3uGV8gsyvv.RmxAmejmDadFkk4B9rRc0O',  -- admin123
     'admin',
     'active'
 ) ON DUPLICATE KEY UPDATE username=username;

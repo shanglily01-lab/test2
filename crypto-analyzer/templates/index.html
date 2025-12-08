@@ -135,20 +135,32 @@
                                 <i class="bi bi-person-circle"></i>
                             </button>
                             <div class="dropdown-menu" id="userMenu">
-                                <div class="dropdown-header" id="userInfo">
-                                    <i class="bi bi-person"></i> 游客
+                                <!-- 未登录状态 -->
+                                <div id="guestMenu">
+                                    <div class="dropdown-header">
+                                        <i class="bi bi-person"></i> 游客
+                                    </div>
+                                    <a href="/login" class="dropdown-item">
+                                        <i class="bi bi-box-arrow-in-right"></i> 登录
+                                    </a>
+                                    <a href="/register" class="dropdown-item">
+                                        <i class="bi bi-person-plus"></i> 注册
+                                    </a>
                                 </div>
-                                <a href="#" class="dropdown-item" onclick="showLoginModal(); return false;">
-                                    <i class="bi bi-box-arrow-in-right"></i> 登录
-                                </a>
-                                <a href="#" class="dropdown-item" onclick="showRegisterModal(); return false;">
-                                    <i class="bi bi-person-plus"></i> 注册
-                                </a>
-                                <a href="/dashboard" class="dropdown-item">
-                                    <i class="bi bi-speedometer2"></i> 进入仪表板
-                                </a>
-                                <div class="dropdown-item" style="border-top: 1px solid var(--border-default); margin-top: var(--spacing-xs);">
-                                    <i class="bi bi-gear"></i> 设置
+                                <!-- 已登录状态 -->
+                                <div id="userLoggedInMenu" style="display: none;">
+                                    <div class="dropdown-header" id="userInfo">
+                                        <i class="bi bi-person-check"></i> <span id="userName">用户</span>
+                                    </div>
+                                    <a href="/dashboard" class="dropdown-item">
+                                        <i class="bi bi-speedometer2"></i> 进入仪表板
+                                    </a>
+                                    <a href="#" class="dropdown-item" onclick="showUserProfile(); return false;">
+                                        <i class="bi bi-person-gear"></i> 个人信息
+                                    </a>
+                                    <a href="#" class="dropdown-item" onclick="logout(); return false;" style="color: var(--danger-red);">
+                                        <i class="bi bi-box-arrow-right"></i> 退出登录
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -506,20 +518,144 @@
             }
         }
 
-        // 显示登录模态框
-        function showLoginModal() {
-            alert('登录功能开发中...');
-            // 这里可以打开登录模态框
+        // ==================== 用户认证相关函数 ====================
+
+        // 检查登录状态
+        function checkLoginStatus() {
+            const token = localStorage.getItem('access_token');
+            const user = localStorage.getItem('user');
+
+            if (token && user) {
+                try {
+                    const userData = JSON.parse(user);
+                    showLoggedInState(userData);
+                    // 验证token是否有效
+                    verifyToken(token);
+                } catch (e) {
+                    showGuestState();
+                }
+            } else {
+                showGuestState();
+            }
         }
 
-        // 显示注册模态框
-        function showRegisterModal() {
-            alert('注册功能开发中...');
-            // 这里可以打开注册模态框
+        // 验证token
+        async function verifyToken(token) {
+            try {
+                const response = await fetch('/api/auth/verify', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    // token无效，尝试刷新
+                    const refreshToken = localStorage.getItem('refresh_token');
+                    if (refreshToken) {
+                        await refreshAccessToken(refreshToken);
+                    } else {
+                        logout(false);
+                    }
+                }
+            } catch (error) {
+                console.error('验证token失败:', error);
+            }
+        }
+
+        // 刷新访问令牌
+        async function refreshAccessToken(refreshToken) {
+            try {
+                const response = await fetch('/api/auth/refresh', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ refresh_token: refreshToken })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('access_token', data.access_token);
+                } else {
+                    logout(false);
+                }
+            } catch (error) {
+                console.error('刷新token失败:', error);
+                logout(false);
+            }
+        }
+
+        // 显示已登录状态
+        function showLoggedInState(user) {
+            document.getElementById('guestMenu').style.display = 'none';
+            document.getElementById('userLoggedInMenu').style.display = 'block';
+            document.getElementById('userName').textContent = user.username || '用户';
+        }
+
+        // 显示游客状态
+        function showGuestState() {
+            document.getElementById('guestMenu').style.display = 'block';
+            document.getElementById('userLoggedInMenu').style.display = 'none';
+        }
+
+        // 退出登录
+        async function logout(showMessage = true) {
+            const refreshToken = localStorage.getItem('refresh_token');
+
+            // 调用后端退出接口
+            if (refreshToken) {
+                try {
+                    await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ refresh_token: refreshToken })
+                    });
+                } catch (error) {
+                    console.error('退出登录请求失败:', error);
+                }
+            }
+
+            // 清除本地存储
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('remember_me');
+
+            // 更新UI
+            showGuestState();
+
+            if (showMessage) {
+                alert('已退出登录');
+            }
+        }
+
+        // 显示用户信息
+        function showUserProfile() {
+            const user = localStorage.getItem('user');
+            if (user) {
+                const userData = JSON.parse(user);
+                alert(`用户名: ${userData.username}\n邮箱: ${userData.email}\n角色: ${userData.role}`);
+            }
+        }
+
+        // 获取认证头
+        function getAuthHeaders() {
+            const token = localStorage.getItem('access_token');
+            if (token) {
+                return {
+                    'Authorization': `Bearer ${token}`
+                };
+            }
+            return {};
         }
 
         // 页面加载时执行
         document.addEventListener('DOMContentLoaded', function() {
+            // 检查登录状态
+            checkLoginStatus();
+            // 加载市场数据
             loadMarketData();
             // 每30秒更新一次
             setInterval(loadMarketData, 30000);
