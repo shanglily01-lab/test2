@@ -3495,46 +3495,58 @@ class StrategyExecutor:
                                     pass
                                 else:
                                     # 计算仓位大小
-                                    # 从数据库获取账户余额
-                                    connection_balance = None
-                                    cursor_balance = None
-                                    try:
-                                        connection_balance = self._get_connection()
-                                        cursor_balance = connection_balance.cursor(pymysql.cursors.DictCursor)
-                                        cursor_balance.execute(
-                                            "SELECT total_equity, current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
-                                            (account_id,)
-                                        )
-                                        account = cursor_balance.fetchone()
+                                    # 根据市场类型获取账户余额
+                                    account_equity = 10000.0  # 默认值
 
-                                        if account:
-                                            # 优先使用 total_equity，如果没有则使用 current_balance + frozen_balance
-                                            if account.get('total_equity') is not None:
-                                                account_equity = float(account['total_equity'])
-                                            elif account.get('current_balance') is not None:
-                                                frozen = float(account.get('frozen_balance', 0) or 0)
-                                                account_equity = float(account['current_balance']) + frozen
+                                    if market_type == 'live' and self.live_engine is not None:
+                                        # 实盘模式：从实盘API获取真实余额
+                                        try:
+                                            live_balance_info = self.live_engine.get_account_balance()
+                                            if live_balance_info.get('success'):
+                                                # 使用可用余额（available）作为开仓基准
+                                                account_equity = float(live_balance_info.get('available', 0))
+                                                logger.info(f"[实盘] {symbol} 获取实盘余额: 可用={account_equity:.2f} USDT")
                                             else:
-                                                account_equity = 10000.0
-                                        else:
-                                            account_equity = 10000.0
-                                    except Exception as e:
-                                        # logger.warning(f"获取账户余额失败: {e}，使用默认值10000")
-                                        account_equity = 10000.0
-                                    finally:
-                                        # 确保数据库连接正确释放
-                                        if cursor_balance:
-                                            try:
-                                                cursor_balance.close()
-                                            except:
-                                                pass
-                                        if connection_balance:
-                                            try:
-                                                connection_balance.close()
-                                            except:
-                                                pass
+                                                logger.warning(f"[实盘] {symbol} 获取实盘余额失败: {live_balance_info.get('error')}")
+                                        except Exception as e:
+                                            logger.warning(f"[实盘] {symbol} 获取实盘余额异常: {e}")
+                                    else:
+                                        # 模拟盘模式：从数据库获取账户余额
+                                        connection_balance = None
+                                        cursor_balance = None
+                                        try:
+                                            connection_balance = self._get_connection()
+                                            cursor_balance = connection_balance.cursor(pymysql.cursors.DictCursor)
+                                            cursor_balance.execute(
+                                                "SELECT total_equity, current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
+                                                (account_id,)
+                                            )
+                                            account = cursor_balance.fetchone()
+
+                                            if account:
+                                                # 优先使用 total_equity，如果没有则使用 current_balance + frozen_balance
+                                                if account.get('total_equity') is not None:
+                                                    account_equity = float(account['total_equity'])
+                                                elif account.get('current_balance') is not None:
+                                                    frozen = float(account.get('frozen_balance', 0) or 0)
+                                                    account_equity = float(account['current_balance']) + frozen
+                                        except Exception as e:
+                                            logger.warning(f"[模拟] {symbol} 获取模拟盘余额失败: {e}")
+                                        finally:
+                                            # 确保数据库连接正确释放
+                                            if cursor_balance:
+                                                try:
+                                                    cursor_balance.close()
+                                                except:
+                                                    pass
+                                            if connection_balance:
+                                                try:
+                                                    connection_balance.close()
+                                                except:
+                                                    pass
 
                                     position_value = account_equity * (position_size / 100)
+                                    logger.info(f"[{market_type.upper()}] {symbol} 仓位计算: 余额={account_equity:.2f} × {position_size}% = {position_value:.2f} USDT")
                                     quantity = (position_value * leverage) / entry_price
                                     quantity = self.round_quantity(quantity, symbol)
                                             
