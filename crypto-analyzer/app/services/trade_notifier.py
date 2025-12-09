@@ -53,7 +53,14 @@ class TradeNotifier:
         Returns:
             是否发送成功
         """
-        if not self.enabled or not self.bot_token or not self.chat_id:
+        if not self.enabled:
+            logger.debug(f"Telegram通知未启用 (enabled={self.enabled})")
+            return False
+        if not self.bot_token:
+            logger.warning(f"Telegram bot_token未配置")
+            return False
+        if not self.chat_id:
+            logger.warning(f"Telegram chat_id未配置")
             return False
 
         try:
@@ -103,8 +110,10 @@ class TradeNotifier:
             order_type: 订单类型 (MARKET/LIMIT)
         """
         if not self.notify_open:
+            logger.debug(f"开仓通知已禁用 (notify_open={self.notify_open})")
             return
 
+        logger.info(f"准备发送开仓通知: {symbol} {direction} {quantity} @ {entry_price}")
         direction_lower = direction.lower()
         direction_emoji = "🟢" if direction_lower == 'long' else "🔴"
         direction_text = "做多" if direction_lower == 'long' else "做空"
@@ -139,7 +148,11 @@ class TradeNotifier:
 
         message += f"\n⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
-        self._send_telegram(message)
+        result = self._send_telegram(message)
+        if result:
+            logger.info(f"✅ 开仓通知已发送: {symbol}")
+        else:
+            logger.warning(f"⚠️ 开仓通知发送失败: {symbol}")
 
     def notify_close_position(
         self,
