@@ -511,8 +511,8 @@ class StrategyExecutor:
 
             # 同步实盘交易配置
             sync_live = strategy.get('syncLive', False)  # 是否同步实盘
-            live_quantity_pct = strategy.get('liveQuantityPct', 5)  # 实盘下单数量百分比（默认5%）
-            live_max_position_usdt = strategy.get('liveMaxPositionUsdt', 200)  # 实盘单笔最大仓位(USDT)
+            live_quantity_pct = strategy.get('liveQuantityPct', 10)  # 实盘下单数量百分比（默认10%）
+            live_max_position_usdt = strategy.get('liveMaxPositionUsdt', 500)  # 实盘单笔最大保证金(USDT)
 
             # 新指标过滤配置
             rsi_filter = strategy.get('rsiFilter', {})
@@ -1287,7 +1287,7 @@ class StrategyExecutor:
         max_short_positions = kwargs.get('max_short_positions')  # 最大做空持仓数
         # 同步实盘交易配置
         sync_live = kwargs.get('sync_live', False)  # 是否同步实盘
-        live_quantity_pct = kwargs.get('live_quantity_pct', 5)  # 实盘下单数量百分比（默认5%）
+        live_quantity_pct = kwargs.get('live_quantity_pct', 10)  # 实盘下单数量百分比（默认10%）
         rsi_filter_enabled = kwargs.get('rsi_filter_enabled', False)
         rsi_long_max = kwargs.get('rsi_long_max', 70)
         rsi_short_min = kwargs.get('rsi_short_min', 30)
@@ -1366,7 +1366,7 @@ class StrategyExecutor:
         strategy_name = kwargs.get('strategy_name', '测试策略')
         account_id = kwargs.get('account_id', 0)
         market_type = kwargs.get('market_type', 'test')  # 市场类型: test/live
-        live_max_position_usdt = kwargs.get('live_max_position_usdt', 200)  # 实盘单笔最大仓位(USDT)
+        live_max_position_usdt = kwargs.get('live_max_position_usdt', 500)  # 实盘单笔最大保证金(USDT)
 
         # 根据市场类型选择交易引擎
         if market_type == 'live':
@@ -3972,7 +3972,7 @@ class StrategyExecutor:
                             'market_type': strategy.get('market_type', 'test'),  # 市场类型: test/live
                             'adaptiveRegime': strategy.get('adaptive_regime', False),  # 行情自适应开关
                             'syncLive': strategy.get('sync_live', False),  # 同步实盘交易开关
-                            'liveQuantityPct': float(strategy.get('live_quantity_pct', 5) or 5),  # 实盘下单数量百分比（默认5%）
+                            'liveQuantityPct': float(strategy.get('live_quantity_pct', 10) or 10),  # 实盘下单数量百分比（默认10%）
                             **config  # 合并配置
                         }
                         result.append(strategy_dict)
