@@ -480,8 +480,8 @@ class BinanceFuturesEngine:
             if not leverage_result.get('success', True):
                 logger.warning(f"设置杠杆失败: {leverage_result.get('error')}")
 
-            # 2. 设置为全仓模式
-            margin_result = self.set_margin_type(symbol, 'CROSSED')
+            # 2. 设置为逐仓模式
+            margin_result = self.set_margin_type(symbol, 'ISOLATED')
             if not margin_result.get('success', True):
                 logger.warning(f"设置保证金模式失败: {margin_result.get('error')}")
 
