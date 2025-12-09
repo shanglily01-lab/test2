@@ -37,6 +37,7 @@ class FuturesMonitorService:
         self.config = load_config(Path(config_path))
 
         self.db_config = self.config['database']['mysql']
+        self.binance_config = self.config.get('exchanges', {}).get('binance', {})
         self.monitor = None
 
         logger.info("FuturesMonitorService initialized")
@@ -44,7 +45,7 @@ class FuturesMonitorService:
     def start_monitor(self):
         """启动监控器"""
         if not self.monitor:
-            self.monitor = StopLossMonitor(self.db_config)
+            self.monitor = StopLossMonitor(self.db_config, self.binance_config)
             logger.info("Stop-loss monitor created")
 
     def monitor_positions(self):

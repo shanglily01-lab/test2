@@ -24,22 +24,37 @@ import time
 
 from app.trading.futures_trading_engine import FuturesTradingEngine
 
+try:
+    from app.trading.binance_futures_engine import BinanceFuturesEngine
+except ImportError:
+    BinanceFuturesEngine = None
+
 
 class StopLossMonitor:
     """止盈止损监控器"""
 
-    def __init__(self, db_config: dict):
+    def __init__(self, db_config: dict, binance_config: dict = None):
         """
         初始化监控器
 
         Args:
             db_config: 数据库配置
+            binance_config: 币安实盘配置（可选）
         """
         self.db_config = db_config
         self.connection = pymysql.connect(**db_config)
         self._connection_created_at = time.time()  # 连接创建时间（Unix时间戳）
         self._connection_max_age = 300  # 连接最大存活时间（秒），5分钟
         self.engine = FuturesTradingEngine(db_config)
+
+        # 初始化实盘引擎（如果提供了配置）
+        self.live_engine = None
+        if binance_config and BinanceFuturesEngine:
+            try:
+                self.live_engine = BinanceFuturesEngine(binance_config, db_config)
+                logger.info("✅ 止损监控：实盘引擎已初始化")
+            except Exception as e:
+                logger.warning(f"⚠️ 止损监控：实盘引擎初始化失败: {e}")
 
         logger.info("StopLossMonitor initialized")
 
@@ -507,6 +522,8 @@ class StopLossMonitor:
                 position_id=position_id,
                 reason='liquidation'
             )
+            # 同步平掉实盘仓位
+            self._sync_close_live_position(position, 'liquidation')
             return {
                 'position_id': position_id,
                 'symbol': symbol,
@@ -524,6 +541,8 @@ class StopLossMonitor:
                 reason='stop_loss',
                 close_price=stop_loss_price  # 使用止损价格平仓
             )
+            # 同步平掉实盘仓位
+            self._sync_close_live_position(position, 'stop_loss')
             return {
                 'position_id': position_id,
                 'symbol': symbol,
@@ -542,6 +561,8 @@ class StopLossMonitor:
                 reason='take_profit',
                 close_price=take_profit_price  # 使用止盈价格平仓
             )
+            # 同步平掉实盘仓位
+            self._sync_close_live_position(position, 'take_profit')
             return {
                 'position_id': position_id,
                 'symbol': symbol,
@@ -559,6 +580,57 @@ class StopLossMonitor:
             'current_price': float(current_price),
             'unrealized_pnl': float(position.get('unrealized_pnl', 0))
         }
+
+    def _sync_close_live_position(self, position: Dict, reason: str):
+        """
+        同步平掉实盘对应的仓位
+
+        Args:
+            position: 模拟盘仓位信息
+            reason: 平仓原因 (stop_loss/take_profit/liquidation)
+        """
+        if not self.live_engine:
+            return
+
+        try:
+            symbol = position['symbol']
+            position_side = position['position_side']
+            strategy_id = position.get('strategy_id')
+
+            # 查询对应的实盘仓位
+            self._ensure_connection()
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT id, quantity FROM live_futures_positions
+                WHERE symbol = %s AND position_side = %s AND strategy_id = %s AND status = 'OPEN'
+                ORDER BY open_time DESC LIMIT 1
+            """, (symbol, position_side, strategy_id))
+            live_position = cursor.fetchone()
+            cursor.close()
+
+            if not live_position:
+                logger.debug(f"[止损监控] 未找到对应的实盘仓位: {symbol} {position_side} (策略ID: {strategy_id})")
+                return
+
+            live_position_id = live_position['id']
+            logger.info(f"[止损监控] 同步平仓实盘仓位 #{live_position_id}: {symbol} {position_side} (原因: {reason})")
+
+            # 平掉实盘仓位
+            close_result = self.live_engine.close_position(
+                position_id=live_position_id,
+                reason=f"sync_{reason}"
+            )
+
+            if close_result.get('success'):
+                logger.info(f"[止损监控] ✅ 实盘平仓成功: {symbol} {position_side}")
+            else:
+                error_msg = close_result.get('error', '未知错误')
+                logger.error(f"[止损监控] ❌ 实盘平仓失败: {symbol} {position_side} - {error_msg}")
+
+        except Exception as e:
+            logger.error(f"[止损监控] 同步实盘平仓异常: {e}")
+            import traceback
+            traceback.print_exc()
 
     def monitor_all_positions(self) -> Dict:
         """
