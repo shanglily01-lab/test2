@@ -486,10 +486,15 @@
                                 <i class="bi bi-hourglass-split"></i>
                                 <span id="orders-title">未成交订单</span>
                             </button>
+                            <button class="btn btn-secondary" id="tabCancelledTitle" onclick="showPositionsTab('cancelled')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
+                                <i class="bi bi-x-circle"></i>
+                                <span id="cancelled-title">已取消订单</span>
+                            </button>
                         </div>
                         <div class="d-flex align-center gap-md">
                             <span class="badge badge-info" id="positionCount" style="display: none;">0 个持仓</span>
                             <span class="badge badge-warning" id="orderCount" style="display: none;">0 个订单</span>
+                            <span class="badge badge-secondary" id="cancelledCount" style="display: none;">0 个已取消</span>
                             <div class="last-update" id="positions-update">-</div>
                         </div>
                     </div>
@@ -546,6 +551,43 @@
                             <div id="ordersEmpty" class="empty-state" style="display: none;">
                                 <div class="empty-state-icon">⏳</div>
                                 <div class="empty-state-text">暂无未成交订单</div>
+                            </div>
+                        </div>
+
+                        <!-- 已取消订单标签页 -->
+                        <div id="cancelledTab" style="display: none;">
+                            <div id="cancelledLoading" class="loading-overlay" style="min-height: 200px;">
+                                <div class="spinner"></div>
+                            </div>
+                            <div id="cancelledTable" style="display: none;">
+                                <div class="table-container">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>交易对</th>
+                                                <th>方向</th>
+                                                <th>订单类型</th>
+                                                <th>杠杆</th>
+                                                <th>委托价格</th>
+                                                <th>数量</th>
+                                                <th>保证金</th>
+                                                <th>止损价</th>
+                                                <th>止盈价</th>
+                                                <th>取消原因</th>
+                                                <th>来源</th>
+                                                <th>创建时间</th>
+                                                <th>取消时间</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cancelledBody">
+                                            <!-- 动态加载 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div id="cancelledEmpty" class="empty-state" style="display: none;">
+                                <div class="empty-state-icon">✅</div>
+                                <div class="empty-state-text">暂无已取消订单</div>
                             </div>
                         </div>
                     </div>
@@ -1188,34 +1230,50 @@
         function showPositionsTab(tab) {
             const positionsTab = document.getElementById('positionsTab');
             const ordersTab = document.getElementById('ordersTab');
+            const cancelledTab = document.getElementById('cancelledTab');
             const positionsTitle = document.getElementById('tabPositionsTitle');
             const ordersTitle = document.getElementById('tabOrdersTitle');
-            
+            const cancelledTitle = document.getElementById('tabCancelledTitle');
+
+            // 重置所有标签页样式
+            const resetButton = (btn) => {
+                btn.className = 'btn btn-secondary';
+                btn.style.opacity = '0.7';
+                btn.style.boxShadow = 'var(--shadow-sm)';
+            };
+            const activateButton = (btn) => {
+                btn.className = 'btn btn-primary';
+                btn.style.opacity = '1';
+                btn.style.boxShadow = 'var(--shadow-md)';
+            };
+
+            // 隐藏所有标签页和计数器
+            positionsTab.style.display = 'none';
+            ordersTab.style.display = 'none';
+            cancelledTab.style.display = 'none';
+            document.getElementById('positionCount').style.display = 'none';
+            document.getElementById('orderCount').style.display = 'none';
+            document.getElementById('cancelledCount').style.display = 'none';
+
+            resetButton(positionsTitle);
+            resetButton(ordersTitle);
+            resetButton(cancelledTitle);
+
+            // 根据tab参数显示对应标签页
             if (tab === 'positions') {
                 positionsTab.style.display = 'block';
-                ordersTab.style.display = 'none';
-                // 切换按钮样式：持仓中为激活状态
-                positionsTitle.className = 'btn btn-primary';
-                positionsTitle.style.opacity = '1';
-                positionsTitle.style.boxShadow = 'var(--shadow-md)';
-                ordersTitle.className = 'btn btn-secondary';
-                ordersTitle.style.opacity = '0.7';
-                ordersTitle.style.boxShadow = 'var(--shadow-sm)';
+                activateButton(positionsTitle);
                 document.getElementById('positionCount').style.display = 'inline-flex';
-                document.getElementById('orderCount').style.display = 'none';
-            } else {
-                positionsTab.style.display = 'none';
+            } else if (tab === 'orders') {
                 ordersTab.style.display = 'block';
-                // 切换按钮样式：未成交订单为激活状态
-                positionsTitle.className = 'btn btn-secondary';
-                positionsTitle.style.opacity = '0.7';
-                positionsTitle.style.boxShadow = 'var(--shadow-sm)';
-                ordersTitle.className = 'btn btn-primary';
-                ordersTitle.style.opacity = '1';
-                ordersTitle.style.boxShadow = 'var(--shadow-md)';
-                document.getElementById('positionCount').style.display = 'none';
+                activateButton(ordersTitle);
                 document.getElementById('orderCount').style.display = 'inline-flex';
                 loadOrders();
+            } else if (tab === 'cancelled') {
+                cancelledTab.style.display = 'block';
+                activateButton(cancelledTitle);
+                document.getElementById('cancelledCount').style.display = 'inline-flex';
+                loadCancelledOrders();
             }
         }
 
@@ -1654,6 +1712,94 @@
                 // 静默处理订单加载失败
                 document.getElementById('ordersLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
                 showToast('加载未成交订单失败', 'error');
+            }
+        }
+
+        // 加载已取消订单
+        async function loadCancelledOrders() {
+            try {
+                const response = await fetch(`${API_BASE}/orders?account_id=2&status=CANCELLED`);
+                const data = await response.json();
+
+                const cancelledBody = document.getElementById('cancelledBody');
+                const cancelledTable = document.getElementById('cancelledTable');
+                const cancelledEmpty = document.getElementById('cancelledEmpty');
+                const cancelledLoading = document.getElementById('cancelledLoading');
+                const cancelledCount = document.getElementById('cancelledCount');
+                const cancelledTitle = document.getElementById('cancelled-title');
+
+                cancelledLoading.style.display = 'none';
+
+                if (data.success && data.data && data.data.length > 0) {
+                    cancelledBody.innerHTML = data.data.map(order => {
+                        // 只显示"多"或"空"
+                        const sideText = order.side.includes('LONG') ? '多' :
+                                        order.side.includes('SHORT') ? '空' :
+                                        order.side === 'BUY' ? '多' : '空';
+                        const sideClass = order.side.includes('LONG') || order.side === 'BUY' ? 'badge-success' : 'badge-danger';
+                        const orderTypeText = order.order_type === 'MARKET' ? '市价' :
+                                            order.order_type === 'LIMIT' ? '限价' :
+                                            order.order_type === 'STOP_MARKET' ? '止损市价' :
+                                            order.order_type === 'TAKE_PROFIT_MARKET' ? '止盈市价' : order.order_type;
+
+                        // 格式化取消原因
+                        const reasonMap = {
+                            'manual': '手动取消',
+                            'strategy_signal': '策略信号',
+                            'risk_control': '风险控制',
+                            'system': '系统取消',
+                            'expired': '订单过期'
+                        };
+                        const reasonText = order.cancellation_reason ? reasonMap[order.cancellation_reason] || order.cancellation_reason : '未知';
+                        const reasonClass = order.cancellation_reason === 'manual' ? 'badge-neutral' :
+                                          order.cancellation_reason === 'strategy_signal' ? 'badge-info' :
+                                          order.cancellation_reason === 'risk_control' ? 'badge-warning' : 'badge-secondary';
+
+                        // 格式化订单来源
+                        const orderSource = order.order_source || 'manual';
+                        const sourceText = orderSource === 'strategy' ? '策略' :
+                                         orderSource === 'limit_order' ? '限价单' :
+                                         orderSource === 'manual' ? '手动' : orderSource;
+                        const sourceClass = orderSource === 'strategy' ? 'badge-info' :
+                                          orderSource === 'limit_order' ? 'badge-warning' :
+                                          'badge-neutral';
+
+                        return `
+                            <tr>
+                                <td><strong>${order.symbol}</strong></td>
+                                <td><span class="badge ${sideClass}">${sideText}</span></td>
+                                <td><span class="badge badge-neutral">${orderTypeText}</span></td>
+                                <td><span class="badge badge-info">${order.leverage || 1}x</span></td>
+                                <td class="font-mono">${order.price ? '$' + formatPrice(order.price) : '市价'}</td>
+                                <td>${order.quantity || '--'}</td>
+                                <td>${formatLargeNumber(order.margin || 0)}</td>
+                                <td class="font-mono text-sm">${order.stop_loss_price ? '<span style="color: var(--danger-red);">$' + formatPrice(order.stop_loss_price) + '</span>' : '--'}</td>
+                                <td class="font-mono text-sm">${order.take_profit_price ? '<span style="color: var(--success-green);">$' + formatPrice(order.take_profit_price) + '</span>' : '--'}</td>
+                                <td><span class="badge ${reasonClass}">${reasonText}</span></td>
+                                <td><span class="badge ${sourceClass}" title="${order.signal_id ? '策略ID: ' + order.signal_id : ''}">${sourceText}</span></td>
+                                <td class="text-sm text-secondary">${order.created_at ? new Date(order.created_at).toLocaleString('zh-CN') : '--'}</td>
+                                <td class="text-sm text-secondary">${order.updated_at ? new Date(order.updated_at).toLocaleString('zh-CN') : '--'}</td>
+                            </tr>
+                        `;
+                    }).join('');
+
+                    const count = data.data.length;
+                    cancelledCount.textContent = `${count} 个已取消`;
+                    cancelledTitle.textContent = `已取消订单 [${count}]`;
+                    cancelledTable.style.display = 'block';
+                    cancelledEmpty.style.display = 'none';
+                    document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
+                } else {
+                    cancelledCount.textContent = '0 个已取消';
+                    cancelledTitle.textContent = '已取消订单 [0]';
+                    cancelledTable.style.display = 'none';
+                    cancelledEmpty.style.display = 'block';
+                    document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
+                }
+            } catch (error) {
+                // 静默处理已取消订单加载失败
+                document.getElementById('cancelledLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
+                showToast('加载已取消订单失败', 'error');
             }
         }
 

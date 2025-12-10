@@ -603,12 +603,13 @@ async def update_order_stop_loss_take_profit(
 
 
 @router.delete('/orders/{order_id}')
-async def cancel_order(order_id: str, account_id: int = 2):
+async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual'):
     """
     撤销订单（同步撤销模拟盘和实盘订单）
 
     - **order_id**: 订单ID
     - **account_id**: 账户ID（默认2）
+    - **reason**: 取消原因（manual=手动取消, strategy_signal=策略信号取消, risk_control=风控取消, system=系统取消, expired=订单过期）
 
     功能：
     1. 撤销模拟盘订单，释放冻结保证金
@@ -618,7 +619,7 @@ async def cancel_order(order_id: str, account_id: int = 2):
     try:
         connection = pymysql.connect(**db_config)
         cursor = connection.cursor(pymysql.cursors.DictCursor)
-        
+
         # 检查订单是否存在且未成交，同时获取订单详情用于同步实盘撤单
         cursor.execute(
             """SELECT id, status, symbol, side, strategy_id FROM futures_orders
@@ -626,12 +627,12 @@ async def cancel_order(order_id: str, account_id: int = 2):
             (order_id, account_id)
         )
         order = cursor.fetchone()
-        
+
         if not order:
             cursor.close()
             connection.close()
             raise HTTPException(status_code=404, detail="订单不存在")
-        
+
         if order['status'] not in ['PENDING', 'PARTIALLY_FILLED']:
             cursor.close()
             connection.close()
@@ -642,12 +643,12 @@ async def cancel_order(order_id: str, account_id: int = 2):
         side = order['side']
         strategy_id = order.get('strategy_id')
 
-        # 更新模拟盘订单状态
+        # 更新模拟盘订单状态和取消原因
         cursor.execute(
-            """UPDATE futures_orders 
-            SET status = 'CANCELLED', updated_at = NOW()
+            """UPDATE futures_orders
+            SET status = 'CANCELLED', cancellation_reason = %s, updated_at = NOW()
             WHERE order_id = %s AND account_id = %s""",
-            (order_id, account_id)
+            (reason, order_id, account_id)
         )
         
         # 释放冻结的保证金和手续费
