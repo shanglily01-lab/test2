@@ -2933,7 +2933,7 @@
                 const data = await response.json();
                 if (data.success) {
                     strategy.syncLive = newSyncLive;
-                    loadStrategies();  // 重新加载策略列表
+                    await loadStrategies();  // 等待重新加载策略列表完成
                     showToast(data.message || `已${actionText}`, 'success');
                 } else {
                     showToast(data.detail || `${actionText}失败`, 'error');
