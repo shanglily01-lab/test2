@@ -212,7 +212,11 @@ class LiveOrderMonitor:
                 logger.info(f"[实盘监控] ✓ 币安订单已取消: {symbol} #{order_id} - {reason}")
 
                 # 更新数据库状态
-                await self._update_position_canceled(position, f'TREND_REVERSAL: {reason}')
+                await self._update_position_canceled(
+                    position,
+                    f'TREND_REVERSAL: {reason}',
+                    cancellation_reason='trend_reversal'
+                )
             else:
                 logger.error(f"[实盘监控] ✗ 取消币安订单失败: {result.get('error', '未知错误')}")
 
@@ -387,12 +391,20 @@ class LiveOrderMonitor:
         except Exception as e:
             logger.error(f"[实盘监控] 更新仓位状态失败: {e}")
 
-    async def _update_position_canceled(self, position: Dict, status: str):
-        """更新已取消的仓位"""
+    async def _update_position_canceled(self, position: Dict, status: str, cancellation_reason: str = None):
+        """
+        更新已取消的仓位
+
+        Args:
+            position: 仓位信息
+            status: 状态（如 TIMEOUT_PRICE_DEVIATION, TREND_REVERSAL 等）
+            cancellation_reason: 取消原因（strategy_signal/timeout/price_deviation/trend_reversal）
+        """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # 更新 live_futures_positions 表
             update_sql = """UPDATE live_futures_positions
                 SET status = %s,
                     updated_at = NOW()
@@ -400,6 +412,22 @@ class LiveOrderMonitor:
             update_params = (status, position['id'])
 
             cursor.execute(update_sql, update_params)
+
+            # 同时更新 futures_orders 表的 cancellation_reason
+            if cancellation_reason:
+                # 查找对应的订单记录（通过 binance_order_id）
+                order_id = position.get('binance_order_id')
+                if order_id:
+                    cursor.execute("""
+                        UPDATE futures_orders
+                        SET cancellation_reason = %s,
+                            status = 'CANCELLED',
+                            canceled_at = NOW()
+                        WHERE binance_order_id = %s
+                          AND status IN ('PENDING', 'NEW')
+                    """, (cancellation_reason, order_id))
+
+                    logger.info(f"[实盘监控] 订单 {order_id} 取消原因已更新: {cancellation_reason}")
 
             logger.info(f"[实盘监控] 仓位 {position['id']} 已更新为 {status}")
 

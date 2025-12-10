@@ -28,7 +28,8 @@
       "Bash(cat:*)",
       "Bash(grep:*)",
       "Bash(pip3 list:*)",
-      "Bash(sudo systemctl list-units:*)"
+      "Bash(sudo systemctl list-units:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []

@@ -365,6 +365,8 @@ class FuturesLimitOrderExecutor:
                                 update_cursor.execute(
                                     """UPDATE futures_orders
                                     SET status = 'CANCELLED',
+                                        cancellation_reason = 'trend_reversal',
+                                        canceled_at = NOW(),
                                         notes = CONCAT(COALESCE(notes, ''), ' TREND_REVERSAL: ', %s)
                                     WHERE order_id = %s""",
                                     (trend_reversal_reason, order_id)
@@ -418,6 +420,8 @@ class FuturesLimitOrderExecutor:
                                         update_cursor.execute(
                                             """UPDATE futures_orders
                                             SET status = 'CANCELLED',
+                                                cancellation_reason = 'timeout',
+                                                canceled_at = NOW(),
                                                 notes = CONCAT(COALESCE(notes, ''), ' TIMEOUT_PRICE_DEVIATION')
                                             WHERE order_id = %s""",
                                             (order_id,)
