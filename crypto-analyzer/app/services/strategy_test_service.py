@@ -1204,10 +1204,12 @@ class StrategyTestService:
                                         sustained_reasons = []
 
                                         # 条件1：趋势强度检查
-                                        if ema_strength_pct < sustained_trend_min_strength:
+                                        # 使用容差避免浮点数精度问题（0.01% = 0.0001）
+                                        EPSILON = 0.0001
+                                        if ema_strength_pct < sustained_trend_min_strength - EPSILON:
                                             sustained_conditions_met = False
                                             sustained_reasons.append(f"趋势强度不足({ema_strength_pct:.2f}% < {sustained_trend_min_strength}%)")
-                                        elif ema_strength_pct > sustained_trend_max_strength:
+                                        elif ema_strength_pct > sustained_trend_max_strength + EPSILON:
                                             sustained_conditions_met = False
                                             sustained_reasons.append(f"趋势强度过高({ema_strength_pct:.2f}% > {sustained_trend_max_strength}%)")
 
@@ -1263,9 +1265,11 @@ class StrategyTestService:
                                         sustained_reasons = []
 
                                         # 条件1：趋势强度检查
-                                        if ema_strength_pct < sustained_trend_min_strength:
+                                        # 使用容差避免浮点数精度问题（0.01% = 0.0001）
+                                        EPSILON = 0.0001
+                                        if ema_strength_pct < sustained_trend_min_strength - EPSILON:
                                             sustained_conditions_met = False
-                                        elif ema_strength_pct > sustained_trend_max_strength:
+                                        elif ema_strength_pct > sustained_trend_max_strength + EPSILON:
                                             sustained_conditions_met = False
 
                                         # 条件2：MA10/EMA10趋势确认

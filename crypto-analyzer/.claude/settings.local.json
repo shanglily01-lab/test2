@@ -29,7 +29,9 @@
       "Bash(grep:*)",
       "Bash(pip3 list:*)",
       "Bash(sudo systemctl list-units:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(chmod:*)",
+      "Bash(printenv:*)"
     ],
     "deny": [],
     "ask": []
