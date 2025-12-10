@@ -1619,10 +1619,16 @@
                                                 <small style="color: var(--text-tertiary); font-size: 10px;">低于EMA多少触发</small>
                                             </div>
                                             <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
-                                                <label class="form-label" style="font-size: 11px;">最小盈利要求（%）</label>
+                                                <label class="form-label" style="font-size: 11px;">盈利门槛（%）</label>
                                                 <input type="number" class="form-input" id="emaSupportMinProfitPct" value="0" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
-                                                <small style="color: var(--text-tertiary); font-size: 10px;">达到此盈利才启用</small>
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">盈利超此值才启用（0=立即启用）</small>
                                             </div>
+                                        </div>
+                                        <div style="margin-top: 8px; padding: 8px; background: rgba(43, 111, 237, 0.1); border-radius: 4px; border-left: 3px solid var(--primary-blue);">
+                                            <small style="color: var(--text-secondary); font-size: 11px;">
+                                                <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
+                                                <strong>盈利门槛说明：</strong>用于保护利润而非防止亏损。设为0则立即启用；设为0.5则盈利0.5%后才启用EMA支撑止损。
+                                            </small>
                                         </div>
                                     </div>
                                 </div>
