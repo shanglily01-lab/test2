@@ -33,19 +33,20 @@ except ImportError:
 class StopLossMonitor:
     """止盈止损监控器"""
 
-    def __init__(self, db_config: dict, binance_config: dict = None):
+    def __init__(self, db_config: dict, binance_config: dict = None, trade_notifier=None):
         """
         初始化监控器
 
         Args:
             db_config: 数据库配置
             binance_config: 币安实盘配置（可选）
+            trade_notifier: Telegram通知服务（可选）
         """
         self.db_config = db_config
         self.connection = pymysql.connect(**db_config)
         self._connection_created_at = time.time()  # 连接创建时间（Unix时间戳）
         self._connection_max_age = 300  # 连接最大存活时间（秒），5分钟
-        self.engine = FuturesTradingEngine(db_config)
+        self.engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
 
         # 初始化实盘引擎（如果提供了配置）
         self.live_engine = None

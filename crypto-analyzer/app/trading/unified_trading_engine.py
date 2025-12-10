@@ -15,14 +15,16 @@ class UnifiedTradingEngine:
     根据账户类型或策略配置，自动路由到模拟或实盘引擎
     """
 
-    def __init__(self, db_config: dict):
+    def __init__(self, db_config: dict, trade_notifier=None):
         """
         初始化统一交易引擎
 
         Args:
             db_config: 数据库配置
+            trade_notifier: Telegram通知服务（可选）
         """
         self.db_config = db_config
+        self.trade_notifier = trade_notifier
         self._paper_engine = None
         self._live_engine = None
         self._live_engine_error = None
@@ -37,7 +39,7 @@ class UnifiedTradingEngine:
         """初始化模拟交易引擎"""
         try:
             from app.trading.futures_trading_engine import FuturesTradingEngine
-            self._paper_engine = FuturesTradingEngine(self.db_config)
+            self._paper_engine = FuturesTradingEngine(self.db_config, trade_notifier=self.trade_notifier)
             logger.info("模拟交易引擎初始化成功")
         except Exception as e:
             logger.error(f"模拟交易引擎初始化失败: {e}")
@@ -261,6 +263,12 @@ class UnifiedTradingEngine:
         )
 
 
-def create_unified_engine(db_config: dict) -> UnifiedTradingEngine:
-    """创建统一交易引擎"""
-    return UnifiedTradingEngine(db_config)
+def create_unified_engine(db_config: dict, trade_notifier=None) -> UnifiedTradingEngine:
+    """
+    创建统一交易引擎
+
+    Args:
+        db_config: 数据库配置
+        trade_notifier: Telegram通知服务（可选）
+    """
+    return UnifiedTradingEngine(db_config, trade_notifier=trade_notifier)

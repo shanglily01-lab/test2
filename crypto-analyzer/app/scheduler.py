@@ -154,7 +154,9 @@ class UnifiedDataScheduler:
         # 5.5. 合约交易引擎（用于更新总权益）
         db_config = self.config.get('database', {}).get('mysql', {})
         try:
-            self.futures_engine = FuturesTradingEngine(db_config)
+            from app.services.trade_notifier import init_trade_notifier
+            trade_notifier = init_trade_notifier(self.config)
+            self.futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
             logger.info("  ✓ 合约交易引擎 (用于更新总权益)")
         except Exception as e:
             logger.warning(f"  ⊗ 合约交易引擎初始化失败: {e}")

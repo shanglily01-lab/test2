@@ -43,7 +43,12 @@ class AutoFuturesTrader:
         self.config = load_config(Path(config_path))
 
         self.db_config = self.config['database']['mysql']
-        self.engine = FuturesTradingEngine(self.db_config)
+
+        # 初始化Telegram通知服务
+        from app.services.trade_notifier import init_trade_notifier
+        trade_notifier = init_trade_notifier(self.config)
+
+        self.engine = FuturesTradingEngine(self.db_config, trade_notifier=trade_notifier)
 
         # 交易配置
         self.account_id = 2  # 默认合约账户

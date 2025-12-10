@@ -52,9 +52,13 @@ class StrategyScheduler:
         if not db_config:
             raise ValueError("数据库配置未找到，请检查config.yaml")
 
+        # 初始化Telegram通知服务
+        from app.services.trade_notifier import init_trade_notifier
+        trade_notifier = init_trade_notifier(self.config)
+
         # 初始化合约交易引擎
         logger.info("初始化合约交易引擎...")
-        self.futures_engine = FuturesTradingEngine(db_config)
+        self.futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
 
         # 初始化策略执行器
         logger.info("初始化策略执行器...")
