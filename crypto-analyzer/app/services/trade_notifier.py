@@ -274,6 +274,84 @@ class TradeNotifier:
 
         self._send_telegram(message)
 
+    def notify_stop_loss_set(
+        self,
+        symbol: str,
+        direction: str,
+        stop_price: float,
+        quantity: float
+    ):
+        """
+        通知止损单设置成功
+
+        Args:
+            symbol: 交易对
+            direction: 方向 (long/short/LONG/SHORT)
+            stop_price: 止损价格
+            quantity: 数量
+        """
+        if not self.notify_stop_loss:
+            logger.debug(f"止损通知已禁用 (notify_stop_loss={self.notify_stop_loss})")
+            return
+
+        direction_lower = direction.lower()
+        direction_text = "多单" if direction_lower == 'long' else "空单"
+
+        message = f"""
+🛡️ <b>【止损单已设置】{symbol}</b>
+
+📌 类型: {direction_text}
+💰 数量: {quantity:.6f}
+💵 止损价: ${stop_price:,.4f}
+
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+
+        result = self._send_telegram(message)
+        if result:
+            logger.info(f"✅ 止损通知已发送: {symbol}")
+        else:
+            logger.warning(f"⚠️ 止损通知发送失败: {symbol}")
+
+    def notify_take_profit_set(
+        self,
+        symbol: str,
+        direction: str,
+        take_profit_price: float,
+        quantity: float
+    ):
+        """
+        通知止盈单设置成功
+
+        Args:
+            symbol: 交易对
+            direction: 方向 (long/short/LONG/SHORT)
+            take_profit_price: 止盈价格
+            quantity: 数量
+        """
+        if not self.notify_take_profit:
+            logger.debug(f"止盈通知已禁用 (notify_take_profit={self.notify_take_profit})")
+            return
+
+        direction_lower = direction.lower()
+        direction_text = "多单" if direction_lower == 'long' else "空单"
+
+        message = f"""
+🎯 <b>【止盈单已设置】{symbol}</b>
+
+📌 类型: {direction_text}
+💰 数量: {quantity:.6f}
+💵 止盈价: ${take_profit_price:,.4f}
+
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+
+        result = self._send_telegram(message)
+        if result:
+            logger.info(f"✅ 止盈通知已发送: {symbol}")
+        else:
+            logger.warning(f"⚠️ 止盈通知发送失败: {symbol}")
+
     def notify_error(self, symbol: str, error_type: str, error_message: str):
         """
         通知交易错误

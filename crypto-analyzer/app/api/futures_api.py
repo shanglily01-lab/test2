@@ -605,18 +605,23 @@ async def update_order_stop_loss_take_profit(
 @router.delete('/orders/{order_id}')
 async def cancel_order(order_id: str, account_id: int = 2):
     """
-    撤销订单
-    
+    撤销订单（同步撤销模拟盘和实盘订单）
+
     - **order_id**: 订单ID
     - **account_id**: 账户ID（默认2）
+
+    功能：
+    1. 撤销模拟盘订单，释放冻结保证金
+    2. 自动查找并撤销对应的实盘订单（通过 symbol, position_side, strategy_id 匹配）
+    3. 调用币安API撤销实盘订单
     """
     try:
         connection = pymysql.connect(**db_config)
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
-        # 检查订单是否存在且未成交
+        # 检查订单是否存在且未成交，同时获取订单详情用于同步实盘撤单
         cursor.execute(
-            """SELECT id, status FROM futures_orders 
+            """SELECT id, status, symbol, side, strategy_id FROM futures_orders
             WHERE order_id = %s AND account_id = %s""",
             (order_id, account_id)
         )
@@ -631,8 +636,13 @@ async def cancel_order(order_id: str, account_id: int = 2):
             cursor.close()
             connection.close()
             raise HTTPException(status_code=400, detail=f"订单状态为 {order['status']}，无法撤销")
-        
-        # 更新订单状态
+
+        # 提取订单信息用于同步实盘撤单
+        symbol = order['symbol']
+        side = order['side']
+        strategy_id = order.get('strategy_id')
+
+        # 更新模拟盘订单状态
         cursor.execute(
             """UPDATE futures_orders 
             SET status = 'CANCELLED', updated_at = NOW()
@@ -675,14 +685,82 @@ async def cancel_order(order_id: str, account_id: int = 2):
             )
         
         connection.commit()
+
+        # 同步撤销实盘订单
+        live_cancel_result = None
+        try:
+            # 确定持仓方向 (BUY -> LONG, SELL -> SHORT)
+            position_side = 'LONG' if side == 'BUY' else 'SHORT'
+
+            # 查询对应的实盘待成交订单
+            cursor.execute("""
+                SELECT id, binance_order_id, symbol, position_side, quantity
+                FROM live_futures_positions
+                WHERE symbol = %s AND position_side = %s AND strategy_id = %s AND status = 'PENDING'
+                ORDER BY created_at DESC LIMIT 1
+            """, (symbol, position_side, strategy_id))
+            live_position = cursor.fetchone()
+
+            if live_position and live_position.get('binance_order_id'):
+                live_position_id = live_position['id']
+                binance_order_id = live_position['binance_order_id']
+
+                logger.info(f"[撤单同步] 找到对应的实盘订单: {symbol} {position_side} (币安订单ID: {binance_order_id})")
+
+                # 初始化实盘交易引擎
+                live_engine = None
+                if BinanceFuturesEngine:
+                    try:
+                        live_engine = BinanceFuturesEngine(db_config)
+                    except Exception as engine_err:
+                        logger.error(f"[撤单同步] 初始化实盘引擎失败: {engine_err}")
+
+                if live_engine:
+                    # 调用币安API撤销订单
+                    binance_symbol = symbol.replace('/', '').upper()
+                    cancel_result = live_engine._request('DELETE', '/fapi/v1/order', {
+                        'symbol': binance_symbol,
+                        'orderId': binance_order_id
+                    })
+
+                    if isinstance(cancel_result, dict) and not cancel_result.get('success') == False:
+                        # 撤单成功，更新本地数据库
+                        cursor.execute("""
+                            UPDATE live_futures_positions
+                            SET status = 'CANCELED', updated_at = NOW()
+                            WHERE id = %s
+                        """, (live_position_id,))
+                        connection.commit()
+
+                        logger.info(f"[撤单同步] ✅ 实盘订单撤销成功: {symbol} {position_side}")
+                        live_cancel_result = {'success': True, 'message': '实盘订单已同步撤销'}
+                    else:
+                        error_msg = cancel_result.get('error', '未知错误') if isinstance(cancel_result, dict) else str(cancel_result)
+                        logger.error(f"[撤单同步] ❌ 实盘订单撤销失败: {error_msg}")
+                        live_cancel_result = {'success': False, 'error': error_msg}
+                else:
+                    logger.warning(f"[撤单同步] 实盘引擎未初始化，跳过同步撤单")
+            else:
+                logger.debug(f"[撤单同步] 未找到对应的实盘待成交订单: {symbol} {position_side} (策略ID: {strategy_id})")
+        except Exception as sync_err:
+            logger.error(f"[撤单同步] 同步撤销实盘订单异常: {sync_err}")
+            import traceback
+            traceback.print_exc()
+
         cursor.close()
         connection.close()
-        
-        return {
+
+        result = {
             'success': True,
             'message': '订单已撤销'
         }
-        
+
+        # 附加实盘撤单结果（如果有）
+        if live_cancel_result:
+            result['live_cancel'] = live_cancel_result
+
+        return result
+
     except HTTPException:
         raise
     except Exception as e:

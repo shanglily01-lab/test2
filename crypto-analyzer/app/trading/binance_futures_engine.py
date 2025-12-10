@@ -673,7 +673,7 @@ class BinanceFuturesEngine:
 
     def _place_stop_loss(self, symbol: str, position_side: str, quantity: Decimal,
                          stop_price: Decimal) -> Dict:
-        """设置止损单"""
+        """设置止损单 - 使用 Algo Order API"""
         binance_symbol = self._convert_symbol(symbol)
 
         # 止损方向与开仓相反
@@ -681,16 +681,19 @@ class BinanceFuturesEngine:
         stop_price = self._round_price(stop_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
+        # 使用新的 Algo Order API (从2025-12-09开始使用)
         params = {
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,  # 双向持仓模式必须指定
             'type': 'STOP_MARKET',
             'stopPrice': str(stop_price),
-            'quantity': str(quantity)
+            'quantity': str(quantity),
+            'workingType': 'MARK_PRICE'  # 使用标记价格触发，更安全
         }
 
-        result = self._request('POST', '/fapi/v1/order', params)
+        # 使用 Algo Order 端点
+        result = self._request('POST', '/fapi/v1/algo/order', params)
 
         if isinstance(result, dict) and result.get('success') == False:
             return result
@@ -703,7 +706,7 @@ class BinanceFuturesEngine:
 
     def _place_take_profit(self, symbol: str, position_side: str, quantity: Decimal,
                            take_profit_price: Decimal) -> Dict:
-        """设置止盈单"""
+        """设置止盈单 - 使用 Algo Order API"""
         binance_symbol = self._convert_symbol(symbol)
 
         # 止盈方向与开仓相反
@@ -711,16 +714,19 @@ class BinanceFuturesEngine:
         take_profit_price = self._round_price(take_profit_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
+        # 使用新的 Algo Order API (从2025-12-09开始使用)
         params = {
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,  # 双向持仓模式必须指定
             'type': 'TAKE_PROFIT_MARKET',
             'stopPrice': str(take_profit_price),
-            'quantity': str(quantity)
+            'quantity': str(quantity),
+            'workingType': 'MARK_PRICE'  # 使用标记价格触发，更安全
         }
 
-        result = self._request('POST', '/fapi/v1/order', params)
+        # 使用 Algo Order 端点
+        result = self._request('POST', '/fapi/v1/algo/order', params)
 
         if isinstance(result, dict) and result.get('success') == False:
             return result

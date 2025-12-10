@@ -539,6 +539,19 @@ class LiveOrderMonitor:
                     )
                     if sl_result.get('success'):
                         logger.info(f"[实盘监控] ✓ 止损单已设置: {symbol} @ {stop_loss_price}")
+
+                        # 发送Telegram通知
+                        try:
+                            notifier = get_trade_notifier() if get_trade_notifier else None
+                            if notifier:
+                                notifier.notify_stop_loss_set(
+                                    symbol=symbol,
+                                    direction=position_side,
+                                    stop_price=float(stop_loss_price),
+                                    quantity=float(executed_qty)
+                                )
+                        except Exception as notify_err:
+                            logger.warning(f"[实盘监控] 发送止损通知失败: {notify_err}")
                     else:
                         logger.error(f"[实盘监控] ✗ 止损单设置失败: {sl_result.get('error')}")
                 except Exception as e:
@@ -568,6 +581,19 @@ class LiveOrderMonitor:
                     )
                     if tp_result.get('success'):
                         logger.info(f"[实盘监控] ✓ 止盈单已设置: {symbol} @ {take_profit_price}")
+
+                        # 发送Telegram通知
+                        try:
+                            notifier = get_trade_notifier() if get_trade_notifier else None
+                            if notifier:
+                                notifier.notify_take_profit_set(
+                                    symbol=symbol,
+                                    direction=position_side,
+                                    take_profit_price=float(take_profit_price),
+                                    quantity=float(executed_qty)
+                                )
+                        except Exception as notify_err:
+                            logger.warning(f"[实盘监控] 发送止盈通知失败: {notify_err}")
                     else:
                         logger.error(f"[实盘监控] ✗ 止盈单设置失败: {tp_result.get('error')}")
                 except Exception as e:
