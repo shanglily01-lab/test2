@@ -292,9 +292,13 @@
         .tab-content-container {
             max-height: 600px;
             overflow-y: auto;
+            overflow-x: auto;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-default);
         }
         .tab-content-container::-webkit-scrollbar {
             width: 8px;
+            height: 8px;
         }
         .tab-content-container::-webkit-scrollbar-track {
             background: var(--bg-tertiary);
@@ -616,31 +620,29 @@
                             </div>
                             <div id="ordersTable" style="display: none;">
                                 <div class="tab-content-container">
-                                    <div class="table-container">
-                                        <table>
-                                            <thead>
-                                                <tr>
-                                                    <th>交易对</th>
-                                                    <th>方向</th>
-                                                    <th>订单类型</th>
-                                                    <th>杠杆</th>
-                                                    <th>委托价格</th>
-                                                    <th>数量</th>
-                                                    <th>已成交</th>
-                                                    <th>保证金</th>
-                                                    <th>止损价</th>
-                                                    <th>止盈价</th>
-                                                    <th>来源</th>
-                                                    <th>状态</th>
-                                                    <th>创建时间</th>
-                                                    <th>操作</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="ordersBody">
-                                                <!-- 动态加载 -->
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>交易对</th>
+                                                <th>方向</th>
+                                                <th>订单类型</th>
+                                                <th>杠杆</th>
+                                                <th>委托价格</th>
+                                                <th>数量</th>
+                                                <th>已成交</th>
+                                                <th>保证金</th>
+                                                <th>止损价</th>
+                                                <th>止盈价</th>
+                                                <th>来源</th>
+                                                <th>状态</th>
+                                                <th>创建时间</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="ordersBody">
+                                            <!-- 动态加载 -->
+                                        </tbody>
+                                    </table>
                                 </div>
                                 <div class="tab-pagination" id="ordersPagination" style="display: none;">
                                     <div class="tab-pagination-info">
@@ -678,30 +680,28 @@
                             </div>
                             <div id="cancelledTable" style="display: none;">
                                 <div class="tab-content-container">
-                                    <div class="table-container">
-                                        <table>
-                                            <thead>
-                                                <tr>
-                                                    <th>交易对</th>
-                                                    <th>方向</th>
-                                                    <th>订单类型</th>
-                                                    <th>杠杆</th>
-                                                    <th>委托价格</th>
-                                                    <th>数量</th>
-                                                    <th>保证金</th>
-                                                    <th>止损价</th>
-                                                    <th>止盈价</th>
-                                                    <th>取消原因</th>
-                                                    <th>来源</th>
-                                                    <th>创建时间</th>
-                                                    <th>取消时间</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="cancelledBody">
-                                                <!-- 动态加载 -->
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>交易对</th>
+                                                <th>方向</th>
+                                                <th>订单类型</th>
+                                                <th>杠杆</th>
+                                                <th>委托价格</th>
+                                                <th>数量</th>
+                                                <th>保证金</th>
+                                                <th>止损价</th>
+                                                <th>止盈价</th>
+                                                <th>取消原因</th>
+                                                <th>来源</th>
+                                                <th>创建时间</th>
+                                                <th>取消时间</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="cancelledBody">
+                                            <!-- 动态加载 -->
+                                        </tbody>
+                                    </table>
                                 </div>
                                 <div class="tab-pagination" id="cancelledPagination" style="display: none;">
                                     <div class="tab-pagination-info">
