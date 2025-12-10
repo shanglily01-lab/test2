@@ -14,19 +14,21 @@ from loguru import logger
 
 class FuturesLimitOrderExecutor:
     """合约限价单自动执行器"""
-    
-    def __init__(self, db_config: Dict, trading_engine, price_cache_service=None):
+
+    def __init__(self, db_config: Dict, trading_engine, price_cache_service=None, live_engine=None):
         """
         初始化执行器
-        
+
         Args:
             db_config: 数据库配置
             trading_engine: 合约交易引擎实例 (FuturesTradingEngine)
             price_cache_service: 价格缓存服务（可选）
+            live_engine: 实盘交易引擎实例 (BinanceFuturesEngine, 可选)
         """
         self.db_config = db_config
         self.trading_engine = trading_engine
         self.price_cache_service = price_cache_service
+        self.live_engine = live_engine
         self.running = False
         self.task = None
         self.connection = None  # 持久数据库连接
@@ -521,6 +523,66 @@ class FuturesLimitOrderExecutor:
                                         logger.info(f"✅ 限价单超时转市价执行成功: {symbol} {position_side} {quantity} @ {execution_price} (原限价: {limit_price})")
                                     else:
                                         logger.info(f"✅ 限价单执行成功: {symbol} {position_side} {quantity} @ {execution_price}")
+
+                                    # ========== 同步实盘交易 ==========
+                                    # 检查策略是否启用实盘同步
+                                    try:
+                                        strategy_config = order.get('strategy_config')
+                                        if strategy_config and self.live_engine:
+                                            # 解析策略配置
+                                            config = strategy_config
+                                            parse_attempts = 0
+                                            while isinstance(config, str) and parse_attempts < 3:
+                                                try:
+                                                    config = json.loads(config)
+                                                    parse_attempts += 1
+                                                except json.JSONDecodeError:
+                                                    break
+
+                                            if isinstance(config, dict):
+                                                sync_live = config.get('syncLive', False)
+                                                live_quantity_pct = config.get('liveQuantityPct', 10)
+                                                live_max_position_usdt = config.get('liveMaxPositionUsdt', 100)
+
+                                                if sync_live:
+                                                    # 获取实盘可用余额
+                                                    live_balance = self.live_engine.get_account_balance()
+                                                    live_available = live_balance.get('available_balance', 0)
+
+                                                    # 计算实盘保证金和数量
+                                                    live_margin_to_use = live_available * (live_quantity_pct / 100)
+                                                    if live_margin_to_use > live_max_position_usdt:
+                                                        logger.info(f"[同步实盘] {symbol} 保证金限制: {live_margin_to_use:.2f} USDT 超过上限 {live_max_position_usdt:.2f} USDT")
+                                                        live_margin_to_use = live_max_position_usdt
+
+                                                    # 计算实盘数量
+                                                    live_quantity = Decimal(str(live_margin_to_use)) * Decimal(str(leverage)) / execution_price
+
+                                                    logger.info(f"[同步实盘] {symbol} {position_side} 开始同步: 实盘可用={live_available:.2f} USDT, 使用{live_quantity_pct}%={live_margin_to_use:.2f} USDT, 数量={live_quantity}")
+
+                                                    # 调用实盘引擎开仓
+                                                    live_result = self.live_engine.open_position(
+                                                        account_id=1,
+                                                        symbol=symbol,
+                                                        position_side=position_side,
+                                                        quantity=live_quantity,
+                                                        leverage=leverage,
+                                                        limit_price=execution_price if not execute_at_market else None,
+                                                        stop_loss_pct=Decimal(str((stop_loss_price - execution_price) / execution_price * 100)) if stop_loss_price and position_side == 'LONG' else (Decimal(str((execution_price - stop_loss_price) / execution_price * 100)) if stop_loss_price else None),
+                                                        take_profit_pct=Decimal(str((take_profit_price - execution_price) / execution_price * 100)) if take_profit_price and position_side == 'LONG' else (Decimal(str((execution_price - take_profit_price) / execution_price * 100)) if take_profit_price else None),
+                                                        source='limit_order_sync',
+                                                        strategy_id=order.get('strategy_id')
+                                                    )
+
+                                                    if live_result.get('success'):
+                                                        logger.info(f"[同步实盘] ✅ {symbol} {position_side} 成功: 数量={live_quantity}, 价格={execution_price}")
+                                                    else:
+                                                        live_error = live_result.get('error', live_result.get('message', '未知错误'))
+                                                        logger.error(f"[同步实盘] ❌ {symbol} {position_side} 失败: {live_error}")
+                                    except Exception as live_ex:
+                                        logger.error(f"[同步实盘] ❌ {symbol} {position_side} 异常: {live_ex}")
+                                    # ========== 同步实盘交易结束 ==========
+
                                 else:
                                     # 如果开仓失败，恢复冻结的保证金
                                     if frozen_margin > 0:

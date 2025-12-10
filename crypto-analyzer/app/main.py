@@ -206,17 +206,30 @@ async def lifespan(app: FastAPI):
             traceback.print_exc()
             pending_order_executor = None
 
+        # 初始化实盘交易引擎（需要在限价单执行器之前初始化）
+        live_engine = None
+        try:
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            db_config = config.get('database', {}).get('mysql', {})
+            live_engine = BinanceFuturesEngine(db_config)
+            logger.info("✅ 实盘交易引擎初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  实盘交易引擎初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+
         # 初始化合约限价单自动执行器
         try:
             from app.services.futures_limit_order_executor import FuturesLimitOrderExecutor
             from app.trading.futures_trading_engine import FuturesTradingEngine
-            
+
             db_config = config.get('database', {}).get('mysql', {})
             futures_engine = FuturesTradingEngine(db_config)
             futures_limit_order_executor = FuturesLimitOrderExecutor(
                 db_config=db_config,
                 trading_engine=futures_engine,
-                price_cache_service=price_cache_service
+                price_cache_service=price_cache_service,
+                live_engine=live_engine
             )
             logger.info("✅ 合约限价单自动执行服务初始化成功")
         except Exception as e:
@@ -241,10 +254,8 @@ async def lifespan(app: FastAPI):
         # 初始化实盘订单监控服务（限价单成交后自动设置止损止盈）
         try:
             from app.services.live_order_monitor import init_live_order_monitor
-            from app.trading.binance_futures_engine import BinanceFuturesEngine
 
             db_config = config.get('database', {}).get('mysql', {})
-            live_engine = BinanceFuturesEngine(db_config)
             live_order_monitor = init_live_order_monitor(db_config, live_engine)
             logger.info("✅ 实盘订单监控服务初始化成功")
         except Exception as e:
