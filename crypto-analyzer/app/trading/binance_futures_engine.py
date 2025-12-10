@@ -183,7 +183,16 @@ class BinanceFuturesEngine:
             else:
                 raise ValueError(f"不支持的HTTP方法: {method}")
 
-            result = response.json()
+            # 处理空响应
+            if not response.text:
+                logger.error(f"币安API返回空响应: {method} {endpoint}")
+                return {'success': False, 'error': '服务器返回空响应'}
+
+            try:
+                result = response.json()
+            except ValueError as json_err:
+                logger.error(f"币安API返回非JSON响应: {response.text[:200]}")
+                return {'success': False, 'error': f'无效的JSON响应: {str(json_err)}'}
 
             if response.status_code != 200:
                 error_msg = result.get('msg', '未知错误')

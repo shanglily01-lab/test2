@@ -559,10 +559,29 @@ class FuturesLimitOrderExecutor:
                                                         logger.info(f"[同步实盘] {symbol} 保证金限制: {live_margin_to_use:.2f} USDT 超过上限 {live_max_position_usdt:.2f} USDT")
                                                         live_margin_to_use = live_max_position_usdt
 
-                                                    # 计算实盘数量
-                                                    live_quantity = Decimal(str(live_margin_to_use)) * Decimal(str(leverage)) / execution_price
+                                                    # 计算实盘数量 (确保所有类型都是Decimal)
+                                                    execution_price_decimal = Decimal(str(execution_price))
+                                                    live_quantity = Decimal(str(live_margin_to_use)) * Decimal(str(leverage)) / execution_price_decimal
 
                                                     logger.info(f"[同步实盘] {symbol} {position_side} 开始同步: 实盘可用={live_available:.2f} USDT, 使用{live_quantity_pct}%={live_margin_to_use:.2f} USDT, 数量={live_quantity}")
+
+                                                    # 计算止损止盈百分比 (确保所有类型都是Decimal)
+                                                    stop_loss_pct_value = None
+                                                    take_profit_pct_value = None
+
+                                                    if stop_loss_price:
+                                                        stop_loss_decimal = Decimal(str(stop_loss_price))
+                                                        if position_side == 'LONG':
+                                                            stop_loss_pct_value = (stop_loss_decimal - execution_price_decimal) / execution_price_decimal * Decimal('100')
+                                                        else:
+                                                            stop_loss_pct_value = (execution_price_decimal - stop_loss_decimal) / execution_price_decimal * Decimal('100')
+
+                                                    if take_profit_price:
+                                                        take_profit_decimal = Decimal(str(take_profit_price))
+                                                        if position_side == 'LONG':
+                                                            take_profit_pct_value = (take_profit_decimal - execution_price_decimal) / execution_price_decimal * Decimal('100')
+                                                        else:
+                                                            take_profit_pct_value = (execution_price_decimal - take_profit_decimal) / execution_price_decimal * Decimal('100')
 
                                                     # 调用实盘引擎开仓
                                                     live_result = self.live_engine.open_position(
@@ -572,8 +591,8 @@ class FuturesLimitOrderExecutor:
                                                         quantity=live_quantity,
                                                         leverage=leverage,
                                                         limit_price=execution_price if not execute_at_market else None,
-                                                        stop_loss_pct=Decimal(str((stop_loss_price - execution_price) / execution_price * 100)) if stop_loss_price and position_side == 'LONG' else (Decimal(str((execution_price - stop_loss_price) / execution_price * 100)) if stop_loss_price else None),
-                                                        take_profit_pct=Decimal(str((take_profit_price - execution_price) / execution_price * 100)) if take_profit_price and position_side == 'LONG' else (Decimal(str((execution_price - take_profit_price) / execution_price * 100)) if take_profit_price else None),
+                                                        stop_loss_pct=stop_loss_pct_value,
+                                                        take_profit_pct=take_profit_pct_value,
                                                         source='limit_order_sync',
                                                         strategy_id=order.get('strategy_id')
                                                     )
