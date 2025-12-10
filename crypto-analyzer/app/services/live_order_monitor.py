@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 """
 实盘订单监控服务
-监控限价单成交后自动设置止损止盈
-支持趋势转向时自动取消未成交限价单
-支持智能止盈功能：
-  - 连续K线止盈：检测到连续N根阴线/阳线时提前止盈
-  - 移动止盈：价格回撤一定比例后提前止盈
+
+核心职责：
+- 监控限价单成交状态（PENDING → FILLED）
+- 限价单成交后自动设置止损止盈订单
+- 趋势转向时自动取消未成交限价单
+
+架构说明：
+- 实盘不负责策略判断（开仓/平仓条件、止损触发、智能止盈等）
+- 所有策略判断由模拟盘完成
+- 实盘仅同步执行模拟盘的操作（下单/平仓/撤单）
+- 这样避免了重复检查，确保策略逻辑统一
 """
 
 import asyncio
@@ -24,7 +30,18 @@ except ImportError:
 
 
 class LiveOrderMonitor:
-    """实盘订单监控器 - 监控限价单成交后设置止损止盈，支持智能止盈"""
+    """
+    实盘订单监控器
+
+    职责：
+    1. 监控限价单成交状态
+    2. 成交后自动设置止损止盈订单
+
+    注意：
+    - 不负责策略判断（由模拟盘负责）
+    - 不检查智能止盈/止损（由模拟盘负责）
+    - 仅执行订单管理和风控单设置
+    """
 
     def __init__(self, db_config: Dict, live_engine):
         """
@@ -40,9 +57,6 @@ class LiveOrderMonitor:
         self.task = None
         self.connection = None
         self.check_interval = 10  # 检查间隔（秒）
-
-        # 移动止盈状态追踪: {position_id: {'max_profit_pct': float, 'trailing_activated': bool}}
-        self.trailing_state = {}
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -223,14 +237,24 @@ class LiveOrderMonitor:
         logger.info("[实盘监控] 订单监控服务已停止")
 
     async def _monitor_loop(self):
-        """监控循环"""
+        """
+        监控循环
+
+        职责：
+        - 监控限价单成交状态
+        - 限价单成交后自动设置止损止盈
+
+        注意：
+        实盘不负责策略判断（开仓/平仓/止损触发等），所有策略判断由模拟盘完成。
+        实盘仅同步执行模拟盘的操作（下单/平仓/撤单）。
+        """
         while self.running:
             try:
-                # 1. 检查待成交的限价单
+                # 检查待成交的限价单（成交后设置止损止盈）
                 await self._check_pending_orders()
 
-                # 2. 检查已开仓位的智能止盈
-                await self._check_smart_exit_for_open_positions()
+                # ❌ 已禁用：实盘不做策略判断，智能止盈由模拟盘负责
+                # await self._check_smart_exit_for_open_positions()
             except Exception as e:
                 logger.error(f"[实盘监控] 监控循环出错: {e}")
 
@@ -600,6 +624,11 @@ class LiveOrderMonitor:
                     logger.error(f"[实盘监控] 设置止盈单异常: {e}")
             else:
                 logger.warning(f"[实盘监控] 止盈价 {take_profit_price} 无效 ({position_side} 当前价 {current_price})，跳过止盈设置")
+
+    # ==================== 以下方法已禁用 ====================
+    # 实盘不负责策略判断，智能止盈/止损由模拟盘负责
+    # 保留代码以供参考或未来特殊需求
+    # =======================================================
 
     async def _check_smart_exit_for_open_positions(self):
         """
