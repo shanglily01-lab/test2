@@ -8,10 +8,10 @@ from typing import Optional
 from datetime import datetime, timedelta
 import mysql.connector
 from mysql.connector import pooling
-import yaml
 from pathlib import Path
 from decimal import Decimal
 from app.services.price_cache_service import get_global_price_cache
+from app.utils.config_loader import load_config
 
 router = APIRouter()
 
@@ -35,8 +35,8 @@ def get_db_connection():
                 _init_failed = True
                 raise HTTPException(status_code=500, detail=f"config.yaml 不存在: {config_path}")
 
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
+            # 使用 config_loader 加载配置，自动替换环境变量
+            config = load_config(config_path)
 
             mysql_config = config.get('database', {}).get('mysql', {})
 
