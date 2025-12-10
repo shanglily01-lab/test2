@@ -512,7 +512,7 @@ class StrategyExecutor:
             # 同步实盘交易配置
             sync_live = strategy.get('syncLive', False)  # 是否同步实盘
             live_quantity_pct = strategy.get('liveQuantityPct', 10)  # 实盘下单数量百分比（默认10%）
-            live_max_position_usdt = strategy.get('liveMaxPositionUsdt', 500)  # 实盘单笔最大保证金(USDT)
+            live_max_position_usdt = strategy.get('liveMaxPositionUsdt', 100)  # 实盘单笔最大保证金(USDT)
 
             # 新指标过滤配置
             rsi_filter = strategy.get('rsiFilter', {})
