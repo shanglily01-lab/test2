@@ -3885,7 +3885,7 @@ class StrategyExecutor:
                                                             stop_loss_pct=Decimal(str(stop_loss_pct)) if stop_loss_pct else None,
                                                             take_profit_pct=Decimal(str(take_profit_pct)) if take_profit_pct else None,
                                                             source='strategy_sync',
-                                                            strategy_id=strategy['id']  # 传递策略ID
+                                                            strategy_id=strategy_id  # 传递策略ID
                                                         )
 
                                                         if live_result.get('success'):
