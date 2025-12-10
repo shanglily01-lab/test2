@@ -551,7 +551,7 @@ class FuturesLimitOrderExecutor:
                                                 if sync_live:
                                                     # 获取实盘可用余额
                                                     live_balance = self.live_engine.get_account_balance()
-                                                    live_available = live_balance.get('available_balance', 0)
+                                                    live_available = live_balance.get('available', 0)
 
                                                     # 计算实盘保证金和数量
                                                     live_margin_to_use = live_available * (live_quantity_pct / 100)
