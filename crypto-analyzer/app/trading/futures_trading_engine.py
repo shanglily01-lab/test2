@@ -56,13 +56,19 @@ def round_quantity(quantity: Decimal, symbol: str) -> Decimal:
 class FuturesTradingEngine:
     """模拟合约交易引擎"""
 
-    def __init__(self, db_config: dict):
-        """初始化合约交易引擎"""
+    def __init__(self, db_config: dict, trade_notifier=None):
+        """初始化合约交易引擎
+
+        Args:
+            db_config: 数据库配置
+            trade_notifier: TradeNotifier实例（可选）
+        """
         self.db_config = db_config
         self.connection = None
         self._is_first_connection = True  # 标记是否是首次连接
         self._connection_created_at = None  # 连接创建时间（Unix时间戳）
         self._connection_max_age = 300  # 连接最大存活时间（秒），5分钟
+        self.trade_notifier = trade_notifier  # TG通知器
         self._connect_db()
 
     def _connect_db(self, is_reconnect=False):
@@ -477,13 +483,27 @@ class FuturesTradingEngine:
                     )
                     
                     self.connection.commit()
-                    
+
                     logger.info(
                         f"创建限价单: {symbol} {position_side} {quantity} @ {limit_price} "
                         f"(当前价格: {current_price}), 杠杆{leverage}x, "
                         f"止损: {limit_stop_loss_price}, 止盈: {limit_take_profit_price}"
                     )
-                    
+
+                    # 发送TG通知 - 限价单挂单
+                    if self.trade_notifier:
+                        try:
+                            side = 'BUY' if position_side == 'LONG' else 'SELL'
+                            self.trade_notifier.notify_order_placed(
+                                symbol=symbol,
+                                side=side,
+                                quantity=float(quantity),
+                                price=float(limit_price),
+                                order_type='限价单 - 模拟合约'
+                            )
+                        except Exception as notify_error:
+                            logger.warning(f"发送限价单挂单TG通知失败: {notify_error}")
+
                     return {
                         'success': True,
                         'order_id': order_id,
@@ -726,6 +746,20 @@ class FuturesTradingEngine:
                 f"{current_time_str}: 开仓成功: {symbol} {position_side} {float(quantity):.{qty_precision}f} @ {entry_price}, "
                 f"杠杆{leverage}x, 保证金{margin_required:.2f} USDT"
             )
+
+            # 发送TG通知 - 模拟合约开仓
+            if self.trade_notifier:
+                try:
+                    side = 'BUY' if position_side == 'LONG' else 'SELL'
+                    self.trade_notifier.notify_order_filled(
+                        symbol=symbol,
+                        side=side,
+                        quantity=float(quantity),
+                        price=float(entry_price),
+                        order_type='市价单 - 模拟合约'
+                    )
+                except Exception as notify_error:
+                    logger.warning(f"发送开仓TG通知失败: {notify_error}")
 
             return {
                 'success': True,

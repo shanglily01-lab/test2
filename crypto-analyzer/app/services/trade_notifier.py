@@ -237,6 +237,43 @@ class TradeNotifier:
 
         self._send_telegram(message)
 
+    def notify_order_placed(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        price: float,
+        order_type: str = 'LIMIT'
+    ):
+        """
+        通知限价单挂单
+
+        Args:
+            symbol: 交易对
+            side: 买卖方向 (BUY/SELL)
+            quantity: 数量
+            price: 限价
+            order_type: 订单类型
+        """
+        if not self.notify_open:
+            return
+
+        side_emoji = "🟢" if side == 'BUY' else "🔴"
+        side_text = "买入" if side == 'BUY' else "卖出"
+
+        message = f"""
+📝 <b>【限价单挂单】{symbol}</b>
+
+📌 方向: {side_text}
+💰 数量: {quantity:.6f}
+💵 限价: ${price:,.4f}
+📋 类型: {order_type}
+
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+
+        self._send_telegram(message)
+
     def notify_order_filled(
         self,
         symbol: str,

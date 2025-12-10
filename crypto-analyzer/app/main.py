@@ -218,13 +218,22 @@ async def lifespan(app: FastAPI):
             import traceback
             traceback.print_exc()
 
+        # 初始化Telegram通知服务（需要先初始化，供其他服务使用）
+        try:
+            from app.services.trade_notifier import init_trade_notifier
+            trade_notifier = init_trade_notifier(config)
+            logger.info("✅ Telegram通知服务初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  Telegram通知服务初始化失败: {e}")
+            trade_notifier = None
+
         # 初始化合约限价单自动执行器
         try:
             from app.services.futures_limit_order_executor import FuturesLimitOrderExecutor
             from app.trading.futures_trading_engine import FuturesTradingEngine
 
             db_config = config.get('database', {}).get('mysql', {})
-            futures_engine = FuturesTradingEngine(db_config)
+            futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
             futures_limit_order_executor = FuturesLimitOrderExecutor(
                 db_config=db_config,
                 trading_engine=futures_engine,
@@ -264,13 +273,7 @@ async def lifespan(app: FastAPI):
             traceback.print_exc()
             live_order_monitor = None
 
-        # 初始化实盘交易Telegram通知服务
-        try:
-            from app.services.trade_notifier import init_trade_notifier
-            trade_notifier = init_trade_notifier(config)
-            logger.info("✅ 实盘交易Telegram通知服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  实盘交易Telegram通知服务初始化失败: {e}")
+        # Telegram通知服务已在前面初始化
 
         # 初始化用户认证服务
         try:
