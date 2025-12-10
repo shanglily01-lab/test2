@@ -72,6 +72,36 @@
         .form-row > .form-section { flex: 1; min-width: 300px; }
         .form-section { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
         .form-section-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-sm); border-bottom: 1px solid var(--border-default); display: flex; align-items: center; gap: var(--spacing-sm); }
+
+        /* 大板块容器样式 */
+        .major-block {
+            background: linear-gradient(135deg, rgba(43, 111, 237, 0.03), rgba(124, 58, 237, 0.03));
+            border: 2px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-xl);
+            margin-bottom: var(--spacing-2xl);
+            position: relative;
+        }
+        .major-block-header {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary-blue);
+            margin-bottom: var(--spacing-xl);
+            padding-bottom: var(--spacing-md);
+            border-bottom: 2px solid var(--primary-blue);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+        }
+        .major-block-header i {
+            font-size: 22px;
+        }
+        .major-block-description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-left: auto;
+            font-weight: 400;
+        }
         
         /* 单选按钮组 */
         .radio-group { display: flex; gap: var(--spacing-md); flex-wrap: wrap; }
@@ -550,6 +580,16 @@
                             </div>
                             
                             <!-- 买入条件（全宽显示） -->
+                        <!-- ============================================ -->
+                        <!-- 板块1：开仓设置 -->
+                        <!-- ============================================ -->
+                        <div class="major-block">
+                            <div class="major-block-header">
+                                <i class="bi bi-door-open"></i>
+                                开仓设置
+                                <span class="major-block-description">配置入场信号、条件和控制策略</span>
+                            </div>
+
                             <div class="form-section">
                                 <div class="form-section-title">
                                     <i class="bi bi-arrow-down-circle" style="color: var(--success-green);"></i>
@@ -1263,6 +1303,18 @@
                             </div>
                             
                             <!-- 风险控制 -->
+                        </div> <!-- 结束板块1: 开仓设置 -->
+
+                        <!-- ============================================ -->
+                        <!-- 板块2：平仓设置 -->
+                        <!-- ============================================ -->
+                        <div class="major-block">
+                            <div class="major-block-header">
+                                <i class="bi bi-door-closed"></i>
+                                平仓设置
+                                <span class="major-block-description">配置止损、止盈和出场策略</span>
+                            </div>
+
                             <div class="form-section">
                                 <div class="form-section-title">
                                     <i class="bi bi-shield-exclamation"></i>
@@ -1645,6 +1697,18 @@
                                     </div>
                                 </div>
 
+                        </div> <!-- 结束板块2: 平仓设置 -->
+
+                        <!-- ============================================ -->
+                        <!-- 板块3：订单管理 -->
+                        <!-- ============================================ -->
+                        <div class="major-block">
+                            <div class="major-block-header">
+                                <i class="bi bi-list-check"></i>
+                                订单管理
+                                <span class="major-block-description">配置订单执行、实盘同步和通知</span>
+                            </div>
+
                                 <!-- 限价单超时转市价 -->
                                 <div class="form-group" id="limitOrderTimeoutGroup">
                                     <label class="form-label">限价单超时转市价</label>
@@ -1701,6 +1765,8 @@
                             <!-- 按钮区域 -->
                             <div class="form-actions" style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border-default);">
                                 <button type="button" class="btn btn-secondary" onclick="closeStrategyModal()">取消</button>
+                        </div> <!-- 结束板块3: 订单管理 -->
+
                                 <button type="submit" class="btn btn-primary">保存策略</button>
                             </div>
                     </form>
