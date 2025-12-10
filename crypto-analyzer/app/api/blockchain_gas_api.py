@@ -35,8 +35,10 @@ def get_db_connection():
             if not config_path.exists():
                 _init_failed = True
                 raise HTTPException(status_code=500, detail=f"config.yaml 不存在: {config_path}")
-            
-            
+
+            # 使用 config_loader 加载配置，自动替换环境变量
+            config = load_config(config_path)
+
             mysql_config = config.get('database', {}).get('mysql', {})
             
             db_config = {
