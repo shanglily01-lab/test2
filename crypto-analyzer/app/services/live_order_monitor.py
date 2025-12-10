@@ -15,12 +15,12 @@
 """
 
 import asyncio
+from datetime import datetime
 from decimal import Decimal
 from typing import Dict, Optional, List
 import pymysql
 import json
 from loguru import logger
-from datetime import datetime
 
 # 导入交易通知器
 try:
@@ -344,6 +344,11 @@ class LiveOrderMonitor:
                 timeout_minutes = position.get('timeout_minutes', 0) or 0
                 elapsed_seconds = position.get('elapsed_seconds', 0) or 0
 
+                # 添加调试日志
+                logger.debug(f"[实盘监控] 订单 {order_id} 超时检查: "
+                           f"timeout_minutes={timeout_minutes}, "
+                           f"elapsed_seconds={elapsed_seconds}")
+
                 if timeout_minutes > 0:
                     elapsed_minutes = elapsed_seconds / 60
                     timeout_seconds = timeout_minutes * 60
@@ -453,6 +458,9 @@ class LiveOrderMonitor:
 
                 # 更新数据库状态为超时取消
                 await self._update_position_canceled(position, 'TIMEOUT_PRICE_DEVIATION')
+
+                # 发送TG通知
+                self._send_timeout_cancel_notification(position, deviation_pct, elapsed_minutes)
 
             else:
                 # 价格偏离在可接受范围内，以市价重新开仓
@@ -624,6 +632,35 @@ class LiveOrderMonitor:
                     logger.error(f"[实盘监控] 设置止盈单异常: {e}")
             else:
                 logger.warning(f"[实盘监控] 止盈价 {take_profit_price} 无效 ({position_side} 当前价 {current_price})，跳过止盈设置")
+
+    def _send_timeout_cancel_notification(self, position: Dict, deviation_pct: Decimal, elapsed_minutes: float):
+        """发送限价单超时取消的Telegram通知"""
+        try:
+            from app.services.trade_notifier import get_trade_notifier
+            notifier = get_trade_notifier()
+            if not notifier:
+                return
+
+            symbol = position['symbol']
+            position_side = position['position_side']
+            direction_text = "做多" if position_side == 'LONG' else "做空"
+
+            message = f"""
+⚠️ <b>【限价单超时取消】{symbol}</b>
+
+📌 方向: {direction_text}
+⏱️ 等待时长: {elapsed_minutes:.1f} 分钟
+📊 价格偏离: {deviation_pct:.2f}% (> 0.5%)
+💡 原因: 价格偏离过大，避免追高/杀低
+
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+
+            notifier._send_telegram(message)
+            logger.info(f"[实盘监控] ✅ 超时取消通知已发送: {symbol}")
+
+        except Exception as e:
+            logger.warning(f"[实盘监控] 发送超时取消通知失败: {e}")
 
     # ==================== 以下方法已禁用 ====================
     # 实盘不负责策略判断，智能止盈/止损由模拟盘负责
