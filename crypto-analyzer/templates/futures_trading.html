@@ -1942,7 +1942,8 @@
             if (!confirmed) return;
 
             try {
-                const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}?account_id=2`, {
+                // 手动撤单，传递 reason=manual
+                const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}?account_id=2&reason=manual`, {
                     method: 'DELETE'
                 });
 
