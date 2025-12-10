@@ -676,14 +676,22 @@ class LiveOrderMonitor:
             exit_price = None
             exit_reason = None
 
-            # ===== 1. 检查连续K线止盈 =====
-            consecutive_bearish_exit = strategy_config.get('consecutiveBearishExit', {})
-            if isinstance(consecutive_bearish_exit, dict) and consecutive_bearish_exit.get('enabled', False):
-                exit_price, exit_reason = await self._check_consecutive_kline_exit(
-                    position, current_price, current_profit_pct, consecutive_bearish_exit
+            # ===== 1. 检查连续K线止损（亏损时提前离场） =====
+            consecutive_bearish_stop = strategy_config.get('consecutiveBearishStopLoss', {})
+            if isinstance(consecutive_bearish_stop, dict) and consecutive_bearish_stop.get('enabled', False):
+                exit_price, exit_reason = await self._check_consecutive_kline_stop_loss(
+                    position, current_price, current_profit_pct, consecutive_bearish_stop
                 )
 
-            # ===== 2. 检查盈利保护（移动止盈） =====
+            # ===== 2. 检查连续K线止盈（盈利时提前离场） =====
+            if not exit_price:
+                consecutive_bearish_exit = strategy_config.get('consecutiveBearishExit', {})
+                if isinstance(consecutive_bearish_exit, dict) and consecutive_bearish_exit.get('enabled', False):
+                    exit_price, exit_reason = await self._check_consecutive_kline_exit(
+                        position, current_price, current_profit_pct, consecutive_bearish_exit
+                    )
+
+            # ===== 3. 检查盈利保护（移动止盈） =====
             if not exit_price:
                 profit_protection = strategy_config.get('profitProtection', {})
                 if isinstance(profit_protection, dict) and profit_protection.get('enabled', False):
@@ -691,12 +699,89 @@ class LiveOrderMonitor:
                         position, current_price, current_profit_pct, profit_protection
                     )
 
-            # 如果触发智能止盈，执行平仓
+            # 如果触发智能止盈/止损，执行平仓
             if exit_price and exit_reason:
                 await self._execute_smart_exit(position, current_price, exit_reason)
 
         except Exception as e:
             logger.error(f"[实盘监控] 检查仓位 {position.get('id')} 智能止盈失败: {e}")
+
+    async def _check_consecutive_kline_stop_loss(
+        self,
+        position: Dict,
+        current_price: float,
+        current_profit_pct: float,
+        config: Dict
+    ) -> tuple:
+        """
+        检查连续K线止损条件（亏损时提前离场）
+
+        做多时：连续N根阴线（收盘<开盘）则提前止损
+        做空时：连续N根阳线（收盘>开盘）则提前止损
+
+        Returns:
+            (exit_price, exit_reason) 或 (None, None)
+        """
+        try:
+            bars = config.get('bars', 2)  # 默认连续2根
+            timeframe = config.get('timeframe', '5m')  # 默认5分钟K线
+            max_loss_pct = config.get('maxLossPct', -0.5)  # 默认-0.5%以内才触发（避免过早止损）
+
+            # 检查是否在亏损区间（如果盈利了就不用连续K线止损）
+            if current_profit_pct > 0:
+                return None, None
+
+            # 检查是否超过最大亏损限制（如果亏损太多了，不适用连续K线止损）
+            if current_profit_pct < max_loss_pct:
+                return None, None
+
+            symbol = position['symbol']
+            position_side = position['position_side']
+
+            # 获取K线数据
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT open_price, close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (symbol, timeframe, bars))
+
+            klines = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            if not klines or len(klines) < bars:
+                return None, None
+
+            # 检查连续K线
+            if position_side == 'LONG':
+                # 做多：检查连续阴线（价格持续下跌）
+                consecutive_bearish = all(
+                    float(k['close_price']) < float(k['open_price'])
+                    for k in klines[:bars]
+                )
+                if consecutive_bearish:
+                    logger.warning(f"[实盘监控] {symbol}: 🔻 检测到连续{bars}根阴线，当前亏损{current_profit_pct:.2f}%，触发连续下跌止损")
+                    return current_price, f"连续{bars}根阴线止损(亏损{current_profit_pct:.2f}%)"
+            else:
+                # 做空：检查连续阳线（价格持续上涨）
+                consecutive_bullish = all(
+                    float(k['close_price']) > float(k['open_price'])
+                    for k in klines[:bars]
+                )
+                if consecutive_bullish:
+                    logger.warning(f"[实盘监控] {symbol}: 🔺 检测到连续{bars}根阳线，当前亏损{current_profit_pct:.2f}%，触发连续上涨止损")
+                    return current_price, f"连续{bars}根阳线止损(亏损{current_profit_pct:.2f}%)"
+
+            return None, None
+
+        except Exception as e:
+            logger.error(f"[实盘监控] 连续K线止损检测失败: {e}")
+            return None, None
 
     async def _check_consecutive_kline_exit(
         self,
@@ -706,7 +791,7 @@ class LiveOrderMonitor:
         config: Dict
     ) -> tuple:
         """
-        检查连续K线止盈条件
+        检查连续K线止盈条件（盈利时提前离场）
 
         做多时：连续N根阴线（收盘<开盘）则提前止盈
         做空时：连续N根阳线（收盘>开盘）则提前止盈
@@ -739,6 +824,8 @@ class LiveOrderMonitor:
             """, (symbol, timeframe, bars))
 
             klines = cursor.fetchall()
+            cursor.close()
+            conn.close()
 
             if not klines or len(klines) < bars:
                 return None, None
