@@ -98,17 +98,10 @@ def find_insertion_points(lines):
                     block3_start = j
                     break
 
-        # 找到保存按钮（表单结束）
-        if block3_end is None and '保存策略' in line and 'button' in line:
-            # 回溯找到按钮容器之前的位置
-            for j in range(i, max(0, i-30), -1):
-                if '</div>' in lines[j] and 'form-group' in lines[j-10:j]:
-                    # 找到最后一个form-section的结束
-                    block3_end = j + 1
-                    break
-            # 如果还没找到，使用按钮行之前
-            if block3_end is None:
-                block3_end = i
+        # 找到按钮区域（表单结束）
+        if block3_end is None and '<!-- 按钮区域 -->' in line:
+            # 板块3应该在按钮区域之前结束
+            block3_end = i
 
     return block1_start, block1_end, block2_start, block2_end, block3_start, block3_end
 
