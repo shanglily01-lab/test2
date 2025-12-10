@@ -7,7 +7,7 @@ from typing import Optional, List, Dict
 from datetime import datetime, date, timedelta, timezone
 import mysql.connector
 from mysql.connector import pooling
-import yaml
+from app.utils.config_loader import load_config
 from pathlib import Path
 from decimal import Decimal
 import logging
@@ -36,8 +36,6 @@ def get_db_connection():
                 _init_failed = True
                 raise HTTPException(status_code=500, detail=f"config.yaml 不存在: {config_path}")
             
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = yaml.safe_load(f)
             
             mysql_config = config.get('database', {}).get('mysql', {})
             
