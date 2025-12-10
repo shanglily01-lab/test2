@@ -2,16 +2,15 @@
 """
 测试Telegram通知功能
 """
-import yaml
 from pathlib import Path
+from app.utils.config_loader import load_config
 from app.services.trade_notifier import init_trade_notifier
 
 def test_telegram_notification():
     """测试TG通知"""
-    # 加载配置
+    # 加载配置（会自动替换环境变量）
     config_path = Path(__file__).parent / 'config.yaml'
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
+    config = load_config(config_path)
 
     print("=" * 60)
     print("  测试Telegram通知功能")
@@ -98,8 +97,8 @@ def test_telegram_notification():
             entry_price=0.145,
             margin=145.0,
             leverage=10,
-            stop_loss=0.138,
-            take_profit=0.160
+            stop_loss_price=0.138,
+            take_profit_price=0.160
         )
         print("   ✅ 开仓通知发送成功")
     except Exception as e:
