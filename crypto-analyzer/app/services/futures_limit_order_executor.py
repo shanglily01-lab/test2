@@ -468,9 +468,10 @@ class FuturesLimitOrderExecutor:
                                 connection.commit()
                                 
                                 # 执行开仓
-                                # 保留原始订单的来源和信号ID（如果是策略订单）
+                                # 保留原始订单的来源、信号ID和策略ID（如果是策略订单）
                                 original_source = order.get('order_source', 'limit_order')
                                 original_signal_id = order.get('signal_id')
+                                original_strategy_id = order.get('strategy_id')
 
                                 # 根据是否超时决定使用限价还是市价
                                 if execute_at_market:
@@ -491,7 +492,8 @@ class FuturesLimitOrderExecutor:
                                     stop_loss_price=stop_loss_price,
                                     take_profit_price=take_profit_price,
                                     source=original_source,  # 保留原始来源（strategy 或 limit_order）
-                                    signal_id=original_signal_id  # 保留原始信号ID
+                                    signal_id=original_signal_id,  # 保留原始信号ID
+                                    strategy_id=original_strategy_id  # 保留原始策略ID（用于实盘同步）
                                 )
 
                                 if result.get('success'):
