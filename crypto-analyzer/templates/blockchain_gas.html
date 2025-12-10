@@ -91,6 +91,61 @@
             .nav-links { flex-direction: column; }
             .stats-grid { grid-template-columns: 1fr; }
         }
+        /* Daily table pagination styles */
+        .daily-table-container {
+            max-height: 600px;
+            overflow-y: auto;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-default);
+        }
+        .pagination-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-lg) 0;
+            border-top: 1px solid var(--border-default);
+            margin-top: var(--spacing-lg);
+        }
+        .pagination-info {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .pagination-buttons {
+            display: flex;
+            gap: var(--spacing-sm);
+            align-items: center;
+        }
+        .pagination-btn {
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            color: var(--text-primary);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all var(--transition-fast);
+        }
+        .pagination-btn:hover:not(:disabled) {
+            background: var(--bg-hover);
+            border-color: var(--primary-blue);
+        }
+        .pagination-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .pagination-select {
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            color: var(--text-primary);
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .pagination-select:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+        }
     </style>
 </head>
 <body>
@@ -263,7 +318,7 @@
                     </h2>
                 </div>
                 <div class="card-body">
-                    <div class="table-container">
+                    <div class="daily-table-container">
                         <table>
                             <thead>
                                 <tr>
@@ -285,6 +340,29 @@
                             </tbody>
                         </table>
                     </div>
+                    <div class="pagination-controls">
+                        <div class="pagination-info">
+                            显示 <span id="pageStart">0</span> - <span id="pageEnd">0</span> / 共 <span id="totalRows">0</span> 条
+                        </div>
+                        <div class="pagination-buttons">
+                            <label style="color: var(--text-secondary); font-size: 13px; margin-right: var(--spacing-sm);">每页显示:</label>
+                            <select id="rowsPerPage" class="pagination-select" onchange="changeRowsPerPage()">
+                                <option value="20">20</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                            </select>
+                            <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)">
+                                <i class="bi bi-chevron-left"></i> 上一页
+                            </button>
+                            <span style="color: var(--text-secondary); font-size: 13px; padding: 0 var(--spacing-md);">
+                                第 <span id="currentPage">1</span> / <span id="totalPages">1</span> 页
+                            </span>
+                            <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">
+                                下一页 <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -292,6 +370,9 @@
 
     <script>
         let gasValueChart = null;
+        let allDailyData = []; // Store all daily data
+        let currentPageNum = 1;
+        let rowsPerPageNum = 50;
 
         // 格式化数字
         function formatNumber(num, decimals = 2) {
@@ -474,6 +555,7 @@
             const tbody = document.getElementById('dailyTableBody');
             if (!dailyData || dailyData.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无数据</td></tr>';
+                updatePaginationInfo(0, 0, 0, 1, 1);
                 return;
             }
 
@@ -485,7 +567,30 @@
                 return a.chain_name.localeCompare(b.chain_name);
             });
 
-            tbody.innerHTML = dailyData.map(item => {
+            // Store all data for pagination
+            allDailyData = dailyData;
+
+            // Reset to first page when data changes
+            currentPageNum = 1;
+
+            // Render current page
+            renderDailyTablePage();
+        }
+
+        // Render current page of daily table
+        function renderDailyTablePage() {
+            const tbody = document.getElementById('dailyTableBody');
+            const totalRows = allDailyData.length;
+            const totalPages = Math.ceil(totalRows / rowsPerPageNum);
+
+            // Calculate start and end indices
+            const startIndex = (currentPageNum - 1) * rowsPerPageNum;
+            const endIndex = Math.min(startIndex + rowsPerPageNum, totalRows);
+
+            // Get current page data
+            const pageData = allDailyData.slice(startIndex, endIndex);
+
+            tbody.innerHTML = pageData.map(item => {
                 return `
                     <tr>
                         <td>${item.date}</td>
@@ -500,6 +605,42 @@
                     </tr>
                 `;
             }).join('');
+
+            // Update pagination info
+            updatePaginationInfo(startIndex + 1, endIndex, totalRows, currentPageNum, totalPages);
+        }
+
+        // Update pagination info and button states
+        function updatePaginationInfo(start, end, total, current, totalPages) {
+            document.getElementById('pageStart').textContent = start;
+            document.getElementById('pageEnd').textContent = end;
+            document.getElementById('totalRows').textContent = total;
+            document.getElementById('currentPage').textContent = current;
+            document.getElementById('totalPages').textContent = totalPages;
+
+            // Update button states
+            document.getElementById('prevPageBtn').disabled = current <= 1;
+            document.getElementById('nextPageBtn').disabled = current >= totalPages;
+        }
+
+        // Change page
+        function changePage(direction) {
+            const totalPages = Math.ceil(allDailyData.length / rowsPerPageNum);
+            const newPage = currentPageNum + direction;
+
+            if (newPage < 1 || newPage > totalPages) {
+                return;
+            }
+
+            currentPageNum = newPage;
+            renderDailyTablePage();
+        }
+
+        // Change rows per page
+        function changeRowsPerPage() {
+            rowsPerPageNum = parseInt(document.getElementById('rowsPerPage').value);
+            currentPageNum = 1; // Reset to first page
+            renderDailyTablePage();
         }
 
         // 更新图表
