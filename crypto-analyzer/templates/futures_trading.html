@@ -287,6 +287,75 @@
             th, td { padding: var(--spacing-sm); font-size: 11px; }
             .trading-layout { grid-template-columns: 1fr; gap: var(--spacing-lg); }
         }
+
+        /* Tab pagination styles */
+        .tab-content-container {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .tab-content-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .tab-content-container::-webkit-scrollbar-track {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+        .tab-content-container::-webkit-scrollbar-thumb {
+            background: var(--border-default);
+            border-radius: 4px;
+        }
+        .tab-content-container::-webkit-scrollbar-thumb:hover {
+            background: var(--text-tertiary);
+        }
+        .tab-pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-lg) 0;
+            border-top: 1px solid var(--border-default);
+            margin-top: var(--spacing-lg);
+            flex-shrink: 0;
+        }
+        .tab-pagination-info {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .tab-pagination-controls {
+            display: flex;
+            gap: var(--spacing-sm);
+            align-items: center;
+        }
+        .tab-pagination-select {
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            color: var(--text-primary);
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .tab-pagination-select:focus {
+            outline: none;
+            border-color: var(--primary-blue);
+        }
+        .tab-pagination-btn {
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            color: var(--text-primary);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all var(--transition-fast);
+        }
+        .tab-pagination-btn:hover:not(:disabled) {
+            background: var(--bg-hover);
+            border-color: var(--primary-blue);
+        }
+        .tab-pagination-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -505,8 +574,32 @@
                                 <div class="spinner"></div>
                             </div>
                             <div id="positionsTable" style="display: none;">
-                                <div id="positionsBody" style="display: flex; flex-direction: column; gap: 12px;">
-                                    <!-- 动态加载持仓卡片 -->
+                                <div class="tab-content-container" id="positionsBodyContainer">
+                                    <div id="positionsBody" style="display: flex; flex-direction: column; gap: 12px;">
+                                        <!-- 动态加载持仓卡片 -->
+                                    </div>
+                                </div>
+                                <div class="tab-pagination" id="positionsPagination" style="display: none;">
+                                    <div class="tab-pagination-info">
+                                        显示 <span id="positionsPageStart">0</span> - <span id="positionsPageEnd">0</span> / 共 <span id="positionsTotalRows">0</span> 条
+                                    </div>
+                                    <div class="tab-pagination-controls">
+                                        <label style="color: var(--text-secondary); font-size: 13px; margin-right: var(--spacing-sm);">每页显示:</label>
+                                        <select id="positionsRowsPerPage" class="tab-pagination-select" onchange="changePositionsRowsPerPage()">
+                                            <option value="10" selected>10</option>
+                                            <option value="20">20</option>
+                                            <option value="50">50</option>
+                                        </select>
+                                        <button class="tab-pagination-btn" id="positionsPrevBtn" onclick="changePositionsPage(-1)">
+                                            <i class="bi bi-chevron-left"></i> 上一页
+                                        </button>
+                                        <span style="color: var(--text-secondary); font-size: 13px; padding: 0 var(--spacing-md);">
+                                            第 <span id="positionsCurrentPage">1</span> / <span id="positionsTotalPages">1</span> 页
+                                        </span>
+                                        <button class="tab-pagination-btn" id="positionsNextBtn" onclick="changePositionsPage(1)">
+                                            下一页 <i class="bi bi-chevron-right"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div id="positionsEmpty" class="empty-state" style="display: none;">
@@ -522,30 +615,54 @@
                                 <div class="spinner"></div>
                             </div>
                             <div id="ordersTable" style="display: none;">
-                                <div class="table-container">
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>交易对</th>
-                                                <th>方向</th>
-                                                <th>订单类型</th>
-                                                <th>杠杆</th>
-                                                <th>委托价格</th>
-                                                <th>数量</th>
-                                                <th>已成交</th>
-                                                <th>保证金</th>
-                                                <th>止损价</th>
-                                                <th>止盈价</th>
-                                                <th>来源</th>
-                                                <th>状态</th>
-                                                <th>创建时间</th>
-                                                <th>操作</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="ordersBody">
-                                            <!-- 动态加载 -->
-                                        </tbody>
-                                    </table>
+                                <div class="tab-content-container">
+                                    <div class="table-container">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    <th>交易对</th>
+                                                    <th>方向</th>
+                                                    <th>订单类型</th>
+                                                    <th>杠杆</th>
+                                                    <th>委托价格</th>
+                                                    <th>数量</th>
+                                                    <th>已成交</th>
+                                                    <th>保证金</th>
+                                                    <th>止损价</th>
+                                                    <th>止盈价</th>
+                                                    <th>来源</th>
+                                                    <th>状态</th>
+                                                    <th>创建时间</th>
+                                                    <th>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="ordersBody">
+                                                <!-- 动态加载 -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="tab-pagination" id="ordersPagination" style="display: none;">
+                                    <div class="tab-pagination-info">
+                                        显示 <span id="ordersPageStart">0</span> - <span id="ordersPageEnd">0</span> / 共 <span id="ordersTotalRows">0</span> 条
+                                    </div>
+                                    <div class="tab-pagination-controls">
+                                        <label style="color: var(--text-secondary); font-size: 13px; margin-right: var(--spacing-sm);">每页显示:</label>
+                                        <select id="ordersRowsPerPage" class="tab-pagination-select" onchange="changeOrdersRowsPerPage()">
+                                            <option value="10" selected>10</option>
+                                            <option value="20">20</option>
+                                            <option value="50">50</option>
+                                        </select>
+                                        <button class="tab-pagination-btn" id="ordersPrevBtn" onclick="changeOrdersPage(-1)">
+                                            <i class="bi bi-chevron-left"></i> 上一页
+                                        </button>
+                                        <span style="color: var(--text-secondary); font-size: 13px; padding: 0 var(--spacing-md);">
+                                            第 <span id="ordersCurrentPage">1</span> / <span id="ordersTotalPages">1</span> 页
+                                        </span>
+                                        <button class="tab-pagination-btn" id="ordersNextBtn" onclick="changeOrdersPage(1)">
+                                            下一页 <i class="bi bi-chevron-right"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div id="ordersEmpty" class="empty-state" style="display: none;">
@@ -560,29 +677,53 @@
                                 <div class="spinner"></div>
                             </div>
                             <div id="cancelledTable" style="display: none;">
-                                <div class="table-container">
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>交易对</th>
-                                                <th>方向</th>
-                                                <th>订单类型</th>
-                                                <th>杠杆</th>
-                                                <th>委托价格</th>
-                                                <th>数量</th>
-                                                <th>保证金</th>
-                                                <th>止损价</th>
-                                                <th>止盈价</th>
-                                                <th>取消原因</th>
-                                                <th>来源</th>
-                                                <th>创建时间</th>
-                                                <th>取消时间</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="cancelledBody">
-                                            <!-- 动态加载 -->
-                                        </tbody>
-                                    </table>
+                                <div class="tab-content-container">
+                                    <div class="table-container">
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    <th>交易对</th>
+                                                    <th>方向</th>
+                                                    <th>订单类型</th>
+                                                    <th>杠杆</th>
+                                                    <th>委托价格</th>
+                                                    <th>数量</th>
+                                                    <th>保证金</th>
+                                                    <th>止损价</th>
+                                                    <th>止盈价</th>
+                                                    <th>取消原因</th>
+                                                    <th>来源</th>
+                                                    <th>创建时间</th>
+                                                    <th>取消时间</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="cancelledBody">
+                                                <!-- 动态加载 -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="tab-pagination" id="cancelledPagination" style="display: none;">
+                                    <div class="tab-pagination-info">
+                                        显示 <span id="cancelledPageStart">0</span> - <span id="cancelledPageEnd">0</span> / 共 <span id="cancelledTotalRows">0</span> 条
+                                    </div>
+                                    <div class="tab-pagination-controls">
+                                        <label style="color: var(--text-secondary); font-size: 13px; margin-right: var(--spacing-sm);">每页显示:</label>
+                                        <select id="cancelledRowsPerPage" class="tab-pagination-select" onchange="changeCancelledRowsPerPage()">
+                                            <option value="10" selected>10</option>
+                                            <option value="20">20</option>
+                                            <option value="50">50</option>
+                                        </select>
+                                        <button class="tab-pagination-btn" id="cancelledPrevBtn" onclick="changeCancelledPage(-1)">
+                                            <i class="bi bi-chevron-left"></i> 上一页
+                                        </button>
+                                        <span style="color: var(--text-secondary); font-size: 13px; padding: 0 var(--spacing-md);">
+                                            第 <span id="cancelledCurrentPage">1</span> / <span id="cancelledTotalPages">1</span> 页
+                                        </span>
+                                        <button class="tab-pagination-btn" id="cancelledNextBtn" onclick="changeCancelledPage(1)">
+                                            下一页 <i class="bi bi-chevron-right"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div id="cancelledEmpty" class="empty-state" style="display: none;">
@@ -657,6 +798,19 @@
         let currentPrice = 0;
         let previousPrice = 0; // 用于价格变化检测
         let symbols = [];
+
+        // Pagination variables
+        let allPositions = [];
+        let currentPositionsPage = 1;
+        let positionsRowsPerPage = 10;
+
+        let allOrders = [];
+        let currentOrdersPage = 1;
+        let ordersRowsPerPage = 10;
+
+        let allCancelledOrders = [];
+        let currentCancelledPage = 1;
+        let cancelledRowsPerPage = 10;
 
         // 加载交易对列表
         async function loadSymbols() {
@@ -1354,6 +1508,155 @@
                 showToast('加载账户信息失败', 'error');
             }
         }
+
+        // ========== Pagination Functions ==========
+
+        // Positions pagination
+        function updatePositionsPagination(start, end, total, current, totalPages) {
+            document.getElementById('positionsPageStart').textContent = start;
+            document.getElementById('positionsPageEnd').textContent = end;
+            document.getElementById('positionsTotalRows').textContent = total;
+            document.getElementById('positionsCurrentPage').textContent = current;
+            document.getElementById('positionsTotalPages').textContent = totalPages;
+
+            document.getElementById('positionsPrevBtn').disabled = current <= 1;
+            document.getElementById('positionsNextBtn').disabled = current >= totalPages;
+
+            // Show/hide pagination based on total rows
+            const paginationEl = document.getElementById('positionsPagination');
+            if (paginationEl) {
+                paginationEl.style.display = total > positionsRowsPerPage ? 'flex' : 'none';
+            }
+        }
+
+        function renderPositionsPage() {
+            const positionsBody = document.getElementById('positionsBody');
+            const totalRows = allPositions.length;
+            const totalPages = Math.ceil(totalRows / positionsRowsPerPage);
+
+            const startIndex = (currentPositionsPage - 1) * positionsRowsPerPage;
+            const endIndex = Math.min(startIndex + positionsRowsPerPage, totalRows);
+
+            const pageData = allPositions.slice(startIndex, endIndex);
+
+            positionsBody.innerHTML = pageData.map(pos => pos.html).join('');
+
+            updatePositionsPagination(startIndex + 1, endIndex, totalRows, currentPositionsPage, totalPages);
+        }
+
+        function changePositionsPage(direction) {
+            const totalPages = Math.ceil(allPositions.length / positionsRowsPerPage);
+            const newPage = currentPositionsPage + direction;
+
+            if (newPage < 1 || newPage > totalPages) return;
+
+            currentPositionsPage = newPage;
+            renderPositionsPage();
+        }
+
+        function changePositionsRowsPerPage() {
+            positionsRowsPerPage = parseInt(document.getElementById('positionsRowsPerPage').value);
+            currentPositionsPage = 1;
+            renderPositionsPage();
+        }
+
+        // Orders pagination
+        function updateOrdersPagination(start, end, total, current, totalPages) {
+            document.getElementById('ordersPageStart').textContent = start;
+            document.getElementById('ordersPageEnd').textContent = end;
+            document.getElementById('ordersTotalRows').textContent = total;
+            document.getElementById('ordersCurrentPage').textContent = current;
+            document.getElementById('ordersTotalPages').textContent = totalPages;
+
+            document.getElementById('ordersPrevBtn').disabled = current <= 1;
+            document.getElementById('ordersNextBtn').disabled = current >= totalPages;
+
+            const paginationEl = document.getElementById('ordersPagination');
+            if (paginationEl) {
+                paginationEl.style.display = total > ordersRowsPerPage ? 'flex' : 'none';
+            }
+        }
+
+        function renderOrdersPage() {
+            const ordersBody = document.getElementById('ordersBody');
+            const totalRows = allOrders.length;
+            const totalPages = Math.ceil(totalRows / ordersRowsPerPage);
+
+            const startIndex = (currentOrdersPage - 1) * ordersRowsPerPage;
+            const endIndex = Math.min(startIndex + ordersRowsPerPage, totalRows);
+
+            const pageData = allOrders.slice(startIndex, endIndex);
+
+            ordersBody.innerHTML = pageData.map(order => order.html).join('');
+
+            updateOrdersPagination(startIndex + 1, endIndex, totalRows, currentOrdersPage, totalPages);
+        }
+
+        function changeOrdersPage(direction) {
+            const totalPages = Math.ceil(allOrders.length / ordersRowsPerPage);
+            const newPage = currentOrdersPage + direction;
+
+            if (newPage < 1 || newPage > totalPages) return;
+
+            currentOrdersPage = newPage;
+            renderOrdersPage();
+        }
+
+        function changeOrdersRowsPerPage() {
+            ordersRowsPerPage = parseInt(document.getElementById('ordersRowsPerPage').value);
+            currentOrdersPage = 1;
+            renderOrdersPage();
+        }
+
+        // Cancelled orders pagination
+        function updateCancelledPagination(start, end, total, current, totalPages) {
+            document.getElementById('cancelledPageStart').textContent = start;
+            document.getElementById('cancelledPageEnd').textContent = end;
+            document.getElementById('cancelledTotalRows').textContent = total;
+            document.getElementById('cancelledCurrentPage').textContent = current;
+            document.getElementById('cancelledTotalPages').textContent = totalPages;
+
+            document.getElementById('cancelledPrevBtn').disabled = current <= 1;
+            document.getElementById('cancelledNextBtn').disabled = current >= totalPages;
+
+            const paginationEl = document.getElementById('cancelledPagination');
+            if (paginationEl) {
+                paginationEl.style.display = total > cancelledRowsPerPage ? 'flex' : 'none';
+            }
+        }
+
+        function renderCancelledPage() {
+            const cancelledBody = document.getElementById('cancelledBody');
+            const totalRows = allCancelledOrders.length;
+            const totalPages = Math.ceil(totalRows / cancelledRowsPerPage);
+
+            const startIndex = (currentCancelledPage - 1) * cancelledRowsPerPage;
+            const endIndex = Math.min(startIndex + cancelledRowsPerPage, totalRows);
+
+            const pageData = allCancelledOrders.slice(startIndex, endIndex);
+
+            cancelledBody.innerHTML = pageData.map(order => order.html).join('');
+
+            updateCancelledPagination(startIndex + 1, endIndex, totalRows, currentCancelledPage, totalPages);
+        }
+
+        function changeCancelledPage(direction) {
+            const totalPages = Math.ceil(allCancelledOrders.length / cancelledRowsPerPage);
+            const newPage = currentCancelledPage + direction;
+
+            if (newPage < 1 || newPage > totalPages) return;
+
+            currentCancelledPage = newPage;
+            renderCancelledPage();
+        }
+
+        function changeCancelledRowsPerPage() {
+            cancelledRowsPerPage = parseInt(document.getElementById('cancelledRowsPerPage').value);
+            currentCancelledPage = 1;
+            renderCancelledPage();
+        }
+
+        // ========== End Pagination Functions ==========
 
         // 加载持仓
         async function loadPositions() {
