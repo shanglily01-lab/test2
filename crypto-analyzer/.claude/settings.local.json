@@ -31,7 +31,8 @@
       "Bash(sudo systemctl list-units:*)",
       "Bash(echo:*)",
       "Bash(chmod:*)",
-      "Bash(printenv:*)"
+      "Bash(printenv:*)",
+      "Bash(journalctl:*)"
     ],
     "deny": [],
     "ask": []

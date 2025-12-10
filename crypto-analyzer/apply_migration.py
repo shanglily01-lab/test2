@@ -20,7 +20,7 @@ def apply_migration():
     print()
 
     # 读取SQL文件
-    sql_file = Path(__file__).parent / 'migrations' / 'add_canceled_at_to_futures_orders.sql'
+    sql_file = Path(__file__).parent / 'scripts' / 'migrations' / '026_add_canceled_at_to_futures_orders.sql'
 
     if not sql_file.exists():
         print(f"❌ SQL文件不存在: {sql_file}")
