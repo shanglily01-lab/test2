@@ -404,7 +404,7 @@ class FuturesTradingEngine:
                     
                     # 检查账户余额
                     cursor.execute(
-                        "SELECT current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
+                        "SELECT current_balance, frozen_balance, total_equity FROM paper_trading_accounts WHERE id = %s",
                         (account_id,)
                     )
                     account = cursor.fetchone()
@@ -413,11 +413,20 @@ class FuturesTradingEngine:
                             'success': False,
                             'message': f"账户 {account_id} 不存在"
                         }
-                    
+
                     current_balance = Decimal(str(account['current_balance']))
                     frozen_balance = Decimal(str(account.get('frozen_balance', 0) or 0))
+                    total_equity = Decimal(str(account.get('total_equity', 0) or current_balance))
                     available_balance = current_balance - frozen_balance
-                    
+
+                    # 检查最大仓位限制（单笔保证金不超过总权益的10%）
+                    max_margin_allowed = total_equity * Decimal('0.1')
+                    if limit_margin_required > max_margin_allowed:
+                        return {
+                            'success': False,
+                            'message': f"保证金超过限制。单笔保证金 {limit_margin_required:.2f} USDT 超过总权益的10% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
+                        }
+
                     if available_balance < (limit_margin_required + limit_fee):
                         return {
                             'success': False,
@@ -556,7 +565,7 @@ class FuturesTradingEngine:
             # 4. 检查账户余额（并保存变化前的余额信息）
             try:
                 cursor.execute(
-                    "SELECT current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
+                    "SELECT current_balance, frozen_balance, total_equity FROM paper_trading_accounts WHERE id = %s",
                     (account_id,)
                 )
                 account = cursor.fetchone()
@@ -569,13 +578,22 @@ class FuturesTradingEngine:
                 # 计算可用余额 = 当前余额 - 冻结余额
                 current_balance = Decimal(str(account['current_balance']))
                 frozen_balance = Decimal(str(account.get('frozen_balance', 0) or 0))
+                total_equity = Decimal(str(account.get('total_equity', 0) or current_balance))
                 available_balance = current_balance - frozen_balance
-                
+
                 # 保存变化前的余额信息（用于资金管理记录）
                 balance_before = float(current_balance)
                 frozen_before = float(frozen_balance)
                 available_before = float(available_balance)
-                
+
+                # 检查最大仓位限制（单笔保证金不超过总权益的10%）
+                max_margin_allowed = total_equity * Decimal('0.1')
+                if margin_required > max_margin_allowed:
+                    return {
+                        'success': False,
+                        'message': f"保证金超过限制。单笔保证金 {margin_required:.2f} USDT 超过总权益的10% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
+                    }
+
                 if available_balance < (margin_required + fee):
                     return {
                         'success': False,
