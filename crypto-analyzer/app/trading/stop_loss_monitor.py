@@ -536,7 +536,27 @@ class StopLossMonitor:
                 'result': result
             }
 
-        # 优先级2: 检查止损（使用持仓中保存的止损价格）
+        # 优先级2: 检查连续K线止损（亏损时提前离场）
+        consecutive_stop_result = self._check_consecutive_kline_stop_loss(position, current_price)
+        if consecutive_stop_result:
+            logger.warning(f"🔻 Consecutive kline stop-loss triggered for position #{position_id} {symbol}: {consecutive_stop_result['reason']}")
+            result = self.engine.close_position(
+                position_id=position_id,
+                reason='consecutive_kline_stop',
+                close_price=current_price
+            )
+            # 同步平掉实盘仓位
+            self._sync_close_live_position(position, 'consecutive_kline_stop')
+            return {
+                'position_id': position_id,
+                'symbol': symbol,
+                'status': 'consecutive_kline_stop',
+                'current_price': float(current_price),
+                'reason': consecutive_stop_result['reason'],
+                'result': result
+            }
+
+        # 优先级3: 检查固定止损（使用持仓中保存的止损价格）
         if self.should_trigger_stop_loss(position, current_price):
             stop_loss_price = Decimal(str(position.get('stop_loss_price', 0)))
             logger.info(f"🛑 Stop-loss triggered for position #{position_id} {symbol} @ {current_price:.8f} (stop_loss={stop_loss_price:.8f})")
@@ -556,7 +576,7 @@ class StopLossMonitor:
                 'result': result
             }
 
-        # 优先级3: 检查止盈（使用持仓中保存的止盈价格）
+        # 优先级4: 检查止盈（使用持仓中保存的止盈价格）
         if self.should_trigger_take_profit(position, current_price):
             take_profit_price = Decimal(str(position.get('take_profit_price', 0)))
             logger.info(f"✅ Take-profit triggered for position #{position_id} {symbol} @ {current_price:.8f} (take_profit={take_profit_price:.8f})")
@@ -635,6 +655,113 @@ class StopLossMonitor:
             logger.error(f"[止损监控] 同步实盘平仓异常: {e}")
             import traceback
             traceback.print_exc()
+
+    def _check_consecutive_kline_stop_loss(self, position: Dict, current_price: Decimal) -> Optional[Dict]:
+        """
+        检查连续K线止损条件（亏损时提前离场）
+
+        做多时：连续N根阴线（收盘<开盘）则提前止损
+        做空时：连续N根阳线（收盘>开盘）则提前止损
+
+        Args:
+            position: 持仓信息
+            current_price: 当前价格
+
+        Returns:
+            如果触发止损返回 {'reason': str}，否则返回 None
+        """
+        try:
+            # 获取策略配置
+            strategy_id = position.get('strategy_id')
+            if not strategy_id:
+                return None
+
+            # 从数据库获取策略配置
+            self._ensure_connection()
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT config FROM trading_strategies WHERE id = %s", (strategy_id,))
+            strategy = cursor.fetchone()
+            cursor.close()
+
+            if not strategy or not strategy.get('config'):
+                return None
+
+            # 解析策略配置
+            import json
+            config = json.loads(strategy['config']) if isinstance(strategy['config'], str) else strategy['config']
+            consecutive_config = config.get('consecutiveBearishStopLoss', {})
+
+            if not consecutive_config.get('enabled', False):
+                return None
+
+            bars = consecutive_config.get('bars', 2)
+            timeframe = consecutive_config.get('timeframe', '5m')
+            max_loss_pct = consecutive_config.get('maxLossPct', -0.5)
+
+            # 计算当前盈亏
+            entry_price = Decimal(str(position.get('entry_price', 0)))
+            position_side = position.get('position_side')
+
+            if entry_price == 0:
+                return None
+
+            if position_side == 'LONG':
+                current_profit_pct = float((current_price - entry_price) / entry_price * 100)
+            else:  # SHORT
+                current_profit_pct = float((entry_price - current_price) / entry_price * 100)
+
+            # 检查是否在亏损区间
+            if current_profit_pct > 0:
+                return None
+
+            # 检查是否超过最大亏损限制
+            if current_profit_pct < max_loss_pct:
+                return None
+
+            # 获取K线数据
+            symbol = position['symbol']
+            cursor = self.connection.cursor()
+            cursor.execute("""
+                SELECT open_price, close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (symbol, timeframe, bars))
+
+            klines = cursor.fetchall()
+            cursor.close()
+
+            if not klines or len(klines) < bars:
+                return None
+
+            # 检查连续K线
+            if position_side == 'LONG':
+                # 做多：检查连续阴线（价格持续下跌）
+                consecutive_bearish = all(
+                    float(k['close_price']) < float(k['open_price'])
+                    for k in klines[:bars]
+                )
+                if consecutive_bearish:
+                    return {
+                        'reason': f"连续{bars}根阴线止损(亏损{current_profit_pct:.2f}%)"
+                    }
+            else:  # SHORT
+                # 做空：检查连续阳线（价格持续上涨）
+                consecutive_bullish = all(
+                    float(k['close_price']) > float(k['open_price'])
+                    for k in klines[:bars]
+                )
+                if consecutive_bullish:
+                    return {
+                        'reason': f"连续{bars}根阳线止损(亏损{current_profit_pct:.2f}%)"
+                    }
+
+            return None
+
+        except Exception as e:
+            logger.error(f"连续K线止损检测失败: {e}")
+            return None
 
     def monitor_all_positions(self) -> Dict:
         """
