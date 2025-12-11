@@ -700,8 +700,8 @@ class BinanceFuturesEngine:
             'type': 'STOP_MARKET',
             'stopPrice': str(stop_price),
             'quantity': str(quantity),
-            'workingType': 'MARK_PRICE',
-            'reduceOnly': 'true'  # 只减仓
+            'workingType': 'MARK_PRICE'
+            # 注意：双向持仓模式下不需要 reduceOnly 参数
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
@@ -733,8 +733,8 @@ class BinanceFuturesEngine:
             'type': 'TAKE_PROFIT_MARKET',
             'stopPrice': str(take_profit_price),
             'quantity': str(quantity),
-            'workingType': 'MARK_PRICE',
-            'reduceOnly': 'true'  # 只减仓
+            'workingType': 'MARK_PRICE'
+            # 注意：双向持仓模式下不需要 reduceOnly 参数
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
