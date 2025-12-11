@@ -214,8 +214,8 @@ class LiveOrderMonitor:
                 # 更新数据库状态
                 await self._update_position_canceled(
                     position,
-                    f'TREND_REVERSAL: {reason}',
-                    cancellation_reason='trend_reversal'
+                    'CANCELED',  # 使用简短的状态码
+                    cancellation_reason=f'trend_reversal: {reason}'
                 )
 
                 # 发送Telegram通知

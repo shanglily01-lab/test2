@@ -692,16 +692,16 @@ class BinanceFuturesEngine:
         stop_price = self._round_price(stop_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
-        # 使用 STOP 类型（不是 STOP_MARKET）+ closePosition=true
+        # 使用 STOP_MARKET 类型
         params = {
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,
-            'type': 'STOP',
+            'type': 'STOP_MARKET',
             'stopPrice': str(stop_price),
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE',
-            'closePosition': 'true'  # 平仓单，不需要指定价格
+            'reduceOnly': 'true'  # 只减仓
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
@@ -725,16 +725,16 @@ class BinanceFuturesEngine:
         take_profit_price = self._round_price(take_profit_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
-        # 使用 TAKE_PROFIT 类型（不是 TAKE_PROFIT_MARKET）+ closePosition=true
+        # 使用 TAKE_PROFIT_MARKET 类型
         params = {
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,
-            'type': 'TAKE_PROFIT',
+            'type': 'TAKE_PROFIT_MARKET',
             'stopPrice': str(take_profit_price),
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE',
-            'closePosition': 'true'  # 平仓单，不需要指定价格
+            'reduceOnly': 'true'  # 只减仓
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
