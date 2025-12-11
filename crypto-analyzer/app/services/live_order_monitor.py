@@ -598,7 +598,21 @@ class LiveOrderMonitor:
                         stop_price=stop_loss_price
                     )
                     if sl_result.get('success'):
-                        logger.info(f"[实盘监控] ✓ 止损单已设置: {symbol} @ {stop_loss_price}")
+                        sl_order_id = sl_result.get('order_id')
+                        logger.info(f"[实盘监控] ✓ 止损单已设置: {symbol} @ {stop_loss_price}, 订单ID={sl_order_id}")
+
+                        # 保存止损订单ID到数据库
+                        try:
+                            conn = self._get_connection()
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                UPDATE live_futures_positions
+                                SET sl_order_id = %s
+                                WHERE id = %s
+                            """, (sl_order_id, position['id']))
+                            cursor.close()
+                        except Exception as db_err:
+                            logger.error(f"[实盘监控] 保存止损订单ID失败: {db_err}")
 
                         # 发送Telegram通知
                         try:
@@ -640,7 +654,21 @@ class LiveOrderMonitor:
                         take_profit_price=take_profit_price
                     )
                     if tp_result.get('success'):
-                        logger.info(f"[实盘监控] ✓ 止盈单已设置: {symbol} @ {take_profit_price}")
+                        tp_order_id = tp_result.get('order_id')
+                        logger.info(f"[实盘监控] ✓ 止盈单已设置: {symbol} @ {take_profit_price}, 订单ID={tp_order_id}")
+
+                        # 保存止盈订单ID到数据库
+                        try:
+                            conn = self._get_connection()
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                UPDATE live_futures_positions
+                                SET tp_order_id = %s
+                                WHERE id = %s
+                            """, (tp_order_id, position['id']))
+                            cursor.close()
+                        except Exception as db_err:
+                            logger.error(f"[实盘监控] 保存止盈订单ID失败: {db_err}")
 
                         # 发送Telegram通知
                         try:
