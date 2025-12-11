@@ -388,6 +388,7 @@ class LiveOrderMonitor:
             update_params = (float(executed_qty), float(avg_price), position['id'])
 
             cursor.execute(update_sql, update_params)
+            conn.commit()  # 🔧 修复：添加 commit，确保数据库更新生效
 
             logger.info(f"[实盘监控] 仓位 {position['id']} 已更新为 OPEN")
 
@@ -432,6 +433,7 @@ class LiveOrderMonitor:
 
                     logger.info(f"[实盘监控] 订单 {order_id} 取消原因已更新: {cancellation_reason}")
 
+            conn.commit()  # 🔧 修复：添加 commit
             logger.info(f"[实盘监控] 仓位 {position['id']} 已更新为 {status}")
 
         except Exception as e:
@@ -613,7 +615,9 @@ class LiveOrderMonitor:
                                 SET sl_order_id = %s
                                 WHERE id = %s
                             """, (sl_order_id, position['id']))
+                            conn.commit()  # 🔧 修复：添加 commit
                             cursor.close()
+                            logger.info(f"[实盘监控] ✓ 止损订单ID已保存: {sl_order_id}")
                         except Exception as db_err:
                             logger.error(f"[实盘监控] 保存止损订单ID失败: {db_err}")
 
@@ -669,7 +673,9 @@ class LiveOrderMonitor:
                                 SET tp_order_id = %s
                                 WHERE id = %s
                             """, (tp_order_id, position['id']))
+                            conn.commit()  # 🔧 修复：添加 commit
                             cursor.close()
+                            logger.info(f"[实盘监控] ✓ 止盈订单ID已保存: {tp_order_id}")
                         except Exception as db_err:
                             logger.error(f"[实盘监控] 保存止盈订单ID失败: {db_err}")
 
