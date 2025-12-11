@@ -983,7 +983,8 @@ class BinanceFuturesEngine:
             avg_price = Decimal(str(result.get('avgPrice', '0')))
 
             if avg_price == 0:
-                avg_price = self.get_current_price(symbol)
+                current_price = self.get_current_price(symbol)
+                avg_price = Decimal(str(current_price)) if not isinstance(current_price, Decimal) else current_price
 
             # 5. 计算盈亏
             if position_side == 'LONG':
