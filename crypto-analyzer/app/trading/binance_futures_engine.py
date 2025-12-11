@@ -706,6 +706,7 @@ class BinanceFuturesEngine:
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,
+            'algoType': 'CONDITIONAL',  # 条件单类型，必填参数
             'orderType': 'STOP_MARKET',  # Algo API 使用 orderType 而非 type
             'triggerPrice': str(stop_price),  # Algo API 使用 triggerPrice 而非 stopPrice
             'quantity': str(quantity),
@@ -744,6 +745,7 @@ class BinanceFuturesEngine:
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,
+            'algoType': 'CONDITIONAL',  # 条件单类型，必填参数
             'orderType': 'TAKE_PROFIT_MARKET',  # Algo API 使用 orderType 而非 type
             'triggerPrice': str(take_profit_price),  # Algo API 使用 triggerPrice 而非 stopPrice
             'quantity': str(quantity),
@@ -1057,7 +1059,7 @@ class BinanceFuturesEngine:
             binance_symbol = self._convert_symbol(position['symbol'])
 
             # 1. 取消 Algo 条件单（STOP_MARKET, TAKE_PROFIT_MARKET 等）
-            algo_result = self._request('GET', '/fapi/v1/algoOrder/openOrders', {'symbol': binance_symbol})
+            algo_result = self._request('GET', '/fapi/v1/openAlgoOrders', {'symbol': binance_symbol})
 
             if isinstance(algo_result, dict) and algo_result.get('orders'):
                 for order in algo_result['orders']:

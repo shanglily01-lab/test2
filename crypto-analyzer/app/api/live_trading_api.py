@@ -566,7 +566,7 @@ async def set_stop_loss_take_profit(request: SetStopLossTakeProfitRequest):
         binance_symbol = symbol.replace('/', '')
 
         # 2.1 取消 Algo 条件单
-        algo_orders = engine._request('GET', '/fapi/v1/algoOrder/openOrders', {'symbol': binance_symbol})
+        algo_orders = engine._request('GET', '/fapi/v1/openAlgoOrders', {'symbol': binance_symbol})
 
         if isinstance(algo_orders, dict) and algo_orders.get('orders'):
             for order in algo_orders['orders']:

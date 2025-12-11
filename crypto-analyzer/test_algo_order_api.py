@@ -96,7 +96,7 @@ def test_algo_order():
     # 查询 Algo 订单
     print("\n[3] 查询 Algo 订单...")
     binance_symbol = symbol.replace('/', '')
-    algo_orders = engine._request('GET', '/fapi/v1/algoOrder/openOrders', {'symbol': binance_symbol})
+    algo_orders = engine._request('GET', '/fapi/v1/openAlgoOrders', {'symbol': binance_symbol})
 
     if isinstance(algo_orders, dict) and algo_orders.get('orders'):
         print(f"当前 Algo 订单:")
