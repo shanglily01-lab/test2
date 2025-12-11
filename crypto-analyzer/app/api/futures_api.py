@@ -36,11 +36,12 @@ config = load_config()
 db_config = config['database']['mysql']
 
 # 初始化Telegram通知服务
-from app.services.trade_notifier import init_trade_notifier
-trade_notifier = init_trade_notifier(config)
+# 注意：模拟盘不需要TG通知，只有实盘需要
+# from app.services.trade_notifier import init_trade_notifier
+# trade_notifier = init_trade_notifier(config)
 
-# 初始化交易引擎（传入trade_notifier以支持TG通知）
-engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
+# 初始化交易引擎（模拟盘不传入trade_notifier，不发送TG通知）
+engine = FuturesTradingEngine(db_config, trade_notifier=None)
 
 # 初始化实盘引擎（用于同步平仓）
 live_engine = None
