@@ -562,13 +562,38 @@ async def set_stop_loss_take_profit(request: SetStopLossTakeProfitRequest):
         logger.info(f"[实盘API] 设置止损止盈: {symbol} {position_side}, SL={request.stop_loss_price}, TP={request.take_profit_price}")
 
         # 2. 取消现有的止损止盈订单
+        # 注意：从 2025-12-09 起，条件订单迁移到 Algo Service
         binance_symbol = symbol.replace('/', '')
+
+        # 2.1 取消 Algo 条件单
+        algo_orders = engine._request('GET', '/fapi/v1/algoOrder/openOrders', {'symbol': binance_symbol})
+
+        if isinstance(algo_orders, dict) and algo_orders.get('orders'):
+            for order in algo_orders['orders']:
+                algo_id = order.get('algoId')
+                if algo_id:
+                    engine._request('DELETE', '/fapi/v1/algoOrder', {
+                        'symbol': binance_symbol,
+                        'algoId': algo_id
+                    })
+                    logger.info(f"[实盘API] 取消旧Algo订单: {algo_id}")
+        elif isinstance(algo_orders, list):
+            for order in algo_orders:
+                algo_id = order.get('algoId')
+                if algo_id:
+                    engine._request('DELETE', '/fapi/v1/algoOrder', {
+                        'symbol': binance_symbol,
+                        'algoId': algo_id
+                    })
+                    logger.info(f"[实盘API] 取消旧Algo订单: {algo_id}")
+
+        # 2.2 取消普通挂单
         open_orders = engine._request('GET', '/fapi/v1/openOrders', {'symbol': binance_symbol})
 
         if isinstance(open_orders, list):
             for order in open_orders:
                 order_type = order.get('type', '')
-                if order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET']:
+                if order_type in ['LIMIT', 'STOP', 'TAKE_PROFIT']:
                     order_id = order.get('orderId')
                     engine._request('DELETE', '/fapi/v1/order', {
                         'symbol': binance_symbol,

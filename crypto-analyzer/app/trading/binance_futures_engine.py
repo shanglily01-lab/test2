@@ -560,16 +560,20 @@ class BinanceFuturesEngine:
 
             # 8. 计算止盈止损价格
             if stop_loss_price is None and stop_loss_pct:
+                # 确保所有值都是 Decimal，避免 Decimal * float 的类型错误
+                sl_pct = Decimal(str(stop_loss_pct))
                 if position_side == 'LONG':
-                    stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
+                    stop_loss_price = entry_price * (1 - sl_pct / 100)
                 else:
-                    stop_loss_price = entry_price * (1 + stop_loss_pct / 100)
+                    stop_loss_price = entry_price * (1 + sl_pct / 100)
 
             if take_profit_price is None and take_profit_pct:
+                # 确保所有值都是 Decimal，避免 Decimal * float 的类型错误
+                tp_pct = Decimal(str(take_profit_pct))
                 if position_side == 'LONG':
-                    take_profit_price = entry_price * (1 + take_profit_pct / 100)
+                    take_profit_price = entry_price * (1 + tp_pct / 100)
                 else:
-                    take_profit_price = entry_price * (1 - take_profit_pct / 100)
+                    take_profit_price = entry_price * (1 - tp_pct / 100)
 
             # 9. 设置止损止盈订单（仅市价单立即设置，限价单由监控服务处理）
             sl_order_id = None
@@ -684,7 +688,12 @@ class BinanceFuturesEngine:
 
     def _place_stop_loss(self, symbol: str, position_side: str, quantity: Decimal,
                          stop_price: Decimal) -> Dict:
-        """设置止损单"""
+        """
+        设置止损单
+
+        注意：从 2025-12-09 起，币安要求使用 Algo Order API (/fapi/v1/algoOrder)
+        来设置条件订单（STOP_MARKET, TAKE_PROFIT_MARKET 等）
+        """
         binance_symbol = self._convert_symbol(symbol)
 
         # 止损方向与开仓相反
@@ -692,32 +701,37 @@ class BinanceFuturesEngine:
         stop_price = self._round_price(stop_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
-        # 使用 STOP_MARKET 类型
+        # 使用 Algo Order API 的 STOP_MARKET 类型
         params = {
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,
-            'type': 'STOP_MARKET',
-            'stopPrice': str(stop_price),
+            'orderType': 'STOP_MARKET',  # Algo API 使用 orderType 而非 type
+            'triggerPrice': str(stop_price),  # Algo API 使用 triggerPrice 而非 stopPrice
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE'
-            # 注意：双向持仓模式下不需要 reduceOnly 参数
         }
 
-        result = self._request('POST', '/fapi/v1/order', params)
+        result = self._request('POST', '/fapi/v1/algoOrder', params)
 
         if isinstance(result, dict) and result.get('success') == False:
             return result
 
+        # Algo Order API 返回 algoId 而非 orderId
         return {
             'success': True,
-            'order_id': str(result.get('orderId', '')),
+            'order_id': str(result.get('algoId', result.get('orderId', ''))),
             'stop_price': float(stop_price)
         }
 
     def _place_take_profit(self, symbol: str, position_side: str, quantity: Decimal,
                            take_profit_price: Decimal) -> Dict:
-        """设置止盈单"""
+        """
+        设置止盈单
+
+        注意：从 2025-12-09 起，币安要求使用 Algo Order API (/fapi/v1/algoOrder)
+        来设置条件订单（STOP_MARKET, TAKE_PROFIT_MARKET 等）
+        """
         binance_symbol = self._convert_symbol(symbol)
 
         # 止盈方向与开仓相反
@@ -725,26 +739,26 @@ class BinanceFuturesEngine:
         take_profit_price = self._round_price(take_profit_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
-        # 使用 TAKE_PROFIT_MARKET 类型
+        # 使用 Algo Order API 的 TAKE_PROFIT_MARKET 类型
         params = {
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,
-            'type': 'TAKE_PROFIT_MARKET',
-            'stopPrice': str(take_profit_price),
+            'orderType': 'TAKE_PROFIT_MARKET',  # Algo API 使用 orderType 而非 type
+            'triggerPrice': str(take_profit_price),  # Algo API 使用 triggerPrice 而非 stopPrice
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE'
-            # 注意：双向持仓模式下不需要 reduceOnly 参数
         }
 
-        result = self._request('POST', '/fapi/v1/order', params)
+        result = self._request('POST', '/fapi/v1/algoOrder', params)
 
         if isinstance(result, dict) and result.get('success') == False:
             return result
 
+        # Algo Order API 返回 algoId 而非 orderId
         return {
             'success': True,
-            'order_id': str(result.get('orderId', '')),
+            'order_id': str(result.get('algoId', result.get('orderId', ''))),
             'take_profit_price': float(take_profit_price)
         }
 
@@ -1033,23 +1047,52 @@ class BinanceFuturesEngine:
             return {'success': False, 'error': str(e)}
 
     def _cancel_position_orders(self, position: dict):
-        """取消持仓相关的止盈止损单"""
+        """
+        取消持仓相关的止盈止损单
+
+        注意：从 2025-12-09 起，条件订单迁移到 Algo Service，
+        需要同时检查普通订单和 Algo 订单
+        """
         try:
             binance_symbol = self._convert_symbol(position['symbol'])
 
-            # 获取所有挂单
+            # 1. 取消 Algo 条件单（STOP_MARKET, TAKE_PROFIT_MARKET 等）
+            algo_result = self._request('GET', '/fapi/v1/algoOrder/openOrders', {'symbol': binance_symbol})
+
+            if isinstance(algo_result, dict) and algo_result.get('orders'):
+                for order in algo_result['orders']:
+                    algo_id = order.get('algoId')
+                    if algo_id:
+                        cancel_result = self._request('DELETE', '/fapi/v1/algoOrder', {
+                            'symbol': binance_symbol,
+                            'algoId': algo_id
+                        })
+                        logger.info(f"[实盘] 取消Algo条件单: {algo_id}")
+            elif isinstance(algo_result, list):
+                # 备选格式：直接返回列表
+                for order in algo_result:
+                    algo_id = order.get('algoId')
+                    if algo_id:
+                        cancel_result = self._request('DELETE', '/fapi/v1/algoOrder', {
+                            'symbol': binance_symbol,
+                            'algoId': algo_id
+                        })
+                        logger.info(f"[实盘] 取消Algo条件单: {algo_id}")
+
+            # 2. 取消普通挂单（限价单等）
             result = self._request('GET', '/fapi/v1/openOrders', {'symbol': binance_symbol})
 
             if isinstance(result, list):
                 for order in result:
                     order_type = order.get('type', '')
-                    if order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET']:
+                    # 普通订单类型：LIMIT, MARKET 等
+                    if order_type in ['LIMIT', 'STOP', 'TAKE_PROFIT']:
                         order_id = order.get('orderId')
                         cancel_result = self._request('DELETE', '/fapi/v1/order', {
                             'symbol': binance_symbol,
                             'orderId': order_id
                         })
-                        logger.info(f"[实盘] 取消条件单: {order_id}")
+                        logger.info(f"[实盘] 取消普通订单: {order_id}")
         except Exception as e:
             logger.warning(f"取消条件单失败: {e}")
 
