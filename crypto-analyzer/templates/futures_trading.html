@@ -293,21 +293,17 @@
         #positionsTab, #ordersTab, #cancelledTab {
             display: flex;
             flex-direction: column;
-            height: 100%;
         }
         #positionsTable, #ordersTable, #cancelledTable {
             display: flex !important;
             flex-direction: column;
-            flex: 1;
-            min-height: 0;
         }
         .tab-content-container {
-            flex: 1;
             overflow-y: auto;
             overflow-x: auto;
             border-radius: var(--radius-md);
             border: 1px solid var(--border-default);
-            min-height: 0;
+            max-height: 900px;
         }
         .tab-content-container::-webkit-scrollbar {
             width: 8px;
