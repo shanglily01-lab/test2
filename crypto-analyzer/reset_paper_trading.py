@@ -22,6 +22,31 @@ from pathlib import Path
 from datetime import datetime
 
 
+def load_env_file():
+    """加载.env文件中的环境变量"""
+    env_file = Path(__file__).parent / '.env'
+
+    if not env_file.exists():
+        print("⚠️  警告: 未找到.env文件，将使用config.yaml中的默认值")
+        return
+
+    with open(env_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            # 跳过注释和空行
+            if not line or line.startswith('#'):
+                continue
+
+            # 解析 KEY=VALUE 格式
+            if '=' in line:
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip()
+                # 设置环境变量（如果尚未设置）
+                if key and not os.getenv(key):
+                    os.environ[key] = value
+
+
 def resolve_env_var(value):
     """解析环境变量格式 ${VAR_NAME:default_value}"""
     if not isinstance(value, str):
@@ -224,6 +249,9 @@ def reset_paper_trading(account_id=1, initial_balance=10000.0):
 
 def main():
     """主函数"""
+    # 首先加载.env文件
+    load_env_file()
+
     parser = argparse.ArgumentParser(
         description='重置模拟盘数据并重置账户资金',
         formatter_class=argparse.RawDescriptionHelpFormatter,
