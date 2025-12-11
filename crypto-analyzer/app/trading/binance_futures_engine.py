@@ -692,15 +692,16 @@ class BinanceFuturesEngine:
         stop_price = self._round_price(stop_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
-        # 使用标准的 /fapi/v1/order 端点
+        # 使用 STOP 类型（不是 STOP_MARKET）+ closePosition=true
         params = {
             'symbol': binance_symbol,
             'side': side,
-            'positionSide': position_side,  # 双向持仓模式必须指定
-            'type': 'STOP_MARKET',
+            'positionSide': position_side,
+            'type': 'STOP',
             'stopPrice': str(stop_price),
             'quantity': str(quantity),
-            'workingType': 'MARK_PRICE'  # 使用标记价格触发，更安全
+            'workingType': 'MARK_PRICE',
+            'closePosition': 'true'  # 平仓单，不需要指定价格
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
@@ -724,15 +725,16 @@ class BinanceFuturesEngine:
         take_profit_price = self._round_price(take_profit_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
-        # 使用标准的 /fapi/v1/order 端点
+        # 使用 TAKE_PROFIT 类型（不是 TAKE_PROFIT_MARKET）+ closePosition=true
         params = {
             'symbol': binance_symbol,
             'side': side,
-            'positionSide': position_side,  # 双向持仓模式必须指定
-            'type': 'TAKE_PROFIT_MARKET',
+            'positionSide': position_side,
+            'type': 'TAKE_PROFIT',
             'stopPrice': str(take_profit_price),
             'quantity': str(quantity),
-            'workingType': 'MARK_PRICE'  # 使用标记价格触发，更安全
+            'workingType': 'MARK_PRICE',
+            'closePosition': 'true'  # 平仓单，不需要指定价格
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
