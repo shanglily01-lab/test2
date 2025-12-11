@@ -499,20 +499,6 @@ class FuturesTradingEngine:
                         f"止损: {limit_stop_loss_price}, 止盈: {limit_take_profit_price}"
                     )
 
-                    # 发送TG通知 - 限价单挂单
-                    if self.trade_notifier:
-                        try:
-                            side = 'BUY' if position_side == 'LONG' else 'SELL'
-                            self.trade_notifier.notify_order_placed(
-                                symbol=symbol,
-                                side=side,
-                                quantity=float(quantity),
-                                price=float(limit_price),
-                                order_type='限价单 - 模拟合约'
-                            )
-                        except Exception as notify_error:
-                            logger.warning(f"发送限价单挂单TG通知失败: {notify_error}")
-
                     return {
                         'success': True,
                         'order_id': order_id,
@@ -764,20 +750,6 @@ class FuturesTradingEngine:
                 f"{current_time_str}: 开仓成功: {symbol} {position_side} {float(quantity):.{qty_precision}f} @ {entry_price}, "
                 f"杠杆{leverage}x, 保证金{margin_required:.2f} USDT"
             )
-
-            # 发送TG通知 - 模拟合约开仓
-            if self.trade_notifier:
-                try:
-                    side = 'BUY' if position_side == 'LONG' else 'SELL'
-                    self.trade_notifier.notify_order_filled(
-                        symbol=symbol,
-                        side=side,
-                        quantity=float(quantity),
-                        price=float(entry_price),
-                        order_type='市价单 - 模拟合约'
-                    )
-                except Exception as notify_error:
-                    logger.warning(f"发送开仓TG通知失败: {notify_error}")
 
             return {
                 'success': True,
