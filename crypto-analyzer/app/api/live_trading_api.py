@@ -552,6 +552,24 @@ async def cancel_order(request: CancelOrderRequest):
         result = engine.cancel_order(request.symbol, request.order_id)
 
         if result.get('success'):
+            # 发送Telegram通知
+            try:
+                from app.services.trade_notifier import get_trade_notifier
+                from datetime import datetime
+                notifier = get_trade_notifier()
+                if notifier:
+                    message = f"""
+🚫 <b>【订单取消】{request.symbol}</b>
+
+📋 订单ID: {request.order_id}
+💡 原因: 手动取消
+
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+                    notifier._send_telegram(message)
+            except Exception as notify_err:
+                logger.warning(f"发送订单取消通知失败: {notify_err}")
+
             return {
                 "success": True,
                 "message": result.get('message', '订单已取消'),
