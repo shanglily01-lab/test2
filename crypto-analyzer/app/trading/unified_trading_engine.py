@@ -29,17 +29,21 @@ class UnifiedTradingEngine:
         self._live_engine = None
         self._live_engine_error = None
 
-        # 初始化模拟引擎（始终可用）
-        self._init_paper_engine()
-
-        # 尝试初始化实盘引擎（可能失败）
+        # 先初始化实盘引擎（可能失败，但模拟引擎需要引用它）
         self._init_live_engine()
+
+        # 初始化模拟引擎（始终可用，传入实盘引擎用于平仓同步）
+        self._init_paper_engine()
 
     def _init_paper_engine(self):
         """初始化模拟交易引擎"""
         try:
             from app.trading.futures_trading_engine import FuturesTradingEngine
-            self._paper_engine = FuturesTradingEngine(self.db_config, trade_notifier=self.trade_notifier)
+            self._paper_engine = FuturesTradingEngine(
+                self.db_config,
+                trade_notifier=self.trade_notifier,
+                live_engine=self._live_engine  # 传入实盘引擎用于平仓同步
+            )
             logger.info("模拟交易引擎初始化成功")
         except Exception as e:
             logger.error(f"模拟交易引擎初始化失败: {e}")
