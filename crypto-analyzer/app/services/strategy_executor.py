@@ -1392,7 +1392,7 @@ class StrategyExecutor:
                     'entry_price': float(pos.get('entry_price', 0)),
                     'quantity': float(pos.get('quantity', 0)),
                     'entry_time': self.parse_time(pos.get('open_time')),
-                    'entry_time_local': self.utc_to_local(self.parse_time(pos.get('open_time'))) if pos.get('open_time') else None,
+                    'entry_time_local': self.parse_time(pos.get('open_time')) if pos.get('open_time') else None,  # 数据库时间已经是UTC+8，无需转换
                     'leverage': pos.get('leverage', leverage),
                     'open_fee': float(pos.get('open_fee', 0)),
                     'stop_loss_price': float(pos.get('stop_loss_price', 0)) if pos.get('stop_loss_price') else None,
