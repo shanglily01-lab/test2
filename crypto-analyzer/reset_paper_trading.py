@@ -159,25 +159,66 @@ def reset_paper_trading(account_id=1, initial_balance=10000.0):
         # 4. 清空回测结果数据
         print("4. 清空回测数据...")
 
-        # 先删除回测交易明细（外键关联）
+        deleted_backtest_trades = 0
+        deleted_backtests = 0
+
+        # 检查表是否存在
         cursor.execute("""
-            DELETE bt FROM backtest_trades bt
-            INNER JOIN backtest_results br ON bt.backtest_id = br.id
-            WHERE br.account_id = %s
-        """, (account_id,))
-        deleted_backtest_trades = cursor.rowcount
-        print(f"   ✓ 已删除 {deleted_backtest_trades} 条回测交易记录")
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'backtest_trades'
+        """)
+        backtest_trades_exists = cursor.fetchone()['count'] > 0
+
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'backtest_results'
+        """)
+        backtest_results_exists = cursor.fetchone()['count'] > 0
+
+        # 先删除回测交易明细（外键关联）
+        if backtest_trades_exists and backtest_results_exists:
+            cursor.execute("""
+                DELETE bt FROM backtest_trades bt
+                INNER JOIN backtest_results br ON bt.backtest_id = br.id
+                WHERE br.account_id = %s
+            """, (account_id,))
+            deleted_backtest_trades = cursor.rowcount
+            print(f"   ✓ 已删除 {deleted_backtest_trades} 条回测交易记录")
+        else:
+            print(f"   ⊘ 跳过回测交易记录（表不存在）")
 
         # 再删除回测结果
-        cursor.execute("DELETE FROM backtest_results WHERE account_id = %s", (account_id,))
-        deleted_backtests = cursor.rowcount
-        print(f"   ✓ 已删除 {deleted_backtests} 条回测结果")
+        if backtest_results_exists:
+            cursor.execute("DELETE FROM backtest_results WHERE account_id = %s", (account_id,))
+            deleted_backtests = cursor.rowcount
+            print(f"   ✓ 已删除 {deleted_backtests} 条回测结果")
+        else:
+            print(f"   ⊘ 跳过回测结果（表不存在）")
 
         # 5. 清空策略资金管理记录
         print("5. 清空策略资金管理记录...")
-        cursor.execute("DELETE FROM strategy_capital_management WHERE account_id = %s", (account_id,))
-        deleted_capital = cursor.rowcount
-        print(f"   ✓ 已删除 {deleted_capital} 条资金管理记录")
+
+        deleted_capital = 0
+
+        # 检查表是否存在
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'strategy_capital_management'
+        """)
+        capital_exists = cursor.fetchone()['count'] > 0
+
+        if capital_exists:
+            cursor.execute("DELETE FROM strategy_capital_management WHERE account_id = %s", (account_id,))
+            deleted_capital = cursor.rowcount
+            print(f"   ✓ 已删除 {deleted_capital} 条资金管理记录")
+        else:
+            print(f"   ⊘ 跳过资金管理记录（表不存在）")
 
         # 6. 重置账户资金
         print("6. 重置账户资金...")
