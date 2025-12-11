@@ -16,8 +16,27 @@
 import pymysql
 import yaml
 import argparse
+import os
+import re
 from pathlib import Path
 from datetime import datetime
+
+
+def resolve_env_var(value):
+    """解析环境变量格式 ${VAR_NAME:default_value}"""
+    if not isinstance(value, str):
+        return value
+
+    # 匹配 ${VAR_NAME:default_value} 格式
+    pattern = r'\$\{([^:}]+)(?::([^}]*))?\}'
+    match = re.match(pattern, value)
+
+    if match:
+        env_var = match.group(1)
+        default_value = match.group(2) or ''
+        return os.getenv(env_var, default_value)
+
+    return value
 
 
 def load_config():
@@ -32,12 +51,23 @@ def get_db_connection(config):
     """创建数据库连接"""
     db_config = config['database']['mysql']
 
+    # 解析环境变量格式的配置值
+    host = resolve_env_var(db_config['host'])
+    port = resolve_env_var(db_config['port'])
+    user = resolve_env_var(db_config['user'])
+    password = resolve_env_var(db_config['password'])
+    database = resolve_env_var(db_config['database'])
+
+    # 确保端口是整数类型
+    if isinstance(port, str):
+        port = int(port) if port else 3306
+
     return pymysql.connect(
-        host=db_config['host'],
-        port=int(db_config['port']),  # 确保端口是整数类型
-        user=db_config['user'],
-        password=db_config['password'],
-        database=db_config['database'],
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor
     )
