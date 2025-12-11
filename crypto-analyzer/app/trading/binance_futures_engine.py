@@ -707,8 +707,8 @@ class BinanceFuturesEngine:
             'side': side,
             'positionSide': position_side,
             'algoType': 'CONDITIONAL',  # 条件单类型，必填参数
-            'orderType': 'STOP_MARKET',  # Algo API 使用 orderType 而非 type
-            'triggerPrice': str(stop_price),  # Algo API 使用 triggerPrice 而非 stopPrice
+            'type': 'STOP_MARKET',  # 订单类型
+            'triggerPrice': str(stop_price),  # 触发价格
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE'
         }
@@ -746,8 +746,8 @@ class BinanceFuturesEngine:
             'side': side,
             'positionSide': position_side,
             'algoType': 'CONDITIONAL',  # 条件单类型，必填参数
-            'orderType': 'TAKE_PROFIT_MARKET',  # Algo API 使用 orderType 而非 type
-            'triggerPrice': str(take_profit_price),  # Algo API 使用 triggerPrice 而非 stopPrice
+            'type': 'TAKE_PROFIT_MARKET',  # 订单类型
+            'triggerPrice': str(take_profit_price),  # 触发价格
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE'
         }
