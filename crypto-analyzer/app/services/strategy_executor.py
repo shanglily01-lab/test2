@@ -2404,17 +2404,26 @@ class StrategyExecutor:
 
                 # 平仓成交量条件已移除，直接执行卖出
 
-                # 执行卖出（使用实时价格）- 只平对应方向的仓位
+                # 执行卖出（使用实时价格）- 只平对应方向的最早一笔持仓
                 if sell_signal_triggered and sell_close_direction:
-                    for position in positions[:]:
-                        position_id = position.get('position_id')
-                        entry_price = position['entry_price']
-                        quantity = position['quantity']
-                        direction = position['direction']
+                    # 找出对应方向的所有持仓，选择最早的一笔（entry_time_local最小）
+                    target_position = None
+                    for position in positions:
+                        if position.get('direction') == sell_close_direction:
+                            if target_position is None:
+                                target_position = position
+                            else:
+                                # 比较开仓时间，选择更早的
+                                if position.get('entry_time_local') and target_position.get('entry_time_local'):
+                                    if position['entry_time_local'] < target_position['entry_time_local']:
+                                        target_position = position
 
-                        # 只平对应方向的仓位（死叉平多头，金叉平空头）
-                        if direction != sell_close_direction:
-                            continue
+                    # 只平最早的一笔持仓
+                    if target_position:
+                        position_id = target_position.get('position_id')
+                        entry_price = target_position['entry_price']
+                        quantity = target_position['quantity']
+                        direction = target_position['direction']
 
                         if position_id:
                             exit_price_decimal = Decimal(str(realtime_price))
@@ -2452,16 +2461,16 @@ class StrategyExecutor:
                                 qty_precision = self.get_quantity_precision(symbol)
                                 margin_used = (entry_price * actual_quantity) / leverage
                                 pnl_pct = (actual_pnl / margin_used) * 100 if margin_used > 0 else 0
-                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 平仓{direction_text} | 入场价={entry_price:.4f}, 平仓价={actual_exit_price:.4f}, 数量={actual_quantity:.{qty_precision}f}, 实际盈亏={actual_pnl:+.2f} ({pnl_pct:+.2f}%)")
-                                
-                                positions.remove(position)
+                                debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 平仓{direction_text}(最早一笔) | 入场价={entry_price:.4f}, 平仓价={actual_exit_price:.4f}, 数量={actual_quantity:.{qty_precision}f}, 实际盈亏={actual_pnl:+.2f} ({pnl_pct:+.2f}%)")
+
+                                positions.remove(target_position)
                                 closed_at_current_time = True
                             else:
                                 error_msg = close_result.get('message', '未知错误')
                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ❌ 平仓失败: {error_msg}")
                                 logger.error(f"{symbol} 平仓失败 (持仓ID: {position_id}): {error_msg}")
                         else:
-                            positions.remove(position)
+                            positions.remove(target_position)
                             closed_at_current_time = True
         
         # 2. 检查买入信号（开仓）- 使用实时价格
