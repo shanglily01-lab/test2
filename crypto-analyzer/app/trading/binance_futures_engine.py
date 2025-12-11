@@ -40,7 +40,7 @@ class BinanceFuturesEngine:
     _cache_time = None
     _cache_duration = 3600  # 缓存1小时
 
-    def __init__(self, db_config: dict, api_key: str = None, api_secret: str = None):
+    def __init__(self, db_config: dict, api_key: str = None, api_secret: str = None, trade_notifier=None):
         """
         初始化币安实盘合约交易引擎
 
@@ -48,10 +48,12 @@ class BinanceFuturesEngine:
             db_config: 数据库配置
             api_key: 币安API Key（可选，不传则从配置文件读取）
             api_secret: 币安API Secret（可选，不传则从配置文件读取）
+            trade_notifier: Telegram通知服务（可选）
         """
         self.db_config = db_config
         self.connection = None
         self._is_first_connection = True
+        self.trade_notifier = trade_notifier
 
         # 加载API配置
         if api_key and api_secret:
@@ -903,6 +905,126 @@ class BinanceFuturesEngine:
 
         except Exception as e:
             logger.error(f"[实盘] 平仓异常: {e}")
+            import traceback
+            traceback.print_exc()
+            return {'success': False, 'error': str(e)}
+
+    def close_position_by_symbol(
+        self,
+        symbol: str,
+        position_side: str,
+        close_quantity: Optional[Decimal] = None,
+        reason: str = 'manual'
+    ) -> Dict:
+        """
+        通过交易对和方向平仓（不依赖本地position_id）
+
+        Args:
+            symbol: 交易对（如 "BTC/USDT"）
+            position_side: 持仓方向 LONG/SHORT
+            close_quantity: 平仓数量（None为全部）
+            reason: 平仓原因
+
+        Returns:
+            平仓结果
+        """
+        try:
+            # 1. 从币安获取当前持仓
+            positions = self.get_open_positions()
+            target_position = None
+
+            for pos in positions:
+                if pos['symbol'] == symbol and pos['position_side'] == position_side:
+                    target_position = pos
+                    break
+
+            if not target_position:
+                return {
+                    'success': False,
+                    'error': f'未找到 {symbol} {position_side} 持仓'
+                }
+
+            # 2. 确定平仓数量
+            quantity = Decimal(str(target_position['quantity']))
+            entry_price = Decimal(str(target_position['entry_price']))
+
+            if close_quantity is None:
+                close_quantity = quantity
+            else:
+                close_quantity = min(Decimal(str(close_quantity)), quantity)
+
+            close_quantity = self._round_quantity(close_quantity, symbol)
+
+            # 3. 发送平仓订单
+            binance_symbol = self._convert_symbol(symbol)
+            side = 'SELL' if position_side == 'LONG' else 'BUY'
+
+            params = {
+                'symbol': binance_symbol,
+                'side': side,
+                'positionSide': position_side,
+                'type': 'MARKET',
+                'quantity': str(close_quantity)
+            }
+
+            logger.info(f"[实盘] 按交易对平仓: {symbol} {position_side} {close_quantity} (reason: {reason})")
+
+            result = self._request('POST', '/fapi/v1/order', params)
+
+            if isinstance(result, dict) and result.get('success') == False:
+                logger.error(f"[实盘] 平仓失败: {result.get('error')}")
+                return result
+
+            # 4. 解析结果
+            order_id = str(result.get('orderId', ''))
+            executed_qty = Decimal(str(result.get('executedQty', '0')))
+            avg_price = Decimal(str(result.get('avgPrice', '0')))
+
+            if avg_price == 0:
+                avg_price = self.get_current_price(symbol)
+
+            # 5. 计算盈亏
+            if position_side == 'LONG':
+                pnl = (avg_price - entry_price) * executed_qty
+            else:
+                pnl = (entry_price - avg_price) * executed_qty
+
+            roi = (pnl / (entry_price * executed_qty)) * Decimal('100') if entry_price > 0 else Decimal('0')
+
+            logger.info(f"[实盘] 平仓成功: {symbol} {executed_qty} @ {avg_price}, PnL={pnl:.2f} USDT")
+
+            # 6. 发送Telegram通知
+            try:
+                if self.trade_notifier:
+                    self.trade_notifier.notify_position_closed(
+                        symbol=symbol,
+                        direction=position_side,
+                        quantity=float(executed_qty),
+                        entry_price=float(entry_price),
+                        exit_price=float(avg_price),
+                        pnl=float(pnl),
+                        pnl_pct=float(roi),
+                        reason=reason,
+                        hold_time=0  # 无法获取持仓时间
+                    )
+            except Exception as notify_err:
+                logger.warning(f"发送平仓通知失败: {notify_err}")
+
+            return {
+                'success': True,
+                'order_id': order_id,
+                'symbol': symbol,
+                'position_side': position_side,
+                'close_quantity': float(executed_qty),
+                'close_price': float(avg_price),
+                'realized_pnl': float(pnl),
+                'roi': float(roi),
+                'reason': reason,
+                'message': f'平仓成功: PnL={pnl:.2f} USDT'
+            }
+
+        except Exception as e:
+            logger.error(f"[实盘] 按交易对平仓异常: {e}")
             import traceback
             traceback.print_exc()
             return {'success': False, 'error': str(e)}

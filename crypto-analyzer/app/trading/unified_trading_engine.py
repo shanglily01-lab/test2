@@ -53,7 +53,10 @@ class UnifiedTradingEngine:
         """初始化实盘交易引擎"""
         try:
             from app.trading.binance_futures_engine import BinanceFuturesEngine
-            self._live_engine = BinanceFuturesEngine(self.db_config)
+            self._live_engine = BinanceFuturesEngine(
+                self.db_config,
+                trade_notifier=self.trade_notifier
+            )
             logger.info("实盘交易引擎初始化成功")
         except Exception as e:
             self._live_engine_error = str(e)
