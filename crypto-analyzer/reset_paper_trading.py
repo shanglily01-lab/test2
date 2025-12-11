@@ -223,34 +223,26 @@ def reset_paper_trading(account_id=1, initial_balance=10000.0):
         # 6. 重置账户资金
         print("6. 重置账户资金...")
         cursor.execute("""
-            UPDATE futures_accounts
-            SET balance = %s,
-                available = %s,
-                frozen = 0,
-                total_pnl = 0,
-                today_pnl = 0,
-                total_trades = 0,
-                winning_trades = 0,
-                losing_trades = 0,
-                win_rate = 0,
-                total_commission = 0,
+            UPDATE paper_trading_accounts
+            SET initial_balance = %s,
+                current_balance = %s,
+                frozen_balance = 0,
+                total_equity = %s,
                 updated_at = NOW()
             WHERE id = %s
-        """, (initial_balance, initial_balance, account_id))
+        """, (initial_balance, initial_balance, initial_balance, account_id))
 
         if cursor.rowcount == 0:
             print(f"   ⚠️  警告：账户ID {account_id} 不存在，尝试创建...")
             cursor.execute("""
-                INSERT INTO futures_accounts (
-                    id, account_name, balance, available, frozen,
-                    total_pnl, today_pnl, total_trades, winning_trades, losing_trades,
-                    win_rate, total_commission, created_at, updated_at
+                INSERT INTO paper_trading_accounts (
+                    id, account_name, initial_balance, current_balance, frozen_balance,
+                    total_equity, created_at, updated_at
                 ) VALUES (
                     %s, '默认模拟账户', %s, %s, 0,
-                    0, 0, 0, 0, 0,
-                    0, 0, NOW(), NOW()
+                    %s, NOW(), NOW()
                 )
-            """, (account_id, initial_balance, initial_balance))
+            """, (account_id, initial_balance, initial_balance, initial_balance))
             print(f"   ✓ 已创建新账户并设置初始资金")
         else:
             print(f"   ✓ 账户资金已重置为 {initial_balance} USDT")
