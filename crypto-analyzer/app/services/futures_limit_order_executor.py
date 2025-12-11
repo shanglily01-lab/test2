@@ -381,7 +381,6 @@ class FuturesLimitOrderExecutor:
                                     config = strategy_config
                                     if isinstance(config, str):
                                         try:
-                                            import json
                                             config = json.loads(config)
                                         except:
                                             config = {}
@@ -494,7 +493,6 @@ class FuturesLimitOrderExecutor:
                                             config = strategy_config
                                             if isinstance(config, str):
                                                 try:
-                                                    import json
                                                     config = json.loads(config)
                                                 except:
                                                     config = {}
