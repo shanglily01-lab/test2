@@ -34,7 +34,7 @@ def get_db_connection(config):
 
     return pymysql.connect(
         host=db_config['host'],
-        port=db_config['port'],
+        port=int(db_config['port']),  # 确保端口是整数类型
         user=db_config['user'],
         password=db_config['password'],
         database=db_config['database'],
