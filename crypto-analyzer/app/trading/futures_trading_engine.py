@@ -1079,47 +1079,57 @@ class FuturesTradingEngine:
             # ========== 同步实盘平仓 ==========
             # 检查是否需要同步实盘平仓
             try:
-                strategy_id = position.get('strategy_id')
-                if strategy_id and self.live_engine:
-                    # 查询策略配置
-                    cursor = connection.cursor()
-                    cursor.execute(
-                        "SELECT config FROM trading_strategies WHERE id = %s",
-                        (strategy_id,)
-                    )
-                    strategy_row = cursor.fetchone()
-                    cursor.close()
+                if self.live_engine:
+                    # 首先检查策略配置（如果有 strategy_id）
+                    should_sync = False
+                    strategy_id = position.get('strategy_id')
 
-                    if strategy_row and strategy_row.get('config'):
-                        # 解析策略配置
-                        import json
-                        config = strategy_row['config']
-                        parse_attempts = 0
-                        while isinstance(config, str) and parse_attempts < 3:
-                            try:
-                                config = json.loads(config)
-                                parse_attempts += 1
-                            except json.JSONDecodeError:
-                                break
+                    if strategy_id:
+                        # 查询策略配置
+                        cursor = connection.cursor()
+                        cursor.execute(
+                            "SELECT config FROM trading_strategies WHERE id = %s",
+                            (strategy_id,)
+                        )
+                        strategy_row = cursor.fetchone()
+                        cursor.close()
 
-                        if isinstance(config, dict):
-                            sync_live = config.get('syncLive', False)
+                        if strategy_row and strategy_row.get('config'):
+                            # 解析策略配置
+                            import json
+                            config = strategy_row['config']
+                            parse_attempts = 0
+                            while isinstance(config, str) and parse_attempts < 3:
+                                try:
+                                    config = json.loads(config)
+                                    parse_attempts += 1
+                                except json.JSONDecodeError:
+                                    break
 
-                            if sync_live:
-                                # 同步实盘平仓
-                                logger.info(f"[同步实盘] {symbol} {position_side} 开始平仓同步")
+                            if isinstance(config, dict):
+                                should_sync = config.get('syncLive', False)
+                    else:
+                        # 没有 strategy_id（手动开仓），默认同步实盘
+                        should_sync = True
+                        logger.debug(f"[同步实盘] {symbol} {position_side} 无策略ID，默认同步实盘平仓")
 
-                                live_result = self.live_engine.close_position_by_symbol(
-                                    symbol=symbol,
-                                    position_side=position_side,
-                                    reason='paper_sync_close'
-                                )
+                    if should_sync:
+                        # 同步实盘平仓
+                        logger.info(f"[同步实盘] {symbol} {position_side} 开始平仓同步 (原因: {reason})")
 
-                                if live_result.get('success'):
-                                    logger.info(f"[同步实盘] ✅ {symbol} {position_side} 平仓成功")
-                                else:
-                                    live_error = live_result.get('error', live_result.get('message', '未知错误'))
-                                    logger.error(f"[同步实盘] ❌ {symbol} {position_side} 平仓失败: {live_error}")
+                        live_result = self.live_engine.close_position_by_symbol(
+                            symbol=symbol,
+                            position_side=position_side,
+                            reason=f'paper_sync_{reason}'
+                        )
+
+                        if live_result.get('success'):
+                            logger.info(f"[同步实盘] ✅ {symbol} {position_side} 平仓成功")
+                        else:
+                            live_error = live_result.get('error', live_result.get('message', '未知错误'))
+                            logger.error(f"[同步实盘] ❌ {symbol} {position_side} 平仓失败: {live_error}")
+                    else:
+                        logger.debug(f"[同步实盘] {symbol} {position_side} 策略未启用实盘同步，跳过")
             except Exception as live_ex:
                 logger.error(f"[同步实盘] ❌ {symbol} {position_side} 平仓异常: {live_ex}")
             # ========== 同步实盘平仓结束 ==========
