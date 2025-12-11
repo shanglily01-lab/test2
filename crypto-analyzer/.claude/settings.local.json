@@ -38,7 +38,8 @@
       "Bash(do echo \"=== $file ===\" grep -n \"yaml.safe_load\\|import yaml\" \"$file\")",
       "Bash(for file in app/api/futures_api.py app/api/strategy_analyzer_api.py app/api/paper_trading_api.py app/api/live_trading_api.py)",
       "Bash(do if grep -q \"yaml.safe_load\\|yaml.load\" \"$file\")",
-      "Bash(then echo \"=== $file HAS yaml.safe_load/load ===\" grep -n \"yaml.safe_load\\|yaml.load\" \"$file\")"
+      "Bash(then echo \"=== $file HAS yaml.safe_load/load ===\" grep -n \"yaml.safe_load\\|yaml.load\" \"$file\")",
+      "Bash(sudo journalctl:*)"
     ],
     "deny": [],
     "ask": []

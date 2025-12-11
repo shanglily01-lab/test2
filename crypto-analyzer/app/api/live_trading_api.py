@@ -85,6 +85,13 @@ class CancelOrderRequest(BaseModel):
     order_id: str = Field(..., description="订单ID")
 
 
+class SetStopLossTakeProfitRequest(BaseModel):
+    """设置止损止盈请求"""
+    position_id: int = Field(..., description="持仓ID")
+    stop_loss_price: Optional[float] = Field(default=None, description="止损价格")
+    take_profit_price: Optional[float] = Field(default=None, description="止盈价格")
+
+
 # ==================== API端点 ====================
 
 @router.get("/test-connection")
@@ -516,6 +523,141 @@ async def close_position_by_symbol(request: CloseBySymbolRequest):
         raise
     except Exception as e:
         logger.error(f"平仓失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/set-stop-loss-take-profit")
+async def set_stop_loss_take_profit(request: SetStopLossTakeProfitRequest):
+    """
+    为已有持仓设置或修改止损止盈
+
+    注意：
+    1. 如果已有止损/止盈订单，会先取消旧订单再创建新订单
+    2. 传入null可以只设置其中一个
+    """
+    try:
+        engine = get_live_engine()
+        db_config = get_db_config()
+        conn = pymysql.connect(**db_config)
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 1. 获取持仓信息
+        cursor.execute(
+            """SELECT * FROM live_futures_positions
+            WHERE id = %s AND status = 'OPEN'""",
+            (request.position_id,)
+        )
+        position = cursor.fetchone()
+
+        if not position:
+            raise HTTPException(status_code=404, detail=f"未找到持仓 ID={request.position_id}")
+
+        symbol = position['symbol']
+        position_side = position['position_side']
+        quantity = Decimal(str(position['quantity']))
+        entry_price = Decimal(str(position['entry_price']))
+
+        logger.info(f"[实盘API] 设置止损止盈: {symbol} {position_side}, SL={request.stop_loss_price}, TP={request.take_profit_price}")
+
+        # 2. 取消现有的止损止盈订单
+        binance_symbol = symbol.replace('/', '')
+        open_orders = engine._request('GET', '/fapi/v1/openOrders', {'symbol': binance_symbol})
+
+        if isinstance(open_orders, list):
+            for order in open_orders:
+                order_type = order.get('type', '')
+                if order_type in ['STOP_MARKET', 'TAKE_PROFIT_MARKET']:
+                    order_id = order.get('orderId')
+                    engine._request('DELETE', '/fapi/v1/order', {
+                        'symbol': binance_symbol,
+                        'orderId': order_id
+                    })
+                    logger.info(f"[实盘API] 取消旧订单: {order_id} ({order_type})")
+
+        # 3. 设置新的止损订单
+        sl_order_id = None
+        if request.stop_loss_price is not None:
+            stop_loss_price = Decimal(str(request.stop_loss_price))
+
+            # 验证止损价格
+            sl_valid = False
+            if position_side == 'LONG' and stop_loss_price < entry_price:
+                sl_valid = True
+            elif position_side == 'SHORT' and stop_loss_price > entry_price:
+                sl_valid = True
+
+            if sl_valid:
+                sl_result = engine._place_stop_loss(symbol, position_side, quantity, stop_loss_price)
+                if sl_result.get('success'):
+                    sl_order_id = sl_result.get('order_id')
+                    logger.info(f"[实盘API] 止损单已设置: {stop_loss_price}, 订单ID={sl_order_id}")
+                else:
+                    raise HTTPException(status_code=400, detail=f"止损单设置失败: {sl_result.get('error')}")
+            else:
+                raise HTTPException(status_code=400, detail=f"止损价格无效: {position_side} 持仓入场价 {entry_price}")
+
+        # 4. 设置新的止盈订单
+        tp_order_id = None
+        if request.take_profit_price is not None:
+            take_profit_price = Decimal(str(request.take_profit_price))
+
+            # 验证止盈价格
+            tp_valid = False
+            if position_side == 'LONG' and take_profit_price > entry_price:
+                tp_valid = True
+            elif position_side == 'SHORT' and take_profit_price < entry_price:
+                tp_valid = True
+
+            if tp_valid:
+                tp_result = engine._place_take_profit(symbol, position_side, quantity, take_profit_price)
+                if tp_result.get('success'):
+                    tp_order_id = tp_result.get('order_id')
+                    logger.info(f"[实盘API] 止盈单已设置: {take_profit_price}, 订单ID={tp_order_id}")
+                else:
+                    raise HTTPException(status_code=400, detail=f"止盈单设置失败: {tp_result.get('error')}")
+            else:
+                raise HTTPException(status_code=400, detail=f"止盈价格无效: {position_side} 持仓入场价 {entry_price}")
+
+        # 5. 更新数据库
+        cursor.execute("""
+            UPDATE live_futures_positions
+            SET stop_loss_price = %s,
+                take_profit_price = %s,
+                sl_order_id = %s,
+                tp_order_id = %s,
+                updated_at = NOW()
+            WHERE id = %s
+        """, (
+            request.stop_loss_price,
+            request.take_profit_price,
+            sl_order_id,
+            tp_order_id,
+            request.position_id
+        ))
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "success": True,
+            "message": "止损止盈已设置",
+            "data": {
+                "position_id": request.position_id,
+                "symbol": symbol,
+                "stop_loss_price": request.stop_loss_price,
+                "take_profit_price": request.take_profit_price,
+                "sl_order_id": sl_order_id,
+                "tp_order_id": tp_order_id
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"设置止损止盈失败: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
