@@ -630,13 +630,13 @@ class FuturesTradingEngine:
                     quantity, notional_value, margin,
                     entry_price, mark_price, liquidation_price,
                     stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct,
-                    open_time, source, signal_id, status
+                    open_time, source, signal_id, strategy_id, status
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s, %s,
-                    %s, %s, %s, 'open'
+                    %s, %s, %s, %s, 'open'
                 )
             """
 
@@ -648,7 +648,7 @@ class FuturesTradingEngine:
                 float(take_profit_price) if take_profit_price else None,
                 float(stop_loss_pct) if stop_loss_pct else None,
                 float(take_profit_pct) if take_profit_pct else None,
-                get_local_time(), source, signal_id
+                get_local_time(), source, signal_id, strategy_id
             ))
 
             position_id = cursor.lastrowid
@@ -665,7 +665,7 @@ class FuturesTradingEngine:
                     margin, total_value, executed_value,
                     fee, fee_rate, status,
                     avg_fill_price, fill_time,
-                    order_source, signal_id
+                    order_source, signal_id, strategy_id
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, %s, %s,
@@ -673,13 +673,13 @@ class FuturesTradingEngine:
                     %s, %s, %s,
                     %s, %s, 'FILLED',
                     %s, %s,
-                    %s, %s
+                    %s, %s, %s
                 )
             """
 
             # 确定订单类型：如果有限价且不等于当前价格，则为限价单，否则为市价单
             order_type = 'LIMIT' if (limit_price and limit_price > 0 and limit_price != current_price) else 'MARKET'
-            
+
             cursor.execute(order_sql, (
                 account_id, order_id, position_id, symbol,
                 side, order_type, leverage,
@@ -687,7 +687,7 @@ class FuturesTradingEngine:
                 float(margin_required), float(notional_value), float(notional_value),
                 float(fee), float(fee_rate),
                 float(entry_price), get_local_time(),
-                source, signal_id
+                source, signal_id, strategy_id
             ))
 
             # 8. 创建交易记录
