@@ -2694,13 +2694,13 @@ class StrategyExecutor:
                                 # 条件5：冷却时间检查（检查最近是否已经因持续趋势信号开过仓）
                                 if sustained_conditions_met and sustained_trend_cooldown_minutes > 0:
                                     # 查询最近的交易记录，检查是否在冷却期内有过开仓
-                                    cooldown_start = current_time_local - timedelta(minutes=sustained_trend_cooldown_minutes)
                                     for pos in positions:
                                         pos_entry_time = pos.get('entry_time_local')
                                         if pos_entry_time and pos.get('direction') == 'short':
-                                            if pos_entry_time >= cooldown_start:
+                                            time_since_entry = current_time_local - pos_entry_time
+                                            if time_since_entry < timedelta(minutes=sustained_trend_cooldown_minutes):
                                                 sustained_conditions_met = False
-                                                remaining_minutes = sustained_trend_cooldown_minutes - int((current_time_local - pos_entry_time).total_seconds() / 60)
+                                                remaining_minutes = sustained_trend_cooldown_minutes - int(time_since_entry.total_seconds() / 60)
                                                 sustained_reasons.append(f"冷却期内(剩余{remaining_minutes}分钟)")
                                                 break
 
@@ -2796,13 +2796,13 @@ class StrategyExecutor:
 
                                 # 条件5：冷却时间检查
                                 if sustained_conditions_met and sustained_trend_cooldown_minutes > 0:
-                                    cooldown_start = current_time_local - timedelta(minutes=sustained_trend_cooldown_minutes)
                                     for pos in positions:
                                         pos_entry_time = pos.get('entry_time_local')
                                         if pos_entry_time and pos.get('direction') == 'long':
-                                            if pos_entry_time >= cooldown_start:
+                                            time_since_entry = current_time_local - pos_entry_time
+                                            if time_since_entry < timedelta(minutes=sustained_trend_cooldown_minutes):
                                                 sustained_conditions_met = False
-                                                remaining_minutes = sustained_trend_cooldown_minutes - int((current_time_local - pos_entry_time).total_seconds() / 60)
+                                                remaining_minutes = sustained_trend_cooldown_minutes - int(time_since_entry.total_seconds() / 60)
                                                 sustained_reasons.append(f"冷却期内(剩余{remaining_minutes}分钟)")
                                                 break
 
