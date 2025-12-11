@@ -140,21 +140,35 @@ def reset_paper_trading(account_id=1, initial_balance=10000.0):
 
         # 1. 清空模拟盘持仓数据
         print("1. 清空模拟盘持仓数据...")
+        cursor.execute("DELETE FROM paper_trading_positions WHERE account_id = %s", (account_id,))
+        deleted_pt_positions = cursor.rowcount
         cursor.execute("DELETE FROM futures_positions WHERE account_id = %s", (account_id,))
-        deleted_positions = cursor.rowcount
-        print(f"   ✓ 已删除 {deleted_positions} 条持仓记录")
+        deleted_fut_positions = cursor.rowcount
+        print(f"   ✓ 已删除 {deleted_pt_positions + deleted_fut_positions} 条持仓记录")
 
         # 2. 清空模拟盘交易历史
         print("2. 清空模拟盘交易历史...")
+        cursor.execute("DELETE FROM paper_trading_trades WHERE account_id = %s", (account_id,))
+        deleted_pt_trades = cursor.rowcount
         cursor.execute("DELETE FROM futures_trades WHERE account_id = %s", (account_id,))
-        deleted_trades = cursor.rowcount
-        print(f"   ✓ 已删除 {deleted_trades} 条交易记录")
+        deleted_fut_trades = cursor.rowcount
+        print(f"   ✓ 已删除 {deleted_pt_trades + deleted_fut_trades} 条交易记录")
 
         # 3. 清空模拟盘订单数据
         print("3. 清空模拟盘订单数据...")
+        cursor.execute("DELETE FROM paper_trading_orders WHERE account_id = %s", (account_id,))
+        deleted_pt_orders = cursor.rowcount
+        cursor.execute("DELETE FROM paper_trading_pending_orders WHERE account_id = %s", (account_id,))
+        deleted_pending_orders = cursor.rowcount
         cursor.execute("DELETE FROM futures_orders WHERE account_id = %s", (account_id,))
-        deleted_orders = cursor.rowcount
-        print(f"   ✓ 已删除 {deleted_orders} 条订单记录")
+        deleted_fut_orders = cursor.rowcount
+        print(f"   ✓ 已删除 {deleted_pt_orders + deleted_pending_orders + deleted_fut_orders} 条订单记录")
+
+        # 3.5 清空余额历史
+        print("3.5 清空余额历史...")
+        cursor.execute("DELETE FROM paper_trading_balance_history WHERE account_id = %s", (account_id,))
+        deleted_balance_history = cursor.rowcount
+        print(f"   ✓ 已删除 {deleted_balance_history} 条余额历史记录")
 
         # 4. 清空回测结果数据
         print("4. 清空回测数据...")
@@ -254,9 +268,10 @@ def reset_paper_trading(account_id=1, initial_balance=10000.0):
         print("  ✅ 模拟盘数据重置完成！")
         print("=" * 70)
         print("\n数据清理汇总：")
-        print(f"  • 持仓记录: {deleted_positions} 条")
-        print(f"  • 交易记录: {deleted_trades} 条")
-        print(f"  • 订单记录: {deleted_orders} 条")
+        print(f"  • 持仓记录: {deleted_pt_positions + deleted_fut_positions} 条")
+        print(f"  • 交易记录: {deleted_pt_trades + deleted_fut_trades} 条")
+        print(f"  • 订单记录: {deleted_pt_orders + deleted_pending_orders + deleted_fut_orders} 条")
+        print(f"  • 余额历史: {deleted_balance_history} 条")
         print(f"  • 回测结果: {deleted_backtests} 条")
         print(f"  • 回测交易: {deleted_backtest_trades} 条")
         print(f"  • 资金管理: {deleted_capital} 条")
