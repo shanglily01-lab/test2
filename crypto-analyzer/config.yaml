@@ -14,6 +14,8 @@ symbols:
 - DOT/USDT
 - LINK/USDT
 - ASTER/USDT
+- SUI/USDT
+- ETC/USDT
 
 demo_mode: false
 exchanges:
