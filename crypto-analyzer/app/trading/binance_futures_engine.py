@@ -849,7 +849,7 @@ class BinanceFuturesEngine:
             else:
                 pnl = (entry_price - avg_price) * executed_qty
 
-            roi = (pnl / (entry_price * executed_qty)) * 100 if entry_price > 0 else Decimal('0')
+            roi = (pnl / (entry_price * executed_qty)) * 100 if entry_price > 0 and executed_qty > 0 else Decimal('0')
 
             logger.info(f"[实盘] 平仓成功: {symbol} {executed_qty} @ {avg_price}, PnL={pnl:.2f} USDT, ROI={roi:.2f}%")
 
@@ -1014,7 +1014,7 @@ class BinanceFuturesEngine:
             else:
                 pnl = (entry_price - avg_price) * executed_qty
 
-            roi = (pnl / (entry_price * executed_qty)) * Decimal('100') if entry_price > 0 else Decimal('0')
+            roi = (pnl / (entry_price * executed_qty)) * Decimal('100') if entry_price > 0 and executed_qty > 0 else Decimal('0')
 
             logger.info(f"[实盘] 平仓成功: {symbol} {executed_qty} @ {avg_price}, PnL={pnl:.2f} USDT")
 
