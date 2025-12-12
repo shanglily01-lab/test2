@@ -271,6 +271,101 @@ class FuturesLimitOrderExecutor:
             logger.error(f"检查趋势转向时出错: {e}")
             return None
 
+    def _check_ema_unfavorable(self, connection, order) -> Optional[str]:
+        """
+        检查EMA状态是否不利于开仓（用于超时转市价前的检查）
+
+        与 _check_trend_reversal 的区别：
+        - _check_trend_reversal: 检测EMA交叉（金叉/死叉）
+        - _check_ema_unfavorable: 检查当前EMA状态是否已不适合开仓方向
+
+        判断逻辑：
+        - 做多(OPEN_LONG): 如果 EMA9 < EMA26，说明短期趋势弱于长期趋势，不适合做多
+        - 做空(OPEN_SHORT): 如果 EMA9 > EMA26，说明短期趋势强于长期趋势，不适合做空
+
+        Returns:
+            如果EMA状态不利于开仓，返回原因字符串；否则返回None
+        """
+        try:
+            strategy_config = order.get('strategy_config')
+            if not strategy_config:
+                return None
+
+            # 解析策略配置
+            config = strategy_config
+            parse_attempts = 0
+            while isinstance(config, str) and parse_attempts < 3:
+                try:
+                    config = json.loads(config)
+                    parse_attempts += 1
+                except json.JSONDecodeError:
+                    logger.warning(f"无法解析策略配置: {strategy_config[:100]}...")
+                    return None
+
+            if not isinstance(config, dict):
+                return None
+
+            symbol = order['symbol']
+            side = order['side']  # OPEN_LONG 或 OPEN_SHORT
+
+            # 获取买入时间周期（默认15m）
+            buy_signals = config.get('buySignals', {})
+            buy_timeframe = '15m'
+
+            if isinstance(buy_signals, str):
+                if '5m' in buy_signals:
+                    buy_timeframe = '5m'
+                elif '1h' in buy_signals:
+                    buy_timeframe = '1h'
+            elif isinstance(buy_signals, dict):
+                if buy_signals.get('ema_5m', {}).get('enabled'):
+                    buy_timeframe = '5m'
+                elif buy_signals.get('ema_1h', {}).get('enabled'):
+                    buy_timeframe = '1h'
+
+            # 查询最近的K线数据
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY timestamp DESC
+                    LIMIT 50""",
+                    (symbol, buy_timeframe)
+                )
+                klines = cursor.fetchall()
+
+            if not klines or len(klines) < 30:
+                return None  # K线数据不足，跳过检查
+
+            # 将K线反转为正序（从旧到新）
+            prices = [float(k['close_price']) for k in reversed(klines)]
+
+            # 计算EMA9和EMA26
+            ema9_values = self._calculate_ema(prices, 9)
+            ema26_values = self._calculate_ema(prices, 26)
+
+            if not ema9_values or not ema26_values:
+                return None
+
+            curr_ema9 = ema9_values[-1]
+            curr_ema26 = ema26_values[-1]
+            ema_diff_pct = (curr_ema9 - curr_ema26) / curr_ema26 * 100
+
+            # 做多但EMA9 < EMA26，趋势不利
+            if side == 'OPEN_LONG' and curr_ema9 < curr_ema26:
+                return f"EMA状态不利于做多: EMA9={curr_ema9:.4f} < EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
+
+            # 做空但EMA9 > EMA26，趋势不利
+            if side == 'OPEN_SHORT' and curr_ema9 > curr_ema26:
+                return f"EMA状态不利于做空: EMA9={curr_ema9:.4f} > EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
+
+            return None
+
+        except Exception as e:
+            logger.error(f"检查EMA状态时出错: {e}")
+            return None
+
     async def check_and_execute_limit_orders(self):
         """检查并执行限价单（每次查询都创建新连接，确保获取最新数据）"""
         if not self.running:
@@ -587,7 +682,98 @@ class FuturesLimitOrderExecutor:
 
                                     continue  # 跳过此订单
                                 else:
-                                    # 价格偏离在可接受范围内，以市价执行
+                                    # 价格偏离在可接受范围内，但在转市价之前需要检查EMA状态
+                                    # 如果EMA状态不再支持开仓方向，则取消订单而不是强行市价成交
+                                    ema_unfavorable_reason = self._check_ema_unfavorable(connection, order)
+                                    if ema_unfavorable_reason:
+                                        # EMA状态不利于开仓，取消订单
+                                        logger.info(f"⏰ 限价单超时取消(EMA不利): {symbol} {position_side} - {ema_unfavorable_reason}")
+
+                                        # 解冻保证金
+                                        frozen_margin = Decimal(str(order.get('margin', 0)))
+                                        if frozen_margin > 0:
+                                            with connection.cursor() as update_cursor:
+                                                update_cursor.execute(
+                                                    """UPDATE paper_trading_accounts
+                                                    SET current_balance = current_balance + %s,
+                                                        frozen_balance = GREATEST(0, frozen_balance - %s)
+                                                    WHERE id = %s""",
+                                                    (float(frozen_margin), float(frozen_margin), account_id)
+                                                )
+
+                                        # 更新订单状态为已取消
+                                        with connection.cursor() as update_cursor:
+                                            update_cursor.execute(
+                                                """UPDATE futures_orders
+                                                SET status = 'CANCELLED',
+                                                    cancellation_reason = 'timeout_ema_unfavorable',
+                                                    canceled_at = NOW(),
+                                                    notes = CONCAT(COALESCE(notes, ''), ' TIMEOUT_EMA_UNFAVORABLE: ', %s)
+                                                WHERE order_id = %s""",
+                                                (ema_unfavorable_reason, order_id)
+                                            )
+
+                                        connection.commit()
+
+                                        # ========== 同步取消实盘订单 (EMA不利) ==========
+                                        try:
+                                            strategy_config = order.get('strategy_config')
+                                            if strategy_config and self.live_engine:
+                                                config = strategy_config
+                                                if isinstance(config, str):
+                                                    try:
+                                                        config = json.loads(config)
+                                                    except:
+                                                        config = {}
+
+                                                sync_live = config.get('syncLive', False) if isinstance(config, dict) else False
+                                                if sync_live in (True, 1, "1", "true", "True"):
+                                                    # 查找对应的实盘PENDING持仓
+                                                    with connection.cursor() as cursor:
+                                                        cursor.execute("""
+                                                            SELECT id, binance_order_id
+                                                            FROM live_futures_positions
+                                                            WHERE symbol = %s
+                                                              AND position_side = %s
+                                                              AND status = 'PENDING'
+                                                            ORDER BY created_at DESC
+                                                            LIMIT 1
+                                                        """, (symbol, position_side))
+                                                        live_pos = cursor.fetchone()
+
+                                                    if live_pos and live_pos.get('binance_order_id'):
+                                                        binance_order_id = live_pos['binance_order_id']
+                                                        logger.info(f"[同步实盘] 取消限价单(EMA不利): {symbol} {position_side}, 订单ID={binance_order_id}")
+
+                                                        # 调用实盘引擎取消订单
+                                                        cancel_result = self.live_engine.cancel_order(
+                                                            symbol=symbol,
+                                                            order_id=binance_order_id
+                                                        )
+
+                                                        if cancel_result.get('success'):
+                                                            # 更新实盘持仓状态
+                                                            with connection.cursor() as cursor:
+                                                                cursor.execute("""
+                                                                    UPDATE live_futures_positions
+                                                                    SET status = 'CANCELED',
+                                                                        close_reason = 'timeout_ema_unfavorable',
+                                                                        close_time = NOW(),
+                                                                        notes = CONCAT(COALESCE(notes, ''), ' SYNCED_CANCEL_EMA_UNFAVORABLE')
+                                                                    WHERE id = %s
+                                                                """, (live_pos['id'],))
+                                                            connection.commit()
+                                                            logger.info(f"[同步实盘] ✅ 限价单已取消(EMA不利): {symbol} {position_side}")
+                                                        else:
+                                                            error_msg = cancel_result.get('error', cancel_result.get('message', '未知错误'))
+                                                            logger.error(f"[同步实盘] ❌ 取消限价单失败(EMA不利): {symbol} {position_side} - {error_msg}")
+                                        except Exception as sync_ex:
+                                            logger.error(f"[同步实盘] ❌ 取消限价单异常(EMA不利): {symbol} {position_side} - {sync_ex}")
+                                        # ========== 同步取消实盘订单结束 ==========
+
+                                        continue  # 跳过此订单
+
+                                    # EMA状态仍然有利，可以市价执行
                                     should_execute = True
                                     execute_at_market = True
                                     logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟, 偏离 {deviation_pct:.2f}%")
