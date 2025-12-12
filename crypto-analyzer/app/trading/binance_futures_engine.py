@@ -1183,6 +1183,11 @@ class BinanceFuturesEngine:
         result = self._request('DELETE', '/fapi/v1/order', params)
 
         if isinstance(result, dict) and result.get('success') == False:
+            # -2011: Unknown order sent - 订单已经不存在（已成交或已取消），视为成功
+            error_msg = result.get('error', '')
+            if '-2011' in error_msg or 'Unknown order' in error_msg:
+                logger.info(f"[实盘] 订单 {order_id} 已不存在（可能已成交或取消）")
+                return {'success': True, 'order_id': order_id, 'message': '订单已不存在'}
             return result
 
         return {'success': True, 'order_id': order_id, 'message': '订单已取消'}
