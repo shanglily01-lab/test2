@@ -604,10 +604,12 @@ class FuturesTradingEngine:
             # 处理止损价格：优先使用直接指定的价格，否则根据百分比计算
             if stop_loss_price is None:
                 if stop_loss_pct:
+                    # 确保所有值都是 Decimal，避免 Decimal * float 的类型错误
+                    sl_pct = Decimal(str(stop_loss_pct))
                     if position_side == 'LONG':
-                        stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
+                        stop_loss_price = entry_price * (1 - sl_pct / 100)
                     else:
-                        stop_loss_price = entry_price * (1 + stop_loss_pct / 100)
+                        stop_loss_price = entry_price * (1 + sl_pct / 100)
                 else:
                     stop_loss_price = None
             # 如果直接指定了止损价格，使用指定的价格
@@ -615,10 +617,12 @@ class FuturesTradingEngine:
             # 处理止盈价格：优先使用直接指定的价格，否则根据百分比计算
             if take_profit_price is None:
                 if take_profit_pct:
+                    # 确保所有值都是 Decimal，避免 Decimal * float 的类型错误
+                    tp_pct = Decimal(str(take_profit_pct))
                     if position_side == 'LONG':
-                        take_profit_price = entry_price * (1 + take_profit_pct / 100)
+                        take_profit_price = entry_price * (1 + tp_pct / 100)
                     else:
-                        take_profit_price = entry_price * (1 - take_profit_pct / 100)
+                        take_profit_price = entry_price * (1 - tp_pct / 100)
                 else:
                     take_profit_price = None
             # 如果直接指定了止盈价格，使用指定的价格

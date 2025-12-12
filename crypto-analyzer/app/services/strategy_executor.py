@@ -3643,18 +3643,21 @@ class StrategyExecutor:
                                         open_fee = (entry_price * quantity) * fee_rate
                                                 
                                         # 计算止损止盈价格
+                                        # 确保所有值都是 float，避免 Decimal * float 的类型错误
                                         stop_loss_price = None
                                         take_profit_price = None
                                         if stop_loss_pct is not None:
+                                            sl_pct = float(stop_loss_pct)
                                             if direction == 'long':
-                                                stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
+                                                stop_loss_price = entry_price * (1 - sl_pct / 100)
                                             else:
-                                                stop_loss_price = entry_price * (1 + stop_loss_pct / 100)
+                                                stop_loss_price = entry_price * (1 + sl_pct / 100)
                                         if take_profit_pct is not None:
+                                            tp_pct = float(take_profit_pct)
                                             if direction == 'long':
-                                                take_profit_price = entry_price * (1 + take_profit_pct / 100)
+                                                take_profit_price = entry_price * (1 + tp_pct / 100)
                                             else:
-                                                take_profit_price = entry_price * (1 - take_profit_pct / 100)
+                                                take_profit_price = entry_price * (1 - tp_pct / 100)
                                                 
                                         # 使用 futures_engine 执行真实开仓（使用实时价格）
                                         position_side = 'LONG' if direction == 'long' else 'SHORT'
