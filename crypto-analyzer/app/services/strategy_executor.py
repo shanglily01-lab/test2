@@ -3267,9 +3267,47 @@ class StrategyExecutor:
                             trend_confirm_ok = True
                             filter_failure_reasons = []  # 收集所有过滤器失败的原因
                             logger.info(f"{symbol} [{buy_timeframe}]: 🔍 开始趋势确认和过滤检查 (方向: {direction})")
-                                    
+
+                            # ========== 检查卖出信号EMA状态（短周期趋势确认） ==========
+                            # 避免买入信号(15m)触发后，卖出信号(5m)的EMA已经反转导致刚开仓就被平仓
+                            sell_ema_check_enabled = strategy.get('sellEmaCheckEnabled', True)  # 默认启用
+                            if sell_ema_check_enabled and sell_timeframe != buy_timeframe:
+                                try:
+                                    # 获取卖出信号时间周期的EMA数据
+                                    sell_indicator_pairs = self.calculate_indicators(
+                                        symbol, sell_timeframe, extended_start_time, end_time, ema_periods=(9, 26)
+                                    )
+                                    if sell_indicator_pairs and len(sell_indicator_pairs) > 0:
+                                        sell_indicator = sell_indicator_pairs[-1]['indicator']
+                                        sell_ema9 = float(sell_indicator.get('ema_short', 0)) if sell_indicator.get('ema_short') else None
+                                        sell_ema26 = float(sell_indicator.get('ema_long', 0)) if sell_indicator.get('ema_long') else None
+
+                                        if sell_ema9 and sell_ema26:
+                                            sell_ema_diff_pct = (sell_ema9 - sell_ema26) / sell_ema26 * 100
+
+                                            # 做多时，卖出信号EMA也应该是多头趋势（EMA9 > EMA26）
+                                            if direction == 'long' and sell_ema9 < sell_ema26:
+                                                trend_confirm_ok = False
+                                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出信号EMA不利于做多: EMA9={sell_ema9:.4f} < EMA26={sell_ema26:.4f} ({sell_ema_diff_pct:.2f}%)"
+                                                debug_info.append(msg)
+                                                logger.info(f"{symbol} {msg}")
+                                                filter_failure_reasons.append(f"卖出信号EMA不利: [{sell_timeframe}] EMA9<EMA26")
+
+                                            # 做空时，卖出信号EMA也应该是空头趋势（EMA9 < EMA26）
+                                            elif direction == 'short' and sell_ema9 > sell_ema26:
+                                                trend_confirm_ok = False
+                                                msg = f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{sell_timeframe}]: ⚠️ 卖出信号EMA不利于做空: EMA9={sell_ema9:.4f} > EMA26={sell_ema26:.4f} ({sell_ema_diff_pct:.2f}%)"
+                                                debug_info.append(msg)
+                                                logger.info(f"{symbol} {msg}")
+                                                filter_failure_reasons.append(f"卖出信号EMA不利: [{sell_timeframe}] EMA9>EMA26")
+                                            else:
+                                                logger.info(f"{symbol} [{sell_timeframe}]: ✅ 卖出信号EMA检查通过 (EMA9={sell_ema9:.4f}, EMA26={sell_ema26:.4f}, 差值={sell_ema_diff_pct:.2f}%)")
+                                except Exception as sell_ema_err:
+                                    logger.warning(f"{symbol} 检查卖出信号EMA状态失败: {sell_ema_err}")
+                            # ========== 卖出信号EMA检查结束 ==========
+
                             # 检查 RSI 过滤
-                            if rsi_filter_enabled:
+                            if trend_confirm_ok and rsi_filter_enabled:
                                 rsi_value = float(buy_indicator.get('rsi')) if buy_indicator.get('rsi') else None
                                 if rsi_value is not None:
                                     if direction == 'long' and rsi_value > rsi_long_max:
