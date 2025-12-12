@@ -667,13 +667,13 @@ class FuturesLimitOrderExecutor:
                                                 if sync_live:
                                                     # 获取实盘可用余额
                                                     live_balance = self.live_engine.get_account_balance()
-                                                    live_available = live_balance.get('available', 0)
+                                                    live_available = float(live_balance.get('available', 0))
 
-                                                    # 计算实盘保证金和数量
-                                                    live_margin_to_use = live_available * (live_quantity_pct / 100)
-                                                    if live_margin_to_use > live_max_position_usdt:
+                                                    # 计算实盘保证金和数量（使用 float 避免类型错误）
+                                                    live_margin_to_use = live_available * (float(live_quantity_pct) / 100)
+                                                    if live_margin_to_use > float(live_max_position_usdt):
                                                         logger.info(f"[同步实盘] {symbol} 保证金限制: {live_margin_to_use:.2f} USDT 超过上限 {live_max_position_usdt:.2f} USDT")
-                                                        live_margin_to_use = live_max_position_usdt
+                                                        live_margin_to_use = float(live_max_position_usdt)
 
                                                     # 计算实盘数量 (确保所有类型都是Decimal)
                                                     execution_price_decimal = Decimal(str(execution_price))
