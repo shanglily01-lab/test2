@@ -1117,8 +1117,10 @@ class FuturesTradingEngine:
                                     break
 
                             if isinstance(config, dict):
-                                should_sync = config.get('syncLive', False)
-                                logger.info(f"[同步实盘] 策略 {strategy_id} syncLive={should_sync}")
+                                sync_value = config.get('syncLive', False)
+                                # 兼容多种格式: true, 1, "1", "true"
+                                should_sync = sync_value in (True, 1, "1", "true", "True")
+                                logger.info(f"[同步实盘] 策略 {strategy_id} syncLive原始值={sync_value}, 解析结果={should_sync}")
                             else:
                                 logger.warning(f"[同步实盘] 策略配置解析失败，config类型: {type(config)}")
                         else:
