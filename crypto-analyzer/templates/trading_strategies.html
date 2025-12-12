@@ -2596,6 +2596,8 @@
                 if (index !== -1) {
                     formData.id = strategies[index].id; // 保持原始ID
                     formData.enabled = strategies[index].enabled; // 保持原有启用状态
+                    formData.syncLive = strategies[index].syncLive; // 保持原有实盘同步状态
+                    formData.liveQuantityPct = strategies[index].liveQuantityPct; // 保持原有实盘仓位比例
                     strategies[index] = formData;
                     console.log('更新策略:', formData.name, 'ID:', formData.id);
                 } else {
