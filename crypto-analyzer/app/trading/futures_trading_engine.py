@@ -1083,6 +1083,7 @@ class FuturesTradingEngine:
             # ========== 同步实盘平仓 ==========
             # 检查是否需要同步实盘平仓
             try:
+                logger.info(f"[同步实盘] 检查是否需要同步: live_engine={self.live_engine is not None}, position_id={position_id}, symbol={symbol}, position_side={position_side}, strategy_id={position.get('strategy_id')}")
                 if self.live_engine:
                     # 首先检查策略配置（如果有 strategy_id）
                     should_sync = False
@@ -1098,6 +1099,8 @@ class FuturesTradingEngine:
                         strategy_row = cursor.fetchone()
                         cursor.close()
 
+                        logger.info(f"[同步实盘] 策略配置查询结果: strategy_id={strategy_id}, found={strategy_row is not None}")
+
                         if strategy_row and strategy_row.get('config'):
                             # 解析策略配置
                             import json
@@ -1112,10 +1115,15 @@ class FuturesTradingEngine:
 
                             if isinstance(config, dict):
                                 should_sync = config.get('syncLive', False)
+                                logger.info(f"[同步实盘] 策略 {strategy_id} syncLive={should_sync}")
+                            else:
+                                logger.warning(f"[同步实盘] 策略配置解析失败，config类型: {type(config)}")
+                        else:
+                            logger.warning(f"[同步实盘] 策略 {strategy_id} 无配置信息")
                     else:
                         # 没有 strategy_id（手动开仓），默认同步实盘
                         should_sync = True
-                        logger.debug(f"[同步实盘] {symbol} {position_side} 无策略ID，默认同步实盘平仓")
+                        logger.info(f"[同步实盘] {symbol} {position_side} 无策略ID，默认同步实盘平仓")
 
                     if should_sync:
                         # 同步实盘平仓（按数量比例平仓，避免一次性平掉所有持仓）

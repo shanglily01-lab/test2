@@ -39,7 +39,11 @@
       "Bash(for file in app/api/futures_api.py app/api/strategy_analyzer_api.py app/api/paper_trading_api.py app/api/live_trading_api.py)",
       "Bash(do if grep -q \"yaml.safe_load\\|yaml.load\" \"$file\")",
       "Bash(then echo \"=== $file HAS yaml.safe_load/load ===\" grep -n \"yaml.safe_load\\|yaml.load\" \"$file\")",
-      "Bash(sudo journalctl:*)"
+      "Bash(sudo journalctl:*)",
+      "Bash(timedatectl:*)",
+      "Bash(for id in 1764130914476 1764510354115 1764662486056)",
+      "Bash(do echo \"=== Strategy $id ===\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

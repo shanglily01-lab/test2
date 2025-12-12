@@ -65,15 +65,17 @@ class StrategyExecutor:
         try:
             from app.trading.binance_futures_engine import BinanceFuturesEngine
             self.live_engine = BinanceFuturesEngine(self.db_config)
-            logger.info("实盘交易引擎初始化成功")
+            logger.info("✅ 实盘交易引擎初始化成功")
 
             # 将实盘引擎传给模拟引擎，用于同步平仓
             if self.futures_engine:
                 self.futures_engine.live_engine = self.live_engine
-                logger.info("已将实盘引擎绑定到模拟引擎，支持同步平仓")
+                logger.info(f"✅ 已将实盘引擎绑定到模拟引擎，支持同步平仓 (futures_engine.live_engine={self.futures_engine.live_engine is not None})")
+            else:
+                logger.warning("⚠️ futures_engine 为空，无法绑定实盘引擎")
         except Exception as e:
             self.live_engine_error = str(e)
-            logger.warning(f"实盘交易引擎初始化失败（实盘功能不可用）: {e}")
+            logger.error(f"❌ 实盘交易引擎初始化失败（实盘功能不可用）: {e}")
 
     def get_engine_for_strategy(self, strategy: Dict):
         """
