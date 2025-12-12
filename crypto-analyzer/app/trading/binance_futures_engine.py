@@ -973,6 +973,9 @@ class BinanceFuturesEngine:
 
             close_quantity = self._round_quantity(close_quantity, symbol)
 
+            # 2.5. 取消相关的止损止盈订单（Algo订单）
+            self._cancel_position_orders({'symbol': symbol})
+
             # 3. 发送平仓订单
             binance_symbol = self._convert_symbol(symbol)
             side = 'SELL' if position_side == 'LONG' else 'BUY'
