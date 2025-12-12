@@ -1195,6 +1195,27 @@ class BinanceFuturesEngine:
 
         return {'success': True, 'order_id': order_id, 'message': '订单已取消'}
 
+    def get_order_status(self, symbol: str, order_id: str) -> Dict:
+        """查询订单状态"""
+        binance_symbol = self._convert_symbol(symbol)
+
+        params = {
+            'symbol': binance_symbol,
+            'orderId': order_id
+        }
+
+        result = self._request('GET', '/fapi/v1/order', params)
+
+        if isinstance(result, dict) and result.get('success') == False:
+            return {'status': 'UNKNOWN', 'error': result.get('error')}
+
+        return {
+            'status': result.get('status', 'UNKNOWN'),
+            'executed_qty': result.get('executedQty', '0'),
+            'avg_price': result.get('avgPrice', '0'),
+            'order_id': order_id
+        }
+
     def cancel_all_orders(self, symbol: str) -> Dict:
         """取消某交易对的所有订单"""
         binance_symbol = self._convert_symbol(symbol)
