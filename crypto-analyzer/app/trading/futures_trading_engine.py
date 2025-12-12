@@ -815,6 +815,9 @@ class FuturesTradingEngine:
         Returns:
             平仓结果
         """
+        # 记录平仓开始和 live_engine 状态
+        logger.info(f"📤 [模拟盘平仓] 开始: position_id={position_id}, reason={reason}, live_engine绑定状态={self.live_engine is not None}")
+
         # 每次操作都创建新连接，确保获取最新数据
         connection = pymysql.connect(
             host=self.db_config.get('host', 'localhost'),
