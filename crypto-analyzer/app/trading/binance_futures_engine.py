@@ -579,7 +579,10 @@ class BinanceFuturesEngine:
             sl_order_id = None
             tp_order_id = None
 
-            if stop_loss_price and executed_qty > 0:
+            # 限价单不在此处设置止盈止损，由 live_order_monitor 统一处理
+            is_limit_order = limit_price is not None
+
+            if stop_loss_price and executed_qty > 0 and not is_limit_order:
                 # 验证止损价格
                 # 做多：止损价必须低于入场价
                 # 做空：止损价必须高于入场价
@@ -599,7 +602,7 @@ class BinanceFuturesEngine:
                 else:
                     logger.warning(f"[实盘] 止损价 {stop_loss_price} 无效 ({position_side} 入场价 {entry_price})，跳过止损设置")
 
-            if take_profit_price and executed_qty > 0:
+            if take_profit_price and executed_qty > 0 and not is_limit_order:
                 # 验证止盈价格
                 # 做多：止盈价必须高于入场价
                 # 做空：止盈价必须低于入场价
