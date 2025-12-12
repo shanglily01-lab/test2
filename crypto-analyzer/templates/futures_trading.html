@@ -263,7 +263,7 @@
         .trading-panel-wrapper { display: flex; flex-direction: column; height: 100%; }
         .positions-trades-wrapper { display: flex; flex-direction: column; gap: var(--spacing-xl); height: 100%; }
         .positions-card { flex: 1.5; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-        .trades-card { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+        .trades-card { flex: 2; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
         .positions-card .card-body, .trades-card .card-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; }
         .positions-card .card-body::-webkit-scrollbar, .trades-card .card-body::-webkit-scrollbar { width: 6px; }
         .positions-card .card-body::-webkit-scrollbar-track, .trades-card .card-body::-webkit-scrollbar-track { background: var(--bg-tertiary); border-radius: 3px; }
@@ -276,7 +276,8 @@
         @media (max-width: 1200px) {
             .trading-layout { grid-template-columns: 1fr; align-items: start; }
             .trading-panel-wrapper, .positions-trades-wrapper { height: auto; }
-            .positions-card, .trades-card { min-height: 400px; }
+            .positions-card { min-height: 400px; }
+            .trades-card { min-height: 800px; }
         }
         @media (max-width: 768px) {
             .container { padding: var(--spacing-md); }
@@ -753,7 +754,7 @@
                         <div class="last-update" id="trades-update">-</div>
                     </div>
                     <div class="card-body" style="padding: var(--spacing-md); display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                        <div id="tradesLoading" class="loading-overlay" style="min-height: 200px; flex: 1;">
+                        <div id="tradesLoading" class="loading-overlay" style="min-height: 400px; flex: 1;">
                             <div class="spinner"></div>
                         </div>
                         <div id="tradesTable" style="display: none; flex-direction: column; min-height: 0;">
