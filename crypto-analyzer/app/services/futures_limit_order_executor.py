@@ -308,22 +308,24 @@ class FuturesLimitOrderExecutor:
             symbol = order['symbol']
             side = order['side']  # OPEN_LONG 或 OPEN_SHORT
 
-            # 获取买入时间周期（默认15m）
-            buy_signals = config.get('buySignals', {})
-            buy_timeframe = '15m'
+            # 获取卖出信号时间周期（默认5m）
+            # 注意：这里用卖出信号的时间周期，因为我们要检查的是"是否快要触发卖出信号"
+            sell_signals = config.get('sellSignals', 'ema_5m')
+            sell_timeframe = '5m'  # 默认5分钟
 
-            if isinstance(buy_signals, str):
-                if '5m' in buy_signals:
-                    buy_timeframe = '5m'
-                elif '1h' in buy_signals:
-                    buy_timeframe = '1h'
-            elif isinstance(buy_signals, dict):
-                if buy_signals.get('ema_5m', {}).get('enabled'):
-                    buy_timeframe = '5m'
-                elif buy_signals.get('ema_1h', {}).get('enabled'):
-                    buy_timeframe = '1h'
+            if isinstance(sell_signals, str):
+                if '15m' in sell_signals:
+                    sell_timeframe = '15m'
+                elif '1h' in sell_signals:
+                    sell_timeframe = '1h'
+                # 默认 5m
+            elif isinstance(sell_signals, dict):
+                if sell_signals.get('ema_15m', {}).get('enabled'):
+                    sell_timeframe = '15m'
+                elif sell_signals.get('ema_1h', {}).get('enabled'):
+                    sell_timeframe = '1h'
 
-            # 查询最近的K线数据
+            # 查询最近的K线数据（使用卖出信号的时间周期）
             with connection.cursor() as cursor:
                 cursor.execute(
                     """SELECT close_price
@@ -331,7 +333,7 @@ class FuturesLimitOrderExecutor:
                     WHERE symbol = %s AND timeframe = %s
                     ORDER BY timestamp DESC
                     LIMIT 50""",
-                    (symbol, buy_timeframe)
+                    (symbol, sell_timeframe)
                 )
                 klines = cursor.fetchall()
 
@@ -352,13 +354,13 @@ class FuturesLimitOrderExecutor:
             curr_ema26 = ema26_values[-1]
             ema_diff_pct = (curr_ema9 - curr_ema26) / curr_ema26 * 100
 
-            # 做多但EMA9 < EMA26，趋势不利
+            # 做多但EMA9 < EMA26，趋势不利（即将触发卖出信号）
             if side == 'OPEN_LONG' and curr_ema9 < curr_ema26:
-                return f"EMA状态不利于做多: EMA9={curr_ema9:.4f} < EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
+                return f"[{sell_timeframe}] EMA状态不利于做多: EMA9={curr_ema9:.4f} < EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
 
-            # 做空但EMA9 > EMA26，趋势不利
+            # 做空但EMA9 > EMA26，趋势不利（即将触发卖出信号）
             if side == 'OPEN_SHORT' and curr_ema9 > curr_ema26:
-                return f"EMA状态不利于做空: EMA9={curr_ema9:.4f} > EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
+                return f"[{sell_timeframe}] EMA状态不利于做空: EMA9={curr_ema9:.4f} > EMA26={curr_ema26:.4f}, 差值={ema_diff_pct:.2f}%"
 
             return None
 
