@@ -877,83 +877,88 @@ class FuturesLimitOrderExecutor:
 
                                     # ========== 同步实盘交易 ==========
                                     # 检查策略是否启用实盘同步
-                                    try:
-                                        strategy_config = order.get('strategy_config')
-                                        if strategy_config and self.live_engine:
-                                            # 解析策略配置
-                                            config = strategy_config
-                                            parse_attempts = 0
-                                            while isinstance(config, str) and parse_attempts < 3:
-                                                try:
-                                                    config = json.loads(config)
-                                                    parse_attempts += 1
-                                                except json.JSONDecodeError:
-                                                    break
+                                    # 重要：只有模拟盘真正创建了持仓才同步，避免重复同步
+                                    paper_position_id = result.get('position_id')
+                                    if not paper_position_id:
+                                        logger.warning(f"⚠️ 模拟盘未创建持仓（可能被防重复开仓拦截），跳过实盘同步: {symbol} {position_side}")
+                                    else:
+                                        try:
+                                            strategy_config = order.get('strategy_config')
+                                            if strategy_config and self.live_engine:
+                                                # 解析策略配置
+                                                config = strategy_config
+                                                parse_attempts = 0
+                                                while isinstance(config, str) and parse_attempts < 3:
+                                                    try:
+                                                        config = json.loads(config)
+                                                        parse_attempts += 1
+                                                    except json.JSONDecodeError:
+                                                        break
 
-                                            if isinstance(config, dict):
-                                                sync_live = config.get('syncLive', False)
-                                                live_quantity_pct = config.get('liveQuantityPct', 10)
-                                                live_max_position_usdt = config.get('liveMaxPositionUsdt', 100)
+                                                if isinstance(config, dict):
+                                                    sync_live = config.get('syncLive', False)
+                                                    live_quantity_pct = config.get('liveQuantityPct', 10)
+                                                    live_max_position_usdt = config.get('liveMaxPositionUsdt', 100)
 
-                                                if sync_live:
-                                                    # 获取实盘可用余额
-                                                    live_balance = self.live_engine.get_account_balance()
-                                                    live_available = float(live_balance.get('available', 0))
+                                                    if sync_live:
+                                                        # 获取实盘可用余额
+                                                        live_balance = self.live_engine.get_account_balance()
+                                                        live_available = float(live_balance.get('available', 0))
 
-                                                    # 计算实盘保证金和数量（使用 float 避免类型错误）
-                                                    live_margin_to_use = live_available * (float(live_quantity_pct) / 100)
-                                                    if live_margin_to_use > float(live_max_position_usdt):
-                                                        logger.info(f"[同步实盘] {symbol} 保证金限制: {live_margin_to_use:.2f} USDT 超过上限 {live_max_position_usdt:.2f} USDT")
-                                                        live_margin_to_use = float(live_max_position_usdt)
+                                                        # 计算实盘保证金和数量（使用 float 避免类型错误）
+                                                        live_margin_to_use = live_available * (float(live_quantity_pct) / 100)
+                                                        if live_margin_to_use > float(live_max_position_usdt):
+                                                            logger.info(f"[同步实盘] {symbol} 保证金限制: {live_margin_to_use:.2f} USDT 超过上限 {live_max_position_usdt:.2f} USDT")
+                                                            live_margin_to_use = float(live_max_position_usdt)
 
-                                                    # 计算实盘数量 (确保所有类型都是Decimal)
-                                                    execution_price_decimal = Decimal(str(execution_price))
-                                                    live_quantity = Decimal(str(live_margin_to_use)) * Decimal(str(leverage)) / execution_price_decimal
+                                                        # 计算实盘数量 (确保所有类型都是Decimal)
+                                                        execution_price_decimal = Decimal(str(execution_price))
+                                                        live_quantity = Decimal(str(live_margin_to_use)) * Decimal(str(leverage)) / execution_price_decimal
 
-                                                    logger.info(f"[同步实盘] {symbol} {position_side} 开始同步: 实盘可用={live_available:.2f} USDT, 使用{live_quantity_pct}%={live_margin_to_use:.2f} USDT, 数量={live_quantity}")
+                                                        logger.info(f"[同步实盘] {symbol} {position_side} 开始同步: 实盘可用={live_available:.2f} USDT, 使用{live_quantity_pct}%={live_margin_to_use:.2f} USDT, 数量={live_quantity}")
 
-                                                    # 计算止损止盈百分比 (确保所有类型都是Decimal)
-                                                    stop_loss_pct_value = None
-                                                    take_profit_pct_value = None
+                                                        # 计算止损止盈百分比 (确保所有类型都是Decimal)
+                                                        stop_loss_pct_value = None
+                                                        take_profit_pct_value = None
 
-                                                    if stop_loss_price:
-                                                        stop_loss_decimal = Decimal(str(stop_loss_price))
-                                                        # 止损百分比应该是正数
-                                                        # LONG: 止损价 < 入场价, 百分比 = (入场价 - 止损价) / 入场价
-                                                        # SHORT: 止损价 > 入场价, 百分比 = (止损价 - 入场价) / 入场价
-                                                        if position_side == 'LONG':
-                                                            stop_loss_pct_value = (execution_price_decimal - stop_loss_decimal) / execution_price_decimal * Decimal('100')
+                                                        if stop_loss_price:
+                                                            stop_loss_decimal = Decimal(str(stop_loss_price))
+                                                            # 止损百分比应该是正数
+                                                            # LONG: 止损价 < 入场价, 百分比 = (入场价 - 止损价) / 入场价
+                                                            # SHORT: 止损价 > 入场价, 百分比 = (止损价 - 入场价) / 入场价
+                                                            if position_side == 'LONG':
+                                                                stop_loss_pct_value = (execution_price_decimal - stop_loss_decimal) / execution_price_decimal * Decimal('100')
+                                                            else:
+                                                                stop_loss_pct_value = (stop_loss_decimal - execution_price_decimal) / execution_price_decimal * Decimal('100')
+
+                                                        if take_profit_price:
+                                                            take_profit_decimal = Decimal(str(take_profit_price))
+                                                            if position_side == 'LONG':
+                                                                take_profit_pct_value = (take_profit_decimal - execution_price_decimal) / execution_price_decimal * Decimal('100')
+                                                            else:
+                                                                take_profit_pct_value = (execution_price_decimal - take_profit_decimal) / execution_price_decimal * Decimal('100')
+
+                                                        # 调用实盘引擎开仓
+                                                        live_result = self.live_engine.open_position(
+                                                            account_id=1,
+                                                            symbol=symbol,
+                                                            position_side=position_side,
+                                                            quantity=live_quantity,
+                                                            leverage=leverage,
+                                                            limit_price=execution_price if not execute_at_market else None,
+                                                            stop_loss_pct=stop_loss_pct_value,
+                                                            take_profit_pct=take_profit_pct_value,
+                                                            source='limit_order_sync',
+                                                            strategy_id=order.get('strategy_id')
+                                                        )
+
+                                                        if live_result.get('success'):
+                                                            logger.info(f"[同步实盘] ✅ {symbol} {position_side} 成功: 数量={live_quantity}, 价格={execution_price}")
                                                         else:
-                                                            stop_loss_pct_value = (stop_loss_decimal - execution_price_decimal) / execution_price_decimal * Decimal('100')
-
-                                                    if take_profit_price:
-                                                        take_profit_decimal = Decimal(str(take_profit_price))
-                                                        if position_side == 'LONG':
-                                                            take_profit_pct_value = (take_profit_decimal - execution_price_decimal) / execution_price_decimal * Decimal('100')
-                                                        else:
-                                                            take_profit_pct_value = (execution_price_decimal - take_profit_decimal) / execution_price_decimal * Decimal('100')
-
-                                                    # 调用实盘引擎开仓
-                                                    live_result = self.live_engine.open_position(
-                                                        account_id=1,
-                                                        symbol=symbol,
-                                                        position_side=position_side,
-                                                        quantity=live_quantity,
-                                                        leverage=leverage,
-                                                        limit_price=execution_price if not execute_at_market else None,
-                                                        stop_loss_pct=stop_loss_pct_value,
-                                                        take_profit_pct=take_profit_pct_value,
-                                                        source='limit_order_sync',
-                                                        strategy_id=order.get('strategy_id')
-                                                    )
-
-                                                    if live_result.get('success'):
-                                                        logger.info(f"[同步实盘] ✅ {symbol} {position_side} 成功: 数量={live_quantity}, 价格={execution_price}")
-                                                    else:
-                                                        live_error = live_result.get('error', live_result.get('message', '未知错误'))
-                                                        logger.error(f"[同步实盘] ❌ {symbol} {position_side} 失败: {live_error}")
-                                    except Exception as live_ex:
-                                        logger.error(f"[同步实盘] ❌ {symbol} {position_side} 异常: {live_ex}")
+                                                            live_error = live_result.get('error', live_result.get('message', '未知错误'))
+                                                            logger.error(f"[同步实盘] ❌ {symbol} {position_side} 失败: {live_error}")
+                                        except Exception as live_ex:
+                                            logger.error(f"[同步实盘] ❌ {symbol} {position_side} 异常: {live_ex}")
                                     # ========== 同步实盘交易结束 ==========
 
                                 else:
