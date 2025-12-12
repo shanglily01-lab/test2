@@ -730,10 +730,13 @@ class FuturesLimitOrderExecutor:
 
                                                     if stop_loss_price:
                                                         stop_loss_decimal = Decimal(str(stop_loss_price))
+                                                        # 止损百分比应该是正数
+                                                        # LONG: 止损价 < 入场价, 百分比 = (入场价 - 止损价) / 入场价
+                                                        # SHORT: 止损价 > 入场价, 百分比 = (止损价 - 入场价) / 入场价
                                                         if position_side == 'LONG':
-                                                            stop_loss_pct_value = (stop_loss_decimal - execution_price_decimal) / execution_price_decimal * Decimal('100')
-                                                        else:
                                                             stop_loss_pct_value = (execution_price_decimal - stop_loss_decimal) / execution_price_decimal * Decimal('100')
+                                                        else:
+                                                            stop_loss_pct_value = (stop_loss_decimal - execution_price_decimal) / execution_price_decimal * Decimal('100')
 
                                                     if take_profit_price:
                                                         take_profit_decimal = Decimal(str(take_profit_price))
