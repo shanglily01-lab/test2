@@ -1183,7 +1183,9 @@ class BinanceFuturesEngine:
             'orderId': order_id
         }
 
+        logger.info(f"[实盘] 发送取消订单请求: {symbol} orderId={order_id}")
         result = self._request('DELETE', '/fapi/v1/order', params)
+        logger.info(f"[实盘] 取消订单响应: {result}")
 
         if isinstance(result, dict) and result.get('success') == False:
             # -2011: Unknown order sent - 订单已经不存在（已成交或已取消），视为成功
@@ -1191,9 +1193,14 @@ class BinanceFuturesEngine:
             if '-2011' in error_msg or 'Unknown order' in error_msg:
                 logger.info(f"[实盘] 订单 {order_id} 已不存在（可能已成交或取消）")
                 return {'success': True, 'order_id': order_id, 'message': '订单已不存在'}
+            logger.error(f"[实盘] 取消订单失败: {error_msg}")
             return result
 
-        return {'success': True, 'order_id': order_id, 'message': '订单已取消'}
+        # 检查返回的订单状态
+        order_status = result.get('status', '')
+        logger.info(f"[实盘] 订单 {order_id} 取消后状态: {order_status}")
+
+        return {'success': True, 'order_id': order_id, 'message': '订单已取消', 'status': order_status}
 
     def get_order_status(self, symbol: str, order_id: str) -> Dict:
         """查询订单状态"""
