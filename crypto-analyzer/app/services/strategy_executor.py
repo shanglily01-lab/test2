@@ -3898,10 +3898,13 @@ class StrategyExecutor:
                                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={actual_entry_price:.4f}，数量={actual_quantity:.{qty_precision}f}，开仓手续费={actual_fee:.4f}，持仓ID={position_id}")
 
                                                 # ========== 同步实盘交易 ==========
-                                                # 市价单有 position_id，限价单有 order_id，都需要同步
-                                                # 只有两者都没有才说明开单失败
+                                                # 只有市价单（position_id）才立即同步实盘
+                                                # 限价单（order_id）由 futures_limit_order_executor 在执行时同步，避免重复开单
                                                 if not position_id and not order_id:
                                                     logger.warning(f"⚠️ 模拟盘开单失败（无持仓ID和订单ID），跳过实盘同步: {symbol} {position_side}")
+                                                elif not position_id and order_id:
+                                                    # 限价单：不在这里同步，等 futures_limit_order_executor 执行时再同步
+                                                    logger.info(f"📝 模拟盘限价单已创建 (order_id={order_id})，实盘同步将在限价单执行时进行: {symbol} {position_side}")
                                                 elif sync_live and self.live_engine is not None:
                                                     try:
                                                         # 获取实盘账户可用余额
