@@ -1572,14 +1572,14 @@
                                 <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default);">
                                     <div style="display: flex; align-items: center; margin-bottom: 8px;">
                                         <input type="checkbox" id="consecutiveBearishStopLossEnabled" style="margin-right: 8px;">
-                                        <label for="consecutiveBearishStopLossEnabled" style="font-weight: 600; cursor: pointer;">连续K线止损</label>
-                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">连续N根阴线/阳线时亏损离场</span>
+                                        <label for="consecutiveBearishStopLossEnabled" style="font-weight: 600; cursor: pointer;">连续K线平仓</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">连续N根反向K线时立即平仓</span>
                                     </div>
                                     <div id="consecutiveBearishStopLossParams" style="display: none; margin-top: 8px;">
                                         <div class="form-row" style="gap: 12px;">
                                             <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
                                                 <label class="form-label" style="font-size: 11px;">连续K线数</label>
-                                                <input type="number" class="form-input" id="consecutiveBearishStopLossBars" value="2" step="1" min="2" max="10" style="padding: 6px 10px; font-size: 13px;">
+                                                <input type="number" class="form-input" id="consecutiveBearishStopLossBars" value="3" step="1" min="2" max="10" style="padding: 6px 10px; font-size: 13px;">
                                                 <small style="color: var(--text-tertiary); font-size: 10px;">做多检测阴线，做空检测阳线</small>
                                             </div>
                                             <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
@@ -1592,16 +1592,11 @@
                                                 </select>
                                                 <small style="color: var(--text-tertiary); font-size: 10px;">检测K线的时间周期</small>
                                             </div>
-                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                <label class="form-label" style="font-size: 11px;">最大允许亏损（%）</label>
-                                                <input type="number" class="form-input" id="consecutiveBearishStopLossMaxLossPct" value="0.5" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
-                                                <small style="color: var(--text-tertiary); font-size: 10px;">亏损区间触发（如0.5表示-0.5%）</small>
-                                            </div>
                                         </div>
-                                        <div style="margin-top: 8px; padding: 8px; background: rgba(239, 68, 68, 0.1); border-radius: 4px; border-left: 3px solid var(--danger-red);">
+                                        <div style="margin-top: 8px; padding: 8px; background: rgba(59, 130, 246, 0.1); border-radius: 4px; border-left: 3px solid var(--primary-blue);">
                                             <small style="color: var(--text-secondary); font-size: 11px;">
                                                 <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
-                                                仅在亏损状态（0%到最大允许亏损之间）触发。做多时检测连续阴线，做空时检测连续阳线。
+                                                趋势反转信号：做多时检测连续阴线，做空时检测连续阳线。无论盈亏状态，只要出现连续反向K线就立即平仓。
                                             </small>
                                         </div>
                                     </div>
@@ -2523,12 +2518,11 @@
                         minProfitPct: document.getElementById('emaSupportMinProfitPct') ? parseFloat(document.getElementById('emaSupportMinProfitPct').value) : 0.0
                     }
                 },
-                // 连续K线止损配置
+                // 连续K线平仓配置（无盈亏限制，趋势反转立即平仓）
                 consecutiveBearishStopLoss: {
                     enabled: document.getElementById('consecutiveBearishStopLossEnabled') ? document.getElementById('consecutiveBearishStopLossEnabled').checked : false,
-                    bars: document.getElementById('consecutiveBearishStopLossBars') ? parseInt(document.getElementById('consecutiveBearishStopLossBars').value) : 2,
-                    timeframe: document.getElementById('consecutiveBearishStopLossTimeframe') ? document.getElementById('consecutiveBearishStopLossTimeframe').value : '5m',
-                    maxLossPct: document.getElementById('consecutiveBearishStopLossMaxLossPct') ? -Math.abs(parseFloat(document.getElementById('consecutiveBearishStopLossMaxLossPct').value)) : -0.5
+                    bars: document.getElementById('consecutiveBearishStopLossBars') ? parseInt(document.getElementById('consecutiveBearishStopLossBars').value) : 3,
+                    timeframe: document.getElementById('consecutiveBearishStopLossTimeframe') ? document.getElementById('consecutiveBearishStopLossTimeframe').value : '5m'
                 },
                 // 行情自适应开关
                 adaptiveRegime: document.getElementById('adaptiveRegimeEnabled') ? document.getElementById('adaptiveRegimeEnabled').checked : false,
@@ -3266,13 +3260,11 @@
                 }
             }
 
-            // 连续K线止损配置
+            // 连续K线平仓配置
             if (strategy.consecutiveBearishStopLoss && document.getElementById('consecutiveBearishStopLossEnabled')) {
                 document.getElementById('consecutiveBearishStopLossEnabled').checked = strategy.consecutiveBearishStopLoss.enabled === true;
-                document.getElementById('consecutiveBearishStopLossBars').value = strategy.consecutiveBearishStopLoss.bars || 2;
+                document.getElementById('consecutiveBearishStopLossBars').value = strategy.consecutiveBearishStopLoss.bars || 3;
                 document.getElementById('consecutiveBearishStopLossTimeframe').value = strategy.consecutiveBearishStopLoss.timeframe || '5m';
-                // 显示为正数（取绝对值）
-                document.getElementById('consecutiveBearishStopLossMaxLossPct').value = Math.abs(strategy.consecutiveBearishStopLoss.maxLossPct || -0.5);
                 toggleConsecutiveBearishStopLossParams();
             }
 
