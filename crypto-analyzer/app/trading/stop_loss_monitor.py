@@ -711,16 +711,9 @@ class StopLossMonitor:
             else:  # SHORT
                 current_profit_pct = float((entry_price - current_price) / entry_price * 100)
 
-            # 检查是否在亏损区间
-            # 只有亏损时才检查连续K线止损
-            if current_profit_pct > 0:
-                logger.debug(f"[连续K线止损] {symbol} {position_side} 当前盈利 {current_profit_pct:.2f}%，跳过检查")
-                return None
-
-            # 注意：移除了 maxLossPct 限制
-            # 原逻辑：只有亏损在 maxLossPct 范围内才检查，这导致亏损过大时反而不检查
-            # 新逻辑：只要亏损就检查连续K线，连续反向K线说明趋势不利，应提前止损
-            logger.debug(f"[连续K线止损] {symbol} {position_side} 当前亏损 {current_profit_pct:.2f}%，开始检查连续K线")
+            # 连续反向K线检查 - 不限制盈亏状态
+            # 设计理念：连续反向K线说明趋势转向，应立即平仓，不管当前盈亏
+            logger.debug(f"[连续K线止损] {symbol} {position_side} 当前盈亏 {current_profit_pct:.2f}%，开始检查连续K线")
 
             # 获取K线数据
             symbol = position['symbol']
