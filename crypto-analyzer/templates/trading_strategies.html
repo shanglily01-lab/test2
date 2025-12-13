@@ -1461,8 +1461,8 @@
                                                 <label class="form-label" style="font-size: 11px;">检测周期</label>
                                                 <select class="form-input" id="consecutiveBearishTimeframe" style="padding: 6px 10px; font-size: 13px;">
                                                     <option value="1m">1分钟</option>
-                                                    <option value="5m" selected>5分钟</option>
-                                                    <option value="15m">15分钟</option>
+                                                    <option value="5m">5分钟</option>
+                                                    <option value="15m" selected>15分钟</option>
                                                 </select>
                                                 <small style="color: var(--text-tertiary); font-size: 10px;">检测K线的时间周期</small>
                                             </div>
@@ -1587,8 +1587,8 @@
                                                 <label class="form-label" style="font-size: 11px;">检测周期</label>
                                                 <select class="form-input" id="consecutiveBearishStopLossTimeframe" style="padding: 6px 10px; font-size: 13px;">
                                                     <option value="1m">1分钟</option>
-                                                    <option value="5m" selected>5分钟</option>
-                                                    <option value="15m">15分钟</option>
+                                                    <option value="5m">5分钟</option>
+                                                    <option value="15m" selected>15分钟</option>
                                                     <option value="1h">1小时</option>
                                                 </select>
                                                 <small style="color: var(--text-tertiary); font-size: 10px;">检测K线的时间周期</small>
@@ -2491,7 +2491,7 @@
                 consecutiveBearishExit: {
                     enabled: document.getElementById('consecutiveBearishExitEnabled') ? document.getElementById('consecutiveBearishExitEnabled').checked : false,
                     bars: document.getElementById('consecutiveBearishBars') ? parseInt(document.getElementById('consecutiveBearishBars').value) : 3,
-                    timeframe: document.getElementById('consecutiveBearishTimeframe') ? document.getElementById('consecutiveBearishTimeframe').value : '5m'
+                    timeframe: document.getElementById('consecutiveBearishTimeframe') ? document.getElementById('consecutiveBearishTimeframe').value : '15m'
                 },
                 // 智能止损配置
                 smartStopLoss: {
@@ -2523,7 +2523,7 @@
                 consecutiveBearishStopLoss: {
                     enabled: document.getElementById('consecutiveBearishStopLossEnabled') ? document.getElementById('consecutiveBearishStopLossEnabled').checked : false,
                     bars: document.getElementById('consecutiveBearishStopLossBars') ? parseInt(document.getElementById('consecutiveBearishStopLossBars').value) : 3,
-                    timeframe: document.getElementById('consecutiveBearishStopLossTimeframe') ? document.getElementById('consecutiveBearishStopLossTimeframe').value : '5m'
+                    timeframe: document.getElementById('consecutiveBearishStopLossTimeframe') ? document.getElementById('consecutiveBearishStopLossTimeframe').value : '15m'
                 },
                 // 行情自适应开关
                 adaptiveRegime: document.getElementById('adaptiveRegimeEnabled') ? document.getElementById('adaptiveRegimeEnabled').checked : false,
@@ -3220,7 +3220,7 @@
                 if (document.getElementById('consecutiveBearishExitEnabled')) {
                     document.getElementById('consecutiveBearishExitEnabled').checked = strategy.consecutiveBearishExit.enabled === true;
                     document.getElementById('consecutiveBearishBars').value = strategy.consecutiveBearishExit.bars || 3;
-                    document.getElementById('consecutiveBearishTimeframe').value = strategy.consecutiveBearishExit.timeframe || '5m';
+                    document.getElementById('consecutiveBearishTimeframe').value = strategy.consecutiveBearishExit.timeframe || '15m';
                     toggleConsecutiveBearishExitParams();
                 }
             }
@@ -3264,7 +3264,7 @@
             if (strategy.consecutiveBearishStopLoss && document.getElementById('consecutiveBearishStopLossEnabled')) {
                 document.getElementById('consecutiveBearishStopLossEnabled').checked = strategy.consecutiveBearishStopLoss.enabled === true;
                 document.getElementById('consecutiveBearishStopLossBars').value = strategy.consecutiveBearishStopLoss.bars || 3;
-                document.getElementById('consecutiveBearishStopLossTimeframe').value = strategy.consecutiveBearishStopLoss.timeframe || '5m';
+                document.getElementById('consecutiveBearishStopLossTimeframe').value = strategy.consecutiveBearishStopLoss.timeframe || '15m';
                 toggleConsecutiveBearishStopLossParams();
             }
 

@@ -878,7 +878,7 @@ class LiveOrderMonitor:
         """
         try:
             bars = config.get('bars', 3)  # 默认连续3根
-            timeframe = config.get('timeframe', '5m')  # 默认5分钟K线
+            timeframe = config.get('timeframe', '15m')  # 默认15分钟K线
             # 注意：已移除盈亏限制，趋势反转时无论盈亏都立即平仓
 
             symbol = position['symbol']
@@ -947,7 +947,7 @@ class LiveOrderMonitor:
         """
         try:
             bars = config.get('bars', 3)
-            timeframe = config.get('timeframe', '5m')
+            timeframe = config.get('timeframe', '15m')  # 默认15分钟K线
             # 注意：已移除 minProfitPct 限制，趋势反转时无论盈亏都立即平仓
 
             symbol = position['symbol']
