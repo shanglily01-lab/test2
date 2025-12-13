@@ -2012,22 +2012,30 @@ class StrategyExecutor:
                     try:
                         conn = self._get_connection()
                         cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+                        # 计算当前K线的开始时间，用于排除未完成的K线
+                        timeframe_minutes = {'5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440}.get(consecutive_bearish_timeframe, 15)
+                        now = datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
+                        # 计算当前K线的开始时间（向下取整到周期边界）
+                        current_kline_start = now.replace(
+                            minute=(now.minute // timeframe_minutes) * timeframe_minutes,
+                            second=0, microsecond=0
+                        )
+
+                        # 只获取已完成的K线（timestamp < 当前K线开始时间）
                         cursor.execute("""
                             SELECT open_price, close_price, timestamp
                             FROM kline_data
                             WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
+                            AND timestamp < %s
                             ORDER BY timestamp DESC
                             LIMIT %s
-                        """, (symbol, consecutive_bearish_timeframe, consecutive_bearish_bars + 1))
+                        """, (symbol, consecutive_bearish_timeframe, current_kline_start, consecutive_bearish_bars))
                         kline_rows = cursor.fetchall()
                         cursor.close()
                         conn.close()
 
-                        # 排除当前未完成的K线（取最近完成的N根）
-                        if len(kline_rows) > consecutive_bearish_bars:
-                            recent_klines = kline_rows[1:consecutive_bearish_bars + 1]  # 跳过最新的未完成K线
-                        else:
-                            recent_klines = kline_rows[:consecutive_bearish_bars]
+                        recent_klines = kline_rows
 
                         if len(recent_klines) >= consecutive_bearish_bars:
                             # 做多时：检查连续阴线（收盘<开盘）
