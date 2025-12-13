@@ -677,42 +677,46 @@
                                                 <input type="radio" id="buySignalMaEma5" name="buySignals" value="ma_ema5" onchange="autoUpdateDirection('buy')">
                                                 <label for="buySignalMaEma5" class="radio-label">MA/EMA 5 5</label>
                                             </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="buySignalReversal24h" name="buySignals" value="reversal_24h" onchange="autoUpdateDirection('buy'); toggleReversal24hParams()">
-                                                <label for="buySignalReversal24h" class="radio-label">24H反转</label>
-                                            </div>
                                         </div>
-                                        <!-- 24H反转参数配置 -->
-                                        <div id="reversal24hParams" style="display: none; margin-top: 12px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-left: 3px solid var(--primary-blue);">
-                                            <div style="font-weight: 600; margin-bottom: 8px; color: var(--primary-blue);">
-                                                <i class="bi bi-arrow-repeat" style="margin-right: 4px;"></i>24H高低点反转参数
+                                        <!-- 24H高低点反转过滤（独立复选框） -->
+                                        <div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.05); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                                <input type="checkbox" id="reversal24hEnabled" onchange="toggleReversal24hParams()">
+                                                <label for="reversal24hEnabled" style="font-weight: 600; color: var(--primary-blue); margin: 0; cursor: pointer;">
+                                                    <i class="bi bi-arrow-repeat" style="margin-right: 4px;"></i>启用24H高低点反转过滤
+                                                </label>
                                             </div>
-                                            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                                <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                    <label class="form-label" style="font-size: 11px;">高低点偏离(%)</label>
-                                                    <input type="number" class="form-input" id="reversal24hNearPct" value="1.0" step="0.1" min="0.1" max="5" style="padding: 6px 10px; font-size: 13px;">
-                                                    <small style="color: var(--text-tertiary); font-size: 10px;">价格在高/低点此范围内视为"接近"</small>
+                                            <small style="color: var(--text-tertiary); display: block; margin-bottom: 8px;">
+                                                附加条件：只在24H高点附近做空，只在24H低点附近做多
+                                            </small>
+                                            <div id="reversal24hParams" style="display: none;">
+                                                <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                                                    <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                        <label class="form-label" style="font-size: 11px;">高低点偏离(%)</label>
+                                                        <input type="number" class="form-input" id="reversal24hNearPct" value="1.0" step="0.1" min="0.1" max="5" style="padding: 6px 10px; font-size: 13px;">
+                                                        <small style="color: var(--text-tertiary); font-size: 10px;">价格在高/低点此范围内视为"接近"</small>
+                                                    </div>
+                                                    <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                        <label class="form-label" style="font-size: 11px;">连续K线数</label>
+                                                        <input type="number" class="form-input" id="reversal24hBars" value="3" step="1" min="2" max="10" style="padding: 6px 10px; font-size: 13px;">
+                                                        <small style="color: var(--text-tertiary); font-size: 10px;">连续阴线/阳线确认数量</small>
+                                                    </div>
+                                                    <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                        <label class="form-label" style="font-size: 11px;">K线周期</label>
+                                                        <select class="form-input" id="reversal24hTimeframe" style="padding: 6px 10px; font-size: 13px;">
+                                                            <option value="5m">5分钟</option>
+                                                            <option value="15m" selected>15分钟</option>
+                                                            <option value="1h">1小时</option>
+                                                        </select>
+                                                        <small style="color: var(--text-tertiary); font-size: 10px;">检测K线的时间周期</small>
+                                                    </div>
                                                 </div>
-                                                <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                    <label class="form-label" style="font-size: 11px;">连续K线数</label>
-                                                    <input type="number" class="form-input" id="reversal24hBars" value="3" step="1" min="2" max="10" style="padding: 6px 10px; font-size: 13px;">
-                                                    <small style="color: var(--text-tertiary); font-size: 10px;">连续阴线/阳线确认数量</small>
+                                                <div style="margin-top: 8px; padding: 8px; background: rgba(255, 193, 7, 0.1); border-radius: 4px;">
+                                                    <small style="color: var(--text-secondary); font-size: 11px;">
+                                                        <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
+                                                        <strong>策略说明：</strong>在24H高点附近出现连续阴线→允许做空；在24H低点附近出现连续阳线→允许做多
+                                                    </small>
                                                 </div>
-                                                <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                    <label class="form-label" style="font-size: 11px;">K线周期</label>
-                                                    <select class="form-input" id="reversal24hTimeframe" style="padding: 6px 10px; font-size: 13px;">
-                                                        <option value="5m">5分钟</option>
-                                                        <option value="15m" selected>15分钟</option>
-                                                        <option value="1h">1小时</option>
-                                                    </select>
-                                                    <small style="color: var(--text-tertiary); font-size: 10px;">检测K线的时间周期</small>
-                                                </div>
-                                            </div>
-                                            <div style="margin-top: 8px; padding: 8px; background: rgba(255, 193, 7, 0.1); border-radius: 4px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px;">
-                                                    <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
-                                                    <strong>策略说明：</strong>在24H高点附近出现连续阴线→做空；在24H低点附近出现连续阳线→做多
-                                                </small>
                                             </div>
                                         </div>
                                     </div>
@@ -2185,10 +2189,10 @@
 
         // 24H反转参数显示切换
         function toggleReversal24hParams() {
-            const buySignal = document.querySelector('input[name="buySignals"]:checked');
+            const enabled = document.getElementById('reversal24hEnabled');
             const params = document.getElementById('reversal24hParams');
-            if (params) {
-                params.style.display = (buySignal && buySignal.value === 'reversal_24h') ? 'block' : 'none';
+            if (params && enabled) {
+                params.style.display = enabled.checked ? 'block' : 'none';
             }
         }
 
@@ -2541,7 +2545,7 @@
                 },
                 // 24H高低点反转信号配置
                 reversal24h: {
-                    enabled: buySignalRadio && buySignalRadio.value === 'reversal_24h',
+                    enabled: document.getElementById('reversal24hEnabled') ? document.getElementById('reversal24hEnabled').checked : false,
                     nearHighLowPct: document.getElementById('reversal24hNearPct') ? parseFloat(document.getElementById('reversal24hNearPct').value) : 1.0,
                     consecutiveBars: document.getElementById('reversal24hBars') ? parseInt(document.getElementById('reversal24hBars').value) : 3,
                     timeframe: document.getElementById('reversal24hTimeframe') ? document.getElementById('reversal24hTimeframe').value : '15m'
@@ -3065,6 +3069,9 @@
 
             // 24H高低点反转信号配置
             if (strategy.reversal24h) {
+                if (document.getElementById('reversal24hEnabled')) {
+                    document.getElementById('reversal24hEnabled').checked = strategy.reversal24h.enabled === true;
+                }
                 if (document.getElementById('reversal24hNearPct')) {
                     document.getElementById('reversal24hNearPct').value = strategy.reversal24h.nearHighLowPct || 1.0;
                 }

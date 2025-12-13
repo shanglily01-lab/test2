@@ -3073,34 +3073,34 @@ class StrategyExecutor:
                             debug_info.append(f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ MA10/EMA10金叉检测成功 - 当前K线穿越！")
                             debug_info.append(f"   📊 MA10={ma10:.4f}, EMA10={ema10:.4f}, 差值={ma10_ema10_diff:.4f} ({ma10_ema10_diff_pct:+.2f}%)" if ma10_ema10_diff_pct else f"   📊 MA10={ma10:.4f}, EMA10={ema10:.4f}")
 
-                # ================== 24H高低点反转信号检测 ==================
-                elif buy_signal == 'reversal_24h' or reversal_24h_enabled:
-                    # 检测24H高低点反转信号
-                    reversal_config = {
-                        'enabled': True,
-                        'nearHighLowPct': reversal_24h_near_pct,
-                        'consecutiveBars': reversal_24h_consecutive_bars,
-                        'timeframe': reversal_24h_timeframe
-                    }
-                    reversal_result = self.check_24h_reversal_signal(symbol, buy_directions, reversal_config, debug_info)
+        # ================== 24H高低点反转过滤 ==================
+        # 如果启用了24H反转过滤，在EMA信号触发后进行二次筛选
+        if buy_signal_triggered and reversal_24h_enabled:
+            reversal_config = {
+                'enabled': True,
+                'nearHighLowPct': reversal_24h_near_pct,
+                'consecutiveBars': reversal_24h_consecutive_bars,
+                'timeframe': reversal_24h_timeframe
+            }
+            reversal_result = self.check_24h_reversal_signal(symbol, buy_directions, reversal_config, debug_info)
 
-                    if reversal_result['signal']:
-                        buy_signal_triggered = True
-                        # 根据信号方向设置交叉类型
-                        if reversal_result['signal'] == 'long':
-                            found_golden_cross = True
-                            detected_cross_type = 'golden'
-                        else:
-                            found_death_cross = True
-                            detected_cross_type = 'death'
-
-                        # 使用最新的K线数据作为买入参考
-                        if buy_indicator_pairs:
-                            buy_pair = buy_indicator_pairs[-1]
-                            buy_indicator = buy_pair.get('indicator', {})
-
-                        debug_info.append(f"[24H反转] ✅ 触发{reversal_result['signal'].upper()}信号: {reversal_result['reason']}")
-                        logger.info(f"[24H反转] {symbol} 触发{reversal_result['signal'].upper()}信号: {reversal_result['reason']}")
+            # 检查24H反转信号是否与当前触发的信号方向一致
+            if reversal_result['signal']:
+                # 24H反转信号存在，检查方向是否匹配
+                if (detected_cross_type == 'golden' and reversal_result['signal'] == 'long') or \
+                   (detected_cross_type == 'death' and reversal_result['signal'] == 'short'):
+                    debug_info.append(f"[24H反转过滤] ✅ 通过 - {reversal_result['signal'].upper()}方向与EMA信号一致: {reversal_result['reason']}")
+                    logger.info(f"[24H反转过滤] {symbol} ✅ 通过 - {reversal_result['signal'].upper()}信号与EMA方向一致")
+                else:
+                    # 方向不匹配，取消买入信号
+                    buy_signal_triggered = False
+                    debug_info.append(f"[24H反转过滤] ❌ 未通过 - 24H反转方向({reversal_result['signal']})与EMA信号方向({detected_cross_type})不一致")
+                    logger.info(f"[24H反转过滤] {symbol} ❌ 未通过 - 方向不匹配")
+            else:
+                # 没有检测到24H反转信号，取消买入信号
+                buy_signal_triggered = False
+                debug_info.append(f"[24H反转过滤] ❌ 未通过 - 当前价格不在24H高低点附近或无连续K线确认")
+                logger.info(f"[24H反转过滤] {symbol} ❌ 未通过 - 未检测到高低点反转信号")
 
         # 初始化 buy_volume_ratio 默认值（避免后续使用时未定义）
         buy_volume_ratio = 1.0
