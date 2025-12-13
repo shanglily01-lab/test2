@@ -3898,9 +3898,10 @@ class StrategyExecutor:
                                                 debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')}: ✅ 买入{direction_text}，价格={actual_entry_price:.4f}，数量={actual_quantity:.{qty_precision}f}，开仓手续费={actual_fee:.4f}，持仓ID={position_id}")
 
                                                 # ========== 同步实盘交易 ==========
-                                                # 重要：只有模拟盘真正创建了持仓才同步，避免重复同步
-                                                if not position_id:
-                                                    logger.warning(f"⚠️ 模拟盘未创建持仓（可能被防重复开仓拦截），跳过实盘同步: {symbol} {position_side}")
+                                                # 市价单有 position_id，限价单有 order_id，都需要同步
+                                                # 只有两者都没有才说明开单失败
+                                                if not position_id and not order_id:
+                                                    logger.warning(f"⚠️ 模拟盘开单失败（无持仓ID和订单ID），跳过实盘同步: {symbol} {position_side}")
                                                 elif sync_live and self.live_engine is not None:
                                                     try:
                                                         # 获取实盘账户可用余额
