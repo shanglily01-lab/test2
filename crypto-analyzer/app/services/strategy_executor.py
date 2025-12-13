@@ -336,27 +336,44 @@ class StrategyExecutor:
         timeframe = config.get('timeframe', '15m')  # 默认15分钟
 
         try:
-            # 1. 从币安API获取真实的24H高低价（比数据库K线更准确）
-            import requests
-            binance_symbol = symbol.replace('/', '')
-            ticker_url = f"https://fapi.binance.com/fapi/v1/ticker/24hr?symbol={binance_symbol}"
+            conn = pymysql.connect(**self.db_config, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
+            cursor = conn.cursor()
 
-            try:
-                ticker_response = requests.get(ticker_url, timeout=5)
-                if ticker_response.status_code == 200:
-                    ticker_data = ticker_response.json()
-                    high_24h = float(ticker_data['highPrice'])
-                    low_24h = float(ticker_data['lowPrice'])
-                    current_price = float(ticker_data['lastPrice'])
-                else:
-                    debug_info.append(f"[24H反转] {symbol}: 币安API请求失败 HTTP {ticker_response.status_code}")
-                    return result
-            except Exception as api_err:
-                debug_info.append(f"[24H反转] {symbol}: 币安API请求异常 {api_err}")
+            # 1. 获取24H最高价和最低价（使用UTC_TIMESTAMP确保时区一致）
+            # K线时间戳是UTC，所以用UTC_TIMESTAMP()而不是NOW()
+            cursor.execute("""
+                SELECT MAX(high_price) as high_24h, MIN(low_price) as low_24h
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '15m' AND exchange = 'binance_futures'
+                AND timestamp >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 24 HOUR)
+            """, (symbol,))
+
+            price_range = cursor.fetchone()
+            if not price_range or not price_range['high_24h'] or not price_range['low_24h']:
+                debug_info.append(f"[24H反转] {symbol}: 无法获取24H高低价数据")
+                cursor.close()
+                conn.close()
                 return result
 
+            high_24h = float(price_range['high_24h'])
+            low_24h = float(price_range['low_24h'])
             result['high_24h'] = high_24h
             result['low_24h'] = low_24h
+
+            # 2. 获取当前价格
+            cursor.execute("""
+                SELECT close_price FROM kline_data
+                WHERE symbol = %s AND timeframe = '15m' AND exchange = 'binance_futures'
+                ORDER BY timestamp DESC LIMIT 1
+            """, (symbol,))
+
+            current_row = cursor.fetchone()
+            if not current_row:
+                cursor.close()
+                conn.close()
+                return result
+
+            current_price = float(current_row['close_price'])
             result['price'] = current_price
 
             # 3. 计算价格距离高低点的百分比
@@ -367,10 +384,6 @@ class StrategyExecutor:
             near_low = dist_to_low_pct <= near_pct
 
             debug_info.append(f"[24H反转] {symbol}: 当前价={current_price:.4f}, 24H高={high_24h:.4f}(距{dist_to_high_pct:.2f}%), 24H低={low_24h:.4f}(距{dist_to_low_pct:.2f}%)")
-
-            # 2. 获取最近N根K线，检测连续阴线/阳线（从数据库）
-            conn = pymysql.connect(**self.db_config, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
-            cursor = conn.cursor()
 
             cursor.execute("""
                 SELECT open_price, close_price, timestamp
