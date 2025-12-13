@@ -484,6 +484,8 @@ async def get_orders(account_id: int = 2, status: str = 'PENDING'):
             realized_pnl,
             pnl_pct,
             notes,
+            cancellation_reason,
+            canceled_at,
             created_at,
             updated_at
         FROM futures_orders
