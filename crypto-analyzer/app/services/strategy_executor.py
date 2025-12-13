@@ -507,6 +507,7 @@ class StrategyExecutor:
             prevent_duplicate_entry = strategy.get('preventDuplicateEntry', False)  # 防止重复开仓
             close_opposite_on_entry = strategy.get('closeOppositeOnEntry', False)  # 开仓前先平掉相反方向的持仓
             min_holding_time_hours = strategy.get('minHoldingTimeHours', 0)  # 最小持仓时间（小时）
+            sell_ema_check_enabled = strategy.get('sellEmaCheckEnabled', True)  # 卖出信号EMA检查（默认启用）
 
             # ================== v2.0 全局开仓冷却配置 ==================
             # 适用于所有信号类型（金叉/死叉/持续趋势），防止短时间内频繁开仓
@@ -899,6 +900,7 @@ class StrategyExecutor:
                     prevent_duplicate_entry=prevent_duplicate_entry,
                     close_opposite_on_entry=close_opposite_on_entry,
                     min_holding_time_hours=min_holding_time_hours,
+                    sell_ema_check_enabled=sell_ema_check_enabled,
                     fee_rate=fee_rate,
                     entry_cooldown_enabled=entry_cooldown_enabled,
                     entry_cooldown_minutes=entry_cooldown_minutes,
@@ -1283,6 +1285,7 @@ class StrategyExecutor:
         prevent_duplicate_entry = kwargs.get('prevent_duplicate_entry', False)  # 防止重复开仓
         close_opposite_on_entry = kwargs.get('close_opposite_on_entry', False)  # 开仓前先平掉相反方向的持仓
         min_holding_time_hours = kwargs.get('min_holding_time_hours', 0)  # 最小持仓时间（小时）
+        sell_ema_check_enabled = kwargs.get('sell_ema_check_enabled', True)  # 卖出信号EMA检查（默认启用）
         fee_rate = kwargs.get('fee_rate', 0.0004)
         # v2.0 全局开仓冷却
         entry_cooldown_enabled = kwargs.get('entry_cooldown_enabled', True)  # 默认启用
@@ -3266,7 +3269,7 @@ class StrategyExecutor:
 
                             # ========== 检查卖出信号EMA状态（短周期趋势确认） ==========
                             # 避免买入信号(15m)触发后，卖出信号(5m)的EMA已经反转导致刚开仓就被平仓
-                            sell_ema_check_enabled = strategy.get('sellEmaCheckEnabled', True)  # 默认启用
+                            # sell_ema_check_enabled 已从 kwargs 获取（默认启用）
                             if sell_ema_check_enabled and sell_timeframe != buy_timeframe:
                                 try:
                                     # 获取卖出信号时间周期的EMA数据
