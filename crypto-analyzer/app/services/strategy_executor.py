@@ -1137,7 +1137,12 @@ class StrategyExecutor:
                     # 同步实盘交易配置
                     sync_live=sync_live,
                     live_quantity_pct=live_quantity_pct,
-                    live_max_position_usdt=live_max_position_usdt  # 实盘单笔最大仓位
+                    live_max_position_usdt=live_max_position_usdt,  # 实盘单笔最大仓位
+                    # 24H高低点反转信号配置
+                    reversal_24h_enabled=reversal_24h_enabled,
+                    reversal_24h_near_pct=reversal_24h_near_pct,
+                    reversal_24h_consecutive_bars=reversal_24h_consecutive_bars,
+                    reversal_24h_timeframe=reversal_24h_timeframe
                 )
 
                 results.append(result)
@@ -1545,6 +1550,12 @@ class StrategyExecutor:
         account_id = kwargs.get('account_id', 0)
         market_type = kwargs.get('market_type', 'test')  # 市场类型: test/live
         live_max_position_usdt = kwargs.get('live_max_position_usdt', 500)  # 实盘单笔最大保证金(USDT)
+
+        # 24H高低点反转信号配置
+        reversal_24h_enabled = kwargs.get('reversal_24h_enabled', False)
+        reversal_24h_near_pct = kwargs.get('reversal_24h_near_pct', 1.0)
+        reversal_24h_consecutive_bars = kwargs.get('reversal_24h_consecutive_bars', 3)
+        reversal_24h_timeframe = kwargs.get('reversal_24h_timeframe', '15m')
 
         # 根据市场类型选择交易引擎
         if market_type == 'live':
