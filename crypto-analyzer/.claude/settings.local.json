@@ -43,7 +43,8 @@
       "Bash(timedatectl:*)",
       "Bash(for id in 1764130914476 1764510354115 1764662486056)",
       "Bash(do echo \"=== Strategy $id ===\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(ssh:*)"
     ],
     "deny": [],
     "ask": []

@@ -827,13 +827,16 @@ class FuturesLimitOrderExecutor:
                                     # 正常限价单触发：使用限价
                                     execution_price = limit_price
 
+                                # 限价单已触发执行，不再传 limit_price（否则可能再次创建 PENDING 订单）
+                                # 而是通过 limit_price=None 让引擎以市价方式立即执行
+                                # 注意：执行价格会使用 current_price（实时价格）
                                 result = self.trading_engine.open_position(
                                     account_id=account_id,
                                     symbol=symbol,
                                     position_side=position_side,
                                     quantity=quantity,
                                     leverage=leverage,
-                                    limit_price=execution_price,  # 使用执行价格
+                                    limit_price=None,  # 不传限价，直接执行市价单
                                     stop_loss_price=stop_loss_price,
                                     take_profit_price=take_profit_price,
                                     source=original_source,  # 保留原始来源（strategy 或 limit_order）
@@ -962,18 +965,31 @@ class FuturesLimitOrderExecutor:
                                     # ========== 同步实盘交易结束 ==========
 
                                 else:
-                                    # 如果开仓失败，恢复冻结的保证金
-                                    if frozen_margin > 0:
-                                        with connection.cursor() as update_cursor:
+                                    # 如果开仓失败，恢复冻结的保证金并取消订单
+                                    error_message = result.get('message', '未知错误')
+                                    logger.error(f"❌ 限价单执行失败: {symbol} {position_side} - {error_message}")
+
+                                    # 取消订单，避免无限重试
+                                    with connection.cursor() as update_cursor:
+                                        update_cursor.execute(
+                                            """UPDATE futures_orders
+                                            SET status = 'CANCELED',
+                                                cancellation_reason = %s,
+                                                canceled_at = NOW()
+                                            WHERE order_id = %s""",
+                                            (f"执行失败: {error_message[:100]}", order_id)
+                                        )
+
+                                        # 恢复冻结的保证金到可用余额
+                                        if frozen_margin > 0:
                                             update_cursor.execute(
                                                 """UPDATE paper_trading_accounts
-                                                SET current_balance = current_balance - %s,
-                                                    frozen_balance = frozen_balance + %s
+                                                SET frozen_balance = GREATEST(0, frozen_balance - %s)
                                                 WHERE id = %s""",
-                                                (float(frozen_margin), float(frozen_margin), account_id)
+                                                (float(frozen_margin), account_id)
                                             )
-                                        connection.commit()
-                                    logger.error(f"❌ 限价单执行失败: {symbol} {position_side} - {result.get('message', '未知错误')}")
+                                    connection.commit()
+                                    logger.info(f"📛 已取消限价单 {order_id}，原因: {error_message}")
                                     
                             except Exception as e:
                                 logger.error(f"执行限价单 {order_id} 时出错: {e}")
