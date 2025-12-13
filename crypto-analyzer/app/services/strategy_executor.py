@@ -2008,39 +2008,51 @@ class StrategyExecutor:
                 # 连续反向K线平仓检查（做多时连续N根阴线，做空时连续N根阳线，无盈亏限制）
                 if not exit_price and consecutive_bearish_exit_enabled:
                     # 获取最近N根K线来检查连续下跌/上涨
-                    # 使用卖出周期的K线数据（通常是5m）
-                    recent_klines = []
-                    kline_count = len(sell_indicator_pairs)
-                    bars_to_check = min(consecutive_bearish_bars, kline_count)
+                    # 使用配置的 consecutive_bearish_timeframe 周期K线数据
+                    try:
+                        conn = self._get_connection()
+                        cursor = conn.cursor(pymysql.cursors.DictCursor)
+                        cursor.execute("""
+                            SELECT open_price, close_price, timestamp
+                            FROM kline_data
+                            WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
+                            ORDER BY timestamp DESC
+                            LIMIT %s
+                        """, (symbol, consecutive_bearish_timeframe, consecutive_bearish_bars + 1))
+                        kline_rows = cursor.fetchall()
+                        cursor.close()
+                        conn.close()
 
-                    for i in range(bars_to_check):
-                        idx = kline_count - 1 - i
-                        if idx >= 0:
-                            kline = sell_indicator_pairs[idx].get('kline', {})
-                            recent_klines.append(kline)
-
-                    if len(recent_klines) >= consecutive_bearish_bars:
-                        # 做多时：检查连续阴线（收盘<开盘）
-                        if direction == 'long':
-                            consecutive_bearish = all(
-                                float(k.get('close', k.get('close_price', 0))) < float(k.get('open', k.get('open_price', 0)))
-                                for k in recent_klines[:consecutive_bearish_bars]
-                            )
-                            if consecutive_bearish:
-                                exit_price = realtime_price
-                                exit_reason = f"连续{consecutive_bearish_bars}根阴线平仓(盈亏{current_profit_pct:.2f}%)"
-                                logger.info(f"{symbol}: 🔻 检测到连续{consecutive_bearish_bars}根阴线，当前盈亏{current_profit_pct:.2f}%，立即平仓")
-
-                        # 做空时：检查连续阳线（收盘>开盘）
+                        # 排除当前未完成的K线（取最近完成的N根）
+                        if len(kline_rows) > consecutive_bearish_bars:
+                            recent_klines = kline_rows[1:consecutive_bearish_bars + 1]  # 跳过最新的未完成K线
                         else:
-                            consecutive_bullish = all(
-                                float(k.get('close', k.get('close_price', 0))) > float(k.get('open', k.get('open_price', 0)))
-                                for k in recent_klines[:consecutive_bearish_bars]
-                            )
-                            if consecutive_bullish:
-                                exit_price = realtime_price
-                                exit_reason = f"连续{consecutive_bearish_bars}根阳线平仓(盈亏{current_profit_pct:.2f}%)"
-                                logger.info(f"{symbol}: 🔺 检测到连续{consecutive_bearish_bars}根阳线，当前盈亏{current_profit_pct:.2f}%，立即平仓")
+                            recent_klines = kline_rows[:consecutive_bearish_bars]
+
+                        if len(recent_klines) >= consecutive_bearish_bars:
+                            # 做多时：检查连续阴线（收盘<开盘）
+                            if direction == 'long':
+                                consecutive_bearish = all(
+                                    float(k.get('close_price', 0)) < float(k.get('open_price', 0))
+                                    for k in recent_klines
+                                )
+                                if consecutive_bearish:
+                                    exit_price = realtime_price
+                                    exit_reason = f"连续{consecutive_bearish_bars}根{consecutive_bearish_timeframe}阴线平仓(盈亏{current_profit_pct:.2f}%)"
+                                    logger.info(f"{symbol}: 🔻 检测到连续{consecutive_bearish_bars}根{consecutive_bearish_timeframe}阴线，当前盈亏{current_profit_pct:.2f}%，立即平仓")
+
+                            # 做空时：检查连续阳线（收盘>开盘）
+                            else:
+                                consecutive_bullish = all(
+                                    float(k.get('close_price', 0)) > float(k.get('open_price', 0))
+                                    for k in recent_klines
+                                )
+                                if consecutive_bullish:
+                                    exit_price = realtime_price
+                                    exit_reason = f"连续{consecutive_bearish_bars}根{consecutive_bearish_timeframe}阳线平仓(盈亏{current_profit_pct:.2f}%)"
+                                    logger.info(f"{symbol}: 🔺 检测到连续{consecutive_bearish_bars}根{consecutive_bearish_timeframe}阳线，当前盈亏{current_profit_pct:.2f}%，立即平仓")
+                    except Exception as e:
+                        logger.warning(f"{symbol}: 连续K线平仓检查失败: {e}")
 
                 # 盈利保护止损检查（盈利达到阈值后，如果盈利回落到保底线则平仓）
                 # 逻辑：追踪历史最高盈利，当盈利曾达到 activatePct%，如果回落到 minLockPct% 则触发保护出场
