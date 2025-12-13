@@ -347,23 +347,15 @@ class LiveOrderMonitor:
                     await self._cancel_binance_order(position, trend_reversal_reason)
                     return
 
-                # 2. 检查限价单超时转市价
-                timeout_minutes = position.get('timeout_minutes', 0) or 0
-                elapsed_seconds = position.get('elapsed_seconds', 0) or 0
-
-                # 添加调试日志
-                logger.debug(f"[实盘监控] 订单 {order_id} 超时检查: "
-                           f"timeout_minutes={timeout_minutes}, "
-                           f"elapsed_seconds={elapsed_seconds}")
-
-                if timeout_minutes > 0:
-                    elapsed_minutes = elapsed_seconds / 60
-                    timeout_seconds = timeout_minutes * 60
-
-                    if elapsed_seconds >= timeout_seconds:
-                        # 超时，检查价格偏离
-                        await self._handle_limit_order_timeout(position, order_id, elapsed_minutes)
-                        return
+                # 2. 限价单超时转市价 - 已禁用
+                # 原因：模拟盘的 futures_limit_order_executor.py 已经处理限价单超时，
+                # 并会同步到实盘开仓。如果这里也处理，会导致重复开仓。
+                #
+                # 注意：实盘限价单的超时取消由模拟盘的限价单超时逻辑触发同步取消。
+                # 这里只需要处理：
+                # - 限价单成交后设置止损止盈（上面的 FILLED 分支）
+                # - 趋势转向时取消限价单（上面的 _check_trend_reversal 逻辑）
+                pass
 
             elif status in ['CANCELED', 'EXPIRED', 'REJECTED']:
                 # 订单已取消/过期/拒绝，更新数据库
