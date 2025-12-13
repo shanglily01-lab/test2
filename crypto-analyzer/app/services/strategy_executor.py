@@ -292,6 +292,165 @@ class StrategyExecutor:
 
         return False
 
+    def check_24h_reversal_signal(self, symbol: str, buy_directions: list, config: dict, debug_info: list) -> dict:
+        """
+        检测24H高低点反转信号
+
+        策略逻辑：
+        - 做空信号：价格接近24H高点 + 连续N根阴线 → 高点见顶回落
+        - 做多信号：价格接近24H低点 + 连续N根阳线 → 低点触底反弹
+
+        Args:
+            symbol: 交易对
+            buy_directions: 允许的交易方向 ['long', 'short']
+            config: 配置参数 {
+                'enabled': True,
+                'nearHighLowPct': 1.0,  # 高低点偏离范围百分比
+                'consecutiveBars': 3,   # 连续K线数
+                'timeframe': '15m'      # K线周期
+            }
+            debug_info: 调试信息列表
+
+        Returns:
+            {
+                'signal': 'long' / 'short' / None,
+                'price': 当前价格,
+                'high_24h': 24H最高价,
+                'low_24h': 24H最低价,
+                'reason': 信号原因
+            }
+        """
+        result = {
+            'signal': None,
+            'price': None,
+            'high_24h': None,
+            'low_24h': None,
+            'reason': None
+        }
+
+        if not config.get('enabled', False):
+            return result
+
+        near_pct = config.get('nearHighLowPct', 1.0)  # 默认1%范围内
+        consecutive_bars = config.get('consecutiveBars', 3)  # 默认3根
+        timeframe = config.get('timeframe', '15m')  # 默认15分钟
+
+        try:
+            conn = pymysql.connect(**self.db_config, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
+            cursor = conn.cursor()
+
+            # 1. 获取24H最高价和最低价
+            now = datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
+            time_24h_ago = now - timedelta(hours=24)
+
+            cursor.execute("""
+                SELECT MAX(high_price) as high_24h, MIN(low_price) as low_24h
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '15m' AND exchange = 'binance_futures'
+                AND timestamp >= %s
+            """, (symbol, time_24h_ago))
+
+            price_range = cursor.fetchone()
+            if not price_range or not price_range['high_24h'] or not price_range['low_24h']:
+                debug_info.append(f"[24H反转] {symbol}: 无法获取24H高低价数据")
+                cursor.close()
+                conn.close()
+                return result
+
+            high_24h = float(price_range['high_24h'])
+            low_24h = float(price_range['low_24h'])
+            result['high_24h'] = high_24h
+            result['low_24h'] = low_24h
+
+            # 2. 获取当前价格
+            cursor.execute("""
+                SELECT close_price FROM kline_data
+                WHERE symbol = %s AND timeframe = '15m' AND exchange = 'binance_futures'
+                ORDER BY timestamp DESC LIMIT 1
+            """, (symbol,))
+
+            current_row = cursor.fetchone()
+            if not current_row:
+                cursor.close()
+                conn.close()
+                return result
+
+            current_price = float(current_row['close_price'])
+            result['price'] = current_price
+
+            # 3. 计算价格距离高低点的百分比
+            dist_to_high_pct = ((high_24h - current_price) / high_24h) * 100 if high_24h > 0 else 100
+            dist_to_low_pct = ((current_price - low_24h) / low_24h) * 100 if low_24h > 0 else 100
+
+            near_high = dist_to_high_pct <= near_pct
+            near_low = dist_to_low_pct <= near_pct
+
+            debug_info.append(f"[24H反转] {symbol}: 当前价={current_price:.4f}, 24H高={high_24h:.4f}(距{dist_to_high_pct:.2f}%), 24H低={low_24h:.4f}(距{dist_to_low_pct:.2f}%)")
+
+            # 4. 获取最近N根K线，检测连续阴线/阳线
+            cursor.execute("""
+                SELECT open_price, close_price, timestamp
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (symbol, timeframe, consecutive_bars))
+
+            klines = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            if not klines or len(klines) < consecutive_bars:
+                debug_info.append(f"[24H反转] {symbol}: K线数据不足({len(klines) if klines else 0}/{consecutive_bars})")
+                return result
+
+            # 检查连续阴线（做空条件确认）
+            consecutive_bearish = all(
+                float(k['close_price']) < float(k['open_price'])
+                for k in klines[:consecutive_bars]
+            )
+
+            # 检查连续阳线（做多条件确认）
+            consecutive_bullish = all(
+                float(k['close_price']) > float(k['open_price'])
+                for k in klines[:consecutive_bars]
+            )
+
+            # 5. 综合判断信号
+            # 做空信号：接近24H高点 + 连续阴线
+            if 'short' in buy_directions and near_high and consecutive_bearish:
+                result['signal'] = 'short'
+                result['reason'] = f"24H高点反转做空: 价格接近24H高点({dist_to_high_pct:.2f}%内) + 连续{consecutive_bars}根{timeframe}阴线"
+                debug_info.append(f"[24H反转] ✅ {symbol}: {result['reason']}")
+                logger.info(f"[24H反转] ✅ {symbol}: {result['reason']}")
+
+            # 做多信号：接近24H低点 + 连续阳线
+            elif 'long' in buy_directions and near_low and consecutive_bullish:
+                result['signal'] = 'long'
+                result['reason'] = f"24H低点反转做多: 价格接近24H低点({dist_to_low_pct:.2f}%内) + 连续{consecutive_bars}根{timeframe}阳线"
+                debug_info.append(f"[24H反转] ✅ {symbol}: {result['reason']}")
+                logger.info(f"[24H反转] ✅ {symbol}: {result['reason']}")
+            else:
+                # 记录未触发原因
+                reasons = []
+                if 'short' in buy_directions:
+                    if not near_high:
+                        reasons.append(f"距高点{dist_to_high_pct:.2f}%>{near_pct}%")
+                    if not consecutive_bearish:
+                        reasons.append(f"无连续{consecutive_bars}根阴线")
+                if 'long' in buy_directions:
+                    if not near_low:
+                        reasons.append(f"距低点{dist_to_low_pct:.2f}%>{near_pct}%")
+                    if not consecutive_bullish:
+                        reasons.append(f"无连续{consecutive_bars}根阳线")
+                debug_info.append(f"[24H反转] {symbol}: 未触发 - {', '.join(reasons)}")
+
+        except Exception as e:
+            logger.error(f"[24H反转] {symbol} 检测失败: {e}")
+            debug_info.append(f"[24H反转] {symbol}: 检测异常 - {str(e)}")
+
+        return result
+
     def _save_trade_record(self, symbol: str, action: str, direction: str, 
                             entry_price: float, exit_price: Optional[float], quantity: float, leverage: int, 
                             fee: Optional[float] = None, realized_pnl: Optional[float] = None,
@@ -648,13 +807,25 @@ class StrategyExecutor:
             # 要求最小盈利才启用（避免开仓即触发）
             ema_support_min_profit_pct = ema_support_stop_loss.get('minProfitPct', 0.0) if isinstance(ema_support_stop_loss, dict) else 0.0
 
+            # ================== 24H高低点反转信号配置 ==================
+            # 在24H高点附近出现连续阴线做空，在24H低点附近出现连续阳线做多
+            reversal_24h = strategy.get('reversal24h', {})
+            reversal_24h_enabled = reversal_24h.get('enabled', False) if isinstance(reversal_24h, dict) else False
+            # 高低点偏离范围（%），价格在此范围内视为"接近"高低点
+            reversal_24h_near_pct = reversal_24h.get('nearHighLowPct', 1.0) if isinstance(reversal_24h, dict) else 1.0
+            # 连续K线确认数量
+            reversal_24h_consecutive_bars = reversal_24h.get('consecutiveBars', 3) if isinstance(reversal_24h, dict) else 3
+            # 检测使用的时间周期
+            reversal_24h_timeframe = reversal_24h.get('timeframe', '15m') if isinstance(reversal_24h, dict) else '15m'
+
             # 确定买入和卖出的时间周期
             timeframe_map = {
                 'ema_5m': '5m',
                 'ema_15m': '15m',
                 'ema_1h': '1h',
                 'ma_ema5': '5m',
-                'ma_ema10': '5m'
+                'ma_ema10': '5m',
+                'reversal_24h': '15m'  # 24H反转策略默认使用15分钟
             }
             buy_timeframe = timeframe_map.get(buy_signal, '15m')
             sell_timeframe = timeframe_map.get(sell_signal, '5m')
@@ -2901,7 +3072,36 @@ class StrategyExecutor:
                             signal_time_local = self.utc_to_local(signal_time)
                             debug_info.append(f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ MA10/EMA10金叉检测成功 - 当前K线穿越！")
                             debug_info.append(f"   📊 MA10={ma10:.4f}, EMA10={ema10:.4f}, 差值={ma10_ema10_diff:.4f} ({ma10_ema10_diff_pct:+.2f}%)" if ma10_ema10_diff_pct else f"   📊 MA10={ma10:.4f}, EMA10={ema10:.4f}")
-        
+
+                # ================== 24H高低点反转信号检测 ==================
+                elif buy_signal == 'reversal_24h' or reversal_24h_enabled:
+                    # 检测24H高低点反转信号
+                    reversal_config = {
+                        'enabled': True,
+                        'nearHighLowPct': reversal_24h_near_pct,
+                        'consecutiveBars': reversal_24h_consecutive_bars,
+                        'timeframe': reversal_24h_timeframe
+                    }
+                    reversal_result = self.check_24h_reversal_signal(symbol, buy_directions, reversal_config, debug_info)
+
+                    if reversal_result['signal']:
+                        buy_signal_triggered = True
+                        # 根据信号方向设置交叉类型
+                        if reversal_result['signal'] == 'long':
+                            found_golden_cross = True
+                            detected_cross_type = 'golden'
+                        else:
+                            found_death_cross = True
+                            detected_cross_type = 'death'
+
+                        # 使用最新的K线数据作为买入参考
+                        if buy_indicator_pairs:
+                            buy_pair = buy_indicator_pairs[-1]
+                            buy_indicator = buy_pair.get('indicator', {})
+
+                        debug_info.append(f"[24H反转] ✅ 触发{reversal_result['signal'].upper()}信号: {reversal_result['reason']}")
+                        logger.info(f"[24H反转] {symbol} 触发{reversal_result['signal'].upper()}信号: {reversal_result['reason']}")
+
         # 初始化 buy_volume_ratio 默认值（避免后续使用时未定义）
         buy_volume_ratio = 1.0
 
