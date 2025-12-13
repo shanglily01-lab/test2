@@ -165,7 +165,8 @@ class TradeNotifier:
         pnl_pct: float,
         reason: str = 'manual',
         hold_time: Optional[str] = None,
-        strategy_name: Optional[str] = None
+        strategy_name: Optional[str] = None,
+        is_paper: bool = False
     ):
         """
         通知平仓
@@ -181,6 +182,7 @@ class TradeNotifier:
             reason: 平仓原因 (manual/stop_loss/take_profit/signal_reverse/liquidation)
             hold_time: 持仓时间
             strategy_name: 策略名称
+            is_paper: 是否为模拟盘
         """
         # 根据平仓原因判断是否通知
         if reason == 'stop_loss' and not self.notify_stop_loss:
@@ -215,8 +217,11 @@ class TradeNotifier:
         }
         reason_text = reason_map.get(reason, reason)
 
+        # 区分模拟盘和实盘
+        trade_type = "模拟盘平仓" if is_paper else "实盘平仓"
+
         message = f"""
-{pnl_emoji} <b>【实盘平仓】{symbol}</b>
+{pnl_emoji} <b>【{trade_type}】{symbol}</b>
 
 📌 类型: {direction_text}
 📍 原因: {reason_text}

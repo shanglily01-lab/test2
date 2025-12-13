@@ -1083,6 +1083,44 @@ class FuturesTradingEngine:
                 f"盈亏{realized_pnl:.2f} USDT ({pnl_pct:.2f}%), ROI {roi:.2f}%"
             )
 
+            # ========== 发送 Telegram 通知 ==========
+            try:
+                if self.trade_notifier:
+                    # 计算持仓时间
+                    hold_time = None
+                    if position.get('open_time'):
+                        open_time = position['open_time']
+                        if isinstance(open_time, str):
+                            from datetime import datetime
+                            open_time = datetime.strptime(open_time, '%Y-%m-%d %H:%M:%S')
+                        hold_duration = get_local_time() - open_time
+                        hours, remainder = divmod(hold_duration.total_seconds(), 3600)
+                        minutes = remainder // 60
+                        if hours >= 24:
+                            days = int(hours // 24)
+                            hours = int(hours % 24)
+                            hold_time = f"{days}天{int(hours)}小时{int(minutes)}分钟"
+                        elif hours >= 1:
+                            hold_time = f"{int(hours)}小时{int(minutes)}分钟"
+                        else:
+                            hold_time = f"{int(minutes)}分钟"
+
+                    self.trade_notifier.notify_close_position(
+                        symbol=symbol,
+                        direction=position_side,
+                        quantity=float(close_quantity),
+                        entry_price=float(entry_price),
+                        exit_price=float(current_price),
+                        pnl=float(realized_pnl),
+                        pnl_pct=float(roi),  # 使用 ROI（杠杆收益率）
+                        reason=reason,
+                        hold_time=hold_time,
+                        is_paper=True  # 标记为模拟盘
+                    )
+            except Exception as notify_err:
+                logger.warning(f"发送模拟盘平仓通知失败: {notify_err}")
+            # ========== Telegram 通知结束 ==========
+
             # ========== 同步实盘平仓 ==========
             # 检查是否需要同步实盘平仓
             try:
