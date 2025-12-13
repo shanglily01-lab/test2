@@ -1443,12 +1443,12 @@
                                     </div>
                                 </div>
 
-                                <!-- 连续下跌K线提前止盈 -->
+                                <!-- 连续反向K线平仓（智能止盈区域）-->
                                 <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-top: 12px; border: 1px solid var(--border-default);">
                                     <div style="display: flex; align-items: center; margin-bottom: 8px;">
                                         <input type="checkbox" id="consecutiveBearishExitEnabled" style="margin-right: 8px;">
-                                        <label for="consecutiveBearishExitEnabled" style="font-weight: 600; cursor: pointer;">连续下跌K线止盈</label>
-                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">连续N根阴线/阳线时提前锁定利润</span>
+                                        <label for="consecutiveBearishExitEnabled" style="font-weight: 600; cursor: pointer;">连续反向K线平仓</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">连续N根反向K线时立即平仓</span>
                                     </div>
                                     <div id="consecutiveBearishExitParams" style="display: none; margin-top: 8px;">
                                         <div class="form-row" style="gap: 12px;">
@@ -1466,11 +1466,12 @@
                                                 </select>
                                                 <small style="color: var(--text-tertiary); font-size: 10px;">检测K线的时间周期</small>
                                             </div>
-                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                <label class="form-label" style="font-size: 11px;">最小盈利要求（%）</label>
-                                                <input type="number" class="form-input" id="consecutiveBearishMinProfit" value="0.3" step="0.1" min="0" style="padding: 6px 10px; font-size: 13px;">
-                                                <small style="color: var(--text-tertiary); font-size: 10px;">避免亏损时出场</small>
-                                            </div>
+                                        </div>
+                                        <div style="margin-top: 8px; padding: 8px; background: rgba(59, 130, 246, 0.1); border-radius: 4px; border-left: 3px solid var(--primary-blue);">
+                                            <small style="color: var(--text-secondary); font-size: 11px;">
+                                                <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
+                                                趋势反转信号：无论盈亏，出现连续反向K线立即平仓。
+                                            </small>
                                         </div>
                                     </div>
                                 </div>
@@ -2486,11 +2487,11 @@
                     minProfitPct: document.getElementById('exitPriceCrossEmaMinProfit') ? parseFloat(document.getElementById('exitPriceCrossEmaMinProfit').value) : 0.5,
                     confirmBars: document.getElementById('exitPriceCrossEmaConfirmBars') ? parseInt(document.getElementById('exitPriceCrossEmaConfirmBars').value) : 1
                 },
+                // 连续反向K线平仓（无盈亏限制，趋势反转立即平仓）
                 consecutiveBearishExit: {
                     enabled: document.getElementById('consecutiveBearishExitEnabled') ? document.getElementById('consecutiveBearishExitEnabled').checked : false,
                     bars: document.getElementById('consecutiveBearishBars') ? parseInt(document.getElementById('consecutiveBearishBars').value) : 3,
-                    timeframe: document.getElementById('consecutiveBearishTimeframe') ? document.getElementById('consecutiveBearishTimeframe').value : '5m',
-                    minProfitPct: document.getElementById('consecutiveBearishMinProfit') ? parseFloat(document.getElementById('consecutiveBearishMinProfit').value) : 0.3
+                    timeframe: document.getElementById('consecutiveBearishTimeframe') ? document.getElementById('consecutiveBearishTimeframe').value : '5m'
                 },
                 // 智能止损配置
                 smartStopLoss: {
@@ -3214,13 +3215,12 @@
                     toggleExitOnPriceCrossEmaParams();
                 }
             }
-            // 连续下跌K线提前止盈
+            // 连续反向K线平仓
             if (strategy.consecutiveBearishExit) {
                 if (document.getElementById('consecutiveBearishExitEnabled')) {
                     document.getElementById('consecutiveBearishExitEnabled').checked = strategy.consecutiveBearishExit.enabled === true;
                     document.getElementById('consecutiveBearishBars').value = strategy.consecutiveBearishExit.bars || 3;
                     document.getElementById('consecutiveBearishTimeframe').value = strategy.consecutiveBearishExit.timeframe || '5m';
-                    document.getElementById('consecutiveBearishMinProfit').value = strategy.consecutiveBearishExit.minProfitPct || 0.3;
                     toggleConsecutiveBearishExitParams();
                 }
             }

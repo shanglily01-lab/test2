@@ -597,15 +597,14 @@ class StrategyExecutor:
             # 穿越确认K线数，连续几根K线在EMA下方/上方才触发
             exit_price_cross_ema_confirm_bars = exit_on_price_cross_ema.get('confirmBars', 1) if isinstance(exit_on_price_cross_ema, dict) else 1
 
-            # 4. 连续下跌K线提前止盈：连续N根K线收跌时提前止盈锁定利润
+            # 4. 连续反向K线平仓：连续N根反向K线时立即平仓（无盈亏限制）
             consecutive_bearish_exit = strategy.get('consecutiveBearishExit', {})
             consecutive_bearish_exit_enabled = consecutive_bearish_exit.get('enabled', False) if isinstance(consecutive_bearish_exit, dict) else False
-            # 连续下跌K线数量（做多时）
+            # 连续K线数量
             consecutive_bearish_bars = consecutive_bearish_exit.get('bars', 3) if isinstance(consecutive_bearish_exit, dict) else 3
             # 检测使用的时间周期（默认5m）
             consecutive_bearish_timeframe = consecutive_bearish_exit.get('timeframe', '5m') if isinstance(consecutive_bearish_exit, dict) else '5m'
-            # 要求最小盈利才触发（%），避免亏损出场
-            consecutive_bearish_min_profit = consecutive_bearish_exit.get('minProfitPct', 0.3) if isinstance(consecutive_bearish_exit, dict) else 0.3
+            # 注意：已移除 minProfitPct 限制，趋势反转时无论盈亏都立即平仓
 
             # ================== 智能止损配置 ==================
             smart_stop_loss = strategy.get('smartStopLoss', {})

@@ -877,17 +877,9 @@ class LiveOrderMonitor:
             (exit_price, exit_reason) 或 (None, None)
         """
         try:
-            bars = config.get('bars', 2)  # 默认连续2根
+            bars = config.get('bars', 3)  # 默认连续3根
             timeframe = config.get('timeframe', '5m')  # 默认5分钟K线
-            max_loss_pct = config.get('maxLossPct', -0.5)  # 默认-0.5%以内才触发（避免过早止损）
-
-            # 检查是否在亏损区间（如果盈利了就不用连续K线止损）
-            if current_profit_pct > 0:
-                return None, None
-
-            # 检查是否超过最大亏损限制（如果亏损太多了，不适用连续K线止损）
-            if current_profit_pct < max_loss_pct:
-                return None, None
+            # 注意：已移除盈亏限制，趋势反转时无论盈亏都立即平仓
 
             symbol = position['symbol']
             position_side = position['position_side']
@@ -956,11 +948,7 @@ class LiveOrderMonitor:
         try:
             bars = config.get('bars', 3)
             timeframe = config.get('timeframe', '5m')
-            min_profit_pct = config.get('minProfitPct', 0.3)
-
-            # 检查最小盈利要求
-            if current_profit_pct < min_profit_pct:
-                return None, None
+            # 注意：已移除 minProfitPct 限制，趋势反转时无论盈亏都立即平仓
 
             symbol = position['symbol']
             position_side = position['position_side']
