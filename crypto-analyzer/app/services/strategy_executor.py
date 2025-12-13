@@ -3270,12 +3270,10 @@ class StrategyExecutor:
                             # ========== 检查卖出信号EMA状态（短周期趋势确认） ==========
                             # 避免买入信号(15m)触发后，卖出信号(5m)的EMA已经反转导致刚开仓就被平仓
                             # sell_ema_check_enabled 已从 kwargs 获取（默认启用）
+                            # 使用已计算的 sell_indicator_pairs（在函数开头已计算）
                             if sell_ema_check_enabled and sell_timeframe != buy_timeframe:
                                 try:
-                                    # 获取卖出信号时间周期的EMA数据
-                                    sell_indicator_pairs = self.calculate_indicators(
-                                        symbol, sell_timeframe, extended_start_time, end_time, ema_periods=(9, 26)
-                                    )
+                                    # 使用已有的卖出时间周期指标数据
                                     if sell_indicator_pairs and len(sell_indicator_pairs) > 0:
                                         sell_indicator = sell_indicator_pairs[-1]['indicator']
                                         sell_ema9 = float(sell_indicator.get('ema_short', 0)) if sell_indicator.get('ema_short') else None
