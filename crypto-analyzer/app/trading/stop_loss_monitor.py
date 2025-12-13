@@ -712,12 +712,15 @@ class StopLossMonitor:
                 current_profit_pct = float((entry_price - current_price) / entry_price * 100)
 
             # 检查是否在亏损区间
+            # 只有亏损时才检查连续K线止损
             if current_profit_pct > 0:
+                logger.debug(f"[连续K线止损] {symbol} {position_side} 当前盈利 {current_profit_pct:.2f}%，跳过检查")
                 return None
 
-            # 检查是否超过最大亏损限制
-            if current_profit_pct < max_loss_pct:
-                return None
+            # 注意：移除了 maxLossPct 限制
+            # 原逻辑：只有亏损在 maxLossPct 范围内才检查，这导致亏损过大时反而不检查
+            # 新逻辑：只要亏损就检查连续K线，连续反向K线说明趋势不利，应提前止损
+            logger.debug(f"[连续K线止损] {symbol} {position_side} 当前亏损 {current_profit_pct:.2f}%，开始检查连续K线")
 
             # 获取K线数据
             symbol = position['symbol']
@@ -734,26 +737,27 @@ class StopLossMonitor:
             cursor.close()
 
             if not klines or len(klines) < bars:
+                logger.debug(f"[连续K线止损] {symbol} K线数据不足: 需要{bars}根，实际{len(klines) if klines else 0}根")
                 return None
 
             # 检查连续K线
             if position_side == 'LONG':
                 # 做多：检查连续阴线（价格持续下跌）
-                consecutive_bearish = all(
-                    float(k['close_price']) < float(k['open_price'])
-                    for k in klines[:bars]
-                )
+                kline_status = [(float(k['open_price']), float(k['close_price']), float(k['close_price']) < float(k['open_price'])) for k in klines[:bars]]
+                consecutive_bearish = all(k[2] for k in kline_status)
+                logger.debug(f"[连续K线止损] {symbol} LONG 检查连续阴线: {kline_status} -> 结果={consecutive_bearish}")
                 if consecutive_bearish:
+                    logger.info(f"[连续K线止损] ⚠️ {symbol} LONG 触发连续{bars}根阴线止损，当前亏损 {current_profit_pct:.2f}%")
                     return {
                         'reason': f"连续{bars}根阴线止损(亏损{current_profit_pct:.2f}%)"
                     }
             else:  # SHORT
                 # 做空：检查连续阳线（价格持续上涨）
-                consecutive_bullish = all(
-                    float(k['close_price']) > float(k['open_price'])
-                    for k in klines[:bars]
-                )
+                kline_status = [(float(k['open_price']), float(k['close_price']), float(k['close_price']) > float(k['open_price'])) for k in klines[:bars]]
+                consecutive_bullish = all(k[2] for k in kline_status)
+                logger.debug(f"[连续K线止损] {symbol} SHORT 检查连续阳线: {kline_status} -> 结果={consecutive_bullish}")
                 if consecutive_bullish:
+                    logger.info(f"[连续K线止损] ⚠️ {symbol} SHORT 触发连续{bars}根阳线止损，当前亏损 {current_profit_pct:.2f}%")
                     return {
                         'reason': f"连续{bars}根阳线止损(亏损{current_profit_pct:.2f}%)"
                     }
