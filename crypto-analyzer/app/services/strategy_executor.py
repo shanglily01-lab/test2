@@ -2692,6 +2692,7 @@ class StrategyExecutor:
         # 初始化变量
         buy_signal_triggered = False
         is_sustained_signal = False  # 是否为持续趋势信号（跳过MACD/KDJ/MA10信号强度检查）
+        is_reversal_24h_signal = False  # 是否为24H高低点反转信号（跳过EMA趋势确认）
         found_golden_cross = False
         found_death_cross = False
         detected_cross_type = None
@@ -3117,6 +3118,7 @@ class StrategyExecutor:
 
             if reversal_result['signal']:
                 buy_signal_triggered = True
+                is_reversal_24h_signal = True  # 标记为24H反转信号，跳过EMA趋势确认
                 # 根据信号方向设置交叉类型
                 if reversal_result['signal'] == 'long':
                     found_golden_cross = True
@@ -3623,12 +3625,13 @@ class StrategyExecutor:
                                     if min_ma10_cross_strength > 0 or ma10_ema10_trend_filter:
                                         debug_info.append(f"{current_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ⚠️ 缺少 MA10/EMA10 数据，跳过检查")
                                     
-                            # 检查趋势持续性（持续趋势信号跳过此检查）
+                            # 检查趋势持续性（持续趋势信号和24H反转信号跳过此检查）
                             # 注意：当只检测当前K线穿越时，trend_confirm_bars > 1 的配置将导致信号永远不会触发
                             # 因为交叉刚发生，无法满足"持续N根K线"的要求
                             # 如果需要趋势确认功能，建议设置 trend_confirm_bars = 0 或 1
                             # 持续趋势信号已经在信号检测阶段确认了趋势持续性，不需要再检查
-                            if trend_confirm_ok and trend_confirm_bars > 0 and not is_sustained_signal:
+                            # 24H反转信号是独立的信号逻辑，不依赖EMA交叉，跳过EMA趋势确认
+                            if trend_confirm_ok and trend_confirm_bars > 0 and not is_sustained_signal and not is_reversal_24h_signal:
                                 # 找到金叉/死叉发生的索引位置（根据交易方向）
                                 cross_index = None
                                 for check_lookback in range(1, min(4, current_buy_index + 1)):
