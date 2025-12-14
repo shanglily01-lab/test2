@@ -16,6 +16,7 @@ symbols:
 - ASTER/USDT
 - SUI/USDT
 - ETC/USDT
+- NEAR/USDT
 
 demo_mode: false
 exchanges:
