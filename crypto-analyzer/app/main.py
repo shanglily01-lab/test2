@@ -233,7 +233,7 @@ async def lifespan(app: FastAPI):
             from app.trading.futures_trading_engine import FuturesTradingEngine
 
             db_config = config.get('database', {}).get('mysql', {})
-            futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
+            futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier, live_engine=live_engine)
             futures_limit_order_executor = FuturesLimitOrderExecutor(
                 db_config=db_config,
                 trading_engine=futures_engine,
