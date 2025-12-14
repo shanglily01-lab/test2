@@ -1516,6 +1516,44 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- EMA差值反转出场 -->
+                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-top: 12px; border: 1px solid var(--border-default);">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <input type="checkbox" id="emaDiffReversalExitEnabled" style="margin-right: 8px;">
+                                        <label for="emaDiffReversalExitEnabled" style="font-weight: 600; cursor: pointer;">EMA差值反转出场</label>
+                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">EMA9-EMA26差值收窄时平仓</span>
+                                    </div>
+                                    <div id="emaDiffReversalExitParams" style="display: none; margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">收窄阈值%</label>
+                                                <input type="number" class="form-input" id="emaDiffReversalShrinkPct" value="50" step="5" min="10" max="100" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">差值收窄此比例时平仓</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">最小持仓(分钟)</label>
+                                                <input type="number" class="form-input" id="emaDiffReversalMinHoldMinutes" value="30" step="5" min="5" max="240" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">防止开仓后立即出场</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">检测周期</label>
+                                                <select class="form-input" id="emaDiffReversalTimeframe" style="padding: 6px 10px; font-size: 13px;">
+                                                    <option value="5m">5分钟</option>
+                                                    <option value="15m" selected>15分钟</option>
+                                                    <option value="1h">1小时</option>
+                                                </select>
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">EMA计算周期</small>
+                                            </div>
+                                        </div>
+                                        <div style="margin-top: 8px; padding: 8px; background: rgba(59, 130, 246, 0.1); border-radius: 4px; border-left: 3px solid var(--primary-blue);">
+                                            <small style="color: var(--text-secondary); font-size: 11px;">
+                                                <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
+                                                开仓时记录EMA9-EMA26差值，持仓期间如果差值向0收窄（趋势减弱）或变号（趋势反转），触发平仓。
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- 智能止损 -->
@@ -2214,6 +2252,12 @@
             params.style.display = enabled ? 'block' : 'none';
         }
 
+        function toggleEmaDiffReversalExitParams() {
+            const enabled = document.getElementById('emaDiffReversalExitEnabled').checked;
+            const params = document.getElementById('emaDiffReversalExitParams');
+            params.style.display = enabled ? 'block' : 'none';
+        }
+
         // 24H反转参数显示切换
         function toggleReversal24hParams() {
             const enabled = document.getElementById('reversal24hEnabled');
@@ -2338,6 +2382,9 @@
 
             const consecutiveBearishExitCheckbox = document.getElementById('consecutiveBearishExitEnabled');
             if (consecutiveBearishExitCheckbox) consecutiveBearishExitCheckbox.addEventListener('change', toggleConsecutiveBearishExitParams);
+
+            const emaDiffReversalExitCheckbox = document.getElementById('emaDiffReversalExitEnabled');
+            if (emaDiffReversalExitCheckbox) emaDiffReversalExitCheckbox.addEventListener('change', toggleEmaDiffReversalExitParams);
 
             // 智能止损复选框事件绑定
             const atrStopLossCheckbox = document.getElementById('atrStopLossEnabled');
@@ -2571,6 +2618,13 @@
                     enabled: document.getElementById('consecutiveBearishExitEnabled') ? document.getElementById('consecutiveBearishExitEnabled').checked : false,
                     bars: document.getElementById('consecutiveBearishBars') ? parseInt(document.getElementById('consecutiveBearishBars').value) : 3,
                     timeframe: document.getElementById('consecutiveBearishTimeframe') ? document.getElementById('consecutiveBearishTimeframe').value : '15m'
+                },
+                // EMA差值反转出场
+                emaDiffReversalExit: {
+                    enabled: document.getElementById('emaDiffReversalExitEnabled') ? document.getElementById('emaDiffReversalExitEnabled').checked : false,
+                    shrinkPct: document.getElementById('emaDiffReversalShrinkPct') ? parseFloat(document.getElementById('emaDiffReversalShrinkPct').value) : 50.0,
+                    minHoldMinutes: document.getElementById('emaDiffReversalMinHoldMinutes') ? parseInt(document.getElementById('emaDiffReversalMinHoldMinutes').value) : 30,
+                    timeframe: document.getElementById('emaDiffReversalTimeframe') ? document.getElementById('emaDiffReversalTimeframe').value : '15m'
                 },
                 // 24H高低点反转信号配置
                 reversal24h: {
@@ -3326,6 +3380,16 @@
                     document.getElementById('consecutiveBearishBars').value = strategy.consecutiveBearishExit.bars || 3;
                     document.getElementById('consecutiveBearishTimeframe').value = strategy.consecutiveBearishExit.timeframe || '15m';
                     toggleConsecutiveBearishExitParams();
+                }
+            }
+            // EMA差值反转出场
+            if (strategy.emaDiffReversalExit) {
+                if (document.getElementById('emaDiffReversalExitEnabled')) {
+                    document.getElementById('emaDiffReversalExitEnabled').checked = strategy.emaDiffReversalExit.enabled === true;
+                    document.getElementById('emaDiffReversalShrinkPct').value = strategy.emaDiffReversalExit.shrinkPct || 50.0;
+                    document.getElementById('emaDiffReversalMinHoldMinutes').value = strategy.emaDiffReversalExit.minHoldMinutes || 30;
+                    document.getElementById('emaDiffReversalTimeframe').value = strategy.emaDiffReversalExit.timeframe || '15m';
+                    toggleEmaDiffReversalExitParams();
                 }
             }
 

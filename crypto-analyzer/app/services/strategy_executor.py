@@ -765,6 +765,19 @@ class StrategyExecutor:
             consecutive_bearish_timeframe = consecutive_bearish_exit.get('timeframe', '5m') if isinstance(consecutive_bearish_exit, dict) else '5m'
             # 注意：已移除 minProfitPct 限制，趋势反转时无论盈亏都立即平仓
 
+            # 5. EMA差值反转出场：当EMA9-EMA26差值相对于开仓时收窄时出场
+            # 做空：开仓时差值为负（EMA9<EMA26），如果差值向0收窄说明趋势反转
+            # 做多：开仓时差值为正（EMA9>EMA26），如果差值向0收窄说明趋势反转
+            ema_diff_reversal_exit = strategy.get('emaDiffReversalExit', {})
+            ema_diff_reversal_enabled = ema_diff_reversal_exit.get('enabled', False) if isinstance(ema_diff_reversal_exit, dict) else False
+            # 收窄阈值（%）：当差值收窄超过此百分比时触发出场
+            # 例如：开仓差值=-0.5，当前差值=-0.2，收窄了60%，如果阈值是50%则触发
+            ema_diff_reversal_shrink_pct = ema_diff_reversal_exit.get('shrinkPct', 50.0) if isinstance(ema_diff_reversal_exit, dict) else 50.0
+            # 最小持仓时间（分钟）：防止开仓后立即因波动出场
+            ema_diff_reversal_min_hold_minutes = ema_diff_reversal_exit.get('minHoldMinutes', 30) if isinstance(ema_diff_reversal_exit, dict) else 30
+            # 检测使用的时间周期（默认15m，与开仓时保存的一致）
+            ema_diff_reversal_timeframe = ema_diff_reversal_exit.get('timeframe', '15m') if isinstance(ema_diff_reversal_exit, dict) else '15m'
+
             # ================== 智能止损配置 ==================
             smart_stop_loss = strategy.get('smartStopLoss', {})
 
@@ -2138,7 +2151,47 @@ class StrategyExecutor:
                             elif direction == 'short' and bars_above_ema >= exit_price_cross_ema_confirm_bars:
                                 exit_price = realtime_price
                                 exit_reason = f"价格突破EMA9({bars_above_ema}根K线确认)"
-                
+
+                # EMA差值反转出场检查：当EMA9-EMA26差值相对于开仓时收窄时出场
+                if not exit_price and ema_diff_reversal_enabled:
+                    try:
+                        # 获取开仓时保存的EMA差值
+                        entry_ema_diff = position.get('entry_ema_diff')
+                        if entry_ema_diff is not None and entry_ema_diff != 0:
+                            entry_ema_diff = float(entry_ema_diff)
+
+                            # 检查最小持仓时间
+                            hold_minutes = (datetime.now(self.LOCAL_TZ).replace(tzinfo=None) - position['entry_time_local']).total_seconds() / 60
+                            if hold_minutes >= ema_diff_reversal_min_hold_minutes:
+                                # 计算当前EMA差值
+                                current_ema_diff = trading_engine.get_ema_diff(symbol, ema_diff_reversal_timeframe)
+                                if current_ema_diff is not None:
+                                    # 计算差值收窄百分比
+                                    # 做空：开仓差值为负，当前差值向0收窄（变大/变小于原来绝对值）
+                                    # 做多：开仓差值为正，当前差值向0收窄（变小/变小于原来绝对值）
+
+                                    abs_entry = abs(entry_ema_diff)
+                                    abs_current = abs(current_ema_diff)
+
+                                    # 收窄百分比 = (开仓差值绝对值 - 当前差值绝对值) / 开仓差值绝对值 * 100
+                                    shrink_pct = (abs_entry - abs_current) / abs_entry * 100 if abs_entry > 0 else 0
+
+                                    # 还要检查差值是否变号（完全反转）
+                                    sign_changed = (entry_ema_diff > 0 and current_ema_diff < 0) or (entry_ema_diff < 0 and current_ema_diff > 0)
+
+                                    if sign_changed:
+                                        # 差值已经反号，说明趋势已经完全反转
+                                        exit_price = realtime_price
+                                        exit_reason = f"EMA差值反转(开仓{entry_ema_diff:.4f}→当前{current_ema_diff:.4f},已变号)"
+                                        logger.info(f"{symbol}: 📉 EMA差值反转平仓 - 开仓差值={entry_ema_diff:.4f}, 当前差值={current_ema_diff:.4f}, 已变号")
+                                    elif shrink_pct >= ema_diff_reversal_shrink_pct:
+                                        # 差值收窄超过阈值
+                                        exit_price = realtime_price
+                                        exit_reason = f"EMA差值收窄{shrink_pct:.1f}%(阈值{ema_diff_reversal_shrink_pct}%)"
+                                        logger.info(f"{symbol}: 📉 EMA差值收窄平仓 - 开仓差值={entry_ema_diff:.4f}, 当前差值={current_ema_diff:.4f}, 收窄{shrink_pct:.1f}%")
+                    except Exception as e:
+                        logger.warning(f"{symbol}: EMA差值反转检查失败: {e}")
+
                 if exit_price and exit_reason:
                     position_id = position.get('position_id')
                     quantity = position['quantity']

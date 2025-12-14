@@ -56,6 +56,29 @@ def round_quantity(quantity: Decimal, symbol: str) -> Decimal:
 class FuturesTradingEngine:
     """模拟合约交易引擎"""
 
+    @staticmethod
+    def calculate_ema(prices: list, period: int) -> float:
+        """
+        计算EMA（指数移动平均线）
+
+        Args:
+            prices: 价格列表（从旧到新）
+            period: EMA周期
+
+        Returns:
+            EMA值
+        """
+        if not prices or len(prices) < period:
+            return 0.0
+
+        multiplier = 2 / (period + 1)
+        ema = sum(prices[:period]) / period  # 初始SMA
+
+        for price in prices[period:]:
+            ema = (price - ema) * multiplier + ema
+
+        return ema
+
     def __init__(self, db_config: dict, trade_notifier=None, live_engine=None):
         """初始化合约交易引擎
 
@@ -109,12 +132,56 @@ class FuturesTradingEngine:
         """检查是否需要刷新连接（基于连接年龄）"""
         if self._connection_created_at is None:
             return True
-        
+
         current_time = time.time()
         connection_age = current_time - self._connection_created_at
-        
+
         # 如果连接年龄超过最大存活时间，需要刷新
         return connection_age > self._connection_max_age
+
+    def get_ema_diff(self, symbol: str, timeframe: str = '15m') -> Optional[float]:
+        """
+        获取当前 EMA9 - EMA26 的差值
+
+        Args:
+            symbol: 交易对
+            timeframe: K线周期，默认15分钟
+
+        Returns:
+            EMA9 - EMA26 的差值，无法计算时返回 None
+        """
+        try:
+            cursor = self._get_cursor()
+            # 获取最近30根K线（确保有足够数据计算EMA26）
+            cursor.execute("""
+                SELECT close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s
+                ORDER BY timestamp DESC
+                LIMIT 30
+            """, (symbol, timeframe))
+
+            rows = cursor.fetchall()
+            if not rows or len(rows) < 26:
+                logger.warning(f"[EMA差值] {symbol} K线数据不足，无法计算EMA")
+                return None
+
+            # 转换为从旧到新的价格列表
+            prices = [float(row['close_price']) for row in reversed(rows)]
+
+            ema9 = self.calculate_ema(prices, 9)
+            ema26 = self.calculate_ema(prices, 26)
+
+            if ema9 == 0 or ema26 == 0:
+                return None
+
+            ema_diff = ema9 - ema26
+            logger.debug(f"[EMA差值] {symbol}: EMA9={ema9:.6f}, EMA26={ema26:.6f}, 差值={ema_diff:.6f}")
+            return ema_diff
+
+        except Exception as e:
+            logger.error(f"[EMA差值] 计算失败: {e}")
+            return None
 
     def _get_cursor(self):
         """获取数据库游标"""
@@ -627,6 +694,11 @@ class FuturesTradingEngine:
                     take_profit_price = None
             # 如果直接指定了止盈价格，使用指定的价格
 
+            # 5.5. 计算开仓时的 EMA 差值（用于趋势反转检测）
+            entry_ema_diff = self.get_ema_diff(symbol, '15m')
+            if entry_ema_diff is not None:
+                logger.info(f"[EMA差值] {symbol} {position_side} 开仓EMA差值: {entry_ema_diff:.6f}")
+
             # 6. 创建持仓记录
             position_sql = """
                 INSERT INTO futures_positions (
@@ -634,12 +706,14 @@ class FuturesTradingEngine:
                     quantity, notional_value, margin,
                     entry_price, mark_price, liquidation_price,
                     stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct,
+                    entry_ema_diff,
                     open_time, source, signal_id, strategy_id, status
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s, %s,
+                    %s,
                     %s, %s, %s, %s, 'open'
                 )
             """
@@ -652,6 +726,7 @@ class FuturesTradingEngine:
                 float(take_profit_price) if take_profit_price else None,
                 float(stop_loss_pct) if stop_loss_pct else None,
                 float(take_profit_pct) if take_profit_pct else None,
+                entry_ema_diff,
                 get_local_time(), source, signal_id, strategy_id
             ))
 

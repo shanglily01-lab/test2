@@ -136,6 +136,73 @@ class BinanceFuturesEngine:
             self._connect_db()
             return self.connection.cursor()
 
+    @staticmethod
+    def calculate_ema(prices: list, period: int) -> float:
+        """
+        计算EMA（指数移动平均线）
+
+        Args:
+            prices: 价格列表（从旧到新）
+            period: EMA周期
+
+        Returns:
+            EMA值
+        """
+        if not prices or len(prices) < period:
+            return 0.0
+
+        multiplier = 2 / (period + 1)
+        ema = sum(prices[:period]) / period  # 初始SMA
+
+        for price in prices[period:]:
+            ema = (price - ema) * multiplier + ema
+
+        return ema
+
+    def get_ema_diff(self, symbol: str, timeframe: str = '15m') -> Optional[float]:
+        """
+        获取当前 EMA9 - EMA26 的差值
+
+        Args:
+            symbol: 交易对
+            timeframe: K线周期，默认15分钟
+
+        Returns:
+            EMA9 - EMA26 的差值，无法计算时返回 None
+        """
+        try:
+            cursor = self._get_cursor()
+            # 获取最近30根K线（确保有足够数据计算EMA26）
+            cursor.execute("""
+                SELECT close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s
+                ORDER BY timestamp DESC
+                LIMIT 30
+            """, (symbol, timeframe))
+
+            rows = cursor.fetchall()
+            if not rows or len(rows) < 26:
+                logger.warning(f"[实盘EMA差值] {symbol} K线数据不足，无法计算EMA")
+                return None
+
+            # 转换为从旧到新的价格列表
+            prices = [float(row['close_price']) for row in reversed(rows)]
+
+            ema9 = self.calculate_ema(prices, 9)
+            ema26 = self.calculate_ema(prices, 26)
+
+            if ema9 == 0 or ema26 == 0:
+                return None
+
+            ema_diff = ema9 - ema26
+            logger.debug(f"[实盘EMA差值] {symbol}: EMA9={ema9:.6f}, EMA26={ema26:.6f}, 差值={ema_diff:.6f}")
+            return ema_diff
+
+        except Exception as e:
+            logger.error(f"[实盘EMA差值] 计算失败: {e}")
+            return None
+
     def _generate_signature(self, params: dict) -> str:
         """生成请求签名"""
         # 按原始顺序拼接参数（不排序）
@@ -622,6 +689,11 @@ class BinanceFuturesEngine:
                 else:
                     logger.warning(f"[实盘] 止盈价 {take_profit_price} 无效 ({position_side} 入场价 {entry_price})，跳过止盈设置")
 
+            # 9.5. 计算开仓时的 EMA 差值（用于趋势反转检测）
+            entry_ema_diff = self.get_ema_diff(symbol, '15m')
+            if entry_ema_diff is not None:
+                logger.info(f"[实盘EMA差值] {symbol} {position_side} 开仓EMA差值: {entry_ema_diff:.6f}")
+
             # 10. 保存到本地数据库
             position_id = self._save_position_to_db(
                 account_id=account_id,
@@ -636,7 +708,8 @@ class BinanceFuturesEngine:
                 signal_id=signal_id,
                 strategy_id=strategy_id,
                 binance_order_id=order_id,
-                status='OPEN' if status == 'FILLED' else 'PENDING'
+                status='OPEN' if status == 'FILLED' else 'PENDING',
+                entry_ema_diff=entry_ema_diff
             )
 
             # 发送Telegram通知
@@ -1253,7 +1326,8 @@ class BinanceFuturesEngine:
         signal_id: Optional[int],
         strategy_id: Optional[int],
         binance_order_id: str,
-        status: str
+        status: str,
+        entry_ema_diff: Optional[float] = None
     ) -> int:
         """保存持仓到本地数据库"""
         try:
@@ -1266,13 +1340,14 @@ class BinanceFuturesEngine:
             insert_sql = """INSERT INTO live_futures_positions
                 (account_id, symbol, position_side, leverage, quantity,
                  notional_value, margin, entry_price, stop_loss_price,
-                 take_profit_price, open_time, status, source, signal_id,
+                 take_profit_price, entry_ema_diff, open_time, status, source, signal_id,
                  strategy_id, binance_order_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
             insert_params = (account_id, symbol, position_side, leverage, float(quantity),
                  float(notional_value), float(margin), float(entry_price),
                  float(stop_loss_price) if stop_loss_price else None,
                  float(take_profit_price) if take_profit_price else None,
+                 entry_ema_diff,
                  get_local_time(), status, source, signal_id, strategy_id, binance_order_id)
 
             cursor.execute(insert_sql, insert_params)
