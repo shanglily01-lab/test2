@@ -44,7 +44,10 @@
       "Bash(for id in 1764130914476 1764510354115 1764662486056)",
       "Bash(do echo \"=== Strategy $id ===\")",
       "Bash(done)",
-      "Bash(ssh:*)"
+      "Bash(ssh:*)",
+      "Bash(pgrep:*)",
+      "Bash(sudo systemctl status:*)",
+      "Bash(ps:*)"
     ],
     "deny": [],
     "ask": []

@@ -2957,20 +2957,43 @@ class StrategyExecutor:
                                         sustained_conditions_met = False
                                         sustained_reasons.append(f"价格未在EMA9下方(实时价格={realtime_price:.4f} >= EMA9={curr_ema_short:.4f})")
 
-                                # 条件4：连续K线确认（检查历史K线是否持续保持趋势）
+                                # 条件4：连续K线确认（检查EMA差值是否连续放大，确认趋势加速）
+                                # 做空时：EMA9 < EMA26，差值为负，差值放大意味着绝对值变大（更负）
                                 if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
-                                    bars_in_trend = 0
-                                    for i in range(sustained_trend_min_bars):
+                                    diff_expanding = True
+                                    diff_values = []
+
+                                    # 收集最近N+1根K线的差值（需要N+1根才能比较N次）
+                                    for i in range(sustained_trend_min_bars + 1):
                                         check_idx = current_buy_index - i
                                         if check_idx >= 0:
                                             check_pair = buy_indicator_pairs[check_idx]
                                             check_ema_short = float(check_pair['indicator'].get('ema_short', 0))
                                             check_ema_long = float(check_pair['indicator'].get('ema_long', 0))
-                                            if check_ema_short < check_ema_long:  # 空头状态
-                                                bars_in_trend += 1
-                                    if bars_in_trend < sustained_trend_min_bars:
+                                            if check_ema_long > 0:
+                                                # 做空时差值为负，取绝对值便于比较
+                                                diff_abs = abs(check_ema_short - check_ema_long) / check_ema_long * 100
+                                                diff_values.append(diff_abs)
+
+                                    # 检查差值是否连续放大（从旧到新）
+                                    # diff_values[0]是最新的，diff_values[-1]是最旧的
+                                    if len(diff_values) >= sustained_trend_min_bars + 1:
+                                        diff_values.reverse()  # 反转为从旧到新
+                                        for i in range(len(diff_values) - 1):
+                                            if diff_values[i + 1] <= diff_values[i]:  # 新的差值应该大于旧的
+                                                diff_expanding = False
+                                                break
+
+                                        if not diff_expanding:
+                                            sustained_conditions_met = False
+                                            diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
+                                            sustained_reasons.append(f"EMA差值未连续放大({diff_str})")
+                                        else:
+                                            diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
+                                            debug_info.append(f"   ✅ EMA差值连续放大: {diff_str}")
+                                    else:
                                         sustained_conditions_met = False
-                                        sustained_reasons.append(f"趋势持续性不足(连续{bars_in_trend}根K线 < 要求{sustained_trend_min_bars}根)")
+                                        sustained_reasons.append(f"K线数据不足(需要{sustained_trend_min_bars + 1}根，实际{len(diff_values)}根)")
 
                                 # 条件5：冷却时间检查（检查最近是否已经因持续趋势信号开过仓）
                                 if sustained_conditions_met and sustained_trend_cooldown_minutes > 0:
@@ -3060,20 +3083,43 @@ class StrategyExecutor:
                                         sustained_conditions_met = False
                                         sustained_reasons.append(f"价格未在EMA9上方(实时价格={realtime_price:.4f} <= EMA9={curr_ema_short:.4f})")
 
-                                # 条件4：连续K线确认
+                                # 条件4：连续K线确认（检查EMA差值是否连续放大，确认趋势加速）
+                                # 做多时：EMA9 > EMA26，差值为正，差值放大意味着值变大
                                 if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
-                                    bars_in_trend = 0
-                                    for i in range(sustained_trend_min_bars):
+                                    diff_expanding = True
+                                    diff_values = []
+
+                                    # 收集最近N+1根K线的差值（需要N+1根才能比较N次）
+                                    for i in range(sustained_trend_min_bars + 1):
                                         check_idx = current_buy_index - i
                                         if check_idx >= 0:
                                             check_pair = buy_indicator_pairs[check_idx]
                                             check_ema_short = float(check_pair['indicator'].get('ema_short', 0))
                                             check_ema_long = float(check_pair['indicator'].get('ema_long', 0))
-                                            if check_ema_short > check_ema_long:  # 多头状态
-                                                bars_in_trend += 1
-                                    if bars_in_trend < sustained_trend_min_bars:
+                                            if check_ema_long > 0:
+                                                # 做多时差值为正，取绝对值便于比较
+                                                diff_abs = abs(check_ema_short - check_ema_long) / check_ema_long * 100
+                                                diff_values.append(diff_abs)
+
+                                    # 检查差值是否连续放大（从旧到新）
+                                    # diff_values[0]是最新的，diff_values[-1]是最旧的
+                                    if len(diff_values) >= sustained_trend_min_bars + 1:
+                                        diff_values.reverse()  # 反转为从旧到新
+                                        for i in range(len(diff_values) - 1):
+                                            if diff_values[i + 1] <= diff_values[i]:  # 新的差值应该大于旧的
+                                                diff_expanding = False
+                                                break
+
+                                        if not diff_expanding:
+                                            sustained_conditions_met = False
+                                            diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
+                                            sustained_reasons.append(f"EMA差值未连续放大({diff_str})")
+                                        else:
+                                            diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
+                                            debug_info.append(f"   ✅ EMA差值连续放大: {diff_str}")
+                                    else:
                                         sustained_conditions_met = False
-                                        sustained_reasons.append(f"趋势持续性不足(连续{bars_in_trend}根K线 < 要求{sustained_trend_min_bars}根)")
+                                        sustained_reasons.append(f"K线数据不足(需要{sustained_trend_min_bars + 1}根，实际{len(diff_values)}根)")
 
                                 # 条件5：冷却时间检查
                                 if sustained_conditions_met and sustained_trend_cooldown_minutes > 0:
