@@ -3937,12 +3937,19 @@ class StrategyExecutor:
                                         quantity_decimal = Decimal(str(quantity))
                                         entry_price_decimal = Decimal(str(entry_price))
                                                 
-                                        # 判断是否使用限价单：做多时检查long_price_type，做空时检查short_price_type
+                                        # 判断是否使用限价单：
+                                        # 方案3：金叉/死叉信号强制使用市价单（只有持续趋势信号才用限价单）
+                                        # - 金叉/死叉是穿越信号，需要立即成交抓住时机
+                                        # - 持续趋势是追涨杀跌，可以用限价单等更好的价格
                                         use_limit_price = False
-                                        if direction == 'long' and long_price_type != 'market':
-                                            use_limit_price = True
-                                        elif direction == 'short' and short_price_type != 'market':
-                                            use_limit_price = True
+                                        if is_sustained_signal:
+                                            # 持续趋势信号：根据配置决定是否用限价单
+                                            if direction == 'long' and long_price_type != 'market':
+                                                use_limit_price = True
+                                            elif direction == 'short' and short_price_type != 'market':
+                                                use_limit_price = True
+                                        # 金叉/死叉/24H反转等信号：强制使用市价单
+                                        # use_limit_price 保持 False
 
                                         # 添加开仓调试日志
                                         market_label = "[实盘]" if market_type == 'live' else "[模拟]"

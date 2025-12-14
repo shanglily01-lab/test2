@@ -546,144 +546,22 @@ class FuturesLimitOrderExecutor:
                                 # 超时，检查价格偏离是否过大
                                 # 做多：当前价格高于限价太多则取消（避免追高）
                                 # 做空：当前价格低于限价太多则取消（避免杀低）
-                                max_deviation_pct = Decimal('0.5')  # 最大允许偏离 0.5% (与实盘一致)
+                                max_deviation_pct = Decimal('1.5')  # 最大允许偏离 1.5%（增大容忍度，避免错过信号）
 
                                 if side == 'OPEN_LONG':
                                     deviation_pct = (current_price - limit_price) / limit_price * 100
                                 else:  # OPEN_SHORT
                                     deviation_pct = (limit_price - current_price) / limit_price * 100
 
+                                # 方案2：无论偏离大小，超时后都转市价执行（不再取消）
+                                # 偏离过大时也执行，只是记录不同的日志
                                 if deviation_pct > max_deviation_pct:
-                                    # 价格偏离过大，取消订单而不是转市价
-                                    logger.info(f"⏰ 限价单超时取消: {symbol} {position_side} 价格偏离超过0.5% ({deviation_pct:.2f}%), 限价={limit_price}, 当前={current_price}")
-
-                                    # 解冻保证金
-                                    frozen_margin = Decimal(str(order.get('margin', 0)))
-                                    if frozen_margin > 0:
-                                        with connection.cursor() as update_cursor:
-                                            update_cursor.execute(
-                                                """UPDATE paper_trading_accounts
-                                                SET current_balance = current_balance + %s,
-                                                    frozen_balance = GREATEST(0, frozen_balance - %s)
-                                                WHERE id = %s""",
-                                                (float(frozen_margin), float(frozen_margin), account_id)
-                                            )
-
-                                    # 更新订单状态为已取消
-                                    with connection.cursor() as update_cursor:
-                                        update_cursor.execute(
-                                            """UPDATE futures_orders
-                                            SET status = 'CANCELLED',
-                                                cancellation_reason = 'timeout',
-                                                canceled_at = NOW(),
-                                                notes = CONCAT(COALESCE(notes, ''), ' TIMEOUT_PRICE_DEVIATION')
-                                            WHERE order_id = %s""",
-                                            (order_id,)
-                                        )
-
-                                    connection.commit()
-
-                                    # ========== 同步取消实盘订单 ==========
-                                    try:
-                                        strategy_config = order.get('strategy_config')
-                                        if strategy_config and self.live_engine:
-                                            config = strategy_config
-                                            if isinstance(config, str):
-                                                try:
-                                                    config = json.loads(config)
-                                                except:
-                                                    config = {}
-
-                                            sync_live = config.get('syncLive', False)
-                                            if sync_live:
-                                                # 查找对应的实盘PENDING持仓
-                                                with connection.cursor() as cursor:
-                                                    cursor.execute("""
-                                                        SELECT id, binance_order_id
-                                                        FROM live_futures_positions
-                                                        WHERE symbol = %s
-                                                          AND position_side = %s
-                                                          AND status = 'PENDING'
-                                                        ORDER BY created_at DESC
-                                                        LIMIT 1
-                                                    """, (symbol, position_side))
-                                                    live_pos = cursor.fetchone()
-
-                                                if live_pos and live_pos.get('binance_order_id'):
-                                                    binance_order_id = live_pos['binance_order_id']
-                                                    logger.info(f"[同步实盘] 取消限价单: {symbol} {position_side}, 订单ID={binance_order_id}")
-
-                                                    # 先查询订单状态，确认订单是否已成交
-                                                    order_status = self.live_engine.get_order_status(symbol, binance_order_id)
-
-                                                    if order_status.get('status') == 'FILLED':
-                                                        # 订单已成交，不能取消，更新为 OPEN 状态
-                                                        logger.warning(f"[同步实盘] ⚠️ 限价单已成交，无法取消: {symbol} {position_side}")
-                                                        with connection.cursor() as cursor:
-                                                            cursor.execute("""
-                                                                UPDATE live_futures_positions
-                                                                SET status = 'OPEN',
-                                                                    notes = CONCAT(COALESCE(notes, ''), ' FILLED_BEFORE_CANCEL')
-                                                                WHERE id = %s
-                                                            """, (live_pos['id'],))
-                                                        connection.commit()
-                                                    else:
-                                                        # 调用实盘引擎取消订单
-                                                        cancel_result = self.live_engine.cancel_order(
-                                                            symbol=symbol,
-                                                            order_id=binance_order_id
-                                                        )
-
-                                                        if cancel_result.get('success'):
-                                                            # 再次确认订单状态（取消成功可能因为订单已成交）
-                                                            if '已不存在' in cancel_result.get('message', ''):
-                                                                # 订单不存在，可能已成交，查询确认
-                                                                final_status = self.live_engine.get_order_status(symbol, binance_order_id)
-                                                                if final_status.get('status') == 'FILLED':
-                                                                    logger.warning(f"[同步实盘] ⚠️ 订单已成交: {symbol} {position_side}")
-                                                                    with connection.cursor() as cursor:
-                                                                        cursor.execute("""
-                                                                            UPDATE live_futures_positions
-                                                                            SET status = 'OPEN',
-                                                                                notes = CONCAT(COALESCE(notes, ''), ' FILLED_ON_CANCEL_CHECK')
-                                                                            WHERE id = %s
-                                                                        """, (live_pos['id'],))
-                                                                    connection.commit()
-                                                                else:
-                                                                    # 真的被取消了
-                                                                    with connection.cursor() as cursor:
-                                                                        cursor.execute("""
-                                                                            UPDATE live_futures_positions
-                                                                            SET status = 'CANCELED',
-                                                                                close_reason = 'timeout_price_deviation',
-                                                                                close_time = NOW(),
-                                                                                notes = CONCAT(COALESCE(notes, ''), ' SYNCED_CANCEL_FROM_PAPER')
-                                                                            WHERE id = %s
-                                                                        """, (live_pos['id'],))
-                                                                    connection.commit()
-                                                                    logger.info(f"[同步实盘] ✅ 限价单已取消: {symbol} {position_side}")
-                                                            else:
-                                                                # 正常取消成功
-                                                                with connection.cursor() as cursor:
-                                                                    cursor.execute("""
-                                                                        UPDATE live_futures_positions
-                                                                        SET status = 'CANCELED',
-                                                                            close_reason = 'timeout_price_deviation',
-                                                                            close_time = NOW(),
-                                                                            notes = CONCAT(COALESCE(notes, ''), ' SYNCED_CANCEL_FROM_PAPER')
-                                                                        WHERE id = %s
-                                                                    """, (live_pos['id'],))
-                                                                connection.commit()
-                                                                logger.info(f"[同步实盘] ✅ 限价单已取消: {symbol} {position_side}")
-                                                        else:
-                                                            error_msg = cancel_result.get('error', cancel_result.get('message', '未知错误'))
-                                                            logger.error(f"[同步实盘] ❌ 取消限价单失败: {symbol} {position_side} - {error_msg}")
-                                    except Exception as sync_ex:
-                                        logger.error(f"[同步实盘] ❌ 取消限价单异常: {symbol} {position_side} - {sync_ex}")
-                                    # ========== 同步取消实盘订单结束 ==========
-
-                                    continue  # 跳过此订单
+                                    logger.info(f"⏰ 限价单超时转市价(偏离大): {symbol} {position_side} 价格偏离 {deviation_pct:.2f}% > {max_deviation_pct}%, 限价={limit_price}, 当前={current_price}")
                                 else:
+                                    logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟, 偏离 {deviation_pct:.2f}%")
+
+                                # 统一处理：检查EMA状态后决定是否市价执行
+                                if True:  # 保持原有缩进结构
                                     # 价格偏离在可接受范围内，但在转市价之前需要检查EMA状态
                                     # 如果EMA状态不再支持开仓方向，则取消订单而不是强行市价成交
                                     ema_unfavorable_reason = self._check_ema_unfavorable(connection, order)
