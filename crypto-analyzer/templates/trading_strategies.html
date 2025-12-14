@@ -1759,15 +1759,42 @@
                                 <div class="form-group" id="limitOrderTimeoutGroup">
                                     <label class="form-label">限价单超时转市价</label>
                                     <small style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px; display: block;">
-                                        限价单超时后：价格偏离≤0.5%则市价成交，偏离>0.5%则取消订单（0表示不超时）
+                                        限价单超时后自动转市价执行（0表示不超时）
                                     </small>
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <input type="number" id="limitOrderTimeoutMinutes" name="limitOrderTimeoutMinutes"
                                                step="1" min="0" max="120"
-                                               placeholder="0"
+                                               placeholder="15"
                                                style="width: 80px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
                                         <small style="color: var(--text-secondary); font-size: 11px;">分钟（建议5-15分钟）</small>
                                     </div>
+                                </div>
+
+                                <!-- 限价单最大偏离百分比 -->
+                                <div class="form-group" id="limitOrderMaxDeviationGroup">
+                                    <label class="form-label">限价单最大偏离</label>
+                                    <small style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px; display: block;">
+                                        超时转市价时，只有偏离≤此值才执行；偏离过大时也转市价（避免错过信号）
+                                    </small>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <input type="number" id="limitOrderMaxDeviation" name="limitOrderMaxDeviation"
+                                               step="0.1" min="0.5" max="5"
+                                               placeholder="1.5"
+                                               style="width: 80px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                        <small style="color: var(--text-secondary); font-size: 11px;">%（建议1-2%）</small>
+                                    </div>
+                                </div>
+
+                                <!-- 金叉/死叉强制市价单 -->
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        <input type="checkbox" id="crossSignalForceMarket" name="crossSignalForceMarket" checked
+                                               style="margin-right: 8px;">
+                                        金叉/死叉信号强制市价单
+                                    </label>
+                                    <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">
+                                        穿越信号需要立即成交，只有持续趋势信号才使用限价单
+                                    </small>
                                 </div>
                             </div>
 
@@ -2465,7 +2492,9 @@
                 maxShortPositions: document.getElementById('maxShortPositions').value ? parseInt(document.getElementById('maxShortPositions').value) : null,
                 longPrice: longPriceRadio ? longPriceRadio.value : null,
                 shortPrice: shortPriceRadio ? shortPriceRadio.value : null,
-                limitOrderTimeoutMinutes: document.getElementById('limitOrderTimeoutMinutes') && document.getElementById('limitOrderTimeoutMinutes').value ? parseInt(document.getElementById('limitOrderTimeoutMinutes').value) : 0,
+                limitOrderTimeoutMinutes: document.getElementById('limitOrderTimeoutMinutes') && document.getElementById('limitOrderTimeoutMinutes').value ? parseInt(document.getElementById('limitOrderTimeoutMinutes').value) : 15,
+                limitOrderMaxDeviation: document.getElementById('limitOrderMaxDeviation') && document.getElementById('limitOrderMaxDeviation').value ? parseFloat(document.getElementById('limitOrderMaxDeviation').value) : 1.5,
+                crossSignalForceMarket: document.getElementById('crossSignalForceMarket') ? document.getElementById('crossSignalForceMarket').checked : true,
                 stopLoss: document.getElementById('stopLoss').value ? parseFloat(document.getElementById('stopLoss').value) : null,
                 takeProfit: document.getElementById('takeProfit').value ? parseFloat(document.getElementById('takeProfit').value) : null,
                 closeOppositeOnEntry: document.getElementById('closeOppositeOnEntry') ? document.getElementById('closeOppositeOnEntry').checked : false,
@@ -3372,6 +3401,16 @@
             // 限价单超时
             if (document.getElementById('limitOrderTimeoutMinutes')) {
                 document.getElementById('limitOrderTimeoutMinutes').value = strategy.limitOrderTimeoutMinutes || '';
+            }
+
+            // 限价单最大偏离
+            if (document.getElementById('limitOrderMaxDeviation')) {
+                document.getElementById('limitOrderMaxDeviation').value = strategy.limitOrderMaxDeviation || '';
+            }
+
+            // 金叉/死叉强制市价单
+            if (document.getElementById('crossSignalForceMarket')) {
+                document.getElementById('crossSignalForceMarket').checked = strategy.crossSignalForceMarket !== false;
             }
 
             // 显示Modal表单

@@ -398,8 +398,12 @@ class FuturesLimitOrderExecutor:
                         """SELECT o.*,
                                COALESCE(
                                    CAST(JSON_EXTRACT(s.config, '$.limitOrderTimeoutMinutes') AS UNSIGNED),
-                                   0
+                                   15
                                ) as strategy_timeout,
+                               COALESCE(
+                                   CAST(JSON_EXTRACT(s.config, '$.limitOrderMaxDeviation') AS DECIMAL(5,2)),
+                                   1.5
+                               ) as strategy_max_deviation,
                                s.config as strategy_config,
                                s.name as strategy_name,
                                NOW() as db_now,
@@ -546,7 +550,8 @@ class FuturesLimitOrderExecutor:
                                 # 超时，检查价格偏离是否过大
                                 # 做多：当前价格高于限价太多则取消（避免追高）
                                 # 做空：当前价格低于限价太多则取消（避免杀低）
-                                max_deviation_pct = Decimal('1.5')  # 最大允许偏离 1.5%（增大容忍度，避免错过信号）
+                                # 从策略配置读取最大偏离百分比，默认1.5%
+                                max_deviation_pct = Decimal(str(order.get('strategy_max_deviation', 1.5) or 1.5))
 
                                 if side == 'OPEN_LONG':
                                     deviation_pct = (current_price - limit_price) / limit_price * 100

@@ -641,7 +641,9 @@ class StrategyExecutor:
             long_price_type = strategy.get('longPrice', 'market')
             short_price_type = strategy.get('shortPrice', 'market')
             # 限价单超时自动转市价（分钟），0表示不转换
-            limit_order_timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 0)
+            limit_order_timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 15)
+            # 金叉/死叉信号强制使用市价单（默认启用，穿越信号需要立即成交）
+            cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
             stop_loss_pct = strategy.get('stopLoss')
             take_profit_pct = strategy.get('takeProfit')
             ma10_ema10_trend_filter = strategy.get('ma10Ema10TrendFilter', False)
@@ -3938,18 +3940,24 @@ class StrategyExecutor:
                                         entry_price_decimal = Decimal(str(entry_price))
                                                 
                                         # 判断是否使用限价单：
-                                        # 方案3：金叉/死叉信号强制使用市价单（只有持续趋势信号才用限价单）
-                                        # - 金叉/死叉是穿越信号，需要立即成交抓住时机
-                                        # - 持续趋势是追涨杀跌，可以用限价单等更好的价格
+                                        # 方案3：金叉/死叉信号可配置是否强制使用市价单
+                                        # - cross_signal_force_market=True（默认）：金叉/死叉使用市价单，只有持续趋势用限价单
+                                        # - cross_signal_force_market=False：所有信号都根据 long_price_type/short_price_type 配置决定
                                         use_limit_price = False
+
                                         if is_sustained_signal:
-                                            # 持续趋势信号：根据配置决定是否用限价单
+                                            # 持续趋势信号：始终根据配置决定是否用限价单
                                             if direction == 'long' and long_price_type != 'market':
                                                 use_limit_price = True
                                             elif direction == 'short' and short_price_type != 'market':
                                                 use_limit_price = True
-                                        # 金叉/死叉/24H反转等信号：强制使用市价单
-                                        # use_limit_price 保持 False
+                                        elif not cross_signal_force_market:
+                                            # 金叉/死叉信号：如果关闭了强制市价单，则根据配置决定
+                                            if direction == 'long' and long_price_type != 'market':
+                                                use_limit_price = True
+                                            elif direction == 'short' and short_price_type != 'market':
+                                                use_limit_price = True
+                                        # 否则 cross_signal_force_market=True，金叉/死叉使用市价单（use_limit_price 保持 False）
 
                                         # 添加开仓调试日志
                                         market_label = "[实盘]" if market_type == 'live' else "[模拟]"
