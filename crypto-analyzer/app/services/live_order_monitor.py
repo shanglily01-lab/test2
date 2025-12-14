@@ -873,6 +873,8 @@ class LiveOrderMonitor:
         做多时：连续N根阴线（收盘<开盘）则提前止损
         做空时：连续N根阳线（收盘>开盘）则提前止损
 
+        注意：只检查开仓时间之后的K线！
+
         Returns:
             (exit_price, exit_reason) 或 (None, None)
         """
@@ -883,24 +885,31 @@ class LiveOrderMonitor:
 
             symbol = position['symbol']
             position_side = position['position_side']
+            open_time = position.get('open_time') or position.get('created_at')
 
-            # 获取K线数据
+            # 获取K线数据 - 只查询开仓时间之后的K线
             conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT open_price, close_price
+                SELECT open_price, close_price, timestamp
                 FROM kline_data
                 WHERE symbol = %s AND timeframe = %s
+                  AND timestamp >= %s
                 ORDER BY timestamp DESC
                 LIMIT %s
-            """, (symbol, timeframe, bars))
+            """, (symbol, timeframe, open_time, bars + 1))  # 多取1根，排除开仓那根
 
             klines = cursor.fetchall()
             cursor.close()
             conn.close()
 
+            # 排除当前未完成的K线（最新一根可能还在进行中）
+            if klines and len(klines) > 1:
+                klines = klines[1:]  # 排除最新的未完成K线
+
             if not klines or len(klines) < bars:
+                # 开仓后的K线数量不足，不触发
                 return None, None
 
             # 检查连续K线
@@ -911,8 +920,8 @@ class LiveOrderMonitor:
                     for k in klines[:bars]
                 )
                 if consecutive_bearish:
-                    logger.warning(f"[实盘监控] {symbol}: 🔻 检测到连续{bars}根阴线，当前亏损{current_profit_pct:.2f}%，触发连续下跌止损")
-                    return current_price, f"连续{bars}根阴线止损(亏损{current_profit_pct:.2f}%)"
+                    logger.warning(f"[实盘监控] {symbol}: 🔻 检测到连续{bars}根阴线(开仓后)，当前盈亏{current_profit_pct:.2f}%，触发平仓")
+                    return current_price, f"连续{bars}根{timeframe}阴线平仓(盈亏{current_profit_pct:.2f}%)"
             else:
                 # 做空：检查连续阳线（价格持续上涨）
                 consecutive_bullish = all(
@@ -920,8 +929,8 @@ class LiveOrderMonitor:
                     for k in klines[:bars]
                 )
                 if consecutive_bullish:
-                    logger.warning(f"[实盘监控] {symbol}: 🔺 检测到连续{bars}根阳线，当前亏损{current_profit_pct:.2f}%，触发连续上涨止损")
-                    return current_price, f"连续{bars}根阳线止损(亏损{current_profit_pct:.2f}%)"
+                    logger.warning(f"[实盘监控] {symbol}: 🔺 检测到连续{bars}根阳线(开仓后)，当前盈亏{current_profit_pct:.2f}%，触发平仓")
+                    return current_price, f"连续{bars}根{timeframe}阳线平仓(盈亏{current_profit_pct:.2f}%)"
 
             return None, None
 
@@ -942,6 +951,8 @@ class LiveOrderMonitor:
         做多时：连续N根阴线（收盘<开盘）则提前止盈
         做空时：连续N根阳线（收盘>开盘）则提前止盈
 
+        注意：只检查开仓时间之后的K线！
+
         Returns:
             (exit_price, exit_reason) 或 (None, None)
         """
@@ -952,24 +963,32 @@ class LiveOrderMonitor:
 
             symbol = position['symbol']
             position_side = position['position_side']
+            open_time = position.get('open_time') or position.get('created_at')
 
-            # 获取K线数据
+            # 获取K线数据 - 只查询开仓时间之后的K线
             conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT open_price, close_price
+                SELECT open_price, close_price, timestamp
                 FROM kline_data
                 WHERE symbol = %s AND timeframe = %s
+                  AND timestamp >= %s
                 ORDER BY timestamp DESC
                 LIMIT %s
-            """, (symbol, timeframe, bars))
+            """, (symbol, timeframe, open_time, bars + 1))  # 多取1根，排除开仓那根
 
             klines = cursor.fetchall()
             cursor.close()
             conn.close()
 
+            # 排除当前未完成的K线（最新一根可能还在进行中）
+            # 以及开仓那根K线（开仓时的K线不算）
+            if klines and len(klines) > 1:
+                klines = klines[1:]  # 排除最新的未完成K线
+
             if not klines or len(klines) < bars:
+                # 开仓后的K线数量不足，不触发
                 return None, None
 
             # 检查连续K线
@@ -980,8 +999,8 @@ class LiveOrderMonitor:
                     for k in klines[:bars]
                 )
                 if consecutive_bearish:
-                    logger.info(f"[实盘监控] {symbol}: 🔻 检测到连续{bars}根阴线，当前盈利{current_profit_pct:.2f}%，触发提前止盈")
-                    return current_price, f"连续{bars}根阴线提前止盈(盈利{current_profit_pct:.2f}%)"
+                    logger.info(f"[实盘监控] {symbol}: 🔻 检测到连续{bars}根阴线(开仓后)，当前盈亏{current_profit_pct:.2f}%，触发平仓")
+                    return current_price, f"连续{bars}根{timeframe}阴线平仓(盈亏{current_profit_pct:.2f}%)"
             else:
                 # 做空：检查连续阳线
                 consecutive_bullish = all(
@@ -989,8 +1008,8 @@ class LiveOrderMonitor:
                     for k in klines[:bars]
                 )
                 if consecutive_bullish:
-                    logger.info(f"[实盘监控] {symbol}: 🔺 检测到连续{bars}根阳线，当前盈利{current_profit_pct:.2f}%，触发提前止盈")
-                    return current_price, f"连续{bars}根阳线提前止盈(盈利{current_profit_pct:.2f}%)"
+                    logger.info(f"[实盘监控] {symbol}: 🔺 检测到连续{bars}根阳线(开仓后)，当前盈亏{current_profit_pct:.2f}%，触发平仓")
+                    return current_price, f"连续{bars}根{timeframe}阳线平仓(盈亏{current_profit_pct:.2f}%)"
 
             return None, None
 
