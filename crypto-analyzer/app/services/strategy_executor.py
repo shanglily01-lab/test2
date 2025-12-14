@@ -2957,7 +2957,7 @@ class StrategyExecutor:
                                         sustained_conditions_met = False
                                         sustained_reasons.append(f"价格未在EMA9下方(实时价格={realtime_price:.4f} >= EMA9={curr_ema_short:.4f})")
 
-                                # 条件4：连续K线确认（检查EMA差值是否连续放大，确认趋势加速）
+                                # 条件4：连续K线确认（检查EMA差值趋势是否放大）
                                 # 做空时：EMA9 < EMA26，差值为负，差值放大意味着绝对值变大（更负）
                                 if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
                                     diff_expanding = True
@@ -2975,22 +2975,32 @@ class StrategyExecutor:
                                                 diff_abs = abs(check_ema_short - check_ema_long) / check_ema_long * 100
                                                 diff_values.append(diff_abs)
 
-                                    # 检查差值是否连续放大（从旧到新）
+                                    # 检查差值趋势（从旧到新）
                                     # diff_values[0]是最新的，diff_values[-1]是最旧的
                                     if len(diff_values) >= sustained_trend_min_bars + 1:
                                         diff_values.reverse()  # 反转为从旧到新
-                                        for i in range(len(diff_values) - 1):
-                                            if diff_values[i + 1] <= diff_values[i]:  # 新的差值应该大于旧的
-                                                diff_expanding = False
-                                                break
+                                        diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
+
+                                        # 新逻辑：
+                                        # 1. 当前差值（最后一个）必须是所有值中的最大值（或接近最大）
+                                        # 2. 整体趋势放大（最后一个 > 第一个）
+                                        current_diff = diff_values[-1]
+                                        first_diff = diff_values[0]
+                                        max_diff = max(diff_values)
+
+                                        if current_diff < max_diff * 0.95:  # 允许5%的容差
+                                            # 当前不是最大，说明趋势在减弱
+                                            diff_expanding = False
+                                            sustained_reasons.append(f"当前差值不是最大({diff_str})")
+                                        elif current_diff <= first_diff:
+                                            # 整体没有放大
+                                            diff_expanding = False
+                                            sustained_reasons.append(f"整体趋势未放大({diff_str})")
+                                        else:
+                                            debug_info.append(f"   ✅ EMA差值趋势放大: {diff_str}")
 
                                         if not diff_expanding:
                                             sustained_conditions_met = False
-                                            diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
-                                            sustained_reasons.append(f"EMA差值未连续放大({diff_str})")
-                                        else:
-                                            diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
-                                            debug_info.append(f"   ✅ EMA差值连续放大: {diff_str}")
                                     else:
                                         sustained_conditions_met = False
                                         sustained_reasons.append(f"K线数据不足(需要{sustained_trend_min_bars + 1}根，实际{len(diff_values)}根)")
@@ -3083,7 +3093,7 @@ class StrategyExecutor:
                                         sustained_conditions_met = False
                                         sustained_reasons.append(f"价格未在EMA9上方(实时价格={realtime_price:.4f} <= EMA9={curr_ema_short:.4f})")
 
-                                # 条件4：连续K线确认（检查EMA差值是否连续放大，确认趋势加速）
+                                # 条件4：连续K线确认（检查EMA差值趋势是否放大）
                                 # 做多时：EMA9 > EMA26，差值为正，差值放大意味着值变大
                                 if sustained_trend_min_bars > 0 and current_buy_index >= sustained_trend_min_bars:
                                     diff_expanding = True
@@ -3101,22 +3111,32 @@ class StrategyExecutor:
                                                 diff_abs = abs(check_ema_short - check_ema_long) / check_ema_long * 100
                                                 diff_values.append(diff_abs)
 
-                                    # 检查差值是否连续放大（从旧到新）
+                                    # 检查差值趋势（从旧到新）
                                     # diff_values[0]是最新的，diff_values[-1]是最旧的
                                     if len(diff_values) >= sustained_trend_min_bars + 1:
                                         diff_values.reverse()  # 反转为从旧到新
-                                        for i in range(len(diff_values) - 1):
-                                            if diff_values[i + 1] <= diff_values[i]:  # 新的差值应该大于旧的
-                                                diff_expanding = False
-                                                break
+                                        diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
+
+                                        # 新逻辑：
+                                        # 1. 当前差值（最后一个）必须是所有值中的最大值（或接近最大）
+                                        # 2. 整体趋势放大（最后一个 > 第一个）
+                                        current_diff = diff_values[-1]
+                                        first_diff = diff_values[0]
+                                        max_diff = max(diff_values)
+
+                                        if current_diff < max_diff * 0.95:  # 允许5%的容差
+                                            # 当前不是最大，说明趋势在减弱
+                                            diff_expanding = False
+                                            sustained_reasons.append(f"当前差值不是最大({diff_str})")
+                                        elif current_diff <= first_diff:
+                                            # 整体没有放大
+                                            diff_expanding = False
+                                            sustained_reasons.append(f"整体趋势未放大({diff_str})")
+                                        else:
+                                            debug_info.append(f"   ✅ EMA差值趋势放大: {diff_str}")
 
                                         if not diff_expanding:
                                             sustained_conditions_met = False
-                                            diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
-                                            sustained_reasons.append(f"EMA差值未连续放大({diff_str})")
-                                        else:
-                                            diff_str = ' → '.join([f"{d:.3f}%" for d in diff_values])
-                                            debug_info.append(f"   ✅ EMA差值连续放大: {diff_str}")
                                     else:
                                         sustained_conditions_met = False
                                         sustained_reasons.append(f"K线数据不足(需要{sustained_trend_min_bars + 1}根，实际{len(diff_values)}根)")
