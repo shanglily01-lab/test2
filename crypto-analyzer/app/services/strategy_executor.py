@@ -1129,6 +1129,11 @@ class StrategyExecutor:
                     consecutive_bearish_exit_enabled=consecutive_bearish_exit_enabled,
                     consecutive_bearish_bars=consecutive_bearish_bars,
                     consecutive_bearish_timeframe=consecutive_bearish_timeframe,
+                    # EMA差值反转出场配置
+                    ema_diff_reversal_enabled=ema_diff_reversal_enabled,
+                    ema_diff_reversal_shrink_pct=ema_diff_reversal_shrink_pct,
+                    ema_diff_reversal_min_hold_minutes=ema_diff_reversal_min_hold_minutes,
+                    ema_diff_reversal_timeframe=ema_diff_reversal_timeframe,
                     # 智能止损配置
                     atr_stop_loss_enabled=atr_stop_loss_enabled,
                     atr_stop_loss_multiplier=atr_stop_loss_multiplier,
@@ -1532,6 +1537,12 @@ class StrategyExecutor:
         consecutive_bearish_exit_enabled = kwargs.get('consecutive_bearish_exit_enabled', False)
         consecutive_bearish_bars = kwargs.get('consecutive_bearish_bars', 3)  # 连续K线数量
         consecutive_bearish_timeframe = kwargs.get('consecutive_bearish_timeframe', '5m')  # 检测周期
+
+        # 5. EMA差值反转出场
+        ema_diff_reversal_enabled = kwargs.get('ema_diff_reversal_enabled', False)
+        ema_diff_reversal_shrink_pct = kwargs.get('ema_diff_reversal_shrink_pct', 50.0)  # 收窄阈值%
+        ema_diff_reversal_min_hold_minutes = kwargs.get('ema_diff_reversal_min_hold_minutes', 30)  # 最小持仓时间
+        ema_diff_reversal_timeframe = kwargs.get('ema_diff_reversal_timeframe', '15m')  # 检测周期
 
         # ================== 智能止损配置 ==================
         # 1. ATR动态止损
