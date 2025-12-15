@@ -2821,7 +2821,10 @@ class StrategyExecutor:
                 # 买入信号：根据 buySignals 配置决定使用哪个信号
                 if buy_signal in ['ema_5m', 'ema_15m', 'ema_1h']:
                     # 检测 EMA9/26 金叉（做多）和死叉（做空）
-                    if is_golden_cross and 'long' in buy_directions:
+                    # 重要：金叉/死叉穿越信号使用原始策略方向，绕过行情自适应的方向限制
+                    # 因为穿越是明确的趋势反转信号，不应该被行情判断阻止
+                    cross_directions = original_buy_directions if original_buy_directions else buy_directions
+                    if is_golden_cross and 'long' in cross_directions:
                         # 金叉 = 做多信号
                         # 使用当前K线的差值计算信号强度
                         curr_diff = curr_ema_short - curr_ema_long
@@ -2850,7 +2853,10 @@ class StrategyExecutor:
                             # 记录信号检测信息
                             signal_time = self.parse_time(curr_pair['kline']['timestamp'])
                             signal_time_local = self.utc_to_local(signal_time)
-                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ EMA9/26金叉检测成功（做多信号）- 当前K线穿越！"
+                            # 检查是否绕过了行情自适应限制
+                            bypassed_regime = 'long' not in buy_directions and 'long' in cross_directions
+                            bypass_note = " [绕过行情限制]" if bypassed_regime else ""
+                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ EMA9/26金叉检测成功（做多信号）- 当前K线穿越！{bypass_note}"
                             debug_info.append(msg)
                             logger.info(f"{symbol} {msg}")
                             msg_detail = f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)"
@@ -2861,8 +2867,8 @@ class StrategyExecutor:
                                 debug_info.append(msg_strength)
                                 logger.info(f"{symbol} {msg_strength}")
 
-                    elif is_death_cross and 'short' in buy_directions:
-                        # 死叉 = 做空信号
+                    elif is_death_cross and 'short' in cross_directions:
+                        # 死叉 = 做空信号（使用cross_directions绕过行情自适应限制）
                         # 使用当前K线的差值计算信号强度
                         curr_diff = curr_ema_short - curr_ema_long
                         curr_diff_pct = (curr_diff / curr_ema_long * 100) if curr_ema_long > 0 else 0
@@ -2890,7 +2896,10 @@ class StrategyExecutor:
                             # 记录信号检测信息
                             signal_time = self.parse_time(curr_pair['kline']['timestamp'])
                             signal_time_local = self.utc_to_local(signal_time)
-                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ EMA9/26死叉检测成功（做空信号）- 当前K线穿越！"
+                            # 检查是否绕过了行情自适应限制
+                            bypassed_regime = 'short' not in buy_directions and 'short' in cross_directions
+                            bypass_note = " [绕过行情限制]" if bypassed_regime else ""
+                            msg = f"{signal_time_local.strftime('%Y-%m-%d %H:%M')} [{buy_timeframe}]: ✅✅✅ EMA9/26死叉检测成功（做空信号）- 当前K线穿越！{bypass_note}"
                             debug_info.append(msg)
                             logger.info(f"{symbol} {msg}")
                             msg_detail = f"   📊 EMA9={ema_short:.4f}, EMA26={ema_long:.4f}, 差值={curr_diff:.4f} ({curr_diff_pct:+.2f}%)"
