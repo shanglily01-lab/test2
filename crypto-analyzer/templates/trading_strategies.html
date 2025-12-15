@@ -665,8 +665,7 @@
                                     
                                     <div class="form-group">
                                         <label class="form-label">开仓信号</label>
-                                        <!-- 固定使用 EMA 15分钟信号 -->
-                                        <input type="hidden" id="buySignalEma15m" name="buySignals" value="ema_15m">
+                                        <!-- V2策略固定使用 EMA 15分钟信号 -->
                                         <div style="padding: 12px; background: rgba(16, 185, 129, 0.08); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.2);">
                                             <div style="display: flex; align-items: center; gap: 8px;">
                                                 <i class="bi bi-graph-up-arrow" style="color: var(--success-green);"></i>
@@ -680,24 +679,6 @@
                                     </div>
                                 </div>
                                 <!-- 结束三栏布局 -->
-
-                                <!-- V2策略使用固定的过滤参数，以下为隐藏字段保持表单兼容性 -->
-                                <input type="hidden" id="reversal24hEnabled" value="false">
-                                <input type="hidden" id="ma10Ema10TrendFilter" value="true">
-                                <input type="hidden" id="minSignalStrength_ema9_26" value="0.15">
-                                <input type="hidden" id="minSignalStrength_ma10_ema10" value="">
-                                <input type="hidden" id="trendConfirmBars" value="0">
-                                <input type="hidden" id="trendConfirmEMAThreshold" value="0.1">
-                                <input type="hidden" id="exitOnMAFlip" value="false">
-                                <input type="hidden" id="exitOnEMAWeak" value="false">
-                                <input type="hidden" id="exitOnMAFlipThreshold" value="0.1">
-                                <input type="hidden" id="exitOnMAFlipConfirmBars" value="1">
-                                <input type="hidden" id="exitOnEMAWeakThreshold" value="0.05">
-                                <input type="hidden" id="minHoldingTimeHours" value="0">
-                                <input type="hidden" id="earlyStopLossPct" value="">
-                                <input type="hidden" id="entryCooldownEnabled" value="true">
-                                <input type="hidden" id="entryCooldownMinutes" value="30">
-                                <input type="hidden" id="entryCooldownPerDirection" value="true">
 
                                 <!-- 技术指标过滤器 -->
                                 <div class="form-group" style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default);">
@@ -1730,52 +1711,10 @@
                     form.reset();
                 }
                 
-                // 成交量相关代码已移除（V2策略不使用）
-                // 清除 MA10/EMA10 同向过滤
-                const ma10Ema10Filter = document.getElementById('ma10Ema10TrendFilter');
-                if (ma10Ema10Filter) {
-                    ma10Ema10Filter.checked = false;
-                }
-                // 清除信号强度过滤
-                const minSignalStrength_ema9_26 = document.getElementById('minSignalStrength_ema9_26');
-                if (minSignalStrength_ema9_26) minSignalStrength_ema9_26.value = '';
-                const minSignalStrength_ma10_ema10 = document.getElementById('minSignalStrength_ma10_ema10');
-                if (minSignalStrength_ma10_ema10) minSignalStrength_ma10_ema10.value = '';
-                // 清除趋势持续性检查
-                const trendConfirmBars = document.getElementById('trendConfirmBars');
-                if (trendConfirmBars) trendConfirmBars.value = '';
-                // 清除趋势反转退出机制
+                // V2策略使用固定参数，以下字段已被移除
                 // 清除开仓前先平掉相反方向持仓
                 const closeOppositeOnEntry = document.getElementById('closeOppositeOnEntry');
                 if (closeOppositeOnEntry) closeOppositeOnEntry.checked = false;
-                const exitOnMAFlip = document.getElementById('exitOnMAFlip');
-                if (exitOnMAFlip) exitOnMAFlip.checked = false;
-                const exitOnMAFlipThreshold = document.getElementById('exitOnMAFlipThreshold');
-                if (exitOnMAFlipThreshold) exitOnMAFlipThreshold.value = '';
-                const exitOnMAFlipConfirmBars = document.getElementById('exitOnMAFlipConfirmBars');
-                if (exitOnMAFlipConfirmBars) exitOnMAFlipConfirmBars.value = '';
-                const exitOnEMAWeak = document.getElementById('exitOnEMAWeak');
-                if (exitOnEMAWeak) exitOnEMAWeak.checked = false;
-                const exitOnEMAWeakThreshold = document.getElementById('exitOnEMAWeakThreshold');
-                if (exitOnEMAWeakThreshold) exitOnEMAWeakThreshold.value = '';
-                const earlyStopLossPct = document.getElementById('earlyStopLossPct');
-                if (earlyStopLossPct) earlyStopLossPct.value = '';
-                const trendConfirmEMAThreshold = document.getElementById('trendConfirmEMAThreshold');
-                if (trendConfirmEMAThreshold) trendConfirmEMAThreshold.value = '';
-                
-                // 清除风险控制
-                const preventDuplicateEntry = document.getElementById('preventDuplicateEntry');
-                if (preventDuplicateEntry) preventDuplicateEntry.checked = false;
-                const minHoldingTimeHours = document.getElementById('minHoldingTimeHours');
-                if (minHoldingTimeHours) minHoldingTimeHours.value = '';
-
-                // 清除开仓冷却
-                const entryCooldownEnabled = document.getElementById('entryCooldownEnabled');
-                if (entryCooldownEnabled) entryCooldownEnabled.checked = true;  // 默认启用
-                const entryCooldownMinutes = document.getElementById('entryCooldownMinutes');
-                if (entryCooldownMinutes) entryCooldownMinutes.value = '30';  // 默认30分钟
-                const entryCooldownPerDirection = document.getElementById('entryCooldownPerDirection');
-                if (entryCooldownPerDirection) entryCooldownPerDirection.checked = true;  // 默认按方向
 
                 // 清除同方向持仓限制
                 const maxLongPositions = document.getElementById('maxLongPositions');
@@ -2247,11 +2186,6 @@
         async function saveStrategy(event) {
             event.preventDefault();
 
-            const buyVolumeLongRadio = document.querySelector('input[name="buyVolumeLong"]:checked');
-            const buyVolumeShortRadio = document.querySelector('input[name="buyVolumeShort"]:checked');
-            // V2策略: 买入信号固定为 EMA 15分钟，优先获取 hidden 字段
-            const buySignalHidden = document.querySelector('input[name="buySignals"][type="hidden"]');
-            const buySignalRadio = document.querySelector('input[name="buySignals"]:checked') || buySignalHidden;
             const sellSignalRadio = document.querySelector('input[name="sellSignals"]:checked');
             const longPriceRadio = document.querySelector('input[name="longPrice"]:checked');
             const shortPriceRadio = document.querySelector('input[name="shortPrice"]:checked');
@@ -2259,14 +2193,12 @@
             const buyDirections = Array.from(document.querySelectorAll('input[name="buyDirection"]:checked')).map(cb => cb.value);
             const leverageRadio = document.querySelector('input[name="leverage"]:checked');
 
-            // 成交量条件已移除（V2策略不使用）
-
             const formData = {
                 name: document.getElementById('strategyName').value,
                 useV2Strategy: true, // V2策略始终启用
                 buyDirection: buyDirections, // 改为数组，支持多选
                 leverage: leverageRadio ? parseInt(leverageRadio.value) : 5, // 交易倍数，默认5
-                buySignals: buySignalRadio ? buySignalRadio.value : 'ema_15m', // V2固定为 ema_15m
+                buySignals: 'ema_15m', // V2策略固定使用 EMA 15分钟信号
                 // 成交量条件字段已移除
                 sellSignals: sellSignalRadio ? sellSignalRadio.value : null, // 改为单选
                 // 平仓成交量已移除，不再限制
@@ -2283,26 +2215,20 @@
                 stopLoss: document.getElementById('stopLoss').value ? parseFloat(document.getElementById('stopLoss').value) : null,
                 takeProfit: document.getElementById('takeProfit').value ? parseFloat(document.getElementById('takeProfit').value) : null,
                 closeOppositeOnEntry: document.getElementById('closeOppositeOnEntry') ? document.getElementById('closeOppositeOnEntry').checked : false,
-                ma10Ema10TrendFilter: document.getElementById('ma10Ema10TrendFilter').checked,
-                minSignalStrength: {
-                    ema9_26: document.getElementById('minSignalStrength_ema9_26').value ? parseFloat(document.getElementById('minSignalStrength_ema9_26').value) : 0,
-                    ma10_ema10: document.getElementById('minSignalStrength_ma10_ema10').value ? parseFloat(document.getElementById('minSignalStrength_ma10_ema10').value) : 0
-                },
-                trendConfirmBars: document.getElementById('trendConfirmBars').value ? parseInt(document.getElementById('trendConfirmBars').value) : 0,
-                trendConfirmEMAThreshold: document.getElementById('trendConfirmEMAThreshold') && document.getElementById('trendConfirmEMAThreshold').value ? parseFloat(document.getElementById('trendConfirmEMAThreshold').value) : 0,
-                exitOnMAFlip: document.getElementById('exitOnMAFlip') ? document.getElementById('exitOnMAFlip').checked : false,
-                exitOnMAFlipThreshold: document.getElementById('exitOnMAFlipThreshold') && document.getElementById('exitOnMAFlipThreshold').value ? parseFloat(document.getElementById('exitOnMAFlipThreshold').value) : 0.1,
-                exitOnMAFlipConfirmBars: document.getElementById('exitOnMAFlipConfirmBars') && document.getElementById('exitOnMAFlipConfirmBars').value ? parseInt(document.getElementById('exitOnMAFlipConfirmBars').value) : 1,
-                exitOnEMAWeak: document.getElementById('exitOnEMAWeak') ? document.getElementById('exitOnEMAWeak').checked : false,
-                exitOnEMAWeakThreshold: document.getElementById('exitOnEMAWeakThreshold') && document.getElementById('exitOnEMAWeakThreshold').value ? parseFloat(document.getElementById('exitOnEMAWeakThreshold').value) : 0.05,
-                earlyStopLossPct: document.getElementById('earlyStopLossPct') && document.getElementById('earlyStopLossPct').value ? parseFloat(document.getElementById('earlyStopLossPct').value) : null,
-                preventDuplicateEntry: document.getElementById('preventDuplicateEntry') ? document.getElementById('preventDuplicateEntry').checked : false,
-                minHoldingTimeHours: document.getElementById('minHoldingTimeHours') ? (document.getElementById('minHoldingTimeHours').value ? parseFloat(document.getElementById('minHoldingTimeHours').value) : 0) : 0,
-                entryCooldown: {
-                    enabled: document.getElementById('entryCooldownEnabled') ? document.getElementById('entryCooldownEnabled').checked : true,
-                    minutes: document.getElementById('entryCooldownMinutes') ? parseInt(document.getElementById('entryCooldownMinutes').value) || 30 : 30,
-                    perDirection: document.getElementById('entryCooldownPerDirection') ? document.getElementById('entryCooldownPerDirection').checked : true
-                },
+                // V2策略固定参数
+                ma10Ema10TrendFilter: true,
+                minSignalStrength: { ema9_26: 0.15, ma10_ema10: 0 },
+                trendConfirmBars: 0,
+                trendConfirmEMAThreshold: 0.1,
+                exitOnMAFlip: false,
+                exitOnMAFlipThreshold: 0.1,
+                exitOnMAFlipConfirmBars: 1,
+                exitOnEMAWeak: false,
+                exitOnEMAWeakThreshold: 0.05,
+                earlyStopLossPct: null,
+                preventDuplicateEntry: false,
+                minHoldingTimeHours: 0,
+                entryCooldown: { enabled: true, minutes: 30, perDirection: true },
                 rsiFilter: {
                     enabled: document.getElementById('rsiFilterEnabled') ? document.getElementById('rsiFilterEnabled').checked : false,
                     longMax: document.getElementById('rsiLongMax') ? parseFloat(document.getElementById('rsiLongMax').value) : 70,
@@ -2903,73 +2829,11 @@
             document.getElementById('stopLoss').value = strategy.stopLoss || '';
             document.getElementById('takeProfit').value = strategy.takeProfit || '';
             
-            // MA10/EMA10 同向过滤
-            document.getElementById('ma10Ema10TrendFilter').checked = strategy.ma10Ema10TrendFilter === true;
+            // V2策略使用固定参数，MA10/EMA10过滤、信号强度过滤、趋势确认、退出机制、开仓冷却等已移除
 
-            // 信号强度过滤
-            if (strategy.minSignalStrength) {
-                document.getElementById('minSignalStrength_ema9_26').value = strategy.minSignalStrength.ema9_26 || '';
-                document.getElementById('minSignalStrength_ma10_ema10').value = strategy.minSignalStrength.ma10_ema10 || '';
-            } else {
-                document.getElementById('minSignalStrength_ema9_26').value = '';
-                document.getElementById('minSignalStrength_ma10_ema10').value = '';
-            }
-
-            // 趋势持续性检查
-            document.getElementById('trendConfirmBars').value = strategy.trendConfirmBars || '';
-            if (document.getElementById('trendConfirmEMAThreshold')) {
-                document.getElementById('trendConfirmEMAThreshold').value = strategy.trendConfirmEMAThreshold || '';
-            }
-            
-            // 趋势反转退出机制
-            document.getElementById('exitOnMAFlip').checked = strategy.exitOnMAFlip === true;
-            if (document.getElementById('exitOnMAFlipThreshold')) {
-                document.getElementById('exitOnMAFlipThreshold').value = strategy.exitOnMAFlipThreshold || '0.1';
-            }
-            if (document.getElementById('exitOnMAFlipConfirmBars')) {
-                document.getElementById('exitOnMAFlipConfirmBars').value = strategy.exitOnMAFlipConfirmBars || '1';
-            }
-            document.getElementById('exitOnEMAWeak').checked = strategy.exitOnEMAWeak === true;
-            if (document.getElementById('exitOnEMAWeakThreshold')) {
-                document.getElementById('exitOnEMAWeakThreshold').value = strategy.exitOnEMAWeakThreshold || '0.05';
-            }
-            if (document.getElementById('earlyStopLossPct')) {
-                document.getElementById('earlyStopLossPct').value = strategy.earlyStopLossPct || '';
-            }
-            
-            // 风险控制
-            if (document.getElementById('preventDuplicateEntry')) {
-                document.getElementById('preventDuplicateEntry').checked = strategy.preventDuplicateEntry === true;
-            }
-            if (document.getElementById('minHoldingTimeHours')) {
-                document.getElementById('minHoldingTimeHours').value = strategy.minHoldingTimeHours || '';
-            }
+            // 风险控制 - 开仓前平反向持仓
             if (document.getElementById('closeOppositeOnEntry')) {
                 document.getElementById('closeOppositeOnEntry').checked = strategy.closeOppositeOnEntry === true;
-            }
-
-            // 开仓冷却配置
-            if (strategy.entryCooldown) {
-                if (document.getElementById('entryCooldownEnabled')) {
-                    document.getElementById('entryCooldownEnabled').checked = strategy.entryCooldown.enabled !== false;
-                }
-                if (document.getElementById('entryCooldownMinutes')) {
-                    document.getElementById('entryCooldownMinutes').value = strategy.entryCooldown.minutes || 30;
-                }
-                if (document.getElementById('entryCooldownPerDirection')) {
-                    document.getElementById('entryCooldownPerDirection').checked = strategy.entryCooldown.perDirection !== false;
-                }
-            } else {
-                // 默认值
-                if (document.getElementById('entryCooldownEnabled')) {
-                    document.getElementById('entryCooldownEnabled').checked = true;
-                }
-                if (document.getElementById('entryCooldownMinutes')) {
-                    document.getElementById('entryCooldownMinutes').value = 30;
-                }
-                if (document.getElementById('entryCooldownPerDirection')) {
-                    document.getElementById('entryCooldownPerDirection').checked = true;
-                }
             }
 
             // 技术指标过滤器
