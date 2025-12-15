@@ -34,13 +34,13 @@ from app.analyzers.technical_indicators import TechnicalIndicators
 class StrategyScheduler:
     """交易策略自动执行调度器"""
 
-    def __init__(self, config_path: str = 'config.yaml', use_v2: bool = False):
+    def __init__(self, config_path: str = 'config.yaml', use_v2: bool = True):
         """
         初始化调度器
 
         Args:
             config_path: 配置文件路径
-            use_v2: 是否使用V2策略执行器（简化版）
+            use_v2: 是否使用V2策略执行器（默认True，简化版）
         """
         self.use_v2 = use_v2
 
@@ -329,7 +329,8 @@ def main():
     parser.add_argument(
         '--v2',
         action='store_true',
-        help='使用V2策略执行器（简化版，新逻辑）'
+        default=True,
+        help='使用V2策略执行器（简化版，新逻辑）- 默认启用'
     )
     args = parser.parse_args()
 

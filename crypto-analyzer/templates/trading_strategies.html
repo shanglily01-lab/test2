@@ -582,23 +582,16 @@
                                 <input type="text" class="form-input" id="strategyName" placeholder="例如：EMA多空策略" required>
                             </div>
 
-                            <!-- V2简化策略模式开关 -->
-                            <div class="form-group" style="margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(43, 111, 237, 0.1)); border-radius: var(--radius-lg); border: 2px solid var(--success-green);">
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <input type="checkbox" id="useV2Strategy" onchange="toggleV2Mode()">
-                                    <label for="useV2Strategy" style="font-weight: 700; font-size: 16px; color: var(--success-green); cursor: pointer; margin: 0;">
-                                        <i class="bi bi-lightning-charge-fill"></i> 使用V2简化策略
-                                    </label>
+                            <!-- V2策略说明（始终使用V2简化策略） -->
+                            <input type="hidden" id="useV2Strategy" value="true">
+                            <div class="form-group" style="margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(43, 111, 237, 0.1)); border-radius: var(--radius-lg); border-left: 4px solid var(--success-green);">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <i class="bi bi-lightning-charge-fill" style="color: var(--success-green); font-size: 18px;"></i>
+                                    <span style="font-weight: 700; font-size: 14px; color: var(--success-green);">简化策略模式</span>
                                 </div>
-                                <div style="margin-top: 8px; margin-left: 32px;">
-                                    <small style="color: var(--text-secondary); font-size: 12px; line-height: 1.6;">
-                                        V2策略使用优化后的固定参数，更简单高效：<br>
-                                        • <strong>开仓信号</strong>：EMA 9/26 金叉/死叉 + MA方向一致性过滤<br>
-                                        • <strong>止损</strong>：固定 2.5%（交易所止损单）<br>
-                                        • <strong>移动止盈</strong>：盈利≥1.5%激活，回调1%平仓，最大8%<br>
-                                        • <strong>仓位</strong>：默认5%账户余额
-                                    </small>
-                                </div>
+                                <small style="color: var(--text-secondary); font-size: 12px; line-height: 1.6;">
+                                    使用优化后的固定参数：EMA(9,26) 15分钟金叉/死叉信号 + MA10/EMA10方向过滤 | 止损 2.5% | 移动止盈 1.5%→1%回调 (最大8%)
+                                </small>
                             </div>
 
                             <!-- 买入条件（全宽显示） -->
@@ -671,237 +664,40 @@
                                     </div>
                                     
                                     <div class="form-group">
-                                        <label class="form-label">买入信号<span class="required">*</span></label>
-                                        <small style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px; display: block;">
-                                            <strong>EMA(9,26)交叉信号：</strong>向上穿越=做多信号，向下穿越=做空信号
-                                        </small>
-                                        <div class="radio-group">
-                                            <div class="radio-option">
-                                                <input type="radio" id="buySignalEma5m" name="buySignals" value="ema_5m" onchange="autoUpdateDirection('buy')">
-                                                <label for="buySignalEma5m" class="radio-label">EMA 5分钟</label>
+                                        <label class="form-label">开仓信号</label>
+                                        <!-- 固定使用 EMA 15分钟信号 -->
+                                        <input type="hidden" id="buySignalEma15m" name="buySignals" value="ema_15m">
+                                        <div style="padding: 12px; background: rgba(16, 185, 129, 0.08); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <i class="bi bi-graph-up-arrow" style="color: var(--success-green);"></i>
+                                                <span style="font-weight: 600; color: var(--text-primary);">EMA(9,26) 15分钟 金叉/死叉</span>
                                             </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="buySignalEma15m" name="buySignals" value="ema_15m" checked onchange="autoUpdateDirection('buy')">
-                                                <label for="buySignalEma15m" class="radio-label">EMA 15分钟</label>
-                                            </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="buySignalEma1h" name="buySignals" value="ema_1h" onchange="autoUpdateDirection('buy')">
-                                                <label for="buySignalEma1h" class="radio-label">EMA 1小时</label>
-                                            </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="buySignalMaEma10" name="buySignals" value="ma_ema10" onchange="autoUpdateDirection('buy')">
-                                                <label for="buySignalMaEma10" class="radio-label">MA/EMA 10 10</label>
-                                            </div>
-                                            <div class="radio-option">
-                                                <input type="radio" id="buySignalMaEma5" name="buySignals" value="ma_ema5" onchange="autoUpdateDirection('buy')">
-                                                <label for="buySignalMaEma5" class="radio-label">MA/EMA 5 5</label>
-                                            </div>
-                                        </div>
-                                        <!-- 24H高低点反转过滤（独立复选框） -->
-                                        <div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.05); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
-                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                                <input type="checkbox" id="reversal24hEnabled" onchange="toggleReversal24hParams()">
-                                                <label for="reversal24hEnabled" style="font-weight: 600; color: var(--primary-blue); margin: 0; cursor: pointer;">
-                                                    <i class="bi bi-arrow-repeat" style="margin-right: 4px;"></i>启用24H高低点反转过滤
-                                                </label>
-                                            </div>
-                                            <small style="color: var(--text-tertiary); display: block; margin-bottom: 8px;">
-                                                附加条件：只在24H高点附近做空，只在24H低点附近做多
+                                            <small style="color: var(--text-secondary); font-size: 12px; margin-top: 6px; display: block;">
+                                                金叉（EMA9上穿EMA26）= 做多信号 | 死叉（EMA9下穿EMA26）= 做空信号<br>
+                                                配合 MA10/EMA10 方向一致性过滤，信号强度≥0.15%
                                             </small>
-                                            <div id="reversal24hParams" style="display: none;">
-                                                <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                                                    <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                        <label class="form-label" style="font-size: 11px;">高低点偏离(%)</label>
-                                                        <input type="number" class="form-input" id="reversal24hNearPct" value="1.0" step="0.1" min="0.1" max="5" style="padding: 6px 10px; font-size: 13px;">
-                                                        <small style="color: var(--text-tertiary); font-size: 10px;">价格在高/低点此范围内视为"接近"</small>
-                                                    </div>
-                                                    <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                        <label class="form-label" style="font-size: 11px;">连续K线数</label>
-                                                        <input type="number" class="form-input" id="reversal24hBars" value="3" step="1" min="2" max="10" style="padding: 6px 10px; font-size: 13px;">
-                                                        <small style="color: var(--text-tertiary); font-size: 10px;">连续阴线/阳线确认数量</small>
-                                                    </div>
-                                                    <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                        <label class="form-label" style="font-size: 11px;">K线周期</label>
-                                                        <select class="form-input" id="reversal24hTimeframe" style="padding: 6px 10px; font-size: 13px;">
-                                                            <option value="5m">5分钟</option>
-                                                            <option value="15m" selected>15分钟</option>
-                                                            <option value="1h">1小时</option>
-                                                        </select>
-                                                        <small style="color: var(--text-tertiary); font-size: 10px;">检测K线的时间周期</small>
-                                                    </div>
-                                                </div>
-                                                <div style="margin-top: 8px; padding: 8px; background: rgba(255, 193, 7, 0.1); border-radius: 4px;">
-                                                    <small style="color: var(--text-secondary); font-size: 11px;">
-                                                        <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
-                                                        <strong>策略说明：</strong>在24H高点附近出现连续阴线→允许做空；在24H低点附近出现连续阳线→允许做多
-                                                    </small>
-                                                </div>
-                                            </div>
                                         </div>
                                     </div>
                                 </div>
                                 <!-- 结束三栏布局 -->
 
-                                <!-- 成交量条件已移除（V2策略不使用） -->
-
-                                <!-- 过滤器配置 -->
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
-                                    <div class="form-group">
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <input type="checkbox" id="ma10Ema10TrendFilter" name="ma10Ema10TrendFilter">
-                                            <label for="ma10Ema10TrendFilter" class="checkbox-label" style="margin: 0; font-weight: 500;">启用 MA10/EMA10 同向过滤</label>
-                                        </div>
-                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block; margin-left: 26px;">
-                                            <strong>做多时：</strong>要求 EMA10 > MA10<br>
-                                            <strong>做空时：</strong>要求 EMA10 < MA10<br>
-                                            <span style="color: var(--warning-orange); font-weight: 500;">⚠️ 可能过滤掉做空信号</span>
-                                        </small>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">信号强度过滤</label>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
-                                            <div>
-                                                <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; display: block;">EMA9/26差值最小百分比 (%)</label>
-                                                <input type="number" id="minSignalStrength_ema9_26" name="minSignalStrength_ema9_26" 
-                                                       step="0.01" min="0" max="10" 
-                                                       placeholder="0.08" 
-                                                       style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">持仓时检查，推荐值：0.08%（过滤弱信号）</small>
-                                            </div>
-                                            <div>
-                                                <label style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; display: block;">MA10/EMA10差值最小百分比 (%)</label>
-                                                <input type="number" id="minSignalStrength_ma10_ema10" name="minSignalStrength_ma10_ema10" 
-                                                       step="0.01" min="0" max="10" 
-                                                       placeholder="0.15" 
-                                                       style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">持仓时检查，推荐值：0.15%（过滤弱信号）</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <!-- 结束过滤器两栏布局 -->
-
-                                <!-- 趋势确认设置（两栏布局） -->
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
-                                    <div class="form-group">
-                                        <label class="form-label">趋势持续性检查</label>
-                                        <input type="number" id="trendConfirmBars" name="trendConfirmBars" 
-                                               step="1" min="0" max="10" 
-                                               placeholder="2" 
-                                               style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; margin-top: 8px;">
-                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">金叉后趋势至少持续此数量的K线才入场（0表示不启用）</small>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label class="form-label">趋势确认EMA差值阈值（%）</label>
-                                        <input type="number" id="trendConfirmEMAThreshold" name="trendConfirmEMAThreshold" 
-                                               step="0.01" min="0" max="5" 
-                                               placeholder="0.1" 
-                                               style="width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 14px; margin-top: 8px;">
-                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">趋势确认时，EMA差值必须≥此阈值（0表示不启用，建议0.1-0.3%）</small>
-                                    </div>
-                                </div>
-                                <!-- 结束趋势确认两栏布局 -->
-
-                                <div class="form-group" style="margin-top: 16px;">
-                                    <label class="form-label">趋势反转退出机制</label>
-                                        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
-                                            <div style="display: flex; align-items: center; gap: 8px;">
-                                                <input type="checkbox" id="exitOnMAFlip" name="exitOnMAFlip">
-                                                <label for="exitOnMAFlip" class="checkbox-label" style="margin: 0; font-weight: 500;">MA10/EMA10反转时立即平仓</label>
-                                            </div>
-                                            <div style="margin-left: 26px; margin-top: 4px;">
-                                                <small style="color: var(--text-secondary); font-size: 12px; display: block;">当MA10/EMA10从多头转为空头（或相反）时，立即平仓退出</small>
-                                                <div style="display: flex; gap: 12px; margin-top: 4px;">
-                                                    <div>
-                                                        <input type="number" id="exitOnMAFlipThreshold" name="exitOnMAFlipThreshold"
-                                                               step="0.01" min="0" max="5"
-                                                               placeholder="0.1"
-                                                               style="width: 80px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
-                                                        <small style="color: var(--text-secondary); font-size: 11px; display: block;">阈值（%）</small>
-                                                    </div>
-                                                    <div>
-                                                        <input type="number" id="exitOnMAFlipConfirmBars" name="exitOnMAFlipConfirmBars"
-                                                               step="1" min="1" max="10"
-                                                               placeholder="1"
-                                                               style="width: 80px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
-                                                        <small style="color: var(--text-secondary); font-size: 11px; display: block;">确认K线数</small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
-                                                <input type="checkbox" id="exitOnEMAWeak" name="exitOnEMAWeak">
-                                                <label for="exitOnEMAWeak" class="checkbox-label" style="margin: 0; font-weight: 500;">EMA信号过弱时平仓</label>
-                                            </div>
-                                            <div style="margin-left: 26px; margin-top: 4px;">
-                                                <small style="color: var(--text-secondary); font-size: 12px; display: block;">当EMA9/26差值小于阈值时，立即平仓退出</small>
-                                                <input type="number" id="exitOnEMAWeakThreshold" name="exitOnEMAWeakThreshold"
-                                                       step="0.01" min="0" max="1"
-                                                       placeholder="0.05"
-                                                       style="width: 120px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; margin-top: 4px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; margin-left: 4px;">阈值（%），默认0.05%</small>
-                                            </div>
-
-                                            <!-- 最小持仓时间 -->
-                                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-default);">
-                                                <label class="form-label" style="margin: 0; font-weight: 500;">
-                                                    <i class="bi bi-clock-history"></i> 最小持仓时间（小时）
-                                                </label>
-                                            </div>
-                                            <div style="margin-left: 0; margin-top: 4px;">
-                                                <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-bottom: 4px;">
-                                                    持仓时间未达到此值时，不会因EMA信号过弱或MA反转而平仓（止损不受影响）
-                                                </small>
-                                                <input type="number" id="minHoldingTimeHours" name="minHoldingTimeHours"
-                                                       step="0.5" min="0" max="168"
-                                                       placeholder="例如：4"
-                                                       style="width: 120px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; margin-left: 4px;">默认0表示不限制（建议2-8小时）</small>
-                                            </div>
-
-                                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
-                                                <label class="form-label" style="margin: 0; font-weight: 500;">早期止损（%）</label>
-                                            </div>
-                                            <div style="margin-left: 0; margin-top: 4px;">
-                                                <input type="number" id="earlyStopLossPct" name="earlyStopLossPct" 
-                                                       step="0.1" min="0" max="10" 
-                                                       placeholder="例如：3" 
-                                                       style="width: 120px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px; margin-top: 4px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; margin-left: 4px;">基于EMA差值或价格回撤的早期止损（留空表示不启用）</small>
-                                                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">当EMA差值缩小或价格回撤达到此百分比时，触发早期止损（建议2-5%）</small>
-                                            </div>
-
-                                            <!-- 开仓冷却配置 -->
-                                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-default);">
-                                                <input type="checkbox" id="entryCooldownEnabled" name="entryCooldownEnabled" checked>
-                                                <label for="entryCooldownEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">
-                                                    <i class="bi bi-hourglass-split"></i> 开仓冷却
-                                                </label>
-                                            </div>
-                                            <div style="margin-left: 0; margin-top: 4px;">
-                                                <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-bottom: 8px;">
-                                                    防止短时间内频繁开仓，避免在震荡行情中连续亏损
-                                                </small>
-                                                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                                                    <div>
-                                                        <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px;">冷却时间（分钟）</label>
-                                                        <input type="number" id="entryCooldownMinutes" name="entryCooldownMinutes"
-                                                               step="5" min="5" max="1440" value="30"
-                                                               placeholder="30"
-                                                               style="width: 100px; padding: 4px; border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
-                                                    </div>
-                                                    <div style="display: flex; align-items: center; gap: 6px; margin-top: 18px;">
-                                                        <input type="checkbox" id="entryCooldownPerDirection" name="entryCooldownPerDirection" checked>
-                                                        <label for="entryCooldownPerDirection" class="checkbox-label" style="margin: 0; font-size: 12px;">按方向独立冷却</label>
-                                                    </div>
-                                                </div>
-                                                <small style="color: var(--text-secondary); font-size: 11px; display: block; margin-top: 4px;">
-                                                    按方向独立冷却：做多和做空分别计算冷却时间；关闭则任意开仓后都需冷却
-                                                </small>
-                                            </div>
-                                        </div>
-                                </div>
+                                <!-- V2策略使用固定的过滤参数，以下为隐藏字段保持表单兼容性 -->
+                                <input type="hidden" id="reversal24hEnabled" value="false">
+                                <input type="hidden" id="ma10Ema10TrendFilter" value="true">
+                                <input type="hidden" id="minSignalStrength_ema9_26" value="0.15">
+                                <input type="hidden" id="minSignalStrength_ma10_ema10" value="">
+                                <input type="hidden" id="trendConfirmBars" value="0">
+                                <input type="hidden" id="trendConfirmEMAThreshold" value="0.1">
+                                <input type="hidden" id="exitOnMAFlip" value="false">
+                                <input type="hidden" id="exitOnEMAWeak" value="false">
+                                <input type="hidden" id="exitOnMAFlipThreshold" value="0.1">
+                                <input type="hidden" id="exitOnMAFlipConfirmBars" value="1">
+                                <input type="hidden" id="exitOnEMAWeakThreshold" value="0.05">
+                                <input type="hidden" id="minHoldingTimeHours" value="0">
+                                <input type="hidden" id="earlyStopLossPct" value="">
+                                <input type="hidden" id="entryCooldownEnabled" value="true">
+                                <input type="hidden" id="entryCooldownMinutes" value="30">
+                                <input type="hidden" id="entryCooldownPerDirection" value="true">
 
                                 <!-- 技术指标过滤器 -->
                                 <div class="form-group" style="margin-top: var(--spacing-lg); padding-top: var(--spacing-lg); border-top: 1px solid var(--border-default);">
@@ -2051,17 +1847,8 @@
                     resetRegimeParams();
                 }
 
-                // 重置V2简化策略开关
-                const useV2Strategy = document.getElementById('useV2Strategy');
-                if (useV2Strategy) {
-                    useV2Strategy.checked = false;
-                    toggleV2Mode();
-                }
-                // 移除V2参数说明
-                const v2ParamsInfo = document.getElementById('v2ParamsInfo');
-                if (v2ParamsInfo) {
-                    v2ParamsInfo.remove();
-                }
+                // V2策略始终启用，调用初始化函数
+                toggleV2Mode();
 
                 editingStrategyId = null;
                 updateEmptyState();
@@ -2075,123 +1862,39 @@
             }
         }
         
-        // V2简化策略模式切换
+        // V2策略默认设置（已简化，V2始终启用）
         function toggleV2Mode() {
-            const useV2 = document.getElementById('useV2Strategy').checked;
+            // V2策略始终启用，设置默认值
 
-            // V2模式下要隐藏的元素（复杂配置）
-            const v2HideElements = [
-                // 买入信号选择（V2使用固定EMA 15M）
-                'buySignalEma5m', 'buySignalEma1h', 'buySignalMaEma10', 'buySignalMaEma5',
-                // 24H反转过滤
-                'reversal24hEnabled',
-                // 成交量条件已完全移除
-                // MA10/EMA10同向过滤
-                'ma10Ema10TrendFilter',
-                // 信号强度过滤
-                'minSignalStrength_ema9_26', 'minSignalStrength_ma10_ema10',
-                // 趋势持续性检查
-                'trendConfirmBars', 'trendConfirmEMAThreshold',
-                // 趋势反转退出机制
-                'exitOnMAFlip', 'exitOnEMAWeak',
-                // 最小持仓时间、早期止损
-                'minHoldingTimeHours', 'earlyStopLossPct',
-                // 开仓冷却（V2内部处理）
-                'entryCooldownEnabled',
-                // 技术指标过滤器
-                'rsiFilterEnabled', 'macdFilterEnabled', 'kdjFilterEnabled',
-                // 持续趋势信号
-                'sustainedTrendEnabled',
-                // 价格距离EMA限制
-                'priceDistanceLimitEnabled',
-                // 行情自适应
-                'adaptiveRegimeEnabled',
-                // 智能出场
-                'dynamicTakeProfitEnabled', 'profitProtectionEnabled', 'exitOnPriceCrossEmaEnabled',
-                'consecutiveBearishExitEnabled', 'emaDiffReversalExitEnabled',
-                // 智能止损
-                'atrStopLossEnabled', 'trailingStopLossEnabled', 'timeDecayStopLossEnabled',
-                'consecutiveBearishStopLossEnabled', 'emaSupportStopLossEnabled'
-            ];
+            // 设置默认杠杆10X
+            const leverage10 = document.getElementById('leverage10');
+            if (leverage10) leverage10.checked = true;
 
-            // 隐藏/显示V2不需要的配置section
-            v2HideElements.forEach(id => {
-                const element = document.getElementById(id);
-                if (element) {
-                    // 找到最近的父容器（通常是form-group或form-section）
-                    let parent = element.closest('.form-group') || element.closest('.form-section') || element.parentElement.parentElement;
-                    if (parent) {
-                        parent.style.display = useV2 ? 'none' : '';
-                    }
-                }
-            });
+            // 设置默认仓位5%
+            const positionSize = document.getElementById('positionSize');
+            if (positionSize && !positionSize.value) positionSize.value = '5';
 
-            // V2模式下自动设置一些值
-            if (useV2) {
-                // 强制选择EMA 15分钟
-                const ema15m = document.getElementById('buySignalEma15m');
-                if (ema15m) ema15m.checked = true;
-
-                // 设置默认杠杆10X
-                const leverage10 = document.getElementById('leverage10');
-                if (leverage10) leverage10.checked = true;
-
-                // 设置默认仓位5%
-                const positionSize = document.getElementById('positionSize');
-                if (positionSize && !positionSize.value) positionSize.value = '5';
-
-                // 设置默认止损2.5%（V2的硬止损），但允许用户修改
-                const stopLoss = document.getElementById('stopLoss');
-                if (stopLoss && !stopLoss.value) {
-                    stopLoss.value = '2.5';
-                }
-
-                // 设置默认止盈8%（V2的最大止盈），但允许用户修改
-                const takeProfit = document.getElementById('takeProfit');
-                if (takeProfit && !takeProfit.value) {
-                    takeProfit.value = '8';
-                }
-
-                // 强制市价单
-                const marketLong = document.getElementById('longPrice_market');
-                if (marketLong) marketLong.checked = true;
-                const marketShort = document.getElementById('shortPrice_market');
-                if (marketShort) marketShort.checked = true;
-
-                // 开仓前先平反向
-                const closeOpposite = document.getElementById('closeOppositeOnEntry');
-                if (closeOpposite) closeOpposite.checked = true;
+            // 设置默认止损2.5%（V2的硬止损），但允许用户修改
+            const stopLoss = document.getElementById('stopLoss');
+            if (stopLoss && !stopLoss.value) {
+                stopLoss.value = '2.5';
             }
 
-            // 显示V2模式下的固定参数说明
-            let v2ParamsInfo = document.getElementById('v2ParamsInfo');
-            if (useV2) {
-                if (!v2ParamsInfo) {
-                    v2ParamsInfo = document.createElement('div');
-                    v2ParamsInfo.id = 'v2ParamsInfo';
-                    v2ParamsInfo.style.cssText = 'margin: 12px 0; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border-left: 4px solid var(--success-green);';
-                    v2ParamsInfo.innerHTML = `
-                        <div style="font-weight: 600; color: var(--success-green); margin-bottom: 8px;">
-                            <i class="bi bi-check-circle-fill"></i> V2策略固定参数
-                        </div>
-                        <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.8;">
-                            <div>• <strong>入场信号</strong>: EMA(9,26)金叉/死叉，强度≥0.15%</div>
-                            <div>• <strong>方向过滤</strong>: MA+EMA方向一致性检查</div>
-                            <div>• <strong>硬止损</strong>: -2.5%（交易所STOP_MARKET订单）</div>
-                            <div>• <strong>移动止盈</strong>: 盈利≥1.5%激活，回调1%触发，最大+8%</div>
-                            <div>• <strong>卖出信号</strong>: EMA反向穿越直接平仓（不检查强度）</div>
-                        </div>
-                    `;
-                    // 插入到止损止盈区域之前
-                    const stopLossSection = document.getElementById('stopLoss').closest('.form-section');
-                    if (stopLossSection) {
-                        stopLossSection.parentNode.insertBefore(v2ParamsInfo, stopLossSection);
-                    }
-                }
-                v2ParamsInfo.style.display = 'block';
-            } else if (v2ParamsInfo) {
-                v2ParamsInfo.style.display = 'none';
+            // 设置默认止盈8%（V2的最大止盈），但允许用户修改
+            const takeProfit = document.getElementById('takeProfit');
+            if (takeProfit && !takeProfit.value) {
+                takeProfit.value = '8';
             }
+
+            // 强制市价单
+            const marketLong = document.getElementById('longPrice_market');
+            if (marketLong) marketLong.checked = true;
+            const marketShort = document.getElementById('shortPrice_market');
+            if (marketShort) marketShort.checked = true;
+
+            // 开仓前先平反向
+            const closeOpposite = document.getElementById('closeOppositeOnEntry');
+            if (closeOpposite) closeOpposite.checked = true;
         }
 
         // 点击Modal背景关闭
@@ -2558,7 +2261,7 @@
 
             const formData = {
                 name: document.getElementById('strategyName').value,
-                useV2Strategy: document.getElementById('useV2Strategy') ? document.getElementById('useV2Strategy').checked : false, // V2简化策略模式
+                useV2Strategy: true, // V2策略始终启用
                 buyDirection: buyDirections, // 改为数组，支持多选
                 leverage: leverageRadio ? parseInt(leverageRadio.value) : 5, // 交易倍数，默认5
                 buySignals: buySignalRadio ? buySignalRadio.value : null, // 改为单选
@@ -2824,7 +2527,6 @@
                         <div class="strategy-item-header">
                             <div class="strategy-item-title">
                                 ${strategy.name}
-                                ${strategy.useV2Strategy ? '<span style="background: linear-gradient(135deg, #10b981, #2b6fed); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; font-weight: 600;">V2</span>' : ''}
                             </div>
                             <div class="strategy-item-actions">
                                 <button class="btn btn-sm btn-info" onclick="testStrategy(${strategy.id})" title="测试24小时交易">
@@ -2866,26 +2568,13 @@
                                 <div class="strategy-item-field-label">交易倍数</div>
                                 <div class="strategy-item-field-value">X${strategy.leverage || 5}</div>
                             </div>
-                            ${strategy.useV2Strategy ? `
                             <div class="strategy-item-field" style="grid-column: span 2; background: rgba(16, 185, 129, 0.1); padding: 8px 12px; border-radius: 6px; border-left: 3px solid #10b981;">
-                                <div style="font-size: 11px; color: #10b981; font-weight: 600; margin-bottom: 4px;">V2 简化策略</div>
                                 <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
                                     信号: EMA(9,26)金叉/死叉 + MA方向过滤 |
-                                    止损: 2.5% |
-                                    移动止盈: 1.5%→1%回调 (最大8%)
+                                    止损: ${strategy.stopLoss || 2.5}% |
+                                    止盈: ${strategy.takeProfit || 8}%（移动止盈）
                                 </div>
                             </div>
-                            ` : ''}
-                            ${!strategy.useV2Strategy ? `
-                            <div class="strategy-item-field">
-                                <div class="strategy-item-field-label">买入信号</div>
-                                <div class="strategy-item-field-value">${strategy.buySignals || (Array.isArray(strategy.signals) ? strategy.signals.join(', ') : '未设置')}</div>
-                            </div>
-                            <div class="strategy-item-field">
-                                <div class="strategy-item-field-label">卖出信号</div>
-                                <div class="strategy-item-field-value">${strategy.sellSignals || '未设置'}</div>
-                            </div>
-                            ` : ''}
                             <div class="strategy-item-field">
                                 <div class="strategy-item-field-label">交易币种</div>
                                 <div class="strategy-item-field-value">${strategy.symbols.join(', ')}</div>
@@ -3157,12 +2846,8 @@
             // 填充表单
             document.getElementById('strategyName').value = strategy.name;
 
-            // V2简化策略模式
-            const useV2Checkbox = document.getElementById('useV2Strategy');
-            if (useV2Checkbox) {
-                useV2Checkbox.checked = strategy.useV2Strategy === true;
-                toggleV2Mode(); // 应用V2模式设置
-            }
+            // V2策略始终启用
+            toggleV2Mode();
                 
             // 买入方向（支持多选）
             const buyDirections = Array.isArray(strategy.buyDirection) ? strategy.buyDirection : (strategy.buyDirection ? [strategy.buyDirection] : (strategy.direction ? [strategy.direction] : ['long']));
