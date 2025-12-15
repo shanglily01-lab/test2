@@ -1632,7 +1632,7 @@ class StrategyExecutorV2:
 
         try:
             cursor.execute("""
-                SELECT id, name, strategy_config, account_id, enabled, market_type
+                SELECT id, name, config, account_id, enabled, market_type
                 FROM trading_strategies
                 WHERE enabled = 1
                 ORDER BY id
@@ -1642,7 +1642,7 @@ class StrategyExecutorV2:
             for row in cursor.fetchall():
                 try:
                     import json
-                    config = json.loads(row['strategy_config']) if row['strategy_config'] else {}
+                    config = json.loads(row['config']) if row['config'] else {}
                     config['id'] = row['id']
                     config['name'] = row['name']
                     config['account_id'] = row.get('account_id', 2)
