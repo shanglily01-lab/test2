@@ -16,7 +16,7 @@ from pymysql.cursors import DictCursor
 
 # 加载配置
 import yaml
-with open('config.yaml', 'r') as f:
+with open('config.yaml', 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
 db_config = config['database']
