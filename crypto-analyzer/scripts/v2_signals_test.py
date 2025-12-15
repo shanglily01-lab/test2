@@ -247,7 +247,7 @@ def test_close_signals(symbol: str):
 
     try:
         cursor.execute("""
-            SELECT id, symbol, direction, entry_price, quantity, unrealized_pnl_pct,
+            SELECT id, symbol, position_side as direction, entry_price, quantity, unrealized_pnl_pct,
                    max_profit_pct, trailing_stop_activated, created_at
             FROM futures_positions
             WHERE symbol = %s AND status = 'open'
