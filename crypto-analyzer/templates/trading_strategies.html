@@ -581,7 +581,26 @@
                                 <label class="form-label">策略名称<span class="required">*</span></label>
                                 <input type="text" class="form-input" id="strategyName" placeholder="例如：EMA多空策略" required>
                             </div>
-                            
+
+                            <!-- V2简化策略模式开关 -->
+                            <div class="form-group" style="margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(43, 111, 237, 0.1)); border-radius: var(--radius-lg); border: 2px solid var(--success-green);">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <input type="checkbox" id="useV2Strategy" onchange="toggleV2Mode()">
+                                    <label for="useV2Strategy" style="font-weight: 700; font-size: 16px; color: var(--success-green); cursor: pointer; margin: 0;">
+                                        <i class="bi bi-lightning-charge-fill"></i> 使用V2简化策略
+                                    </label>
+                                </div>
+                                <div style="margin-top: 8px; margin-left: 32px;">
+                                    <small style="color: var(--text-secondary); font-size: 12px; line-height: 1.6;">
+                                        V2策略使用优化后的固定参数，更简单高效：<br>
+                                        • <strong>开仓信号</strong>：EMA 9/26 金叉/死叉 + MA方向一致性过滤<br>
+                                        • <strong>止损</strong>：固定 2.5%（交易所止损单）<br>
+                                        • <strong>移动止盈</strong>：盈利≥1.5%激活，回调1%平仓，最大8%<br>
+                                        • <strong>仓位</strong>：默认5%账户余额
+                                    </small>
+                                </div>
+                            </div>
+
                             <!-- 买入条件（全宽显示） -->
                         <!-- ============================================ -->
                         <!-- 板块1：开仓设置 -->
@@ -2103,6 +2122,18 @@
                     resetRegimeParams();
                 }
 
+                // 重置V2简化策略开关
+                const useV2Strategy = document.getElementById('useV2Strategy');
+                if (useV2Strategy) {
+                    useV2Strategy.checked = false;
+                    toggleV2Mode();
+                }
+                // 移除V2参数说明
+                const v2ParamsInfo = document.getElementById('v2ParamsInfo');
+                if (v2ParamsInfo) {
+                    v2ParamsInfo.remove();
+                }
+
                 editingStrategyId = null;
                 updateEmptyState();
             } catch (error) {
@@ -2115,6 +2146,134 @@
             }
         }
         
+        // V2简化策略模式切换
+        function toggleV2Mode() {
+            const useV2 = document.getElementById('useV2Strategy').checked;
+
+            // V2模式下要隐藏的元素（复杂配置）
+            const v2HideElements = [
+                // 买入信号选择（V2使用固定EMA 15M）
+                'buySignalEma5m', 'buySignalEma1h', 'buySignalMaEma10', 'buySignalMaEma5',
+                // 24H反转过滤
+                'reversal24hEnabled',
+                // 成交量条件
+                'buyVolumeLongEnabled', 'buyVolumeShortEnabled',
+                // MA10/EMA10同向过滤
+                'ma10Ema10TrendFilter',
+                // 信号强度过滤
+                'minSignalStrength_ema9_26', 'minSignalStrength_ma10_ema10',
+                // 趋势持续性检查
+                'trendConfirmBars', 'trendConfirmEMAThreshold',
+                // 趋势反转退出机制
+                'exitOnMAFlip', 'exitOnEMAWeak',
+                // 最小持仓时间、早期止损
+                'minHoldingTimeHours', 'earlyStopLossPct',
+                // 开仓冷却（V2内部处理）
+                'entryCooldownEnabled',
+                // 技术指标过滤器
+                'rsiFilterEnabled', 'macdFilterEnabled', 'kdjFilterEnabled',
+                // 持续趋势信号
+                'sustainedTrendEnabled',
+                // 价格距离EMA限制
+                'priceDistanceLimitEnabled',
+                // 行情自适应
+                'adaptiveRegimeEnabled',
+                // 智能出场
+                'dynamicTakeProfitEnabled', 'profitProtectionEnabled', 'exitOnPriceCrossEmaEnabled',
+                'consecutiveBearishExitEnabled', 'emaDiffReversalExitEnabled',
+                // 智能止损
+                'atrStopLossEnabled', 'trailingStopLossEnabled', 'timeDecayStopLossEnabled',
+                'consecutiveBearishStopLossEnabled', 'emaSupportStopLossEnabled'
+            ];
+
+            // 隐藏/显示V2不需要的配置section
+            v2HideElements.forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    // 找到最近的父容器（通常是form-group或form-section）
+                    let parent = element.closest('.form-group') || element.closest('.form-section') || element.parentElement.parentElement;
+                    if (parent) {
+                        parent.style.display = useV2 ? 'none' : '';
+                    }
+                }
+            });
+
+            // V2模式下自动设置一些值
+            if (useV2) {
+                // 强制选择EMA 15分钟
+                const ema15m = document.getElementById('buySignalEma15m');
+                if (ema15m) ema15m.checked = true;
+
+                // 设置默认杠杆10X
+                const leverage10 = document.getElementById('leverage10');
+                if (leverage10) leverage10.checked = true;
+
+                // 设置默认仓位5%
+                const positionSize = document.getElementById('positionSize');
+                if (positionSize && !positionSize.value) positionSize.value = '5';
+
+                // 设置固定止损2.5%（V2的硬止损）
+                const stopLoss = document.getElementById('stopLoss');
+                if (stopLoss) {
+                    stopLoss.value = '2.5';
+                    stopLoss.disabled = true;
+                }
+
+                // 止盈设置为最大8%（V2的最大止盈）
+                const takeProfit = document.getElementById('takeProfit');
+                if (takeProfit) {
+                    takeProfit.value = '8';
+                    takeProfit.disabled = true;
+                }
+
+                // 强制市价单
+                const marketLong = document.getElementById('longPrice_market');
+                if (marketLong) marketLong.checked = true;
+                const marketShort = document.getElementById('shortPrice_market');
+                if (marketShort) marketShort.checked = true;
+
+                // 开仓前先平反向
+                const closeOpposite = document.getElementById('closeOppositeOnEntry');
+                if (closeOpposite) closeOpposite.checked = true;
+            } else {
+                // 恢复止损止盈可编辑
+                const stopLoss = document.getElementById('stopLoss');
+                if (stopLoss) stopLoss.disabled = false;
+                const takeProfit = document.getElementById('takeProfit');
+                if (takeProfit) takeProfit.disabled = false;
+            }
+
+            // 显示V2模式下的固定参数说明
+            let v2ParamsInfo = document.getElementById('v2ParamsInfo');
+            if (useV2) {
+                if (!v2ParamsInfo) {
+                    v2ParamsInfo = document.createElement('div');
+                    v2ParamsInfo.id = 'v2ParamsInfo';
+                    v2ParamsInfo.style.cssText = 'margin: 12px 0; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border-left: 4px solid var(--success-green);';
+                    v2ParamsInfo.innerHTML = `
+                        <div style="font-weight: 600; color: var(--success-green); margin-bottom: 8px;">
+                            <i class="bi bi-check-circle-fill"></i> V2策略固定参数
+                        </div>
+                        <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.8;">
+                            <div>• <strong>入场信号</strong>: EMA(9,26)金叉/死叉，强度≥0.15%</div>
+                            <div>• <strong>方向过滤</strong>: MA+EMA方向一致性检查</div>
+                            <div>• <strong>硬止损</strong>: -2.5%（交易所STOP_MARKET订单）</div>
+                            <div>• <strong>移动止盈</strong>: 盈利≥1.5%激活，回调1%触发，最大+8%</div>
+                            <div>• <strong>卖出信号</strong>: EMA反向穿越直接平仓（不检查强度）</div>
+                        </div>
+                    `;
+                    // 插入到止损止盈区域之前
+                    const stopLossSection = document.getElementById('stopLoss').closest('.form-section');
+                    if (stopLossSection) {
+                        stopLossSection.parentNode.insertBefore(v2ParamsInfo, stopLossSection);
+                    }
+                }
+                v2ParamsInfo.style.display = 'block';
+            } else if (v2ParamsInfo) {
+                v2ParamsInfo.style.display = 'none';
+            }
+        }
+
         // 点击Modal背景关闭
         document.addEventListener('DOMContentLoaded', function() {
             const modal = document.getElementById('strategyModal');
@@ -2522,6 +2681,7 @@
 
             const formData = {
                 name: document.getElementById('strategyName').value,
+                useV2Strategy: document.getElementById('useV2Strategy') ? document.getElementById('useV2Strategy').checked : false, // V2简化策略模式
                 buyDirection: buyDirections, // 改为数组，支持多选
                 leverage: leverageRadio ? parseInt(leverageRadio.value) : 5, // 交易倍数，默认5
                 buySignals: buySignalRadio ? buySignalRadio.value : null, // 改为单选
@@ -2797,7 +2957,10 @@
                 strategyList.innerHTML = strategies.map(strategy => `
                     <div class="strategy-item">
                         <div class="strategy-item-header">
-                            <div class="strategy-item-title">${strategy.name}</div>
+                            <div class="strategy-item-title">
+                                ${strategy.name}
+                                ${strategy.useV2Strategy ? '<span style="background: linear-gradient(135deg, #10b981, #2b6fed); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; font-weight: 600;">V2</span>' : ''}
+                            </div>
                             <div class="strategy-item-actions">
                                 <button class="btn btn-sm btn-info" onclick="testStrategy(${strategy.id})" title="测试24小时交易">
                                     <i class="bi bi-graph-up"></i> 测试
@@ -2838,6 +3001,17 @@
                                 <div class="strategy-item-field-label">交易倍数</div>
                                 <div class="strategy-item-field-value">X${strategy.leverage || 5}</div>
                             </div>
+                            ${strategy.useV2Strategy ? `
+                            <div class="strategy-item-field" style="grid-column: span 2; background: rgba(16, 185, 129, 0.1); padding: 8px 12px; border-radius: 6px; border-left: 3px solid #10b981;">
+                                <div style="font-size: 11px; color: #10b981; font-weight: 600; margin-bottom: 4px;">V2 简化策略</div>
+                                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                                    信号: EMA(9,26)金叉/死叉 + MA方向过滤 |
+                                    止损: 2.5% |
+                                    移动止盈: 1.5%→1%回调 (最大8%)
+                                </div>
+                            </div>
+                            ` : ''}
+                            ${!strategy.useV2Strategy ? `
                             <div class="strategy-item-field">
                                 <div class="strategy-item-field-label">买入信号</div>
                                 <div class="strategy-item-field-value">${strategy.buySignals || (Array.isArray(strategy.signals) ? strategy.signals.join(', ') : '未设置')}</div>
@@ -2847,18 +3021,19 @@
                                 <div class="strategy-item-field-value">${strategy.buyVolumeEnabled !== false ?
                                     (() => {
                                         const longText = (strategy.buyVolumeLongEnabled !== false && strategy.buyVolumeLong) ?
-                                            `做多: ${strategy.buyVolumeLong}倍` :
+                                            '做多: ' + strategy.buyVolumeLong + '倍' :
                                             (strategy.buyVolumeLongEnabled === false ? '做多: 未启用' : '做多: 未设置');
                                         const shortText = (strategy.buyVolumeShortEnabled !== false && strategy.buyVolumeShort) ?
-                                            `做空: ${strategy.buyVolumeShort}倍` :
+                                            '做空: ' + strategy.buyVolumeShort + '倍' :
                                             (strategy.buyVolumeShortEnabled === false ? '做空: 未启用' : '做空: 未设置');
-                                        return `${longText}, ${shortText}`;
+                                        return longText + ', ' + shortText;
                                     })() : '未启用'}</div>
                             </div>
                             <div class="strategy-item-field">
                                 <div class="strategy-item-field-label">卖出信号</div>
                                 <div class="strategy-item-field-value">${strategy.sellSignals || '未设置'}</div>
                             </div>
+                            ` : ''}
                             <div class="strategy-item-field">
                                 <div class="strategy-item-field-label">交易币种</div>
                                 <div class="strategy-item-field-value">${strategy.symbols.join(', ')}</div>
@@ -3126,9 +3301,16 @@
             
             editingStrategyId = strategy.id; // 使用策略中的原始ID
             console.log('编辑策略:', strategy.name, 'ID:', editingStrategyId);
-            
+
             // 填充表单
             document.getElementById('strategyName').value = strategy.name;
+
+            // V2简化策略模式
+            const useV2Checkbox = document.getElementById('useV2Strategy');
+            if (useV2Checkbox) {
+                useV2Checkbox.checked = strategy.useV2Strategy === true;
+                toggleV2Mode(); // 应用V2模式设置
+            }
                 
             // 买入方向（支持多选）
             const buyDirections = Array.isArray(strategy.buyDirection) ? strategy.buyDirection : (strategy.buyDirection ? [strategy.buyDirection] : (strategy.direction ? [strategy.direction] : ['long']));
