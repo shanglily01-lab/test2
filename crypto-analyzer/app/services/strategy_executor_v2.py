@@ -99,6 +99,147 @@ class StrategyExecutorV2:
 
         return ma_values
 
+    def calculate_rsi(self, prices: List[float], period: int = 14) -> List[float]:
+        """计算RSI指标"""
+        if len(prices) < period + 1:
+            return []
+
+        rsi_values = []
+        gains = []
+        losses = []
+
+        # 计算价格变化
+        for i in range(1, len(prices)):
+            change = prices[i] - prices[i-1]
+            if change > 0:
+                gains.append(change)
+                losses.append(0)
+            else:
+                gains.append(0)
+                losses.append(abs(change))
+
+        # 计算初始平均涨跌幅
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+
+        # 计算第一个RSI
+        if avg_loss == 0:
+            rsi_values.append(100)
+        else:
+            rs = avg_gain / avg_loss
+            rsi_values.append(100 - (100 / (1 + rs)))
+
+        # 使用平滑方法计算后续RSI
+        for i in range(period, len(gains)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+
+            if avg_loss == 0:
+                rsi_values.append(100)
+            else:
+                rs = avg_gain / avg_loss
+                rsi_values.append(100 - (100 / (1 + rs)))
+
+        return rsi_values
+
+    def calculate_macd(self, prices: List[float], fast: int = 12, slow: int = 26, signal: int = 9) -> Dict:
+        """
+        计算MACD指标
+
+        Returns:
+            {
+                'macd': List[float],  # MACD线 (DIF)
+                'signal': List[float],  # 信号线 (DEA)
+                'histogram': List[float]  # 柱状图 (MACD柱)
+            }
+        """
+        if len(prices) < slow + signal:
+            return {'macd': [], 'signal': [], 'histogram': []}
+
+        ema_fast = self.calculate_ema(prices, fast)
+        ema_slow = self.calculate_ema(prices, slow)
+
+        # 对齐EMA长度
+        offset = slow - fast
+        ema_fast = ema_fast[offset:]
+
+        # 计算MACD线 (DIF)
+        macd_line = [f - s for f, s in zip(ema_fast, ema_slow)]
+
+        # 计算信号线 (DEA)
+        signal_line = self.calculate_ema(macd_line, signal)
+
+        # 对齐MACD线长度
+        macd_offset = signal - 1
+        macd_aligned = macd_line[macd_offset:]
+
+        # 计算柱状图
+        histogram = [m - s for m, s in zip(macd_aligned, signal_line)]
+
+        return {
+            'macd': macd_aligned,
+            'signal': signal_line,
+            'histogram': histogram
+        }
+
+    def calculate_kdj(self, klines: List[Dict], period: int = 9) -> Dict:
+        """
+        计算KDJ指标
+
+        Args:
+            klines: K线数据，包含 high_price, low_price, close_price
+            period: 计算周期
+
+        Returns:
+            {
+                'k': List[float],
+                'd': List[float],
+                'j': List[float]
+            }
+        """
+        if len(klines) < period:
+            return {'k': [], 'd': [], 'j': []}
+
+        k_values = []
+        d_values = []
+        j_values = []
+
+        prev_k = 50
+        prev_d = 50
+
+        for i in range(period - 1, len(klines)):
+            # 获取周期内的最高价和最低价
+            highs = [float(k['high_price']) for k in klines[i - period + 1:i + 1]]
+            lows = [float(k['low_price']) for k in klines[i - period + 1:i + 1]]
+            close = float(klines[i]['close_price'])
+
+            highest = max(highs)
+            lowest = min(lows)
+
+            # 计算RSV
+            if highest == lowest:
+                rsv = 50
+            else:
+                rsv = (close - lowest) / (highest - lowest) * 100
+
+            # 计算K、D、J
+            k = 2/3 * prev_k + 1/3 * rsv
+            d = 2/3 * prev_d + 1/3 * k
+            j = 3 * k - 2 * d
+
+            k_values.append(k)
+            d_values.append(d)
+            j_values.append(j)
+
+            prev_k = k
+            prev_d = d
+
+        return {
+            'k': k_values,
+            'd': d_values,
+            'j': j_values
+        }
+
     def get_ema_data(self, symbol: str, timeframe: str, limit: int = 100) -> Dict:
         """
         获取EMA数据
@@ -389,6 +530,390 @@ class StrategyExecutorV2:
             cursor.close()
             conn.close()
 
+    # ==================== 技术指标过滤器 ====================
+
+    def check_rsi_filter(self, symbol: str, direction: str, strategy: Dict) -> Tuple[bool, str]:
+        """
+        RSI过滤器检查
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            strategy: 策略配置
+
+        Returns:
+            (是否通过, 原因说明)
+        """
+        rsi_config = strategy.get('rsiFilter', {})
+        if not rsi_config.get('enabled', False):
+            return True, "RSI过滤器未启用"
+
+        # 获取K线数据计算RSI
+        ema_data = self.get_ema_data(symbol, '15m', 50)
+        if not ema_data or 'klines' not in ema_data:
+            return True, "RSI数据不足，跳过过滤"
+
+        close_prices = [float(k['close_price']) for k in ema_data['klines']]
+        rsi_values = self.calculate_rsi(close_prices, 14)
+
+        if not rsi_values:
+            return True, "RSI计算失败，跳过过滤"
+
+        current_rsi = rsi_values[-1]
+
+        long_max = rsi_config.get('longMax', 70)
+        short_min = rsi_config.get('shortMin', 30)
+
+        if direction == 'long':
+            # 做多时RSI不能太高（超买）
+            if current_rsi > long_max:
+                return False, f"RSI过滤失败: 做多RSI={current_rsi:.1f} > {long_max}(超买)"
+            return True, f"RSI过滤通过: 做多RSI={current_rsi:.1f} <= {long_max}"
+        else:  # short
+            # 做空时RSI不能太低（超卖）
+            if current_rsi < short_min:
+                return False, f"RSI过滤失败: 做空RSI={current_rsi:.1f} < {short_min}(超卖)"
+            return True, f"RSI过滤通过: 做空RSI={current_rsi:.1f} >= {short_min}"
+
+    def check_macd_filter(self, symbol: str, direction: str, strategy: Dict) -> Tuple[bool, str]:
+        """
+        MACD过滤器检查
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            strategy: 策略配置
+
+        Returns:
+            (是否通过, 原因说明)
+        """
+        macd_config = strategy.get('macdFilter', {})
+        if not macd_config.get('enabled', False):
+            return True, "MACD过滤器未启用"
+
+        # 获取K线数据计算MACD
+        ema_data = self.get_ema_data(symbol, '15m', 50)
+        if not ema_data or 'klines' not in ema_data:
+            return True, "MACD数据不足，跳过过滤"
+
+        close_prices = [float(k['close_price']) for k in ema_data['klines']]
+        macd_data = self.calculate_macd(close_prices)
+
+        if not macd_data['histogram']:
+            return True, "MACD计算失败，跳过过滤"
+
+        current_histogram = macd_data['histogram'][-1]
+        current_macd = macd_data['macd'][-1] if macd_data['macd'] else 0
+
+        long_require_positive = macd_config.get('longRequirePositive', True)
+        short_require_negative = macd_config.get('shortRequireNegative', True)
+
+        if direction == 'long':
+            # 做多时要求MACD柱为正（或MACD线在零轴上方）
+            if long_require_positive and current_histogram < 0:
+                return False, f"MACD过滤失败: 做多要求MACD柱>0，当前={current_histogram:.6f}"
+            return True, f"MACD过滤通过: 做多MACD柱={current_histogram:.6f}"
+        else:  # short
+            # 做空时要求MACD柱为负（或MACD线在零轴下方）
+            if short_require_negative and current_histogram > 0:
+                return False, f"MACD过滤失败: 做空要求MACD柱<0，当前={current_histogram:.6f}"
+            return True, f"MACD过滤通过: 做空MACD柱={current_histogram:.6f}"
+
+    def check_kdj_filter(self, symbol: str, direction: str, strategy: Dict) -> Tuple[bool, str]:
+        """
+        KDJ过滤器检查
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            strategy: 策略配置
+
+        Returns:
+            (是否通过, 原因说明)
+        """
+        kdj_config = strategy.get('kdjFilter', {})
+        if not kdj_config.get('enabled', False):
+            return True, "KDJ过滤器未启用"
+
+        # 获取K线数据计算KDJ
+        ema_data = self.get_ema_data(symbol, '15m', 50)
+        if not ema_data or 'klines' not in ema_data:
+            return True, "KDJ数据不足，跳过过滤"
+
+        kdj_data = self.calculate_kdj(ema_data['klines'])
+
+        if not kdj_data['k']:
+            return True, "KDJ计算失败，跳过过滤"
+
+        current_k = kdj_data['k'][-1]
+        current_d = kdj_data['d'][-1]
+
+        long_max_k = kdj_config.get('longMaxK', 80)
+        short_min_k = kdj_config.get('shortMinK', 20)
+
+        if direction == 'long':
+            # 做多时K值不能太高（超买区域）
+            if current_k > long_max_k:
+                return False, f"KDJ过滤失败: 做多K={current_k:.1f} > {long_max_k}(超买)"
+            return True, f"KDJ过滤通过: 做多K={current_k:.1f} <= {long_max_k}"
+        else:  # short
+            # 做空时K值不能太低（超卖区域）
+            if current_k < short_min_k:
+                return False, f"KDJ过滤失败: 做空K={current_k:.1f} < {short_min_k}(超卖)"
+            return True, f"KDJ过滤通过: 做空K={current_k:.1f} >= {short_min_k}"
+
+    def check_price_distance_limit(self, symbol: str, direction: str, current_price: float,
+                                    ema_data: Dict, strategy: Dict) -> Tuple[bool, str]:
+        """
+        价格距离EMA限制检查（防追涨杀跌）
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            current_price: 当前价格
+            ema_data: EMA数据
+            strategy: 策略配置
+
+        Returns:
+            (是否通过, 原因说明)
+        """
+        price_limit_config = strategy.get('priceDistanceLimit', {})
+        if not price_limit_config.get('enabled', False):
+            return True, "价格距离限制未启用"
+
+        ema9 = ema_data.get('ema9', 0)
+        if ema9 <= 0:
+            return True, "EMA9数据异常，跳过检查"
+
+        # 计算价格与EMA9的偏离百分比
+        price_distance_pct = (current_price - ema9) / ema9 * 100
+
+        max_above_ema = price_limit_config.get('maxAboveEMA', 1.0)
+        max_below_ema = price_limit_config.get('maxBelowEMA', 1.0)
+
+        if direction == 'long':
+            # 做多时，价格不能高于EMA太多（防止追涨）
+            if price_distance_pct > max_above_ema:
+                return False, f"价格距离限制: 做多价格偏离EMA9 +{price_distance_pct:.2f}% > +{max_above_ema}%（追涨风险）"
+            return True, f"价格距离检查通过: 偏离EMA9 {price_distance_pct:+.2f}%"
+        else:  # short
+            # 做空时，价格不能低于EMA太多（防止杀跌）
+            if price_distance_pct < -max_below_ema:
+                return False, f"价格距离限制: 做空价格偏离EMA9 {price_distance_pct:.2f}% < -{max_below_ema}%（杀跌风险）"
+            return True, f"价格距离检查通过: 偏离EMA9 {price_distance_pct:+.2f}%"
+
+    def detect_market_regime(self, symbol: str) -> Tuple[str, Dict]:
+        """
+        检测市场行情状态
+
+        Returns:
+            (行情状态, 详细信息)
+            状态: 'strong_uptrend', 'weak_uptrend', 'ranging', 'weak_downtrend', 'strong_downtrend'
+        """
+        ema_data = self.get_ema_data(symbol, '15m', 100)
+        if not ema_data:
+            return 'ranging', {'reason': '数据不足'}
+
+        ema_diff_pct = ema_data['ema_diff_pct']
+        ema_diff = ema_data['ema_diff']
+        current_price = ema_data['current_price']
+        ma10 = ema_data['ma10']
+
+        # 判断趋势方向
+        is_uptrend = ema_diff > 0
+        price_above_ma = current_price > ma10
+
+        # 判断趋势强度
+        if ema_diff_pct >= 0.5:
+            strength = 'strong'
+        elif ema_diff_pct >= 0.15:
+            strength = 'weak'
+        else:
+            strength = 'none'
+
+        info = {
+            'ema_diff_pct': ema_diff_pct,
+            'ema_diff': ema_diff,
+            'price_above_ma': price_above_ma,
+            'current_price': current_price,
+            'ma10': ma10
+        }
+
+        if strength == 'none':
+            return 'ranging', info
+
+        if is_uptrend:
+            if strength == 'strong' and price_above_ma:
+                return 'strong_uptrend', info
+            else:
+                return 'weak_uptrend', info
+        else:
+            if strength == 'strong' and not price_above_ma:
+                return 'strong_downtrend', info
+            else:
+                return 'weak_downtrend', info
+
+    def check_adaptive_regime(self, symbol: str, direction: str, strategy: Dict) -> Tuple[bool, str]:
+        """
+        自适应行情模式检查
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            strategy: 策略配置
+
+        Returns:
+            (是否允许开仓, 原因说明)
+        """
+        if not strategy.get('adaptiveRegime', False):
+            return True, "行情自适应未启用"
+
+        regime_params = strategy.get('regimeParams', {})
+        if not regime_params:
+            return True, "行情参数未配置"
+
+        # 检测当前行情状态
+        regime, info = self.detect_market_regime(symbol)
+
+        # 获取该行情下的配置
+        regime_config = regime_params.get(regime, {})
+        allow_direction = regime_config.get('allowDirection', 'both')
+
+        # 检查是否允许该方向开仓
+        if allow_direction == 'none':
+            return False, f"行情自适应: {regime} 模式禁止开仓"
+
+        if allow_direction == 'long_only' and direction != 'long':
+            return False, f"行情自适应: {regime} 模式只允许做多"
+
+        if allow_direction == 'short_only' and direction != 'short':
+            return False, f"行情自适应: {regime} 模式只允许做空"
+
+        return True, f"行情自适应通过: {regime} 模式允许 {direction}"
+
+    def check_sustained_trend_entry(self, symbol: str, direction: str, strategy: Dict) -> Tuple[bool, str]:
+        """
+        持续趋势中开仓检查（错过金叉/死叉后仍可在趋势中开仓）
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            strategy: 策略配置
+
+        Returns:
+            (是否可以开仓, 原因说明)
+        """
+        sustained_config = strategy.get('sustainedTrend', {})
+        if not sustained_config.get('enabled', False):
+            return False, "持续趋势开仓未启用"
+
+        ema_data = self.get_ema_data(symbol, '15m', 50)
+        if not ema_data:
+            return False, "EMA数据不足"
+
+        ema_diff_pct = ema_data['ema_diff_pct']
+        ema_diff = ema_data['ema_diff']
+
+        min_strength = sustained_config.get('minStrength', 0.15)
+        max_strength = sustained_config.get('maxStrength', 1.0)
+        require_ma10_confirm = sustained_config.get('requireMA10Confirm', True)
+        require_price_confirm = sustained_config.get('requirePriceConfirm', True)
+
+        # 检查趋势方向是否匹配
+        is_uptrend = ema_diff > 0
+        if direction == 'long' and not is_uptrend:
+            return False, "持续趋势: 方向不匹配，非上升趋势"
+        if direction == 'short' and is_uptrend:
+            return False, "持续趋势: 方向不匹配，非下降趋势"
+
+        # 检查趋势强度范围
+        if ema_diff_pct < min_strength:
+            return False, f"持续趋势: 强度不足 {ema_diff_pct:.3f}% < {min_strength}%"
+        if ema_diff_pct > max_strength:
+            return False, f"持续趋势: 强度过大 {ema_diff_pct:.3f}% > {max_strength}%（可能反转）"
+
+        # MA10确认
+        if require_ma10_confirm:
+            ma10 = ema_data['ma10']
+            ema10 = self.calculate_ema([float(k['close_price']) for k in ema_data['klines']], 10)
+            if ema10:
+                current_ema10 = ema10[-1]
+                if direction == 'long' and current_ema10 < ma10:
+                    return False, f"持续趋势: MA10/EMA10不确认上升趋势"
+                if direction == 'short' and current_ema10 > ma10:
+                    return False, f"持续趋势: MA10/EMA10不确认下降趋势"
+
+        # 价格确认
+        if require_price_confirm:
+            current_price = ema_data['current_price']
+            ema9 = ema_data['ema9']
+            if direction == 'long' and current_price < ema9:
+                return False, f"持续趋势: 价格未确认上升趋势（价格{current_price:.4f} < EMA9 {ema9:.4f}）"
+            if direction == 'short' and current_price > ema9:
+                return False, f"持续趋势: 价格未确认下降趋势（价格{current_price:.4f} > EMA9 {ema9:.4f}）"
+
+        # 检查冷却时间
+        cooldown_minutes = sustained_config.get('cooldownMinutes', 60)
+        cooldown_key = f"{symbol}_{direction}_sustained"
+        last_entry = self.last_entry_time.get(cooldown_key)
+
+        if last_entry:
+            elapsed = (self.get_local_time() - last_entry).total_seconds() / 60
+            if elapsed < cooldown_minutes:
+                return False, f"持续趋势: 冷却中，还需等待 {cooldown_minutes - elapsed:.0f} 分钟"
+
+        return True, f"持续趋势开仓通过: 强度{ema_diff_pct:.3f}%在{min_strength}%~{max_strength}%范围内"
+
+    def apply_all_filters(self, symbol: str, direction: str, current_price: float,
+                          ema_data: Dict, strategy: Dict) -> Tuple[bool, List[str]]:
+        """
+        应用所有技术指标过滤器
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            current_price: 当前价格
+            ema_data: EMA数据
+            strategy: 策略配置
+
+        Returns:
+            (是否通过所有过滤, 过滤结果列表)
+        """
+        filter_results = []
+        all_passed = True
+
+        # 1. RSI过滤
+        passed, reason = self.check_rsi_filter(symbol, direction, strategy)
+        filter_results.append(f"RSI: {reason}")
+        if not passed:
+            all_passed = False
+
+        # 2. MACD过滤
+        passed, reason = self.check_macd_filter(symbol, direction, strategy)
+        filter_results.append(f"MACD: {reason}")
+        if not passed:
+            all_passed = False
+
+        # 3. KDJ过滤
+        passed, reason = self.check_kdj_filter(symbol, direction, strategy)
+        filter_results.append(f"KDJ: {reason}")
+        if not passed:
+            all_passed = False
+
+        # 4. 价格距离限制
+        passed, reason = self.check_price_distance_limit(symbol, direction, current_price, ema_data, strategy)
+        filter_results.append(f"价格距离: {reason}")
+        if not passed:
+            all_passed = False
+
+        # 5. 行情自适应
+        passed, reason = self.check_adaptive_regime(symbol, direction, strategy)
+        filter_results.append(f"行情自适应: {reason}")
+        if not passed:
+            all_passed = False
+
+        return all_passed, filter_results
+
     # ==================== 平仓信号检测 ====================
 
     def check_cross_reversal(self, position: Dict, ema_data: Dict) -> Tuple[bool, str]:
@@ -508,6 +1033,161 @@ class StrategyExecutorV2:
             return True, f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {self.HARD_STOP_LOSS}%)"
 
         return False, ""
+
+    def check_trend_weakening(self, position: Dict, ema_data: Dict) -> Tuple[bool, str]:
+        """
+        检测趋势减弱（开仓后30分钟开始监控）
+
+        当EMA差值连续3次减弱时，触发平仓
+
+        Args:
+            position: 持仓信息
+            ema_data: 当前EMA数据
+
+        Returns:
+            (是否需要平仓, 原因)
+        """
+        entry_time = position.get('entry_time') or position.get('created_at')
+        if not entry_time:
+            return False, ""
+
+        # 检查是否超过30分钟
+        if isinstance(entry_time, str):
+            entry_time = datetime.strptime(entry_time, '%Y-%m-%d %H:%M:%S')
+
+        elapsed_minutes = (self.get_local_time() - entry_time).total_seconds() / 60
+
+        if elapsed_minutes < self.STRENGTH_MONITOR_DELAY:
+            return False, f"监控等待中({elapsed_minutes:.0f}/{self.STRENGTH_MONITOR_DELAY}分钟)"
+
+        # 获取开仓时的EMA差值
+        entry_ema_diff = float(position.get('entry_ema_diff', 0))
+        if entry_ema_diff <= 0:
+            return False, "无开仓时EMA差值记录"
+
+        current_ema_diff_pct = ema_data['ema_diff_pct']
+        position_side = position.get('position_side', 'LONG')
+
+        # 检查趋势方向是否仍然正确
+        ema_diff = ema_data['ema_diff']
+        if position_side == 'LONG' and ema_diff < 0:
+            return True, f"趋势反转平仓(做多但EMA9 < EMA26)"
+        if position_side == 'SHORT' and ema_diff > 0:
+            return True, f"趋势反转平仓(做空但EMA9 > EMA26)"
+
+        # 检查强度是否减弱到开仓时的50%以下
+        if current_ema_diff_pct < entry_ema_diff * 0.5:
+            return True, f"趋势减弱平仓(当前强度{current_ema_diff_pct:.3f}% < 开仓时{entry_ema_diff:.3f}%的50%)"
+
+        return False, f"趋势强度正常(当前{current_ema_diff_pct:.3f}%, 开仓时{entry_ema_diff:.3f}%)"
+
+    def check_smart_exit(self, position: Dict, current_price: float, ema_data: Dict,
+                          strategy: Dict) -> Tuple[bool, str, Dict]:
+        """
+        智能出场检测（整合所有出场逻辑）
+
+        检测顺序（按优先级）：
+        1. 硬止损 (-2.5%)
+        2. 最大止盈 (+8%)
+        3. 金叉/死叉反转
+        4. 趋势减弱
+        5. 移动止盈回撤
+
+        Args:
+            position: 持仓信息
+            current_price: 当前价格
+            ema_data: EMA数据
+            strategy: 策略配置
+
+        Returns:
+            (是否需要平仓, 原因, 需要更新的字段)
+        """
+        updates = {}
+
+        entry_price = float(position.get('entry_price', 0))
+        position_side = position.get('position_side', 'LONG')
+
+        if entry_price <= 0:
+            return False, "", updates
+
+        # 计算当前盈亏百分比
+        if position_side == 'LONG':
+            current_pnl_pct = (current_price - entry_price) / entry_price * 100
+        else:
+            current_pnl_pct = (entry_price - current_price) / entry_price * 100
+
+        # 获取策略配置的止损止盈参数（如果有）
+        stop_loss_pct = strategy.get('stopLossPercent') or self.HARD_STOP_LOSS
+        max_take_profit = strategy.get('takeProfitPercent') or self.MAX_TAKE_PROFIT
+        trailing_activate = strategy.get('trailingActivate') or self.TRAILING_ACTIVATE
+        trailing_callback = strategy.get('trailingCallback') or self.TRAILING_CALLBACK
+
+        # 1. 硬止损检查（最高优先级）
+        if current_pnl_pct <= -stop_loss_pct:
+            return True, f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)", updates
+
+        # 2. 最大止盈检查
+        if current_pnl_pct >= max_take_profit:
+            return True, f"最大止盈平仓(盈利{current_pnl_pct:.2f}% >= {max_take_profit}%)", updates
+
+        # 3. 金叉/死叉反转检查
+        close_needed, close_reason = self.check_cross_reversal(position, ema_data)
+        if close_needed:
+            return True, close_reason, updates
+
+        # 4. 趋势减弱检查
+        close_needed, close_reason = self.check_trend_weakening(position, ema_data)
+        if close_needed:
+            return True, close_reason, updates
+
+        # 5. 移动止盈检查
+        max_profit_pct = float(position.get('max_profit_pct', 0))
+        trailing_activated = position.get('trailing_stop_activated', False)
+
+        # 更新最高盈利
+        if current_pnl_pct > max_profit_pct:
+            updates['max_profit_pct'] = current_pnl_pct
+            max_profit_pct = current_pnl_pct
+
+            # 更新最高/最低价格
+            if position_side == 'LONG':
+                updates['max_profit_price'] = current_price
+            else:
+                updates['max_profit_price'] = current_price
+
+        # 检查是否激活移动止盈
+        if not trailing_activated and max_profit_pct >= trailing_activate:
+            updates['trailing_stop_activated'] = True
+            trailing_activated = True
+
+            # 计算并记录当前的止损价格
+            if position_side == 'LONG':
+                trailing_stop_price = current_price * (1 - trailing_callback / 100)
+            else:
+                trailing_stop_price = current_price * (1 + trailing_callback / 100)
+            updates['trailing_stop_price'] = trailing_stop_price
+
+            logger.info(f"移动止盈已激活: 最高盈利{max_profit_pct:.2f}% >= {trailing_activate}%，止损价={trailing_stop_price:.4f}")
+
+        # 移动止盈已激活，检查回撤
+        if trailing_activated:
+            callback_pct = max_profit_pct - current_pnl_pct
+            if callback_pct >= trailing_callback:
+                return True, f"移动止盈平仓(从最高{max_profit_pct:.2f}%回撤{callback_pct:.2f}% >= {trailing_callback}%)", updates
+
+            # 更新移动止损价格
+            if position_side == 'LONG':
+                new_trailing_price = current_price * (1 - trailing_callback / 100)
+                current_trailing_price = float(position.get('trailing_stop_price', 0))
+                if new_trailing_price > current_trailing_price:
+                    updates['trailing_stop_price'] = new_trailing_price
+            else:
+                new_trailing_price = current_price * (1 + trailing_callback / 100)
+                current_trailing_price = float(position.get('trailing_stop_price', float('inf')))
+                if new_trailing_price < current_trailing_price:
+                    updates['trailing_stop_price'] = new_trailing_price
+
+        return False, "", updates
 
     # ==================== 开仓执行 ====================
 
@@ -776,27 +1456,21 @@ class StrategyExecutorV2:
         debug_info.append(f"EMA9: {ema_data['ema9']:.4f}, EMA26: {ema_data['ema26']:.4f}")
         debug_info.append(f"EMA差值: {ema_data['ema_diff_pct']:.3f}%")
 
-        # 2. 检查现有持仓，处理平仓
+        # 2. 检查现有持仓，处理平仓（使用智能出场检测）
         positions = self._get_open_positions(symbol, account_id)
         close_results = []
 
         for position in positions:
-            close_needed, close_reason, updates = False, "", {}
+            # 使用智能出场检测（整合所有出场逻辑）
+            close_needed, close_reason, updates = self.check_smart_exit(
+                position, current_price, ema_data, strategy
+            )
 
-            # 2.1 检查金叉/死叉反转
-            close_needed, close_reason = self.check_cross_reversal(position, ema_data)
-
-            # 2.2 检查移动止盈
-            if not close_needed:
-                close_needed, close_reason, updates = self.check_trailing_stop(position, current_price)
-
-            # 2.3 检查硬止损
-            if not close_needed:
-                close_needed, close_reason = self.check_hard_stop_loss(position, current_price)
-
-            # 更新持仓信息（如最高盈利）
+            # 更新持仓信息（如最高盈利、移动止损价格等）
             if updates:
                 self._update_position(position['id'], updates)
+                if updates.get('trailing_stop_activated'):
+                    debug_info.append(f"✨ 移动止盈已激活，最高盈利={updates.get('max_profit_pct', 0):.2f}%")
 
             # 执行平仓
             if close_needed:
@@ -817,30 +1491,82 @@ class StrategyExecutorV2:
                 debug_info.append(f"EMA+MA一致性: {reason}")
 
                 if consistent:
-                    open_result = await self.execute_open_position(
-                        symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
-                        strategy, account_id
+                    # 应用所有技术指标过滤器
+                    filters_passed, filter_results = self.apply_all_filters(
+                        symbol, signal, current_price, ema_data, strategy
                     )
+                    debug_info.extend(filter_results)
 
-            # 3.2 检查连续趋势信号
+                    if filters_passed:
+                        open_result = await self.execute_open_position(
+                            symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
+                            strategy, account_id
+                        )
+                    else:
+                        debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
+
+            # 3.2 检查连续趋势信号（原有的5M放大检测）
             if not open_result or not open_result.get('success'):
                 signal, signal_desc = self.check_sustained_trend(symbol)
-                debug_info.append(f"连续趋势: {signal_desc}")
+                debug_info.append(f"连续趋势(5M放大): {signal_desc}")
 
                 if signal and signal in buy_directions:
-                    open_result = await self.execute_open_position(
-                        symbol, signal, 'sustained_trend', strategy, account_id
+                    # 应用所有技术指标过滤器
+                    filters_passed, filter_results = self.apply_all_filters(
+                        symbol, signal, current_price, ema_data, strategy
                     )
+                    debug_info.extend(filter_results)
 
-            # 3.3 检查震荡反向信号
+                    if filters_passed:
+                        open_result = await self.execute_open_position(
+                            symbol, signal, 'sustained_trend', strategy, account_id
+                        )
+                    else:
+                        debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
+
+            # 3.3 检查持续趋势开仓（错过金叉/死叉后仍可在趋势中开仓）
+            if not open_result or not open_result.get('success'):
+                for direction in buy_directions:
+                    can_entry, sustained_reason = self.check_sustained_trend_entry(symbol, direction, strategy)
+                    debug_info.append(f"持续趋势({direction}): {sustained_reason}")
+
+                    if can_entry:
+                        # 应用所有技术指标过滤器
+                        filters_passed, filter_results = self.apply_all_filters(
+                            symbol, direction, current_price, ema_data, strategy
+                        )
+                        debug_info.extend(filter_results)
+
+                        if filters_passed:
+                            open_result = await self.execute_open_position(
+                                symbol, direction, 'sustained_trend_entry', strategy, account_id
+                            )
+                            if open_result and open_result.get('success'):
+                                # 记录持续趋势开仓时间（用于冷却）
+                                cooldown_key = f"{symbol}_{direction}_sustained"
+                                self.last_entry_time[cooldown_key] = self.get_local_time()
+                                break
+                        else:
+                            debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
+
+            # 3.4 检查震荡反向信号
             if not open_result or not open_result.get('success'):
                 signal, signal_desc = self.check_oscillation_reversal(symbol)
                 debug_info.append(f"震荡反向: {signal_desc}")
 
                 if signal and signal in buy_directions:
-                    open_result = await self.execute_open_position(
-                        symbol, signal, 'oscillation_reversal', strategy, account_id
+                    # 应用所有技术指标过滤器
+                    filters_passed, filter_results = self.apply_all_filters(
+                        symbol, signal, current_price, ema_data, strategy
                     )
+                    debug_info.extend(filter_results)
+
+                    if filters_passed:
+                        open_result = await self.execute_open_position(
+                            symbol, signal, 'oscillation_reversal', strategy, account_id
+                        )
+                    else:
+                        debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
         return {
             'symbol': symbol,
