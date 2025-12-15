@@ -1130,17 +1130,19 @@ class StrategyExecutorV2:
         trailing_activate = strategy.get('trailingActivate') or trailing_config.get('activatePct') or self.TRAILING_ACTIVATE
         trailing_callback = strategy.get('trailingCallback') or trailing_config.get('distancePct') or self.TRAILING_CALLBACK
 
-        # 移动止损参数
+        # 移动止损参数：从前端 smartStopLoss.trailingStopLoss 读取
+        # 前端字段: enabled, activatePct, distancePct, stepPct
         trailing_sl_config = smart_stop_loss.get('trailingStopLoss', {})
-        trailing_sl_activate = strategy.get('trailingStopLossActivate') or trailing_sl_config.get('slActivatePct') or self.TRAILING_STOP_LOSS_ACTIVATE
-        trailing_sl_distance = strategy.get('trailingStopLossDistance') or trailing_sl_config.get('slDistancePct') or self.TRAILING_STOP_LOSS_DISTANCE
+        trailing_sl_enabled = trailing_sl_config.get('enabled', False)
+        trailing_sl_activate = strategy.get('trailingStopLossActivate') or trailing_sl_config.get('activatePct') or self.TRAILING_STOP_LOSS_ACTIVATE
+        trailing_sl_distance = strategy.get('trailingStopLossDistance') or trailing_sl_config.get('distancePct') or self.TRAILING_STOP_LOSS_DISTANCE
 
         # 获取当前止损价
         current_stop_loss = float(position.get('stop_loss_price') or 0)
 
         # 0. 移动止损检查（在硬止损之前）
-        # 当盈利达到阈值时，动态调整止损价
-        if current_pnl_pct >= trailing_sl_activate and current_stop_loss > 0:
+        # 当启用移动止损且盈利达到阈值时，动态调整止损价
+        if trailing_sl_enabled and current_pnl_pct >= trailing_sl_activate and current_stop_loss > 0:
             if position_side == 'LONG':
                 # 做多：止损价 = 当前价 - 距离%
                 new_stop_loss = current_price * (1 - trailing_sl_distance / 100)
