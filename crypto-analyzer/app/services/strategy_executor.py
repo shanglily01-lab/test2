@@ -1050,6 +1050,7 @@ class StrategyExecutor:
                     start_time_local=end_time_local,
                     end_time_local=end_time_local,
                     buy_directions=buy_directions,
+                    original_buy_directions=original_buy_directions,
                     leverage=leverage,
                     buy_signal=buy_signal,
                     buy_volume_enabled=buy_volume_enabled,
@@ -1447,6 +1448,7 @@ class StrategyExecutor:
         start_time_local = kwargs.get('start_time_local')
         end_time_local = kwargs.get('end_time_local')
         buy_directions = kwargs.get('buy_directions', [])
+        original_buy_directions = kwargs.get('original_buy_directions', buy_directions)  # 原始策略方向（未被行情自适应修改）
         leverage = kwargs.get('leverage', 5)
         buy_signal = kwargs.get('buy_signal')
         buy_volume_enabled = kwargs.get('buy_volume_enabled', False)
