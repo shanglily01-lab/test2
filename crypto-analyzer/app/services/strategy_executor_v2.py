@@ -35,6 +35,10 @@ class StrategyExecutorV2:
     TRAILING_CALLBACK = 0.5  # 移动止盈回撤 (%)
     MAX_TAKE_PROFIT = 8.0  # 最大止盈 (%)
 
+    # 移动止损参数
+    TRAILING_STOP_LOSS_ACTIVATE = 0.5  # 移动止损启动阈值：盈利达到0.5%时开始移动止损
+    TRAILING_STOP_LOSS_DISTANCE = 1.0  # 移动止损距离：止损价与当前价的距离 (%)
+
     # 成交量阈值
     VOLUME_SHRINK_THRESHOLD = 0.8  # 缩量阈值 (<80%)
     VOLUME_EXPAND_THRESHOLD = 1.2  # 放量阈值 (>120%)
@@ -1126,25 +1130,57 @@ class StrategyExecutorV2:
         trailing_activate = strategy.get('trailingActivate') or trailing_config.get('activatePct') or self.TRAILING_ACTIVATE
         trailing_callback = strategy.get('trailingCallback') or trailing_config.get('distancePct') or self.TRAILING_CALLBACK
 
-        # 1. 硬止损检查（最高优先级）
+        # 移动止损参数
+        trailing_sl_config = smart_stop_loss.get('trailingStopLoss', {})
+        trailing_sl_activate = strategy.get('trailingStopLossActivate') or trailing_sl_config.get('slActivatePct') or self.TRAILING_STOP_LOSS_ACTIVATE
+        trailing_sl_distance = strategy.get('trailingStopLossDistance') or trailing_sl_config.get('slDistancePct') or self.TRAILING_STOP_LOSS_DISTANCE
+
+        # 获取当前止损价
+        current_stop_loss = float(position.get('stop_loss_price') or 0)
+
+        # 0. 移动止损检查（在硬止损之前）
+        # 当盈利达到阈值时，动态调整止损价
+        if current_pnl_pct >= trailing_sl_activate and current_stop_loss > 0:
+            if position_side == 'LONG':
+                # 做多：止损价 = 当前价 - 距离%
+                new_stop_loss = current_price * (1 - trailing_sl_distance / 100)
+                if new_stop_loss > current_stop_loss:
+                    updates['stop_loss_price'] = new_stop_loss
+                    logger.info(f"移动止损上移: {position.get('symbol')} 做多, 盈利{current_pnl_pct:.2f}%, 止损从{current_stop_loss:.4f}上移到{new_stop_loss:.4f}")
+            else:
+                # 做空：止损价 = 当前价 + 距离%
+                new_stop_loss = current_price * (1 + trailing_sl_distance / 100)
+                if new_stop_loss < current_stop_loss:
+                    updates['stop_loss_price'] = new_stop_loss
+                    logger.info(f"移动止损下移: {position.get('symbol')} 做空, 盈利{current_pnl_pct:.2f}%, 止损从{current_stop_loss:.4f}下移到{new_stop_loss:.4f}")
+
+        # 1. 检查是否触发止损价（包括移动止损后的价格）
+        updated_stop_loss = updates.get('stop_loss_price', current_stop_loss)
+        if updated_stop_loss > 0:
+            if position_side == 'LONG' and current_price <= updated_stop_loss:
+                return True, f"止损平仓(价格{current_price:.4f} <= 止损价{updated_stop_loss:.4f})", updates
+            elif position_side == 'SHORT' and current_price >= updated_stop_loss:
+                return True, f"止损平仓(价格{current_price:.4f} >= 止损价{updated_stop_loss:.4f})", updates
+
+        # 2. 硬止损检查（百分比止损，作为后备）
         if current_pnl_pct <= -stop_loss_pct:
             return True, f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)", updates
 
-        # 2. 最大止盈检查
+        # 3. 最大止盈检查
         if current_pnl_pct >= max_take_profit:
             return True, f"最大止盈平仓(盈利{current_pnl_pct:.2f}% >= {max_take_profit}%)", updates
 
-        # 3. 金叉/死叉反转检查
+        # 4. 金叉/死叉反转检查
         close_needed, close_reason = self.check_cross_reversal(position, ema_data)
         if close_needed:
             return True, close_reason, updates
 
-        # 4. 趋势减弱检查
+        # 5. 趋势减弱检查
         close_needed, close_reason = self.check_trend_weakening(position, ema_data)
         if close_needed:
             return True, close_reason, updates
 
-        # 5. 移动止盈检查
+        # 6. 移动止盈检查
         max_profit_pct = float(position.get('max_profit_pct') or 0)
         trailing_activated = position.get('trailing_stop_activated') or False
 
