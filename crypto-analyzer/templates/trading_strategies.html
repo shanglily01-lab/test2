@@ -2326,9 +2326,8 @@
                     },
                     trailingStopLoss: {
                         enabled: document.getElementById('trailingStopLossEnabled') ? document.getElementById('trailingStopLossEnabled').checked : false,
-                        activatePct: document.getElementById('trailingStopLossActivatePct') ? parseFloat(document.getElementById('trailingStopLossActivatePct').value) : 1.0,
-                        distancePct: document.getElementById('trailingStopLossDistancePct') ? parseFloat(document.getElementById('trailingStopLossDistancePct').value) : 0.5,
-                        stepPct: document.getElementById('trailingStopLossStepPct') ? parseFloat(document.getElementById('trailingStopLossStepPct').value) : 0.1
+                        activatePct: document.getElementById('trailingStopLossActivatePct') ? parseFloat(document.getElementById('trailingStopLossActivatePct').value) : 0.5,
+                        distancePct: document.getElementById('trailingStopLossDistancePct') ? parseFloat(document.getElementById('trailingStopLossDistancePct').value) : 1.0
                     },
                     timeDecayStopLoss: {
                         enabled: document.getElementById('timeDecayStopLossEnabled') ? document.getElementById('timeDecayStopLossEnabled').checked : false,
@@ -2966,9 +2965,8 @@
                 // 移动止损（追踪止损）
                 if (strategy.smartStopLoss.trailingStopLoss && document.getElementById('trailingStopLossEnabled')) {
                     document.getElementById('trailingStopLossEnabled').checked = strategy.smartStopLoss.trailingStopLoss.enabled === true;
-                    document.getElementById('trailingStopLossActivatePct').value = strategy.smartStopLoss.trailingStopLoss.activatePct || 1.0;
-                    document.getElementById('trailingStopLossDistancePct').value = strategy.smartStopLoss.trailingStopLoss.distancePct || 0.5;
-                    document.getElementById('trailingStopLossStepPct').value = strategy.smartStopLoss.trailingStopLoss.stepPct || 0.1;
+                    document.getElementById('trailingStopLossActivatePct').value = strategy.smartStopLoss.trailingStopLoss.activatePct || 0.5;
+                    document.getElementById('trailingStopLossDistancePct').value = strategy.smartStopLoss.trailingStopLoss.distancePct || 1.0;
                     toggleTrailingStopLossParams();
                 }
                 // 时间衰减止损
