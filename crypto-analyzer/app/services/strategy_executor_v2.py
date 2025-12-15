@@ -967,9 +967,9 @@ class StrategyExecutorV2:
         Returns:
             (是否需要平仓, 原因, 需要更新的字段)
         """
-        entry_price = float(position.get('entry_price', 0))
+        entry_price = float(position.get('entry_price') or 0)
         position_side = position.get('position_side', 'LONG')
-        max_profit_pct = float(position.get('max_profit_pct', 0))
+        max_profit_pct = float(position.get('max_profit_pct') or 0)
         trailing_activated = position.get('trailing_stop_activated', False)
 
         if entry_price <= 0:
@@ -1017,7 +1017,7 @@ class StrategyExecutorV2:
         Returns:
             (是否需要平仓, 原因)
         """
-        entry_price = float(position.get('entry_price', 0))
+        entry_price = float(position.get('entry_price') or 0)
         position_side = position.get('position_side', 'LONG')
 
         if entry_price <= 0:
@@ -1061,7 +1061,7 @@ class StrategyExecutorV2:
             return False, f"监控等待中({elapsed_minutes:.0f}/{self.STRENGTH_MONITOR_DELAY}分钟)"
 
         # 获取开仓时的EMA差值
-        entry_ema_diff = float(position.get('entry_ema_diff', 0))
+        entry_ema_diff = float(position.get('entry_ema_diff') or 0)
         if entry_ema_diff <= 0:
             return False, "无开仓时EMA差值记录"
 
@@ -1104,7 +1104,7 @@ class StrategyExecutorV2:
         """
         updates = {}
 
-        entry_price = float(position.get('entry_price', 0))
+        entry_price = float(position.get('entry_price') or 0)
         position_side = position.get('position_side', 'LONG')
 
         if entry_price <= 0:
@@ -1141,8 +1141,8 @@ class StrategyExecutorV2:
             return True, close_reason, updates
 
         # 5. 移动止盈检查
-        max_profit_pct = float(position.get('max_profit_pct', 0))
-        trailing_activated = position.get('trailing_stop_activated', False)
+        max_profit_pct = float(position.get('max_profit_pct') or 0)
+        trailing_activated = position.get('trailing_stop_activated') or False
 
         # 更新最高盈利
         if current_pnl_pct > max_profit_pct:
@@ -1178,12 +1178,12 @@ class StrategyExecutorV2:
             # 更新移动止损价格
             if position_side == 'LONG':
                 new_trailing_price = current_price * (1 - trailing_callback / 100)
-                current_trailing_price = float(position.get('trailing_stop_price', 0))
+                current_trailing_price = float(position.get('trailing_stop_price') or 0)
                 if new_trailing_price > current_trailing_price:
                     updates['trailing_stop_price'] = new_trailing_price
             else:
                 new_trailing_price = current_price * (1 + trailing_callback / 100)
-                current_trailing_price = float(position.get('trailing_stop_price', float('inf')))
+                current_trailing_price = float(position.get('trailing_stop_price') or float('inf'))
                 if new_trailing_price < current_trailing_price:
                     updates['trailing_stop_price'] = new_trailing_price
 
