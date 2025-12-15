@@ -1347,29 +1347,30 @@
                                 </div>
 
                                 <!-- 移动止损（追踪止损） -->
-                                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default);">
+                                <div style="background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 2px solid #ff9800;">
                                     <div style="display: flex; align-items: center; margin-bottom: 8px;">
                                         <input type="checkbox" id="trailingStopLossEnabled" style="margin-right: 8px;">
-                                        <label for="trailingStopLossEnabled" style="font-weight: 600; cursor: pointer;">移动止损（追踪止损）</label>
-                                        <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px;">止损价随盈利上移，只升不降</span>
+                                        <span style="font-size: 16px; margin-right: 8px;">🛡️</span>
+                                        <label for="trailingStopLossEnabled" style="font-weight: 600; cursor: pointer; color: #e65100;">移动止损（追踪止损）</label>
+                                        <span style="font-size: 11px; color: #f57c00; margin-left: 8px;">盈利时止损价跟随上移，减少亏损</span>
                                     </div>
                                     <div id="trailingStopLossParams" style="display: none; margin-top: 8px;">
                                         <div class="form-row" style="gap: 12px;">
                                             <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                <label class="form-label" style="font-size: 11px;">激活阈值（%）</label>
-                                                <input type="number" class="form-input" id="trailingStopLossActivatePct" value="0.5" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px;">
-                                                <small style="color: var(--text-tertiary); font-size: 10px;">盈利超此值开始移动止损</small>
+                                                <label class="form-label" style="font-size: 11px; color: #e65100;">激活阈值（%）</label>
+                                                <input type="number" class="form-input" id="trailingStopLossActivatePct" value="0.5" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px; border-color: #ff9800;">
+                                                <small style="color: #f57c00; font-size: 10px;">盈利超此值开始移动止损</small>
                                             </div>
                                             <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                <label class="form-label" style="font-size: 11px;">止损距离（%）</label>
-                                                <input type="number" class="form-input" id="trailingStopLossDistancePct" value="1.0" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px;">
-                                                <small style="color: var(--text-tertiary); font-size: 10px;">止损价与当前价的距离</small>
+                                                <label class="form-label" style="font-size: 11px; color: #e65100;">止损距离（%）</label>
+                                                <input type="number" class="form-input" id="trailingStopLossDistancePct" value="1.0" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px; border-color: #ff9800;">
+                                                <small style="color: #f57c00; font-size: 10px;">止损价与当前价的距离</small>
                                             </div>
-                                            <div class="form-group" style="flex: 1; min-width: 120px; margin-bottom: 8px;">
-                                                <label class="form-label" style="font-size: 11px;">步进值（%）</label>
-                                                <input type="number" class="form-input" id="trailingStopLossStepPct" value="0.1" step="0.05" min="0.05" style="padding: 6px 10px; font-size: 13px;">
-                                                <small style="color: var(--text-tertiary); font-size: 10px;">最小移动幅度</small>
-                                            </div>
+                                        </div>
+                                        <div style="background: rgba(255, 152, 0, 0.1); border-radius: 6px; padding: 8px; margin-top: 8px;">
+                                            <small style="color: #e65100;">
+                                                💡 <strong>示例：</strong>激活0.5%，距离1.0%。做多盈利1%时，止损从-2.5%移到当前价-1%，减少潜在亏损。
+                                            </small>
                                         </div>
                                     </div>
                                 </div>
