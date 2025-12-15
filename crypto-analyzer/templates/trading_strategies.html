@@ -2249,7 +2249,9 @@
 
             const buyVolumeLongRadio = document.querySelector('input[name="buyVolumeLong"]:checked');
             const buyVolumeShortRadio = document.querySelector('input[name="buyVolumeShort"]:checked');
-            const buySignalRadio = document.querySelector('input[name="buySignals"]:checked');
+            // V2策略: 买入信号固定为 EMA 15分钟，优先获取 hidden 字段
+            const buySignalHidden = document.querySelector('input[name="buySignals"][type="hidden"]');
+            const buySignalRadio = document.querySelector('input[name="buySignals"]:checked') || buySignalHidden;
             const sellSignalRadio = document.querySelector('input[name="sellSignals"]:checked');
             const longPriceRadio = document.querySelector('input[name="longPrice"]:checked');
             const shortPriceRadio = document.querySelector('input[name="shortPrice"]:checked');
@@ -2264,7 +2266,7 @@
                 useV2Strategy: true, // V2策略始终启用
                 buyDirection: buyDirections, // 改为数组，支持多选
                 leverage: leverageRadio ? parseInt(leverageRadio.value) : 5, // 交易倍数，默认5
-                buySignals: buySignalRadio ? buySignalRadio.value : null, // 改为单选
+                buySignals: buySignalRadio ? buySignalRadio.value : 'ema_15m', // V2固定为 ema_15m
                 // 成交量条件字段已移除
                 sellSignals: sellSignalRadio ? sellSignalRadio.value : null, // 改为单选
                 // 平仓成交量已移除，不再限制
@@ -2417,12 +2419,8 @@
                 showToast('请选择交易倍数', 'warning');
                 return;
             }
-            
-            if (!buySignalRadio) {
-                showToast('请选择一个买入信号', 'warning');
-                return;
-            }
-            
+
+            // V2策略买入信号固定为 EMA 15分钟，无需验证
             // 成交量条件验证已移除（V2策略不使用）
 
             if (!sellSignalRadio) {
