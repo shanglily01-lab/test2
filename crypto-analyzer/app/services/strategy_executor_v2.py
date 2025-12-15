@@ -1117,10 +1117,14 @@ class StrategyExecutorV2:
             current_pnl_pct = (entry_price - current_price) / entry_price * 100
 
         # 获取策略配置的止损止盈参数（如果有）
-        stop_loss_pct = strategy.get('stopLossPercent') or self.HARD_STOP_LOSS
-        max_take_profit = strategy.get('takeProfitPercent') or self.MAX_TAKE_PROFIT
-        trailing_activate = strategy.get('trailingActivate') or self.TRAILING_ACTIVATE
-        trailing_callback = strategy.get('trailingCallback') or self.TRAILING_CALLBACK
+        stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
+        max_take_profit = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
+
+        # 移动止盈参数：优先从 smartStopLoss.trailingStopLoss 读取（前端格式），其次从顶层读取
+        smart_stop_loss = strategy.get('smartStopLoss', {})
+        trailing_config = smart_stop_loss.get('trailingStopLoss', {})
+        trailing_activate = strategy.get('trailingActivate') or trailing_config.get('activatePct') or self.TRAILING_ACTIVATE
+        trailing_callback = strategy.get('trailingCallback') or trailing_config.get('distancePct') or self.TRAILING_CALLBACK
 
         # 1. 硬止损检查（最高优先级）
         if current_pnl_pct <= -stop_loss_pct:
@@ -1192,7 +1196,8 @@ class StrategyExecutorV2:
     # ==================== 开仓执行 ====================
 
     async def execute_open_position(self, symbol: str, direction: str, signal_type: str,
-                                     strategy: Dict, account_id: int = 2) -> Dict:
+                                     strategy: Dict, account_id: int = 2,
+                                     signal_reason: str = None) -> Dict:
         """
         执行开仓
 
@@ -1202,6 +1207,7 @@ class StrategyExecutorV2:
             signal_type: 信号类型
             strategy: 策略配置
             account_id: 账户ID
+            signal_reason: 开仓原因详情
 
         Returns:
             执行结果
@@ -1272,15 +1278,15 @@ class StrategyExecutorV2:
                 if result.get('success'):
                     position_id = result.get('position_id')
 
-                    # 更新开仓时的EMA差值
+                    # 更新开仓时的EMA差值和开仓原因
                     conn = self.get_db_connection()
                     cursor = conn.cursor()
                     try:
                         cursor.execute("""
                             UPDATE futures_positions
-                            SET entry_signal_type = %s, entry_ema_diff = %s
+                            SET entry_signal_type = %s, entry_ema_diff = %s, entry_reason = %s
                             WHERE id = %s
-                        """, (signal_type, ema_diff_pct, position_id))
+                        """, (signal_type, ema_diff_pct, signal_reason, position_id))
                         conn.commit()
                     except Exception as e:
                         logger.warning(f"更新开仓信号类型失败: {e}")
@@ -1502,9 +1508,11 @@ class StrategyExecutorV2:
                     debug_info.extend(filter_results)
 
                     if filters_passed:
+                        # 构建开仓原因
+                        entry_reason = f"金叉/死叉信号: {reason}, EMA差值:{ema_data['ema_diff_pct']:.3f}%"
                         open_result = await self.execute_open_position(
                             symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
-                            strategy, account_id
+                            strategy, account_id, signal_reason=entry_reason
                         )
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
@@ -1522,8 +1530,11 @@ class StrategyExecutorV2:
                     debug_info.extend(filter_results)
 
                     if filters_passed:
+                        # 构建开仓原因
+                        entry_reason = f"连续趋势(5M放大): {signal_desc}"
                         open_result = await self.execute_open_position(
-                            symbol, signal, 'sustained_trend', strategy, account_id
+                            symbol, signal, 'sustained_trend', strategy, account_id,
+                            signal_reason=entry_reason
                         )
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
@@ -1542,8 +1553,11 @@ class StrategyExecutorV2:
                         debug_info.extend(filter_results)
 
                         if filters_passed:
+                            # 构建开仓原因
+                            entry_reason = f"持续趋势入场({direction}): {sustained_reason}"
                             open_result = await self.execute_open_position(
-                                symbol, direction, 'sustained_trend_entry', strategy, account_id
+                                symbol, direction, 'sustained_trend_entry', strategy, account_id,
+                                signal_reason=entry_reason
                             )
                             if open_result and open_result.get('success'):
                                 # 记录持续趋势开仓时间（用于冷却）
@@ -1566,8 +1580,11 @@ class StrategyExecutorV2:
                     debug_info.extend(filter_results)
 
                     if filters_passed:
+                        # 构建开仓原因
+                        entry_reason = f"震荡反向信号: {signal_desc}"
                         open_result = await self.execute_open_position(
-                            symbol, signal, 'oscillation_reversal', strategy, account_id
+                            symbol, signal, 'oscillation_reversal', strategy, account_id,
+                            signal_reason=entry_reason
                         )
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
