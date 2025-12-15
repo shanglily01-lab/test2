@@ -19,16 +19,20 @@ import yaml
 with open('config.yaml', 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
+# 支持两种配置格式
 db_config = config['database']
+if 'mysql' in db_config:
+    # 嵌套格式: database.mysql.host
+    db_config = db_config['mysql']
 
 
 def get_db_connection():
     return pymysql.connect(
-        host=db_config['host'],
+        host=db_config.get('host', 'localhost'),
         port=db_config.get('port', 3306),
-        user=db_config['user'],
-        password=db_config['password'],
-        database=db_config['database'],
+        user=db_config.get('user', 'root'),
+        password=db_config.get('password', ''),
+        database=db_config.get('database', 'binance-data'),
         cursorclass=DictCursor
     )
 
