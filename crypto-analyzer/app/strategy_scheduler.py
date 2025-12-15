@@ -27,6 +27,7 @@ from typing import Optional
 from app.services.strategy_executor import StrategyExecutor
 from app.services.strategy_executor_v2 import StrategyExecutorV2
 from app.services.strategy_test_service import StrategyTestService
+from app.services.position_validator import PositionValidator
 from app.trading.futures_trading_engine import FuturesTradingEngine
 from app.analyzers.technical_indicators import TechnicalIndicators
 
@@ -97,9 +98,19 @@ class StrategyScheduler:
         )
         logger.info("  ✓ 策略测试服务初始化成功")
 
+        # 初始化开单自检服务
+        logger.info("初始化开单自检服务...")
+        self.position_validator = PositionValidator(
+            db_config=db_config,
+            futures_engine=self.futures_engine,
+            trade_notifier=trade_notifier
+        )
+        logger.info("  ✓ 开单自检服务初始化成功")
+
         # 运行状态
         self.running = False
         self.task: Optional[asyncio.Task] = None
+        self.validator_task: Optional[asyncio.Task] = None
         self.interval = 5  # 默认5秒检查一次（实时监控）
         self.last_check_time = {}  # 记录每个策略的最后检查时间
 
@@ -205,12 +216,22 @@ class StrategyScheduler:
         self.task = loop.create_task(self.run_loop(interval))
         logger.info(f"策略实时监控服务已启动（每{interval}秒检查）")
 
+        # 启动开单自检服务
+        self.validator_task = loop.create_task(self.position_validator.start())
+        logger.info("开单自检服务已启动")
+
     def stop(self):
         """停止策略执行服务"""
         logger.info("正在停止策略执行服务...")
         self.running = False
         if self.task and not self.task.done():
             self.task.cancel()
+
+        # 停止开单自检服务
+        if self.validator_task and not self.validator_task.done():
+            self.validator_task.cancel()
+            asyncio.create_task(self.position_validator.stop())
+
         logger.info("策略执行服务已停止")
 
     async def test_strategy(self, strategy_config: dict) -> dict:
