@@ -1254,15 +1254,19 @@ class StrategyExecutorV2:
 
             # 执行模拟开仓
             if self.futures_engine:
+                # 转换方向格式：long -> LONG, short -> SHORT
+                position_side = direction.upper()
+
                 result = self.futures_engine.open_position(
-                    symbol=symbol,
-                    direction=direction,
-                    quantity=quantity,
-                    leverage=leverage,
                     account_id=account_id,
-                    stop_loss_pct=self.HARD_STOP_LOSS,
-                    take_profit_pct=self.MAX_TAKE_PROFIT,
-                    signal_type=signal_type
+                    symbol=symbol,
+                    position_side=position_side,
+                    quantity=Decimal(str(quantity)),
+                    leverage=leverage,
+                    stop_loss_pct=Decimal(str(self.HARD_STOP_LOSS)),
+                    take_profit_pct=Decimal(str(self.MAX_TAKE_PROFIT)),
+                    source='strategy',
+                    strategy_id=strategy.get('id')
                 )
 
                 if result.get('success'):
