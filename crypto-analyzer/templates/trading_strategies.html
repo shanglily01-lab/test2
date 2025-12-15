@@ -1126,6 +1126,34 @@
                                     <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal; margin-left: 8px;">优化出场时机，保护利润</span>
                                 </div>
 
+                                <!-- 移动止盈（核心功能） -->
+                                <div style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 2px solid #4caf50;">
+                                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                        <span style="font-size: 16px; margin-right: 8px;">📈</span>
+                                        <span style="font-weight: 600; color: #2e7d32;">移动止盈（跟踪止盈）</span>
+                                        <span style="font-size: 11px; color: #558b2f; margin-left: 8px;">盈利达到阈值后，从最高点回撤一定比例平仓</span>
+                                    </div>
+                                    <div style="margin-top: 8px;">
+                                        <div class="form-row" style="gap: 12px;">
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px; color: #2e7d32;">激活阈值（%）</label>
+                                                <input type="number" class="form-input" id="trailingActivate" value="1.5" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px; border-color: #4caf50;">
+                                                <small style="color: #558b2f; font-size: 10px;">盈利超过此值激活移动止盈</small>
+                                            </div>
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px; color: #2e7d32;">回调触发（%）</label>
+                                                <input type="number" class="form-input" id="trailingCallback" value="0.5" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px; border-color: #4caf50;">
+                                                <small style="color: #558b2f; font-size: 10px;">从最高点回撤此比例触发平仓</small>
+                                            </div>
+                                        </div>
+                                        <div style="background: rgba(76, 175, 80, 0.1); border-radius: 6px; padding: 8px; margin-top: 8px;">
+                                            <small style="color: #2e7d32;">
+                                                💡 <strong>示例：</strong>激活1.5%，回调0.5%。若盈利达到3%，价格从最高点回落0.5%时平仓，锁定约2.5%利润。
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- 动态止盈 -->
                                 <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default);">
                                     <div style="display: flex; align-items: center; margin-bottom: 8px;">
@@ -2202,6 +2230,8 @@
                 crossSignalForceMarket: document.getElementById('crossSignalForceMarket') ? document.getElementById('crossSignalForceMarket').checked : true,
                 stopLoss: document.getElementById('stopLoss').value ? parseFloat(document.getElementById('stopLoss').value) : null,
                 takeProfit: document.getElementById('takeProfit').value ? parseFloat(document.getElementById('takeProfit').value) : null,
+                trailingActivate: document.getElementById('trailingActivate').value ? parseFloat(document.getElementById('trailingActivate').value) : 1.5,
+                trailingCallback: document.getElementById('trailingCallback').value ? parseFloat(document.getElementById('trailingCallback').value) : 0.5,
                 closeOppositeOnEntry: document.getElementById('closeOppositeOnEntry') ? document.getElementById('closeOppositeOnEntry').checked : false,
                 // V2策略固定参数
                 ma10Ema10TrendFilter: true,
@@ -2816,7 +2846,11 @@
             // 止损止盈
             document.getElementById('stopLoss').value = strategy.stopLoss || '';
             document.getElementById('takeProfit').value = strategy.takeProfit || '';
-            
+
+            // 移动止盈
+            document.getElementById('trailingActivate').value = strategy.trailingActivate || 1.5;
+            document.getElementById('trailingCallback').value = strategy.trailingCallback || 0.5;
+
             // V2策略使用固定参数，MA10/EMA10过滤、信号强度过滤、趋势确认、退出机制、开仓冷却等已移除
 
             // 风险控制 - 开仓前平反向持仓
