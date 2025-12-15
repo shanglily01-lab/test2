@@ -11,8 +11,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import asyncio
 from datetime import datetime, timedelta
 from decimal import Decimal
+import re
 import pymysql
 from pymysql.cursors import DictCursor
+
+# 加载 .env 文件
+def load_env():
+    """加载 .env 文件中的环境变量"""
+    env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+    if os.path.exists(env_path):
+        with open(env_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ.setdefault(key.strip(), value.strip())
+
+load_env()
 
 # 加载配置
 import yaml
@@ -25,14 +40,25 @@ if 'mysql' in db_config:
     # 嵌套格式: database.mysql.host
     db_config = db_config['mysql']
 
+def resolve_env_var(value):
+    """解析环境变量格式 ${VAR:default}"""
+    if not isinstance(value, str):
+        return value
+    match = re.match(r'\$\{(\w+):?(.*)\}', value)
+    if match:
+        var_name = match.group(1)
+        default = match.group(2) if match.group(2) else ''
+        return os.environ.get(var_name, default)
+    return value
+
 
 def get_db_connection():
     return pymysql.connect(
-        host=db_config.get('host', 'localhost'),
-        port=db_config.get('port', 3306),
-        user=db_config.get('user', 'root'),
-        password=db_config.get('password', ''),
-        database=db_config.get('database', 'binance-data'),
+        host=resolve_env_var(db_config.get('host', 'localhost')),
+        port=int(resolve_env_var(db_config.get('port', 3306))),
+        user=resolve_env_var(db_config.get('user', 'root')),
+        password=resolve_env_var(db_config.get('password', '')),
+        database=resolve_env_var(db_config.get('database', 'binance-data')),
         cursorclass=DictCursor
     )
 
