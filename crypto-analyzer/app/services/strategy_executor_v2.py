@@ -32,7 +32,7 @@ class StrategyExecutorV2:
     # 止损止盈参数
     HARD_STOP_LOSS = 2.5  # 硬止损 (%)
     TRAILING_ACTIVATE = 1.5  # 移动止盈启动阈值 (%)
-    TRAILING_CALLBACK = 1.0  # 移动止盈回撤 (%)
+    TRAILING_CALLBACK = 0.5  # 移动止盈回撤 (%)
     MAX_TAKE_PROFIT = 8.0  # 最大止盈 (%)
 
     # 成交量阈值
