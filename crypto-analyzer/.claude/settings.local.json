@@ -47,7 +47,9 @@
       "Bash(ssh:*)",
       "Bash(pgrep:*)",
       "Bash(sudo systemctl status:*)",
-      "Bash(ps:*)"
+      "Bash(ps:*)",
+      "Bash(pip3 install:*)",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": []
