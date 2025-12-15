@@ -2212,18 +2212,16 @@
                 const positionSize = document.getElementById('positionSize');
                 if (positionSize && !positionSize.value) positionSize.value = '5';
 
-                // 设置固定止损2.5%（V2的硬止损）
+                // 设置默认止损2.5%（V2的硬止损），但允许用户修改
                 const stopLoss = document.getElementById('stopLoss');
-                if (stopLoss) {
+                if (stopLoss && !stopLoss.value) {
                     stopLoss.value = '2.5';
-                    stopLoss.disabled = true;
                 }
 
-                // 止盈设置为最大8%（V2的最大止盈）
+                // 设置默认止盈8%（V2的最大止盈），但允许用户修改
                 const takeProfit = document.getElementById('takeProfit');
-                if (takeProfit) {
+                if (takeProfit && !takeProfit.value) {
                     takeProfit.value = '8';
-                    takeProfit.disabled = true;
                 }
 
                 // 强制市价单
@@ -2235,12 +2233,6 @@
                 // 开仓前先平反向
                 const closeOpposite = document.getElementById('closeOppositeOnEntry');
                 if (closeOpposite) closeOpposite.checked = true;
-            } else {
-                // 恢复止损止盈可编辑
-                const stopLoss = document.getElementById('stopLoss');
-                if (stopLoss) stopLoss.disabled = false;
-                const takeProfit = document.getElementById('takeProfit');
-                if (takeProfit) takeProfit.disabled = false;
             }
 
             // 显示V2模式下的固定参数说明
