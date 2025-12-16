@@ -405,9 +405,8 @@ class PositionValidator:
         # if is_inconsistent:
         #     issues.append(reason)
 
-        # 决定是否允许开仓（需要至少2个问题才阻止）
-        min_issues = self.VALIDATION_CONFIG['min_issues_to_close']
-        allow_open = len(issues) < min_issues
+        # 决定是否允许开仓（任意1个问题就阻止）
+        allow_open = len(issues) == 0
 
         result = {
             'allow_open': allow_open,
