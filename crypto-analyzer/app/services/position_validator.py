@@ -400,10 +400,10 @@ class PositionValidator:
         if is_exhausted:
             issues.append(reason)
 
-        # ========== 检查3: 多周期不一致 ==========
-        is_inconsistent, reason = self._check_multi_timeframe_consistency(symbol, direction)
-        if is_inconsistent:
-            issues.append(reason)
+        # ========== 检查3: 多周期不一致 (不作为检查条件，下行周期无法开多) ==========
+        # is_inconsistent, reason = self._check_multi_timeframe_consistency(symbol, direction)
+        # if is_inconsistent:
+        #     issues.append(reason)
 
         # 决定是否允许开仓（需要至少2个问题才阻止）
         min_issues = self.VALIDATION_CONFIG['min_issues_to_close']
