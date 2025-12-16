@@ -1693,26 +1693,27 @@ async def toggle_strategy_sync_live(strategy_id: int, request: Request):
 async def get_pending_positions():
     """获取待检查订单列表"""
     try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         cursor.execute("""
             SELECT
                 pp.id,
                 pp.strategy_id,
                 pp.symbol,
-                pp.side,
+                pp.direction as side,
                 pp.signal_price,
                 pp.signal_type,
                 pp.status,
-                pp.check_count,
-                pp.last_check_at,
+                pp.validation_count as check_count,
+                pp.last_validation_time as last_check_at,
                 pp.created_at,
-                pp.expire_seconds,
+                pp.signal_ema_diff_pct,
+                pp.rejection_reason,
                 ts.name as strategy_name
             FROM pending_positions pp
             LEFT JOIN trading_strategies ts ON pp.strategy_id = ts.id
-            WHERE pp.status IN ('pending', 'checking')
+            WHERE pp.status = 'pending'
             ORDER BY pp.created_at DESC
             LIMIT 100
         """)
@@ -1744,8 +1745,8 @@ async def get_pending_positions():
 async def delete_pending_position(position_id: int):
     """删除/取消待检查订单"""
     try:
-        connection = get_db_connection()
-        cursor = connection.cursor(dictionary=True)
+        connection = pymysql.connect(**db_config)
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         # 检查是否存在
         cursor.execute("SELECT id, status FROM pending_positions WHERE id = %s", (position_id,))
