@@ -1070,14 +1070,25 @@ class FuturesTradingEngine:
             ))
 
             # 7. 更新持仓状态
+            # 将原因转换为中文显示
+            reason_map = {
+                'stop_loss': '止损',
+                'trailing_stop': '移动止损',
+                'take_profit': '止盈',
+                'manual': '手动平仓',
+                'strategy': '策略平仓',
+                'liquidation': '强制平仓'
+            }
+            notes_reason = reason_map.get(reason, reason)
+
             if close_quantity == quantity:
                 # 全部平仓
                 cursor.execute(
                     """UPDATE futures_positions
                     SET status = 'closed', close_time = %s,
-                        realized_pnl = %s
+                        realized_pnl = %s, notes = %s
                     WHERE id = %s""",
-                    (get_local_time(), float(realized_pnl), position_id)
+                    (get_local_time(), float(realized_pnl), notes_reason, position_id)
                 )
 
                 # 释放全部保证金
