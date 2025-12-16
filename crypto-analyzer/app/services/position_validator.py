@@ -301,7 +301,7 @@ class PositionValidator:
         ranging_threshold = self.validation_config['ranging_volatility']
 
         if volatility < ranging_threshold and ema_diff_pct < 0.15:
-            return True, f"震荡市追单(波动{volatility:.2f}%,EMA差{ema_diff_pct:.2f}%)"
+            return True, f"ranging(vol{volatility:.2f}%,ema{ema_diff_pct:.2f}%)"
 
         return False, ""
 
@@ -329,15 +329,15 @@ class PositionValidator:
         threshold = self.validation_config['trend_exhaustion_threshold']
 
         if direction == 'long':
-            # 做多时检查是否接近高点
+            # Near high when going long
             distance_to_high = (max_high - entry_price) / entry_price * 100
             if distance_to_high < threshold:
-                return True, f"趋势末端做多(距高点{distance_to_high:.2f}%)"
+                return True, f"near_high({distance_to_high:.2f}%)"
         else:
-            # 做空时检查是否接近低点
+            # Near low when going short
             distance_to_low = (entry_price - min_low) / entry_price * 100
             if distance_to_low < threshold:
-                return True, f"趋势末端做空(距低点{distance_to_low:.2f}%)"
+                return True, f"near_low({distance_to_low:.2f}%)"
 
         return False, ""
 
@@ -635,7 +635,7 @@ class PositionValidator:
                     close_time = recent_close['created_at']
                     elapsed = (now - close_time).total_seconds()
                     remaining = cooldown_seconds - elapsed
-                    return True, f"平仓冷却中(剩余{remaining:.0f}秒)"
+                    return True, f"cooldown({remaining:.0f}s)"
 
                 return False, ""
 
@@ -762,63 +762,60 @@ class PositionValidator:
                 issues.append(cooldown_reason)
                 checks_passed = False
 
-        # ========== 检查1: 价格偏差 ==========
+        # ========== Check 1: Price deviation ==========
         max_price_diff = self.validation_config.get('pending_max_price_diff', 0.5)
         price_diff_pct = abs(current_price - signal_price) / signal_price * 100
         if price_diff_pct > max_price_diff:
-            issues.append(f"价格偏差过大({price_diff_pct:.2f}%>{max_price_diff}%)")
+            issues.append(f"price_diff({price_diff_pct:.2f}%>{max_price_diff}%)")
             checks_passed = False
 
-        # ========== 检查2: EMA方向确认 ==========
+        # ========== Check 2: EMA direction ==========
         if self.validation_config.get('pending_require_ema_confirm', True):
             if direction == 'long':
-                if current_ema_diff <= 0:  # EMA9 < EMA26，非上升趋势
-                    issues.append(f"EMA方向不确认(EMA9<EMA26)")
+                if current_ema_diff <= 0:  # EMA9 < EMA26
+                    issues.append(f"ema_direction(EMA9<EMA26)")
                     checks_passed = False
             else:  # short
-                if current_ema_diff >= 0:  # EMA9 > EMA26，非下降趋势
-                    issues.append(f"EMA方向不确认(EMA9>EMA26)")
+                if current_ema_diff >= 0:  # EMA9 > EMA26
+                    issues.append(f"ema_direction(EMA9>EMA26)")
                     checks_passed = False
 
-        # ========== 检查3: MA方向确认 ==========
+        # ========== Check 3: MA direction ==========
         if self.validation_config.get('pending_require_ma_confirm', True):
             if direction == 'long':
                 if current_price < ma10:
-                    issues.append(f"价格低于MA10({current_price:.4f}<{ma10:.4f})")
+                    issues.append(f"price<MA10({current_price:.4f}<{ma10:.4f})")
                     checks_passed = False
             else:  # short
                 if current_price > ma10:
-                    issues.append(f"价格高于MA10({current_price:.4f}>{ma10:.4f})")
+                    issues.append(f"price>MA10({current_price:.4f}>{ma10:.4f})")
                     checks_passed = False
 
-        # ========== 检查4: 震荡市检查 ==========
+        # ========== Check 4: Ranging market ==========
         if self.validation_config.get('pending_check_ranging', True):
             is_ranging, reason = self._check_ranging_market(symbol, ema_data)
             if is_ranging:
                 issues.append(reason)
                 checks_passed = False
 
-        # ========== 检查5: 趋势末端检查 ==========
+        # ========== Check 5: Trend exhaustion ==========
         if self.validation_config.get('pending_check_trend_end', True):
             is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, current_price, ema_data)
             if is_exhausted:
                 issues.append(reason)
                 checks_passed = False
 
-        # ========== 检查6: EMA趋势强度检查 ==========
-        # 如果EMA差值太小，说明趋势弱或即将反转，拒绝开仓
+        # ========== Check 6: EMA trend strength ==========
         min_ema_diff = self.validation_config.get('pending_min_ema_diff_pct', 0.15)
         if abs(current_ema_diff_pct) < min_ema_diff:
-            issues.append(f"EMA趋势弱(差值{current_ema_diff_pct:.3f}%<{min_ema_diff}%)")
+            issues.append(f"weak_trend({current_ema_diff_pct:.2f}%<{min_ema_diff}%)")
             checks_passed = False
 
-        # ========== 检查7: EMA收敛检查 ==========
-        # 如果信号触发时的EMA差值比现在大很多，说明EMA在收敛，趋势在减弱
+        # ========== Check 7: EMA converging ==========
         if self.validation_config.get('pending_check_ema_converging', True):
             if signal_ema_diff_pct != 0 and abs(current_ema_diff_pct) < abs(signal_ema_diff_pct) * 0.7:
-                # EMA差值收窄超过30%，说明趋势在减弱
                 decay_pct = (1 - abs(current_ema_diff_pct) / abs(signal_ema_diff_pct)) * 100
-                issues.append(f"EMA收敛(趋势减弱{decay_pct:.0f}%)")
+                issues.append(f"ema_converging({decay_pct:.0f}%)")
                 checks_passed = False
 
         # 更新自检次数
