@@ -1616,7 +1616,8 @@
                 </div>
             `;
 
-            // 4. 待开仓自检配置（使用折叠面板）
+            // 4. 待开仓自检配置（仅合约策略，使用折叠面板）
+            if (isFutures) {
             riskHtml += \`
                 <div class="collapsible-section">
                     <div class="collapsible-header" onclick="toggleCollapsible(this)">
@@ -1682,6 +1683,7 @@
                     </div>
                 </div>
             \`;
+            }  // end if (isFutures) - 待开仓自检
 
             // ========== 高级功能标签页 ==========
             
