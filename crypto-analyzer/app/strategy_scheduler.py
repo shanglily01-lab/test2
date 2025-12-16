@@ -114,7 +114,8 @@ class StrategyScheduler:
         self.position_validator = PositionValidator(
             db_config=db_config,
             futures_engine=self.futures_engine,
-            trade_notifier=trade_notifier
+            trade_notifier=trade_notifier,
+            strategy_executor=self.strategy_executor
         )
         logger.info("  ✓ 开单自检服务初始化成功")
 
