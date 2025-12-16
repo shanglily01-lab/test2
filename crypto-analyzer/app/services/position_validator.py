@@ -185,17 +185,17 @@ class PositionValidator:
         if hold_seconds <= quick_loss_window and pnl_pct <= -quick_loss_threshold:
             issues.append(f"快速亏损({pnl_pct:.2f}%在{hold_seconds:.0f}秒内)")
 
-        # ========== 检查2: 震荡市追单 ==========
-        is_ranging, reason = self._check_ranging_market(symbol, ema_data)
-        if is_ranging:
-            issues.append(reason)
+        # ========== 检查2: 震荡市追单 (已移至开仓前检查) ==========
+        # is_ranging, reason = self._check_ranging_market(symbol, ema_data)
+        # if is_ranging:
+        #     issues.append(reason)
 
-        # ========== 检查3: 趋势末端开仓 ==========
-        is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, entry_price, ema_data)
-        if is_exhausted:
-            issues.append(reason)
+        # ========== 检查3: 趋势末端开仓 (已移至开仓前检查) ==========
+        # is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, entry_price, ema_data)
+        # if is_exhausted:
+        #     issues.append(reason)
 
-        # ========== 检查4: 逆势开仓（价格立即反向） ==========
+        # ========== 检查4: 逆势开仓（价格立即反向）==========
         is_reversal, reason = self._check_immediate_reversal(position, current_price, hold_seconds)
         if is_reversal:
             issues.append(reason)
@@ -205,10 +205,10 @@ class PositionValidator:
         if is_decayed:
             issues.append(reason)
 
-        # ========== 检查6: 多周期不一致 ==========
-        is_inconsistent, reason = self._check_multi_timeframe_consistency(symbol, direction)
-        if is_inconsistent:
-            issues.append(reason)
+        # ========== 检查6: 多周期不一致 (暂时禁用，下行周期无法开多) ==========
+        # is_inconsistent, reason = self._check_multi_timeframe_consistency(symbol, direction)
+        # if is_inconsistent:
+        #     issues.append(reason)
 
         # 决定是否平仓
         min_issues = self.VALIDATION_CONFIG['min_issues_to_close']
@@ -365,6 +365,62 @@ class PositionValidator:
             return True, f"多周期不一致(15M:{direction},1H:{trend_1h})"
 
         return False, ""
+
+    def validate_before_open(self, symbol: str, direction: str) -> Dict:
+        """
+        开仓前验证（在开仓前调用，检查是否应该阻止开仓）
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+
+        Returns:
+            {
+                'allow_open': True/False,  # 是否允许开仓
+                'issues': [],              # 问题列表
+                'reason': ''               # 拒绝原因（如果不允许开仓）
+            }
+        """
+        issues = []
+
+        # 获取15M市场数据
+        ema_data = self._get_ema_data(symbol, '15m')
+        if not ema_data:
+            return {'allow_open': True, 'issues': [], 'reason': ''}  # 无法获取数据时允许开仓
+
+        current_price = ema_data['current_price']
+
+        # ========== 检查1: 震荡市 ==========
+        is_ranging, reason = self._check_ranging_market(symbol, ema_data)
+        if is_ranging:
+            issues.append(reason)
+
+        # ========== 检查2: 趋势末端 ==========
+        is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, current_price, ema_data)
+        if is_exhausted:
+            issues.append(reason)
+
+        # ========== 检查3: 多周期不一致 ==========
+        is_inconsistent, reason = self._check_multi_timeframe_consistency(symbol, direction)
+        if is_inconsistent:
+            issues.append(reason)
+
+        # 决定是否允许开仓（需要至少2个问题才阻止）
+        min_issues = self.VALIDATION_CONFIG['min_issues_to_close']
+        allow_open = len(issues) < min_issues
+
+        result = {
+            'allow_open': allow_open,
+            'issues': issues,
+            'reason': "; ".join(issues) if not allow_open else ''
+        }
+
+        if not allow_open:
+            logger.warning(f"[开仓前检查] 🚫 {symbol} {direction} 被拦截: {issues}")
+        elif issues:
+            logger.info(f"[开仓前检查] ⚠️ {symbol} {direction} 存在问题但允许开仓: {issues}")
+
+        return result
 
     def _get_ema_data(self, symbol: str, timeframe: str, limit: int = 100) -> Optional[Dict]:
         """获取EMA数据"""

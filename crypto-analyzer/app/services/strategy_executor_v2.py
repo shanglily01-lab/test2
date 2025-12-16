@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 from loguru import logger
+from app.services.position_validator import PositionValidator
 
 
 class StrategyExecutorV2:
@@ -59,6 +60,9 @@ class StrategyExecutorV2:
 
         # 冷却时间记录
         self.last_entry_time = {}  # {symbol_direction: datetime}
+
+        # 初始化开仓前检查器
+        self.position_validator = PositionValidator(db_config, futures_engine)
 
     def get_local_time(self) -> datetime:
         """获取本地时间（UTC+8）"""
@@ -1251,6 +1255,12 @@ class StrategyExecutorV2:
             执行结果
         """
         try:
+            # ========== 开仓前检查 ==========
+            pre_check = self.position_validator.validate_before_open(symbol, direction)
+            if not pre_check['allow_open']:
+                logger.info(f"[开仓前检查] 🚫 {symbol} {direction} 被拦截: {pre_check['reason']}")
+                return {'success': False, 'error': f"开仓前检查未通过: {pre_check['reason']}"}
+
             leverage = strategy.get('leverage', 10)
             position_size_pct = strategy.get('positionSizePct', 5)  # 账户资金的5%
             sync_live = strategy.get('syncLive', False)
