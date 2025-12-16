@@ -1373,11 +1373,46 @@ class StrategyExecutorV2:
                 logger.info(f"[开仓前检查] 🚫 {symbol} {direction} 被拦截: {pre_check['reason']}")
                 return {'success': False, 'error': f"开仓前检查未通过: {pre_check['reason']}"}
 
+            # 直接执行开仓
+            return await self._do_open_position(
+                symbol=symbol,
+                direction=direction,
+                signal_type=signal_type,
+                strategy=strategy,
+                account_id=account_id,
+                signal_reason=signal_reason,
+                current_price=current_price,
+                ema_data=ema_data
+            )
+
+        except Exception as e:
+            logger.error(f"开仓执行失败: {e}")
+            return {'success': False, 'error': str(e)}
+
+    async def _do_open_position(self, symbol: str, direction: str, signal_type: str,
+                                 strategy: Dict, account_id: int, signal_reason: str,
+                                 current_price: float, ema_data: Dict) -> Dict:
+        """
+        执行实际的开仓操作（被 execute_open_position 和待开仓自检调用）
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            signal_type: 信号类型
+            strategy: 策略配置
+            account_id: 账户ID
+            signal_reason: 开仓原因
+            current_price: 当前价格
+            ema_data: EMA数据
+
+        Returns:
+            执行结果
+        """
+        try:
             leverage = strategy.get('leverage', 10)
             position_size_pct = strategy.get('positionSizePct', 5)  # 账户资金的5%
             sync_live = strategy.get('syncLive', False)
 
-            # ema_data 已在前面获取
             ema_diff_pct = ema_data['ema_diff_pct']
 
             # 计算开仓数量
@@ -1483,7 +1518,7 @@ class StrategyExecutorV2:
             return {'success': False, 'error': '交易引擎未初始化'}
 
         except Exception as e:
-            logger.error(f"开仓执行失败: {e}")
+            logger.error(f"执行开仓失败: {e}")
             return {'success': False, 'error': str(e)}
 
     async def _sync_live_open(self, symbol: str, direction: str, quantity: float,

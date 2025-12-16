@@ -727,130 +727,59 @@ class PositionValidator:
             conn.close()
 
     async def _execute_validated_open(self, pending: Dict, current_price: float, ema_data: Dict):
-        """执行已验证通过的开仓"""
+        """执行已验证通过的开仓（调用 strategy_executor 的开仓逻辑）"""
         symbol = pending['symbol']
         direction = pending['direction']
         signal_type = pending['signal_type']
         strategy_id = pending['strategy_id']
         account_id = pending['account_id']
-        leverage = pending['leverage']
-        margin_pct = float(pending['margin_pct']) if pending['margin_pct'] else 10.0
         signal_reason = pending['signal_reason']
 
-        if not self.futures_engine:
-            logger.error(f"[待开仓自检] {symbol} 无法开仓：futures_engine 未初始化")
+        if not self.strategy_executor:
+            logger.error(f"[待开仓自检] {symbol} 无法开仓：strategy_executor 未初始化")
             return
-
-        try:
-            # 获取账户余额
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT balance FROM futures_accounts WHERE id = %s
-            """, (account_id,))
-            account = cursor.fetchone()
-            cursor.close()
-            conn.close()
-
-            if not account:
-                logger.error(f"[待开仓自检] {symbol} 无法开仓：账户不存在")
-                return
-
-            balance = float(account['balance'])
-
-            # 计算开仓数量
-            margin = balance * (margin_pct / 100)
-            notional = margin * leverage
-            quantity = notional / current_price
-
-            # 调用交易引擎开仓
-            result = self.futures_engine.open_position(
-                symbol=symbol,
-                side='BUY' if direction == 'long' else 'SELL',
-                position_side='LONG' if direction == 'long' else 'SHORT',
-                quantity=quantity,
-                leverage=leverage,
-                strategy_id=strategy_id,
-                entry_signal_type=signal_type,
-                entry_reason=signal_reason
-            )
-
-            if result.get('success'):
-                position_id = result.get('position_id')
-                logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={position_id}, 数量={quantity:.6f}")
-
-                # 更新开仓时的EMA差值
-                if position_id:
-                    conn = self.get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        UPDATE futures_positions
-                        SET entry_ema_diff = %s
-                        WHERE id = %s
-                    """, (ema_data['ema_diff_pct'], position_id))
-                    conn.commit()
-                    cursor.close()
-                    conn.close()
-
-                # 同步实盘（如果启用）
-                if self.strategy_executor:
-                    await self._sync_live_if_enabled(pending, result, current_price)
-
-            else:
-                logger.error(f"[待开仓自检] ❌ {symbol} {direction} 开仓失败: {result.get('error')}")
-
-        except Exception as e:
-            logger.error(f"[待开仓自检] {symbol} 开仓异常: {e}")
-
-    async def _sync_live_if_enabled(self, pending: Dict, paper_result: Dict, current_price: float):
-        """如果策略启用了实盘同步，则同步开仓到实盘"""
-        if not self.strategy_executor or not self.strategy_executor.live_engine:
-            return
-
-        strategy_id = pending['strategy_id']
-        symbol = pending['symbol']
-        direction = pending['direction']
-        leverage = pending['leverage']
-        paper_position_id = paper_result.get('position_id')
 
         try:
             # 获取策略配置
             conn = self.get_db_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT sync_live, config FROM trading_strategies WHERE id = %s
+                SELECT config FROM trading_strategies WHERE id = %s
             """, (strategy_id,))
             strategy_row = cursor.fetchone()
             cursor.close()
             conn.close()
 
-            if not strategy_row or not strategy_row.get('sync_live'):
+            if not strategy_row:
+                logger.error(f"[待开仓自检] {symbol} 无法开仓：策略不存在")
                 return
 
             import json
-            config = json.loads(strategy_row['config']) if strategy_row.get('config') else {}
+            strategy = json.loads(strategy_row['config']) if strategy_row.get('config') else {}
+            strategy['id'] = strategy_id
+            # 使用待开仓记录中的杠杆和保证金比例
+            strategy['leverage'] = pending['leverage']
+            strategy['positionSizePct'] = float(pending['margin_pct']) if pending['margin_pct'] else strategy.get('positionSizePct', 5)
 
-            # 实盘固定保证金模式
-            live_margin = config.get('liveMarginPerTrade', 100)
-            live_quantity = (live_margin * leverage) / current_price
-
-            position_side = 'LONG' if direction == 'long' else 'SHORT'
-            result = self.strategy_executor.live_engine.open_position(
+            # 调用 strategy_executor 的 _do_open_position 方法执行开仓
+            result = await self.strategy_executor._do_open_position(
                 symbol=symbol,
-                side='BUY' if direction == 'long' else 'SELL',
-                position_side=position_side,
-                quantity=live_quantity,
-                leverage=leverage,
-                paper_position_id=paper_position_id
+                direction=direction,
+                signal_type=signal_type,
+                strategy=strategy,
+                account_id=account_id,
+                signal_reason=signal_reason or "",
+                current_price=current_price,
+                ema_data=ema_data
             )
 
             if result.get('success'):
-                logger.info(f"[待开仓自检] ✅ {symbol} 实盘同步开仓成功")
+                logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={result.get('position_id')}")
             else:
-                logger.warning(f"[待开仓自检] ⚠️ {symbol} 实盘同步开仓失败: {result.get('error')}")
+                logger.error(f"[待开仓自检] ❌ {symbol} {direction} 开仓失败: {result.get('error')}")
 
         except Exception as e:
-            logger.error(f"[待开仓自检] {symbol} 实盘同步异常: {e}")
+            logger.error(f"[待开仓自检] {symbol} 开仓异常: {e}")
 
     def create_pending_position(self, symbol: str, direction: str, signal_type: str,
                                  signal_price: float, ema_data: Dict, strategy: Dict,
