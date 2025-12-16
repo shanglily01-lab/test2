@@ -900,18 +900,20 @@ class StrategyExecutorV2:
             cooldown_start = current_time - timedelta(minutes=cooldown_minutes)
 
             # 查询冷却期内的开仓记录
+            # 注意：futures_positions 表使用 position_side 字段（LONG/SHORT）
+            position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
             if per_direction:
                 # 按方向独立冷却：只查同方向的开仓
                 cursor.execute("""
-                    SELECT created_at, direction FROM futures_positions
+                    SELECT created_at, position_side FROM futures_positions
                     WHERE symbol = %s AND strategy_id = %s
-                    AND direction = %s AND created_at >= %s
+                    AND position_side = %s AND created_at >= %s
                     ORDER BY created_at DESC LIMIT 1
-                """, (symbol, strategy_id, direction.upper(), cooldown_start))
+                """, (symbol, strategy_id, position_side, cooldown_start))
             else:
                 # 全局冷却：查任意方向的开仓
                 cursor.execute("""
-                    SELECT created_at, direction FROM futures_positions
+                    SELECT created_at, position_side FROM futures_positions
                     WHERE symbol = %s AND strategy_id = %s
                     AND created_at >= %s
                     ORDER BY created_at DESC LIMIT 1
@@ -923,7 +925,7 @@ class StrategyExecutorV2:
 
             if recent_entry:
                 entry_time = recent_entry['created_at']
-                last_direction = recent_entry['direction']
+                last_direction = recent_entry['position_side']
                 time_since_entry = (current_time - entry_time).total_seconds() / 60
                 remaining_cooldown = cooldown_minutes - time_since_entry
 
