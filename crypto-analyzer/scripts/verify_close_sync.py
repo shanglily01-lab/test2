@@ -5,7 +5,12 @@
 import sys
 import os
 # 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+# 加载 .env 文件
+from dotenv import load_dotenv
+load_dotenv(os.path.join(project_root, '.env'))
 
 from app.utils.config_loader import load_config
 from app.trading.futures_trading_engine import FuturesTradingEngine
@@ -20,13 +25,17 @@ def test_close_sync():
 
     # 加载配置
     config = load_config()
+
+    # 从环境变量或配置获取数据库配置
     db_config = {
-        'host': config['database']['host'],
-        'port': config['database']['port'],
-        'user': config['database']['user'],
-        'password': config['database']['password'],
-        'database': config['database']['database']
+        'host': os.getenv('DB_HOST', config.get('database', {}).get('host', 'localhost')),
+        'port': int(os.getenv('DB_PORT', config.get('database', {}).get('port', 3306))),
+        'user': os.getenv('DB_USER', config.get('database', {}).get('user', 'root')),
+        'password': os.getenv('DB_PASSWORD', config.get('database', {}).get('password', '')),
+        'database': os.getenv('DB_NAME', config.get('database', {}).get('database', 'binance-data'))
     }
+
+    print(f"   数据库: {db_config['host']}:{db_config['port']}/{db_config['database']}")
 
     # 初始化通知服务
     trade_notifier = init_trade_notifier(config)
