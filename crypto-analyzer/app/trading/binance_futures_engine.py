@@ -526,7 +526,8 @@ class BinanceFuturesEngine:
         take_profit_price: Optional[Decimal] = None,
         source: str = 'manual',
         signal_id: Optional[int] = None,
-        strategy_id: Optional[int] = None
+        strategy_id: Optional[int] = None,
+        paper_position_id: Optional[int] = None
     ) -> Dict:
         """
         开仓（实盘）
@@ -709,7 +710,8 @@ class BinanceFuturesEngine:
                 strategy_id=strategy_id,
                 binance_order_id=order_id,
                 status='OPEN' if status == 'FILLED' else 'PENDING',
-                entry_ema_diff=entry_ema_diff
+                entry_ema_diff=entry_ema_diff,
+                paper_position_id=paper_position_id
             )
 
             # 发送Telegram通知
@@ -1327,7 +1329,8 @@ class BinanceFuturesEngine:
         strategy_id: Optional[int],
         binance_order_id: str,
         status: str,
-        entry_ema_diff: Optional[float] = None
+        entry_ema_diff: Optional[float] = None,
+        paper_position_id: Optional[int] = None
     ) -> int:
         """保存持仓到本地数据库"""
         try:
@@ -1341,14 +1344,14 @@ class BinanceFuturesEngine:
                 (account_id, symbol, position_side, leverage, quantity,
                  notional_value, margin, entry_price, stop_loss_price,
                  take_profit_price, entry_ema_diff, open_time, status, source, signal_id,
-                 strategy_id, binance_order_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+                 strategy_id, binance_order_id, paper_position_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
             insert_params = (account_id, symbol, position_side, leverage, float(quantity),
                  float(notional_value), float(margin), float(entry_price),
                  float(stop_loss_price) if stop_loss_price else None,
                  float(take_profit_price) if take_profit_price else None,
                  entry_ema_diff,
-                 get_local_time(), status, source, signal_id, strategy_id, binance_order_id)
+                 get_local_time(), status, source, signal_id, strategy_id, binance_order_id, paper_position_id)
 
             cursor.execute(insert_sql, insert_params)
 

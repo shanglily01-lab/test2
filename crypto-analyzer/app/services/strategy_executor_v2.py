@@ -1362,7 +1362,21 @@ class StrategyExecutorV2:
 
                     # 同步实盘
                     if sync_live and self.live_engine:
-                        await self._sync_live_open(symbol, direction, quantity, leverage, strategy)
+                        live_position_id = await self._sync_live_open(symbol, direction, quantity, leverage, strategy, position_id)
+                        # 保存实盘持仓ID到模拟盘持仓
+                        if live_position_id:
+                            try:
+                                conn = self.get_db_connection()
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    "UPDATE futures_positions SET live_position_id = %s WHERE id = %s",
+                                    (live_position_id, position_id)
+                                )
+                                conn.commit()
+                                cursor.close()
+                                conn.close()
+                            except Exception as e:
+                                logger.warning(f"保存实盘持仓ID失败: {e}")
 
                     return {
                         'success': True,
@@ -1382,32 +1396,45 @@ class StrategyExecutorV2:
             return {'success': False, 'error': str(e)}
 
     async def _sync_live_open(self, symbol: str, direction: str, quantity: float,
-                              leverage: int, strategy: Dict):
-        """同步实盘开仓"""
+                              leverage: int, strategy: Dict, paper_position_id: int = None) -> int:
+        """
+        同步实盘开仓
+
+        Returns:
+            实盘持仓ID，失败返回None
+        """
         try:
             if not self.live_engine:
-                return
+                return None
 
-            live_quantity_pct = strategy.get('liveQuantityPct', 10)
+            live_quantity_pct = strategy.get('liveQuantityPct', 100)
             live_quantity = quantity * (live_quantity_pct / 100)
 
-            # 调用实盘引擎开仓
-            result = await self.live_engine.open_position(
+            # 调用实盘引擎开仓，传入模拟盘持仓ID用于关联
+            position_side = 'LONG' if direction == 'long' else 'SHORT'
+            result = self.live_engine.open_position(
+                account_id=1,  # 实盘账户ID
                 symbol=symbol,
-                direction=direction,
-                quantity=live_quantity,
+                position_side=position_side,
+                quantity=Decimal(str(live_quantity)),
                 leverage=leverage,
-                stop_loss_pct=self.HARD_STOP_LOSS,
-                take_profit_pct=self.MAX_TAKE_PROFIT
+                stop_loss_pct=Decimal(str(self.HARD_STOP_LOSS)),
+                take_profit_pct=Decimal(str(self.MAX_TAKE_PROFIT)),
+                source='strategy_sync',
+                paper_position_id=paper_position_id
             )
 
             if result.get('success'):
-                logger.info(f"✅ {symbol} 实盘同步开仓成功")
+                live_position_id = result.get('position_id')
+                logger.info(f"✅ {symbol} 实盘同步开仓成功, 实盘持仓ID: {live_position_id}")
+                return live_position_id
             else:
                 logger.warning(f"⚠️ {symbol} 实盘同步开仓失败: {result.get('error')}")
+                return None
 
         except Exception as e:
             logger.error(f"实盘同步开仓异常: {e}")
+            return None
 
     # ==================== 平仓执行 ====================
 
@@ -1458,23 +1485,35 @@ class StrategyExecutorV2:
             return {'success': False, 'error': str(e)}
 
     async def _sync_live_close(self, position: Dict, strategy: Dict):
-        """同步实盘平仓"""
+        """同步实盘平仓（只平对应的实盘持仓，而不是所有同方向持仓）"""
         try:
             if not self.live_engine:
                 return
 
             symbol = position.get('symbol')
             position_side = position.get('position_side')
+            live_position_id = position.get('live_position_id')
 
-            result = await self.live_engine.close_position_by_symbol(
-                symbol=symbol,
-                position_side=position_side
-            )
-
-            if result.get('success'):
-                logger.info(f"✅ {symbol} 实盘同步平仓成功")
+            if live_position_id:
+                # 根据关联的实盘持仓ID平仓（精确平仓）
+                result = self.live_engine.close_position(
+                    position_id=live_position_id
+                )
+                if result.get('success'):
+                    logger.info(f"✅ {symbol} 实盘同步平仓成功 (持仓ID: {live_position_id})")
+                else:
+                    logger.warning(f"⚠️ {symbol} 实盘同步平仓失败: {result.get('error')}")
             else:
-                logger.warning(f"⚠️ {symbol} 实盘同步平仓失败: {result.get('error')}")
+                # 没有关联ID时，回退到按交易对平仓（兼容旧数据）
+                logger.warning(f"⚠️ {symbol} 无关联实盘持仓ID，使用按交易对平仓")
+                result = self.live_engine.close_position_by_symbol(
+                    symbol=symbol,
+                    position_side=position_side
+                )
+                if result.get('success'):
+                    logger.info(f"✅ {symbol} 实盘同步平仓成功 (按交易对)")
+                else:
+                    logger.warning(f"⚠️ {symbol} 实盘同步平仓失败: {result.get('error')}")
 
         except Exception as e:
             logger.error(f"实盘同步平仓异常: {e}")
