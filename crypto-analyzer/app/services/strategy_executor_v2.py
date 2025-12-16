@@ -1042,15 +1042,16 @@ class StrategyExecutorV2:
 
         return False, ""
 
-    def check_trend_weakening(self, position: Dict, ema_data: Dict) -> Tuple[bool, str]:
+    def check_trend_weakening(self, position: Dict, ema_data: Dict, current_price: float = None) -> Tuple[bool, str]:
         """
-        检测趋势减弱（开仓后30分钟开始监控）
+        检测趋势减弱（开仓后30分钟开始监控，且仅在盈利时触发）
 
         当EMA差值连续3次减弱时，触发平仓
 
         Args:
             position: 持仓信息
             ema_data: 当前EMA数据
+            current_price: 当前价格（用于判断盈亏）
 
         Returns:
             (是否需要平仓, 原因)
@@ -1085,6 +1086,18 @@ class StrategyExecutorV2:
 
         # 检查强度是否减弱到开仓时的50%以下
         if current_ema_diff_pct < entry_ema_diff * 0.5:
+            # 只有在盈利时才触发趋势减弱平仓，亏损时继续持有等待趋势恢复
+            if current_price:
+                entry_price = float(position.get('entry_price', 0))
+                if entry_price > 0:
+                    if position_side == 'LONG':
+                        pnl_pct = (current_price - entry_price) / entry_price * 100
+                    else:
+                        pnl_pct = (entry_price - current_price) / entry_price * 100
+
+                    if pnl_pct < 0:
+                        return False, f"趋势减弱但仍亏损({pnl_pct:.2f}%)，继续持有"
+
             return True, f"趋势减弱平仓(当前强度{current_ema_diff_pct:.3f}% < 开仓时{entry_ema_diff:.3f}%的50%)"
 
         return False, f"趋势强度正常(当前{current_ema_diff_pct:.3f}%, 开仓时{entry_ema_diff:.3f}%)"
@@ -1184,8 +1197,8 @@ class StrategyExecutorV2:
         if close_needed:
             return True, close_reason, updates
 
-        # 5. 趋势减弱检查
-        close_needed, close_reason = self.check_trend_weakening(position, ema_data)
+        # 5. 趋势减弱检查（传入当前价格用于判断盈亏，亏损时不触发）
+        close_needed, close_reason = self.check_trend_weakening(position, ema_data, current_price)
         if close_needed:
             return True, close_reason, updates
 
