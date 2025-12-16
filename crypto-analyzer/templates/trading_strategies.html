@@ -1118,6 +1118,77 @@
                                 </div>
                             </div>
 
+                            <!-- 待开仓自检 -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-search"></i>
+                                    待开仓自检
+                                    <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal; margin-left: 8px;">信号触发后自检通过才开仓</span>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">
+                                            <input type="checkbox" id="pendingValidationEnabled" style="margin-right: 8px;" checked>
+                                            启用待开仓自检
+                                        </label>
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block; margin-left: 24px;">
+                                            信号触发后进入待开仓状态，自检通过后才真正开仓，避免误开仓
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">自检超时（秒）</label>
+                                        <input type="number" class="form-input" id="pendingExpireSeconds" value="300" min="60" max="600" step="30">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">超时未通过自检则取消开仓（建议300秒）</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">自检间隔（秒）</label>
+                                        <input type="number" class="form-input" id="pendingCheckInterval" value="10" min="5" max="60" step="5">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">每隔多少秒检查一次（建议10秒）</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">最大价格偏差（%）</label>
+                                        <input type="number" class="form-input" id="pendingMaxPriceDiff" value="0.5" min="0.1" max="2.0" step="0.1">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">当前价与信号价偏差超过此值不开仓</small>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 12px; padding: 12px; background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
+                                    <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">自检项目</div>
+                                    <div class="form-row" style="gap: 16px;">
+                                        <div class="form-group" style="flex: none; margin-bottom: 8px;">
+                                            <label class="form-label" style="cursor: pointer;">
+                                                <input type="checkbox" id="pendingRequireEmaConfirm" style="margin-right: 8px;" checked>
+                                                EMA方向确认
+                                            </label>
+                                        </div>
+                                        <div class="form-group" style="flex: none; margin-bottom: 8px;">
+                                            <label class="form-label" style="cursor: pointer;">
+                                                <input type="checkbox" id="pendingRequireMaConfirm" style="margin-right: 8px;" checked>
+                                                MA方向确认
+                                            </label>
+                                        </div>
+                                        <div class="form-group" style="flex: none; margin-bottom: 8px;">
+                                            <label class="form-label" style="cursor: pointer;">
+                                                <input type="checkbox" id="pendingCheckRanging" style="margin-right: 8px;" checked>
+                                                震荡市检查
+                                            </label>
+                                        </div>
+                                        <div class="form-group" style="flex: none; margin-bottom: 8px;">
+                                            <label class="form-label" style="cursor: pointer;">
+                                                <input type="checkbox" id="pendingCheckTrendEnd" style="margin-right: 8px;" checked>
+                                                趋势末端检查
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- 智能出场 -->
                             <div class="form-section">
                                 <div class="form-section-title">
@@ -2350,7 +2421,18 @@
                 // 行情自适应开关
                 adaptiveRegime: document.getElementById('adaptiveRegimeEnabled') ? document.getElementById('adaptiveRegimeEnabled').checked : false,
                 // 行情自适应参数配置
-                regimeParams: document.getElementById('adaptiveRegimeEnabled') && document.getElementById('adaptiveRegimeEnabled').checked ? getRegimeParams() : null
+                regimeParams: document.getElementById('adaptiveRegimeEnabled') && document.getElementById('adaptiveRegimeEnabled').checked ? getRegimeParams() : null,
+                // 待开仓自检配置
+                pendingValidation: {
+                    enabled: document.getElementById('pendingValidationEnabled') ? document.getElementById('pendingValidationEnabled').checked : true,
+                    expire_seconds: document.getElementById('pendingExpireSeconds') ? parseInt(document.getElementById('pendingExpireSeconds').value) : 300,
+                    check_interval: document.getElementById('pendingCheckInterval') ? parseInt(document.getElementById('pendingCheckInterval').value) : 10,
+                    max_price_diff: document.getElementById('pendingMaxPriceDiff') ? parseFloat(document.getElementById('pendingMaxPriceDiff').value) : 0.5,
+                    require_ema_confirm: document.getElementById('pendingRequireEmaConfirm') ? document.getElementById('pendingRequireEmaConfirm').checked : true,
+                    require_ma_confirm: document.getElementById('pendingRequireMaConfirm') ? document.getElementById('pendingRequireMaConfirm').checked : true,
+                    check_ranging: document.getElementById('pendingCheckRanging') ? document.getElementById('pendingCheckRanging').checked : true,
+                    check_trend_end: document.getElementById('pendingCheckTrendEnd') ? document.getElementById('pendingCheckTrendEnd').checked : true
+                }
             };
 
             // 验证
@@ -2856,6 +2938,35 @@
             // 风险控制 - 开仓前平反向持仓
             if (document.getElementById('closeOppositeOnEntry')) {
                 document.getElementById('closeOppositeOnEntry').checked = strategy.closeOppositeOnEntry === true;
+            }
+
+            // 待开仓自检配置
+            if (strategy.pendingValidation) {
+                const pv = strategy.pendingValidation;
+                if (document.getElementById('pendingValidationEnabled')) {
+                    document.getElementById('pendingValidationEnabled').checked = pv.enabled !== false;
+                }
+                if (document.getElementById('pendingExpireSeconds')) {
+                    document.getElementById('pendingExpireSeconds').value = pv.expire_seconds || 300;
+                }
+                if (document.getElementById('pendingCheckInterval')) {
+                    document.getElementById('pendingCheckInterval').value = pv.check_interval || 10;
+                }
+                if (document.getElementById('pendingMaxPriceDiff')) {
+                    document.getElementById('pendingMaxPriceDiff').value = pv.max_price_diff || 0.5;
+                }
+                if (document.getElementById('pendingRequireEmaConfirm')) {
+                    document.getElementById('pendingRequireEmaConfirm').checked = pv.require_ema_confirm !== false;
+                }
+                if (document.getElementById('pendingRequireMaConfirm')) {
+                    document.getElementById('pendingRequireMaConfirm').checked = pv.require_ma_confirm !== false;
+                }
+                if (document.getElementById('pendingCheckRanging')) {
+                    document.getElementById('pendingCheckRanging').checked = pv.check_ranging !== false;
+                }
+                if (document.getElementById('pendingCheckTrendEnd')) {
+                    document.getElementById('pendingCheckTrendEnd').checked = pv.check_trend_end !== false;
+                }
             }
 
             // 技术指标过滤器
