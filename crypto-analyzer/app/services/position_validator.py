@@ -234,7 +234,7 @@ class PositionValidator:
         quick_loss_threshold = self.validation_config['quick_loss_threshold']
 
         if hold_seconds <= quick_loss_window and pnl_pct <= -quick_loss_threshold:
-            issues.append(f"快速亏损({pnl_pct:.2f}%在{hold_seconds:.0f}秒内)")
+            issues.append(f"quick_loss({pnl_pct:.2f}%in{hold_seconds:.0f}s)")
 
         # ========== 检查2: 震荡市追单 (已移至开仓前检查) ==========
         # is_ranging, reason = self._check_ranging_market(symbol, ema_data)
@@ -362,12 +362,12 @@ class PositionValidator:
             # 做多后价格下跌
             change_pct = (current_price - entry_price) / entry_price * 100
             if change_pct < -threshold:
-                return True, f"开仓后立即下跌({change_pct:.2f}%)"
+                return True, f"immediate_drop({change_pct:.2f}%)"
         else:
             # 做空后价格上涨
             change_pct = (entry_price - current_price) / entry_price * 100
             if change_pct < -threshold:
-                return True, f"开仓后立即上涨({-change_pct:.2f}%)"
+                return True, f"immediate_rise({-change_pct:.2f}%)"
 
         return False, ""
 
@@ -387,7 +387,7 @@ class PositionValidator:
         decay_pct = (entry_ema_diff - current_ema_diff) / entry_ema_diff * 100
 
         if decay_pct > decay_threshold:
-            return True, f"信号衰减({decay_pct:.0f}%,{entry_ema_diff:.2f}%→{current_ema_diff:.2f}%)"
+            return True, f"signal_decay({decay_pct:.0f}%,{entry_ema_diff:.2f}%->{current_ema_diff:.2f}%)"
 
         return False, ""
 
@@ -413,7 +413,7 @@ class PositionValidator:
         trend_1h = 'long' if ema9_1h > ema26_1h else 'short'
 
         if direction != trend_1h:
-            return True, f"多周期不一致(15M:{direction},1H:{trend_1h})"
+            return True, f"mtf_mismatch(15M:{direction},1H:{trend_1h})"
 
         return False, ""
 
@@ -682,7 +682,7 @@ class PositionValidator:
                 # 1. 先处理过期的待开仓（超过5分钟）
                 cursor.execute("""
                     UPDATE pending_positions
-                    SET status = 'expired', rejection_reason = '超时未通过自检'
+                    SET status = 'expired', rejection_reason = 'expired_without_passing'
                     WHERE status = 'pending'
                     AND created_at < %s
                 """, (expire_threshold,))
@@ -798,12 +798,12 @@ class PositionValidator:
                 issues.append(reason)
                 checks_passed = False
 
-        # ========== Check 5: Trend exhaustion ==========
-        if self.validation_config.get('pending_check_trend_end', True):
-            is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, current_price, ema_data)
-            if is_exhausted:
-                issues.append(reason)
-                checks_passed = False
+        # ========== Check 5: Trend exhaustion (DISABLED - 太严格导致无法开仓) ==========
+        # if self.validation_config.get('pending_check_trend_end', True):
+        #     is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, current_price, ema_data)
+        #     if is_exhausted:
+        #         issues.append(reason)
+        #         checks_passed = False
 
         # ========== Check 6: EMA trend strength ==========
         min_ema_diff = self.validation_config.get('pending_min_ema_diff_pct', 0.15)
@@ -850,7 +850,7 @@ class PositionValidator:
                         SET status = 'cancelled', validation_count = %s, last_validation_time = NOW(),
                             rejection_reason = %s
                         WHERE id = %s
-                    """, (validation_count, f"检查{validation_count}次未通过: " + "; ".join(issues), pending_id))
+                    """, (validation_count, f"failed_after_{validation_count}_checks: " + "; ".join(issues), pending_id))
                 else:
                     # 继续等待
                     logger.info(f"[待开仓自检] ⏳ {symbol} {direction} 第{validation_count}次自检未通过: {issues}")
