@@ -31,6 +31,7 @@ class PositionValidator:
         'pending_check_trend_end': True,   # 是否检查趋势末端
         'pending_min_ema_diff_pct': 0.15,  # 最小EMA差值（%），低于此值说明趋势弱，拒绝开仓
         'pending_check_ema_converging': True,  # 是否检查EMA收敛（即将交叉）
+        'pending_close_cooldown': 300,     # 平仓后冷却时间（秒），同方向不再开仓
 
         # ===== 持仓自检配置 =====
         'enabled': True,
@@ -581,6 +582,63 @@ class PositionValidator:
             else:
                 logger.error(f"[自检服务] ❌ {symbol} 自检平仓失败: {result.get('error')}")
 
+    def _check_close_cooldown(self, symbol: str, direction: str, strategy_id: int,
+                               cooldown_seconds: int) -> Tuple[bool, str]:
+        """
+        检查是否在平仓冷却期内
+
+        如果同交易对同方向在冷却时间内有平仓订单，返回True拒绝开仓
+        避免"平仓-开仓-平仓"的循环
+
+        Args:
+            symbol: 交易对
+            direction: 方向 'long' 或 'short'
+            strategy_id: 策略ID
+            cooldown_seconds: 冷却时间（秒）
+
+        Returns:
+            (是否在冷却期, 原因)
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 将 direction 转换为订单表的 side 格式
+            # direction: 'long' -> side: 'CLOSE_LONG'
+            # direction: 'short' -> side: 'CLOSE_SHORT'
+            close_side = f"CLOSE_{direction.upper()}"
+
+            # 查询冷却时间内是否有平仓订单
+            cursor.execute("""
+                SELECT id, created_at, price
+                FROM futures_orders
+                WHERE account_id = 2
+                AND symbol = %s
+                AND side = %s
+                AND status = 'FILLED'
+                AND created_at > NOW() - INTERVAL %s SECOND
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (symbol, close_side, cooldown_seconds))
+
+            recent_close = cursor.fetchone()
+
+            if recent_close:
+                close_time = recent_close['created_at']
+                now = self.get_local_time()
+                elapsed = (now - close_time).total_seconds()
+                remaining = cooldown_seconds - elapsed
+                return True, f"平仓冷却中(剩余{remaining:.0f}秒)"
+
+            return False, ""
+
+        except Exception as e:
+            logger.error(f"[待开仓自检] 检查平仓冷却出错: {e}")
+            return False, ""
+        finally:
+            cursor.close()
+            conn.close()
+
     # ==================== 待开仓自检相关方法 ====================
 
     async def _check_pending_positions(self):
@@ -647,9 +705,19 @@ class PositionValidator:
         current_ema_diff = ema_data['ema_diff']
         current_ema_diff_pct = ema_data['ema_diff_pct']
         ma10 = ema_data['ma10']
+        strategy_id = pending['strategy_id']
 
         issues = []
         checks_passed = True
+
+        # ========== 检查0: 平仓冷却检查 ==========
+        # 如果同交易对同方向在冷却时间内有平仓，拒绝开仓
+        cooldown_seconds = self.validation_config.get('pending_close_cooldown', 300)
+        if cooldown_seconds > 0:
+            is_cooling, cooldown_reason = self._check_close_cooldown(symbol, direction, strategy_id, cooldown_seconds)
+            if is_cooling:
+                issues.append(cooldown_reason)
+                checks_passed = False
 
         # ========== 检查1: 价格偏差 ==========
         max_price_diff = self.validation_config.get('pending_max_price_diff', 0.5)
