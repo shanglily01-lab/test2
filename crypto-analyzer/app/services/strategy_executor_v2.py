@@ -1561,7 +1561,7 @@ class StrategyExecutorV2:
             # 调用实盘引擎开仓，传入模拟盘持仓ID用于关联
             position_side = 'LONG' if direction == 'long' else 'SHORT'
             result = self.live_engine.open_position(
-                account_id=1,  # 实盘账户ID
+                account_id=2,  # 实盘账户ID
                 symbol=symbol,
                 position_side=position_side,
                 quantity=Decimal(str(live_quantity)),
