@@ -488,12 +488,12 @@ class FuturesTradingEngine:
                     total_equity = Decimal(str(account.get('total_equity', 0) or current_balance))
                     available_balance = current_balance - frozen_balance
 
-                    # 检查最大仓位限制（单笔保证金不超过总权益的10%）
-                    max_margin_allowed = total_equity * Decimal('0.1')
+                    # 检查最大仓位限制（单笔保证金不超过总权益的15%）
+                    max_margin_allowed = total_equity * Decimal('0.15')
                     if limit_margin_required > max_margin_allowed:
                         return {
                             'success': False,
-                            'message': f"保证金超过限制。单笔保证金 {limit_margin_required:.2f} USDT 超过总权益的10% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
+                            'message': f"保证金超过限制。单笔保证金 {limit_margin_required:.2f} USDT 超过总权益的15% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
                         }
 
                     if available_balance < (limit_margin_required + limit_fee):
@@ -641,12 +641,12 @@ class FuturesTradingEngine:
                 frozen_before = float(frozen_balance)
                 available_before = float(available_balance)
 
-                # 检查最大仓位限制（单笔保证金不超过总权益的10%）
-                max_margin_allowed = total_equity * Decimal('0.1')
+                # 检查最大仓位限制（单笔保证金不超过总权益的15%）
+                max_margin_allowed = total_equity * Decimal('0.15')
                 if margin_required > max_margin_allowed:
                     return {
                         'success': False,
-                        'message': f"保证金超过限制。单笔保证金 {margin_required:.2f} USDT 超过总权益的10% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
+                        'message': f"保证金超过限制。单笔保证金 {margin_required:.2f} USDT 超过总权益的15% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
                     }
 
                 if available_balance < (margin_required + fee):
