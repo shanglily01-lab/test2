@@ -184,6 +184,11 @@ class TradeNotifier:
             strategy_name: 策略名称
             is_paper: 是否为模拟盘
         """
+        # 模拟盘不发送通知
+        if is_paper:
+            logger.debug(f"模拟盘平仓不发送通知: {symbol}")
+            return
+
         # 根据平仓原因判断是否通知
         if reason == 'stop_loss' and not self.notify_stop_loss:
             return
