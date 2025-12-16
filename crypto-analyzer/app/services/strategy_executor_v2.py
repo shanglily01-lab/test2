@@ -1163,10 +1163,13 @@ class StrategyExecutorV2:
         # 1. 检查是否触发止损价（包括移动止损后的价格）
         updated_stop_loss = updates.get('stop_loss_price', current_stop_loss)
         if updated_stop_loss > 0:
+            # 判断是移动止损还是普通止损（通过盈亏判断：盈利时触发的是移动止损）
+            is_trailing_stop = current_pnl_pct > 0
+            stop_type = "移动止损" if is_trailing_stop else "止损"
             if position_side == 'LONG' and current_price <= updated_stop_loss:
-                return True, f"止损平仓(价格{current_price:.4f} <= 止损价{updated_stop_loss:.4f})", updates
+                return True, f"{stop_type}平仓(价格{current_price:.4f} <= 止损价{updated_stop_loss:.4f})", updates
             elif position_side == 'SHORT' and current_price >= updated_stop_loss:
-                return True, f"止损平仓(价格{current_price:.4f} >= 止损价{updated_stop_loss:.4f})", updates
+                return True, f"{stop_type}平仓(价格{current_price:.4f} >= 止损价{updated_stop_loss:.4f})", updates
 
         # 2. 硬止损检查（百分比止损，作为后备）
         if current_pnl_pct <= -stop_loss_pct:
