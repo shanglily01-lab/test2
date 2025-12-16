@@ -1651,13 +1651,14 @@ async def toggle_strategy_sync_live(strategy_id: int, request: Request):
             if not strategy:
                 raise HTTPException(status_code=404, detail=f"策略 ID {strategy_id} 不存在")
 
-            # 更新同步状态（syncLive存储在config JSON中）
+            # 更新同步状态（同时更新sync_live列和config JSON）
             cursor.execute("""
                 UPDATE trading_strategies
-                SET config = JSON_SET(config, '$.syncLive', %s),
+                SET sync_live = %s,
+                    config = JSON_SET(config, '$.syncLive', %s),
                     updated_at = NOW()
                 WHERE id = %s
-            """, (sync_live, strategy_id))
+            """, (sync_live, sync_live, strategy_id))
             connection.commit()
 
             status_text = '启用' if sync_live else '关闭'
