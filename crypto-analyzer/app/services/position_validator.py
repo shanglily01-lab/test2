@@ -909,7 +909,7 @@ class PositionValidator:
             strategy['id'] = strategy_id
             # 使用待开仓记录中的杠杆和保证金比例
             strategy['leverage'] = pending['leverage']
-            strategy['positionSizePct'] = float(pending['margin_pct']) if pending['margin_pct'] else strategy.get('positionSizePct', 5)
+            strategy['positionSizePct'] = float(pending['margin_pct']) if pending['margin_pct'] else strategy.get('positionSizePct', 1)
 
             # 调用 strategy_executor 的 _do_open_position 方法执行开仓
             # 使用待开仓记录中的 account_id（通常是2=实盘）
@@ -958,7 +958,7 @@ class PositionValidator:
         try:
             strategy_id = strategy.get('id')
             leverage = strategy.get('leverage', 10)
-            margin_pct = strategy.get('marginPct', 10)
+            margin_pct = strategy.get('marginPct', 1)
 
             # 检查是否已有相同的待开仓信号
             cursor.execute("""

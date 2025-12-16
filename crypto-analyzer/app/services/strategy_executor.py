@@ -634,7 +634,7 @@ class StrategyExecutor:
             buy_volume_short = strategy.get('buyVolumeShort')
             sell_signal = strategy.get('sellSignals')
             # 平仓成交量已移除，不再限制
-            position_size = strategy.get('positionSize', 10)
+            position_size = strategy.get('positionSize', 1)
             max_positions = strategy.get('maxPositions')  # 最大持仓数
             max_long_positions = strategy.get('maxLongPositions')  # 最大做多持仓数
             max_short_positions = strategy.get('maxShortPositions')  # 最大做空持仓数
@@ -1459,7 +1459,7 @@ class StrategyExecutor:
         buy_volume_short = kwargs.get('buy_volume_short')
         sell_signal = kwargs.get('sell_signal')
         # 平仓成交量已移除，不再限制
-        position_size = kwargs.get('position_size', 10)
+        position_size = kwargs.get('position_size', 1)
         max_positions = kwargs.get('max_positions')  # 最大持仓数
         long_price_type = kwargs.get('long_price_type', 'market')
         short_price_type = kwargs.get('short_price_type', 'market')

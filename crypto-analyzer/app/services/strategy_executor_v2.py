@@ -1421,7 +1421,7 @@ class StrategyExecutorV2:
         """
         try:
             leverage = strategy.get('leverage', 10)
-            position_size_pct = strategy.get('positionSizePct', 5)  # 账户资金的5%
+            position_size_pct = strategy.get('positionSizePct', 1)  # 账户资金的1%
             sync_live = strategy.get('syncLive', False)
 
             ema_diff_pct = ema_data['ema_diff_pct']
