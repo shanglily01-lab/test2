@@ -905,12 +905,15 @@ class PositionValidator:
             strategy['positionSizePct'] = float(pending['margin_pct']) if pending['margin_pct'] else strategy.get('positionSizePct', 5)
 
             # 调用 strategy_executor 的 _do_open_position 方法执行开仓
+            # 注意：始终先开模拟盘(account_id=1)，再通过syncLive同步到实盘
+            # 这样可以确保模拟盘和实盘都有持仓记录，平仓时才能正确同步
+            paper_account_id = 1  # 模拟盘账户ID
             result = await self.strategy_executor._do_open_position(
                 symbol=symbol,
                 direction=direction,
                 signal_type=signal_type,
                 strategy=strategy,
-                account_id=account_id,
+                account_id=paper_account_id,  # 始终使用模拟盘账户
                 signal_reason=signal_reason or "",
                 current_price=current_price,
                 ema_data=ema_data

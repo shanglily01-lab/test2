@@ -58,6 +58,11 @@ class StrategyExecutorV2:
         self.live_engine = live_engine
         self.LOCAL_TZ = timezone(timedelta(hours=8))
 
+        # 将实盘引擎绑定到模拟引擎，用于同步平仓（与V1保持一致）
+        if self.futures_engine and self.live_engine:
+            self.futures_engine.live_engine = self.live_engine
+            logger.info("✅ V2: 已将实盘引擎绑定到模拟引擎，支持同步平仓")
+
         # 冷却时间记录
         self.last_entry_time = {}  # {symbol_direction: datetime}
 
