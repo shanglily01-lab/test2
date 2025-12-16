@@ -1407,8 +1407,19 @@ class StrategyExecutorV2:
             if not self.live_engine:
                 return None
 
-            live_quantity_pct = strategy.get('liveQuantityPct', 100)
-            live_quantity = quantity * (live_quantity_pct / 100)
+            # 实盘固定保证金模式：每笔100U保证金
+            live_margin = strategy.get('liveMarginPerTrade', 100)  # 默认100U保证金
+
+            # 获取当前价格
+            current_price = self.live_engine.get_current_price(symbol)
+            if not current_price or current_price <= 0:
+                logger.warning(f"⚠️ {symbol} 无法获取当前价格，跳过实盘同步")
+                return None
+
+            # 根据保证金计算开仓数量: 数量 = 保证金 * 杠杆 / 价格
+            live_quantity = (live_margin * leverage) / float(current_price)
+
+            logger.info(f"[实盘同步] {symbol} 保证金={live_margin}U, 杠杆={leverage}x, 价格={current_price}, 数量={live_quantity:.4f}")
 
             # 调用实盘引擎开仓，传入模拟盘持仓ID用于关联
             position_side = 'LONG' if direction == 'long' else 'SHORT'
