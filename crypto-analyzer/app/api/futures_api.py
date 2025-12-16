@@ -794,62 +794,15 @@ async def close_position(
         # 如果请求体为空或None，使用默认值
         if request is None:
             request = ClosePositionRequest()
-        
+
         close_quantity = Decimal(str(request.close_quantity)) if request.close_quantity else None
 
-        # 先获取持仓信息（用于同步实盘）
-        conn = pymysql.connect(**db_config)
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-        cursor.execute("SELECT symbol, position_side, strategy_id FROM futures_positions WHERE id = %s", (position_id,))
-        position_info = cursor.fetchone()
-        cursor.close()
-        conn.close()
-
-        # 平仓模拟盘
+        # 平仓模拟盘（内部会自动同步实盘，无需额外处理）
         result = engine.close_position(
             position_id=position_id,
             close_quantity=close_quantity,
             reason=request.reason or 'manual'
         )
-
-        # 同步平掉实盘仓位
-        if result['success'] and position_info and live_engine:
-            try:
-                symbol = position_info['symbol']
-                position_side = position_info['position_side']
-                strategy_id = position_info.get('strategy_id')
-
-                # 查找对应的实盘仓位
-                conn = pymysql.connect(**db_config)
-                cursor = conn.cursor(pymysql.cursors.DictCursor)
-                cursor.execute("""
-                    SELECT id FROM live_futures_positions
-                    WHERE symbol = %s AND position_side = %s AND strategy_id = %s AND status = 'OPEN'
-                    ORDER BY open_time DESC LIMIT 1
-                """, (symbol, position_side, strategy_id))
-                live_position = cursor.fetchone()
-                cursor.close()
-                conn.close()
-
-                if live_position:
-                    live_position_id = live_position['id']
-                    logger.info(f"[手动平仓] 同步平仓实盘仓位 #{live_position_id}: {symbol} {position_side}")
-
-                    live_result = live_engine.close_position(
-                        position_id=live_position_id,
-                        reason='manual_sync'
-                    )
-
-                    if live_result.get('success'):
-                        logger.info(f"[手动平仓] ✅ 实盘同步平仓成功: {symbol} {position_side}")
-                    else:
-                        logger.error(f"[手动平仓] ❌ 实盘同步平仓失败: {live_result.get('error')}")
-                else:
-                    logger.debug(f"[手动平仓] 未找到对应的实盘仓位: {symbol} {position_side}")
-            except Exception as e:
-                logger.error(f"[手动平仓] 实盘同步异常: {e}")
-                import traceback
-                traceback.print_exc()
 
         if result['success']:
             return {
