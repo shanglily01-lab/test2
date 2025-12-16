@@ -119,6 +119,18 @@ class TradingDisciplineConfigModel(BaseModel):
     cooldown_period: int = 24
 
 
+class PendingValidationConfigModel(BaseModel):
+    """待开仓自检配置"""
+    enabled: bool = True
+    expire_seconds: int = 300  # 自检超时时间（秒）
+    check_interval: int = 10   # 自检间隔（秒）
+    max_price_diff: float = 0.5  # 最大价格偏差（%）
+    require_ema_confirm: bool = True  # EMA方向确认
+    require_ma_confirm: bool = True   # MA方向确认
+    check_ranging: bool = True        # 震荡市检查
+    check_trend_end: bool = True      # 趋势末端检查
+
+
 class StrategyCreateModel(BaseModel):
     name: str
     description: str = ""
@@ -130,6 +142,7 @@ class StrategyCreateModel(BaseModel):
     dca_config: Optional[DCAConfigModel] = None
     risk_alert: Optional[RiskAlertConfigModel] = None
     discipline: Optional[TradingDisciplineConfigModel] = None
+    pending_validation: Optional[PendingValidationConfigModel] = None
     tags: List[str] = []
 
 
@@ -143,6 +156,7 @@ class StrategyUpdateModel(BaseModel):
     dca_config: Optional[DCAConfigModel] = None
     risk_alert: Optional[RiskAlertConfigModel] = None
     discipline: Optional[TradingDisciplineConfigModel] = None
+    pending_validation: Optional[PendingValidationConfigModel] = None
     tags: Optional[List[str]] = None
 
 
@@ -396,6 +410,10 @@ async def update_strategy(name: str, data: StrategyUpdateModel):
         # 更新交易纪律配置
         if data.discipline:
             strategy.discipline = TradingDisciplineConfig(**data.discipline.dict())
+
+        # 更新待开仓自检配置
+        if data.pending_validation:
+            strategy.pending_validation = data.pending_validation.dict()
 
         if data.tags is not None:
             strategy.tags = data.tags

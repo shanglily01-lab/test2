@@ -1276,6 +1276,7 @@
             const dcaConfig = strategy.dca_config || {};
             const riskAlert = strategy.risk_alert || {};
             const discipline = strategy.discipline || {};
+            const pendingValidation = strategy.pending_validation || {};
 
             // 使用标签页组织内容
             let basicHtml = '';
@@ -1614,6 +1615,73 @@
                     </div>
                 </div>
             `;
+
+            // 4. 待开仓自检配置（使用折叠面板）
+            riskHtml += \`
+                <div class="collapsible-section">
+                    <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                        <div class="collapsible-title">
+                            <i class="bi bi-search"></i> 待开仓自检
+                            <span style="font-size: 11px; color: var(--text-tertiary); margin-left: var(--spacing-sm);">（信号触发后自检通过才开仓）</span>
+                        </div>
+                        <i class="bi bi-chevron-down collapsible-icon"></i>
+                    </div>
+                    <div class="collapsible-content">
+                        <div class="form-group">
+                            <label class="form-checkbox-label">
+                                <input type="checkbox" class="form-checkbox" id="pv_enabled" \${pendingValidation.enabled !== false ? 'checked' : ''} \${editMode && !isDefault ? '' : 'disabled'}>
+                                <span>启用待开仓自检</span>
+                            </label>
+                            <div class="form-help-text">信号触发后进入待开仓状态，自检通过后才真正开仓</div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">自检超时时间（秒）</label>
+                                <input type="number" class="form-input" id="pv_expire_seconds" value="\${pendingValidation.expire_seconds || 300}" step="30" min="60" max="600" \${editMode && !isDefault ? '' : 'readonly'}>
+                                <div class="form-help-text">超时未通过自检则取消开仓</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">自检间隔（秒）</label>
+                                <input type="number" class="form-input" id="pv_check_interval" value="\${pendingValidation.check_interval || 10}" step="5" min="5" max="60" \${editMode && !isDefault ? '' : 'readonly'}>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">最大价格偏差 (%)</label>
+                                <input type="number" class="form-input" id="pv_max_price_diff" value="\${pendingValidation.max_price_diff || 0.5}" step="0.1" min="0.1" max="2.0" \${editMode && !isDefault ? '' : 'readonly'}>
+                                <div class="form-help-text">当前价与信号价偏差超过此值不开仓</div>
+                            </div>
+                        </div>
+                        <div class="form-section-title" style="font-size: 12px; margin-top: 12px;">自检项目</div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-checkbox-label">
+                                    <input type="checkbox" class="form-checkbox" id="pv_require_ema_confirm" \${pendingValidation.require_ema_confirm !== false ? 'checked' : ''} \${editMode && !isDefault ? '' : 'disabled'}>
+                                    <span>EMA方向确认</span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-checkbox-label">
+                                    <input type="checkbox" class="form-checkbox" id="pv_require_ma_confirm" \${pendingValidation.require_ma_confirm !== false ? 'checked' : ''} \${editMode && !isDefault ? '' : 'disabled'}>
+                                    <span>MA方向确认</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-checkbox-label">
+                                    <input type="checkbox" class="form-checkbox" id="pv_check_ranging" \${pendingValidation.check_ranging !== false ? 'checked' : ''} \${editMode && !isDefault ? '' : 'disabled'}>
+                                    <span>震荡市检查</span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-checkbox-label">
+                                    <input type="checkbox" class="form-checkbox" id="pv_check_trend_end" \${pendingValidation.check_trend_end !== false ? 'checked' : ''} \${editMode && !isDefault ? '' : 'disabled'}>
+                                    <span>趋势末端检查</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            \`;
 
             // ========== 高级功能标签页 ==========
             
@@ -2068,6 +2136,21 @@
                         volatility_alert: document.getElementById('ra_volatility_alert')?.checked !== false,
                         volatility_threshold: parseFloat(document.getElementById('ra_volatility_threshold')?.value || 10.0),
                         notify_on_alert: document.getElementById('ra_notify_on_alert')?.checked !== false
+                    };
+                }
+
+                // 收集待开仓自检配置
+                const pv_enabled = document.getElementById('pv_enabled');
+                if (pv_enabled) {
+                    updateData.pending_validation = {
+                        enabled: document.getElementById('pv_enabled')?.checked !== false,
+                        expire_seconds: parseInt(document.getElementById('pv_expire_seconds')?.value || 300),
+                        check_interval: parseInt(document.getElementById('pv_check_interval')?.value || 10),
+                        max_price_diff: parseFloat(document.getElementById('pv_max_price_diff')?.value || 0.5),
+                        require_ema_confirm: document.getElementById('pv_require_ema_confirm')?.checked !== false,
+                        require_ma_confirm: document.getElementById('pv_require_ma_confirm')?.checked !== false,
+                        check_ranging: document.getElementById('pv_check_ranging')?.checked !== false,
+                        check_trend_end: document.getElementById('pv_check_trend_end')?.checked !== false
                     };
                 }
 

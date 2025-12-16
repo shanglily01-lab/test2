@@ -61,8 +61,8 @@ class StrategyExecutorV2:
         # 冷却时间记录
         self.last_entry_time = {}  # {symbol_direction: datetime}
 
-        # 初始化开仓前检查器
-        self.position_validator = PositionValidator(db_config, futures_engine)
+        # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
+        self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
 
     def get_local_time(self) -> datetime:
         """获取本地时间（UTC+8）"""
@@ -1321,7 +1321,7 @@ class StrategyExecutorV2:
                                      strategy: Dict, account_id: int = 2,
                                      signal_reason: str = None) -> Dict:
         """
-        执行开仓
+        执行开仓（或创建待开仓记录）
 
         Args:
             symbol: 交易对
@@ -1335,7 +1335,39 @@ class StrategyExecutorV2:
             执行结果
         """
         try:
-            # ========== 开仓前检查 ==========
+            # 获取当前价格和EMA数据
+            ema_data = self.get_ema_data(symbol, '15m', 50)
+            if not ema_data:
+                return {'success': False, 'error': '获取价格数据失败'}
+
+            current_price = ema_data['current_price']
+
+            # ========== 检查是否启用待开仓自检 ==========
+            pending_validation = strategy.get('pendingValidation', {})
+            pending_enabled = pending_validation.get('enabled', True)  # 默认启用
+
+            if pending_enabled and self.position_validator:
+                # 创建待开仓记录，由自检服务异步处理
+                result = self.position_validator.create_pending_position(
+                    symbol=symbol,
+                    direction=direction,
+                    signal_type=signal_type,
+                    signal_price=current_price,
+                    ema_data=ema_data,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=signal_reason or ""
+                )
+
+                if result.get('success'):
+                    logger.info(f"[开仓] ⏳ {symbol} {direction} 创建待开仓信号，等待自检")
+                    return {'success': True, 'pending': True, 'pending_id': result.get('pending_id'),
+                            'message': '已创建待开仓信号，等待自检通过后开仓'}
+                else:
+                    return {'success': False, 'error': result.get('error', '创建待开仓记录失败')}
+
+            # ========== 不启用待开仓自检，直接开仓 ==========
+            # 开仓前检查（旧逻辑）
             pre_check = self.position_validator.validate_before_open(symbol, direction)
             if not pre_check['allow_open']:
                 logger.info(f"[开仓前检查] 🚫 {symbol} {direction} 被拦截: {pre_check['reason']}")
@@ -1345,12 +1377,7 @@ class StrategyExecutorV2:
             position_size_pct = strategy.get('positionSizePct', 5)  # 账户资金的5%
             sync_live = strategy.get('syncLive', False)
 
-            # 获取当前价格
-            ema_data = self.get_ema_data(symbol, '15m', 50)
-            if not ema_data:
-                return {'success': False, 'error': '获取价格数据失败'}
-
-            current_price = ema_data['current_price']
+            # ema_data 已在前面获取
             ema_diff_pct = ema_data['ema_diff_pct']
 
             # 计算开仓数量

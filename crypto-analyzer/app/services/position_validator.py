@@ -1,6 +1,7 @@
 """
 模拟盘开单自检服务
-在开仓后进行二次验证，如果发现开单不合理，自动平仓避免损失
+1. 待开仓自检：信号触发后进入待开仓状态，自检通过后才真正开仓
+2. 持仓自检：开仓后进行二次验证，如果发现开单不合理，自动平仓避免损失
 """
 
 import asyncio
@@ -17,24 +18,35 @@ logger = logging.getLogger(__name__)
 class PositionValidator:
     """模拟盘开单自检服务"""
 
-    # 配置参数
-    VALIDATION_CONFIG = {
+    # 默认自检配置
+    DEFAULT_VALIDATION_CONFIG = {
+        # ===== 待开仓自检配置 =====
+        'pending_enabled': True,           # 是否启用待开仓自检
+        'pending_expire_seconds': 300,     # 待开仓过期时间（5分钟）
+        'pending_check_interval': 10,      # 待开仓检查间隔（10秒）
+        'pending_max_price_diff': 0.5,     # 最大价格偏差（%）
+        'pending_require_ema_confirm': True,  # 是否需要EMA确认
+        'pending_require_ma_confirm': True,   # 是否需要MA确认
+        'pending_check_ranging': True,     # 是否检查震荡市
+        'pending_check_trend_end': True,   # 是否检查趋势末端
+
+        # ===== 持仓自检配置 =====
         'enabled': True,
-        'first_check_delay': 30,       # 首次检查延迟（秒）
-        'check_interval': 30,          # 检查间隔（秒）
-        'validation_window': 900,      # 验证窗口（15分钟）
-        'quick_loss_threshold': 0.5,   # 快速止损阈值（%）
-        'quick_loss_window': 120,      # 快速止损窗口（2分钟）
-        'ranging_volatility': 1.0,     # 震荡市波动阈值（%）
-        'trend_exhaustion_threshold': 0.3,  # 趋势末端阈值（%）
-        'signal_decay_threshold': 30,  # 信号衰减阈值（%）
+        'first_check_delay': 30,           # 首次检查延迟（秒）
+        'check_interval': 30,              # 检查间隔（秒）
+        'validation_window': 900,          # 验证窗口（15分钟）
+        'quick_loss_threshold': 0.5,       # 快速止损阈值（%）
+        'quick_loss_window': 120,          # 快速止损窗口（2分钟）
+        'ranging_volatility': 1.0,         # 震荡市波动阈值（%）
+        'trend_exhaustion_threshold': 0.3, # 趋势末端阈值（%）
+        'signal_decay_threshold': 30,      # 信号衰减阈值（%）
         'immediate_reversal_threshold': 0.3,  # 逆势阈值（%）
-        'min_issues_to_close': 2,      # 触发平仓的最小问题数
+        'min_issues_to_close': 2,          # 触发平仓的最小问题数
     }
 
     LOCAL_TZ = pytz.timezone('Asia/Shanghai')
 
-    def __init__(self, db_config: Dict, futures_engine=None, trade_notifier=None):
+    def __init__(self, db_config: Dict, futures_engine=None, trade_notifier=None, strategy_executor=None):
         """
         初始化自检服务
 
@@ -42,14 +54,19 @@ class PositionValidator:
             db_config: 数据库配置
             futures_engine: 模拟盘交易引擎
             trade_notifier: Telegram 通知服务
+            strategy_executor: 策略执行器（用于执行真正的开仓）
         """
         self.db_config = db_config
         self.futures_engine = futures_engine
         self.trade_notifier = trade_notifier
+        self.strategy_executor = strategy_executor
         self.running = False
         self.task = None
+        self.pending_task = None  # 待开仓自检任务
         # 记录已验证过的持仓（避免重复平仓）
         self.validated_positions = set()
+        # 自检配置（可从策略配置中覆盖）
+        self.validation_config = self.DEFAULT_VALIDATION_CONFIG.copy()
 
     def get_local_time(self):
         """获取本地时间（UTC+8）"""
@@ -66,6 +83,16 @@ class PositionValidator:
             write_timeout=30
         )
 
+    def set_strategy_executor(self, executor):
+        """设置策略执行器"""
+        self.strategy_executor = executor
+
+    def update_config(self, config: Dict):
+        """更新自检配置"""
+        if config:
+            self.validation_config.update(config)
+            logger.info(f"[自检服务] 配置已更新: {config}")
+
     async def start(self):
         """启动自检服务"""
         if self.running:
@@ -73,8 +100,11 @@ class PositionValidator:
             return
 
         self.running = True
+        # 启动持仓自检循环
         self.task = asyncio.create_task(self._validation_loop())
-        logger.info("[自检服务] ✅ 开单自检服务已启动")
+        # 启动待开仓自检循环
+        self.pending_task = asyncio.create_task(self._pending_validation_loop())
+        logger.info("[自检服务] ✅ 开单自检服务已启动（含待开仓自检）")
 
     async def stop(self):
         """停止自检服务"""
@@ -85,17 +115,34 @@ class PositionValidator:
                 await self.task
             except asyncio.CancelledError:
                 pass
+        if self.pending_task:
+            self.pending_task.cancel()
+            try:
+                await self.pending_task
+            except asyncio.CancelledError:
+                pass
         logger.info("[自检服务] 🛑 开单自检服务已停止")
 
     async def _validation_loop(self):
-        """自检主循环"""
+        """持仓自检主循环"""
         while self.running:
             try:
                 await self._check_new_positions()
             except Exception as e:
-                logger.error(f"[自检服务] 检查循环出错: {e}")
+                logger.error(f"[持仓自检] 检查循环出错: {e}")
 
-            await asyncio.sleep(self.VALIDATION_CONFIG['check_interval'])
+            await asyncio.sleep(self.validation_config.get('check_interval', 30))
+
+    async def _pending_validation_loop(self):
+        """待开仓自检主循环"""
+        while self.running:
+            try:
+                if self.validation_config.get('pending_enabled', True):
+                    await self._check_pending_positions()
+            except Exception as e:
+                logger.error(f"[待开仓自检] 检查循环出错: {e}")
+
+            await asyncio.sleep(self.validation_config.get('pending_check_interval', 10))
 
     async def _check_new_positions(self):
         """检查新开的持仓"""
@@ -531,6 +578,347 @@ class PositionValidator:
                     )
             else:
                 logger.error(f"[自检服务] ❌ {symbol} 自检平仓失败: {result.get('error')}")
+
+    # ==================== 待开仓自检相关方法 ====================
+
+    async def _check_pending_positions(self):
+        """检查待开仓的信号"""
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            expire_seconds = self.validation_config.get('pending_expire_seconds', 300)
+
+            # 1. 先处理过期的待开仓（超过5分钟）
+            cursor.execute("""
+                UPDATE pending_positions
+                SET status = 'expired', rejection_reason = '超时未通过自检'
+                WHERE status = 'pending'
+                AND created_at < NOW() - INTERVAL %s SECOND
+            """, (expire_seconds,))
+            expired_count = cursor.rowcount
+            if expired_count > 0:
+                conn.commit()
+                logger.info(f"[待开仓自检] {expired_count} 个待开仓信号已过期")
+
+            # 2. 获取待自检的信号
+            cursor.execute("""
+                SELECT
+                    id, symbol, direction, signal_type, signal_price,
+                    signal_ema9, signal_ema26, signal_ema_diff_pct,
+                    signal_reason, strategy_id, account_id, leverage, margin_pct,
+                    validation_count, created_at
+                FROM pending_positions
+                WHERE status = 'pending'
+                AND created_at > NOW() - INTERVAL %s SECOND
+                ORDER BY created_at ASC
+            """, (expire_seconds,))
+
+            pending_list = cursor.fetchall()
+
+            for pending in pending_list:
+                await self._validate_pending_position(pending)
+
+        except Exception as e:
+            logger.error(f"[待开仓自检] 检查出错: {e}")
+        finally:
+            cursor.close()
+            conn.close()
+
+    async def _validate_pending_position(self, pending: Dict):
+        """验证单个待开仓信号"""
+        pending_id = pending['id']
+        symbol = pending['symbol']
+        direction = pending['direction']
+        signal_price = float(pending['signal_price'])
+        signal_ema_diff_pct = float(pending['signal_ema_diff_pct']) if pending['signal_ema_diff_pct'] else 0
+
+        # 获取当前市场数据
+        ema_data = self._get_ema_data(symbol, '15m')
+        if not ema_data:
+            logger.warning(f"[待开仓自检] {symbol} 无法获取市场数据，跳过本次检查")
+            return
+
+        current_price = ema_data['current_price']
+        current_ema9 = ema_data['ema9']
+        current_ema26 = ema_data['ema26']
+        current_ema_diff = ema_data['ema_diff']
+        current_ema_diff_pct = ema_data['ema_diff_pct']
+        ma10 = ema_data['ma10']
+
+        issues = []
+        checks_passed = True
+
+        # ========== 检查1: 价格偏差 ==========
+        max_price_diff = self.validation_config.get('pending_max_price_diff', 0.5)
+        price_diff_pct = abs(current_price - signal_price) / signal_price * 100
+        if price_diff_pct > max_price_diff:
+            issues.append(f"价格偏差过大({price_diff_pct:.2f}%>{max_price_diff}%)")
+            checks_passed = False
+
+        # ========== 检查2: EMA方向确认 ==========
+        if self.validation_config.get('pending_require_ema_confirm', True):
+            if direction == 'long':
+                if current_ema_diff <= 0:  # EMA9 < EMA26，非上升趋势
+                    issues.append(f"EMA方向不确认(EMA9<EMA26)")
+                    checks_passed = False
+            else:  # short
+                if current_ema_diff >= 0:  # EMA9 > EMA26，非下降趋势
+                    issues.append(f"EMA方向不确认(EMA9>EMA26)")
+                    checks_passed = False
+
+        # ========== 检查3: MA方向确认 ==========
+        if self.validation_config.get('pending_require_ma_confirm', True):
+            if direction == 'long':
+                if current_price < ma10:
+                    issues.append(f"价格低于MA10({current_price:.4f}<{ma10:.4f})")
+                    checks_passed = False
+            else:  # short
+                if current_price > ma10:
+                    issues.append(f"价格高于MA10({current_price:.4f}>{ma10:.4f})")
+                    checks_passed = False
+
+        # ========== 检查4: 震荡市检查 ==========
+        if self.validation_config.get('pending_check_ranging', True):
+            is_ranging, reason = self._check_ranging_market(symbol, ema_data)
+            if is_ranging:
+                issues.append(reason)
+                checks_passed = False
+
+        # ========== 检查5: 趋势末端检查 ==========
+        if self.validation_config.get('pending_check_trend_end', True):
+            is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, current_price, ema_data)
+            if is_exhausted:
+                issues.append(reason)
+                checks_passed = False
+
+        # 更新自检次数
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            validation_count = pending['validation_count'] + 1
+
+            if checks_passed:
+                # 自检通过，执行真正的开仓
+                logger.info(f"[待开仓自检] ✅ {symbol} {direction} 自检通过（第{validation_count}次），准备开仓")
+                cursor.execute("""
+                    UPDATE pending_positions
+                    SET status = 'validated', validation_count = %s, last_validation_time = NOW()
+                    WHERE id = %s
+                """, (validation_count, pending_id))
+                conn.commit()
+
+                # 执行真正的开仓
+                await self._execute_validated_open(pending, current_price, ema_data)
+
+            else:
+                # 自检未通过，更新状态
+                logger.info(f"[待开仓自检] ⏳ {symbol} {direction} 第{validation_count}次自检未通过: {issues}")
+                cursor.execute("""
+                    UPDATE pending_positions
+                    SET validation_count = %s, last_validation_time = NOW(), rejection_reason = %s
+                    WHERE id = %s
+                """, (validation_count, "; ".join(issues), pending_id))
+                conn.commit()
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    async def _execute_validated_open(self, pending: Dict, current_price: float, ema_data: Dict):
+        """执行已验证通过的开仓"""
+        symbol = pending['symbol']
+        direction = pending['direction']
+        signal_type = pending['signal_type']
+        strategy_id = pending['strategy_id']
+        account_id = pending['account_id']
+        leverage = pending['leverage']
+        margin_pct = float(pending['margin_pct']) if pending['margin_pct'] else 10.0
+        signal_reason = pending['signal_reason']
+
+        if not self.futures_engine:
+            logger.error(f"[待开仓自检] {symbol} 无法开仓：futures_engine 未初始化")
+            return
+
+        try:
+            # 获取账户余额
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT balance FROM futures_accounts WHERE id = %s
+            """, (account_id,))
+            account = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if not account:
+                logger.error(f"[待开仓自检] {symbol} 无法开仓：账户不存在")
+                return
+
+            balance = float(account['balance'])
+
+            # 计算开仓数量
+            margin = balance * (margin_pct / 100)
+            notional = margin * leverage
+            quantity = notional / current_price
+
+            # 调用交易引擎开仓
+            result = self.futures_engine.open_position(
+                symbol=symbol,
+                side='BUY' if direction == 'long' else 'SELL',
+                position_side='LONG' if direction == 'long' else 'SHORT',
+                quantity=quantity,
+                leverage=leverage,
+                strategy_id=strategy_id,
+                entry_signal_type=signal_type,
+                entry_reason=signal_reason
+            )
+
+            if result.get('success'):
+                position_id = result.get('position_id')
+                logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={position_id}, 数量={quantity:.6f}")
+
+                # 更新开仓时的EMA差值
+                if position_id:
+                    conn = self.get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        UPDATE futures_positions
+                        SET entry_ema_diff = %s
+                        WHERE id = %s
+                    """, (ema_data['ema_diff_pct'], position_id))
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+
+                # 同步实盘（如果启用）
+                if self.strategy_executor:
+                    await self._sync_live_if_enabled(pending, result, current_price)
+
+            else:
+                logger.error(f"[待开仓自检] ❌ {symbol} {direction} 开仓失败: {result.get('error')}")
+
+        except Exception as e:
+            logger.error(f"[待开仓自检] {symbol} 开仓异常: {e}")
+
+    async def _sync_live_if_enabled(self, pending: Dict, paper_result: Dict, current_price: float):
+        """如果策略启用了实盘同步，则同步开仓到实盘"""
+        if not self.strategy_executor or not self.strategy_executor.live_engine:
+            return
+
+        strategy_id = pending['strategy_id']
+        symbol = pending['symbol']
+        direction = pending['direction']
+        leverage = pending['leverage']
+        paper_position_id = paper_result.get('position_id')
+
+        try:
+            # 获取策略配置
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT sync_live, config FROM trading_strategies WHERE id = %s
+            """, (strategy_id,))
+            strategy_row = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if not strategy_row or not strategy_row.get('sync_live'):
+                return
+
+            import json
+            config = json.loads(strategy_row['config']) if strategy_row.get('config') else {}
+
+            # 实盘固定保证金模式
+            live_margin = config.get('liveMarginPerTrade', 100)
+            live_quantity = (live_margin * leverage) / current_price
+
+            position_side = 'LONG' if direction == 'long' else 'SHORT'
+            result = self.strategy_executor.live_engine.open_position(
+                symbol=symbol,
+                side='BUY' if direction == 'long' else 'SELL',
+                position_side=position_side,
+                quantity=live_quantity,
+                leverage=leverage,
+                paper_position_id=paper_position_id
+            )
+
+            if result.get('success'):
+                logger.info(f"[待开仓自检] ✅ {symbol} 实盘同步开仓成功")
+            else:
+                logger.warning(f"[待开仓自检] ⚠️ {symbol} 实盘同步开仓失败: {result.get('error')}")
+
+        except Exception as e:
+            logger.error(f"[待开仓自检] {symbol} 实盘同步异常: {e}")
+
+    def create_pending_position(self, symbol: str, direction: str, signal_type: str,
+                                 signal_price: float, ema_data: Dict, strategy: Dict,
+                                 account_id: int = 2, signal_reason: str = "") -> Dict:
+        """
+        创建待开仓记录
+
+        Args:
+            symbol: 交易对
+            direction: 方向 'long' 或 'short'
+            signal_type: 信号类型
+            signal_price: 信号触发时的价格
+            ema_data: EMA数据
+            strategy: 策略配置
+            account_id: 账户ID
+            signal_reason: 开仓原因
+
+        Returns:
+            {'success': True/False, 'pending_id': xxx, 'error': xxx}
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            strategy_id = strategy.get('id')
+            leverage = strategy.get('leverage', 10)
+            margin_pct = strategy.get('marginPct', 10)
+
+            # 检查是否已有相同的待开仓信号
+            cursor.execute("""
+                SELECT id FROM pending_positions
+                WHERE symbol = %s AND direction = %s AND strategy_id = %s
+                AND status = 'pending'
+            """, (symbol, direction, strategy_id))
+
+            existing = cursor.fetchone()
+            if existing:
+                logger.info(f"[待开仓] {symbol} {direction} 已有待开仓信号，跳过")
+                return {'success': False, 'error': '已有相同的待开仓信号'}
+
+            # 插入待开仓记录
+            expire_seconds = self.validation_config.get('pending_expire_seconds', 300)
+            cursor.execute("""
+                INSERT INTO pending_positions
+                (symbol, direction, signal_type, signal_price, signal_ema9, signal_ema26,
+                 signal_ema_diff_pct, signal_reason, strategy_id, account_id, leverage,
+                 margin_pct, status, expired_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending',
+                        NOW() + INTERVAL %s SECOND)
+            """, (
+                symbol, direction, signal_type, signal_price,
+                ema_data.get('ema9'), ema_data.get('ema26'), ema_data.get('ema_diff_pct'),
+                signal_reason, strategy_id, account_id, leverage, margin_pct, expire_seconds
+            ))
+
+            conn.commit()
+            pending_id = cursor.lastrowid
+
+            logger.info(f"[待开仓] ✅ {symbol} {direction} 创建待开仓信号, ID={pending_id}, 将在{expire_seconds}秒内完成自检")
+
+            return {'success': True, 'pending_id': pending_id}
+
+        except Exception as e:
+            logger.error(f"[待开仓] 创建失败: {e}")
+            return {'success': False, 'error': str(e)}
+        finally:
+            cursor.close()
+            conn.close()
 
 
 # 全局实例
