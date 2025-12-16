@@ -2436,149 +2436,131 @@ async def get_technical_signals():
 @app.get("/api/trend-analysis")
 async def get_trend_analysis():
     """
-    获取所有交易对的趋势分析（15m, 1h, 1d）
-    
+    获取所有交易对的趋势分析（5m, 15m, 1h, 1d）
+
+    优化版本：使用批量查询减少数据库往返次数
+
     Returns:
         各交易对在不同时间周期的趋势评估
     """
     try:
         import pymysql
-        
+
         db_config = config.get('database', {}).get('mysql', {})
         connection = pymysql.connect(**db_config)
         cursor = connection.cursor(pymysql.cursors.DictCursor)
-        
+
         try:
             timeframes = ['5m', '15m', '1h', '1d']
             symbols_data = {}
-            
-            # 获取所有交易对
-            cursor.execute("SELECT DISTINCT symbol FROM technical_indicators_cache")
-            symbols = [row['symbol'] for row in cursor.fetchall()]
-            
-            for symbol in symbols:
+
+            # 1. 批量获取所有交易对的最新技术指标（使用窗口函数或子查询）
+            cursor.execute("""
+                SELECT t1.* FROM technical_indicators_cache t1
+                INNER JOIN (
+                    SELECT symbol, timeframe, MAX(updated_at) as max_updated
+                    FROM technical_indicators_cache
+                    WHERE timeframe IN ('5m', '15m', '1h', '1d')
+                    GROUP BY symbol, timeframe
+                ) t2 ON t1.symbol = t2.symbol
+                    AND t1.timeframe = t2.timeframe
+                    AND t1.updated_at = t2.max_updated
+            """)
+            all_indicators = cursor.fetchall()
+
+            # 构建指标查找字典 {(symbol, timeframe): indicator_data}
+            indicator_map = {}
+            all_symbols = set()
+            for row in all_indicators:
+                key = (row['symbol'], row['timeframe'])
+                indicator_map[key] = row
+                all_symbols.add(row['symbol'])
+
+            # 2. 批量获取K线数据（每个symbol-timeframe组合的最新2条）
+            # 使用子查询获取每组最新2条记录
+            kline_map = {}
+            if all_symbols:
+                symbols_list = list(all_symbols)
+                placeholders = ','.join(['%s'] * len(symbols_list))
+                cursor.execute(f"""
+                    SELECT k.symbol, k.timeframe, k.open_price, k.high_price,
+                           k.low_price, k.close_price, k.volume, k.timestamp
+                    FROM kline_data k
+                    INNER JOIN (
+                        SELECT symbol, timeframe, MAX(timestamp) as max_ts
+                        FROM kline_data
+                        WHERE symbol IN ({placeholders})
+                        AND timeframe IN ('5m', '15m', '1h', '1d')
+                        GROUP BY symbol, timeframe
+                    ) latest ON k.symbol = latest.symbol
+                        AND k.timeframe = latest.timeframe
+                        AND k.timestamp >= latest.max_ts - INTERVAL 1 DAY
+                    ORDER BY k.symbol, k.timeframe, k.timestamp DESC
+                """, symbols_list)
+
+                kline_rows = cursor.fetchall()
+                # 按 (symbol, timeframe) 分组，每组取前2条
+                for row in kline_rows:
+                    key = (row['symbol'], row['timeframe'])
+                    if key not in kline_map:
+                        kline_map[key] = []
+                    if len(kline_map[key]) < 2:
+                        kline_map[key].append(row)
+
+            # 3. 批量获取EMA历史数据（用于金叉检测，只需要5m/15m/1h）
+            ema_history_map = {}
+            if all_symbols:
+                symbols_list = list(all_symbols)
+                placeholders = ','.join(['%s'] * len(symbols_list))
+                cursor.execute(f"""
+                    SELECT symbol, timeframe, ema_short, ema_long, updated_at,
+                           ROW_NUMBER() OVER (PARTITION BY symbol, timeframe ORDER BY updated_at DESC) as rn
+                    FROM technical_indicators_cache
+                    WHERE symbol IN ({placeholders})
+                    AND timeframe IN ('5m', '15m', '1h')
+                    AND ema_short IS NOT NULL AND ema_long IS NOT NULL
+                """, symbols_list)
+
+                ema_rows = cursor.fetchall()
+                # 按 (symbol, timeframe) 分组，每组取前10条
+                for row in ema_rows:
+                    if row['rn'] <= 10:  # 只取前10条
+                        key = (row['symbol'], row['timeframe'])
+                        if key not in ema_history_map:
+                            ema_history_map[key] = []
+                        ema_history_map[key].append(row)
+
+            # 4. 处理每个交易对的每个时间周期
+            for symbol in all_symbols:
                 symbols_data[symbol] = {}
-                
+
                 for timeframe in timeframes:
-                    # 获取该交易对在该时间周期的最新数据
-                    # 重要：必须使用对应timeframe的技术指标，不能混用
-                    # - 1d趋势必须使用1d的RSI、MACD、EMA等技术指标
-                    # - 1h趋势必须使用1h的技术指标
-                    # - 15m趋势必须使用15m的技术指标
-                    cursor.execute(
-                        """SELECT * FROM technical_indicators_cache 
-                        WHERE symbol = %s AND timeframe = %s
-                        ORDER BY updated_at DESC LIMIT 1""",
-                        (symbol, timeframe)
-                    )
-                    result = cursor.fetchone()
-                    
+                    key = (symbol, timeframe)
+                    result = indicator_map.get(key)
+
                     if result:
-                        # 验证技术指标的timeframe是否匹配（双重验证，确保不会混用）
+                        # 验证timeframe
                         result_timeframe = result.get('timeframe')
                         if result_timeframe and result_timeframe != timeframe:
-                            logger.error(f"{symbol} 技术指标timeframe不匹配: 期望{timeframe}, 实际{result_timeframe}，跳过该数据")
                             symbols_data[symbol][timeframe] = None
                             continue
-                        
-                        # 获取K线数据用于价格和成交量趋势分析
-                        # 只需要最新2根K线，用于对比前一个数据
-                        cursor.execute(
-                            """SELECT open_price, high_price, low_price, close_price, volume, timestamp
-                            FROM kline_data 
-                            WHERE symbol = %s AND timeframe = %s
-                            ORDER BY timestamp DESC LIMIT 2""",
-                            (symbol, timeframe)
-                        )
-                        klines = cursor.fetchall()
-                        
-                        # 对于5m、15m、1h时间周期，获取历史EMA数据以检测金叉
+
+                        # 获取K线数据
+                        klines = kline_map.get(key, [])
+
+                        # 处理EMA交叉信息
                         ema_cross_info = None
                         if timeframe in ['5m', '15m', '1h']:
-                            # 获取最近10条技术指标记录，用于检测EMA金叉（增加记录数以提高检测准确性）
-                            cursor.execute(
-                                """SELECT ema_short, ema_long, updated_at
-                                FROM technical_indicators_cache 
-                                WHERE symbol = %s AND timeframe = %s
-                                ORDER BY updated_at DESC LIMIT 10""",
-                                (symbol, timeframe)
-                            )
-                            ema_history = cursor.fetchall()
-                            # 调试：记录EMA历史数据数量
-                            if len(ema_history) < 2:
-                                logger.debug(f"{symbol} {timeframe} EMA历史数据不足: {len(ema_history)}条")
-                            if len(ema_history) >= 2:
-                                # 当前EMA值
-                                curr_ema_short = float(ema_history[0].get('ema_short', 0)) if ema_history[0].get('ema_short') else 0
-                                curr_ema_long = float(ema_history[0].get('ema_long', 0)) if ema_history[0].get('ema_long') else 0
-                                
-                                if curr_ema_short > 0 and curr_ema_long > 0:
-                                    # 检测最近是否发生金叉（在最近10条记录中查找）
-                                    is_golden_cross = False
-                                    is_death_cross = False
-                                    
-                                    # 从最新到最旧遍历，查找最近一次交叉
-                                    for i in range(len(ema_history) - 1):
-                                        curr_ema_short_i = float(ema_history[i].get('ema_short', 0)) if ema_history[i].get('ema_short') else 0
-                                        curr_ema_long_i = float(ema_history[i].get('ema_long', 0)) if ema_history[i].get('ema_long') else 0
-                                        prev_ema_short = float(ema_history[i+1].get('ema_short', 0)) if ema_history[i+1].get('ema_short') else 0
-                                        prev_ema_long = float(ema_history[i+1].get('ema_long', 0)) if ema_history[i+1].get('ema_long') else 0
-                                        
-                                        if prev_ema_short > 0 and prev_ema_long > 0 and curr_ema_short_i > 0 and curr_ema_long_i > 0:
-                                            # 检测金叉（短期上穿长期）：前一个短期<=长期，当前短期>长期
-                                            if prev_ema_short <= prev_ema_long and curr_ema_short_i > curr_ema_long_i:
-                                                is_golden_cross = True
-                                                break
-                                            # 检测死叉（短期下穿长期）：前一个短期>=长期，当前短期<长期
-                                            elif prev_ema_short >= prev_ema_long and curr_ema_short_i < curr_ema_long_i:
-                                                is_death_cross = True
-                                                break
-                                    
-                                    # 如果最近没有发生交叉，但当前状态是短期在长期之上，显示为"多头排列"
-                                    # 如果最近没有发生交叉，但当前状态是短期在长期之下，显示为"空头排列"
-                                    is_bullish = curr_ema_short > curr_ema_long
-                                    is_bearish = curr_ema_short < curr_ema_long
-                                    
-                                    # 调试：记录EMA状态
-                                    if is_golden_cross or is_death_cross or is_bullish or is_bearish:
-                                        logger.debug(f"{symbol} {timeframe} EMA状态: 金叉={is_golden_cross}, 死叉={is_death_cross}, 多头={is_bullish}, 空头={is_bearish}, 短期={curr_ema_short:.4f}, 长期={curr_ema_long:.4f}")
-                                    
-                                    ema_cross_info = {
-                                        'is_golden_cross': is_golden_cross,
-                                        'is_death_cross': is_death_cross,
-                                        'ema_short': curr_ema_short,
-                                        'ema_long': curr_ema_long,
-                                        'is_bullish': is_bullish,  # 当前是否多头排列
-                                        'is_bearish': is_bearish   # 当前是否空头排列
-                                    }
-                            else:
-                                # 即使历史数据不足，也尝试从当前记录获取EMA状态
-                                curr_ema_short = float(result.get('ema_short', 0)) if result.get('ema_short') else 0
-                                curr_ema_long = float(result.get('ema_long', 0)) if result.get('ema_long') else 0
-                                if curr_ema_short > 0 and curr_ema_long > 0:
-                                    ema_cross_info = {
-                                        'is_golden_cross': False,
-                                        'is_death_cross': False,
-                                        'ema_short': curr_ema_short,
-                                        'ema_long': curr_ema_long,
-                                        'is_bullish': curr_ema_short > curr_ema_long,
-                                        'is_bearish': curr_ema_short < curr_ema_long
-                                    }
-                                else:
-                                    # 调试：记录为什么没有EMA数据
-                                    logger.debug(f"{symbol} {timeframe} 当前记录中EMA数据缺失: ema_short={result.get('ema_short')}, ema_long={result.get('ema_long')}")
-                        
-                        # 分析趋势（基于价格和成交量变化）
-                        # 确保传入的indicator_data和klines都是对应timeframe的数据
-                        # 函数内部会再次验证timeframe匹配性
+                            ema_history = ema_history_map.get(key, [])
+                            ema_cross_info = _process_ema_cross(ema_history, result)
+
+                        # 分析趋势
                         trend_analysis = _analyze_trend_from_indicators(result, klines, timeframe, ema_cross_info)
                         symbols_data[symbol][timeframe] = trend_analysis
                     else:
-                        # 如果没有对应timeframe的技术指标数据，返回None
-                        logger.debug(f"{symbol} {timeframe} 技术指标数据不存在")
                         symbols_data[symbol][timeframe] = None
-            
-            # 转换为列表格式，便于前端显示
+
+            # 5. 转换为列表格式
             trend_list = []
             for symbol, timeframes_data in symbols_data.items():
                 trend_list.append({
@@ -2588,21 +2570,20 @@ async def get_trend_analysis():
                     '1h': timeframes_data.get('1h'),
                     '1d': timeframes_data.get('1d')
                 })
-            
-            # 批量获取价格数据（从price_stats_24h缓存表）
+
+            # 6. 批量获取价格数据
             if trend_list:
                 symbols_list = [item['symbol'] for item in trend_list]
                 placeholders = ','.join(['%s'] * len(symbols_list))
                 cursor.execute(
                     f"""SELECT symbol, current_price, change_24h, updated_at
-                    FROM price_stats_24h 
+                    FROM price_stats_24h
                     WHERE symbol IN ({placeholders})""",
                     symbols_list
                 )
                 price_data = cursor.fetchall()
                 price_map = {row['symbol']: row for row in price_data}
-                
-                # 将价格数据添加到每个交易对
+
                 for item in trend_list:
                     price_info = price_map.get(item['symbol'])
                     if price_info:
@@ -2613,22 +2594,71 @@ async def get_trend_analysis():
                         item['current_price'] = None
                         item['change_24h'] = None
                         item['price_updated_at'] = None
-            
+
             return {
                 'success': True,
                 'data': trend_list,
                 'total': len(trend_list)
             }
-            
+
         finally:
             cursor.close()
             connection.close()
-            
+
     except Exception as e:
         logger.error(f"获取趋势分析失败: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _process_ema_cross(ema_history: list, current_result: dict) -> dict:
+    """处理EMA交叉信息"""
+    if len(ema_history) >= 2:
+        curr_ema_short = float(ema_history[0].get('ema_short', 0)) if ema_history[0].get('ema_short') else 0
+        curr_ema_long = float(ema_history[0].get('ema_long', 0)) if ema_history[0].get('ema_long') else 0
+
+        if curr_ema_short > 0 and curr_ema_long > 0:
+            is_golden_cross = False
+            is_death_cross = False
+
+            for i in range(len(ema_history) - 1):
+                curr_short = float(ema_history[i].get('ema_short', 0)) if ema_history[i].get('ema_short') else 0
+                curr_long = float(ema_history[i].get('ema_long', 0)) if ema_history[i].get('ema_long') else 0
+                prev_short = float(ema_history[i+1].get('ema_short', 0)) if ema_history[i+1].get('ema_short') else 0
+                prev_long = float(ema_history[i+1].get('ema_long', 0)) if ema_history[i+1].get('ema_long') else 0
+
+                if prev_short > 0 and prev_long > 0 and curr_short > 0 and curr_long > 0:
+                    if prev_short <= prev_long and curr_short > curr_long:
+                        is_golden_cross = True
+                        break
+                    elif prev_short >= prev_long and curr_short < curr_long:
+                        is_death_cross = True
+                        break
+
+            return {
+                'is_golden_cross': is_golden_cross,
+                'is_death_cross': is_death_cross,
+                'ema_short': curr_ema_short,
+                'ema_long': curr_ema_long,
+                'is_bullish': curr_ema_short > curr_ema_long,
+                'is_bearish': curr_ema_short < curr_ema_long
+            }
+
+    # 历史数据不足时，从当前记录获取
+    curr_ema_short = float(current_result.get('ema_short', 0)) if current_result.get('ema_short') else 0
+    curr_ema_long = float(current_result.get('ema_long', 0)) if current_result.get('ema_long') else 0
+    if curr_ema_short > 0 and curr_ema_long > 0:
+        return {
+            'is_golden_cross': False,
+            'is_death_cross': False,
+            'ema_short': curr_ema_short,
+            'ema_long': curr_ema_long,
+            'is_bullish': curr_ema_short > curr_ema_long,
+            'is_bearish': curr_ema_short < curr_ema_long
+        }
+
+    return None
 
 
 def _analyze_trend_from_indicators(indicator_data: dict, klines: list = None, timeframe: str = '1h', ema_cross_info: dict = None) -> dict:
