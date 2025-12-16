@@ -4,7 +4,8 @@
 """
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 添加项目根目录到路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.utils.config_loader import load_config
 from app.trading.futures_trading_engine import FuturesTradingEngine
