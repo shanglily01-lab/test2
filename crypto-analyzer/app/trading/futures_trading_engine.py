@@ -1379,15 +1379,42 @@ class FuturesTradingEngine:
         
         try:
             cursor_update = connection_update.cursor()
-            
+
+            # 批量获取所有持仓的实时价格（一次API调用获取所有价格）
+            price_cache = {}
+            if positions:
+                try:
+                    import requests
+                    response = requests.get(
+                        'https://fapi.binance.com/fapi/v1/ticker/price',
+                        timeout=3
+                    )
+                    if response.status_code == 200:
+                        all_prices = response.json()
+                        for item in all_prices:
+                            # 将 BTCUSDT 格式转换为 BTC/USDT 格式
+                            symbol = item['symbol']
+                            if symbol.endswith('USDT'):
+                                formatted_symbol = symbol[:-4] + '/USDT'
+                                price_cache[formatted_symbol] = Decimal(str(item['price']))
+                        logger.debug(f"批量获取价格成功，共 {len(price_cache)} 个交易对")
+                except Exception as e:
+                    logger.warning(f"批量获取价格失败，将回退到数据库: {e}")
+
             for pos in positions:
                 # 将 id 映射为 position_id，保持与API一致
                 if 'id' in pos and 'position_id' not in pos:
                     pos['position_id'] = pos['id']
-                
+
                 try:
-                    # 使用实时价格更新持仓
-                    current_price = self.get_current_price(pos['symbol'], use_realtime=True)
+                    # 优先从缓存获取价格，否则从数据库获取
+                    symbol = pos['symbol']
+                    if symbol in price_cache:
+                        current_price = price_cache[symbol]
+                    else:
+                        # 回退到数据库价格
+                        current_price = self.get_current_price(symbol, use_realtime=False)
+
                     entry_price = Decimal(str(pos['entry_price']))
                     quantity = Decimal(str(pos['quantity']))
                     leverage = Decimal(str(pos.get('leverage', 1)))
@@ -1402,7 +1429,7 @@ class FuturesTradingEngine:
 
                     # 计算盈亏百分比（基于保证金）
                     unrealized_pnl_pct = (unrealized_pnl / margin * 100) if margin > 0 else Decimal('0')
-                    
+
                     # 更新数据库中的 mark_price 和未实现盈亏
                     cursor_update.execute(
                         """UPDATE futures_positions
@@ -1417,14 +1444,14 @@ class FuturesTradingEngine:
                     pos['current_price'] = float(current_price)
                     pos['unrealized_pnl'] = float(unrealized_pnl)
                     pos['unrealized_pnl_pct'] = float(unrealized_pnl_pct)
-                    
+
                 except Exception as e:
                     logger.warning(f"更新持仓 {pos.get('symbol', 'unknown')} 价格和盈亏失败: {e}")
                     # 如果更新失败，至少设置默认值
                     pos['current_price'] = float(pos.get('mark_price', 0))
                     pos['unrealized_pnl'] = float(pos.get('unrealized_pnl', 0))
                     pos['unrealized_pnl_pct'] = float(pos.get('unrealized_pnl_pct', 0))
-                
+
                 # 转换 Decimal 和 datetime 类型，确保所有字段都能正确序列化为 JSON
                 for key, value in pos.items():
                     if isinstance(value, Decimal):
@@ -1433,7 +1460,7 @@ class FuturesTradingEngine:
                         pos[key] = value.isoformat()
                     elif isinstance(value, date):
                         pos[key] = value.isoformat()
-        
+
         finally:
             cursor_update.close()
             connection_update.close()
