@@ -554,7 +554,7 @@ class PositionValidator:
         position_id = position['id']
         symbol = position['symbol']
 
-        reason_str = "自检平仓: " + "; ".join(reasons)
+        reason_str = "validation_close: " + "; ".join(reasons)
 
         logger.warning(f"[自检服务] 🚫 {symbol} 触发自检平仓: {reasons}")
 

@@ -1377,7 +1377,7 @@ class StrategyExecutorV2:
             pre_check = self.position_validator.validate_before_open(symbol, direction)
             if not pre_check['allow_open']:
                 logger.info(f"[开仓前检查] 🚫 {symbol} {direction} 被拦截: {pre_check['reason']}")
-                return {'success': False, 'error': f"开仓前检查未通过: {pre_check['reason']}"}
+                return {'success': False, 'error': f"pre_check_failed: {pre_check['reason']}"}
 
             # 直接执行开仓
             return await self._do_open_position(
@@ -1761,7 +1761,7 @@ class StrategyExecutorV2:
                             debug_info.append(f"⏳ {cooldown_msg}")
                         else:
                             # 构建开仓原因
-                            entry_reason = f"金叉/死叉信号: {reason}, EMA差值:{ema_data['ema_diff_pct']:.3f}%"
+                            entry_reason = f"crossover: {reason}, EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
                             open_result = await self.execute_open_position(
                                 symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
                                 strategy, account_id, signal_reason=entry_reason
@@ -1788,7 +1788,7 @@ class StrategyExecutorV2:
                             debug_info.append(f"⏳ {cooldown_msg}")
                         else:
                             # 构建开仓原因
-                            entry_reason = f"连续趋势(5M放大): {signal_desc}"
+                            entry_reason = f"sustained_5m: {signal_desc}"
                             open_result = await self.execute_open_position(
                                 symbol, signal, 'sustained_trend', strategy, account_id,
                                 signal_reason=entry_reason
@@ -1816,7 +1816,7 @@ class StrategyExecutorV2:
                                 debug_info.append(f"⏳ {cooldown_msg}")
                             else:
                                 # 构建开仓原因
-                                entry_reason = f"持续趋势入场({direction}): {sustained_reason}"
+                                entry_reason = f"sustained_entry({direction}): {sustained_reason}"
                                 open_result = await self.execute_open_position(
                                     symbol, direction, 'sustained_trend_entry', strategy, account_id,
                                     signal_reason=entry_reason
@@ -1848,7 +1848,7 @@ class StrategyExecutorV2:
                             debug_info.append(f"⏳ {cooldown_msg}")
                         else:
                             # 构建开仓原因
-                            entry_reason = f"震荡反向信号: {signal_desc}"
+                            entry_reason = f"oscillation_reversal: {signal_desc}"
                             open_result = await self.execute_open_position(
                                 symbol, signal, 'oscillation_reversal', strategy, account_id,
                                 signal_reason=entry_reason
