@@ -599,91 +599,133 @@ class PositionValidator:
         Returns:
             (是否在冷却期, 原因)
         """
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
+        # 将 direction 转换为订单表的 side 格式
+        close_side = f"CLOSE_{direction.upper()}"
 
-        try:
-            # 将 direction 转换为订单表的 side 格式
-            # direction: 'long' -> side: 'CLOSE_LONG'
-            # direction: 'short' -> side: 'CLOSE_SHORT'
-            close_side = f"CLOSE_{direction.upper()}"
+        # 计算时间阈值（使用Python计算，避免MySQL函数）
+        now = self.get_local_time()
+        time_threshold = now - timedelta(seconds=cooldown_seconds)
 
-            # 查询冷却时间内是否有平仓订单
-            cursor.execute("""
-                SELECT id, created_at, price
-                FROM futures_orders
-                WHERE account_id = 2
-                AND symbol = %s
-                AND side = %s
-                AND status = 'FILLED'
-                AND created_at > NOW() - INTERVAL %s SECOND
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (symbol, close_side, cooldown_seconds))
+        # 带重试的查询
+        max_retries = 2
+        for attempt in range(max_retries):
+            conn = None
+            cursor = None
+            try:
+                conn = self.get_db_connection()
+                cursor = conn.cursor()
 
-            recent_close = cursor.fetchone()
+                # 使用参数化时间阈值，避免MySQL NOW()函数
+                cursor.execute("""
+                    SELECT id, created_at, price
+                    FROM futures_orders
+                    WHERE account_id = 2
+                    AND symbol = %s
+                    AND side = %s
+                    AND status = 'FILLED'
+                    AND created_at > %s
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (symbol, close_side, time_threshold))
 
-            if recent_close:
-                close_time = recent_close['created_at']
-                now = self.get_local_time()
-                elapsed = (now - close_time).total_seconds()
-                remaining = cooldown_seconds - elapsed
-                return True, f"平仓冷却中(剩余{remaining:.0f}秒)"
+                recent_close = cursor.fetchone()
 
-            return False, ""
+                if recent_close:
+                    close_time = recent_close['created_at']
+                    elapsed = (now - close_time).total_seconds()
+                    remaining = cooldown_seconds - elapsed
+                    return True, f"平仓冷却中(剩余{remaining:.0f}秒)"
 
-        except Exception as e:
-            logger.error(f"[待开仓自检] 检查平仓冷却出错: {e}")
-            return False, ""
-        finally:
-            cursor.close()
-            conn.close()
+                return False, ""
+
+            except pymysql.err.OperationalError as e:
+                # 连接超时或丢失，重试
+                if attempt < max_retries - 1:
+                    logger.warning(f"[待开仓自检] 检查平仓冷却连接异常，重试中({attempt+1}/{max_retries}): {e}")
+                    continue
+                else:
+                    logger.error(f"[待开仓自检] 检查平仓冷却重试失败: {e}")
+                    return False, ""
+            except Exception as e:
+                logger.error(f"[待开仓自检] 检查平仓冷却出错: {e}")
+                return False, ""
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn:
+                    conn.close()
+
+        return False, ""
 
     # ==================== 待开仓自检相关方法 ====================
 
     async def _check_pending_positions(self):
         """检查待开仓的信号"""
-        conn = self.get_db_connection()
-        cursor = conn.cursor()
+        expire_seconds = self.validation_config.get('pending_expire_seconds', 300)
 
-        try:
-            expire_seconds = self.validation_config.get('pending_expire_seconds', 300)
+        # 计算时间阈值（使用Python计算，避免MySQL函数）
+        now = self.get_local_time()
+        expire_threshold = now - timedelta(seconds=expire_seconds)
 
-            # 1. 先处理过期的待开仓（超过5分钟）
-            cursor.execute("""
-                UPDATE pending_positions
-                SET status = 'expired', rejection_reason = '超时未通过自检'
-                WHERE status = 'pending'
-                AND created_at < NOW() - INTERVAL %s SECOND
-            """, (expire_seconds,))
-            expired_count = cursor.rowcount
-            if expired_count > 0:
-                conn.commit()
-                logger.info(f"[待开仓自检] {expired_count} 个待开仓信号已过期")
+        # 带重试的数据库操作
+        max_retries = 2
+        pending_list = []
 
-            # 2. 获取待自检的信号
-            cursor.execute("""
-                SELECT
-                    id, symbol, direction, signal_type, signal_price,
-                    signal_ema9, signal_ema26, signal_ema_diff_pct,
-                    signal_reason, strategy_id, account_id, leverage, margin_pct,
-                    validation_count, created_at
-                FROM pending_positions
-                WHERE status = 'pending'
-                AND created_at > NOW() - INTERVAL %s SECOND
-                ORDER BY created_at ASC
-            """, (expire_seconds,))
+        for attempt in range(max_retries):
+            conn = None
+            cursor = None
+            try:
+                conn = self.get_db_connection()
+                cursor = conn.cursor()
 
-            pending_list = cursor.fetchall()
+                # 1. 先处理过期的待开仓（超过5分钟）
+                cursor.execute("""
+                    UPDATE pending_positions
+                    SET status = 'expired', rejection_reason = '超时未通过自检'
+                    WHERE status = 'pending'
+                    AND created_at < %s
+                """, (expire_threshold,))
+                expired_count = cursor.rowcount
+                if expired_count > 0:
+                    conn.commit()
+                    logger.info(f"[待开仓自检] {expired_count} 个待开仓信号已过期")
 
-            for pending in pending_list:
-                await self._validate_pending_position(pending)
+                # 2. 获取待自检的信号
+                cursor.execute("""
+                    SELECT
+                        id, symbol, direction, signal_type, signal_price,
+                        signal_ema9, signal_ema26, signal_ema_diff_pct,
+                        signal_reason, strategy_id, account_id, leverage, margin_pct,
+                        validation_count, created_at
+                    FROM pending_positions
+                    WHERE status = 'pending'
+                    AND created_at > %s
+                    ORDER BY created_at ASC
+                """, (expire_threshold,))
 
-        except Exception as e:
-            logger.error(f"[待开仓自检] 检查出错: {e}")
-        finally:
-            cursor.close()
-            conn.close()
+                pending_list = cursor.fetchall()
+                break  # 成功，退出重试循环
+
+            except pymysql.err.OperationalError as e:
+                # 连接超时或丢失，重试
+                if attempt < max_retries - 1:
+                    logger.warning(f"[待开仓自检] 数据库连接异常，重试中({attempt+1}/{max_retries}): {e}")
+                    continue
+                else:
+                    logger.error(f"[待开仓自检] 数据库连接重试失败: {e}")
+                    return
+            except Exception as e:
+                logger.error(f"[待开仓自检] 检查出错: {e}")
+                return
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn:
+                    conn.close()
+
+        # 验证每个待开仓信号
+        for pending in pending_list:
+            await self._validate_pending_position(pending)
 
     async def _validate_pending_position(self, pending: Dict):
         """验证单个待开仓信号"""
