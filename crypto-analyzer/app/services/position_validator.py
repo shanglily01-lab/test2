@@ -29,7 +29,7 @@ class PositionValidator:
         'pending_require_ma_confirm': True,   # 是否需要MA确认
         'pending_check_ranging': True,     # 是否检查震荡市
         'pending_check_trend_end': True,   # 是否检查趋势末端
-        'pending_min_ema_diff_pct': 0.15,  # 最小EMA差值（%），低于此值说明趋势弱，拒绝开仓
+        'pending_min_ema_diff_pct': 0.10,  # 最小EMA差值（%），低于此值说明趋势弱，拒绝开仓
         'pending_check_ema_converging': True,  # 是否检查EMA收敛（即将交叉）
         'pending_close_cooldown': 300,     # 平仓后冷却时间（秒），同方向不再开仓
         'pending_max_check_count': 15,     # 最大检查次数，超过直接标记为失败
