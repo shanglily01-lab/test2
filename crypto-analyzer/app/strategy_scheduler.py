@@ -29,6 +29,7 @@ from app.services.strategy_executor_v2 import StrategyExecutorV2
 from app.services.strategy_test_service import StrategyTestService
 from app.services.position_validator import PositionValidator
 from app.trading.futures_trading_engine import FuturesTradingEngine
+from app.trading.binance_futures_engine import BinanceFuturesEngine
 from app.analyzers.technical_indicators import TechnicalIndicators
 
 
@@ -61,16 +62,26 @@ class StrategyScheduler:
         from app.services.trade_notifier import init_trade_notifier
         trade_notifier = init_trade_notifier(self.config)
 
-        # 初始化合约交易引擎
+        # 初始化合约交易引擎（模拟盘）
         logger.info("初始化合约交易引擎...")
         self.futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
+
+        # 初始化实盘交易引擎
+        logger.info("初始化实盘交易引擎...")
+        try:
+            self.live_engine = BinanceFuturesEngine(db_config, self.config)
+            logger.info("  ✓ 实盘交易引擎初始化成功")
+        except Exception as e:
+            logger.warning(f"  ⚠️ 实盘交易引擎初始化失败: {e}")
+            self.live_engine = None
 
         # 初始化策略执行器
         if use_v2:
             logger.info("初始化策略执行器 V2（简化版）...")
             self.strategy_executor = StrategyExecutorV2(
                 db_config=db_config,
-                futures_engine=self.futures_engine
+                futures_engine=self.futures_engine,
+                live_engine=self.live_engine
             )
             logger.info("  ✓ 策略执行器 V2 初始化成功")
         else:
