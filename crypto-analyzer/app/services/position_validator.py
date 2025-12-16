@@ -733,8 +733,12 @@ class PositionValidator:
         pending_id = pending['id']
         symbol = pending['symbol']
         direction = pending['direction']
+        signal_type = pending.get('signal_type', '')  # 信号类型：golden_cross/death_cross/sustained_trend
         signal_price = float(pending['signal_price'])
         signal_ema_diff_pct = float(pending['signal_ema_diff_pct']) if pending['signal_ema_diff_pct'] else 0
+
+        # 判断是否是金叉/死叉信号（突破信号跳过趋势末端检查）
+        is_crossover_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover')
 
         # 获取当前市场数据
         ema_data = self._get_ema_data(symbol, '15m')
@@ -798,12 +802,12 @@ class PositionValidator:
                 issues.append(reason)
                 checks_passed = False
 
-        # ========== Check 5: Trend exhaustion (DISABLED - 太严格导致无法开仓) ==========
-        # if self.validation_config.get('pending_check_trend_end', True):
-        #     is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, current_price, ema_data)
-        #     if is_exhausted:
-        #         issues.append(reason)
-        #         checks_passed = False
+        # ========== Check 5: Trend exhaustion (只对持续趋势信号检查，金叉/死叉跳过) ==========
+        if self.validation_config.get('pending_check_trend_end', True) and not is_crossover_signal:
+            is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, current_price, ema_data)
+            if is_exhausted:
+                issues.append(reason)
+                checks_passed = False
 
         # ========== Check 6: EMA trend strength ==========
         min_ema_diff = self.validation_config.get('pending_min_ema_diff_pct', 0.15)
