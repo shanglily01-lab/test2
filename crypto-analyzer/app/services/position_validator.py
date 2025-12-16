@@ -32,6 +32,7 @@ class PositionValidator:
         'pending_min_ema_diff_pct': 0.15,  # 最小EMA差值（%），低于此值说明趋势弱，拒绝开仓
         'pending_check_ema_converging': True,  # 是否检查EMA收敛（即将交叉）
         'pending_close_cooldown': 300,     # 平仓后冷却时间（秒），同方向不再开仓
+        'pending_max_check_count': 15,     # 最大检查次数，超过直接标记为失败
 
         # ===== 持仓自检配置 =====
         'enabled': True,
@@ -841,13 +842,26 @@ class PositionValidator:
                 await self._execute_validated_open(pending, current_price, ema_data)
 
             else:
-                # 自检未通过，更新状态
-                logger.info(f"[待开仓自检] ⏳ {symbol} {direction} 第{validation_count}次自检未通过: {issues}")
-                cursor.execute("""
-                    UPDATE pending_positions
-                    SET validation_count = %s, last_validation_time = NOW(), rejection_reason = %s
-                    WHERE id = %s
-                """, (validation_count, "; ".join(issues), pending_id))
+                # 自检未通过
+                max_check_count = self.validation_config.get('pending_max_check_count', 15)
+
+                if validation_count >= max_check_count:
+                    # 超过最大检查次数，直接标记为失败
+                    logger.warning(f"[待开仓自检] ❌ {symbol} {direction} 检查{validation_count}次仍未通过，放弃开仓: {issues}")
+                    cursor.execute("""
+                        UPDATE pending_positions
+                        SET status = 'cancelled', validation_count = %s, last_validation_time = NOW(),
+                            rejection_reason = %s
+                        WHERE id = %s
+                    """, (validation_count, f"检查{validation_count}次未通过: " + "; ".join(issues), pending_id))
+                else:
+                    # 继续等待
+                    logger.info(f"[待开仓自检] ⏳ {symbol} {direction} 第{validation_count}次自检未通过: {issues}")
+                    cursor.execute("""
+                        UPDATE pending_positions
+                        SET validation_count = %s, last_validation_time = NOW(), rejection_reason = %s
+                        WHERE id = %s
+                    """, (validation_count, "; ".join(issues), pending_id))
                 conn.commit()
 
         finally:
