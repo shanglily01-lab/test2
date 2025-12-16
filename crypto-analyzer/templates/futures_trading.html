@@ -2196,8 +2196,9 @@
 
                 if (data.status === 'success' && data.data && data.data.length > 0) {
                     pendingValidationBody.innerHTML = data.data.map(item => {
-                        const sideClass = item.side === 'BUY' || item.side === 'LONG' ? 'badge-success' : 'badge-danger';
-                        const sideText = item.side === 'BUY' || item.side === 'LONG' ? '做多' : '做空';
+                        const sideUpper = (item.side || '').toUpperCase();
+                        const sideClass = sideUpper === 'BUY' || sideUpper === 'LONG' ? 'badge-success' : 'badge-danger';
+                        const sideText = sideUpper === 'BUY' || sideUpper === 'LONG' ? '做多' : '做空';
 
                         // 计算价差百分比
                         const priceDiff = item.current_price && item.signal_price
