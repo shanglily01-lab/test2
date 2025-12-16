@@ -1687,3 +1687,97 @@ async def toggle_strategy_sync_live(strategy_id: int, request: Request):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pending-positions")
+async def get_pending_positions():
+    """获取待检查订单列表"""
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT
+                pp.id,
+                pp.strategy_id,
+                pp.symbol,
+                pp.side,
+                pp.signal_price,
+                pp.signal_type,
+                pp.status,
+                pp.check_count,
+                pp.last_check_at,
+                pp.created_at,
+                pp.expire_seconds,
+                ts.name as strategy_name
+            FROM pending_positions pp
+            LEFT JOIN trading_strategies ts ON pp.strategy_id = ts.id
+            WHERE pp.status IN ('pending', 'checking')
+            ORDER BY pp.created_at DESC
+            LIMIT 100
+        """)
+        pending_list = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        # 转换datetime为字符串
+        for item in pending_list:
+            if item.get('created_at'):
+                item['created_at'] = item['created_at'].isoformat()
+            if item.get('last_check_at'):
+                item['last_check_at'] = item['last_check_at'].isoformat()
+
+        return {
+            'status': 'success',
+            'data': pending_list
+        }
+
+    except Exception as e:
+        logger.error(f"获取待检查订单失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/pending-positions/{position_id}")
+async def delete_pending_position(position_id: int):
+    """删除/取消待检查订单"""
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+
+        # 检查是否存在
+        cursor.execute("SELECT id, status FROM pending_positions WHERE id = %s", (position_id,))
+        position = cursor.fetchone()
+
+        if not position:
+            cursor.close()
+            connection.close()
+            raise HTTPException(status_code=404, detail="待检查订单不存在")
+
+        # 更新状态为已取消
+        cursor.execute("""
+            UPDATE pending_positions
+            SET status = 'cancelled', updated_at = NOW()
+            WHERE id = %s
+        """, (position_id,))
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+
+        logger.info(f"已取消待检查订单: ID={position_id}")
+
+        return {
+            'status': 'success',
+            'message': '已取消待检查订单'
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"取消待检查订单失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
