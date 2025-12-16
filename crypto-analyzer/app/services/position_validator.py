@@ -151,8 +151,8 @@ class PositionValidator:
 
         try:
             # 获取验证窗口内的新持仓
-            validation_window = self.VALIDATION_CONFIG['validation_window']
-            min_delay = self.VALIDATION_CONFIG['first_check_delay']
+            validation_window = self.validation_config['validation_window']
+            min_delay = self.validation_config['first_check_delay']
 
             cursor.execute("""
                 SELECT
@@ -226,8 +226,8 @@ class PositionValidator:
         hold_seconds = (now - created_at).total_seconds()
 
         # ========== 检查1: 快速止损 ==========
-        quick_loss_window = self.VALIDATION_CONFIG['quick_loss_window']
-        quick_loss_threshold = self.VALIDATION_CONFIG['quick_loss_threshold']
+        quick_loss_window = self.validation_config['quick_loss_window']
+        quick_loss_threshold = self.validation_config['quick_loss_threshold']
 
         if hold_seconds <= quick_loss_window and pnl_pct <= -quick_loss_threshold:
             issues.append(f"快速亏损({pnl_pct:.2f}%在{hold_seconds:.0f}秒内)")
@@ -258,7 +258,7 @@ class PositionValidator:
         #     issues.append(reason)
 
         # 决定是否平仓
-        min_issues = self.VALIDATION_CONFIG['min_issues_to_close']
+        min_issues = self.validation_config['min_issues_to_close']
         should_close = len(issues) >= min_issues
 
         # 快速亏损单独触发平仓
@@ -294,7 +294,7 @@ class PositionValidator:
 
         ema_diff_pct = ema_data.get('ema_diff_pct', 0)
 
-        ranging_threshold = self.VALIDATION_CONFIG['ranging_volatility']
+        ranging_threshold = self.validation_config['ranging_volatility']
 
         if volatility < ranging_threshold and ema_diff_pct < 0.15:
             return True, f"震荡市追单(波动{volatility:.2f}%,EMA差{ema_diff_pct:.2f}%)"
@@ -322,7 +322,7 @@ class PositionValidator:
         max_high = max(highs)
         min_low = min(lows)
 
-        threshold = self.VALIDATION_CONFIG['trend_exhaustion_threshold']
+        threshold = self.validation_config['trend_exhaustion_threshold']
 
         if direction == 'long':
             # 做多时检查是否接近高点
@@ -346,13 +346,13 @@ class PositionValidator:
         - 开仓后2分钟内
         - 价格反向移动超过0.3%
         """
-        if hold_seconds > self.VALIDATION_CONFIG['quick_loss_window']:
+        if hold_seconds > self.validation_config['quick_loss_window']:
             return False, ""
 
         direction = position['position_side'].lower()
         entry_price = float(position['entry_price'])
 
-        threshold = self.VALIDATION_CONFIG['immediate_reversal_threshold']
+        threshold = self.validation_config['immediate_reversal_threshold']
 
         if direction == 'long':
             # 做多后价格下跌
@@ -378,7 +378,7 @@ class PositionValidator:
             return False, ""
 
         current_ema_diff = ema_data.get('ema_diff_pct', 0)
-        decay_threshold = self.VALIDATION_CONFIG['signal_decay_threshold']
+        decay_threshold = self.validation_config['signal_decay_threshold']
 
         decay_pct = (entry_ema_diff - current_ema_diff) / entry_ema_diff * 100
 
