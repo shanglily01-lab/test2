@@ -1185,6 +1185,20 @@
                                                 趋势末端检查
                                             </label>
                                         </div>
+                                        <div class="form-group" style="flex: none; margin-bottom: 8px;">
+                                            <label class="form-label" style="cursor: pointer;">
+                                                <input type="checkbox" id="pendingCheckEmaConverging" style="margin-right: 8px;" checked>
+                                                EMA收敛检查
+                                            </label>
+                                            <small style="color: var(--text-tertiary); font-size: 10px; display: block; margin-left: 24px;">EMA差值收窄超30%时拒绝开仓</small>
+                                        </div>
+                                    </div>
+                                    <div class="form-row" style="margin-top: 12px;">
+                                        <div class="form-group" style="flex: 1; min-width: 120px;">
+                                            <label class="form-label" style="font-size: 11px;">最小EMA差值（%）</label>
+                                            <input type="number" class="form-input" id="pendingMinEmaDiffPct" value="0.15" step="0.01" min="0" style="padding: 6px 10px; font-size: 13px;">
+                                            <small style="color: var(--text-tertiary); font-size: 10px;">低于此值视为弱趋势，拒绝开仓</small>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -2429,7 +2443,9 @@
                     require_ema_confirm: document.getElementById('pendingRequireEmaConfirm') ? document.getElementById('pendingRequireEmaConfirm').checked : true,
                     require_ma_confirm: document.getElementById('pendingRequireMaConfirm') ? document.getElementById('pendingRequireMaConfirm').checked : true,
                     check_ranging: document.getElementById('pendingCheckRanging') ? document.getElementById('pendingCheckRanging').checked : true,
-                    check_trend_end: document.getElementById('pendingCheckTrendEnd') ? document.getElementById('pendingCheckTrendEnd').checked : true
+                    check_trend_end: document.getElementById('pendingCheckTrendEnd') ? document.getElementById('pendingCheckTrendEnd').checked : true,
+                    check_ema_converging: document.getElementById('pendingCheckEmaConverging') ? document.getElementById('pendingCheckEmaConverging').checked : true,
+                    min_ema_diff_pct: document.getElementById('pendingMinEmaDiffPct') ? parseFloat(document.getElementById('pendingMinEmaDiffPct').value) : 0.15
                 }
             };
 
@@ -2964,6 +2980,12 @@
                 }
                 if (document.getElementById('pendingCheckTrendEnd')) {
                     document.getElementById('pendingCheckTrendEnd').checked = pv.check_trend_end !== false;
+                }
+                if (document.getElementById('pendingCheckEmaConverging')) {
+                    document.getElementById('pendingCheckEmaConverging').checked = pv.check_ema_converging !== false;
+                }
+                if (document.getElementById('pendingMinEmaDiffPct')) {
+                    document.getElementById('pendingMinEmaDiffPct').value = pv.min_ema_diff_pct || 0.15;
                 }
             }
 

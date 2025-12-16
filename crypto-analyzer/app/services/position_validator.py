@@ -29,6 +29,8 @@ class PositionValidator:
         'pending_require_ma_confirm': True,   # 是否需要MA确认
         'pending_check_ranging': True,     # 是否检查震荡市
         'pending_check_trend_end': True,   # 是否检查趋势末端
+        'pending_min_ema_diff_pct': 0.15,  # 最小EMA差值（%），低于此值说明趋势弱，拒绝开仓
+        'pending_check_ema_converging': True,  # 是否检查EMA收敛（即将交叉）
 
         # ===== 持仓自检配置 =====
         'enabled': True,
@@ -690,6 +692,22 @@ class PositionValidator:
             is_exhausted, reason = self._check_trend_exhaustion(symbol, direction, current_price, ema_data)
             if is_exhausted:
                 issues.append(reason)
+                checks_passed = False
+
+        # ========== 检查6: EMA趋势强度检查 ==========
+        # 如果EMA差值太小，说明趋势弱或即将反转，拒绝开仓
+        min_ema_diff = self.validation_config.get('pending_min_ema_diff_pct', 0.15)
+        if abs(current_ema_diff_pct) < min_ema_diff:
+            issues.append(f"EMA趋势弱(差值{current_ema_diff_pct:.3f}%<{min_ema_diff}%)")
+            checks_passed = False
+
+        # ========== 检查7: EMA收敛检查 ==========
+        # 如果信号触发时的EMA差值比现在大很多，说明EMA在收敛，趋势在减弱
+        if self.validation_config.get('pending_check_ema_converging', True):
+            if signal_ema_diff_pct != 0 and abs(current_ema_diff_pct) < abs(signal_ema_diff_pct) * 0.7:
+                # EMA差值收窄超过30%，说明趋势在减弱
+                decay_pct = (1 - abs(current_ema_diff_pct) / abs(signal_ema_diff_pct)) * 100
+                issues.append(f"EMA收敛(趋势减弱{decay_pct:.0f}%)")
                 checks_passed = False
 
         # 更新自检次数
