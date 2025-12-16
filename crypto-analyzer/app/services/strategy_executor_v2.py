@@ -872,6 +872,70 @@ class StrategyExecutorV2:
 
         return True, f"持续趋势开仓通过: 强度{ema_diff_pct:.3f}%在{min_strength}%~{max_strength}%范围内"
 
+    def check_entry_cooldown(self, symbol: str, direction: str, strategy: Dict, strategy_id: int) -> Tuple[bool, str]:
+        """
+        检查全局开仓冷却时间
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            strategy: 策略配置
+            strategy_id: 策略ID
+
+        Returns:
+            (是否在冷却中, 原因说明)
+        """
+        entry_cooldown = strategy.get('entryCooldown', {})
+        if not entry_cooldown.get('enabled', True):  # 默认启用
+            return False, "开仓冷却未启用"
+
+        cooldown_minutes = entry_cooldown.get('minutes', 30)  # 默认30分钟
+        per_direction = entry_cooldown.get('perDirection', True)  # 默认按方向独立冷却
+
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            current_time = self.get_local_time()
+            cooldown_start = current_time - timedelta(minutes=cooldown_minutes)
+
+            # 查询冷却期内的开仓记录
+            if per_direction:
+                # 按方向独立冷却：只查同方向的开仓
+                cursor.execute("""
+                    SELECT created_at, direction FROM futures_positions
+                    WHERE symbol = %s AND strategy_id = %s
+                    AND direction = %s AND created_at >= %s
+                    ORDER BY created_at DESC LIMIT 1
+                """, (symbol, strategy_id, direction.upper(), cooldown_start))
+            else:
+                # 全局冷却：查任意方向的开仓
+                cursor.execute("""
+                    SELECT created_at, direction FROM futures_positions
+                    WHERE symbol = %s AND strategy_id = %s
+                    AND created_at >= %s
+                    ORDER BY created_at DESC LIMIT 1
+                """, (symbol, strategy_id, cooldown_start))
+
+            recent_entry = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if recent_entry:
+                entry_time = recent_entry['created_at']
+                last_direction = recent_entry['direction']
+                time_since_entry = (current_time - entry_time).total_seconds() / 60
+                remaining_cooldown = cooldown_minutes - time_since_entry
+
+                direction_text = f"同方向({last_direction})" if per_direction else "任意方向"
+                return True, f"开仓冷却中: 距离上次{direction_text}开仓仅{time_since_entry:.0f}分钟，还需等待{remaining_cooldown:.0f}分钟"
+
+            return False, "冷却检查通过"
+
+        except Exception as e:
+            logger.warning(f"{symbol} 检查开仓冷却失败: {e}")
+            return False, f"冷却检查异常: {e}"
+
     def apply_all_filters(self, symbol: str, direction: str, current_price: float,
                           ema_data: Dict, strategy: Dict) -> Tuple[bool, List[str]]:
         """
@@ -1604,6 +1668,7 @@ class StrategyExecutorV2:
 
         # 3. 如果无持仓，检查开仓信号
         open_result = None
+        strategy_id = strategy.get('id')
         if not positions or all(p.get('status') == 'closed' for p in positions):
             # 3.1 检查金叉/死叉信号
             signal, signal_desc = self.check_golden_death_cross(ema_data)
@@ -1622,12 +1687,17 @@ class StrategyExecutorV2:
                     debug_info.extend(filter_results)
 
                     if filters_passed:
-                        # 构建开仓原因
-                        entry_reason = f"金叉/死叉信号: {reason}, EMA差值:{ema_data['ema_diff_pct']:.3f}%"
-                        open_result = await self.execute_open_position(
-                            symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
-                            strategy, account_id, signal_reason=entry_reason
-                        )
+                        # 检查开仓冷却
+                        in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, signal, strategy, strategy_id)
+                        if in_cooldown:
+                            debug_info.append(f"⏳ {cooldown_msg}")
+                        else:
+                            # 构建开仓原因
+                            entry_reason = f"金叉/死叉信号: {reason}, EMA差值:{ema_data['ema_diff_pct']:.3f}%"
+                            open_result = await self.execute_open_position(
+                                symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
+                                strategy, account_id, signal_reason=entry_reason
+                            )
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
@@ -1644,12 +1714,17 @@ class StrategyExecutorV2:
                     debug_info.extend(filter_results)
 
                     if filters_passed:
-                        # 构建开仓原因
-                        entry_reason = f"连续趋势(5M放大): {signal_desc}"
-                        open_result = await self.execute_open_position(
-                            symbol, signal, 'sustained_trend', strategy, account_id,
-                            signal_reason=entry_reason
-                        )
+                        # 检查开仓冷却
+                        in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, signal, strategy, strategy_id)
+                        if in_cooldown:
+                            debug_info.append(f"⏳ {cooldown_msg}")
+                        else:
+                            # 构建开仓原因
+                            entry_reason = f"连续趋势(5M放大): {signal_desc}"
+                            open_result = await self.execute_open_position(
+                                symbol, signal, 'sustained_trend', strategy, account_id,
+                                signal_reason=entry_reason
+                            )
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
@@ -1667,17 +1742,22 @@ class StrategyExecutorV2:
                         debug_info.extend(filter_results)
 
                         if filters_passed:
-                            # 构建开仓原因
-                            entry_reason = f"持续趋势入场({direction}): {sustained_reason}"
-                            open_result = await self.execute_open_position(
-                                symbol, direction, 'sustained_trend_entry', strategy, account_id,
-                                signal_reason=entry_reason
-                            )
-                            if open_result and open_result.get('success'):
-                                # 记录持续趋势开仓时间（用于冷却）
-                                cooldown_key = f"{symbol}_{direction}_sustained"
-                                self.last_entry_time[cooldown_key] = self.get_local_time()
-                                break
+                            # 检查开仓冷却
+                            in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, direction, strategy, strategy_id)
+                            if in_cooldown:
+                                debug_info.append(f"⏳ {cooldown_msg}")
+                            else:
+                                # 构建开仓原因
+                                entry_reason = f"持续趋势入场({direction}): {sustained_reason}"
+                                open_result = await self.execute_open_position(
+                                    symbol, direction, 'sustained_trend_entry', strategy, account_id,
+                                    signal_reason=entry_reason
+                                )
+                                if open_result and open_result.get('success'):
+                                    # 记录持续趋势开仓时间（用于冷却）
+                                    cooldown_key = f"{symbol}_{direction}_sustained"
+                                    self.last_entry_time[cooldown_key] = self.get_local_time()
+                                    break
                         else:
                             debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
@@ -1694,12 +1774,17 @@ class StrategyExecutorV2:
                     debug_info.extend(filter_results)
 
                     if filters_passed:
-                        # 构建开仓原因
-                        entry_reason = f"震荡反向信号: {signal_desc}"
-                        open_result = await self.execute_open_position(
-                            symbol, signal, 'oscillation_reversal', strategy, account_id,
-                            signal_reason=entry_reason
-                        )
+                        # 检查开仓冷却
+                        in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, signal, strategy, strategy_id)
+                        if in_cooldown:
+                            debug_info.append(f"⏳ {cooldown_msg}")
+                        else:
+                            # 构建开仓原因
+                            entry_reason = f"震荡反向信号: {signal_desc}"
+                            open_result = await self.execute_open_position(
+                                symbol, signal, 'oscillation_reversal', strategy, account_id,
+                                signal_reason=entry_reason
+                            )
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
