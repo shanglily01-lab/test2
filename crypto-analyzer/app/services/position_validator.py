@@ -556,7 +556,9 @@ class PositionValidator:
 
         reason_str = "validation_close: " + "; ".join(reasons)
 
-        logger.warning(f"[自检服务] 🚫 {symbol} 触发自检平仓: {reasons}")
+        # 检查 live_engine 绑定状态
+        live_engine_bound = hasattr(self.futures_engine, 'live_engine') and self.futures_engine.live_engine is not None if self.futures_engine else False
+        logger.warning(f"[自检服务] 🚫 {symbol} 触发自检平仓: {reasons}, live_engine绑定={live_engine_bound}")
 
         if self.futures_engine:
             result = self.futures_engine.close_position(
