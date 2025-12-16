@@ -65,6 +65,11 @@ class PositionValidator:
         self.trade_notifier = trade_notifier
         self.strategy_executor = strategy_executor
         self.running = False
+
+        # 检查 live_engine 绑定状态
+        if futures_engine:
+            live_engine_bound = hasattr(futures_engine, 'live_engine') and futures_engine.live_engine is not None
+            logger.info(f"[自检服务] 初始化完成, futures_engine={futures_engine is not None}, live_engine绑定={live_engine_bound}")
         self.task = None
         self.pending_task = None  # 待开仓自检任务
         # 记录已验证过的持仓（避免重复平仓）
