@@ -1439,10 +1439,25 @@ class StrategyExecutorV2:
 
             current_price = ema_data['current_price']
 
-            # ========== 信号触发后进入自检流程 ==========
-            # 信号 → 创建待开仓记录 → 自检通过 → 市价开单
-            # 这样可以避免追高杀跌，只有自检通过才开仓
+            # ========== 金叉/死叉信号直接市价开仓，其他信号走自检 ==========
+            is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover')
+            cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
 
+            if is_cross_signal and cross_signal_force_market:
+                # 金叉/死叉信号直接市价开仓，不走自检
+                logger.info(f"⚡ {symbol} {direction} 金叉/死叉信号，直接市价开仓")
+                return await self._do_open_position(
+                    symbol=symbol,
+                    direction=direction,
+                    signal_type=signal_type,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=signal_reason,
+                    current_price=current_price,
+                    ema_data=ema_data
+                )
+
+            # 其他信号（sustained_trend等）走自检流程
             from app.services.position_validator import get_position_validator
 
             position_validator = get_position_validator()
