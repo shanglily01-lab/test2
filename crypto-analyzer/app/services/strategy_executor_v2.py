@@ -1952,7 +1952,6 @@ class StrategyExecutorV2:
             if not open_result or not open_result.get('success'):
                 for direction in buy_directions:
                     can_entry, sustained_reason = self.check_sustained_trend_entry(symbol, direction, strategy)
-                    debug_info.append(f"持续趋势({direction}): {sustained_reason}")
 
                     if can_entry:
                         # 应用所有技术指标过滤器
