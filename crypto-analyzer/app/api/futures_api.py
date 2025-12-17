@@ -45,12 +45,14 @@ def get_db_connection():
         # 检查连接是否有效
         if _global_connection and _global_connection.open:
             _global_connection.ping(reconnect=True)
+            # 确保能读取最新数据（提交任何未完成的事务）
+            _global_connection.commit()
             return _global_connection
     except Exception:
         pass
 
-    # 创建新连接
-    _global_connection = pymysql.connect(**db_config)
+    # 创建新连接，启用自动提交
+    _global_connection = pymysql.connect(**db_config, autocommit=True)
     return _global_connection
 
 # 初始化Telegram通知服务
