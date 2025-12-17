@@ -52,7 +52,7 @@ class AutoFuturesTrader:
         # 初始化实盘引擎
         live_engine = None
         try:
-            live_engine = BinanceFuturesEngine(self.db_config, self.config)
+            live_engine = BinanceFuturesEngine(self.db_config)
             logger.info("✅ AutoFuturesTrader: 实盘引擎已初始化")
         except Exception as e:
             logger.warning(f"⚠️ AutoFuturesTrader: 实盘引擎初始化失败: {e}")

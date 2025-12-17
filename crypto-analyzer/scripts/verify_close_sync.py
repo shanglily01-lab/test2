@@ -48,7 +48,7 @@ def test_close_sync():
     # 初始化实盘引擎
     print("\n2. 初始化实盘引擎...")
     try:
-        live_engine = BinanceFuturesEngine(db_config, config)
+        live_engine = BinanceFuturesEngine(db_config)
         print(f"   live_engine 创建成功")
     except Exception as e:
         print(f"   ❌ live_engine 创建失败: {e}")
