@@ -27,7 +27,7 @@ from typing import Optional
 from app.services.strategy_executor import StrategyExecutor
 from app.services.strategy_executor_v2 import StrategyExecutorV2
 from app.services.strategy_test_service import StrategyTestService
-from app.services.position_validator import PositionValidator
+from app.services.position_validator import PositionValidator, init_position_validator
 from app.trading.futures_trading_engine import FuturesTradingEngine
 from app.trading.binance_futures_engine import BinanceFuturesEngine
 from app.analyzers.technical_indicators import TechnicalIndicators
@@ -112,14 +112,15 @@ class StrategyScheduler:
         )
         logger.info("  ✓ 策略测试服务初始化成功")
 
-        # 初始化开单自检服务
+        # 初始化开单自检服务（使用全局初始化函数，使其他模块可以通过 get_position_validator 获取实例）
         logger.info("初始化开单自检服务...")
-        self.position_validator = PositionValidator(
+        self.position_validator = init_position_validator(
             db_config=db_config,
             futures_engine=self.futures_engine,
-            trade_notifier=trade_notifier,
-            strategy_executor=self.strategy_executor
+            trade_notifier=trade_notifier
         )
+        # 设置 strategy_executor
+        self.position_validator.strategy_executor = self.strategy_executor
         logger.info("  ✓ 开单自检服务初始化成功")
 
         # 运行状态
