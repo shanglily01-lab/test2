@@ -40,6 +40,11 @@ class BinanceFuturesEngine:
     _cache_time = None
     _cache_duration = 3600  # 缓存1小时
 
+    # 挂单缓存（减少API调用）
+    _open_orders_cache = {}
+    _open_orders_cache_time = None
+    _open_orders_cache_duration = 5  # 缓存5秒
+
     def __init__(self, db_config: dict, api_key: str = None, api_secret: str = None, trade_notifier=None):
         """
         初始化币安实盘合约交易引擎
@@ -1382,8 +1387,23 @@ class BinanceFuturesEngine:
 
     # ==================== 订单查询 ====================
 
-    def get_open_orders(self, symbol: str = None) -> List[Dict]:
-        """获取挂单"""
+    def get_open_orders(self, symbol: str = None, force_refresh: bool = False) -> List[Dict]:
+        """获取挂单（带缓存）
+
+        Args:
+            symbol: 交易对（可选）
+            force_refresh: 强制刷新缓存
+        """
+        current_time = time.time()
+        cache_key = symbol or '__all__'
+
+        # 检查缓存是否有效
+        if not force_refresh and self._open_orders_cache_time:
+            if (current_time - self._open_orders_cache_time) < self._open_orders_cache_duration:
+                if cache_key in self._open_orders_cache:
+                    return self._open_orders_cache[cache_key]
+
+        # 缓存失效，重新请求
         params = {}
         if symbol:
             params['symbol'] = self._convert_symbol(symbol)
@@ -1393,7 +1413,16 @@ class BinanceFuturesEngine:
         if isinstance(result, dict) and result.get('success') == False:
             return []
 
+        # 更新缓存
+        self._open_orders_cache[cache_key] = result
+        self._open_orders_cache_time = current_time
+
         return result
+
+    def invalidate_orders_cache(self):
+        """清除挂单缓存（下单/撤单后调用）"""
+        self._open_orders_cache = {}
+        self._open_orders_cache_time = None
 
     def cancel_order(self, symbol: str, order_id: str) -> Dict:
         """取消订单"""

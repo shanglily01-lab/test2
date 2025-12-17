@@ -35,6 +35,24 @@ config = load_config()
 
 db_config = config['database']['mysql']
 
+# 全局数据库连接（复用连接，避免每次请求都重新建立）
+_global_connection = None
+
+def get_db_connection():
+    """获取数据库连接（复用全局连接）"""
+    global _global_connection
+    try:
+        # 检查连接是否有效
+        if _global_connection and _global_connection.open:
+            _global_connection.ping(reconnect=True)
+            return _global_connection
+    except Exception:
+        pass
+
+    # 创建新连接
+    _global_connection = get_db_connection()
+    return _global_connection
+
 # 初始化Telegram通知服务
 # 注意：模拟盘不需要TG通知，只有实盘需要
 # from app.services.trade_notifier import init_trade_notifier
@@ -110,7 +128,7 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
             positions = engine.get_open_positions(account_id)
         else:
             # 查询所有持仓（包括已平仓）
-            connection = pymysql.connect(**db_config)
+            connection = get_db_connection()
             cursor = connection.cursor(pymysql.cursors.DictCursor)
 
             sql = """
@@ -144,7 +162,7 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
 
             positions = cursor.fetchall()
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
 
             # 转换 Decimal 为 float
             for pos in positions:
@@ -185,7 +203,7 @@ async def update_stop_loss_take_profit(
         stop_loss_pct = request.stop_loss_pct
         take_profit_pct = request.take_profit_pct
         
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
         # 先获取持仓信息
@@ -198,7 +216,7 @@ async def update_stop_loss_take_profit(
         position = cursor.fetchone()
         if not position:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
             raise HTTPException(status_code=404, detail=f'持仓 {position_id} 不存在或已平仓')
         
         # 计算止损价和止盈价
@@ -249,7 +267,7 @@ async def update_stop_loss_take_profit(
         # 如果没有任何字段需要更新
         if not update_fields:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
             raise HTTPException(status_code=400, detail='至少需要提供止损价或止盈价')
         
         update_fields.append("last_update_time = NOW()")
@@ -269,7 +287,7 @@ async def update_stop_loss_take_profit(
             
             if affected_rows == 0:
                 cursor.close()
-                connection.close()
+                # connection.close()  # 复用连接，不关闭
                 logger.error(f"更新失败: 持仓 {position_id} 未找到或未更新任何行")
                 raise HTTPException(status_code=404, detail=f'持仓 {position_id} 未找到或更新失败')
             
@@ -303,7 +321,7 @@ async def update_stop_loss_take_profit(
             import traceback
             logger.error(traceback.format_exc())
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
             raise HTTPException(status_code=500, detail=f'更新失败: {str(e)}')
         
         return {
@@ -329,7 +347,7 @@ async def update_stop_loss_take_profit(
 async def get_position(position_id: int):
     """获取单个持仓详情"""
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         sql = """
@@ -366,7 +384,7 @@ async def get_position(position_id: int):
         cursor.execute(sql, (position_id,))
         position = cursor.fetchone()
         cursor.close()
-        connection.close()
+        # connection.close()  # 复用连接，不关闭
 
         if not position:
             raise HTTPException(status_code=404, detail=f'Position {position_id} not found')
@@ -447,15 +465,15 @@ async def open_position(request: OpenPositionRequest):
 async def get_orders(account_id: int = 2, status: str = 'PENDING'):
     """
     获取订单列表
-    
+
     - **account_id**: 账户ID（默认2）
     - **status**: 订单状态（PENDING, FILLED, PARTIALLY_FILLED, CANCELLED, REJECTED, all, pending）
         - pending: 获取所有未成交订单（PENDING 和 PARTIALLY_FILLED）
     """
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
-        
+
         sql = """
         SELECT
             id,
@@ -491,7 +509,7 @@ async def get_orders(account_id: int = 2, status: str = 'PENDING'):
         FROM futures_orders
         WHERE account_id = %s
         """
-        
+
         params = [account_id]
         if status == 'pending':
             # 获取所有未成交订单（PENDING 和 PARTIALLY_FILLED）
@@ -499,13 +517,13 @@ async def get_orders(account_id: int = 2, status: str = 'PENDING'):
         elif status != 'all':
             sql += " AND status = %s"
             params.append(status)
-        
+
         sql += " ORDER BY created_at DESC LIMIT 100"
-        
+
         cursor.execute(sql, params)
         orders = cursor.fetchall()
         cursor.close()
-        connection.close()
+        # 使用复用连接，不关闭
         
         # 转换 Decimal 为 float
         for order in orders:
@@ -549,7 +567,7 @@ async def update_order_stop_loss_take_profit(
     - **account_id**: 账户ID（默认2）
     """
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
         # 检查订单是否存在且未成交
@@ -563,7 +581,7 @@ async def update_order_stop_loss_take_profit(
         
         if not order:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
             raise HTTPException(status_code=404, detail="订单不存在或已成交")
         
         # 更新止盈止损价格
@@ -580,7 +598,7 @@ async def update_order_stop_loss_take_profit(
         
         if not update_fields:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
             raise HTTPException(status_code=400, detail="至少需要提供一个价格参数")
         
         params.extend([request.order_id, account_id])
@@ -593,7 +611,7 @@ async def update_order_stop_loss_take_profit(
         
         connection.commit()
         cursor.close()
-        connection.close()
+        # connection.close()  # 复用连接，不关闭
         
         return {
             'success': True,
@@ -624,7 +642,7 @@ async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual
     3. 调用币安API撤销实盘订单
     """
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         # 检查订单是否存在且未成交，同时获取订单详情用于同步实盘撤单
@@ -637,12 +655,12 @@ async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual
 
         if not order:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
             raise HTTPException(status_code=404, detail="订单不存在")
 
         if order['status'] not in ['PENDING', 'PARTIALLY_FILLED']:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
             raise HTTPException(status_code=400, detail=f"订单状态为 {order['status']}，无法撤销")
 
         # 提取订单信息用于同步实盘撤单
@@ -756,7 +774,7 @@ async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual
             traceback.print_exc()
 
         cursor.close()
-        connection.close()
+        # connection.close()  # 复用连接，不关闭
 
         result = {
             'success': True,
@@ -857,7 +875,7 @@ async def auto_open_from_signals(request: AutoOpenRequest):
         position_size_map = {k: Decimal(str(v)) for k, v in position_size_map.items()}
 
         # 获取投资建议
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         sql = """
@@ -875,7 +893,7 @@ async def auto_open_from_signals(request: AutoOpenRequest):
         cursor.execute(sql, target_symbols)
         recommendations = cursor.fetchall()
         cursor.close()
-        connection.close()
+        # connection.close()  # 复用连接，不关闭
 
         logger.info(f"Found {len(recommendations)} recommendations")
 
@@ -1012,7 +1030,7 @@ async def auto_open_from_signals(request: AutoOpenRequest):
 async def get_account(account_id: int):
     """获取账户信息"""
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         sql = """
@@ -1037,7 +1055,7 @@ async def get_account(account_id: int):
         cursor.execute(sql, (account_id,))
         account = cursor.fetchone()
         cursor.close()
-        connection.close()
+        # connection.close()  # 复用连接，不关闭
 
         if not account:
             raise HTTPException(status_code=404, detail=f'Account {account_id} not found')
@@ -1248,7 +1266,7 @@ async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_s
     - **page_size**: 每页记录数（默认10）
     """
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         # 先获取总数（只统计平仓交易）
@@ -1304,7 +1322,7 @@ async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_s
         cursor.execute(sql, (account_id, actual_limit, offset))
         trades = cursor.fetchall()
         cursor.close()
-        connection.close()
+        # connection.close()  # 复用连接，不关闭
 
         # 转换 Decimal 为 float，datetime 为字符串
         for trade in trades:
@@ -1378,7 +1396,7 @@ async def get_futures_strategies():
     try:
         import json
         
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
         try:
@@ -1441,7 +1459,7 @@ async def get_futures_strategies():
             
         finally:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
         
     except Exception as e:
         logger.error(f"获取策略配置失败: {e}")
@@ -1464,7 +1482,7 @@ async def save_futures_strategies(strategies: List[Dict] = Body(...)):
         if not isinstance(strategies, list):
             raise HTTPException(status_code=400, detail="策略配置必须是列表格式")
         
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         try:
@@ -1534,7 +1552,7 @@ async def save_futures_strategies(strategies: List[Dict] = Body(...)):
             raise
         finally:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
         
     except HTTPException:
         raise
@@ -1553,7 +1571,7 @@ async def delete_futures_strategy(strategy_id: int):
     - **strategy_id**: 策略ID
     """
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor()
         
         try:
@@ -1583,7 +1601,7 @@ async def delete_futures_strategy(strategy_id: int):
             raise
         finally:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
         
     except HTTPException:
         raise
@@ -1602,7 +1620,7 @@ async def toggle_futures_strategy(strategy_id: int):
     - **strategy_id**: 策略ID
     """
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
         
         try:
@@ -1639,7 +1657,7 @@ async def toggle_futures_strategy(strategy_id: int):
             raise
         finally:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
         
     except HTTPException:
         raise
@@ -1662,7 +1680,7 @@ async def toggle_strategy_sync_live(strategy_id: int, request: Request):
         body = await request.json()
         sync_live = body.get('sync_live', False)
 
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         try:
@@ -1700,7 +1718,7 @@ async def toggle_strategy_sync_live(strategy_id: int, request: Request):
             raise
         finally:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
 
     except HTTPException:
         raise
@@ -1715,7 +1733,7 @@ async def toggle_strategy_sync_live(strategy_id: int, request: Request):
 async def get_pending_positions():
     """获取待检查订单列表"""
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         cursor.execute("""
@@ -1742,7 +1760,7 @@ async def get_pending_positions():
         pending_list = cursor.fetchall()
 
         cursor.close()
-        connection.close()
+        # connection.close()  # 复用连接，不关闭
 
         # 转换datetime为字符串
         for item in pending_list:
@@ -1767,7 +1785,7 @@ async def get_pending_positions():
 async def delete_pending_position(position_id: int):
     """删除/取消待检查订单"""
     try:
-        connection = pymysql.connect(**db_config)
+        connection = get_db_connection()
         cursor = connection.cursor(pymysql.cursors.DictCursor)
 
         # 检查是否存在
@@ -1776,7 +1794,7 @@ async def delete_pending_position(position_id: int):
 
         if not position:
             cursor.close()
-            connection.close()
+            # connection.close()  # 复用连接，不关闭
             raise HTTPException(status_code=404, detail="待检查订单不存在")
 
         # 更新状态为已取消
@@ -1788,7 +1806,7 @@ async def delete_pending_position(position_id: int):
         connection.commit()
 
         cursor.close()
-        connection.close()
+        # connection.close()  # 复用连接，不关闭
 
         logger.info(f"已取消待检查订单: ID={position_id}")
 
