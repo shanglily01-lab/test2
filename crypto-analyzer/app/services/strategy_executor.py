@@ -64,7 +64,14 @@ class StrategyExecutor:
         """初始化实盘交易引擎（延迟加载）"""
         try:
             from app.trading.binance_futures_engine import BinanceFuturesEngine
-            self.live_engine = BinanceFuturesEngine(self.db_config)
+            from app.services.trade_notifier import init_trade_notifier
+            from app.utils.config_loader import load_config
+
+            # 加载配置并初始化通知服务
+            config = load_config()
+            trade_notifier = init_trade_notifier(config)
+
+            self.live_engine = BinanceFuturesEngine(self.db_config, trade_notifier=trade_notifier)
             logger.info("✅ 实盘交易引擎初始化成功")
 
             # 将实盘引擎传给模拟引擎，用于同步平仓

@@ -78,7 +78,14 @@ class StrategyExecutorV2:
         """初始化实盘交易引擎（与V1保持一致）"""
         try:
             from app.trading.binance_futures_engine import BinanceFuturesEngine
-            self.live_engine = BinanceFuturesEngine(self.db_config)
+            from app.services.trade_notifier import init_trade_notifier
+            from app.utils.config_loader import load_config
+
+            # 加载配置并初始化通知服务
+            config = load_config()
+            trade_notifier = init_trade_notifier(config)
+
+            self.live_engine = BinanceFuturesEngine(self.db_config, trade_notifier=trade_notifier)
             logger.info("✅ V2: 实盘交易引擎自动初始化成功")
         except Exception as e:
             self.live_engine_error = str(e)

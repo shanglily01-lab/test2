@@ -51,9 +51,9 @@ class StopLossMonitor:
         self.live_engine = None
         if binance_config and BinanceFuturesEngine:
             try:
-                # BinanceFuturesEngine(db_config, api_key, api_secret)
+                # BinanceFuturesEngine(db_config, trade_notifier=trade_notifier)
                 # 不传api_key和api_secret，让它自己从配置文件加载
-                self.live_engine = BinanceFuturesEngine(db_config)
+                self.live_engine = BinanceFuturesEngine(db_config, trade_notifier=trade_notifier)
                 logger.info("✅ 止损监控：实盘引擎已初始化")
             except Exception as e:
                 logger.warning(f"⚠️ 止损监控：实盘引擎初始化失败: {e}")

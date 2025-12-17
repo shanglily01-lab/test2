@@ -69,7 +69,7 @@ class StrategyScheduler:
         # 初始化实盘交易引擎
         logger.info("初始化实盘交易引擎...")
         try:
-            self.live_engine = BinanceFuturesEngine(db_config)
+            self.live_engine = BinanceFuturesEngine(db_config, trade_notifier=trade_notifier)
             logger.info("  ✓ 实盘交易引擎初始化成功")
             # 绑定live_engine到futures_engine，使模拟盘平仓能同步到实盘
             self.futures_engine.live_engine = self.live_engine
