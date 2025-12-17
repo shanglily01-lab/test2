@@ -928,18 +928,20 @@ class StrategyExecutorV2:
 
             # 注意：futures_positions 表使用 position_side 字段（LONG/SHORT）
             position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
+            # futures_orders 表使用 side 字段（OPEN_LONG/OPEN_SHORT）
+            order_side = f'OPEN_{position_side}'
 
             # 1. 先检查是否有 PENDING 状态的限价单（未成交）
-            # 注意：限价单写入 futures_positions 表，status='pending'
+            # 注意：限价单写入 futures_orders 表，status='PENDING'
             cursor.execute("""
-                SELECT created_at, position_side FROM futures_positions
+                SELECT created_at, side FROM futures_orders
                 WHERE symbol = %s AND strategy_id = %s
-                AND position_side = %s AND status = 'pending'
+                AND side = %s AND status = 'PENDING'
                 ORDER BY created_at DESC LIMIT 1
-            """, (symbol, strategy_id, position_side))
+            """, (symbol, strategy_id, order_side))
 
-            pending_position = cursor.fetchone()
-            if pending_position:
+            pending_order = cursor.fetchone()
+            if pending_order:
                 cursor.close()
                 conn.close()
                 return True, f"已有PENDING限价单等待成交"
