@@ -50,7 +50,7 @@ def get_db_connection():
         pass
 
     # 创建新连接
-    _global_connection = get_db_connection()
+    _global_connection = pymysql.connect(**db_config)
     return _global_connection
 
 # 初始化Telegram通知服务
