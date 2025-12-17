@@ -1986,6 +1986,11 @@ class StrategyExecutorV2:
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
+        # 打印信号检测日志
+        logger.info(f"📊 [{symbol}] 信号检测 | 价格:{current_price:.4f} | EMA9:{ema_data['ema9']:.4f} EMA26:{ema_data['ema26']:.4f} | 差值:{ema_data['ema_diff_pct']:.3f}%")
+        for dbg in debug_info:
+            logger.info(f"   [{symbol}] {dbg}")
+
         return {
             'symbol': symbol,
             'current_price': current_price,
@@ -2091,7 +2096,7 @@ class StrategyExecutorV2:
                 logger.debug("没有启用的策略")
                 return
 
-            logger.info(f"📊 V2执行器: 检查 {len(strategies)} 个策略")
+            logger.debug(f"📊 V2执行器: 检查 {len(strategies)} 个策略")
 
             for strategy in strategies:
                 try:
