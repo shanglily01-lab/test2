@@ -626,6 +626,24 @@ class BinanceFuturesEngine:
             logger.info(f"[实盘] 开仓订单已提交: order_id={order_id}, status={status}, "
                        f"executed={executed_qty}, avg_price={avg_price}")
 
+            # 7.5. 市价单如果未立即成交，等待并查询状态
+            if order_type == 'MARKET' and executed_qty == 0:
+                import time
+                for i in range(3):  # 最多等待3次，每次0.5秒
+                    time.sleep(0.5)
+                    order_status = self._request('GET', '/fapi/v1/order', {
+                        'symbol': binance_symbol,
+                        'orderId': order_id
+                    })
+                    if isinstance(order_status, dict) and order_status.get('status') == 'FILLED':
+                        executed_qty = Decimal(str(order_status.get('executedQty', '0')))
+                        avg_price = Decimal(str(order_status.get('avgPrice', '0')))
+                        if avg_price > 0:
+                            entry_price = avg_price
+                        logger.info(f"[实盘] 市价单已成交: executed={executed_qty}, avg_price={avg_price}")
+                        break
+                    logger.debug(f"[实盘] 等待市价单成交... ({i+1}/3)")
+
             # 8. 计算止盈止损价格
             if stop_loss_price is None and stop_loss_pct:
                 # 确保所有值都是 Decimal，避免 Decimal * float 的类型错误
@@ -650,7 +668,10 @@ class BinanceFuturesEngine:
             # 限价单不在此处设置止盈止损，由 live_order_monitor 统一处理
             is_limit_order = limit_price is not None
 
-            if stop_loss_price and executed_qty > 0 and not is_limit_order:
+            # 市价单：如果executed_qty仍为0，使用提交的quantity
+            order_qty = executed_qty if executed_qty > 0 else quantity
+
+            if stop_loss_price and order_qty > 0 and not is_limit_order:
                 # 验证止损价格
                 # 做多：止损价必须低于入场价
                 # 做空：止损价必须高于入场价
@@ -661,7 +682,7 @@ class BinanceFuturesEngine:
                     sl_valid = True
 
                 if sl_valid:
-                    sl_result = self._place_stop_loss(symbol, position_side, executed_qty, stop_loss_price)
+                    sl_result = self._place_stop_loss(symbol, position_side, order_qty, stop_loss_price)
                     if sl_result.get('success'):
                         sl_order_id = sl_result.get('order_id')
                         logger.info(f"[实盘] 止损单已设置: {stop_loss_price}")
@@ -670,7 +691,7 @@ class BinanceFuturesEngine:
                 else:
                     logger.warning(f"[实盘] 止损价 {stop_loss_price} 无效 ({position_side} 入场价 {entry_price})，跳过止损设置")
 
-            if take_profit_price and executed_qty > 0 and not is_limit_order:
+            if take_profit_price and order_qty > 0 and not is_limit_order:
                 # 验证止盈价格
                 # 做多：止盈价必须高于入场价
                 # 做空：止盈价必须低于入场价
@@ -681,7 +702,7 @@ class BinanceFuturesEngine:
                     tp_valid = True
 
                 if tp_valid:
-                    tp_result = self._place_take_profit(symbol, position_side, executed_qty, take_profit_price)
+                    tp_result = self._place_take_profit(symbol, position_side, order_qty, take_profit_price)
                     if tp_result.get('success'):
                         tp_order_id = tp_result.get('order_id')
                         logger.info(f"[实盘] 止盈单已设置: {take_profit_price}")
