@@ -231,9 +231,15 @@ async def lifespan(app: FastAPI):
         try:
             from app.services.futures_limit_order_executor import FuturesLimitOrderExecutor
             from app.trading.futures_trading_engine import FuturesTradingEngine
+            from app.services.position_validator import init_position_validator
 
             db_config = config.get('database', {}).get('mysql', {})
             futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier, live_engine=live_engine)
+
+            # 初始化 PositionValidator（供限价单超时转自检使用）
+            init_position_validator(db_config, futures_engine, trade_notifier)
+            logger.info("✅ PositionValidator 初始化成功（供限价单超时转自检）")
+
             futures_limit_order_executor = FuturesLimitOrderExecutor(
                 db_config=db_config,
                 trading_engine=futures_engine,
