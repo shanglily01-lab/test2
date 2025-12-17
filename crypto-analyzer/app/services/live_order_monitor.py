@@ -281,6 +281,7 @@ class LiveOrderMonitor:
                 SELECT p.id, p.account_id, p.binance_order_id, p.symbol, p.position_side, p.quantity,
                        p.stop_loss_price, p.take_profit_price, p.leverage, p.entry_price,
                        p.strategy_id, p.created_at, p.source,
+                       p.sl_order_id, p.tp_order_id,
                        COALESCE(
                            CAST(JSON_EXTRACT(s.config, '$.limitOrderTimeoutMinutes') AS UNSIGNED),
                            0
@@ -561,8 +562,28 @@ class LiveOrderMonitor:
         """设置止损止盈订单"""
         symbol = position['symbol']
         position_side = position['position_side']
+        position_id = position.get('id')
         stop_loss_price = position.get('stop_loss_price')
         take_profit_price = position.get('take_profit_price')
+
+        # 检查是否已经设置过止损止盈（市价单在 open_position 时已设置）
+        existing_sl_order_id = position.get('sl_order_id')
+        existing_tp_order_id = position.get('tp_order_id')
+
+        if existing_sl_order_id and existing_tp_order_id:
+            logger.info(f"[实盘监控] {symbol} 止损止盈已设置 (SL={existing_sl_order_id}, TP={existing_tp_order_id})，跳过重复设置")
+            return
+
+        # 如果部分已设置，只设置缺失的
+        if existing_sl_order_id:
+            stop_loss_price = None  # 跳过止损设置
+            logger.debug(f"[实盘监控] {symbol} 止损已存在，跳过止损设置")
+        if existing_tp_order_id:
+            take_profit_price = None  # 跳过止盈设置
+            logger.debug(f"[实盘监控] {symbol} 止盈已存在，跳过止盈设置")
+
+        if not stop_loss_price and not take_profit_price:
+            return
 
         # 获取当前价格用于验证
         try:

@@ -735,6 +735,19 @@ class BinanceFuturesEngine:
                 paper_position_id=paper_position_id
             )
 
+            # 更新止盈止损订单ID到数据库（防止 LiveOrderMonitor 重复设置）
+            if position_id and (sl_order_id or tp_order_id):
+                try:
+                    cursor = self._get_cursor()
+                    cursor.execute("""
+                        UPDATE live_futures_positions
+                        SET sl_order_id = %s, tp_order_id = %s
+                        WHERE id = %s
+                    """, (sl_order_id, tp_order_id, position_id))
+                    logger.debug(f"[实盘] 止盈止损订单ID已保存: SL={sl_order_id}, TP={tp_order_id}")
+                except Exception as e:
+                    logger.warning(f"[实盘] 保存止盈止损订单ID失败: {e}")
+
             # 发送Telegram通知
             try:
                 notifier = get_trade_notifier() if get_trade_notifier else None
