@@ -1658,8 +1658,8 @@ class StrategyExecutorV2:
             if not self.live_engine:
                 return None
 
-            # 实盘固定保证金模式：每笔100U保证金
-            live_margin = strategy.get('liveMarginPerTrade', 100)  # 默认100U保证金
+            # 实盘固定保证金模式：强制每笔100U保证金
+            live_margin = 100  # 固定100U保证金，不从策略读取
 
             # 获取当前价格
             current_price = self.live_engine.get_current_price(symbol)
