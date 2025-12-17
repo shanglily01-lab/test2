@@ -208,8 +208,43 @@ def verify_limit_order_logic():
     cursor.close()
     conn.close()
 
-    # 6. 诊断问题
-    print("\n【6. 问题诊断】")
+    # 6. 检查 validated 状态的待开仓记录对应的订单
+    print("\n【6. 检查 validated 记录对应的订单】")
+    conn = pymysql.connect(**db_config)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT p.id, p.symbol, p.direction, p.signal_type, p.created_at as pending_created,
+               o.order_id, o.order_type, o.status as order_status, o.created_at as order_created
+        FROM pending_positions p
+        LEFT JOIN futures_orders o ON o.symbol = p.symbol
+            AND o.side = CONCAT('OPEN_', UPPER(p.direction))
+            AND o.created_at >= p.created_at
+            AND o.created_at <= DATE_ADD(p.created_at, INTERVAL 5 MINUTE)
+        WHERE p.status = 'validated'
+        ORDER BY p.created_at DESC
+        LIMIT 5
+    """)
+    validated = cursor.fetchall()
+
+    if validated:
+        print(f"   最近 validated 的待开仓记录及对应订单:")
+        for v in validated:
+            print(f"   待开仓 #{v['id']}: {v['symbol']} {v['direction']} ({v['signal_type']})")
+            print(f"      待开仓创建时间: {v['pending_created']}")
+            if v['order_id']:
+                print(f"      订单: {v['order_id']} | 类型: {v['order_type']} | 状态: {v['order_status']}")
+                print(f"      订单创建时间: {v['order_created']}")
+            else:
+                print(f"      ⚠️ 未找到对应订单")
+    else:
+        print("   没有 validated 状态的待开仓记录")
+
+    cursor.close()
+    conn.close()
+
+    # 7. 诊断问题
+    print("\n【7. 问题诊断】")
     print("   根据以上信息分析：")
 
     if limit_count == 0:
