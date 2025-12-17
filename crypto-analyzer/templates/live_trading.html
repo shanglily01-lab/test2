@@ -561,11 +561,14 @@
         let currentPrice = 0;
 
         // 初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            testConnection();
-            loadAccountBalance();
-            loadPositions();
-            loadOrders();
+        document.addEventListener('DOMContentLoaded', async function() {
+            // 并行加载所有数据，加速页面初始化
+            await Promise.all([
+                testConnection(),
+                loadAccountBalance(),
+                loadPositions(),
+                loadOrders()
+            ]);
 
             // 定时刷新
             setInterval(loadPositions, 30000);
