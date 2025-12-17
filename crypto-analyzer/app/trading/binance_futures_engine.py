@@ -824,6 +824,111 @@ class BinanceFuturesEngine:
             'stop_price': float(stop_price)
         }
 
+    def update_stop_loss(self, symbol: str, position_side: str, quantity: Decimal,
+                         new_stop_loss_price: Decimal) -> Dict:
+        """
+        更新止损价格（用于移动止损同步）
+
+        先取消现有止损单，再设置新的止损单
+
+        Args:
+            symbol: 交易对
+            position_side: 'LONG' 或 'SHORT'
+            quantity: 数量
+            new_stop_loss_price: 新的止损价格
+
+        Returns:
+            操作结果
+        """
+        binance_symbol = self._convert_symbol(symbol)
+
+        try:
+            # 1. 查询并取消现有止损单
+            # 查询 Algo Orders
+            algo_orders = self._request('GET', '/fapi/v1/algoOrders', {
+                'symbol': binance_symbol
+            })
+
+            if isinstance(algo_orders, list):
+                for order in algo_orders:
+                    # 找到该持仓方向的止损单
+                    if (order.get('positionSide') == position_side and
+                        order.get('type') == 'STOP_MARKET' and
+                        order.get('status') in ('NEW', 'PENDING')):
+
+                        algo_id = order.get('algoId')
+                        if algo_id:
+                            # 取消旧止损单
+                            cancel_result = self._request('DELETE', '/fapi/v1/algoOrder', {
+                                'symbol': binance_symbol,
+                                'algoId': algo_id
+                            })
+                            logger.info(f"[移动止损] 取消旧止损单: algoId={algo_id}")
+
+            # 2. 设置新的止损单
+            result = self._place_stop_loss(symbol, position_side, quantity, new_stop_loss_price)
+
+            if result.get('success'):
+                logger.info(f"[移动止损] 新止损单已设置: {symbol} {position_side} @ {new_stop_loss_price}")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"[移动止损] 更新止损失败: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def update_take_profit(self, symbol: str, position_side: str, quantity: Decimal,
+                           new_take_profit_price: Decimal) -> Dict:
+        """
+        更新止盈价格（用于移动止盈同步）
+
+        先取消现有止盈单，再设置新的止盈单
+
+        Args:
+            symbol: 交易对
+            position_side: 'LONG' 或 'SHORT'
+            quantity: 数量
+            new_take_profit_price: 新的止盈价格
+
+        Returns:
+            操作结果
+        """
+        binance_symbol = self._convert_symbol(symbol)
+
+        try:
+            # 1. 查询并取消现有止盈单
+            algo_orders = self._request('GET', '/fapi/v1/algoOrders', {
+                'symbol': binance_symbol
+            })
+
+            if isinstance(algo_orders, list):
+                for order in algo_orders:
+                    # 找到该持仓方向的止盈单
+                    if (order.get('positionSide') == position_side and
+                        order.get('type') == 'TAKE_PROFIT_MARKET' and
+                        order.get('status') in ('NEW', 'PENDING')):
+
+                        algo_id = order.get('algoId')
+                        if algo_id:
+                            # 取消旧止盈单
+                            cancel_result = self._request('DELETE', '/fapi/v1/algoOrder', {
+                                'symbol': binance_symbol,
+                                'algoId': algo_id
+                            })
+                            logger.info(f"[移动止盈] 取消旧止盈单: algoId={algo_id}")
+
+            # 2. 设置新的止盈单
+            result = self._place_take_profit(symbol, position_side, quantity, new_take_profit_price)
+
+            if result.get('success'):
+                logger.info(f"[移动止盈] 新止盈单已设置: {symbol} {position_side} @ {new_take_profit_price}")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"[移动止盈] 更新止盈失败: {e}")
+            return {'success': False, 'error': str(e)}
+
     def _place_take_profit(self, symbol: str, position_side: str, quantity: Decimal,
                            take_profit_price: Decimal) -> Dict:
         """

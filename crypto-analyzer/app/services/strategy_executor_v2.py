@@ -1584,6 +1584,154 @@ class StrategyExecutorV2:
             logger.error(f"实盘同步开仓异常: {e}")
             return None
 
+    def _sync_live_stop_loss(self, position: Dict, new_stop_loss: float):
+        """
+        同步移动止损价格到实盘
+
+        Args:
+            position: 模拟盘持仓信息
+            new_stop_loss: 新的止损价格
+        """
+        if not self.live_engine:
+            return
+
+        symbol = position.get('symbol')
+        position_side = position.get('position_side', '').upper()
+        strategy_id = position.get('strategy_id')
+
+        try:
+            # 查找关联的实盘持仓
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT id, quantity, stop_loss_price
+                FROM live_futures_positions
+                WHERE symbol = %s AND position_side = %s AND strategy_id = %s AND status = 'OPEN'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (symbol, position_side, strategy_id))
+
+            live_position = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if not live_position:
+                logger.debug(f"[移动止损同步] {symbol} 未找到关联实盘持仓")
+                return
+
+            live_position_id = live_position['id']
+            quantity = live_position['quantity']
+            old_stop_loss = float(live_position.get('stop_loss_price') or 0)
+
+            # 检查是否需要更新（新止损价与旧止损价差异超过0.1%）
+            if old_stop_loss > 0:
+                diff_pct = abs(new_stop_loss - old_stop_loss) / old_stop_loss * 100
+                if diff_pct < 0.1:
+                    return
+
+            # 调用实盘引擎更新止损
+            result = self.live_engine.update_stop_loss(
+                symbol=symbol,
+                position_side=position_side,
+                quantity=quantity,
+                new_stop_loss_price=Decimal(str(new_stop_loss))
+            )
+
+            if result.get('success'):
+                logger.info(f"[移动止损同步] ✅ {symbol} {position_side} 止损价已同步: {old_stop_loss:.6f} -> {new_stop_loss:.6f}")
+
+                # 更新数据库中的止损价
+                conn = self.get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE live_futures_positions
+                    SET stop_loss_price = %s
+                    WHERE id = %s
+                """, (new_stop_loss, live_position_id))
+                conn.commit()
+                cursor.close()
+                conn.close()
+            else:
+                logger.warning(f"[移动止损同步] ⚠️ {symbol} 止损同步失败: {result.get('error')}")
+
+        except Exception as e:
+            logger.error(f"[移动止损同步] 异常: {e}")
+
+    def _sync_live_take_profit(self, position: Dict, new_take_profit: float):
+        """
+        同步移动止盈价格到实盘
+
+        Args:
+            position: 模拟盘持仓信息
+            new_take_profit: 新的止盈价格
+        """
+        if not self.live_engine:
+            return
+
+        symbol = position.get('symbol')
+        position_side = position.get('position_side', '').upper()
+        strategy_id = position.get('strategy_id')
+
+        try:
+            # 查找关联的实盘持仓
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT id, quantity, take_profit_price
+                FROM live_futures_positions
+                WHERE symbol = %s AND position_side = %s AND strategy_id = %s AND status = 'OPEN'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (symbol, position_side, strategy_id))
+
+            live_position = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if not live_position:
+                logger.debug(f"[移动止盈同步] {symbol} 未找到关联实盘持仓")
+                return
+
+            live_position_id = live_position['id']
+            quantity = live_position['quantity']
+            old_take_profit = float(live_position.get('take_profit_price') or 0)
+
+            # 检查是否需要更新（新止盈价与旧止盈价差异超过0.1%）
+            if old_take_profit > 0:
+                diff_pct = abs(new_take_profit - old_take_profit) / old_take_profit * 100
+                if diff_pct < 0.1:
+                    return
+
+            # 调用实盘引擎更新止盈
+            result = self.live_engine.update_take_profit(
+                symbol=symbol,
+                position_side=position_side,
+                quantity=quantity,
+                new_take_profit_price=Decimal(str(new_take_profit))
+            )
+
+            if result.get('success'):
+                logger.info(f"[移动止盈同步] ✅ {symbol} {position_side} 止盈价已同步: {old_take_profit:.6f} -> {new_take_profit:.6f}")
+
+                # 更新数据库中的止盈价
+                conn = self.get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE live_futures_positions
+                    SET take_profit_price = %s
+                    WHERE id = %s
+                """, (new_take_profit, live_position_id))
+                conn.commit()
+                cursor.close()
+                conn.close()
+            else:
+                logger.warning(f"[移动止盈同步] ⚠️ {symbol} 止盈同步失败: {result.get('error')}")
+
+        except Exception as e:
+            logger.error(f"[移动止盈同步] 异常: {e}")
+
     # ==================== 平仓执行 ====================
 
     async def execute_close_position(self, position: Dict, reason: str,
@@ -1732,6 +1880,14 @@ class StrategyExecutorV2:
                 self._update_position(position['id'], updates)
                 if updates.get('trailing_stop_activated'):
                     debug_info.append(f"✨ 移动止盈已激活，最高盈利={updates.get('max_profit_pct', 0):.2f}%")
+
+                # 同步移动止损到实盘
+                if updates.get('stop_loss_price') and self.live_engine and strategy.get('syncLive'):
+                    self._sync_live_stop_loss(position, updates['stop_loss_price'])
+
+                # 同步移动止盈（trailing_stop_price）到实盘止盈
+                if updates.get('trailing_stop_price') and self.live_engine and strategy.get('syncLive'):
+                    self._sync_live_take_profit(position, updates['trailing_stop_price'])
 
             # 执行平仓
             if close_needed:
