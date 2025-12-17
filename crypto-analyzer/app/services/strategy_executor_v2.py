@@ -1582,6 +1582,8 @@ class StrategyExecutorV2:
 
                 if result.get('success'):
                     position_id = result.get('position_id')
+                    order_type = result.get('order_type', 'MARKET')
+                    order_status = result.get('status', 'FILLED')
 
                     # 更新开仓时的EMA差值和开仓原因
                     conn = self.get_db_connection()
@@ -1599,15 +1601,19 @@ class StrategyExecutorV2:
                         cursor.close()
                         conn.close()
 
-                    logger.info(f"✅ {symbol} 开仓成功: {direction} {quantity:.8f} @ {current_price:.4f}, 信号:{signal_type}")
+                    logger.info(f"✅ {symbol} 开仓成功: {direction} {quantity:.8f} @ {current_price:.4f}, 信号:{signal_type}, 订单类型:{order_type}, 状态:{order_status}")
 
                     # 同步实盘
+                    # 重要：如果是 PENDING 限价单，不同步实盘，等限价单成交后由 FuturesLimitOrderExecutor 同步
                     live_position_id = None
-                    logger.info(f"[开仓] {symbol} sync_live={sync_live}, live_engine={self.live_engine is not None}")
-                    if sync_live and self.live_engine:
-                        live_position_id = await self._sync_live_open(symbol, direction, quantity, leverage, strategy, position_id)
-                    elif sync_live and not self.live_engine:
-                        logger.warning(f"⚠️ [开仓] {symbol} sync_live=True 但 live_engine 未初始化，无法同步实盘！live_engine_error={self.live_engine_error}")
+                    if order_type == 'LIMIT' and order_status == 'PENDING':
+                        logger.info(f"[开仓] {symbol} 限价单 PENDING 状态，暂不同步实盘，等待成交后同步")
+                    else:
+                        logger.info(f"[开仓] {symbol} sync_live={sync_live}, live_engine={self.live_engine is not None}")
+                        if sync_live and self.live_engine:
+                            live_position_id = await self._sync_live_open(symbol, direction, quantity, leverage, strategy, position_id)
+                        elif sync_live and not self.live_engine:
+                            logger.warning(f"⚠️ [开仓] {symbol} sync_live=True 但 live_engine 未初始化，无法同步实盘！live_engine_error={self.live_engine_error}")
 
                     # 保存实盘持仓ID到模拟盘持仓
                     if live_position_id:

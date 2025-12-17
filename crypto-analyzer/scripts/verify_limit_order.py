@@ -278,5 +278,185 @@ def verify_limit_order_logic():
     print("=" * 70)
 
 
+async def test_limit_order_open():
+    """
+    直接测试限价单开仓功能
+    调用 futures_trading_engine.open_position 传入限价参数，验证是否创建 LIMIT 订单
+    """
+    print("\n" + "=" * 70)
+    print("【测试限价单开仓】")
+    print("=" * 70)
+
+    # 导入必要的模块
+    from decimal import Decimal
+    from app.trading.futures_trading_engine import FuturesTradingEngine
+
+    # 初始化引擎
+    engine = FuturesTradingEngine()
+
+    # 测试参数
+    test_symbol = 'BTCUSDT'
+    test_account_id = 1  # 测试账户ID
+
+    # 获取当前价格
+    print(f"\n1. 获取 {test_symbol} 当前价格...")
+    current_price = engine.get_current_price(test_symbol)
+    if not current_price:
+        print(f"   ❌ 无法获取 {test_symbol} 价格")
+        return
+
+    print(f"   当前价格: {current_price}")
+
+    # 计算限价（做多用 market_minus_0_4，即当前价 -0.4%）
+    limit_price_long = Decimal(str(current_price)) * Decimal('0.996')
+    limit_price_long = limit_price_long.quantize(Decimal('0.01'))
+
+    # 计算限价（做空用 market_plus_0_4，即当前价 +0.4%）
+    limit_price_short = Decimal(str(current_price)) * Decimal('1.004')
+    limit_price_short = limit_price_short.quantize(Decimal('0.01'))
+
+    print(f"\n2. 限价计算:")
+    print(f"   做多限价 (market_minus_0_4): {limit_price_long} ({current_price} * 0.996)")
+    print(f"   做空限价 (market_plus_0_4): {limit_price_short} ({current_price} * 1.004)")
+
+    # 测试做多限价单
+    print(f"\n3. 测试做多限价单...")
+    print(f"   交易对: {test_symbol}")
+    print(f"   方向: LONG")
+    print(f"   限价: {limit_price_long}")
+    print(f"   当前价: {current_price}")
+    print(f"   预期: 当前价 > 限价 → 创建 PENDING 限价单")
+
+    # 计算最小数量（约 10 USDT）
+    quantity = Decimal('10') / limit_price_long
+    quantity = quantity.quantize(Decimal('0.001'))
+
+    print(f"   数量: {quantity}")
+
+    result = engine.open_position(
+        account_id=test_account_id,
+        symbol=test_symbol,
+        position_side='LONG',
+        quantity=quantity,
+        leverage=5,
+        limit_price=limit_price_long,
+        stop_loss_pct=Decimal('2'),
+        take_profit_pct=Decimal('3'),
+        source='test_limit_order',
+        signal_id=None,
+        strategy_id=None
+    )
+
+    print(f"\n   开仓结果:")
+    print(f"   success: {result.get('success')}")
+    print(f"   order_type: {result.get('order_type', 'N/A')}")
+    print(f"   status: {result.get('status', 'N/A')}")
+    print(f"   message: {result.get('message', 'N/A')}")
+
+    if result.get('success') and result.get('order_type') == 'LIMIT':
+        print(f"\n   ✅ 限价单测试成功！订单ID: {result.get('order_id')}")
+    elif result.get('success') and result.get('order_type') != 'LIMIT':
+        print(f"\n   ⚠️  开仓成功但不是限价单，order_type: {result.get('order_type')}")
+    else:
+        print(f"\n   ❌ 限价单测试失败")
+
+    # 4. 验证数据库中的订单
+    print(f"\n4. 验证数据库中的订单...")
+    conn = pymysql.connect(**db_config)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT order_id, symbol, side, order_type, status, price, created_at
+        FROM futures_orders
+        WHERE order_source = 'test_limit_order'
+        ORDER BY created_at DESC
+        LIMIT 5
+    """)
+    test_orders = cursor.fetchall()
+
+    if test_orders:
+        print(f"   测试创建的订单:")
+        print(f"   {'订单ID':<25} | {'类型':<8} | {'状态':<10} | {'价格':<12}")
+        print(f"   {'-'*25}-+-{'-'*8}-+-{'-'*10}-+-{'-'*12}")
+        for order in test_orders:
+            print(f"   {order['order_id']:<25} | {order['order_type']:<8} | {order['status']:<10} | {order['price']:<12}")
+    else:
+        print(f"   没有找到测试订单")
+
+    # 统计 LIMIT 类型订单
+    cursor.execute("""
+        SELECT COUNT(*) as cnt FROM futures_orders WHERE order_type = 'LIMIT'
+    """)
+    limit_count = cursor.fetchone()['cnt']
+    print(f"\n   数据库中 LIMIT 类型订单总数: {limit_count}")
+
+    cursor.close()
+    conn.close()
+
+    print("\n" + "=" * 70)
+    print("限价单测试完成")
+    print("=" * 70)
+
+
+def cleanup_test_orders():
+    """清理测试订单"""
+    print("\n【清理测试订单】")
+    conn = pymysql.connect(**db_config)
+    cursor = conn.cursor()
+
+    # 查找测试订单
+    cursor.execute("""
+        SELECT order_id, symbol, side, order_type, status, margin
+        FROM futures_orders
+        WHERE order_source = 'test_limit_order'
+    """)
+    test_orders = cursor.fetchall()
+
+    if not test_orders:
+        print("   没有找到测试订单")
+        cursor.close()
+        conn.close()
+        return
+
+    print(f"   找到 {len(test_orders)} 个测试订单")
+
+    for order in test_orders:
+        order_id = order['order_id']
+        status = order['status']
+        margin = order['margin'] or 0
+
+        # 如果是 PENDING 状态，需要解冻保证金
+        if status == 'PENDING':
+            print(f"   删除 PENDING 订单 {order_id}，解冻保证金 {margin}")
+            # 解冻保证金（简化处理，实际需要查询 fee）
+            cursor.execute("""
+                UPDATE paper_trading_accounts
+                SET current_balance = current_balance + %s,
+                    frozen_balance = frozen_balance - %s
+                WHERE id = 1
+            """, (float(margin) * 1.0004, float(margin) * 1.0004))
+
+        # 删除订单
+        cursor.execute("DELETE FROM futures_orders WHERE order_id = %s", (order_id,))
+        print(f"   已删除订单 {order_id}")
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("   清理完成")
+
+
 if __name__ == '__main__':
-    verify_limit_order_logic()
+    import argparse
+    parser = argparse.ArgumentParser(description='验证限价单逻辑')
+    parser.add_argument('--test', action='store_true', help='执行限价单开仓测试')
+    parser.add_argument('--cleanup', action='store_true', help='清理测试订单')
+    args = parser.parse_args()
+
+    if args.cleanup:
+        cleanup_test_orders()
+    elif args.test:
+        import asyncio
+        asyncio.run(test_limit_order_open())
+    else:
+        verify_limit_order_logic()
