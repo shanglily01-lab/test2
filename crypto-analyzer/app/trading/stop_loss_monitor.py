@@ -152,7 +152,10 @@ class StopLossMonitor:
                 take_profit_price,
                 liquidation_price,
                 unrealized_pnl,
-                open_time
+                open_time,
+                trailing_stop_activated,
+                trailing_stop_price,
+                strategy_id
             FROM futures_positions
             WHERE status = 'open'
             """
@@ -311,7 +314,11 @@ class StopLossMonitor:
 
     def should_trigger_stop_loss(self, position: Dict, current_price: Decimal) -> bool:
         """
-        判断是否触发止损
+        判断是否触发止损（包括固定止损和移动止损）
+
+        优先级：
+        1. 移动止损 (trailing_stop_price) - 当移动止盈激活后，使用移动止损价格
+        2. 固定止损 (stop_loss_price) - 开仓时设置的止损价格
 
         Args:
             position: 持仓信息
@@ -320,7 +327,37 @@ class StopLossMonitor:
         Returns:
             是否触发止损
         """
-        # 检查是否有止损价格
+        position_side = position['position_side']
+        symbol = position['symbol']
+        position_id = position['id']
+
+        # 检查移动止损价格（优先级更高，因为它会随着盈利上移/下移）
+        trailing_stop_activated = position.get('trailing_stop_activated', False)
+        trailing_stop_price = position.get('trailing_stop_price')
+
+        # 移动止损激活且有移动止损价格时，使用移动止损
+        if trailing_stop_activated and trailing_stop_price and trailing_stop_price > 0:
+            try:
+                trailing_stop_price = Decimal(str(trailing_stop_price))
+            except (ValueError, TypeError):
+                logger.warning(f"Position #{position_id} has invalid trailing_stop_price: {position.get('trailing_stop_price')}")
+                trailing_stop_price = None
+
+            if trailing_stop_price:
+                if position_side == 'LONG':
+                    # 多头：当前价格 <= 移动止损价
+                    if current_price <= trailing_stop_price:
+                        logger.info(f"🛑 移动止损触发 LONG #{position_id} {symbol}: "
+                                  f"current={current_price:.8f}, trailing_stop={trailing_stop_price:.8f}")
+                        return True
+                else:  # SHORT
+                    # 空头：当前价格 >= 移动止损价
+                    if current_price >= trailing_stop_price:
+                        logger.info(f"🛑 移动止损触发 SHORT #{position_id} {symbol}: "
+                                  f"current={current_price:.8f}, trailing_stop={trailing_stop_price:.8f}")
+                        return True
+
+        # 检查固定止损价格
         stop_loss_price = position.get('stop_loss_price')
         if not stop_loss_price or stop_loss_price == 0:
             return False
@@ -331,15 +368,11 @@ class StopLossMonitor:
             logger.warning(f"Position #{position['id']} has invalid stop_loss_price: {position.get('stop_loss_price')}")
             return False
 
-        position_side = position['position_side']
-        symbol = position['symbol']
-        position_id = position['id']
-
         if position_side == 'LONG':
             # 多头：当前价格 <= 止损价（价格跌破止损价）
             should_trigger = current_price <= stop_loss_price
             if should_trigger:
-                logger.info(f"🛑 Stop-loss triggered for LONG position #{position_id} {symbol}: "
+                logger.info(f"🛑 固定止损触发 LONG #{position_id} {symbol}: "
                           f"current={current_price:.8f}, stop_loss={stop_loss_price:.8f}")
                 return True
             else:
@@ -350,7 +383,7 @@ class StopLossMonitor:
             # 空头：当前价格 >= 止损价（价格涨破止损价）
             should_trigger = current_price >= stop_loss_price
             if should_trigger:
-                logger.info(f"🛑 Stop-loss triggered for SHORT position #{position_id} {symbol}: "
+                logger.info(f"🛑 固定止损触发 SHORT #{position_id} {symbol}: "
                           f"current={current_price:.8f}, stop_loss={stop_loss_price:.8f}")
                 return True
             else:
@@ -559,27 +592,37 @@ class StopLossMonitor:
                 'result': result
             }
 
-        # 优先级3: 检查固定止损（使用持仓中保存的止损价格）
+        # 优先级3: 检查止损（移动止损和固定止损）
         if self.should_trigger_stop_loss(position, current_price):
-            stop_loss_price = Decimal(str(position.get('stop_loss_price', 0)))
             entry_price = Decimal(str(position.get('entry_price', 0)))
             position_side = position.get('position_side', 'LONG')
 
-            # 判断是移动止损还是普通止损（根据当前盈亏判断）
+            # 判断是移动止损还是固定止损
+            trailing_stop_activated = position.get('trailing_stop_activated', False)
+            trailing_stop_price = position.get('trailing_stop_price')
+
+            if trailing_stop_activated and trailing_stop_price and trailing_stop_price > 0:
+                # 使用移动止损价格
+                actual_stop_price = Decimal(str(trailing_stop_price))
+                stop_type = 'trailing_stop'
+                stop_type_cn = '移动止损'
+            else:
+                # 使用固定止损价格
+                actual_stop_price = Decimal(str(position.get('stop_loss_price', 0)))
+                stop_type = 'stop_loss'
+                stop_type_cn = '固定止损'
+
+            # 计算当前盈亏
             if position_side == 'LONG':
                 pnl_pct = (current_price - entry_price) / entry_price * 100 if entry_price > 0 else 0
             else:
                 pnl_pct = (entry_price - current_price) / entry_price * 100 if entry_price > 0 else 0
 
-            is_trailing_stop = pnl_pct > 0
-            stop_type = 'trailing_stop' if is_trailing_stop else 'stop_loss'
-            stop_type_cn = '移动止损' if is_trailing_stop else '止损'
-
-            logger.info(f"🛑 {stop_type_cn} triggered for position #{position_id} {symbol} @ {current_price:.8f} (stop_loss={stop_loss_price:.8f}, pnl={pnl_pct:.2f}%)")
+            logger.info(f"🛑 {stop_type_cn} triggered for position #{position_id} {symbol} @ {current_price:.8f} (stop_price={actual_stop_price:.8f}, pnl={pnl_pct:.2f}%)")
             result = self.engine.close_position(
                 position_id=position_id,
                 reason=stop_type,
-                close_price=stop_loss_price  # 使用止损价格平仓
+                close_price=actual_stop_price  # 使用实际触发的止损价格平仓
             )
             # 同步平掉实盘仓位
             self._sync_close_live_position(position, stop_type)
@@ -588,7 +631,7 @@ class StopLossMonitor:
                 'symbol': symbol,
                 'status': stop_type,
                 'current_price': float(current_price),
-                'stop_loss_price': float(stop_loss_price),
+                'stop_loss_price': float(actual_stop_price),
                 'result': result
             }
 

@@ -1135,6 +1135,46 @@ class StrategyExecutorV2:
 
         return False, ""
 
+    def _calculate_limit_price(self, current_price: float, price_type: str, direction: str) -> Optional[float]:
+        """
+        根据价格类型计算限价
+
+        Args:
+            current_price: 当前市价
+            price_type: 价格类型 (market, market_minus_0_2, market_plus_0_6, etc.)
+            direction: 方向 (long/short)
+
+        Returns:
+            限价，如果是市价则返回None
+        """
+        if price_type == 'market':
+            return None
+
+        # 解析价格类型
+        # 做多: market_minus_X 表示市价减X%（更低的买入价）
+        # 做空: market_plus_X 表示市价加X%（更高的卖出价）
+        price_adjustments = {
+            'market_minus_0_2': -0.2,
+            'market_minus_0_4': -0.4,
+            'market_minus_0_6': -0.6,
+            'market_minus_0_8': -0.8,
+            'market_minus_1': -1.0,
+            'market_plus_0_2': 0.2,
+            'market_plus_0_4': 0.4,
+            'market_plus_0_6': 0.6,
+            'market_plus_0_8': 0.8,
+            'market_plus_1': 1.0,
+        }
+
+        adjustment_pct = price_adjustments.get(price_type)
+        if adjustment_pct is None:
+            logger.warning(f"未知的价格类型: {price_type}, 使用市价")
+            return None
+
+        # 计算限价
+        limit_price = current_price * (1 + adjustment_pct / 100)
+        return limit_price
+
     def check_trend_weakening(self, position: Dict, ema_data: Dict, current_price: float = None) -> Tuple[bool, str]:
         """
         检测趋势减弱（开仓后30分钟开始监控，且仅在盈利时触发）
@@ -1496,12 +1536,36 @@ class StrategyExecutorV2:
                 stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
                 take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
 
+                # ========== 限价单支持 ==========
+                # 读取价格类型配置
+                long_price_type = strategy.get('longPrice', 'market')
+                short_price_type = strategy.get('shortPrice', 'market')
+                cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
+
+                # 判断是否使用限价单
+                limit_price = None
+                is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover')
+
+                # 金叉/死叉信号且配置强制市价，则用市价单
+                if is_cross_signal and cross_signal_force_market:
+                    limit_price = None
+                else:
+                    # 根据方向选择价格类型
+                    price_type = long_price_type if direction == 'long' else short_price_type
+
+                    if price_type != 'market':
+                        # 计算限价
+                        limit_price = self._calculate_limit_price(current_price, price_type, direction)
+                        if limit_price:
+                            logger.info(f"[限价单] {symbol} {direction} 当前价:{current_price:.4f}, 限价:{limit_price:.4f}, 类型:{price_type}")
+
                 result = self.futures_engine.open_position(
                     account_id=account_id,
                     symbol=symbol,
                     position_side=position_side,
                     quantity=Decimal(str(quantity)),
                     leverage=leverage,
+                    limit_price=Decimal(str(limit_price)) if limit_price else None,
                     stop_loss_pct=Decimal(str(stop_loss_pct)),
                     take_profit_pct=Decimal(str(take_profit_pct)),
                     source='strategy',
@@ -1625,153 +1689,9 @@ class StrategyExecutorV2:
             logger.error(f"实盘同步开仓异常: {e}")
             return None
 
-    def _sync_live_stop_loss(self, position: Dict, new_stop_loss: float):
-        """
-        同步移动止损价格到实盘
-
-        Args:
-            position: 模拟盘持仓信息
-            new_stop_loss: 新的止损价格
-        """
-        if not self.live_engine:
-            return
-
-        symbol = position.get('symbol')
-        position_side = position.get('position_side', '').upper()
-        strategy_id = position.get('strategy_id')
-
-        try:
-            # 查找关联的实盘持仓
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                SELECT id, quantity, stop_loss_price
-                FROM live_futures_positions
-                WHERE symbol = %s AND position_side = %s AND strategy_id = %s AND status = 'OPEN'
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (symbol, position_side, strategy_id))
-
-            live_position = cursor.fetchone()
-            cursor.close()
-            conn.close()
-
-            if not live_position:
-                logger.debug(f"[移动止损同步] {symbol} 未找到关联实盘持仓")
-                return
-
-            live_position_id = live_position['id']
-            quantity = live_position['quantity']
-            old_stop_loss = float(live_position.get('stop_loss_price') or 0)
-
-            # 检查是否需要更新（新止损价与旧止损价差异超过0.1%）
-            if old_stop_loss > 0:
-                diff_pct = abs(new_stop_loss - old_stop_loss) / old_stop_loss * 100
-                if diff_pct < 0.1:
-                    return
-
-            # 调用实盘引擎更新止损
-            result = self.live_engine.update_stop_loss(
-                symbol=symbol,
-                position_side=position_side,
-                quantity=quantity,
-                new_stop_loss_price=Decimal(str(new_stop_loss))
-            )
-
-            if result.get('success'):
-                logger.info(f"[移动止损同步] ✅ {symbol} {position_side} 止损价已同步: {old_stop_loss:.6f} -> {new_stop_loss:.6f}")
-
-                # 更新数据库中的止损价
-                conn = self.get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("""
-                    UPDATE live_futures_positions
-                    SET stop_loss_price = %s
-                    WHERE id = %s
-                """, (new_stop_loss, live_position_id))
-                conn.commit()
-                cursor.close()
-                conn.close()
-            else:
-                logger.warning(f"[移动止损同步] ⚠️ {symbol} 止损同步失败: {result.get('error')}")
-
-        except Exception as e:
-            logger.error(f"[移动止损同步] 异常: {e}")
-
-    def _sync_live_take_profit(self, position: Dict, new_take_profit: float):
-        """
-        同步移动止盈价格到实盘
-
-        Args:
-            position: 模拟盘持仓信息
-            new_take_profit: 新的止盈价格
-        """
-        if not self.live_engine:
-            return
-
-        symbol = position.get('symbol')
-        position_side = position.get('position_side', '').upper()
-        strategy_id = position.get('strategy_id')
-
-        try:
-            # 查找关联的实盘持仓
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                SELECT id, quantity, take_profit_price
-                FROM live_futures_positions
-                WHERE symbol = %s AND position_side = %s AND strategy_id = %s AND status = 'OPEN'
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (symbol, position_side, strategy_id))
-
-            live_position = cursor.fetchone()
-            cursor.close()
-            conn.close()
-
-            if not live_position:
-                logger.debug(f"[移动止盈同步] {symbol} 未找到关联实盘持仓")
-                return
-
-            live_position_id = live_position['id']
-            quantity = live_position['quantity']
-            old_take_profit = float(live_position.get('take_profit_price') or 0)
-
-            # 检查是否需要更新（新止盈价与旧止盈价差异超过0.1%）
-            if old_take_profit > 0:
-                diff_pct = abs(new_take_profit - old_take_profit) / old_take_profit * 100
-                if diff_pct < 0.1:
-                    return
-
-            # 调用实盘引擎更新止盈
-            result = self.live_engine.update_take_profit(
-                symbol=symbol,
-                position_side=position_side,
-                quantity=quantity,
-                new_take_profit_price=Decimal(str(new_take_profit))
-            )
-
-            if result.get('success'):
-                logger.info(f"[移动止盈同步] ✅ {symbol} {position_side} 止盈价已同步: {old_take_profit:.6f} -> {new_take_profit:.6f}")
-
-                # 更新数据库中的止盈价
-                conn = self.get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("""
-                    UPDATE live_futures_positions
-                    SET take_profit_price = %s
-                    WHERE id = %s
-                """, (new_take_profit, live_position_id))
-                conn.commit()
-                cursor.close()
-                conn.close()
-            else:
-                logger.warning(f"[移动止盈同步] ⚠️ {symbol} 止盈同步失败: {result.get('error')}")
-
-        except Exception as e:
-            logger.error(f"[移动止盈同步] 异常: {e}")
+    # 注意：移动止损和移动止盈不同步到实盘
+    # 实盘的止损止盈在开仓时一次性设置，由币安交易所自动执行
+    # 模拟盘的移动止损/止盈只在模拟盘内部维护
 
     # ==================== 平仓执行 ====================
 
@@ -1921,13 +1841,8 @@ class StrategyExecutorV2:
                 if updates.get('trailing_stop_activated'):
                     debug_info.append(f"✨ 移动止盈已激活，最高盈利={updates.get('max_profit_pct', 0):.2f}%")
 
-                # 同步移动止损到实盘
-                if updates.get('stop_loss_price') and self.live_engine and strategy.get('syncLive'):
-                    self._sync_live_stop_loss(position, updates['stop_loss_price'])
-
-                # 同步移动止盈（trailing_stop_price）到实盘止盈
-                if updates.get('trailing_stop_price') and self.live_engine and strategy.get('syncLive'):
-                    self._sync_live_take_profit(position, updates['trailing_stop_price'])
+                # 注意：移动止损和移动止盈不同步到实盘
+                # 实盘的止损止盈由币安交易所自动执行
 
             # 执行平仓
             if close_needed:

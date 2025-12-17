@@ -10,6 +10,7 @@ from typing import Dict, Optional, List
 import pymysql
 import json
 from loguru import logger
+from app.services.position_validator import get_position_validator
 
 
 class FuturesLimitOrderExecutor:
@@ -368,6 +369,58 @@ class FuturesLimitOrderExecutor:
             logger.error(f"检查EMA状态时出错: {e}")
             return None
 
+    def _get_ema_data_for_validation(self, connection, symbol: str, timeframe: str = '15m') -> Optional[Dict]:
+        """
+        获取 EMA 数据用于创建待开仓记录
+
+        Args:
+            connection: 数据库连接
+            symbol: 交易对
+            timeframe: 时间周期
+
+        Returns:
+            EMA 数据字典，包含 ema9, ema26, ema_diff_pct, current_price 等
+        """
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY timestamp DESC
+                    LIMIT 50
+                """, (symbol, timeframe))
+                klines = cursor.fetchall()
+
+            if not klines or len(klines) < 30:
+                return None
+
+            # 将K线反转为正序（从旧到新）
+            prices = [float(k['close_price']) for k in reversed(klines)]
+
+            # 计算 EMA9 和 EMA26
+            ema9_values = self._calculate_ema(prices, 9)
+            ema26_values = self._calculate_ema(prices, 26)
+
+            if not ema9_values or not ema26_values:
+                return None
+
+            ema9 = ema9_values[-1]
+            ema26 = ema26_values[-1]
+            current_price = prices[-1]
+            ema_diff_pct = abs((ema9 - ema26) / ema26 * 100) if ema26 != 0 else 0
+
+            return {
+                'ema9': ema9,
+                'ema26': ema26,
+                'ema_diff_pct': ema_diff_pct,
+                'current_price': current_price
+            }
+
+        except Exception as e:
+            logger.error(f"获取EMA数据时出错: {e}")
+            return None
+
     async def check_and_execute_limit_orders(self):
         """检查并执行限价单（每次查询都创建新连接，确保获取最新数据）"""
         if not self.running:
@@ -565,103 +618,84 @@ class FuturesLimitOrderExecutor:
                                 else:
                                     logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟, 偏离 {deviation_pct:.2f}%")
 
-                                # 统一处理：检查EMA状态后决定是否市价执行
-                                if True:  # 保持原有缩进结构
-                                    # 价格偏离在可接受范围内，但在转市价之前需要检查EMA状态
-                                    # 如果EMA状态不再支持开仓方向，则取消订单而不是强行市价成交
-                                    ema_unfavorable_reason = self._check_ema_unfavorable(connection, order)
-                                    if ema_unfavorable_reason:
-                                        # EMA状态不利于开仓，取消订单
-                                        logger.info(f"⏰ 限价单超时取消(EMA不利): {symbol} {position_side} - {ema_unfavorable_reason}")
+                                # ========== 限价单超时：转入待开仓自检 ==========
+                                # 超时后不直接市价执行，而是创建待开仓记录，由 PositionValidator 进行自检
+                                # 自检通过后才能开仓，确保市场条件仍然满足
+                                logger.info(f"⏰ 限价单超时，转入待开仓自检: {symbol} {position_side}")
 
-                                        # 解冻保证金
-                                        frozen_margin = Decimal(str(order.get('margin', 0)))
-                                        if frozen_margin > 0:
-                                            with connection.cursor() as update_cursor:
-                                                update_cursor.execute(
-                                                    """UPDATE paper_trading_accounts
-                                                    SET current_balance = current_balance + %s,
-                                                        frozen_balance = GREATEST(0, frozen_balance - %s)
-                                                    WHERE id = %s""",
-                                                    (float(frozen_margin), float(frozen_margin), account_id)
-                                                )
+                                # 获取 PositionValidator 实例
+                                position_validator = get_position_validator()
+                                if not position_validator:
+                                    logger.error(f"❌ 限价单超时无法转自检: PositionValidator 未初始化")
+                                    continue
 
-                                        # 更新订单状态为已取消
-                                        with connection.cursor() as update_cursor:
-                                            update_cursor.execute(
-                                                """UPDATE futures_orders
-                                                SET status = 'CANCELLED',
-                                                    cancellation_reason = 'timeout_ema_unfavorable',
-                                                    canceled_at = NOW(),
-                                                    notes = CONCAT(COALESCE(notes, ''), ' TIMEOUT_EMA_UNFAVORABLE: ', %s)
-                                                WHERE order_id = %s""",
-                                                (ema_unfavorable_reason, order_id)
-                                            )
+                                # 解冻保证金（创建待开仓记录后，真正开仓时会重新冻结）
+                                frozen_margin = Decimal(str(order.get('margin', 0)))
+                                if frozen_margin > 0:
+                                    with connection.cursor() as update_cursor:
+                                        update_cursor.execute(
+                                            """UPDATE paper_trading_accounts
+                                            SET current_balance = current_balance + %s,
+                                                frozen_balance = GREATEST(0, frozen_balance - %s)
+                                            WHERE id = %s""",
+                                            (float(frozen_margin), float(frozen_margin), account_id)
+                                        )
 
-                                        connection.commit()
+                                # 更新限价单状态为 PENDING_VALIDATION（转入自检）
+                                with connection.cursor() as update_cursor:
+                                    update_cursor.execute(
+                                        """UPDATE futures_orders
+                                        SET status = 'CANCELLED',
+                                            cancellation_reason = 'timeout_to_validation',
+                                            canceled_at = NOW(),
+                                            notes = CONCAT(COALESCE(notes, ''), ' TIMEOUT_TO_VALIDATION')
+                                        WHERE order_id = %s""",
+                                        (order_id,)
+                                    )
 
-                                        # ========== 同步取消实盘订单 (EMA不利) ==========
+                                connection.commit()
+
+                                # 构造 EMA 数据（从 K 线获取）
+                                ema_data = self._get_ema_data_for_validation(connection, symbol)
+
+                                # 解析策略配置
+                                strategy_config = order.get('strategy_config')
+                                strategy = {}
+                                if strategy_config:
+                                    config = strategy_config
+                                    if isinstance(config, str):
                                         try:
-                                            strategy_config = order.get('strategy_config')
-                                            if strategy_config and self.live_engine:
-                                                config = strategy_config
-                                                if isinstance(config, str):
-                                                    try:
-                                                        config = json.loads(config)
-                                                    except:
-                                                        config = {}
+                                            config = json.loads(config)
+                                        except:
+                                            config = {}
+                                    if isinstance(config, dict):
+                                        strategy = config
 
-                                                sync_live = config.get('syncLive', False) if isinstance(config, dict) else False
-                                                if sync_live in (True, 1, "1", "true", "True"):
-                                                    # 查找对应的实盘PENDING持仓
-                                                    with connection.cursor() as cursor:
-                                                        cursor.execute("""
-                                                            SELECT id, binance_order_id
-                                                            FROM live_futures_positions
-                                                            WHERE symbol = %s
-                                                              AND position_side = %s
-                                                              AND status = 'PENDING'
-                                                            ORDER BY created_at DESC
-                                                            LIMIT 1
-                                                        """, (symbol, position_side))
-                                                        live_pos = cursor.fetchone()
+                                strategy['id'] = order.get('strategy_id')
+                                strategy['leverage'] = leverage
 
-                                                    if live_pos and live_pos.get('binance_order_id'):
-                                                        binance_order_id = live_pos['binance_order_id']
-                                                        logger.info(f"[同步实盘] 取消限价单(EMA不利): {symbol} {position_side}, 订单ID={binance_order_id}")
+                                # 创建待开仓记录
+                                direction = 'long' if side == 'OPEN_LONG' else 'short'
+                                pending_result = position_validator.create_pending_position(
+                                    symbol=symbol,
+                                    direction=direction,
+                                    signal_type='limit_order_timeout',
+                                    signal_price=float(current_price),
+                                    ema_data=ema_data or {},
+                                    strategy=strategy,
+                                    account_id=account_id,
+                                    signal_reason=f"限价单超时转自检 (原限价: {limit_price})"
+                                )
 
-                                                        # 调用实盘引擎取消订单
-                                                        cancel_result = self.live_engine.cancel_order(
-                                                            symbol=symbol,
-                                                            order_id=binance_order_id
-                                                        )
+                                if pending_result.get('success'):
+                                    logger.info(f"✅ 限价单超时转待开仓自检成功: {symbol} {position_side}, pending_id={pending_result.get('pending_id')}")
+                                else:
+                                    logger.error(f"❌ 限价单超时转待开仓自检失败: {symbol} {position_side} - {pending_result.get('error')}")
 
-                                                        if cancel_result.get('success'):
-                                                            # 更新实盘持仓状态
-                                                            with connection.cursor() as cursor:
-                                                                cursor.execute("""
-                                                                    UPDATE live_futures_positions
-                                                                    SET status = 'CANCELED',
-                                                                        close_reason = 'timeout_ema_unfavorable',
-                                                                        close_time = NOW(),
-                                                                        notes = CONCAT(COALESCE(notes, ''), ' SYNCED_CANCEL_EMA_UNFAVORABLE')
-                                                                    WHERE id = %s
-                                                                """, (live_pos['id'],))
-                                                            connection.commit()
-                                                            logger.info(f"[同步实盘] ✅ 限价单已取消(EMA不利): {symbol} {position_side}")
-                                                        else:
-                                                            error_msg = cancel_result.get('error', cancel_result.get('message', '未知错误'))
-                                                            logger.error(f"[同步实盘] ❌ 取消限价单失败(EMA不利): {symbol} {position_side} - {error_msg}")
-                                        except Exception as sync_ex:
-                                            logger.error(f"[同步实盘] ❌ 取消限价单异常(EMA不利): {symbol} {position_side} - {sync_ex}")
-                                        # ========== 同步取消实盘订单结束 ==========
+                                # 注意：限价单不同步到实盘，只有开仓成功后才同步
+                                # 实盘同步由 PositionValidator 自检通过后的开仓逻辑处理
 
-                                        continue  # 跳过此订单
-
-                                    # EMA状态仍然有利，可以市价执行
-                                    should_execute = True
-                                    execute_at_market = True
-                                    logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟, 偏离 {deviation_pct:.2f}%")
+                                continue  # 跳过此订单，已转入自检流程
 
                         # 如果没有超时，检查价格是否达到限价条件
                         if not should_execute:
