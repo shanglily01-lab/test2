@@ -1439,38 +1439,11 @@ class StrategyExecutorV2:
 
             current_price = ema_data['current_price']
 
-            # ========== 检查是否启用待开仓自检 ==========
-            pending_validation = strategy.get('pendingValidation', {})
-            pending_enabled = pending_validation.get('enabled', True)  # 默认启用
+            # ========== 信号触发后直接开仓（跳过自检）==========
+            # 自检改为在限价单超时后才执行，信号触发时直接创建限价单
+            # 这样避免：信号自检通过 → 创建限价单 → 超时 → 又自检 的重复流程
 
-            if pending_enabled and self.position_validator:
-                # 创建待开仓记录，由自检服务异步处理
-                result = self.position_validator.create_pending_position(
-                    symbol=symbol,
-                    direction=direction,
-                    signal_type=signal_type,
-                    signal_price=current_price,
-                    ema_data=ema_data,
-                    strategy=strategy,
-                    account_id=account_id,
-                    signal_reason=signal_reason or ""
-                )
-
-                if result.get('success'):
-                    logger.info(f"[开仓] ⏳ {symbol} {direction} 创建待开仓信号，等待自检")
-                    return {'success': True, 'pending': True, 'pending_id': result.get('pending_id'),
-                            'message': '已创建待开仓信号，等待自检通过后开仓'}
-                else:
-                    return {'success': False, 'error': result.get('error', '创建待开仓记录失败')}
-
-            # ========== 不启用待开仓自检，直接开仓 ==========
-            # 开仓前检查（旧逻辑）
-            pre_check = self.position_validator.validate_before_open(symbol, direction)
-            if not pre_check['allow_open']:
-                logger.info(f"[开仓前检查] 🚫 {symbol} {direction} 被拦截: {pre_check['reason']}")
-                return {'success': False, 'error': f"pre_check_failed: {pre_check['reason']}"}
-
-            # 直接执行开仓
+            # 直接执行开仓（会根据策略配置创建限价单或市价单）
             return await self._do_open_position(
                 symbol=symbol,
                 direction=direction,
