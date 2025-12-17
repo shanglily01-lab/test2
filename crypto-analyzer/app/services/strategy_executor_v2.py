@@ -926,9 +926,25 @@ class StrategyExecutorV2:
             current_time = self.get_local_time()
             cooldown_start = current_time - timedelta(minutes=cooldown_minutes)
 
-            # 查询冷却期内的开仓记录
             # 注意：futures_positions 表使用 position_side 字段（LONG/SHORT）
             position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
+
+            # 1. 先检查是否有 PENDING 状态的限价单（未成交）
+            order_side = 'BUY' if direction.lower() == 'long' else 'SELL'
+            cursor.execute("""
+                SELECT created_at, side FROM futures_orders
+                WHERE symbol = %s AND strategy_id = %s
+                AND side = %s AND status = 'PENDING' AND order_type = 'LIMIT'
+                ORDER BY created_at DESC LIMIT 1
+            """, (symbol, strategy_id, order_side))
+
+            pending_order = cursor.fetchone()
+            if pending_order:
+                cursor.close()
+                conn.close()
+                return True, f"已有PENDING限价单等待成交"
+
+            # 2. 查询冷却期内的开仓记录
             if per_direction:
                 # 按方向独立冷却：只查同方向的开仓
                 cursor.execute("""
@@ -1906,24 +1922,29 @@ class StrategyExecutorV2:
                 debug_info.append(f"连续趋势(5M放大): {signal_desc}")
 
                 if signal and signal in buy_directions:
+                    debug_info.append(f"✅ 连续趋势信号匹配方向: signal={signal}")
                     # 应用所有技术指标过滤器
                     filters_passed, filter_results = self.apply_all_filters(
                         symbol, signal, current_price, ema_data, strategy
                     )
                     debug_info.extend(filter_results)
+                    debug_info.append(f"📋 过滤器结果: filters_passed={filters_passed}")
 
                     if filters_passed:
                         # 检查开仓冷却
                         in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, signal, strategy, strategy_id)
+                        debug_info.append(f"⏰ 冷却检查: in_cooldown={in_cooldown}, msg={cooldown_msg}")
                         if in_cooldown:
                             debug_info.append(f"⏳ {cooldown_msg}")
                         else:
                             # 构建开仓原因
                             entry_reason = f"sustained_5m: {signal_desc}"
+                            debug_info.append(f"🚀 准备执行开仓: {entry_reason}")
                             open_result = await self.execute_open_position(
                                 symbol, signal, 'sustained_trend', strategy, account_id,
                                 signal_reason=entry_reason
                             )
+                            debug_info.append(f"📊 开仓结果: {open_result}")
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
