@@ -425,6 +425,7 @@ class FuturesTradingEngine:
                 }
 
             # 1.5. 检查限价单逻辑
+            logger.info(f"[开仓] {symbol} {position_side} 收到 limit_price={limit_price}, current_price={current_price}")
             # 如果设置了限价，检查是否需要创建未成交订单
             if limit_price and limit_price > 0:
                 should_create_pending_order = False

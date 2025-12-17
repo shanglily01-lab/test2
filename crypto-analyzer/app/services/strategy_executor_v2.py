@@ -1543,6 +1543,10 @@ class StrategyExecutorV2:
                 short_price_type = strategy.get('shortPrice', 'market')
                 cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
 
+                logger.info(f"[限价单调试] {symbol} {direction} signal_type={signal_type}, "
+                           f"longPrice={long_price_type}, shortPrice={short_price_type}, "
+                           f"crossSignalForceMarket={cross_signal_force_market}")
+
                 # 判断是否使用限价单
                 limit_price = None
                 is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover')
@@ -1550,13 +1554,16 @@ class StrategyExecutorV2:
                 # 金叉/死叉信号且配置强制市价，则用市价单
                 if is_cross_signal and cross_signal_force_market:
                     limit_price = None
+                    logger.info(f"[限价单调试] {symbol} 金叉/死叉信号强制市价，跳过限价单")
                 else:
                     # 根据方向选择价格类型
                     price_type = long_price_type if direction == 'long' else short_price_type
+                    logger.info(f"[限价单调试] {symbol} {direction} 选择价格类型: {price_type}")
 
                     if price_type != 'market':
                         # 计算限价
                         limit_price = self._calculate_limit_price(current_price, price_type, direction)
+                        logger.info(f"[限价单调试] {symbol} {direction} 计算限价: {limit_price}")
                         if limit_price:
                             logger.info(f"[限价单] {symbol} {direction} 当前价:{current_price:.4f}, 限价:{limit_price:.4f}, 类型:{price_type}")
 
