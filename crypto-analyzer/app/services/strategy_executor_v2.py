@@ -1439,21 +1439,45 @@ class StrategyExecutorV2:
 
             current_price = ema_data['current_price']
 
-            # ========== 信号触发后直接开仓（跳过自检）==========
-            # 自检改为在限价单超时后才执行，信号触发时直接创建限价单
-            # 这样避免：信号自检通过 → 创建限价单 → 超时 → 又自检 的重复流程
+            # ========== 信号触发后进入自检流程 ==========
+            # 信号 → 创建待开仓记录 → 自检通过 → 市价开单
+            # 这样可以避免追高杀跌，只有自检通过才开仓
 
-            # 直接执行开仓（会根据策略配置创建限价单或市价单）
-            return await self._do_open_position(
-                symbol=symbol,
-                direction=direction,
-                signal_type=signal_type,
-                strategy=strategy,
-                account_id=account_id,
-                signal_reason=signal_reason,
-                current_price=current_price,
-                ema_data=ema_data
-            )
+            from app.services.position_validator import get_position_validator
+
+            position_validator = get_position_validator()
+            if position_validator:
+                # 创建待开仓记录，由自检服务验证后开仓
+                result = position_validator.create_pending_position(
+                    symbol=symbol,
+                    direction=direction,
+                    signal_type=signal_type,
+                    signal_price=current_price,
+                    ema_data=ema_data,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=signal_reason
+                )
+
+                if result.get('success'):
+                    logger.info(f"📋 {symbol} {direction} 信号已进入自检队列，pending_id={result.get('pending_id')}")
+                    return {'success': True, 'pending': True, 'pending_id': result.get('pending_id')}
+                else:
+                    # 可能是已有相同的待开仓信号
+                    return {'success': False, 'error': result.get('error', '创建待开仓记录失败')}
+            else:
+                logger.warning(f"⚠️ 自检服务未初始化，直接市价开仓")
+                # 自检服务未初始化，回退到直接开仓
+                return await self._do_open_position(
+                    symbol=symbol,
+                    direction=direction,
+                    signal_type=signal_type,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=signal_reason,
+                    current_price=current_price,
+                    ema_data=ema_data
+                )
 
         except Exception as e:
             logger.error(f"开仓执行失败: {e}")
@@ -1528,35 +1552,9 @@ class StrategyExecutorV2:
                 stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
                 take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
 
-                # ========== 限价单支持 ==========
-                # 读取价格类型配置
-                long_price_type = strategy.get('longPrice', 'market')
-                short_price_type = strategy.get('shortPrice', 'market')
-                cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
-
-                logger.info(f"[限价单调试] {symbol} {direction} signal_type={signal_type}, "
-                           f"longPrice={long_price_type}, shortPrice={short_price_type}, "
-                           f"crossSignalForceMarket={cross_signal_force_market}")
-
-                # 判断是否使用限价单
-                limit_price = None
-                is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover')
-
-                # 金叉/死叉信号且配置强制市价，则用市价单
-                if is_cross_signal and cross_signal_force_market:
-                    limit_price = None
-                    logger.info(f"[限价单调试] {symbol} 金叉/死叉信号强制市价，跳过限价单")
-                else:
-                    # 根据方向选择价格类型
-                    price_type = long_price_type if direction == 'long' else short_price_type
-                    logger.info(f"[限价单调试] {symbol} {direction} 选择价格类型: {price_type}")
-
-                    if price_type != 'market':
-                        # 计算限价
-                        limit_price = self._calculate_limit_price(current_price, price_type, direction)
-                        logger.info(f"[限价单调试] {symbol} {direction} 计算限价: {limit_price}")
-                        if limit_price:
-                            logger.info(f"[限价单] {symbol} {direction} 当前价:{current_price:.4f}, 限价:{limit_price:.4f}, 类型:{price_type}")
+                # ========== 市价单开仓（已移除限价单逻辑）==========
+                # 限价单逻辑已移除，统一使用市价单
+                # 信号触发 → 自检 → 通过后市价开单
 
                 result = self.futures_engine.open_position(
                     account_id=account_id,
@@ -1564,7 +1562,7 @@ class StrategyExecutorV2:
                     position_side=position_side,
                     quantity=Decimal(str(quantity)),
                     leverage=leverage,
-                    limit_price=Decimal(str(limit_price)) if limit_price else None,
+                    limit_price=None,  # 统一使用市价单
                     stop_loss_pct=Decimal(str(stop_loss_pct)),
                     take_profit_pct=Decimal(str(take_profit_pct)),
                     source='strategy',
@@ -1592,19 +1590,14 @@ class StrategyExecutorV2:
                         cursor.close()
                         conn.close()
 
-                    logger.info(f"✅ {symbol} 开仓成功: {direction} {quantity:.8f} @ {current_price:.4f}, 信号:{signal_type}, 订单类型:{order_type}, 状态:{order_status}")
+                    logger.info(f"✅ {symbol} 开仓成功: {direction} {quantity:.8f} @ {current_price:.4f}, 信号:{signal_type}")
 
-                    # 同步实盘
-                    # 重要：如果是 PENDING 限价单，不同步实盘，等限价单成交后由 FuturesLimitOrderExecutor 同步
+                    # 同步实盘（市价单立即成交，直接同步）
                     live_position_id = None
-                    if order_type == 'LIMIT' and order_status == 'PENDING':
-                        logger.info(f"[开仓] {symbol} 限价单 PENDING 状态，暂不同步实盘，等待成交后同步")
-                    else:
-                        logger.info(f"[开仓] {symbol} sync_live={sync_live}, live_engine={self.live_engine is not None}")
-                        if sync_live and self.live_engine:
-                            live_position_id = await self._sync_live_open(symbol, direction, quantity, leverage, strategy, position_id)
-                        elif sync_live and not self.live_engine:
-                            logger.warning(f"⚠️ [开仓] {symbol} sync_live=True 但 live_engine 未初始化，无法同步实盘！live_engine_error={self.live_engine_error}")
+                    if sync_live and self.live_engine:
+                        live_position_id = await self._sync_live_open(symbol, direction, quantity, leverage, strategy, position_id)
+                    elif sync_live and not self.live_engine:
+                        logger.warning(f"⚠️ [开仓] {symbol} sync_live=True 但 live_engine 未初始化，无法同步实盘！")
 
                     # 保存实盘持仓ID到模拟盘持仓
                     if live_position_id:
