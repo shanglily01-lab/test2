@@ -682,7 +682,7 @@ class StopLossMonitor:
 
             # 查询对应的实盘仓位
             self._ensure_connection()
-            cursor = self.connection.cursor()
+            cursor = self.connection.cursor(pymysql.cursors.DictCursor)
             cursor.execute("""
                 SELECT id, quantity FROM live_futures_positions
                 WHERE symbol = %s AND position_side = %s AND strategy_id = %s AND status = 'OPEN'
@@ -737,7 +737,7 @@ class StopLossMonitor:
 
             # 从数据库获取策略配置
             self._ensure_connection()
-            cursor = self.connection.cursor()
+            cursor = self.connection.cursor(pymysql.cursors.DictCursor)
             cursor.execute("SELECT config FROM trading_strategies WHERE id = %s", (strategy_id,))
             strategy = cursor.fetchone()
             cursor.close()
@@ -775,7 +775,7 @@ class StopLossMonitor:
 
             # 获取K线数据
             symbol = position['symbol']
-            cursor = self.connection.cursor()
+            cursor = self.connection.cursor(pymysql.cursors.DictCursor)
             cursor.execute("""
                 SELECT open_price, close_price
                 FROM kline_data
