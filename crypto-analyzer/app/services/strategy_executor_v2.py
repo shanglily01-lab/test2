@@ -1508,7 +1508,8 @@ class StrategyExecutorV2:
                     return {'success': False, 'error': '账户不存在'}
 
                 balance = float(account['current_balance'])
-                margin = balance * (position_size_pct / 100)
+                # 固定保证金100U，不再使用账户余额百分比
+                margin = 100.0
                 notional = margin * leverage
                 quantity = notional / current_price
 
