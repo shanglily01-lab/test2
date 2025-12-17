@@ -690,7 +690,7 @@ class FuturesLimitOrderExecutor:
                                 if pending_result.get('success'):
                                     logger.info(f"✅ 限价单超时转待开仓自检成功: {symbol} {position_side}, pending_id={pending_result.get('pending_id')}")
                                 else:
-                                    logger.error(f"❌ 限价单超时转待开仓自检失败: {symbol} {position_side} - {pending_result.get('error')}")
+                                    logger.warning(f"⚠️ 限价单超时转待开仓自检: {symbol} {position_side} - {pending_result.get('error')}")
 
                                 # 注意：限价单不同步到实盘，只有开仓成功后才同步
                                 # 实盘同步由 PositionValidator 自检通过后的开仓逻辑处理

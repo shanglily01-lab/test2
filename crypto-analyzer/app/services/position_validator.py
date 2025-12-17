@@ -966,14 +966,14 @@ class PositionValidator:
 
             # 检查是否已有相同的待开仓信号
             cursor.execute("""
-                SELECT id FROM pending_positions
+                SELECT id, signal_type FROM pending_positions
                 WHERE symbol = %s AND direction = %s AND strategy_id = %s
                 AND status = 'pending'
             """, (symbol, direction, strategy_id))
 
             existing = cursor.fetchone()
             if existing:
-                logger.info(f"[待开仓] {symbol} {direction} 已有待开仓信号，跳过")
+                logger.info(f"[待开仓] {symbol} {direction} 已有待开仓信号(ID={existing['id']}, type={existing['signal_type']})，跳过")
                 return {'success': False, 'error': '已有相同的待开仓信号'}
 
             # 插入待开仓记录
