@@ -2007,10 +2007,10 @@ class StrategyExecutorV2:
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
-        # 打印信号检测日志
+        # 打印信号检测日志（只打印概要，详细信息改为debug级别）
         logger.info(f"📊 [{symbol}] 信号检测 | 价格:{current_price:.4f} | EMA9:{ema_data['ema9']:.4f} EMA26:{ema_data['ema26']:.4f} | 差值:{ema_data['ema_diff_pct']:.3f}%")
         for dbg in debug_info:
-            logger.info(f"   [{symbol}] {dbg}")
+            logger.debug(f"   [{symbol}] {dbg}")
 
         return {
             'symbol': symbol,
