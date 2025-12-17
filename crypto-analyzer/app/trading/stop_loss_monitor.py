@@ -46,7 +46,6 @@ class StopLossMonitor:
         self.connection = pymysql.connect(**db_config)
         self._connection_created_at = time.time()  # 连接创建时间（Unix时间戳）
         self._connection_max_age = 300  # 连接最大存活时间（秒），5分钟
-        self.engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
 
         # 初始化实盘引擎（如果提供了配置）
         self.live_engine = None
@@ -60,6 +59,9 @@ class StopLossMonitor:
                 logger.warning(f"⚠️ 止损监控：实盘引擎初始化失败: {e}")
                 import traceback
                 traceback.print_exc()
+
+        # 初始化模拟盘引擎，传入live_engine以便平仓同步
+        self.engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier, live_engine=self.live_engine)
 
         logger.info("StopLossMonitor initialized")
 

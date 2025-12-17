@@ -40,9 +40,6 @@ db_config = config['database']['mysql']
 # from app.services.trade_notifier import init_trade_notifier
 # trade_notifier = init_trade_notifier(config)
 
-# 初始化交易引擎（模拟盘不传入trade_notifier，不发送TG通知）
-engine = FuturesTradingEngine(db_config, trade_notifier=None)
-
 # 初始化实盘引擎（用于同步平仓）
 live_engine = None
 if BinanceFuturesEngine:
@@ -51,6 +48,9 @@ if BinanceFuturesEngine:
         logger.info("✅ Futures API: 实盘引擎已初始化")
     except Exception as e:
         logger.warning(f"⚠️ Futures API: 实盘引擎初始化失败: {e}")
+
+# 初始化交易引擎（模拟盘不传入trade_notifier，不发送TG通知，传入live_engine以便平仓同步）
+engine = FuturesTradingEngine(db_config, trade_notifier=None, live_engine=live_engine)
 
 
 # ==================== Pydantic Models ====================

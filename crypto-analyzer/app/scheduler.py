@@ -44,6 +44,7 @@ from app.database.db_service import DatabaseService
 from app.trading.auto_futures_trader import AutoFuturesTrader
 from app.trading.futures_trading_engine import FuturesTradingEngine
 from app.services.cache_update_service import CacheUpdateService
+from app.trading.binance_futures_engine import BinanceFuturesEngine
 
 
 class UnifiedDataScheduler:
@@ -156,7 +157,17 @@ class UnifiedDataScheduler:
         try:
             from app.services.trade_notifier import init_trade_notifier
             trade_notifier = init_trade_notifier(self.config)
-            self.futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
+
+            # 先初始化实盘引擎
+            live_engine = None
+            try:
+                live_engine = BinanceFuturesEngine(db_config, self.config)
+                logger.info("  ✓ 实盘交易引擎初始化成功")
+            except Exception as e:
+                logger.warning(f"  ⚠️ 实盘交易引擎初始化失败: {e}")
+
+            # 初始化模拟盘引擎，传入live_engine以便平仓同步
+            self.futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier, live_engine=live_engine)
             logger.info("  ✓ 合约交易引擎 (用于更新总权益)")
         except Exception as e:
             logger.warning(f"  ⊗ 合约交易引擎初始化失败: {e}")

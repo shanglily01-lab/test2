@@ -23,6 +23,7 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 
 from app.trading.futures_trading_engine import FuturesTradingEngine
+from app.trading.binance_futures_engine import BinanceFuturesEngine
 
 
 class AutoFuturesTrader:
@@ -48,7 +49,16 @@ class AutoFuturesTrader:
         from app.services.trade_notifier import init_trade_notifier
         trade_notifier = init_trade_notifier(self.config)
 
-        self.engine = FuturesTradingEngine(self.db_config, trade_notifier=trade_notifier)
+        # 初始化实盘引擎
+        live_engine = None
+        try:
+            live_engine = BinanceFuturesEngine(self.db_config, self.config)
+            logger.info("✅ AutoFuturesTrader: 实盘引擎已初始化")
+        except Exception as e:
+            logger.warning(f"⚠️ AutoFuturesTrader: 实盘引擎初始化失败: {e}")
+
+        # 初始化模拟盘引擎，传入live_engine以便平仓同步
+        self.engine = FuturesTradingEngine(self.db_config, trade_notifier=trade_notifier, live_engine=live_engine)
 
         # 交易配置
         self.account_id = 2  # 默认合约账户

@@ -56,7 +56,12 @@ class StrategyExecutorV2:
         self.db_config = db_config
         self.futures_engine = futures_engine
         self.live_engine = live_engine
+        self.live_engine_error = None  # 实盘引擎初始化错误
         self.LOCAL_TZ = timezone(timedelta(hours=8))
+
+        # 如果没有传入 live_engine，自动初始化（与V1保持一致）
+        if self.live_engine is None:
+            self._init_live_engine()
 
         # 将实盘引擎绑定到模拟引擎，用于同步平仓（与V1保持一致）
         if self.futures_engine and self.live_engine:
@@ -68,6 +73,16 @@ class StrategyExecutorV2:
 
         # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
         self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
+
+    def _init_live_engine(self):
+        """初始化实盘交易引擎（与V1保持一致）"""
+        try:
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            self.live_engine = BinanceFuturesEngine(self.db_config)
+            logger.info("✅ V2: 实盘交易引擎自动初始化成功")
+        except Exception as e:
+            self.live_engine_error = str(e)
+            logger.error(f"❌ V2: 实盘交易引擎初始化失败（实盘功能不可用）: {e}")
 
     def get_local_time(self) -> datetime:
         """获取本地时间（UTC+8）"""

@@ -71,6 +71,9 @@ class StrategyScheduler:
         try:
             self.live_engine = BinanceFuturesEngine(db_config, self.config)
             logger.info("  ✓ 实盘交易引擎初始化成功")
+            # 绑定live_engine到futures_engine，使模拟盘平仓能同步到实盘
+            self.futures_engine.live_engine = self.live_engine
+            logger.info("  ✓ 已绑定实盘引擎到模拟盘引擎")
         except Exception as e:
             logger.warning(f"  ⚠️ 实盘交易引擎初始化失败: {e}")
             self.live_engine = None
