@@ -3450,161 +3450,185 @@
                 if (!positionsBody) {
                     return;
                 }
-                
+
                 // 获取所有持仓卡片
                 const positionRows = positionsBody.querySelectorAll('.position-card[data-symbol]');
-                
+
                 if (positionRows.length === 0) {
                     // 如果没有持仓，尝试重新加载一次
                     await loadPositions();
                     return;
                 }
-                
-                // 为每个持仓更新价格和盈亏
-                await Promise.all(Array.from(positionRows).map(async (row) => {
+
+                // 收集所有需要获取价格的交易对
+                const symbolsSet = new Set();
+                const rowsData = [];
+                Array.from(positionRows).forEach(row => {
                     const symbol = row.getAttribute('data-symbol');
                     const positionId = row.getAttribute('data-position-id');
-                    if (!symbol || !positionId) {
+                    if (symbol && positionId) {
+                        symbolsSet.add(symbol);
+                        rowsData.push({ row, symbol, positionId });
+                    }
+                });
+
+                if (symbolsSet.size === 0) {
+                    return;
+                }
+
+                // 批量获取价格（单次API调用）
+                let pricesMap = {};
+                try {
+                    const priceResponse = await fetch('/api/futures/prices/batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ symbols: Array.from(symbolsSet) })
+                    });
+                    if (priceResponse.ok) {
+                        const priceData = await priceResponse.json();
+                        if (priceData.success && priceData.prices) {
+                            pricesMap = priceData.prices;
+                        }
+                    }
+                } catch (e) {
+                    console.error('批量获取价格失败:', e);
+                    return;
+                }
+
+                // 为每个持仓更新价格和盈亏
+                rowsData.forEach(({ row, symbol, positionId }) => {
+                    try {
+                        const priceInfo = pricesMap[symbol];
+                    if (!priceInfo || !priceInfo.price) {
                         return;
                     }
-                    
-                    try {
-                        // 获取实时价格（使用实时API）
-                        const priceUrl = `/api/futures/price/${encodeURIComponent(symbol)}`;
-                        const priceResponse = await fetch(priceUrl);
-                        if (priceResponse.ok) {
-                            const priceData = await priceResponse.json();
-                            if (priceData.success && priceData.price) {
-                                const currentPrice = parseFloat(priceData.price);
-                                
-                                // 获取持仓数据（从映射表或卡片数据，使用position_id作为键）
-                                let positionData = positionsDataMap[positionId];
-                                if (!positionData) {
-                                    // 从卡片文本中提取数据
-                                    const cardText = row.textContent;
-                                    const entryPriceMatch = cardText.match(/开仓价:\s*\$?([\d,]+\.?\d*)/);
-                                    const quantityMatch = cardText.match(/数量:\s*([\d,]+\.?\d*)/);
-                                    const marginMatch = cardText.match(/保证金:\s*([\d,]+\.?\d*)/);
-                                    const positionSide = row.querySelector('.badge-success') ? 'LONG' : 'SHORT';
-                                    
-                                    if (entryPriceMatch && quantityMatch && marginMatch) {
-                                        const entryPrice = parseFloat(entryPriceMatch[1].replace(/,/g, '')) || 0;
-                                        const quantity = parseFloat(quantityMatch[1].replace(/,/g, '')) || 0;
-                                        const margin = parseFloat(marginMatch[1].replace(/,/g, '')) || 0;
-                                        
-                                        positionData = {
-                                            entry_price: entryPrice,
-                                            quantity: quantity,
-                                            margin: margin,
-                                            position_side: positionSide
-                                        };
-                                        positionsDataMap[positionId] = positionData;
-                                    } else {
-                                        return; // 无法获取持仓数据，跳过
-                                    }
-                                }
-                                
-                                const { entry_price, quantity, margin, position_side } = positionData;
-                                
-                                // 计算实时盈亏
-                                let unrealizedPnl = 0;
-                                let unrealizedPnlPct = 0;
-                                
-                                // 确保所有值都是数字
-                                const currentPriceNum = parseFloat(currentPrice) || 0;
-                                const entryPriceNum = parseFloat(entry_price) || 0;
-                                const quantityNum = parseFloat(quantity) || 0;
-                                const marginNum = parseFloat(margin) || 0;
-                                
-                                if (currentPriceNum > 0 && entryPriceNum > 0 && quantityNum > 0) {
-                                    if (position_side === 'LONG') {
-                                        unrealizedPnl = (currentPriceNum - entryPriceNum) * quantityNum;
-                                    } else {
-                                        unrealizedPnl = (entryPriceNum - currentPriceNum) * quantityNum;
-                                    }
-                                    
-                                    // 盈亏百分比基于保证金计算
-                                    if (marginNum > 0) {
-                                        unrealizedPnlPct = (unrealizedPnl / marginNum) * 100;
-                                    }
-                                } else {
-                                    return; // 数据无效，跳过
-                                }
-                                
-                                // 更新价格显示 - 尝试多种选择器
-                                let priceCell = row.querySelector('.current-price-cell[data-symbol="' + symbol + '"]');
-                                if (!priceCell) {
-                                    // 尝试其他可能的选择器
-                                    priceCell = row.querySelector('[data-symbol="' + symbol + '"].current-price-cell');
-                                }
-                                if (!priceCell) {
-                                    // 尝试查找包含价格的单元格
-                                    const allCells = row.querySelectorAll('td, .cell, [class*="price"]');
-                                    for (let cell of allCells) {
-                                        if (cell.textContent.includes('$') || cell.textContent.match(/[\d,]+\.?\d*/)) {
-                                            priceCell = cell;
-                                            break;
-                                        }
-                                    }
-                                }
-                                
-                                if (priceCell) {
-                                    priceCell.textContent = '$' + formatPrice(currentPrice);
-                                    
-                                    // 根据价格变化添加颜色标注
-                                    if (currentPrice > entry_price) {
-                                        priceCell.style.color = 'var(--success-green)';
-                                    } else if (currentPrice < entry_price) {
-                                        priceCell.style.color = 'var(--danger-red)';
-                                    } else {
-                                        priceCell.style.color = 'var(--primary-blue)';
-                                    }
-                                }
-                                
-                                // 更新止盈止损输入框的值（只有在输入框没有焦点时才更新，避免覆盖用户正在输入的值）
-                                if (positionId) {
-                                    const stopLossInput = document.getElementById(`stopLoss_${positionId}`);
-                                    const takeProfitInput = document.getElementById(`takeProfit_${positionId}`);
-                                    
-                                    // 只有当输入框没有焦点时，才从数据库更新值
-                                    if (stopLossInput && document.activeElement !== stopLossInput) {
-                                        // 不更新，保持用户输入的值
-                                    }
-                                    if (takeProfitInput && document.activeElement !== takeProfitInput) {
-                                        // 不更新，保持用户输入的值
-                                    }
-                                }
-                                
-                                // 更新未实现盈亏（卡片样式，使用position_id作为唯一标识）
-                                let pnlCell = row.querySelector(`[data-pnl="${positionId}"]`);
-                                if (pnlCell) {
-                                    const pnlClass = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                                    pnlCell.className = `${pnlClass} font-mono`;
-                                    let formattedPnl = formatLargeNumber(unrealizedPnl);
-                                    const newPnlText = (unrealizedPnl >= 0 ? '+' : '') + formattedPnl;
-                                    pnlCell.textContent = newPnlText;
-                                }
-                                
-                                // 更新未实现盈亏百分比（卡片样式，使用position_id作为唯一标识）
-                                let pnlPctCell = row.querySelector(`[data-pnl-pct="${positionId}"]`);
-                                if (pnlPctCell) {
-                                    const pnlClass = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                                    pnlPctCell.className = pnlClass;
-                                    const newPnlPctText = (unrealizedPnlPct >= 0 ? '+' : '') + unrealizedPnlPct.toFixed(2) + '%';
-                                    pnlPctCell.textContent = newPnlPctText;
-                                }
-                                
-                                // 更新映射表中的数据
-                                positionData.current_price = currentPrice;
-                                positionData.unrealized_pnl = unrealizedPnl;
-                                positionData.unrealized_pnl_pct = unrealizedPnlPct;
+                    const currentPrice = parseFloat(priceInfo.price);
+
+                    // 获取持仓数据（从映射表或卡片数据，使用position_id作为键）
+                    let positionData = positionsDataMap[positionId];
+                    if (!positionData) {
+                        // 从卡片文本中提取数据
+                        const cardText = row.textContent;
+                        const entryPriceMatch = cardText.match(/开仓价:\s*\$?([\d,]+\.?\d*)/);
+                        const quantityMatch = cardText.match(/数量:\s*([\d,]+\.?\d*)/);
+                        const marginMatch = cardText.match(/保证金:\s*([\d,]+\.?\d*)/);
+                        const positionSide = row.querySelector('.badge-success') ? 'LONG' : 'SHORT';
+
+                        if (entryPriceMatch && quantityMatch && marginMatch) {
+                            const entryPrice = parseFloat(entryPriceMatch[1].replace(/,/g, '')) || 0;
+                            const quantity = parseFloat(quantityMatch[1].replace(/,/g, '')) || 0;
+                            const margin = parseFloat(marginMatch[1].replace(/,/g, '')) || 0;
+
+                            positionData = {
+                                entry_price: entryPrice,
+                                quantity: quantity,
+                                margin: margin,
+                                position_side: positionSide
+                            };
+                            positionsDataMap[positionId] = positionData;
+                        } else {
+                            return; // 无法获取持仓数据，跳过
+                        }
+                    }
+
+                    const { entry_price, quantity, margin, position_side } = positionData;
+
+                    // 计算实时盈亏
+                    let unrealizedPnl = 0;
+                    let unrealizedPnlPct = 0;
+
+                    // 确保所有值都是数字
+                    const currentPriceNum = parseFloat(currentPrice) || 0;
+                    const entryPriceNum = parseFloat(entry_price) || 0;
+                    const quantityNum = parseFloat(quantity) || 0;
+                    const marginNum = parseFloat(margin) || 0;
+
+                    if (currentPriceNum > 0 && entryPriceNum > 0 && quantityNum > 0) {
+                        if (position_side === 'LONG') {
+                            unrealizedPnl = (currentPriceNum - entryPriceNum) * quantityNum;
+                        } else {
+                            unrealizedPnl = (entryPriceNum - currentPriceNum) * quantityNum;
+                        }
+
+                        // 盈亏百分比基于保证金计算
+                        if (marginNum > 0) {
+                            unrealizedPnlPct = (unrealizedPnl / marginNum) * 100;
+                        }
+                    } else {
+                        return; // 数据无效，跳过
+                    }
+
+                    // 更新价格显示 - 尝试多种选择器
+                    let priceCell = row.querySelector('.current-price-cell[data-symbol="' + symbol + '"]');
+                    if (!priceCell) {
+                        // 尝试其他可能的选择器
+                        priceCell = row.querySelector('[data-symbol="' + symbol + '"].current-price-cell');
+                    }
+                    if (!priceCell) {
+                        // 尝试查找包含价格的单元格
+                        const allCells = row.querySelectorAll('td, .cell, [class*="price"]');
+                        for (let cell of allCells) {
+                            if (cell.textContent.includes('$') || cell.textContent.match(/[\d,]+\.?\d*/)) {
+                                priceCell = cell;
+                                break;
                             }
                         }
+                    }
+
+                    if (priceCell) {
+                        priceCell.textContent = '$' + formatPrice(currentPrice);
+
+                        // 根据价格变化添加颜色标注
+                        if (currentPrice > entry_price) {
+                            priceCell.style.color = 'var(--success-green)';
+                        } else if (currentPrice < entry_price) {
+                            priceCell.style.color = 'var(--danger-red)';
+                        } else {
+                            priceCell.style.color = 'var(--primary-blue)';
+                        }
+                    }
+
+                    // 更新止盈止损输入框的值（只有在输入框没有焦点时才更新，避免覆盖用户正在输入的值）
+                    if (positionId) {
+                        const stopLossInput = document.getElementById(`stopLoss_${positionId}`);
+                        const takeProfitInput = document.getElementById(`takeProfit_${positionId}`);
+
+                        // 只有当输入框没有焦点时，才从数据库更新值
+                        if (stopLossInput && document.activeElement !== stopLossInput) {
+                            // 不更新，保持用户输入的值
+                        }
+                        if (takeProfitInput && document.activeElement !== takeProfitInput) {
+                            // 不更新，保持用户输入的值
+                        }
+                    }
+
+                    // 更新未实现盈亏（卡片样式，使用position_id作为唯一标识）
+                    let pnlCell = row.querySelector(`[data-pnl="${positionId}"]`);
+                    if (pnlCell) {
+                        const pnlClass = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                        pnlCell.className = `${pnlClass} font-mono`;
+                        let formattedPnl = formatLargeNumber(unrealizedPnl);
+                        const newPnlText = (unrealizedPnl >= 0 ? '+' : '') + formattedPnl;
+                        pnlCell.textContent = newPnlText;
+                    }
+
+                    // 更新未实现盈亏百分比（卡片样式，使用position_id作为唯一标识）
+                    let pnlPctCell = row.querySelector(`[data-pnl-pct="${positionId}"]`);
+                    if (pnlPctCell) {
+                        const pnlClass = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                        pnlPctCell.className = pnlClass;
+                        const newPnlPctText = (unrealizedPnlPct >= 0 ? '+' : '') + unrealizedPnlPct.toFixed(2) + '%';
+                        pnlPctCell.textContent = newPnlPctText;
+                    }
+
+                    // 更新映射表中的数据
+                    positionData.current_price = currentPrice;
+                    positionData.unrealized_pnl = unrealizedPnl;
+                    positionData.unrealized_pnl_pct = unrealizedPnlPct;
                     } catch (e) {
                         console.error(`updatePositionsPrices: ${symbol} 更新失败`, e);
-                        console.error(`updatePositionsPrices: ${symbol} 错误堆栈:`, e.stack);
                     }
-                }));
+                });
                 
                 // 更新账户信息中的未实现盈亏总和
                 const totalUnrealizedPnl = Object.values(positionsDataMap).reduce((sum, pos) => {
