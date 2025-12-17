@@ -213,16 +213,12 @@ def verify_limit_order_logic():
     conn = pymysql.connect(**db_config)
     cursor = conn.cursor()
 
+    # 先获取 validated 的待开仓记录
     cursor.execute("""
-        SELECT p.id, p.symbol, p.direction, p.signal_type, p.created_at as pending_created,
-               o.order_id, o.order_type, o.status as order_status, o.created_at as order_created
-        FROM pending_positions p
-        LEFT JOIN futures_orders o ON o.symbol = p.symbol
-            AND o.side = CONCAT('OPEN_', UPPER(p.direction))
-            AND o.created_at >= p.created_at
-            AND o.created_at <= DATE_ADD(p.created_at, INTERVAL 5 MINUTE)
-        WHERE p.status = 'validated'
-        ORDER BY p.created_at DESC
+        SELECT id, symbol, direction, signal_type, created_at
+        FROM pending_positions
+        WHERE status = 'validated'
+        ORDER BY created_at DESC
         LIMIT 5
     """)
     validated = cursor.fetchall()
@@ -230,11 +226,31 @@ def verify_limit_order_logic():
     if validated:
         print(f"   最近 validated 的待开仓记录及对应订单:")
         for v in validated:
-            print(f"   待开仓 #{v['id']}: {v['symbol']} {v['direction']} ({v['signal_type']})")
-            print(f"      待开仓创建时间: {v['pending_created']}")
-            if v['order_id']:
-                print(f"      订单: {v['order_id']} | 类型: {v['order_type']} | 状态: {v['order_status']}")
-                print(f"      订单创建时间: {v['order_created']}")
+            pending_id = v['id']
+            symbol = v['symbol']
+            direction = v['direction']
+            signal_type = v['signal_type']
+            created_at = v['created_at']
+
+            print(f"   待开仓 #{pending_id}: {symbol} {direction} ({signal_type})")
+            print(f"      待开仓创建时间: {created_at}")
+
+            # 单独查询对应订单
+            side = f"OPEN_{direction.upper()}"
+            cursor.execute("""
+                SELECT order_id, order_type, status, created_at
+                FROM futures_orders
+                WHERE symbol = %s AND side = %s
+                AND created_at >= %s
+                AND created_at <= DATE_ADD(%s, INTERVAL 5 MINUTE)
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (symbol, side, created_at, created_at))
+            order = cursor.fetchone()
+
+            if order:
+                print(f"      订单: {order['order_id']} | 类型: {order['order_type']} | 状态: {order['status']}")
+                print(f"      订单创建时间: {order['created_at']}")
             else:
                 print(f"      ⚠️ 未找到对应订单")
     else:
