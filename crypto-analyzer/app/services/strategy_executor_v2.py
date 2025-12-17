@@ -1828,6 +1828,7 @@ class StrategyExecutorV2:
                                buy_directions: List[str], account_id: int) -> Dict:
         """执行单个交易对的策略"""
         debug_info = []
+        debug_info.append(f"允许方向: {buy_directions}")
 
         # 1. 获取EMA数据
         ema_data = self.get_ema_data(symbol, '15m', 50)
