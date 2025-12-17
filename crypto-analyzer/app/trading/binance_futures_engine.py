@@ -1333,7 +1333,10 @@ class BinanceFuturesEngine:
                     continue
 
                 symbol = self._reverse_symbol(pos.get('symbol', ''))
-                position_side = 'LONG' if position_amt > 0 else 'SHORT'
+                # 双向持仓模式使用 positionSide 字段，单向模式根据 positionAmt 判断
+                position_side = pos.get('positionSide', 'BOTH')
+                if position_side == 'BOTH':
+                    position_side = 'LONG' if position_amt > 0 else 'SHORT'
                 entry_price = Decimal(str(pos.get('entryPrice', '0')))
                 mark_price = Decimal(str(pos.get('markPrice', '0')))
                 unrealized_pnl = Decimal(str(pos.get('unRealizedProfit', '0')))

@@ -1761,9 +1761,8 @@ class StrategyExecutorV2:
                 if result.get('success'):
                     logger.info(f"✅ {symbol} 平仓成功: {reason}")
 
-                    # 同步实盘平仓
-                    if sync_live and self.live_engine:
-                        await self._sync_live_close(position, strategy)
+                    # 注意: 实盘同步平仓已在 futures_engine.close_position 内部处理
+                    # 无需再次调用 _sync_live_close，避免重复平仓
 
                     return {
                         'success': True,
