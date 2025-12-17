@@ -779,6 +779,9 @@ class BinanceFuturesEngine:
                 import traceback
                 traceback.print_exc()
 
+            # 清除挂单缓存，确保下次查询获取最新数据
+            self.invalidate_orders_cache()
+
             return {
                 'success': True,
                 'position_id': position_id,
@@ -1128,6 +1131,9 @@ class BinanceFuturesEngine:
             except Exception as notify_err:
                 logger.warning(f"发送平仓通知失败: {notify_err}")
 
+            # 清除挂单缓存，确保下次查询获取最新数据
+            self.invalidate_orders_cache()
+
             return {
                 'success': True,
                 'position_id': position_id,
@@ -1449,6 +1455,9 @@ class BinanceFuturesEngine:
         # 检查返回的订单状态
         order_status = result.get('status', '')
         logger.info(f"[实盘] 订单 {order_id} 取消后状态: {order_status}")
+
+        # 清除挂单缓存，确保下次查询获取最新数据
+        self.invalidate_orders_cache()
 
         return {'success': True, 'order_id': order_id, 'message': '订单已取消', 'status': order_status}
 
