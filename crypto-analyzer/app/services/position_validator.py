@@ -894,7 +894,7 @@ class PositionValidator:
             conn = self.get_db_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT config FROM trading_strategies WHERE id = %s
+                SELECT config, sync_live FROM trading_strategies WHERE id = %s
             """, (strategy_id,))
             strategy_row = cursor.fetchone()
             cursor.close()
@@ -907,6 +907,10 @@ class PositionValidator:
             import json
             strategy = json.loads(strategy_row['config']) if strategy_row.get('config') else {}
             strategy['id'] = strategy_id
+            # 数据库列 sync_live 优先级高于 JSON config 中的 syncLive
+            db_sync_live = strategy_row.get('sync_live')
+            if db_sync_live is not None:
+                strategy['syncLive'] = bool(db_sync_live)
             # 使用待开仓记录中的杠杆和保证金比例
             strategy['leverage'] = pending['leverage']
             strategy['positionSizePct'] = float(pending['margin_pct']) if pending['margin_pct'] else strategy.get('positionSizePct', 1)

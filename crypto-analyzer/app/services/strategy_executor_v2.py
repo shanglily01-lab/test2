@@ -1486,14 +1486,18 @@ class StrategyExecutorV2:
                 # 转换方向格式：long -> LONG, short -> SHORT
                 position_side = direction.upper()
 
+                # 从策略配置读取止损止盈，没有则用默认值
+                stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
+                take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
+
                 result = self.futures_engine.open_position(
                     account_id=account_id,
                     symbol=symbol,
                     position_side=position_side,
                     quantity=Decimal(str(quantity)),
                     leverage=leverage,
-                    stop_loss_pct=Decimal(str(self.HARD_STOP_LOSS)),
-                    take_profit_pct=Decimal(str(self.MAX_TAKE_PROFIT)),
+                    stop_loss_pct=Decimal(str(stop_loss_pct)),
+                    take_profit_pct=Decimal(str(take_profit_pct)),
                     source='strategy',
                     strategy_id=strategy.get('id')
                 )
@@ -1520,22 +1524,27 @@ class StrategyExecutorV2:
                     logger.info(f"✅ {symbol} 开仓成功: {direction} {quantity:.8f} @ {current_price:.4f}, 信号:{signal_type}")
 
                     # 同步实盘
+                    live_position_id = None
+                    logger.info(f"[开仓] {symbol} sync_live={sync_live}, live_engine={self.live_engine is not None}")
                     if sync_live and self.live_engine:
                         live_position_id = await self._sync_live_open(symbol, direction, quantity, leverage, strategy, position_id)
-                        # 保存实盘持仓ID到模拟盘持仓
-                        if live_position_id:
-                            try:
-                                conn = self.get_db_connection()
-                                cursor = conn.cursor()
-                                cursor.execute(
-                                    "UPDATE futures_positions SET live_position_id = %s WHERE id = %s",
-                                    (live_position_id, position_id)
-                                )
-                                conn.commit()
-                                cursor.close()
-                                conn.close()
-                            except Exception as e:
-                                logger.warning(f"保存实盘持仓ID失败: {e}")
+                    elif sync_live and not self.live_engine:
+                        logger.warning(f"⚠️ [开仓] {symbol} sync_live=True 但 live_engine 未初始化，无法同步实盘！live_engine_error={self.live_engine_error}")
+
+                    # 保存实盘持仓ID到模拟盘持仓
+                    if live_position_id:
+                        try:
+                            conn = self.get_db_connection()
+                            cursor = conn.cursor()
+                            cursor.execute(
+                                "UPDATE futures_positions SET live_position_id = %s WHERE id = %s",
+                                (live_position_id, position_id)
+                            )
+                            conn.commit()
+                            cursor.close()
+                            conn.close()
+                        except Exception as e:
+                            logger.warning(f"保存实盘持仓ID失败: {e}")
 
                     return {
                         'success': True,
@@ -1580,6 +1589,10 @@ class StrategyExecutorV2:
 
             logger.info(f"[实盘同步] {symbol} 保证金={live_margin}U, 杠杆={leverage}x, 价格={current_price}, 数量={live_quantity:.4f}")
 
+            # 从策略配置读取止损止盈，没有则用默认值
+            stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
+            take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
+
             # 调用实盘引擎开仓，传入模拟盘持仓ID用于关联
             position_side = 'LONG' if direction == 'long' else 'SHORT'
             result = self.live_engine.open_position(
@@ -1588,8 +1601,8 @@ class StrategyExecutorV2:
                 position_side=position_side,
                 quantity=Decimal(str(live_quantity)),
                 leverage=leverage,
-                stop_loss_pct=Decimal(str(self.HARD_STOP_LOSS)),
-                take_profit_pct=Decimal(str(self.MAX_TAKE_PROFIT)),
+                stop_loss_pct=Decimal(str(stop_loss_pct)),
+                take_profit_pct=Decimal(str(take_profit_pct)),
                 source='strategy_sync',
                 paper_position_id=paper_position_id
             )
@@ -2102,7 +2115,7 @@ class StrategyExecutorV2:
 
         try:
             cursor.execute("""
-                SELECT id, name, config, account_id, enabled, market_type
+                SELECT id, name, config, account_id, enabled, market_type, sync_live
                 FROM trading_strategies
                 WHERE enabled = 1
                 ORDER BY id
@@ -2117,6 +2130,10 @@ class StrategyExecutorV2:
                     config['name'] = row['name']
                     config['account_id'] = row.get('account_id', 2)
                     config['market_type'] = row.get('market_type', 'test')
+                    # 数据库列 sync_live 优先级高于 JSON config 中的 syncLive
+                    db_sync_live = row.get('sync_live')
+                    if db_sync_live is not None:
+                        config['syncLive'] = bool(db_sync_live)
                     strategies.append(config)
                 except Exception as e:
                     logger.warning(f"解析策略配置失败 (ID={row['id']}): {e}")
