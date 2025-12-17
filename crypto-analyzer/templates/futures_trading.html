@@ -1735,23 +1735,35 @@
                 positionsLoading.style.display = 'none';
 
                 if (data.success && data.data && data.data.length > 0) {
-                    // 为每个持仓实时获取当前价格
-                    const positionsWithPrices = await Promise.all(data.data.map(async (pos) => {
-                        let currentPrice = pos.current_price || 0;
-                        try {
-                            // 实时获取当前价格
-                            const priceResponse = await fetch(`/api/futures/price/${encodeURIComponent(pos.symbol)}`);
-                            if (priceResponse.ok) {
-                                const priceData = await priceResponse.json();
-                                if (priceData.success && priceData.price) {
-                                    currentPrice = parseFloat(priceData.price);
-                                }
+                    // 批量获取所有持仓的价格（优化性能，单次请求）
+                    const symbols = [...new Set(data.data.map(pos => pos.symbol))];
+                    let priceMap = {};
+
+                    try {
+                        const priceResponse = await fetch('/api/futures/prices/batch', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ symbols: symbols })
+                        });
+                        if (priceResponse.ok) {
+                            const priceData = await priceResponse.json();
+                            if (priceData.success && priceData.prices) {
+                                priceMap = priceData.prices;
                             }
-                        } catch (e) {
-                            // 如果获取失败，使用后端返回的价格
-                            // 静默处理价格获取失败
                         }
-                        
+                    } catch (e) {
+                        // 批量获取失败，使用后端返回的价格
+                        console.debug('批量获取价格失败，使用缓存价格');
+                    }
+
+                    // 为每个持仓设置价格并计算盈亏
+                    const positionsWithPrices = data.data.map((pos) => {
+                        // 使用批量获取的价格，或后端返回的价格
+                        let currentPrice = pos.current_price || 0;
+                        if (priceMap[pos.symbol] && priceMap[pos.symbol].price) {
+                            currentPrice = parseFloat(priceMap[pos.symbol].price);
+                        }
+
                         // 计算实时盈亏（基于名义价值，不乘以杠杆）
                         // 杠杆只影响保证金，不影响盈亏本身
                         const quantity = parseFloat(pos.quantity) || 0;
@@ -1819,8 +1831,8 @@
                         }
                         
                         return positionData;
-                    }));
-                    
+                    });
+
                     // 计算所有持仓的未实现盈亏总和
                     const totalUnrealizedPnl = positionsWithPrices.reduce((sum, pos) => {
                         return sum + (parseFloat(pos.unrealized_pnl) || 0);

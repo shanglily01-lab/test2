@@ -1235,7 +1235,7 @@ class BinanceFuturesEngine:
             # 6. 发送Telegram通知
             try:
                 if self.trade_notifier:
-                    self.trade_notifier.notify_position_closed(
+                    self.trade_notifier.notify_close_position(
                         symbol=symbol,
                         direction=position_side,
                         quantity=float(executed_qty),
@@ -1244,7 +1244,8 @@ class BinanceFuturesEngine:
                         pnl=float(pnl),
                         pnl_pct=float(roi),
                         reason=reason,
-                        hold_time=0  # 无法获取持仓时间
+                        hold_time=None,  # 无法获取持仓时间
+                        is_paper=False  # 实盘平仓
                     )
             except Exception as notify_err:
                 logger.warning(f"发送平仓通知失败: {notify_err}")

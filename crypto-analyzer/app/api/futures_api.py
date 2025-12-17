@@ -1158,12 +1158,81 @@ async def get_futures_price(symbol: str):
             }
         else:
             raise HTTPException(status_code=404, detail=f'无法获取 {symbol} 的合约价格')
-            
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"获取合约价格失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取合约价格失败: {str(e)}")
+
+
+@router.post('/prices/batch')
+async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
+    """
+    批量获取合约价格（优化性能）
+
+    - **symbols**: 交易对列表，如 ["BTC/USDT", "ETH/USDT"]
+
+    一次API调用获取所有交易对价格，避免多次网络请求
+    """
+    import aiohttp
+    from aiohttp import ClientTimeout
+
+    if not symbols:
+        return {'success': True, 'prices': {}}
+
+    # 标准化交易对格式
+    symbol_map = {}  # 原始symbol -> 标准化symbol
+    for s in symbols:
+        clean = s.replace('/', '').replace('%2F', '').upper()
+        symbol_map[clean] = s
+
+    prices = {}
+    quick_timeout = ClientTimeout(total=3)  # 3秒超时
+
+    try:
+        # 1. 从Binance批量获取所有合约价格（单次请求）
+        async with aiohttp.ClientSession(timeout=quick_timeout) as session:
+            async with session.get('https://fapi.binance.com/fapi/v1/ticker/price') as response:
+                if response.status == 200:
+                    all_prices = await response.json()
+                    # 构建价格映射
+                    price_map = {item['symbol']: float(item['price']) for item in all_prices}
+
+                    for clean_symbol, original_symbol in symbol_map.items():
+                        if clean_symbol in price_map:
+                            prices[original_symbol] = {
+                                'price': price_map[clean_symbol],
+                                'source': 'binance_futures'
+                            }
+    except Exception as e:
+        logger.debug(f"批量获取Binance价格失败: {e}")
+
+    # 2. 对于没有获取到的symbol，尝试其他来源
+    missing_symbols = [s for s in symbols if s not in prices]
+    if missing_symbols:
+        try:
+            from app.database.db_service import DatabaseService
+            db_service = DatabaseService(config.get('database', {}))
+
+            for symbol in missing_symbols:
+                try:
+                    latest_kline = db_service.get_latest_kline(symbol, '1m')
+                    if latest_kline:
+                        prices[symbol] = {
+                            'price': float(latest_kline.close_price),
+                            'source': 'database_spot'
+                        }
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.debug(f"从数据库获取价格失败: {e}")
+
+    return {
+        'success': True,
+        'prices': prices,
+        'count': len(prices)
+    }
 
 
 # ==================== 健康检查 ====================

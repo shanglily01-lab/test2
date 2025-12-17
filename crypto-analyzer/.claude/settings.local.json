@@ -54,7 +54,9 @@
       "Bash(git checkout:*)",
       "Bash(source .venv/bin/activate)",
       "Bash(git revert:*)",
-      "Bash(source:*)"
+      "Bash(source:*)",
+      "Bash(pip3 show:*)",
+      "Bash(/dev/null <<'EOF'\nSELECT id, name FROM trading_strategies WHERE is_active = 1 LIMIT 3;\nEOF)"
     ],
     "deny": [],
     "ask": []
