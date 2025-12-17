@@ -2130,7 +2130,8 @@ class StrategyExecutorV2:
                     # 记录执行结果
                     for r in result.get('results', []):
                         symbol = r.get('symbol')
-                        if r.get('open_result') and r['open_result'].get('success'):
+                        # 排除 pending=True 的情况（待开仓自检），只记录真正开仓成功的
+                        if r.get('open_result') and r['open_result'].get('success') and not r['open_result'].get('pending'):
                             logger.info(f"✅ {symbol} 开仓成功: {r['open_result'].get('signal_type')}")
                         if r.get('close_results'):
                             for cr in r['close_results']:
