@@ -472,6 +472,30 @@ class StrategyExecutorV2:
             if current_price >= ma10:
                 return None, f"限价单做空: 价格{current_price:.4f} >= MA10{ma10:.4f}, 趋势不一致"
 
+        # 检查是否已有open持仓（防止重复开仓）
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            position_side = 'LONG' if direction == 'long' else 'SHORT'
+
+            cursor.execute("""
+                SELECT id FROM futures_positions
+                WHERE symbol = %s AND strategy_id = %s
+                AND position_side = %s AND status = 'open'
+                LIMIT 1
+            """, (symbol, strategy_id, position_side))
+
+            existing_pos = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if existing_pos:
+                return None, f"已有{position_side}持仓(ID:{existing_pos['id']}), 不再创建限价单"
+
+        except Exception as e:
+            logger.warning(f"{symbol} 检查已有持仓失败: {e}")
+
         # 检查是否已有PENDING限价单
         try:
             conn = self.get_db_connection()
