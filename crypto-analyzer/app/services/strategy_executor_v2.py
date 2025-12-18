@@ -1493,10 +1493,17 @@ class StrategyExecutorV2:
             return False, "", updates
 
         # 计算当前盈亏百分比
+        symbol = position.get('symbol', '')
         if position_side == 'LONG':
             current_pnl_pct = (current_price - entry_price) / entry_price * 100
         else:
             current_pnl_pct = (entry_price - current_price) / entry_price * 100
+
+        # 每5分钟输出一次调试日志（避免刷屏）
+        position_id = position.get('id')
+        max_profit_pct = float(position.get('max_profit_pct') or 0)
+        if position_id and position_id % 10 == 0:  # 只对部分持仓输出
+            logger.debug(f"[智能出场] {symbol} 当前盈亏={current_pnl_pct:.2f}%, 最高盈利={max_profit_pct:.2f}%")
 
         # 获取策略配置的止损止盈参数（如果有）
         stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
@@ -1574,6 +1581,7 @@ class StrategyExecutorV2:
         # 更新最高盈利
         if current_pnl_pct > max_profit_pct:
             updates['max_profit_pct'] = current_pnl_pct
+            logger.info(f"[盈利更新] {symbol} 最高盈利更新: {max_profit_pct:.2f}% -> {current_pnl_pct:.2f}%")
             max_profit_pct = current_pnl_pct
 
             # 更新最高/最低价格
