@@ -2038,26 +2038,23 @@ class StrategyExecutorV2:
             if not symbols:
                 return
 
-            # 批量获取所有符号的最新价格（一次查询）
+            # 批量获取所有符号的实时价格（从price_data表，5秒更新一次）
             placeholders = ','.join(['%s'] * len(symbols))
             cursor.execute(f"""
-                SELECT k1.symbol, k1.close_price
-                FROM kline_data k1
+                SELECT p1.symbol, p1.price
+                FROM price_data p1
                 INNER JOIN (
                     SELECT symbol, MAX(timestamp) as max_ts
-                    FROM kline_data
+                    FROM price_data
                     WHERE symbol IN ({placeholders})
-                    AND timeframe = '15m'
-                    AND exchange = 'binance_futures'
                     GROUP BY symbol
-                ) k2 ON k1.symbol = k2.symbol AND k1.timestamp = k2.max_ts
-                WHERE k1.timeframe = '15m' AND k1.exchange = 'binance_futures'
+                ) p2 ON p1.symbol = p2.symbol AND p1.timestamp = p2.max_ts
             """, symbols)
 
             # 构建价格映射
             price_map = {}
             for row in cursor.fetchall():
-                price_map[row['symbol']] = float(row['close_price'])
+                price_map[row['symbol']] = float(row['price'])
 
             # 获取移动止盈参数
             trailing_activate = strategy.get('trailingActivate') or self.TRAILING_ACTIVATE
