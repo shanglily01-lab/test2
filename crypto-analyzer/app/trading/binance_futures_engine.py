@@ -1482,6 +1482,43 @@ class BinanceFuturesEngine:
 
         return {'success': True, 'message': f'已取消 {symbol} 的所有订单'}
 
+    def cancel_pending_order(self, symbol: str) -> Tuple[bool, str]:
+        """取消某交易对的挂单（限价单）
+
+        Args:
+            symbol: 交易对，如 'BTC/USDT'
+
+        Returns:
+            (成功与否, 消息)
+        """
+        try:
+            # 获取该交易对的所有挂单
+            open_orders = self.get_open_orders(symbol, force_refresh=True)
+
+            if not open_orders:
+                return True, f"{symbol} 没有挂单需要取消"
+
+            # 过滤出限价单（LIMIT类型）
+            limit_orders = [o for o in open_orders if o.get('type') == 'LIMIT']
+
+            if not limit_orders:
+                return True, f"{symbol} 没有限价挂单需要取消"
+
+            cancelled_count = 0
+            for order in limit_orders:
+                order_id = order.get('orderId')
+                if order_id:
+                    result = self.cancel_order(symbol, str(order_id))
+                    if result.get('success'):
+                        cancelled_count += 1
+                        logger.info(f"[实盘] 已取消 {symbol} 限价单 {order_id}")
+
+            return True, f"已取消 {symbol} 的 {cancelled_count} 个限价单"
+
+        except Exception as e:
+            logger.error(f"[实盘] 取消 {symbol} 挂单失败: {e}")
+            return False, str(e)
+
     # ==================== 数据库操作 ====================
 
     def _save_position_to_db(
