@@ -1450,18 +1450,16 @@ class StrategyExecutorV2:
         if entry_ema_diff <= 0:
             return False, "无开仓时EMA差值记录"
 
-        current_ema_diff_pct = ema_data['ema_diff_pct']
+        # 使用已收盘K线的EMA数据，避免未收盘K线波动导致误判
+        confirmed_ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
         position_side = position.get('position_side', 'LONG')
 
-        # 检查趋势方向是否仍然正确
-        ema_diff = ema_data['ema_diff']
-        if position_side == 'LONG' and ema_diff < 0:
-            return True, f"趋势反转平仓(做多但EMA9 < EMA26)"
-        if position_side == 'SHORT' and ema_diff > 0:
-            return True, f"趋势反转平仓(做空但EMA9 > EMA26)"
+        # 注意：趋势反转的检查已经在 check_cross_reversal 中完成
+        # 这里只检查趋势减弱（强度下降），不再重复检查趋势反转
+        # check_cross_reversal 使用已收盘K线判断，更准确
 
-        # 检查强度是否减弱到开仓时的50%以下
-        if current_ema_diff_pct < entry_ema_diff * 0.5:
+        # 检查强度是否减弱到开仓时的50%以下（使用已收盘K线数据）
+        if confirmed_ema_diff_pct < entry_ema_diff * 0.5:
             # 需要满足最小盈利要求才触发趋势减弱平仓
             # 避免刚开始盈利就被平仓的情况
             MIN_PROFIT_FOR_TREND_EXIT = 1.0  # 最小盈利1%才触发趋势减弱平仓
@@ -1480,9 +1478,9 @@ class StrategyExecutorV2:
                     if pnl_pct < MIN_PROFIT_FOR_TREND_EXIT:
                         return False, f"趋势减弱但盈利不足({pnl_pct:.2f}%<{MIN_PROFIT_FOR_TREND_EXIT}%)，继续持有"
 
-            return True, f"趋势减弱平仓(当前强度{current_ema_diff_pct:.3f}% < 开仓时{entry_ema_diff:.3f}%的50%)"
+            return True, f"趋势减弱平仓(当前强度{confirmed_ema_diff_pct:.3f}% < 开仓时{entry_ema_diff:.3f}%的50%，已收盘确认)"
 
-        return False, f"趋势强度正常(当前{current_ema_diff_pct:.3f}%, 开仓时{entry_ema_diff:.3f}%)"
+        return False, f"趋势强度正常(当前{confirmed_ema_diff_pct:.3f}%, 开仓时{entry_ema_diff:.3f}%)"
 
     def check_smart_exit(self, position: Dict, current_price: float, ema_data: Dict,
                           strategy: Dict) -> Tuple[bool, str, Dict]:
@@ -1803,8 +1801,7 @@ class StrategyExecutorV2:
                 stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
                 take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
 
-                # ========== 市价单开仓（已移除限价单逻辑）==========
-                # 限价单逻辑已移除，统一使用市价单
+                # ========== 市价单开仓 ==========
                 # 信号触发 → 自检 → 通过后市价开单
 
                 result = self.futures_engine.open_position(
