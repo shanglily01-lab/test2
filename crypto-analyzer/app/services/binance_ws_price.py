@@ -35,6 +35,12 @@ class BinanceWSPriceService:
         self._reconnect_delay = 5  # 重连延迟（秒）
         self._last_prices: Dict[str, float] = {}  # 上次价格，用于判断是否有变化
 
+        # 健康检查相关
+        self._last_update_time: Optional[datetime] = None  # 最后收到数据的时间
+        self._health_check_interval = 5  # 健康检查间隔（秒）
+        self._stale_threshold = 10  # 数据过期阈值（秒），超过此时间未收到数据视为不健康
+        self._health_callbacks: List[Callable[[bool, str], None]] = []  # 健康状态回调 (is_healthy, reason)
+
     def add_callback(self, callback: Callable[[str, float], None]):
         """添加价格更新回调"""
         self.callbacks.append(callback)
@@ -43,6 +49,53 @@ class BinanceWSPriceService:
         """移除价格更新回调"""
         if callback in self.callbacks:
             self.callbacks.remove(callback)
+
+    def add_health_callback(self, callback: Callable[[bool, str], None]):
+        """添加健康状态回调"""
+        self._health_callbacks.append(callback)
+
+    def remove_health_callback(self, callback: Callable[[bool, str], None]):
+        """移除健康状态回调"""
+        if callback in self._health_callbacks:
+            self._health_callbacks.remove(callback)
+
+    def get_last_update_time(self) -> Optional[datetime]:
+        """获取最后更新时间"""
+        return self._last_update_time
+
+    def is_healthy(self) -> bool:
+        """检查 WebSocket 服务是否健康"""
+        if not self.running or self.ws is None:
+            return False
+        if self._last_update_time is None:
+            return False
+        elapsed = (datetime.now() - self._last_update_time).total_seconds()
+        return elapsed < self._stale_threshold
+
+    def get_health_status(self) -> dict:
+        """获取详细的健康状态"""
+        elapsed = None
+        if self._last_update_time:
+            elapsed = (datetime.now() - self._last_update_time).total_seconds()
+
+        return {
+            'running': self.running,
+            'connected': self.ws is not None,
+            'healthy': self.is_healthy(),
+            'last_update_time': self._last_update_time.isoformat() if self._last_update_time else None,
+            'seconds_since_update': round(elapsed, 2) if elapsed else None,
+            'stale_threshold': self._stale_threshold,
+            'subscribed_symbols': list(self.subscribed_symbols),
+            'prices_count': len(self.prices)
+        }
+
+    def _notify_health_change(self, is_healthy: bool, reason: str):
+        """通知健康状态变化"""
+        for callback in self._health_callbacks:
+            try:
+                callback(is_healthy, reason)
+            except Exception as e:
+                logger.error(f"健康状态回调执行失败: {e}")
 
     def get_price(self, symbol: str) -> Optional[float]:
         """获取当前价格"""
@@ -137,6 +190,15 @@ class BinanceWSPriceService:
         old_price = self.prices.get(symbol, 0)
         self.prices[symbol] = price
 
+        # 更新最后收到数据的时间
+        was_healthy = self.is_healthy()
+        self._last_update_time = datetime.now()
+
+        # 如果之前不健康，现在恢复了，通知健康状态变化
+        if not was_healthy and self.is_healthy():
+            logger.info("✅ WebSocket 数据恢复正常")
+            self._notify_health_change(True, "数据恢复正常")
+
         # 更新最高/最低价
         if price > self.max_prices.get(symbol, 0):
             self.max_prices[symbol] = price
@@ -213,6 +275,35 @@ class BinanceWSPriceService:
 
         self.ws = None
 
+    async def _health_check_loop(self):
+        """健康检查循环 - 定期检查数据是否过期"""
+        logger.info(f"🏥 WebSocket 健康检查服务已启动（间隔: {self._health_check_interval}秒，阈值: {self._stale_threshold}秒）")
+        last_healthy = True
+
+        while self.running:
+            await asyncio.sleep(self._health_check_interval)
+
+            if not self.running:
+                break
+
+            current_healthy = self.is_healthy()
+
+            # 健康状态变化时触发回调
+            if last_healthy and not current_healthy:
+                elapsed = 0
+                if self._last_update_time:
+                    elapsed = (datetime.now() - self._last_update_time).total_seconds()
+                reason = f"超过 {self._stale_threshold} 秒未收到数据（已过 {elapsed:.1f}s）"
+                logger.warning(f"⚠️ WebSocket 数据过期: {reason}")
+                self._notify_health_change(False, reason)
+            elif not last_healthy and current_healthy:
+                # 恢复健康的通知在 _on_price_update 中处理
+                pass
+
+            last_healthy = current_healthy
+
+        logger.info("WebSocket 健康检查服务已停止")
+
     async def start(self, symbols: List[str] = None):
         """启动 WebSocket 服务"""
         if self.running:
@@ -228,6 +319,10 @@ class BinanceWSPriceService:
                 self.min_prices[symbol] = float('inf')
 
         logger.info(f"🚀 启动 WebSocket 实时价格服务，初始订阅: {self.subscribed_symbols}")
+
+        # 启动健康检查任务
+        asyncio.create_task(self._health_check_loop())
+
         await self._connect()
 
     async def stop(self):

@@ -2242,6 +2242,7 @@ class StrategyExecutorV2:
                 position['status'] = 'closed'
                 # 记录反转平仓信息（用于跳过冷却）
                 position['close_reason'] = close_reason
+                logger.info(f"📝 {symbol} 平仓完成，设置 close_reason={close_reason}")
 
         # 3. 如果无持仓或所有仓位都已平仓，检查开仓信号
         # 注意：平仓后 position['status'] 已在上面更新为 'closed'
@@ -2249,33 +2250,50 @@ class StrategyExecutorV2:
         strategy_id = strategy.get('id')
         has_open_position = any(p.get('status') == 'open' for p in positions)
 
+        # 调试日志：输出所有持仓的状态
+        if close_results:
+            for p in positions:
+                logger.info(f"[状态检查] {symbol} id={p.get('id')}, status={p.get('status')}, close_reason={p.get('close_reason')}")
+
         # 检查是否刚刚发生了金叉/死叉反转平仓（跳过所有检查，立即市价开仓）
         # 注意：只有"金叉反转平仓"和"死叉反转平仓"才是绝佳买入时机，"趋势反转平仓"不算
-        just_reversed = any(
-            p.get('status') == 'closed' and (
-                '金叉反转平仓' in p.get('close_reason', '') or
-                '死叉反转平仓' in p.get('close_reason', '')
-            )
-            for p in positions
-        )
+        reversal_direction = None  # 反转后应开仓的方向
+        for p in positions:
+            p_status = p.get('status')
+            p_reason = p.get('close_reason', '')
+            # 只在有平仓时输出日志
+            if close_results:
+                logger.info(f"[反转检测] {symbol} 持仓id={p.get('id')}, status={p_status}, close_reason={p_reason}")
+            if p_status == 'closed':
+                if '金叉反转平仓' in p_reason:
+                    reversal_direction = 'long'
+                    logger.info(f"🔄 {symbol} 检测到金叉反转平仓，准备开多")
+                    break
+                elif '死叉反转平仓' in p_reason:
+                    reversal_direction = 'short'
+                    logger.info(f"🔄 {symbol} 检测到死叉反转平仓，准备开空")
+                    break
 
+        # 只在有平仓发生时输出日志
+        if close_results:
+            logger.info(f"[反转判断] {symbol} positions={len(positions)}, has_open={has_open_position}, reversal={reversal_direction}")
         if not positions or not has_open_position:
-            # 3.1 检查金叉/死叉信号
-            signal, signal_desc = self.check_golden_death_cross(ema_data)
-            debug_info.append(f"金叉/死叉: {signal_desc}")
+            # ⚡ 优先处理反转平仓后的立即开仓（不受 buyDirection 限制）
+            if reversal_direction:
+                logger.info(f"🔄 {symbol} 反转开仓: {reversal_direction}, buy_directions={buy_directions}")
+                entry_reason = f"reversal_entry: EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
+                open_result = await self.execute_open_position(
+                    symbol, reversal_direction, 'reversal_cross',
+                    strategy, account_id, signal_reason=entry_reason,
+                    force_market=True
+                )
 
-            if signal and signal in buy_directions:
-                # ⚡ 反转平仓后：跳过所有检查，只要信号强度够就立即市价开仓
-                if just_reversed:
-                    debug_info.append("🔄 反转平仓后立即市价开仓（跳过所有检查）")
-                    entry_reason = f"reversal_entry: EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
-                    # 强制市价开仓，跳过自检
-                    open_result = await self.execute_open_position(
-                        symbol, signal, 'reversal_cross',
-                        strategy, account_id, signal_reason=entry_reason,
-                        force_market=True  # 强制市价，跳过自检
-                    )
-                else:
+            # 3.1 检查金叉/死叉信号（非反转情况）
+            if not open_result or not open_result.get('success'):
+                signal, signal_desc = self.check_golden_death_cross(ema_data)
+                debug_info.append(f"金叉/死叉: {signal_desc}")
+
+                if signal and signal in buy_directions:
                     # 正常流程：检查EMA+MA一致性
                     consistent, reason = self.check_ema_ma_consistency(ema_data, signal)
                     debug_info.append(f"EMA+MA一致性: {reason}")

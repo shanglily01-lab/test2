@@ -17,16 +17,18 @@ from app.services.binance_ws_price import get_ws_price_service, BinanceWSPriceSe
 class RealtimePositionMonitor:
     """实时持仓监控服务"""
 
-    def __init__(self, db_config: dict, strategy_executor=None):
+    def __init__(self, db_config: dict, strategy_executor=None, fallback_callback=None):
         """
         初始化实时监控服务
 
         Args:
             db_config: 数据库配置
             strategy_executor: 策略执行器（用于平仓）
+            fallback_callback: 降级回调函数，当 WebSocket 不健康时调用
         """
         self.db_config = db_config
         self.strategy_executor = strategy_executor
+        self.fallback_callback = fallback_callback  # 降级回调
         self.ws_service: BinanceWSPriceService = get_ws_price_service()
         self.running = False
         self.LOCAL_TZ = timezone(timedelta(hours=8))
@@ -37,6 +39,11 @@ class RealtimePositionMonitor:
 
         # 策略参数缓存
         self.strategy_params: Dict[int, dict] = {}  # strategy_id -> params
+
+        # 降级状态
+        self._fallback_mode = False  # 是否处于降级模式
+        self._fallback_poll_interval = 2  # 降级时的轮询间隔（秒）
+        self._fallback_task = None  # 降级轮询任务
 
     def get_db_connection(self):
         """获取数据库连接"""
@@ -289,6 +296,92 @@ class RealtimePositionMonitor:
         else:
             logger.warning(f"strategy_executor 未设置，无法执行平仓")
 
+    def _on_ws_health_change(self, is_healthy: bool, reason: str):
+        """WebSocket 健康状态变化回调"""
+        if not is_healthy and not self._fallback_mode:
+            # WebSocket 不健康，启动降级模式
+            logger.warning(f"⚠️ WebSocket 不健康，启动降级轮询模式: {reason}")
+            self._fallback_mode = True
+            if self.fallback_callback:
+                self.fallback_callback(True, reason)
+            # 启动降级轮询任务
+            if self._fallback_task is None or self._fallback_task.done():
+                self._fallback_task = asyncio.create_task(self._fallback_poll_loop())
+        elif is_healthy and self._fallback_mode:
+            # WebSocket 恢复健康，退出降级模式
+            logger.info("✅ WebSocket 恢复健康，退出降级轮询模式")
+            self._fallback_mode = False
+            if self.fallback_callback:
+                self.fallback_callback(False, "WebSocket 恢复正常")
+            # 取消降级轮询任务
+            if self._fallback_task and not self._fallback_task.done():
+                self._fallback_task.cancel()
+                self._fallback_task = None
+
+    async def _fallback_poll_loop(self):
+        """降级轮询循环 - 当 WebSocket 不健康时使用 REST API 获取价格"""
+        logger.info(f"📡 降级轮询模式启动（间隔: {self._fallback_poll_interval}秒）")
+
+        while self.running and self._fallback_mode:
+            try:
+                # 获取所有需要监控的交易对
+                symbols = list(self.symbol_positions.keys())
+                if not symbols:
+                    await asyncio.sleep(self._fallback_poll_interval)
+                    continue
+
+                # 使用 REST API 获取价格
+                for symbol in symbols:
+                    try:
+                        price = await self._get_price_from_api(symbol)
+                        if price:
+                            await self.on_price_update(symbol, price)
+                    except Exception as e:
+                        logger.debug(f"降级模式获取 {symbol} 价格失败: {e}")
+
+            except Exception as e:
+                logger.error(f"降级轮询循环出错: {e}")
+
+            await asyncio.sleep(self._fallback_poll_interval)
+
+        logger.info("📡 降级轮询模式已停止")
+
+    async def _get_price_from_api(self, symbol: str) -> Optional[float]:
+        """从 REST API 获取价格（降级时使用）"""
+        try:
+            # 如果有 live_engine，使用它获取价格
+            if self.strategy_executor and hasattr(self.strategy_executor, 'live_engine'):
+                live_engine = self.strategy_executor.live_engine
+                if live_engine:
+                    price = live_engine.get_current_price(symbol)
+                    if price and price > 0:
+                        return float(price)
+
+            # 回退：从数据库获取最新价格
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute("""
+                    SELECT price FROM price_data
+                    WHERE symbol = %s
+                    ORDER BY timestamp DESC LIMIT 1
+                """, (symbol,))
+                row = cursor.fetchone()
+                if row:
+                    return float(row['price'])
+            finally:
+                cursor.close()
+                conn.close()
+
+        except Exception as e:
+            logger.debug(f"获取 {symbol} 价格失败: {e}")
+
+        return None
+
+    def is_in_fallback_mode(self) -> bool:
+        """检查是否处于降级模式"""
+        return self._fallback_mode
+
     async def start(self, account_id: int = 2):
         """启动实时监控服务"""
         if self.running:
@@ -314,11 +407,15 @@ class RealtimePositionMonitor:
             lambda symbol, price: asyncio.create_task(self.on_price_update(symbol, price))
         )
 
+        # 注册健康状态回调（用于自动降级）
+        self.ws_service.add_health_callback(self._on_ws_health_change)
+
         # 启动 WebSocket
         if not self.ws_service.is_running():
             asyncio.create_task(self.ws_service.start(symbols))
 
         logger.info(f"✅ 实时监控服务已启动，监控 {len(positions)} 个持仓，{len(symbols)} 个交易对")
+        logger.info(f"🔄 自动降级保护已启用（{self.ws_service._stale_threshold}秒无数据将自动切换轮询模式）")
 
         # 定期刷新持仓列表（处理新开仓和外部平仓）
         while self.running:
@@ -353,6 +450,13 @@ class RealtimePositionMonitor:
         """停止实时监控服务"""
         logger.info("正在停止实时监控服务...")
         self.running = False
+        self._fallback_mode = False
+
+        # 停止降级轮询任务
+        if self._fallback_task and not self._fallback_task.done():
+            self._fallback_task.cancel()
+            self._fallback_task = None
+
         await self.ws_service.stop()
         logger.info("实时监控服务已停止")
 
@@ -366,9 +470,9 @@ def get_realtime_monitor() -> Optional[RealtimePositionMonitor]:
     return _realtime_monitor
 
 
-def init_realtime_monitor(db_config: dict, strategy_executor=None) -> RealtimePositionMonitor:
+def init_realtime_monitor(db_config: dict, strategy_executor=None, fallback_callback=None) -> RealtimePositionMonitor:
     """初始化实时监控服务"""
     global _realtime_monitor
     if _realtime_monitor is None:
-        _realtime_monitor = RealtimePositionMonitor(db_config, strategy_executor)
+        _realtime_monitor = RealtimePositionMonitor(db_config, strategy_executor, fallback_callback)
     return _realtime_monitor

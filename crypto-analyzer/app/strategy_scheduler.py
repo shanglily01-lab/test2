@@ -129,7 +129,8 @@ class StrategyScheduler:
         try:
             self.realtime_monitor = init_realtime_monitor(
                 db_config=db_config,
-                strategy_executor=self.strategy_executor
+                strategy_executor=self.strategy_executor,
+                fallback_callback=self._on_ws_fallback
             )
             logger.info("  ✓ WebSocket 实时监控服务初始化成功")
         except Exception as e:
@@ -148,6 +149,30 @@ class StrategyScheduler:
         self.use_websocket = True  # 是否使用 WebSocket 实时监控
 
         logger.info("策略调度器初始化完成")
+
+    def _on_ws_fallback(self, is_fallback: bool, reason: str):
+        """WebSocket 降级状态变化回调"""
+        if is_fallback:
+            logger.warning(f"📡 WebSocket 降级通知: {reason}")
+            # 可以在这里添加通知（如 Telegram）
+        else:
+            logger.info(f"✅ WebSocket 恢复通知: {reason}")
+
+    def get_ws_health_status(self) -> dict:
+        """获取 WebSocket 健康状态"""
+        if self.realtime_monitor:
+            from app.services.binance_ws_price import get_ws_price_service
+            ws_service = get_ws_price_service()
+            return {
+                'websocket': ws_service.get_health_status(),
+                'monitor': {
+                    'running': self.realtime_monitor.running,
+                    'fallback_mode': self.realtime_monitor.is_in_fallback_mode(),
+                    'positions_count': len(self.realtime_monitor.positions),
+                    'symbols_count': len(self.realtime_monitor.symbol_positions)
+                }
+            }
+        return {'websocket': None, 'monitor': None}
 
     async def check_for_new_klines(self) -> bool:
         """

@@ -63,7 +63,8 @@
       "Bash(python -c:*)",
       "Bash(/home/tonny01/test2/crypto-analyzer/.venv/bin/python3:*)",
       "Bash(netstat:*)",
-      "Bash(ss:*)"
+      "Bash(ss:*)",
+      "Bash(xxd:*)"
     ],
     "deny": [],
     "ask": []
