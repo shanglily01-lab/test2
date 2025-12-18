@@ -1460,15 +1460,10 @@ class StrategyExecutorV2:
         # 当启用移动止损且盈利达到阈值时，动态调整止损价
         # 最小移动阈值：只有当新止损价变动超过0.1%时才更新，避免频繁微小调整
         min_move_pct = 0.1
-        entry_price = float(position.get('entry_price') or 0)
-        if trailing_sl_enabled and current_pnl_pct >= trailing_sl_activate and current_stop_loss > 0 and entry_price > 0:
+        if trailing_sl_enabled and current_pnl_pct >= trailing_sl_activate and current_stop_loss > 0:
             if position_side == 'LONG':
                 # 做多：止损价 = 当前价 - 距离%
                 new_stop_loss = current_price * (1 - trailing_sl_distance / 100)
-                # 保护：做多的止损价不能高于入场价（否则会立即触发）
-                if new_stop_loss > entry_price:
-                    new_stop_loss = entry_price * 0.999  # 最高只能到入场价下方0.1%
-                    logger.debug(f"移动止损保护: {position.get('symbol')} 做多, 止损限制在入场价{entry_price:.6f}下方")
                 move_pct = abs(new_stop_loss - current_stop_loss) / current_stop_loss * 100
                 if new_stop_loss > current_stop_loss and move_pct >= min_move_pct:
                     updates['stop_loss_price'] = new_stop_loss
@@ -1476,10 +1471,6 @@ class StrategyExecutorV2:
             else:
                 # 做空：止损价 = 当前价 + 距离%
                 new_stop_loss = current_price * (1 + trailing_sl_distance / 100)
-                # 保护：做空的止损价不能低于入场价（否则会立即触发）
-                if new_stop_loss < entry_price:
-                    new_stop_loss = entry_price * 1.001  # 最低只能到入场价上方0.1%
-                    logger.debug(f"移动止损保护: {position.get('symbol')} 做空, 止损限制在入场价{entry_price:.6f}上方")
                 move_pct = abs(current_stop_loss - new_stop_loss) / current_stop_loss * 100
                 if new_stop_loss < current_stop_loss and move_pct >= min_move_pct:
                     updates['stop_loss_price'] = new_stop_loss
