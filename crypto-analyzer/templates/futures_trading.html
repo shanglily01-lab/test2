@@ -1879,7 +1879,7 @@
                                             </span>
                                         </div>
                                         <div class="text-sm text-secondary" style="margin-bottom: 6px;">
-                                            数量: ${pos.quantity || '--'} 张 | 开仓价: $${formatPrice(pos.entry_price)} | 现价: <span class="font-mono current-price-cell" data-symbol="${pos.symbol}" style="color: ${priceColor}; font-weight: 600;">$${pos.current_price ? formatPrice(pos.current_price) : '--'}</span>
+                                            数量: ${pos.quantity || '--'} 张 | ${pos.source && pos.source.includes('limit') ? '<span style="color: var(--warning-yellow);">限价</span>' : ''}开仓价: $${formatPrice(pos.entry_price)} | 现价: <span class="font-mono current-price-cell" data-symbol="${pos.symbol}" style="color: ${priceColor}; font-weight: 600;">$${pos.current_price ? formatPrice(pos.current_price) : '--'}</span>
                                         </div>
                                         <div class="text-sm text-secondary" style="margin-bottom: 6px;">
                                             保证金: ${formatLargeNumber(pos.margin || 0)} | 收益率: <span class="${pnlClass}" data-pnl-pct="${dbId}">${pos.unrealized_pnl_pct >= 0 ? '+' : ''}${(pos.unrealized_pnl_pct || 0).toFixed(2)}%</span>

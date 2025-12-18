@@ -151,7 +151,8 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
                 take_profit_price,
                 status,
                 open_time,
-                close_time
+                close_time,
+                source
             FROM futures_positions
             WHERE account_id = %s
             """
