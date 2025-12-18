@@ -720,10 +720,10 @@ class FuturesLimitOrderExecutor:
                                 original_signal_id = order.get('signal_id')
                                 original_strategy_id = order.get('strategy_id')
 
-                                # 限价单触发：使用限价作为成交价
-                                # 传入 limit_price，引擎会检测到价格已达条件，直接以限价成交
-                                # 止损止盈基于限价计算（在创建限价单时已计算好，存储在 stop_loss_price/take_profit_price）
-                                execution_price = limit_price
+                                # 限价单触发：不传 limit_price，避免引擎因价格波动再创建 PENDING
+                                # 使用 limit_price=None 让引擎以市价方式立即执行
+                                # 但止损止盈已基于限价计算好，直接传入价格（不是百分比）
+                                execution_price = limit_price  # 记录用的成交价仍为限价
 
                                 result = self.trading_engine.open_position(
                                     account_id=account_id,
@@ -731,7 +731,7 @@ class FuturesLimitOrderExecutor:
                                     position_side=position_side,
                                     quantity=quantity,
                                     leverage=leverage,
-                                    limit_price=limit_price,  # 传入限价，引擎以限价作为入场价
+                                    limit_price=None,  # 不传限价，直接执行，避免再创建PENDING
                                     stop_loss_price=stop_loss_price,  # 已基于限价计算好
                                     take_profit_price=take_profit_price,  # 已基于限价计算好
                                     source=original_source,  # 保留原始来源（strategy 或 limit_order）
@@ -740,14 +740,15 @@ class FuturesLimitOrderExecutor:
                                 )
 
                                 if result.get('success'):
-                                    # 从结果中获取实际的 symbol（确保一致性）
+                                    # 从结果中获取实际的 symbol 和 position_id
                                     actual_symbol = result.get('symbol', symbol)
+                                    paper_position_id = result.get('position_id')
 
                                     # 验证 symbol 是否匹配
                                     if actual_symbol != symbol:
                                         logger.warning(f"⚠️  限价单 {order_id} symbol 不匹配: 订单中为 {symbol}, 开仓结果为 {actual_symbol}")
 
-                                    # 计算已成交价值
+                                    # 计算已成交价值（基于限价）
                                     executed_value = float(execution_price * quantity)
 
                                     # 更新订单状态为已成交
@@ -764,12 +765,24 @@ class FuturesLimitOrderExecutor:
                                         )
 
                                     connection.commit()
+
+                                    # 更新持仓的入场价为限价（因为引擎以市价执行，需要修正为限价）
+                                    if paper_position_id:
+                                        with connection.cursor() as update_cursor:
+                                            update_cursor.execute(
+                                                """UPDATE futures_positions
+                                                SET entry_price = %s,
+                                                    mark_price = %s
+                                                WHERE id = %s""",
+                                                (float(limit_price), float(limit_price), paper_position_id)
+                                            )
+                                        connection.commit()
+
                                     logger.info(f"✅ 限价单执行成功: {symbol} {position_side} {quantity} @ {execution_price}")
 
                                     # ========== 同步实盘交易 ==========
                                     # 检查策略是否启用实盘同步
                                     # 重要：只有模拟盘真正创建了持仓才同步，避免重复同步
-                                    paper_position_id = result.get('position_id')
                                     if not paper_position_id:
                                         logger.warning(f"⚠️ 模拟盘未创建持仓（可能被防重复开仓拦截），跳过实盘同步: {symbol} {position_side}")
                                     else:
@@ -829,14 +842,14 @@ class FuturesLimitOrderExecutor:
                                                             else:
                                                                 take_profit_pct_value = (execution_price_decimal - take_profit_decimal) / execution_price_decimal * Decimal('100')
 
-                                                        # 调用实盘引擎开仓（使用限价）
+                                                        # 调用实盘引擎开仓（市价执行，止损止盈基于限价计算）
                                                         live_result = self.live_engine.open_position(
                                                             account_id=2,
                                                             symbol=symbol,
                                                             position_side=position_side,
                                                             quantity=live_quantity,
                                                             leverage=leverage,
-                                                            limit_price=execution_price,  # 使用限价
+                                                            limit_price=None,  # 市价执行
                                                             stop_loss_pct=stop_loss_pct_value,
                                                             take_profit_pct=take_profit_pct_value,
                                                             source='limit_order_sync',
