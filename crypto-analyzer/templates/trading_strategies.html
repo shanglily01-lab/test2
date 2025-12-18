@@ -1557,6 +1557,22 @@
                                     交易价格
                                 </div>
 
+                                <!-- 限价单开关 -->
+                                <div class="form-group">
+                                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                                        <div>
+                                            <label class="form-label" style="margin-bottom: 0;">启用限价单</label>
+                                            <small style="color: var(--text-secondary); font-size: 12px; display: block; margin-top: 4px;">
+                                                开启后可设置偏离市价的限价单，关闭则统一使用市价
+                                            </small>
+                                        </div>
+                                        <label class="switch">
+                                            <input type="checkbox" id="enableLimitOrder" name="enableLimitOrder" onchange="toggleLimitOrderOptions()">
+                                            <span class="slider round"></span>
+                                        </label>
+                                    </div>
+                                </div>
+
                                 <!-- 做多价格选项 -->
                                 <div class="form-group" id="longPriceGroup">
                                     <label class="form-label">做多价格<span class="required">*</span></label>
@@ -1980,6 +1996,35 @@
             }
         }
 
+        // 切换限价单选项显示/隐藏
+        function toggleLimitOrderOptions() {
+            const enableLimitOrder = document.getElementById('enableLimitOrder').checked;
+
+            // 获取所有非市价的限价选项
+            const longPriceOptions = document.querySelectorAll('#longPriceGroup .radio-option');
+            const shortPriceOptions = document.querySelectorAll('#shortPriceGroup .radio-option');
+
+            longPriceOptions.forEach((option, index) => {
+                if (index > 0) { // 跳过第一个（市价）
+                    option.style.display = enableLimitOrder ? 'flex' : 'none';
+                }
+            });
+
+            shortPriceOptions.forEach((option, index) => {
+                if (index > 0) { // 跳过第一个（市价）
+                    option.style.display = enableLimitOrder ? 'flex' : 'none';
+                }
+            });
+
+            // 如果禁用限价单，强制选中市价
+            if (!enableLimitOrder) {
+                const longMarket = document.getElementById('longPriceMarket');
+                const shortMarket = document.getElementById('shortPriceMarket');
+                if (longMarket) longMarket.checked = true;
+                if (shortMarket) shortMarket.checked = true;
+            }
+        }
+
         // 根据EMA信号自动决定多空方向
         function autoUpdateDirection(type) {
             if (type === 'buy') {
@@ -2307,6 +2352,7 @@
                 maxPositions: document.getElementById('maxPositions').value ? parseInt(document.getElementById('maxPositions').value) : null,
                 maxLongPositions: document.getElementById('maxLongPositions').value ? parseInt(document.getElementById('maxLongPositions').value) : null,
                 maxShortPositions: document.getElementById('maxShortPositions').value ? parseInt(document.getElementById('maxShortPositions').value) : null,
+                enableLimitOrder: document.getElementById('enableLimitOrder') ? document.getElementById('enableLimitOrder').checked : false,
                 longPrice: longPriceRadio ? longPriceRadio.value : null,
                 shortPrice: shortPriceRadio ? shortPriceRadio.value : null,
                 limitOrderTimeoutMinutes: document.getElementById('limitOrderTimeoutMinutes') && document.getElementById('limitOrderTimeoutMinutes').value ? parseInt(document.getElementById('limitOrderTimeoutMinutes').value) : 15,
@@ -2731,6 +2777,14 @@
                                 </div>
                             ` : ''}
                             <div class="strategy-item-field">
+                                <div class="strategy-item-field-label">限价单</div>
+                                <div class="strategy-item-field-value">
+                                    <span style="color: ${strategy.enableLimitOrder !== false && (strategy.longPrice !== 'market' || strategy.shortPrice !== 'market') ? 'var(--success-color)' : 'var(--text-secondary)'}">
+                                        ${strategy.enableLimitOrder !== false && (strategy.longPrice !== 'market' || strategy.shortPrice !== 'market') ? '✓ 启用' : '✗ 禁用'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="strategy-item-field">
                                 <div class="strategy-item-field-label">做多价格</div>
                                 <div class="strategy-item-field-value">${strategy.longPrice ? getBuyPriceTypeText(strategy.longPrice) : '未设置'}</div>
                             </div>
@@ -3139,12 +3193,22 @@
                 }
             }
 
+            // 限价单开关
+            const enableLimitOrderCheckbox = document.getElementById('enableLimitOrder');
+            if (enableLimitOrderCheckbox) {
+                // 判断是否启用限价单：如果价格不是market，则启用
+                const hasLimitPrice = (strategy.longPrice && strategy.longPrice !== 'market') ||
+                                     (strategy.shortPrice && strategy.shortPrice !== 'market');
+                enableLimitOrderCheckbox.checked = strategy.enableLimitOrder !== undefined ? strategy.enableLimitOrder : hasLimitPrice;
+                toggleLimitOrderOptions();
+            }
+
             // 做多价格
             if (strategy.longPrice) {
                 const longPriceRadio = document.querySelector(`input[name="longPrice"][value="${strategy.longPrice}"]`);
                 if (longPriceRadio) longPriceRadio.checked = true;
             }
-            
+
             // 做空价格
             if (strategy.shortPrice) {
                 const shortPriceRadio = document.querySelector(`input[name="shortPrice"][value="${strategy.shortPrice}"]`);

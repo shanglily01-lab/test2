@@ -431,7 +431,12 @@ class StrategyExecutorV2:
         Returns:
             (信号方向 'long'/'short'/None, 信号描述)
         """
-        # 检查是否启用限价单
+        # 检查是否启用限价单开关
+        enable_limit_order = strategy.get('enableLimitOrder', True)  # 默认启用（兼容旧配置）
+        if not enable_limit_order:
+            return None, "限价单已禁用"
+
+        # 检查是否配置了限价
         long_price_type = strategy.get('longPrice', 'market')
         short_price_type = strategy.get('shortPrice', 'market')
 
