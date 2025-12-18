@@ -28,6 +28,7 @@ from app.services.strategy_executor import StrategyExecutor
 from app.services.strategy_executor_v2 import StrategyExecutorV2
 from app.services.strategy_test_service import StrategyTestService
 from app.services.position_validator import PositionValidator, init_position_validator
+from app.services.realtime_position_monitor import RealtimePositionMonitor, init_realtime_monitor
 from app.trading.futures_trading_engine import FuturesTradingEngine
 from app.trading.binance_futures_engine import BinanceFuturesEngine
 from app.analyzers.technical_indicators import TechnicalIndicators
@@ -123,14 +124,28 @@ class StrategyScheduler:
         self.position_validator.strategy_executor = self.strategy_executor
         logger.info("  ✓ 开单自检服务初始化成功")
 
+        # 初始化 WebSocket 实时监控服务
+        logger.info("初始化 WebSocket 实时监控服务...")
+        try:
+            self.realtime_monitor = init_realtime_monitor(
+                db_config=db_config,
+                strategy_executor=self.strategy_executor
+            )
+            logger.info("  ✓ WebSocket 实时监控服务初始化成功")
+        except Exception as e:
+            logger.warning(f"  ⚠️ WebSocket 实时监控服务初始化失败: {e}")
+            self.realtime_monitor = None
+
         # 运行状态
         self.running = False
         self.task: Optional[asyncio.Task] = None
         self.validator_task: Optional[asyncio.Task] = None
-        self.quick_monitor_task: Optional[asyncio.Task] = None  # 快速持仓监控任务
+        self.quick_monitor_task: Optional[asyncio.Task] = None  # 快速持仓监控任务（备用）
+        self.realtime_monitor_task: Optional[asyncio.Task] = None  # WebSocket 实时监控任务
         self.interval = 5  # 默认5秒检查一次（实时监控）
         self.quick_monitor_interval = 2  # 快速监控间隔（秒）
         self.last_check_time = {}  # 记录每个策略的最后检查时间
+        self.use_websocket = True  # 是否使用 WebSocket 实时监控
 
         logger.info("策略调度器初始化完成")
 
@@ -268,9 +283,15 @@ class StrategyScheduler:
         self.task = loop.create_task(self.run_loop(interval))
         logger.info(f"策略实时监控服务已启动（每{interval}秒检查）")
 
-        # 启动快速持仓监控服务（高频更新盈亏）
-        self.quick_monitor_task = loop.create_task(self.run_quick_monitor_loop(self.quick_monitor_interval))
-        logger.info(f"快速持仓监控服务已启动（每{self.quick_monitor_interval}秒检查）")
+        # 启动持仓监控服务
+        if self.use_websocket and self.realtime_monitor:
+            # 优先使用 WebSocket 实时监控（毫秒级响应）
+            self.realtime_monitor_task = loop.create_task(self.realtime_monitor.start(account_id=2))
+            logger.info("🚀 WebSocket 实时持仓监控服务已启动（毫秒级响应）")
+        else:
+            # 回退到轮询模式（2秒间隔）
+            self.quick_monitor_task = loop.create_task(self.run_quick_monitor_loop(self.quick_monitor_interval))
+            logger.info(f"⚡ 快速持仓监控服务已启动（每{self.quick_monitor_interval}秒检查）")
 
         # 启动开单自检服务
         self.validator_task = loop.create_task(self.position_validator.start())
@@ -283,7 +304,14 @@ class StrategyScheduler:
         if self.task and not self.task.done():
             self.task.cancel()
 
-        # 停止快速持仓监控服务
+        # 停止 WebSocket 实时监控服务
+        if self.realtime_monitor_task and not self.realtime_monitor_task.done():
+            self.realtime_monitor_task.cancel()
+            if self.realtime_monitor:
+                asyncio.create_task(self.realtime_monitor.stop())
+            logger.info("WebSocket 实时监控服务已停止")
+
+        # 停止快速持仓监控服务（备用）
         if self.quick_monitor_task and not self.quick_monitor_task.done():
             self.quick_monitor_task.cancel()
             logger.info("快速持仓监控服务已停止")
