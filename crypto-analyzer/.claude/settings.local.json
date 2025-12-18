@@ -57,7 +57,9 @@
       "Bash(source:*)",
       "Bash(pip3 show:*)",
       "Bash(/dev/null <<'EOF'\nSELECT id, name FROM trading_strategies WHERE is_active = 1 LIMIT 3;\nEOF)",
-      "Bash(TZ='Asia/Singapore' date:*)"
+      "Bash(TZ='Asia/Singapore' date:*)",
+      "Bash(/tmp/testvenv/bin/pip install:*)",
+      "Bash(/tmp/testvenv/bin/python3:*)"
     ],
     "deny": [],
     "ask": []

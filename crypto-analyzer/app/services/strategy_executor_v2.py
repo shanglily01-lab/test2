@@ -850,36 +850,40 @@ class StrategyExecutorV2:
         filter_results = []
         all_passed = True
 
-        # 1. RSI过滤
-        passed, reason = self.check_rsi_filter(symbol, direction, strategy)
-        filter_results.append(f"RSI: {reason}")
-        if not passed:
-            all_passed = False
+        # 注意：过滤器1-5暂时全部禁用
+        # 如需启用，取消下面的注释
 
-        # 2. MACD过滤
-        passed, reason = self.check_macd_filter(symbol, direction, strategy)
-        filter_results.append(f"MACD: {reason}")
-        if not passed:
-            all_passed = False
+        # # 1. RSI过滤
+        # passed, reason = self.check_rsi_filter(symbol, direction, strategy)
+        # filter_results.append(f"RSI: {reason}")
+        # if not passed:
+        #     all_passed = False
 
-        # 3. KDJ过滤
-        passed, reason = self.check_kdj_filter(symbol, direction, strategy)
-        filter_results.append(f"KDJ: {reason}")
-        if not passed:
-            all_passed = False
+        # # 2. MACD过滤
+        # passed, reason = self.check_macd_filter(symbol, direction, strategy)
+        # filter_results.append(f"MACD: {reason}")
+        # if not passed:
+        #     all_passed = False
 
-        # 4. 价格距离限制
-        passed, reason = self.check_price_distance_limit(symbol, direction, current_price, ema_data, strategy)
-        filter_results.append(f"价格距离: {reason}")
-        if not passed:
-            all_passed = False
+        # # 3. KDJ过滤
+        # passed, reason = self.check_kdj_filter(symbol, direction, strategy)
+        # filter_results.append(f"KDJ: {reason}")
+        # if not passed:
+        #     all_passed = False
 
-        # 5. 行情自适应
-        passed, reason = self.check_adaptive_regime(symbol, direction, strategy)
-        filter_results.append(f"行情自适应: {reason}")
-        if not passed:
-            all_passed = False
+        # # 4. 价格距离限制
+        # passed, reason = self.check_price_distance_limit(symbol, direction, current_price, ema_data, strategy)
+        # filter_results.append(f"价格距离: {reason}")
+        # if not passed:
+        #     all_passed = False
 
+        # # 5. 行情自适应
+        # passed, reason = self.check_adaptive_regime(symbol, direction, strategy)
+        # filter_results.append(f"行情自适应: {reason}")
+        # if not passed:
+        #     all_passed = False
+
+        filter_results.append("过滤器已禁用")
         return all_passed, filter_results
 
     # ==================== 平仓信号检测 ====================
