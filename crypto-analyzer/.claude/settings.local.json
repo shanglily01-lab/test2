@@ -60,7 +60,8 @@
       "Bash(TZ='Asia/Singapore' date:*)",
       "Bash(/tmp/testvenv/bin/pip install:*)",
       "Bash(/tmp/testvenv/bin/python3:*)",
-      "Bash(python -c:*)"
+      "Bash(python -c:*)",
+      "Bash(/home/tonny01/test2/crypto-analyzer/.venv/bin/python3:*)"
     ],
     "deny": [],
     "ask": []
