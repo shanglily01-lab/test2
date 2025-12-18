@@ -1014,11 +1014,25 @@ class BinanceFuturesEngine:
 
             # 2. 确定平仓数量
             if close_quantity is None:
-                close_quantity = quantity
+                # 全部平仓时，从 Binance 获取实际持仓数量（避免数据库与实际持仓不一致）
+                binance_positions = self.get_open_positions()
+                actual_quantity = None
+                for pos in binance_positions:
+                    if pos['symbol'] == symbol and pos['position_side'] == position_side:
+                        actual_quantity = Decimal(str(pos['quantity']))
+                        break
+
+                if actual_quantity and actual_quantity > 0:
+                    close_quantity = actual_quantity
+                    if actual_quantity != quantity:
+                        logger.info(f"[实盘] 使用 Binance 实际持仓数量: {actual_quantity} (数据库: {quantity})")
+                else:
+                    # 回退到数据库数量
+                    close_quantity = quantity
             else:
                 close_quantity = min(Decimal(str(close_quantity)), quantity)
-
-            close_quantity = self._round_quantity(close_quantity, symbol)
+                # 部分平仓时才做取整处理
+                close_quantity = self._round_quantity(close_quantity, symbol)
 
             # 3. 发送平仓订单
             binance_symbol = self._convert_symbol(symbol)
@@ -1179,11 +1193,12 @@ class BinanceFuturesEngine:
             entry_price = Decimal(str(target_position['entry_price']))
 
             if close_quantity is None:
+                # 全部平仓时，直接使用 Binance 返回的原始数量，不做取整（避免剩余小额仓位）
                 close_quantity = quantity
             else:
                 close_quantity = min(Decimal(str(close_quantity)), quantity)
-
-            close_quantity = self._round_quantity(close_quantity, symbol)
+                # 部分平仓时才做取整处理
+                close_quantity = self._round_quantity(close_quantity, symbol)
 
             # 2.5. 取消相关的止损止盈订单（Algo订单）
             self._cancel_position_orders({'symbol': symbol})
