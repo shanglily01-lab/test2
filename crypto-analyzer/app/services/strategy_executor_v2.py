@@ -2057,12 +2057,14 @@ class StrategyExecutorV2:
                 price_map[row['symbol']] = float(row['price'])
 
             # 获取移动止盈参数
-            trailing_activate = strategy.get('trailingActivate') or self.TRAILING_ACTIVATE
-            trailing_callback = strategy.get('trailingCallback') or self.TRAILING_CALLBACK
+            raw_activate = strategy.get('trailingActivate')
+            raw_callback = strategy.get('trailingCallback')
+            trailing_activate = raw_activate if raw_activate is not None else self.TRAILING_ACTIVATE
+            trailing_callback = raw_callback if raw_callback is not None else self.TRAILING_CALLBACK
 
-            # 调试日志已验证配置读取正确，改回debug级别避免刷屏
-            # if positions:
-            #     logger.debug(f"[移动止盈配置] 策略={strategy.get('name')}, 激活阈值={trailing_activate}%, 回撤阈值={trailing_callback}%")
+            # 每次都输出，确认配置是否正确读取
+            if positions:
+                logger.info(f"[移动止盈] 策略={strategy.get('name')}, raw={raw_activate}/{raw_callback}, 使用={trailing_activate}%/{trailing_callback}%")
 
             for position in positions:
                 symbol = position['symbol']
