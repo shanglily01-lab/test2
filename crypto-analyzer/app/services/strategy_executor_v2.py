@@ -1541,16 +1541,19 @@ class StrategyExecutorV2:
                 return True, f"移动止盈平仓(从最高{max_profit_pct:.2f}%回撤{callback_pct:.2f}% >= {trailing_callback}%)", updates
 
             # 更新移动止损价格
+            symbol = position.get('symbol', '')
             if position_side == 'LONG':
                 new_trailing_price = current_price * (1 - trailing_callback / 100)
                 current_trailing_price = float(position.get('trailing_stop_price') or 0)
                 if new_trailing_price > current_trailing_price:
                     updates['trailing_stop_price'] = new_trailing_price
+                    logger.info(f"[移动止盈] {symbol} 做多 止损价上移: {current_trailing_price:.6f} -> {new_trailing_price:.6f} (当前价={current_price:.4f})")
             else:
                 new_trailing_price = current_price * (1 + trailing_callback / 100)
                 current_trailing_price = float(position.get('trailing_stop_price') or float('inf'))
                 if new_trailing_price < current_trailing_price:
                     updates['trailing_stop_price'] = new_trailing_price
+                    logger.info(f"[移动止盈] {symbol} 做空 止损价下移: {current_trailing_price:.6f} -> {new_trailing_price:.6f} (当前价={current_price:.4f})")
 
         return False, "", updates
 

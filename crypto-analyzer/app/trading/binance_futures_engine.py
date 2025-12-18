@@ -1217,6 +1217,11 @@ class BinanceFuturesEngine:
                 current_price = self.get_current_price(symbol)
                 avg_price = Decimal(str(current_price)) if not isinstance(current_price, Decimal) else current_price
 
+            # 4.5. 如果 executed_qty 为 0，使用请求的数量（可能是止盈/止损单已自动触发）
+            if executed_qty == 0:
+                executed_qty = close_quantity
+                logger.info(f"[实盘] executedQty=0，使用请求数量计算盈亏: {executed_qty}")
+
             # 5. 计算盈亏
             if position_side == 'LONG':
                 pnl = (avg_price - entry_price) * executed_qty
