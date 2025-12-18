@@ -2230,11 +2230,15 @@ class StrategyExecutorV2:
                 result = await self.execute_close_position(position, close_reason, strategy)
                 close_results.append(result)
                 debug_info.append(f"平仓: {close_reason}")
+                # 标记该仓位已平仓（内存中）
+                position['status'] = 'closed'
 
-        # 3. 如果无持仓，检查开仓信号
+        # 3. 如果无持仓或所有仓位都已平仓，检查开仓信号
+        # 注意：平仓后 position['status'] 已在上面更新为 'closed'
         open_result = None
         strategy_id = strategy.get('id')
-        if not positions or all(p.get('status') == 'closed' for p in positions):
+        has_open_position = any(p.get('status') == 'open' for p in positions)
+        if not positions or not has_open_position:
             # 3.1 检查金叉/死叉信号
             signal, signal_desc = self.check_golden_death_cross(ema_data)
             debug_info.append(f"金叉/死叉: {signal_desc}")
