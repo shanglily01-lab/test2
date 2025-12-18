@@ -43,7 +43,7 @@ class PositionValidator:
         'check_interval': 30,              # 检查间隔（秒）
         'validation_window': 900,          # 验证窗口（15分钟）
         'quick_loss_threshold': 0.5,       # 快速止损阈值（%）
-        'quick_loss_window': 120,          # 快速止损窗口（2分钟）
+        'quick_loss_window': 300,          # 快速止损窗口（5分钟）
         'ranging_volatility': 1.0,         # 震荡市波动阈值（%）
         'trend_exhaustion_threshold': 0.3, # 趋势末端阈值（%）
         'signal_decay_threshold': 30,      # 信号衰减阈值（%）
