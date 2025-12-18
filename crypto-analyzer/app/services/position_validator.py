@@ -12,6 +12,9 @@ from typing import Dict, List, Tuple, Optional
 from decimal import Decimal
 import pytz
 
+from app.utils.indicators import calculate_ema, calculate_ma
+from app.utils.db import create_connection
+
 logger = logging.getLogger(__name__)
 
 
@@ -83,14 +86,7 @@ class PositionValidator:
 
     def get_db_connection(self):
         """获取数据库连接"""
-        return pymysql.connect(
-            **self.db_config,
-            charset='utf8mb4',
-            cursorclass=pymysql.cursors.DictCursor,
-            connect_timeout=10,
-            read_timeout=30,
-            write_timeout=30
-        )
+        return create_connection(self.db_config)
 
     def set_strategy_executor(self, executor):
         """设置策略执行器"""
@@ -529,30 +525,12 @@ class PositionValidator:
             conn.close()
 
     def _calculate_ema(self, prices: List[float], period: int) -> List[float]:
-        """计算EMA"""
-        if len(prices) < period:
-            return []
-
-        multiplier = 2 / (period + 1)
-        ema_values = [sum(prices[:period]) / period]
-
-        for price in prices[period:]:
-            ema = (price - ema_values[-1]) * multiplier + ema_values[-1]
-            ema_values.append(ema)
-
-        return ema_values
+        """计算EMA - 委托给公共模块"""
+        return calculate_ema(prices, period)
 
     def _calculate_ma(self, prices: List[float], period: int) -> List[float]:
-        """计算MA"""
-        if len(prices) < period:
-            return []
-
-        ma_values = []
-        for i in range(period - 1, len(prices)):
-            ma = sum(prices[i - period + 1:i + 1]) / period
-            ma_values.append(ma)
-
-        return ma_values
+        """计算MA - 委托给公共模块"""
+        return calculate_ma(prices, period)
 
     async def close_invalid_position(self, position: Dict, reasons: List[str]):
         """平仓不合理的持仓"""

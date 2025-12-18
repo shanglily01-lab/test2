@@ -15,6 +15,8 @@ import requests
 import pymysql
 import yaml
 
+from app.utils.indicators import get_single_ema
+
 # 导入交易通知器
 try:
     from app.services.trade_notifier import get_trade_notifier
@@ -143,26 +145,8 @@ class BinanceFuturesEngine:
 
     @staticmethod
     def calculate_ema(prices: list, period: int) -> float:
-        """
-        计算EMA（指数移动平均线）
-
-        Args:
-            prices: 价格列表（从旧到新）
-            period: EMA周期
-
-        Returns:
-            EMA值
-        """
-        if not prices or len(prices) < period:
-            return 0.0
-
-        multiplier = 2 / (period + 1)
-        ema = sum(prices[:period]) / period  # 初始SMA
-
-        for price in prices[period:]:
-            ema = (price - ema) * multiplier + ema
-
-        return ema
+        """计算EMA - 委托给公共模块"""
+        return get_single_ema(prices, period)
 
     def get_ema_diff(self, symbol: str, timeframe: str = '15m') -> Optional[float]:
         """
