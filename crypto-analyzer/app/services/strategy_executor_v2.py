@@ -2063,12 +2063,9 @@ class StrategyExecutorV2:
             trailing_activate = strategy.get('trailingActivate') or self.TRAILING_ACTIVATE
             trailing_callback = strategy.get('trailingCallback') or self.TRAILING_CALLBACK
 
-            # 调试：输出策略的移动止盈配置（使用info级别确保能看到）
-            if positions:
-                # 详细输出策略原始值以便调试
-                raw_activate = strategy.get('trailingActivate')
-                raw_callback = strategy.get('trailingCallback')
-                logger.info(f"[移动止盈配置] 策略={strategy.get('name')}, 原始值: activate={raw_activate}, callback={raw_callback} | 实际使用: 激活阈值={trailing_activate}%, 回撤阈值={trailing_callback}%")
+            # 调试日志已验证配置读取正确，改回debug级别避免刷屏
+            # if positions:
+            #     logger.debug(f"[移动止盈配置] 策略={strategy.get('name')}, 激活阈值={trailing_activate}%, 回撤阈值={trailing_callback}%")
 
             for position in positions:
                 symbol = position['symbol']
