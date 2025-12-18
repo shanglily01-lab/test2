@@ -720,10 +720,10 @@ class FuturesLimitOrderExecutor:
                                 original_signal_id = order.get('signal_id')
                                 original_strategy_id = order.get('strategy_id')
 
-                                # 限价单触发：不传 limit_price，避免引擎因价格波动再创建 PENDING
-                                # 使用 limit_price=None 让引擎以市价方式立即执行
-                                # 但止损止盈已基于限价计算好，直接传入价格（不是百分比）
-                                execution_price = limit_price  # 记录用的成交价仍为限价
+                                # 限价单触发：以市价执行
+                                # 限价只是触发条件，实际成交价为市价
+                                # 止损止盈已基于限价计算好，直接传入价格
+                                execution_price = current_price  # 实际成交价为市价
 
                                 result = self.trading_engine.open_position(
                                     account_id=account_id,
@@ -766,19 +766,7 @@ class FuturesLimitOrderExecutor:
 
                                     connection.commit()
 
-                                    # 更新持仓的入场价为限价（因为引擎以市价执行，需要修正为限价）
-                                    if paper_position_id:
-                                        with connection.cursor() as update_cursor:
-                                            update_cursor.execute(
-                                                """UPDATE futures_positions
-                                                SET entry_price = %s,
-                                                    mark_price = %s
-                                                WHERE id = %s""",
-                                                (float(limit_price), float(limit_price), paper_position_id)
-                                            )
-                                        connection.commit()
-
-                                    logger.info(f"✅ 限价单执行成功: {symbol} {position_side} {quantity} @ {execution_price}")
+                                    logger.info(f"✅ 限价单执行成功: {symbol} {position_side} {quantity} @ {execution_price} (触发价:{limit_price})")
 
                                     # ========== 同步实盘交易 ==========
                                     # 检查策略是否启用实盘同步
