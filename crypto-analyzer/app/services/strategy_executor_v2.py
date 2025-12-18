@@ -2013,6 +2013,145 @@ class StrategyExecutorV2:
 
     # ==================== 主执行逻辑 ====================
 
+    async def quick_update_positions(self, strategy: Dict, account_id: int = 2):
+        """
+        快速更新所有持仓的盈亏（不需要完整EMA计算）
+        用于高频监控移动止盈/止损
+        优化：批量获取价格，减少数据库查询次数
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 获取所有开放持仓
+            cursor.execute("""
+                SELECT id, symbol, position_side, entry_price, max_profit_pct,
+                       trailing_stop_activated, trailing_stop_price, stop_loss_price
+                FROM futures_positions
+                WHERE account_id = %s AND status = 'open'
+            """, (account_id,))
+            positions = cursor.fetchall()
+
+            if not positions:
+                return
+
+            # 收集所有需要查询价格的符号
+            symbols = list(set(p['symbol'] for p in positions))
+            if not symbols:
+                return
+
+            # 批量获取所有符号的最新价格（一次查询）
+            placeholders = ','.join(['%s'] * len(symbols))
+            cursor.execute(f"""
+                SELECT k1.symbol, k1.close_price
+                FROM kline_data k1
+                INNER JOIN (
+                    SELECT symbol, MAX(timestamp) as max_ts
+                    FROM kline_data
+                    WHERE symbol IN ({placeholders})
+                    AND timeframe = '15m'
+                    AND exchange = 'binance_futures'
+                    GROUP BY symbol
+                ) k2 ON k1.symbol = k2.symbol AND k1.timestamp = k2.max_ts
+                WHERE k1.timeframe = '15m' AND k1.exchange = 'binance_futures'
+            """, symbols)
+
+            # 构建价格映射
+            price_map = {}
+            for row in cursor.fetchall():
+                price_map[row['symbol']] = float(row['close_price'])
+
+            # 获取移动止盈参数
+            trailing_activate = strategy.get('trailingActivate') or self.TRAILING_ACTIVATE
+            trailing_callback = strategy.get('trailingCallback') or self.TRAILING_CALLBACK
+
+            for position in positions:
+                symbol = position['symbol']
+                position_id = position['id']
+                position_side = position['position_side']
+                entry_price = float(position['entry_price'])
+                max_profit_pct = float(position.get('max_profit_pct') or 0)
+                trailing_activated = position.get('trailing_stop_activated') or False
+
+                # 从价格映射获取当前价格
+                current_price = price_map.get(symbol)
+                if not current_price:
+                    continue
+
+                # 计算当前盈亏
+                if position_side == 'LONG':
+                    current_pnl_pct = (current_price - entry_price) / entry_price * 100
+                else:
+                    current_pnl_pct = (entry_price - current_price) / entry_price * 100
+
+                updates = {}
+
+                # 获取策略止损参数
+                stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
+
+                # 快速检查硬止损
+                if current_pnl_pct <= -stop_loss_pct:
+                    close_reason = f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)"
+                    logger.info(f"🚨 [快速监控] {symbol} {close_reason}")
+                    await self.execute_close_position(position, close_reason, strategy)
+                    continue  # 已平仓，跳过后续处理
+
+                # 更新最高盈利（只在有变化时记录日志）
+                if current_pnl_pct > max_profit_pct:
+                    updates['max_profit_pct'] = current_pnl_pct
+                    updates['max_profit_price'] = current_price
+                    logger.info(f"[快速更新] {symbol} 最高盈利: {max_profit_pct:.2f}% -> {current_pnl_pct:.2f}%")
+                    max_profit_pct = current_pnl_pct
+
+                # 检查是否激活移动止盈
+                if not trailing_activated and max_profit_pct >= trailing_activate:
+                    updates['trailing_stop_activated'] = True
+                    trailing_activated = True
+                    if position_side == 'LONG':
+                        trailing_stop_price = current_price * (1 - trailing_callback / 100)
+                    else:
+                        trailing_stop_price = current_price * (1 + trailing_callback / 100)
+                    updates['trailing_stop_price'] = trailing_stop_price
+                    logger.info(f"🎯 [快速更新] {symbol} 移动止盈激活! 盈利={max_profit_pct:.2f}%, 止损价={trailing_stop_price:.6f}")
+
+                # 移动止盈已激活，检查是否触发平仓或更新止损价格
+                elif trailing_activated:
+                    # 检查移动止盈回撤是否触发平仓
+                    callback_pct = max_profit_pct - current_pnl_pct
+                    if callback_pct >= trailing_callback:
+                        # 触发移动止盈平仓！
+                        close_reason = f"移动止盈平仓(从最高{max_profit_pct:.2f}%回撤{callback_pct:.2f}% >= {trailing_callback}%)"
+                        logger.info(f"🚨 [快速监控] {symbol} {close_reason}")
+
+                        # 先更新数据库
+                        if updates:
+                            self._update_position(position_id, updates)
+
+                        # 立即执行平仓
+                        await self.execute_close_position(position, close_reason, strategy)
+                        continue  # 已平仓，跳过后续处理
+
+                    # 未触发平仓，更新止损价格
+                    current_trailing = float(position.get('trailing_stop_price') or 0)
+                    if position_side == 'LONG':
+                        new_trailing = current_price * (1 - trailing_callback / 100)
+                        if new_trailing > current_trailing:
+                            updates['trailing_stop_price'] = new_trailing
+                            logger.info(f"[快速更新] {symbol} 做多止损上移: {current_trailing:.6f} -> {new_trailing:.6f}")
+                    else:
+                        new_trailing = current_price * (1 + trailing_callback / 100)
+                        if current_trailing == 0 or new_trailing < current_trailing:
+                            updates['trailing_stop_price'] = new_trailing
+                            logger.info(f"[快速更新] {symbol} 做空止损下移: {current_trailing:.6f} -> {new_trailing:.6f}")
+
+                # 写入数据库（只在有更新时）
+                if updates:
+                    self._update_position(position_id, updates)
+
+        finally:
+            cursor.close()
+            conn.close()
+
     async def execute_strategy(self, strategy: Dict, account_id: int = 2) -> Dict:
         """
         执行策略
@@ -2295,6 +2434,10 @@ class StrategyExecutorV2:
 
 
     # ==================== 策略加载和调度 ====================
+
+    def get_active_strategies(self) -> List[Dict]:
+        """获取所有启用的策略（公开方法）"""
+        return self._load_strategies()
 
     def _load_strategies(self) -> List[Dict]:
         """从数据库加载启用的策略"""

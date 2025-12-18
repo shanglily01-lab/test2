@@ -61,7 +61,9 @@
       "Bash(/tmp/testvenv/bin/pip install:*)",
       "Bash(/tmp/testvenv/bin/python3:*)",
       "Bash(python -c:*)",
-      "Bash(/home/tonny01/test2/crypto-analyzer/.venv/bin/python3:*)"
+      "Bash(/home/tonny01/test2/crypto-analyzer/.venv/bin/python3:*)",
+      "Bash(netstat:*)",
+      "Bash(ss:*)"
     ],
     "deny": [],
     "ask": []

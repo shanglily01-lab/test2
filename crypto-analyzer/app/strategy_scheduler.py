@@ -127,7 +127,9 @@ class StrategyScheduler:
         self.running = False
         self.task: Optional[asyncio.Task] = None
         self.validator_task: Optional[asyncio.Task] = None
+        self.quick_monitor_task: Optional[asyncio.Task] = None  # 快速持仓监控任务
         self.interval = 5  # 默认5秒检查一次（实时监控）
+        self.quick_monitor_interval = 2  # 快速监控间隔（秒）
         self.last_check_time = {}  # 记录每个策略的最后检查时间
 
         logger.info("策略调度器初始化完成")
@@ -217,6 +219,40 @@ class StrategyScheduler:
             import traceback
             traceback.print_exc()
 
+    async def run_quick_monitor_loop(self, interval: int = 2):
+        """
+        快速持仓监控循环 - 高频更新持仓盈亏，用于移动止盈/止损
+
+        Args:
+            interval: 检查间隔（秒），默认2秒
+        """
+        logger.info(f"⚡ 快速持仓监控服务已启动（间隔: {interval}秒）")
+
+        try:
+            while self.running:
+                try:
+                    # 获取所有启用的策略
+                    strategies = self.strategy_executor.get_active_strategies()
+
+                    for strategy in strategies:
+                        try:
+                            # 快速更新持仓盈亏（不计算EMA，只更新价格和盈亏）
+                            await self.strategy_executor.quick_update_positions(strategy, account_id=2)
+                        except Exception as e:
+                            logger.debug(f"快速更新策略 {strategy.get('name')} 持仓出错: {e}")
+
+                except Exception as e:
+                    logger.error(f"快速监控循环出错: {e}")
+
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            logger.info("快速持仓监控服务已取消")
+            raise
+        except Exception as e:
+            logger.error(f"快速监控循环异常退出: {e}")
+            import traceback
+            traceback.print_exc()
+
     def start(self, interval: int = 5):
         """启动策略执行服务（实时监控模式）"""
         if self.running:
@@ -232,6 +268,10 @@ class StrategyScheduler:
         self.task = loop.create_task(self.run_loop(interval))
         logger.info(f"策略实时监控服务已启动（每{interval}秒检查）")
 
+        # 启动快速持仓监控服务（高频更新盈亏）
+        self.quick_monitor_task = loop.create_task(self.run_quick_monitor_loop(self.quick_monitor_interval))
+        logger.info(f"快速持仓监控服务已启动（每{self.quick_monitor_interval}秒检查）")
+
         # 启动开单自检服务
         self.validator_task = loop.create_task(self.position_validator.start())
         logger.info("开单自检服务已启动")
@@ -242,6 +282,11 @@ class StrategyScheduler:
         self.running = False
         if self.task and not self.task.done():
             self.task.cancel()
+
+        # 停止快速持仓监控服务
+        if self.quick_monitor_task and not self.quick_monitor_task.done():
+            self.quick_monitor_task.cancel()
+            logger.info("快速持仓监控服务已停止")
 
         # 停止开单自检服务
         if self.validator_task and not self.validator_task.done():
