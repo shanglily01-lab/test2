@@ -567,7 +567,7 @@
                             </button>
                             <button class="btn btn-secondary" id="tabOrdersTitle" onclick="showPositionsTab('orders')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
                                 <i class="bi bi-hourglass-split"></i>
-                                <span id="orders-title">未成交订单</span>
+                                <span id="orders-title">限价单</span>
                             </button>
                             <button class="btn btn-secondary" id="tabCancelledTitle" onclick="showPositionsTab('cancelled')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
                                 <i class="bi bi-x-circle"></i>
@@ -684,7 +684,7 @@
                             </div>
                             <div id="ordersEmpty" class="empty-state" style="display: none;">
                                 <div class="empty-state-icon">⏳</div>
-                                <div class="empty-state-text">暂无未成交订单</div>
+                                <div class="empty-state-text">暂无限价单</div>
                             </div>
                         </div>
 
@@ -2067,7 +2067,7 @@
 
                         const count = allOrders.length;
                         orderCount.textContent = `${count} 个订单`;
-                        ordersTitle.textContent = `未成交订单 [${count}]`;
+                        ordersTitle.textContent = `限价单 [${count}]`;
                         orderCount.style.display = 'inline-flex';
                         ordersTable.style.display = 'block';
                         ordersEmpty.style.display = 'none';
@@ -2075,7 +2075,7 @@
                         // 如果获取部分成交订单失败，只显示待成交订单
                         const count = data.data.length;
                         orderCount.textContent = `${count} 个订单`;
-                        ordersTitle.textContent = `未成交订单 [${count}]`;
+                        ordersTitle.textContent = `限价单 [${count}]`;
                         orderCount.style.display = 'inline-flex';
                         ordersTable.style.display = 'block';
                         ordersEmpty.style.display = 'none';
@@ -2083,7 +2083,7 @@
                     document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
                 } else {
                     orderCount.textContent = '0 个订单';
-                    ordersTitle.textContent = '未成交订单 [0]';
+                    ordersTitle.textContent = '限价单 [0]';
                     orderCount.style.display = 'inline-flex';
                     ordersTable.style.display = 'none';
                     ordersEmpty.style.display = 'block';
@@ -2092,7 +2092,7 @@
             } catch (error) {
                 // 静默处理订单加载失败
                 document.getElementById('ordersLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
-                showToast('加载未成交订单失败', 'error');
+                showToast('加载限价单失败', 'error');
             }
         }
 
