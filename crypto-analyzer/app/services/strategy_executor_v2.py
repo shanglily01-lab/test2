@@ -2072,7 +2072,7 @@ class StrategyExecutorV2:
                 max_profit_pct = float(position.get('max_profit_pct') or 0)
                 trailing_activated = position.get('trailing_stop_activated') or False
 
-                # 从价格映射获取当前价格
+                # 从价格映射获取当前价格（提前获取，用于恢复激活状态时计算止损价）
                 current_price = price_map.get(symbol)
                 if not current_price:
                     continue
