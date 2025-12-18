@@ -2278,21 +2278,32 @@ class StrategyExecutorV2:
         if close_results:
             logger.info(f"[反转判断] {symbol} positions={len(positions)}, has_open={has_open_position}, reversal={reversal_direction}")
         if not positions or not has_open_position:
-            # ⚡ 优先处理反转平仓后的立即开仓（不受 buyDirection 限制）
+            # ⚡ 优先处理反转平仓后的立即开仓（不受 buyDirection 限制，但需检查信号强度）
             if reversal_direction:
                 logger.info(f"🔄 {symbol} 反转开仓: {reversal_direction}, buy_directions={buy_directions}")
-                entry_reason = f"reversal_entry: EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
-                try:
-                    open_result = await self.execute_open_position(
-                        symbol, reversal_direction, 'reversal_cross',
-                        strategy, account_id, signal_reason=entry_reason,
-                        force_market=True
-                    )
-                    logger.info(f"🔄 {symbol} 反转开仓结果: {open_result}")
-                except Exception as e:
-                    logger.error(f"❌ {symbol} 反转开仓异常: {e}")
-                    import traceback
-                    traceback.print_exc()
+
+                # 检查信号强度（和普通金叉/死叉开仓逻辑一致）
+                ema_diff_pct = ema_data['ema_diff_pct']
+                if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
+                    logger.info(f"🔄 {symbol} 反转开仓跳过: 信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)")
+                else:
+                    # 检查EMA+MA一致性
+                    consistent, consistency_reason = self.check_ema_ma_consistency(ema_data, reversal_direction)
+                    if not consistent:
+                        logger.info(f"🔄 {symbol} 反转开仓跳过: {consistency_reason}")
+                    else:
+                        entry_reason = f"reversal_entry: {consistency_reason}, EMA_diff:{ema_diff_pct:.3f}%"
+                        try:
+                            open_result = await self.execute_open_position(
+                                symbol, reversal_direction, 'reversal_cross',
+                                strategy, account_id, signal_reason=entry_reason,
+                                force_market=True
+                            )
+                            logger.info(f"🔄 {symbol} 反转开仓结果: {open_result}")
+                        except Exception as e:
+                            logger.error(f"❌ {symbol} 反转开仓异常: {e}")
+                            import traceback
+                            traceback.print_exc()
 
             # 3.1 检查金叉/死叉信号（非反转情况）
             if not open_result or not open_result.get('success'):
