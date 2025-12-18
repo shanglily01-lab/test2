@@ -2040,23 +2040,29 @@ class StrategyExecutorV2:
             if not symbols:
                 return
 
-            # 批量获取所有符号的实时价格（从price_data表，5秒更新一次）
-            placeholders = ','.join(['%s'] * len(symbols))
-            cursor.execute(f"""
-                SELECT p1.symbol, p1.price
-                FROM price_data p1
-                INNER JOIN (
-                    SELECT symbol, MAX(timestamp) as max_ts
-                    FROM price_data
-                    WHERE symbol IN ({placeholders})
-                    GROUP BY symbol
-                ) p2 ON p1.symbol = p2.symbol AND p1.timestamp = p2.max_ts
-            """, symbols)
-
-            # 构建价格映射
+            # 批量获取所有符号的实时价格
+            # 优先使用实盘引擎的实时API（毫秒级），回退到price_data表（5秒延迟）
             price_map = {}
-            for row in cursor.fetchall():
-                price_map[row['symbol']] = float(row['price'])
+            for symbol in symbols:
+                try:
+                    if self.live_engine:
+                        # 使用实盘引擎的实时价格API
+                        price = self.live_engine.get_current_price(symbol)
+                        if price and price > 0:
+                            price_map[symbol] = float(price)
+                            continue
+                except Exception as e:
+                    logger.debug(f"获取 {symbol} 实时价格失败: {e}")
+
+                # 回退：从数据库获取
+                cursor.execute("""
+                    SELECT price FROM price_data
+                    WHERE symbol = %s
+                    ORDER BY timestamp DESC LIMIT 1
+                """, (symbol,))
+                row = cursor.fetchone()
+                if row:
+                    price_map[symbol] = float(row['price'])
 
             # 获取移动止盈参数
             raw_activate = strategy.get('trailingActivate')
