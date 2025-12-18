@@ -2282,11 +2282,17 @@ class StrategyExecutorV2:
             if reversal_direction:
                 logger.info(f"🔄 {symbol} 反转开仓: {reversal_direction}, buy_directions={buy_directions}")
                 entry_reason = f"reversal_entry: EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
-                open_result = await self.execute_open_position(
-                    symbol, reversal_direction, 'reversal_cross',
-                    strategy, account_id, signal_reason=entry_reason,
-                    force_market=True
-                )
+                try:
+                    open_result = await self.execute_open_position(
+                        symbol, reversal_direction, 'reversal_cross',
+                        strategy, account_id, signal_reason=entry_reason,
+                        force_market=True
+                    )
+                    logger.info(f"🔄 {symbol} 反转开仓结果: {open_result}")
+                except Exception as e:
+                    logger.error(f"❌ {symbol} 反转开仓异常: {e}")
+                    import traceback
+                    traceback.print_exc()
 
             # 3.1 检查金叉/死叉信号（非反转情况）
             if not open_result or not open_result.get('success'):
