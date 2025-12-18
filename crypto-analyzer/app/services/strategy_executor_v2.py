@@ -1629,7 +1629,7 @@ class StrategyExecutorV2:
 
     async def execute_open_position(self, symbol: str, direction: str, signal_type: str,
                                      strategy: Dict, account_id: int = 2,
-                                     signal_reason: str = None) -> Dict:
+                                     signal_reason: str = None, force_market: bool = False) -> Dict:
         """
         执行开仓（或创建待开仓记录）
 
@@ -1640,6 +1640,7 @@ class StrategyExecutorV2:
             strategy: 策略配置
             account_id: 账户ID
             signal_reason: 开仓原因详情
+            force_market: 强制市价开仓（跳过自检）
 
         Returns:
             执行结果
@@ -1652,13 +1653,14 @@ class StrategyExecutorV2:
 
             current_price = ema_data['current_price']
 
-            # ========== 金叉/死叉信号直接市价开仓，其他信号走自检 ==========
-            is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover')
+            # ========== 强制市价开仓（反转信号）或金叉/死叉信号直接市价开仓 ==========
+            is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover', 'reversal_cross')
             cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
 
-            if is_cross_signal and cross_signal_force_market:
-                # 金叉/死叉信号直接市价开仓，不走自检
-                logger.info(f"⚡ {symbol} {direction} 金叉/死叉信号，直接市价开仓")
+            if force_market or (is_cross_signal and cross_signal_force_market):
+                # 反转信号或金叉/死叉信号直接市价开仓，不走自检
+                log_msg = "反转信号" if force_market else "金叉/死叉信号"
+                logger.info(f"⚡ {symbol} {direction} {log_msg}，直接市价开仓")
                 return await self._do_open_position(
                     symbol=symbol,
                     direction=direction,
@@ -2241,9 +2243,13 @@ class StrategyExecutorV2:
         strategy_id = strategy.get('id')
         has_open_position = any(p.get('status') == 'open' for p in positions)
 
-        # 检查是否刚刚发生了金叉/死叉反转平仓（跳过冷却）
+        # 检查是否刚刚发生了金叉/死叉反转平仓（跳过所有检查，立即市价开仓）
+        # 注意：只有"金叉反转平仓"和"死叉反转平仓"才是绝佳买入时机，"趋势反转平仓"不算
         just_reversed = any(
-            p.get('status') == 'closed' and '反转平仓' in p.get('close_reason', '')
+            p.get('status') == 'closed' and (
+                '金叉反转平仓' in p.get('close_reason', '') or
+                '死叉反转平仓' in p.get('close_reason', '')
+            )
             for p in positions
         )
 
@@ -2253,28 +2259,30 @@ class StrategyExecutorV2:
             debug_info.append(f"金叉/死叉: {signal_desc}")
 
             if signal and signal in buy_directions:
-                # 检查EMA+MA一致性
-                consistent, reason = self.check_ema_ma_consistency(ema_data, signal)
-                debug_info.append(f"EMA+MA一致性: {reason}")
-
-                if consistent:
-                    # 应用所有技术指标过滤器
-                    filters_passed, filter_results = self.apply_all_filters(
-                        symbol, signal, current_price, ema_data, strategy
+                # ⚡ 反转平仓后：跳过所有检查，只要信号强度够就立即市价开仓
+                if just_reversed:
+                    debug_info.append("🔄 反转平仓后立即市价开仓（跳过所有检查）")
+                    entry_reason = f"reversal_entry: EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
+                    # 强制市价开仓，跳过自检
+                    open_result = await self.execute_open_position(
+                        symbol, signal, 'reversal_cross',
+                        strategy, account_id, signal_reason=entry_reason,
+                        force_market=True  # 强制市价，跳过自检
                     )
-                    debug_info.extend(filter_results)
+                else:
+                    # 正常流程：检查EMA+MA一致性
+                    consistent, reason = self.check_ema_ma_consistency(ema_data, signal)
+                    debug_info.append(f"EMA+MA一致性: {reason}")
 
-                    if filters_passed:
-                        # 反转平仓后跳过冷却检查，直接开仓
-                        if just_reversed:
-                            debug_info.append("🔄 反转平仓后立即开仓（跳过冷却）")
-                            entry_reason = f"reversal_entry: {reason}, EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
-                            open_result = await self.execute_open_position(
-                                symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
-                                strategy, account_id, signal_reason=entry_reason
-                            )
-                        else:
-                            # 正常检查开仓冷却
+                    if consistent:
+                        # 应用所有技术指标过滤器
+                        filters_passed, filter_results = self.apply_all_filters(
+                            symbol, signal, current_price, ema_data, strategy
+                        )
+                        debug_info.extend(filter_results)
+
+                        if filters_passed:
+                            # 检查开仓冷却
                             in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, signal, strategy, strategy_id)
                             if in_cooldown:
                                 debug_info.append(f"⏳ {cooldown_msg}")
@@ -2285,8 +2293,8 @@ class StrategyExecutorV2:
                                     symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
                                     strategy, account_id, signal_reason=entry_reason
                                 )
-                    else:
-                        debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
+                        else:
+                            debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
             # 3.2 检查连续趋势信号（原有的5M放大检测）
             if not open_result or not open_result.get('success'):
