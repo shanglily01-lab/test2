@@ -2062,9 +2062,7 @@ class StrategyExecutorV2:
             trailing_activate = raw_activate if raw_activate is not None else self.TRAILING_ACTIVATE
             trailing_callback = raw_callback if raw_callback is not None else self.TRAILING_CALLBACK
 
-            # 每次都输出，确认配置是否正确读取
-            if positions:
-                logger.info(f"[移动止盈] 策略={strategy.get('name')}, raw={raw_activate}/{raw_callback}, 使用={trailing_activate}%/{trailing_callback}%")
+            # 配置已验证正确 (raw=1/0.3)，不再输出刷屏日志
 
             for position in positions:
                 symbol = position['symbol']
