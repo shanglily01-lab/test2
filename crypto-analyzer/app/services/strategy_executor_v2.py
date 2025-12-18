@@ -2232,12 +2232,21 @@ class StrategyExecutorV2:
                 debug_info.append(f"平仓: {close_reason}")
                 # 标记该仓位已平仓（内存中）
                 position['status'] = 'closed'
+                # 记录反转平仓信息（用于跳过冷却）
+                position['close_reason'] = close_reason
 
         # 3. 如果无持仓或所有仓位都已平仓，检查开仓信号
         # 注意：平仓后 position['status'] 已在上面更新为 'closed'
         open_result = None
         strategy_id = strategy.get('id')
         has_open_position = any(p.get('status') == 'open' for p in positions)
+
+        # 检查是否刚刚发生了金叉/死叉反转平仓（跳过冷却）
+        just_reversed = any(
+            p.get('status') == 'closed' and '反转平仓' in p.get('close_reason', '')
+            for p in positions
+        )
+
         if not positions or not has_open_position:
             # 3.1 检查金叉/死叉信号
             signal, signal_desc = self.check_golden_death_cross(ema_data)
@@ -2256,17 +2265,26 @@ class StrategyExecutorV2:
                     debug_info.extend(filter_results)
 
                     if filters_passed:
-                        # 检查开仓冷却
-                        in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, signal, strategy, strategy_id)
-                        if in_cooldown:
-                            debug_info.append(f"⏳ {cooldown_msg}")
-                        else:
-                            # 构建开仓原因
-                            entry_reason = f"crossover: {reason}, EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
+                        # 反转平仓后跳过冷却检查，直接开仓
+                        if just_reversed:
+                            debug_info.append("🔄 反转平仓后立即开仓（跳过冷却）")
+                            entry_reason = f"reversal_entry: {reason}, EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
                             open_result = await self.execute_open_position(
                                 symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
                                 strategy, account_id, signal_reason=entry_reason
                             )
+                        else:
+                            # 正常检查开仓冷却
+                            in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, signal, strategy, strategy_id)
+                            if in_cooldown:
+                                debug_info.append(f"⏳ {cooldown_msg}")
+                            else:
+                                # 构建开仓原因
+                                entry_reason = f"crossover: {reason}, EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
+                                open_result = await self.execute_open_position(
+                                    symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
+                                    strategy, account_id, signal_reason=entry_reason
+                                )
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
