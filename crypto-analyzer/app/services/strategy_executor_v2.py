@@ -414,6 +414,318 @@ class StrategyExecutorV2:
             cursor.close()
             conn.close()
 
+    # ==================== 限价单信号检测 ====================
+
+    def check_limit_entry_signal(self, symbol: str, ema_data: Dict, strategy: Dict,
+                                  strategy_id: int) -> Tuple[Optional[str], str]:
+        """
+        检测限价单开仓信号
+        条件：EMA趋势强度 > 0.25% 且方向一致 + 无PENDING限价单 + 不在冷却期
+
+        Args:
+            symbol: 交易对
+            ema_data: EMA数据
+            strategy: 策略配置
+            strategy_id: 策略ID
+
+        Returns:
+            (信号方向 'long'/'short'/None, 信号描述)
+        """
+        # 检查是否启用限价单
+        long_price_type = strategy.get('longPrice', 'market')
+        short_price_type = strategy.get('shortPrice', 'market')
+
+        if long_price_type == 'market' and short_price_type == 'market':
+            return None, "限价单未配置"
+
+        # 获取EMA数据
+        ema9 = ema_data['ema9']
+        ema26 = ema_data['ema26']
+        ema_diff = ema_data['ema_diff']
+        ema_diff_pct = ema_data['ema_diff_pct']
+        current_price = ema_data['current_price']
+        ma10 = ema_data['ma10']
+
+        # 限价单要求更强的趋势强度（0.25%）
+        LIMIT_ORDER_MIN_STRENGTH = 0.25
+
+        if ema_diff_pct < LIMIT_ORDER_MIN_STRENGTH:
+            return None, f"限价单信号强度不足({ema_diff_pct:.3f}% < {LIMIT_ORDER_MIN_STRENGTH}%)"
+
+        # 判断方向
+        if ema_diff > 0:  # EMA9 > EMA26, 上升趋势
+            direction = 'long'
+            price_type = long_price_type
+        else:  # EMA9 < EMA26, 下降趋势
+            direction = 'short'
+            price_type = short_price_type
+
+        # 如果该方向没有配置限价单，跳过
+        if price_type == 'market':
+            return None, f"{direction}方向未配置限价单"
+
+        # 检查EMA+MA方向一致性
+        if direction == 'long':
+            if current_price <= ma10:
+                return None, f"限价单做多: 价格{current_price:.4f} <= MA10{ma10:.4f}, 趋势不一致"
+        else:
+            if current_price >= ma10:
+                return None, f"限价单做空: 价格{current_price:.4f} >= MA10{ma10:.4f}, 趋势不一致"
+
+        # 检查是否已有PENDING限价单
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            position_side = 'LONG' if direction == 'long' else 'SHORT'
+            order_side = f'OPEN_{position_side}'
+
+            cursor.execute("""
+                SELECT id, created_at FROM futures_orders
+                WHERE symbol = %s AND strategy_id = %s
+                AND side = %s AND status = 'PENDING'
+                ORDER BY created_at DESC LIMIT 1
+            """, (symbol, strategy_id, order_side))
+
+            pending_order = cursor.fetchone()
+            if pending_order:
+                cursor.close()
+                conn.close()
+                return None, f"已有PENDING限价单(ID:{pending_order['id']})"
+
+            # 检查限价单冷却期（30分钟）
+            LIMIT_ORDER_COOLDOWN_MINUTES = 30
+            cooldown_start = self.get_local_time() - timedelta(minutes=LIMIT_ORDER_COOLDOWN_MINUTES)
+
+            # 检查是否有最近超时/取消的限价单
+            cursor.execute("""
+                SELECT id, created_at, status FROM futures_orders
+                WHERE symbol = %s AND strategy_id = %s
+                AND side = %s AND status IN ('CANCELLED', 'EXPIRED')
+                AND updated_at >= %s
+                ORDER BY updated_at DESC LIMIT 1
+            """, (symbol, strategy_id, order_side, cooldown_start))
+
+            cancelled_order = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if cancelled_order:
+                return None, f"限价单冷却中(最近有超时/取消订单ID:{cancelled_order['id']})"
+
+        except Exception as e:
+            logger.warning(f"{symbol} 检查限价单状态失败: {e}")
+            return None, f"检查限价单状态失败: {e}"
+
+        return direction, f"限价单信号({direction}, 强度{ema_diff_pct:.3f}%)"
+
+    async def execute_limit_order(self, symbol: str, direction: str, strategy: Dict,
+                                   account_id: int, ema_data: Dict) -> Dict:
+        """
+        执行限价单开仓（不需要自检，直接挂单）
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            strategy: 策略配置
+            account_id: 账户ID
+            ema_data: EMA数据
+
+        Returns:
+            执行结果
+        """
+        try:
+            current_price = ema_data['current_price']
+            leverage = strategy.get('leverage', 10)
+            sync_live = strategy.get('syncLive', False)
+
+            # 获取限价配置
+            if direction == 'long':
+                price_type = strategy.get('longPrice', 'market')
+            else:
+                price_type = strategy.get('shortPrice', 'market')
+
+            # 计算限价
+            limit_price = self._calculate_limit_price(current_price, price_type, direction)
+            if limit_price is None:
+                return {'success': False, 'error': '无法计算限价'}
+
+            # 计算开仓数量（固定100U保证金）
+            margin = 100.0
+            notional = margin * leverage
+            quantity = notional / limit_price
+
+            # 止损止盈
+            stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
+            take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
+
+            # 执行模拟挂单
+            if self.futures_engine:
+                position_side = direction.upper()
+
+                result = self.futures_engine.open_position(
+                    account_id=account_id,
+                    symbol=symbol,
+                    position_side=position_side,
+                    quantity=Decimal(str(quantity)),
+                    leverage=leverage,
+                    limit_price=Decimal(str(limit_price)),  # 限价单
+                    stop_loss_pct=Decimal(str(stop_loss_pct)),
+                    take_profit_pct=Decimal(str(take_profit_pct)),
+                    source='strategy_limit',
+                    strategy_id=strategy.get('id')
+                )
+
+                if result.get('success'):
+                    position_id = result.get('position_id')
+                    order_id = result.get('order_id')
+
+                    # 记录限价单超时时间
+                    timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 30)
+
+                    logger.info(f"📋 {symbol} 限价单已挂出: {direction} {quantity:.8f} @ {limit_price:.4f} "
+                               f"(市价:{current_price:.4f}, 偏离:{((limit_price-current_price)/current_price*100):+.2f}%), "
+                               f"超时:{timeout_minutes}分钟")
+
+                    # 同步实盘限价单
+                    if sync_live and self.live_engine:
+                        await self._sync_live_limit_order(
+                            symbol, direction, quantity, leverage, strategy,
+                            limit_price, position_id
+                        )
+
+                    return {
+                        'success': True,
+                        'position_id': position_id,
+                        'order_id': order_id,
+                        'direction': direction,
+                        'quantity': quantity,
+                        'limit_price': limit_price,
+                        'signal_type': 'limit_order',
+                        'is_pending': True
+                    }
+                else:
+                    return {'success': False, 'error': result.get('error', '挂单失败')}
+
+            return {'success': False, 'error': '交易引擎未初始化'}
+
+        except Exception as e:
+            logger.error(f"限价单执行失败: {e}")
+            return {'success': False, 'error': str(e)}
+
+    async def _sync_live_limit_order(self, symbol: str, direction: str, quantity: float,
+                                      leverage: int, strategy: Dict, limit_price: float,
+                                      paper_position_id: int = None):
+        """
+        同步实盘限价单
+
+        Args:
+            symbol: 交易对
+            direction: 方向
+            quantity: 数量
+            leverage: 杠杆
+            strategy: 策略配置
+            limit_price: 限价
+            paper_position_id: 模拟盘持仓ID
+        """
+        try:
+            if not self.live_engine:
+                return
+
+            # 实盘固定100U保证金
+            live_margin = 100
+            live_quantity = (live_margin * leverage) / float(limit_price)
+
+            stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
+            take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
+
+            position_side = 'LONG' if direction == 'long' else 'SHORT'
+            result = self.live_engine.open_position(
+                account_id=2,
+                symbol=symbol,
+                position_side=position_side,
+                quantity=Decimal(str(live_quantity)),
+                leverage=leverage,
+                limit_price=Decimal(str(limit_price)),  # 限价单
+                stop_loss_pct=Decimal(str(stop_loss_pct)),
+                take_profit_pct=Decimal(str(take_profit_pct)),
+                source='strategy_limit_sync',
+                paper_position_id=paper_position_id
+            )
+
+            if result.get('success'):
+                logger.info(f"✅ {symbol} 实盘限价单同步成功: {direction} @ {limit_price:.4f}")
+            else:
+                logger.warning(f"⚠️ {symbol} 实盘限价单同步失败: {result.get('error')}")
+
+        except Exception as e:
+            logger.error(f"实盘限价单同步异常: {e}")
+
+    async def check_and_cancel_timeout_orders(self, strategy: Dict, account_id: int = 2):
+        """
+        检查并取消超时的限价单
+
+        Args:
+            strategy: 策略配置
+            account_id: 账户ID
+        """
+        try:
+            timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 30)
+            timeout_threshold = self.get_local_time() - timedelta(minutes=timeout_minutes)
+
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            # 查找超时的PENDING限价单
+            cursor.execute("""
+                SELECT fo.id, fo.symbol, fo.side, fo.price, fo.created_at, fp.id as position_id
+                FROM futures_orders fo
+                LEFT JOIN futures_positions fp ON fo.position_id = fp.id
+                WHERE fo.strategy_id = %s AND fo.status = 'PENDING'
+                AND fo.order_type = 'LIMIT' AND fo.created_at < %s
+            """, (strategy.get('id'), timeout_threshold))
+
+            timeout_orders = cursor.fetchall()
+
+            for order in timeout_orders:
+                order_id = order['id']
+                symbol = order['symbol']
+                position_id = order.get('position_id')
+
+                logger.info(f"⏰ {symbol} 限价单超时，取消订单(ID:{order_id})")
+
+                # 更新订单状态为EXPIRED
+                cursor.execute("""
+                    UPDATE futures_orders SET status = 'EXPIRED', updated_at = NOW()
+                    WHERE id = %s
+                """, (order_id,))
+
+                # 如果有关联的持仓，也标记为取消
+                if position_id:
+                    cursor.execute("""
+                        UPDATE futures_positions SET status = 'cancelled', updated_at = NOW()
+                        WHERE id = %s AND status = 'pending'
+                    """, (position_id,))
+
+                conn.commit()
+
+                # 同步取消实盘限价单
+                if strategy.get('syncLive') and self.live_engine:
+                    try:
+                        self.live_engine.cancel_pending_order(symbol)
+                        logger.info(f"✅ {symbol} 实盘限价单已取消")
+                    except Exception as e:
+                        logger.warning(f"⚠️ {symbol} 取消实盘限价单失败: {e}")
+
+            cursor.close()
+            conn.close()
+
+            if timeout_orders:
+                logger.info(f"📋 已取消 {len(timeout_orders)} 个超时限价单")
+
+        except Exception as e:
+            logger.error(f"检查超时限价单失败: {e}")
+
     # ==================== 技术指标过滤器 ====================
 
     def check_rsi_filter(self, symbol: str, direction: str, strategy: Dict) -> Tuple[bool, str]:
@@ -1653,6 +1965,9 @@ class StrategyExecutorV2:
         Returns:
             执行结果
         """
+        # 首先检查并取消超时的限价单
+        await self.check_and_cancel_timeout_orders(strategy, account_id)
+
         results = []
         symbols = strategy.get('symbols', [])
         buy_directions = strategy.get('buyDirection', ['long', 'short'])
@@ -1842,6 +2157,19 @@ class StrategyExecutorV2:
                             )
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
+
+            # 3.5 检查限价单信号（无需自检，直接挂单）
+            if not open_result or not open_result.get('success'):
+                limit_signal, limit_desc = self.check_limit_entry_signal(symbol, ema_data, strategy, strategy_id)
+                debug_info.append(f"限价单信号: {limit_desc}")
+
+                if limit_signal and limit_signal in buy_directions:
+                    # 限价单不需要应用技术指标过滤器，直接执行
+                    open_result = await self.execute_limit_order(
+                        symbol, limit_signal, strategy, account_id, ema_data
+                    )
+                    if open_result and open_result.get('success'):
+                        debug_info.append(f"✅ 限价单已挂出: {limit_signal} @ {open_result.get('limit_price', 0):.4f}")
 
         # 信号检测日志全部改为debug级别，只有开仓成功/失败才打印info
         logger.debug(f"📊 [{symbol}] 信号检测 | 价格:{current_price:.4f} | EMA9:{ema_data['ema9']:.4f} EMA26:{ema_data['ema26']:.4f} | 差值:{ema_data['ema_diff_pct']:.3f}%")
