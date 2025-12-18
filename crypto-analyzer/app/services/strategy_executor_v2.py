@@ -1578,17 +1578,15 @@ class StrategyExecutorV2:
         max_profit_pct = float(position.get('max_profit_pct') or 0)
         trailing_activated = position.get('trailing_stop_activated') or False
 
-        # 更新最高盈利
-        if current_pnl_pct > max_profit_pct:
+        # 更新最高盈利（只在有明显变化时更新，避免浮点数精度导致重复更新）
+        # 最小变化阈值：0.01%
+        if current_pnl_pct > max_profit_pct + 0.01:
             updates['max_profit_pct'] = current_pnl_pct
             logger.info(f"[盈利更新] {symbol} 最高盈利更新: {max_profit_pct:.2f}% -> {current_pnl_pct:.2f}%")
             max_profit_pct = current_pnl_pct
 
-            # 更新最高/最低价格
-            if position_side == 'LONG':
-                updates['max_profit_price'] = current_price
-            else:
-                updates['max_profit_price'] = current_price
+            # 更新最高价格
+            updates['max_profit_price'] = current_price
 
         # 检查是否激活移动止盈
         if not trailing_activated and max_profit_pct >= trailing_activate:
@@ -2096,8 +2094,9 @@ class StrategyExecutorV2:
                     await self.execute_close_position(position, close_reason, strategy)
                     continue  # 已平仓，跳过后续处理
 
-                # 更新最高盈利（只在有变化时记录日志）
-                if current_pnl_pct > max_profit_pct:
+                # 更新最高盈利（只在有明显变化时更新，避免浮点数精度导致重复更新）
+                # 最小变化阈值：0.01%
+                if current_pnl_pct > max_profit_pct + 0.01:
                     updates['max_profit_pct'] = current_pnl_pct
                     updates['max_profit_price'] = current_price
                     logger.info(f"[快速更新] {symbol} 最高盈利: {max_profit_pct:.2f}% -> {current_pnl_pct:.2f}%")
