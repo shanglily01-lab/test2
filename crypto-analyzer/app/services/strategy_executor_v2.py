@@ -587,12 +587,8 @@ class StrategyExecutorV2:
                                f"(市价:{current_price:.4f}, 偏离:{((limit_price-current_price)/current_price*100):+.2f}%), "
                                f"超时:{timeout_minutes}分钟")
 
-                    # 同步实盘限价单
-                    if sync_live and self.live_engine:
-                        await self._sync_live_limit_order(
-                            symbol, direction, quantity, leverage, strategy,
-                            limit_price, position_id
-                        )
+                    # 注意：限价单创建时不同步实盘，等模拟盘成交后再同步
+                    # 实盘同步在 futures_limit_order_executor.py 中处理
 
                     return {
                         'success': True,
@@ -612,54 +608,6 @@ class StrategyExecutorV2:
         except Exception as e:
             logger.error(f"限价单执行失败: {e}")
             return {'success': False, 'error': str(e)}
-
-    async def _sync_live_limit_order(self, symbol: str, direction: str, quantity: float,
-                                      leverage: int, strategy: Dict, limit_price: float,
-                                      paper_position_id: int = None):
-        """
-        同步实盘限价单
-
-        Args:
-            symbol: 交易对
-            direction: 方向
-            quantity: 数量
-            leverage: 杠杆
-            strategy: 策略配置
-            limit_price: 限价
-            paper_position_id: 模拟盘持仓ID
-        """
-        try:
-            if not self.live_engine:
-                return
-
-            # 实盘固定100U保证金
-            live_margin = 100
-            live_quantity = (live_margin * leverage) / float(limit_price)
-
-            stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
-            take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
-
-            position_side = 'LONG' if direction == 'long' else 'SHORT'
-            result = self.live_engine.open_position(
-                account_id=2,
-                symbol=symbol,
-                position_side=position_side,
-                quantity=Decimal(str(live_quantity)),
-                leverage=leverage,
-                limit_price=Decimal(str(limit_price)),  # 限价单
-                stop_loss_pct=Decimal(str(stop_loss_pct)),
-                take_profit_pct=Decimal(str(take_profit_pct)),
-                source='strategy_limit_sync',
-                paper_position_id=paper_position_id
-            )
-
-            if result.get('success'):
-                logger.info(f"✅ {symbol} 实盘限价单同步成功: {direction} @ {limit_price:.4f}")
-            else:
-                logger.warning(f"⚠️ {symbol} 实盘限价单同步失败: {result.get('error')}")
-
-        except Exception as e:
-            logger.error(f"实盘限价单同步异常: {e}")
 
     async def check_and_cancel_timeout_orders(self, strategy: Dict, account_id: int = 2):
         """
