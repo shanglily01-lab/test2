@@ -1269,7 +1269,6 @@ class StrategyExecutorV2:
             (是否需要平仓, 原因)
         """
         position_side = position.get('position_side', 'LONG')
-        symbol = position.get('symbol', '')
 
         # 使用已收盘K线的EMA判断金叉/死叉，避免未收盘K线波动导致误判
         ema9 = ema_data.get('confirmed_ema9', ema_data['ema9'])
@@ -1277,40 +1276,27 @@ class StrategyExecutorV2:
         prev_ema9 = ema_data['prev_ema9']
         prev_ema26 = ema_data['prev_ema26']
 
-        # 获取信号强度（使用已收盘K线的EMA差值）
-        ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
+        # 平仓不检查信号强度，趋势已变应尽快平仓
 
         if position_side == 'LONG':
-            # 持多仓 + 死叉 → 检查信号强度后平仓
+            # 持多仓 + 死叉 → 立即平仓
             is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
             if is_death_cross:
-                if ema_diff_pct >= self.MIN_SIGNAL_STRENGTH:
-                    return True, "死叉反转平仓(已收盘确认)"
-                else:
-                    logger.debug(f"📉 {symbol} 死叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)，暂不平仓")
-                    return False, ""
+                return True, "死叉反转平仓(已收盘确认)"
 
-            # 趋势反转：EMA9 < EMA26（已收盘确认），也检查信号强度
+            # 趋势反转：EMA9 < EMA26（已收盘确认）
             if ema9 < ema26:
-                if ema_diff_pct >= self.MIN_SIGNAL_STRENGTH:
-                    return True, "趋势反转平仓(EMA9 < EMA26)"
-                # 信号强度不足时不输出日志，避免刷屏
+                return True, "趋势反转平仓(EMA9 < EMA26)"
 
         else:  # SHORT
-            # 持空仓 + 金叉 → 检查信号强度后平仓
+            # 持空仓 + 金叉 → 立即平仓
             is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
             if is_golden_cross:
-                if ema_diff_pct >= self.MIN_SIGNAL_STRENGTH:
-                    return True, "金叉反转平仓(已收盘确认)"
-                else:
-                    logger.debug(f"📈 {symbol} 金叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)，暂不平仓")
-                    return False, ""
+                return True, "金叉反转平仓(已收盘确认)"
 
-            # 趋势反转：EMA9 > EMA26（已收盘确认），也检查信号强度
+            # 趋势反转：EMA9 > EMA26（已收盘确认）
             if ema9 > ema26:
-                if ema_diff_pct >= self.MIN_SIGNAL_STRENGTH:
-                    return True, "趋势反转平仓(EMA9 > EMA26)"
-                # 信号强度不足时不输出日志，避免刷屏
+                return True, "趋势反转平仓(EMA9 > EMA26)"
 
         return False, ""
 
