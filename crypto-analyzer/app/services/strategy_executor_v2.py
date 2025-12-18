@@ -2287,23 +2287,18 @@ class StrategyExecutorV2:
                 if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
                     logger.info(f"🔄 {symbol} 反转开仓跳过: 信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)")
                 else:
-                    # 检查EMA+MA一致性
-                    consistent, consistency_reason = self.check_ema_ma_consistency(ema_data, reversal_direction)
-                    if not consistent:
-                        logger.info(f"🔄 {symbol} 反转开仓跳过: {consistency_reason}")
-                    else:
-                        entry_reason = f"reversal_entry: {consistency_reason}, EMA_diff:{ema_diff_pct:.3f}%"
-                        try:
-                            open_result = await self.execute_open_position(
-                                symbol, reversal_direction, 'reversal_cross',
-                                strategy, account_id, signal_reason=entry_reason,
-                                force_market=True
-                            )
-                            logger.info(f"🔄 {symbol} 反转开仓结果: {open_result}")
-                        except Exception as e:
-                            logger.error(f"❌ {symbol} 反转开仓异常: {e}")
-                            import traceback
-                            traceback.print_exc()
+                    entry_reason = f"reversal_entry: EMA_diff:{ema_diff_pct:.3f}%"
+                    try:
+                        open_result = await self.execute_open_position(
+                            symbol, reversal_direction, 'reversal_cross',
+                            strategy, account_id, signal_reason=entry_reason,
+                            force_market=True
+                        )
+                        logger.info(f"🔄 {symbol} 反转开仓结果: {open_result}")
+                    except Exception as e:
+                        logger.error(f"❌ {symbol} 反转开仓异常: {e}")
+                        import traceback
+                        traceback.print_exc()
 
             # 3.1 检查金叉/死叉信号（非反转情况）
             if not open_result or not open_result.get('success'):
