@@ -235,12 +235,24 @@ class StrategyExecutorV2:
             ma10 = ma10_values[-1]
             current_price = close_prices[-1]
 
-            # 前一根K线的EMA值（用于判断金叉/死叉）
-            prev_ema9 = ema9_values[-2] if len(ema9_values) >= 2 else ema9
-            prev_ema26 = ema26_values[-2] if len(ema26_values) >= 2 else ema26
+            # 金叉/死叉判断应使用已收盘的K线数据：
+            # - klines[-1] 是当前未收盘K线（数据会变化）
+            # - klines[-2] 是最近一根已收盘K线
+            # - klines[-3] 是倒数第二根已收盘K线
+            # 所以：
+            # - ema9_values[-2] / ema26_values[-2] 是最近已收盘K线的EMA
+            # - ema9_values[-3] / ema26_values[-3] 是倒数第二根已收盘K线的EMA
+            prev_ema9 = ema9_values[-3] if len(ema9_values) >= 3 else ema9_values[-2] if len(ema9_values) >= 2 else ema9
+            prev_ema26 = ema26_values[-3] if len(ema26_values) >= 3 else ema26_values[-2] if len(ema26_values) >= 2 else ema26
+            # 用于金叉/死叉判断的当前EMA（已收盘K线）
+            confirmed_ema9 = ema9_values[-2] if len(ema9_values) >= 2 else ema9
+            confirmed_ema26 = ema26_values[-2] if len(ema26_values) >= 2 else ema26
 
             ema_diff = ema9 - ema26
             ema_diff_pct = abs(ema_diff) / ema26 * 100 if ema26 != 0 else 0
+            # 已确认的EMA差值（用于信号强度判断）
+            confirmed_ema_diff = confirmed_ema9 - confirmed_ema26
+            confirmed_ema_diff_pct = abs(confirmed_ema_diff) / confirmed_ema26 * 100 if confirmed_ema26 != 0 else 0
 
             return {
                 'ema9': ema9,
@@ -251,6 +263,10 @@ class StrategyExecutorV2:
                 'current_price': current_price,
                 'prev_ema9': prev_ema9,
                 'prev_ema26': prev_ema26,
+                # 已收盘K线的EMA（用于金叉/死叉判断）
+                'confirmed_ema9': confirmed_ema9,
+                'confirmed_ema26': confirmed_ema26,
+                'confirmed_ema_diff_pct': confirmed_ema_diff_pct,
                 'klines': klines,
                 'ema9_values': ema9_values,
                 'ema26_values': ema26_values
@@ -302,32 +318,34 @@ class StrategyExecutorV2:
 
     def check_golden_death_cross(self, ema_data: Dict) -> Tuple[Optional[str], str]:
         """
-        检测金叉/死叉信号
+        检测金叉/死叉信号（使用已收盘K线判断，避免误判）
 
         Returns:
             (信号方向 'long'/'short'/None, 信号描述)
         """
-        ema9 = ema_data['ema9']
-        ema26 = ema_data['ema26']
+        # 使用已收盘K线的EMA判断金叉/死叉
+        ema9 = ema_data.get('confirmed_ema9', ema_data['ema9'])
+        ema26 = ema_data.get('confirmed_ema26', ema_data['ema26'])
         prev_ema9 = ema_data['prev_ema9']
         prev_ema26 = ema_data['prev_ema26']
-        ema_diff_pct = ema_data['ema_diff_pct']
+        # 使用已收盘K线的EMA差值
+        ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
 
-        # 金叉：前一根EMA9 <= EMA26，当前EMA9 > EMA26
+        # 金叉：前一根EMA9 <= EMA26，当前EMA9 > EMA26（已收盘确认）
         is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
 
-        # 死叉：前一根EMA9 >= EMA26，当前EMA9 < EMA26
+        # 死叉：前一根EMA9 >= EMA26，当前EMA9 < EMA26（已收盘确认）
         is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
 
         if is_golden_cross:
             if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
                 return None, f"金叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)"
-            return 'long', f"金叉信号(强度{ema_diff_pct:.3f}%)"
+            return 'long', f"金叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
 
         if is_death_cross:
             if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
                 return None, f"死叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)"
-            return 'short', f"死叉信号(强度{ema_diff_pct:.3f}%)"
+            return 'short', f"死叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
 
         return None, "无金叉/死叉信号"
 
@@ -1241,7 +1259,7 @@ class StrategyExecutorV2:
 
     def check_cross_reversal(self, position: Dict, ema_data: Dict) -> Tuple[bool, str]:
         """
-        检测金叉/死叉反转信号（不检查强度，直接平仓）
+        检测金叉/死叉反转信号（使用已收盘K线判断，避免误判）
 
         Args:
             position: 持仓信息
@@ -1252,8 +1270,9 @@ class StrategyExecutorV2:
         """
         position_side = position.get('position_side', 'LONG')
 
-        ema9 = ema_data['ema9']
-        ema26 = ema_data['ema26']
+        # 使用已收盘K线的EMA判断金叉/死叉，避免未收盘K线波动导致误判
+        ema9 = ema_data.get('confirmed_ema9', ema_data['ema9'])
+        ema26 = ema_data.get('confirmed_ema26', ema_data['ema26'])
         prev_ema9 = ema_data['prev_ema9']
         prev_ema26 = ema_data['prev_ema26']
 
@@ -1261,9 +1280,9 @@ class StrategyExecutorV2:
             # 持多仓 + 死叉 → 立即平仓
             is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
             if is_death_cross:
-                return True, "死叉反转平仓(不检查强度)"
+                return True, "死叉反转平仓(已收盘确认)"
 
-            # 趋势反转：EMA9 < EMA26
+            # 趋势反转：EMA9 < EMA26（已收盘确认）
             if ema9 < ema26:
                 return True, "趋势反转平仓(EMA9 < EMA26)"
 
@@ -1271,9 +1290,9 @@ class StrategyExecutorV2:
             # 持空仓 + 金叉 → 立即平仓
             is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
             if is_golden_cross:
-                return True, "金叉反转平仓(不检查强度)"
+                return True, "金叉反转平仓(已收盘确认)"
 
-            # 趋势反转：EMA9 > EMA26
+            # 趋势反转：EMA9 > EMA26（已收盘确认）
             if ema9 > ema26:
                 return True, "趋势反转平仓(EMA9 > EMA26)"
 
@@ -2282,12 +2301,12 @@ class StrategyExecutorV2:
             if reversal_direction:
                 logger.info(f"🔄 {symbol} 反转开仓: {reversal_direction}, buy_directions={buy_directions}")
 
-                # 检查信号强度（和普通金叉/死叉开仓逻辑一致）
-                ema_diff_pct = ema_data['ema_diff_pct']
+                # 检查信号强度（使用已收盘K线的EMA差值，和普通金叉/死叉开仓逻辑一致）
+                ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
                 if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
-                    logger.info(f"🔄 {symbol} 反转开仓跳过: 信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)")
+                    logger.info(f"🔄 {symbol} 反转开仓跳过: 信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%，已收盘确认)")
                 else:
-                    entry_reason = f"reversal_entry: EMA_diff:{ema_diff_pct:.3f}%"
+                    entry_reason = f"reversal_entry(已收盘确认): EMA_diff:{ema_diff_pct:.3f}%"
                     try:
                         open_result = await self.execute_open_position(
                             symbol, reversal_direction, 'reversal_cross',
