@@ -2278,13 +2278,17 @@ class StrategyExecutorV2:
 
             values.append(position_id)
 
-            cursor.execute(f"""
+            sql = f"""
                 UPDATE futures_positions
                 SET {', '.join(set_clauses)}
                 WHERE id = %s
-            """, values)
-
+            """
+            cursor.execute(sql, values)
             conn.commit()
+
+            # 记录更新日志
+            if 'max_profit_pct' in updates or 'trailing_stop_activated' in updates:
+                logger.info(f"[DB更新] position_id={position_id}, updates={updates}")
         finally:
             cursor.close()
             conn.close()
