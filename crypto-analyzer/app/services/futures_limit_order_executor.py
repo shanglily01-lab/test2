@@ -10,7 +10,6 @@ from typing import Dict, Optional, List
 import pymysql
 import json
 from loguru import logger
-from app.services.position_validator import get_position_validator
 
 
 class FuturesLimitOrderExecutor:
@@ -494,7 +493,6 @@ class FuturesLimitOrderExecutor:
 
                         # 检查是否达到触发条件
                         should_execute = False
-                        execute_at_market = False  # 是否以市价执行（超时转市价）
                         position_side = 'LONG' if side == 'OPEN_LONG' else 'SHORT'
 
                         # ===== 趋势转向检测：在趋势转向时取消限价单 =====
@@ -600,36 +598,10 @@ class FuturesLimitOrderExecutor:
                             timeout_seconds = timeout_minutes * 60
 
                             if elapsed_seconds >= timeout_seconds:
-                                # 超时，检查价格偏离是否过大
-                                # 做多：当前价格高于限价太多则取消（避免追高）
-                                # 做空：当前价格低于限价太多则取消（避免杀低）
-                                # 从策略配置读取最大偏离百分比，默认1.5%
-                                max_deviation_pct = Decimal(str(order.get('strategy_max_deviation', 1.5) or 1.5))
+                                # ========== 限价单超时：直接取消，不转自检 ==========
+                                logger.info(f"⏰ 限价单超时取消: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟, 限价={limit_price}, 当前={current_price}")
 
-                                if side == 'OPEN_LONG':
-                                    deviation_pct = (current_price - limit_price) / limit_price * 100
-                                else:  # OPEN_SHORT
-                                    deviation_pct = (limit_price - current_price) / limit_price * 100
-
-                                # 方案2：无论偏离大小，超时后都转市价执行（不再取消）
-                                # 偏离过大时也执行，只是记录不同的日志
-                                if deviation_pct > max_deviation_pct:
-                                    logger.info(f"⏰ 限价单超时转市价(偏离大): {symbol} {position_side} 价格偏离 {deviation_pct:.2f}% > {max_deviation_pct}%, 限价={limit_price}, 当前={current_price}")
-                                else:
-                                    logger.info(f"⏰ 限价单超时转市价: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟, 偏离 {deviation_pct:.2f}%")
-
-                                # ========== 限价单超时：转入待开仓自检 ==========
-                                # 超时后不直接市价执行，而是创建待开仓记录，由 PositionValidator 进行自检
-                                # 自检通过后才能开仓，确保市场条件仍然满足
-                                logger.info(f"⏰ 限价单超时，转入待开仓自检: {symbol} {position_side}")
-
-                                # 获取 PositionValidator 实例
-                                position_validator = get_position_validator()
-                                if not position_validator:
-                                    logger.error(f"❌ 限价单超时无法转自检: PositionValidator 未初始化")
-                                    continue
-
-                                # 解冻保证金（创建待开仓记录后，真正开仓时会重新冻结）
+                                # 解冻保证金
                                 frozen_margin = Decimal(str(order.get('margin', 0)))
                                 if frozen_margin > 0:
                                     with connection.cursor() as update_cursor:
@@ -641,61 +613,74 @@ class FuturesLimitOrderExecutor:
                                             (float(frozen_margin), float(frozen_margin), account_id)
                                         )
 
-                                # 更新限价单状态为 PENDING_VALIDATION（转入自检）
+                                # 更新限价单状态为 EXPIRED（超时取消）
                                 with connection.cursor() as update_cursor:
                                     update_cursor.execute(
                                         """UPDATE futures_orders
-                                        SET status = 'CANCELLED',
-                                            cancellation_reason = 'timeout_to_validation',
+                                        SET status = 'EXPIRED',
+                                            cancellation_reason = 'timeout',
                                             canceled_at = NOW(),
-                                            notes = CONCAT(COALESCE(notes, ''), ' TIMEOUT_TO_VALIDATION')
+                                            notes = CONCAT(COALESCE(notes, ''), ' TIMEOUT_CANCELLED')
                                         WHERE order_id = %s""",
                                         (order_id,)
                                     )
 
                                 connection.commit()
 
-                                # 构造 EMA 数据（从 K 线获取）
-                                ema_data = self._get_ema_data_for_validation(connection, symbol)
+                                # 同步取消实盘限价单
+                                try:
+                                    strategy_config = order.get('strategy_config')
+                                    if strategy_config and self.live_engine:
+                                        config = strategy_config
+                                        if isinstance(config, str):
+                                            try:
+                                                config = json.loads(config)
+                                            except:
+                                                config = {}
 
-                                # 解析策略配置
-                                strategy_config = order.get('strategy_config')
-                                strategy = {}
-                                if strategy_config:
-                                    config = strategy_config
-                                    if isinstance(config, str):
-                                        try:
-                                            config = json.loads(config)
-                                        except:
-                                            config = {}
-                                    if isinstance(config, dict):
-                                        strategy = config
+                                        sync_live = config.get('syncLive', False) if isinstance(config, dict) else False
+                                        if sync_live:
+                                            # 查找对应的实盘PENDING持仓
+                                            with connection.cursor() as cursor:
+                                                cursor.execute("""
+                                                    SELECT id, binance_order_id
+                                                    FROM live_futures_positions
+                                                    WHERE symbol = %s
+                                                      AND position_side = %s
+                                                      AND status = 'PENDING'
+                                                    ORDER BY created_at DESC
+                                                    LIMIT 1
+                                                """, (symbol, position_side))
+                                                live_pos = cursor.fetchone()
 
-                                strategy['id'] = order.get('strategy_id')
-                                strategy['leverage'] = leverage
+                                            if live_pos and live_pos.get('binance_order_id'):
+                                                binance_order_id = live_pos['binance_order_id']
+                                                logger.info(f"[同步实盘] 取消限价单(超时): {symbol} {position_side}, 订单ID={binance_order_id}")
 
-                                # 创建待开仓记录
-                                direction = 'long' if side == 'OPEN_LONG' else 'short'
-                                pending_result = position_validator.create_pending_position(
-                                    symbol=symbol,
-                                    direction=direction,
-                                    signal_type='limit_order_timeout',
-                                    signal_price=float(current_price),
-                                    ema_data=ema_data or {},
-                                    strategy=strategy,
-                                    account_id=account_id,
-                                    signal_reason=f"限价单超时转自检 (原限价: {limit_price})"
-                                )
+                                                cancel_result = self.live_engine.cancel_order(
+                                                    symbol=symbol,
+                                                    order_id=binance_order_id
+                                                )
 
-                                if pending_result.get('success'):
-                                    logger.info(f"✅ 限价单超时转待开仓自检成功: {symbol} {position_side}, pending_id={pending_result.get('pending_id')}")
-                                else:
-                                    logger.warning(f"⚠️ 限价单超时转待开仓自检: {symbol} {position_side} - {pending_result.get('error')}")
+                                                if cancel_result.get('success'):
+                                                    with connection.cursor() as cursor:
+                                                        cursor.execute("""
+                                                            UPDATE live_futures_positions
+                                                            SET status = 'CANCELED',
+                                                                close_reason = 'timeout',
+                                                                close_time = NOW(),
+                                                                notes = CONCAT(COALESCE(notes, ''), ' SYNCED_CANCEL_TIMEOUT')
+                                                            WHERE id = %s
+                                                        """, (live_pos['id'],))
+                                                    connection.commit()
+                                                    logger.info(f"[同步实盘] ✅ 限价单已取消(超时): {symbol} {position_side}")
+                                                else:
+                                                    error_msg = cancel_result.get('error', cancel_result.get('message', '未知错误'))
+                                                    logger.error(f"[同步实盘] ❌ 取消限价单失败(超时): {symbol} {position_side} - {error_msg}")
+                                except Exception as sync_ex:
+                                    logger.error(f"[同步实盘] ❌ 取消限价单异常(超时): {symbol} {position_side} - {sync_ex}")
 
-                                # 注意：限价单不同步到实盘，只有开仓成功后才同步
-                                # 实盘同步由 PositionValidator 自检通过后的开仓逻辑处理
-
-                                continue  # 跳过此订单，已转入自检流程
+                                continue  # 跳过此订单，已超时取消
 
                         # 如果没有超时，检查价格是否达到限价条件
                         if not should_execute:
@@ -735,27 +720,20 @@ class FuturesLimitOrderExecutor:
                                 original_signal_id = order.get('signal_id')
                                 original_strategy_id = order.get('strategy_id')
 
-                                # 根据是否超时决定使用限价还是市价
-                                if execute_at_market:
-                                    # 超时转市价：使用当前市价执行
-                                    execution_price = current_price
-                                    logger.info(f"⏰ 以市价执行: {symbol} {position_side} @ {current_price} (原限价: {limit_price})")
-                                else:
-                                    # 正常限价单触发：使用限价
-                                    execution_price = limit_price
+                                # 限价单触发：使用限价作为成交价
+                                # 传入 limit_price，引擎会检测到价格已达条件，直接以限价成交
+                                # 止损止盈基于限价计算（在创建限价单时已计算好，存储在 stop_loss_price/take_profit_price）
+                                execution_price = limit_price
 
-                                # 限价单已触发执行，不再传 limit_price（否则可能再次创建 PENDING 订单）
-                                # 而是通过 limit_price=None 让引擎以市价方式立即执行
-                                # 注意：执行价格会使用 current_price（实时价格）
                                 result = self.trading_engine.open_position(
                                     account_id=account_id,
                                     symbol=symbol,
                                     position_side=position_side,
                                     quantity=quantity,
                                     leverage=leverage,
-                                    limit_price=None,  # 不传限价，直接执行市价单
-                                    stop_loss_price=stop_loss_price,
-                                    take_profit_price=take_profit_price,
+                                    limit_price=limit_price,  # 传入限价，引擎以限价作为入场价
+                                    stop_loss_price=stop_loss_price,  # 已基于限价计算好
+                                    take_profit_price=take_profit_price,  # 已基于限价计算好
                                     source=original_source,  # 保留原始来源（strategy 或 limit_order）
                                     signal_id=original_signal_id,  # 保留原始信号ID
                                     strategy_id=original_strategy_id  # 保留原始策略ID（用于实盘同步）
@@ -773,8 +751,6 @@ class FuturesLimitOrderExecutor:
                                     executed_value = float(execution_price * quantity)
 
                                     # 更新订单状态为已成交
-                                    # 如果是超时转市价，添加备注
-                                    fill_note = 'TIMEOUT_MARKET' if execute_at_market else None
                                     with connection.cursor() as update_cursor:
                                         update_cursor.execute(
                                             """UPDATE futures_orders
@@ -782,18 +758,13 @@ class FuturesLimitOrderExecutor:
                                                 executed_quantity = %s,
                                                 executed_value = %s,
                                                 avg_fill_price = %s,
-                                                fill_time = NOW(),
-                                                notes = CASE WHEN %s IS NOT NULL THEN %s ELSE notes END
+                                                fill_time = NOW()
                                             WHERE order_id = %s""",
-                                            (float(quantity), executed_value, float(execution_price), fill_note, fill_note, order_id)
+                                            (float(quantity), executed_value, float(execution_price), order_id)
                                         )
 
                                     connection.commit()
-
-                                    if execute_at_market:
-                                        logger.info(f"✅ 限价单超时转市价执行成功: {symbol} {position_side} {quantity} @ {execution_price} (原限价: {limit_price})")
-                                    else:
-                                        logger.info(f"✅ 限价单执行成功: {symbol} {position_side} {quantity} @ {execution_price}")
+                                    logger.info(f"✅ 限价单执行成功: {symbol} {position_side} {quantity} @ {execution_price}")
 
                                     # ========== 同步实盘交易 ==========
                                     # 检查策略是否启用实盘同步
@@ -858,14 +829,14 @@ class FuturesLimitOrderExecutor:
                                                             else:
                                                                 take_profit_pct_value = (execution_price_decimal - take_profit_decimal) / execution_price_decimal * Decimal('100')
 
-                                                        # 调用实盘引擎开仓
+                                                        # 调用实盘引擎开仓（使用限价）
                                                         live_result = self.live_engine.open_position(
                                                             account_id=2,
                                                             symbol=symbol,
                                                             position_side=position_side,
                                                             quantity=live_quantity,
                                                             leverage=leverage,
-                                                            limit_price=execution_price if not execute_at_market else None,
+                                                            limit_price=execution_price,  # 使用限价
                                                             stop_loss_pct=stop_loss_pct_value,
                                                             take_profit_pct=take_profit_pct_value,
                                                             source='limit_order_sync',
