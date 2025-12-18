@@ -2116,9 +2116,10 @@ class StrategyExecutorV2:
                         trailing_stop_price = current_price * (1 + trailing_callback / 100)
                     updates['trailing_stop_price'] = trailing_stop_price
                     logger.info(f"🎯 [快速更新] {symbol} 移动止盈激活! 盈利={max_profit_pct:.2f}%, 止损价={trailing_stop_price:.6f}")
+                    # 注意：激活后不要return，继续往下检查是否已经回撤需要平仓
 
                 # 移动止盈已激活，检查是否触发平仓或更新止损价格
-                elif trailing_activated:
+                if trailing_activated:
                     # 检查移动止盈回撤是否触发平仓
                     callback_pct = max_profit_pct - current_pnl_pct
                     if callback_pct >= trailing_callback:
