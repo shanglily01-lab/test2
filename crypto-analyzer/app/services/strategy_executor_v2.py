@@ -61,6 +61,9 @@ class StrategyExecutorV2:
         self.live_engine_error = None  # 实盘引擎初始化错误
         self.LOCAL_TZ = timezone(timedelta(hours=8))
 
+        # 加载配置文件
+        self._load_margin_config()
+
         # 如果没有传入 live_engine，自动初始化（与V1保持一致）
         if self.live_engine is None:
             self._init_live_engine()
@@ -75,6 +78,65 @@ class StrategyExecutorV2:
 
         # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
         self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
+
+    def _load_margin_config(self):
+        """加载保证金配置"""
+        try:
+            from app.utils.config_loader import load_config
+            config = load_config()
+            margin_config = config.get('signals', {}).get('margin', {})
+
+            # 模拟盘配置
+            paper_config = margin_config.get('paper', {})
+            self.paper_margin_mode = paper_config.get('mode', 'fixed')
+            self.paper_margin_fixed = paper_config.get('fixed_amount', 100)
+            self.paper_margin_percent = paper_config.get('percent', 1)
+
+            # 实盘配置
+            live_config = margin_config.get('live', {})
+            self.live_margin_mode = live_config.get('mode', 'fixed')
+            self.live_margin_fixed = live_config.get('fixed_amount', 100)
+            self.live_margin_percent = live_config.get('percent', 1)
+
+            logger.info(f"✅ 保证金配置已加载: 模拟盘={self.paper_margin_mode}({self.paper_margin_fixed}U/{self.paper_margin_percent}%), "
+                       f"实盘={self.live_margin_mode}({self.live_margin_fixed}U/{self.live_margin_percent}%)")
+        except Exception as e:
+            logger.warning(f"加载保证金配置失败，使用默认值: {e}")
+            self.paper_margin_mode = 'fixed'
+            self.paper_margin_fixed = 100
+            self.paper_margin_percent = 1
+            self.live_margin_mode = 'fixed'
+            self.live_margin_fixed = 100
+            self.live_margin_percent = 1
+
+    def calculate_margin(self, is_live: bool = False, account_balance: float = None) -> float:
+        """
+        计算开仓保证金
+
+        Args:
+            is_live: 是否实盘
+            account_balance: 账户余额（百分比模式需要）
+
+        Returns:
+            保证金金额 (USDT)
+        """
+        if is_live:
+            mode = self.live_margin_mode
+            fixed = self.live_margin_fixed
+            percent = self.live_margin_percent
+        else:
+            mode = self.paper_margin_mode
+            fixed = self.paper_margin_fixed
+            percent = self.paper_margin_percent
+
+        if mode == 'percent' and account_balance:
+            margin = account_balance * percent / 100
+            logger.debug(f"保证金计算: {mode}模式, 余额={account_balance}, 百分比={percent}%, 保证金={margin:.2f}")
+        else:
+            margin = fixed
+            logger.debug(f"保证金计算: fixed模式, 保证金={margin:.2f}")
+
+        return margin
 
     def _init_live_engine(self):
         """初始化实盘交易引擎（与V1保持一致）"""
@@ -579,8 +641,8 @@ class StrategyExecutorV2:
             if limit_price is None:
                 return {'success': False, 'error': '无法计算限价'}
 
-            # 计算开仓数量（固定100U保证金）
-            margin = 100.0
+            # 计算开仓保证金（从配置读取）
+            margin = self.calculate_margin(is_live=False)
             notional = margin * leverage
             quantity = notional / limit_price
 
@@ -1683,8 +1745,8 @@ class StrategyExecutorV2:
                     return {'success': False, 'error': '账户不存在'}
 
                 balance = float(account['current_balance'])
-                # 固定保证金100U，不再使用账户余额百分比
-                margin = 100.0
+                # 从配置读取保证金（支持固定金额或百分比模式）
+                margin = self.calculate_margin(is_live=False, account_balance=balance)
                 notional = margin * leverage
                 quantity = notional / current_price
 
@@ -1803,8 +1865,17 @@ class StrategyExecutorV2:
             if not self.live_engine:
                 return None
 
-            # 实盘固定保证金模式：强制每笔100U保证金
-            live_margin = 100  # 固定100U保证金，不从策略读取
+            # 从配置读取实盘保证金（支持固定金额或百分比模式）
+            # 百分比模式需要获取实盘账户余额
+            live_balance = None
+            if self.live_margin_mode == 'percent':
+                try:
+                    balance_info = self.live_engine.get_account_balance()
+                    live_balance = float(balance_info.get('available', 0)) if balance_info else None
+                except Exception as e:
+                    logger.warning(f"获取实盘余额失败: {e}")
+
+            live_margin = self.calculate_margin(is_live=True, account_balance=live_balance)
 
             # 获取当前价格
             current_price = self.live_engine.get_current_price(symbol)

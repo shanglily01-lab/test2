@@ -164,6 +164,18 @@ signals:
     stop_loss_pct: 0.02
     take_profit_pct: 0.06
     live_max_position_usdt: 200  # 实盘单笔最大仓位(USDT)
+  # 保证金配置
+  margin:
+    # 模拟盘保证金配置
+    paper:
+      mode: fixed  # fixed=固定金额, percent=按资金百分比
+      fixed_amount: 100  # 固定金额模式：每笔100 USDT
+      percent: 1  # 百分比模式：账户资金的1%
+    # 实盘保证金配置
+    live:
+      mode: fixed  # fixed=固定金额, percent=按资金百分比
+      fixed_amount: 100  # 固定金额模式：每笔100 USDT
+      percent: 1  # 百分比模式：账户资金的1%
 api:
   host: 0.0.0.0
   port: 9020
