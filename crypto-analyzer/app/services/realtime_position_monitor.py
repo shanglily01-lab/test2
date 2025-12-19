@@ -95,10 +95,7 @@ class RealtimePositionMonitor:
             conn.close()
 
     def load_strategy_params(self, strategy_id: int) -> dict:
-        """加载策略参数"""
-        if strategy_id in self.strategy_params:
-            return self.strategy_params[strategy_id]
-
+        """加载策略参数（每次从数据库读取，确保配置更新后立即生效）"""
         conn = self.get_db_connection()
         cursor = conn.cursor()
 
@@ -119,7 +116,6 @@ class RealtimePositionMonitor:
                     'trailing_cooldown_minutes': config.get('trailingCooldownMinutes', 15),
                     'sync_live': config.get('syncLive', False)
                 }
-                self.strategy_params[strategy_id] = params
                 return params
 
             # 默认参数
