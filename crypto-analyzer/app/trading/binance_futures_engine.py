@@ -1014,18 +1014,19 @@ class BinanceFuturesEngine:
 
             # 2. 确定平仓数量
             if close_quantity is None:
-                # 全部平仓时，从 Binance 获取实际持仓数量（避免数据库与实际持仓不一致）
+                # 全部平仓时，从 Binance 获取实际持仓数量（使用原始字符串避免精度丢失）
                 binance_positions = self.get_open_positions()
-                actual_quantity = None
+                quantity_raw = None
                 for pos in binance_positions:
                     if pos['symbol'] == symbol and pos['position_side'] == position_side:
-                        actual_quantity = Decimal(str(pos['quantity']))
+                        quantity_raw = pos.get('quantity_raw', '')
                         break
 
-                if actual_quantity and actual_quantity > 0:
-                    close_quantity = actual_quantity
-                    if actual_quantity != quantity:
-                        logger.info(f"[实盘] 使用 Binance 实际持仓数量: {actual_quantity} (数据库: {quantity})")
+                if quantity_raw and quantity_raw != '0':
+                    # 原始值可能是负数（SHORT），取绝对值
+                    close_quantity_str = quantity_raw.lstrip('-')
+                    close_quantity = Decimal(close_quantity_str)
+                    logger.info(f"[实盘] 使用原始数量字符串平仓: {close_quantity_str} (数据库: {quantity})")
                 else:
                     # 回退到数据库数量
                     close_quantity = quantity
@@ -1192,9 +1193,18 @@ class BinanceFuturesEngine:
             quantity = Decimal(str(target_position['quantity']))
             entry_price = Decimal(str(target_position['entry_price']))
 
+            # 获取原始数量字符串（用于全部平仓，避免精度丢失）
+            quantity_raw = target_position.get('quantity_raw', '')
+
             if close_quantity is None:
-                # 全部平仓时，直接使用 Binance 返回的原始数量，不做取整（避免剩余小额仓位）
-                close_quantity = quantity
+                # 全部平仓时，使用 Binance 返回的原始数量字符串（取绝对值）
+                if quantity_raw and quantity_raw != '0':
+                    # 原始值可能是负数（SHORT），取绝对值
+                    close_quantity_str = quantity_raw.lstrip('-')
+                    close_quantity = Decimal(close_quantity_str)
+                    logger.info(f"[实盘] 使用原始数量字符串平仓: {close_quantity_str}")
+                else:
+                    close_quantity = quantity
             else:
                 close_quantity = min(Decimal(str(close_quantity)), quantity)
                 # 部分平仓时才做取整处理
@@ -1376,6 +1386,7 @@ class BinanceFuturesEngine:
                     'symbol': symbol,
                     'position_side': position_side,
                     'quantity': abs(position_amt),
+                    'quantity_raw': pos.get('positionAmt', '0'),  # 保留原始字符串，平仓时使用
                     'entry_price': entry_price,
                     'mark_price': mark_price,
                     'unrealized_pnl': unrealized_pnl,
