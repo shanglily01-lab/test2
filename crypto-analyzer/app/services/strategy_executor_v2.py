@@ -276,6 +276,149 @@ class StrategyExecutorV2:
             cursor.close()
             conn.close()
 
+    def get_ema_data_5m(self, symbol: str, limit: int = 50) -> Optional[Dict]:
+        """
+        获取5M周期的EMA数据（用于智能止损）
+
+        Returns:
+            {
+                'ema9': float,
+                'ema26': float,
+                'prev_ema9': float,  # 上一根K线的EMA9
+                'prev_ema26': float,  # 上一根K线的EMA26
+                'is_golden_cross': bool,  # 是否金叉
+                'is_death_cross': bool,  # 是否死叉
+                'ema_diff_pct': float,  # EMA差距百分比
+                'current_price': float
+            }
+        """
+        conn = self.get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT timestamp, close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '5m' AND exchange = 'binance_futures'
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (symbol, limit))
+
+            klines = list(reversed(cursor.fetchall()))
+
+            if len(klines) < 30:
+                logger.debug(f"[5M EMA] {symbol} K线数据不足: {len(klines)} < 30")
+                return None
+
+            close_prices = [float(k['close_price']) for k in klines]
+
+            # 计算EMA9, EMA26
+            ema9_values = self.calculate_ema(close_prices, 9)
+            ema26_values = self.calculate_ema(close_prices, 26)
+
+            if not ema9_values or not ema26_values:
+                return None
+
+            # 当前EMA（最新已收盘K线）
+            ema9 = ema9_values[-2] if len(ema9_values) >= 2 else ema9_values[-1]
+            ema26 = ema26_values[-2] if len(ema26_values) >= 2 else ema26_values[-1]
+
+            # 上一根K线的EMA
+            prev_ema9 = ema9_values[-3] if len(ema9_values) >= 3 else ema9_values[-2] if len(ema9_values) >= 2 else ema9
+            prev_ema26 = ema26_values[-3] if len(ema26_values) >= 3 else ema26_values[-2] if len(ema26_values) >= 2 else ema26
+
+            current_price = close_prices[-1]
+
+            # 金叉：之前 EMA9 <= EMA26，现在 EMA9 > EMA26
+            is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
+
+            # 死叉：之前 EMA9 >= EMA26，现在 EMA9 < EMA26
+            is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
+
+            # EMA差距百分比（用于强度判断）
+            ema_diff_pct = abs(ema9 - ema26) / ema26 * 100 if ema26 != 0 else 0
+
+            return {
+                'ema9': ema9,
+                'ema26': ema26,
+                'prev_ema9': prev_ema9,
+                'prev_ema26': prev_ema26,
+                'is_golden_cross': is_golden_cross,
+                'is_death_cross': is_death_cross,
+                'ema_diff_pct': ema_diff_pct,
+                'current_price': current_price
+            }
+
+        except Exception as e:
+            logger.error(f"[5M EMA] {symbol} 获取数据失败: {e}")
+            return None
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def check_5m_signal_stop_loss(self, position: Dict, current_pnl_pct: float,
+                                   strategy: Dict) -> Tuple[bool, str]:
+        """
+        5M信号智能止损检测
+
+        逻辑：
+        - 当持仓处于亏损状态（current_pnl_pct < 0）
+        - 且5M周期趋势与持仓方向相反
+        - 且趋势强度足够（EMA差距 > 阈值）
+        - 则触发智能止损
+
+        两种模式：
+        1. crossOnly=True: 只在交叉发生时触发（更保守）
+        2. crossOnly=False: 趋势反向+强度足够就触发（默认，更敏感）
+
+        Args:
+            position: 持仓信息
+            current_pnl_pct: 当前盈亏百分比
+            strategy: 策略配置
+
+        Returns:
+            (是否需要止损, 原因)
+        """
+        symbol = position.get('symbol', '')
+        position_side = position.get('position_side', 'LONG')
+
+        # 获取策略配置
+        smart_stop_loss = strategy.get('smartStopLoss', {})
+        signal_stop_config = smart_stop_loss.get('signalStopLoss', {})
+
+        # 是否启用5M信号止损（默认启用）
+        enabled = signal_stop_config.get('enabled', True)
+        if not enabled:
+            return False, ""
+
+        # 检查是否处于亏损状态（只要亏损就检查）
+        if current_pnl_pct >= 0:
+            # 盈利或持平，不检查5M信号止损
+            return False, ""
+
+        # 获取5M EMA数据
+        ema_5m = self.get_ema_data_5m(symbol)
+        if not ema_5m:
+            return False, ""
+
+        is_golden_cross = ema_5m['is_golden_cross']
+        is_death_cross = ema_5m['is_death_cross']
+
+        # 做多持仓亏损 + 5M EMA死叉 → 立即止损
+        if position_side == 'LONG' and is_death_cross:
+            reason = f"5M EMA死叉止损(亏损{abs(current_pnl_pct):.2f}%, 5M EMA出现死叉)"
+            logger.info(f"🔴 [智能止损] {symbol} {reason}")
+            return True, reason
+
+        # 做空持仓亏损 + 5M EMA金叉 → 立即止损
+        if position_side == 'SHORT' and is_golden_cross:
+            reason = f"5M EMA金叉止损(亏损{abs(current_pnl_pct):.2f}%, 5M EMA出现金叉)"
+            logger.info(f"🟢 [智能止损] {symbol} {reason}")
+            return True, reason
+
+        return False, ""
+
     # ==================== 信号检测 ====================
 
     def check_ema_ma_consistency(self, ema_data: Dict, direction: str) -> Tuple[bool, str]:
@@ -1590,6 +1733,13 @@ class StrategyExecutorV2:
         # 2. 硬止损检查（百分比止损，作为后备）
         if current_pnl_pct <= -stop_loss_pct:
             return True, f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)", updates
+
+        # 2.5 5M信号智能止损（亏损时检测5M反向交叉）
+        # 注意：冷却期内不检查5M信号止损
+        if not in_cooldown:
+            close_needed, close_reason = self.check_5m_signal_stop_loss(position, current_pnl_pct, strategy)
+            if close_needed:
+                return True, close_reason, updates
 
         # 3. 最大止盈检查
         if current_pnl_pct >= max_take_profit:
