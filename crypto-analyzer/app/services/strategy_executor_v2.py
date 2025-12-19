@@ -839,15 +839,39 @@ class StrategyExecutorV2:
                     position_id = result.get('position_id')
                     order_id = result.get('order_id')
 
-                    # 记录限价单超时时间
-                    timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 30)
+                    # 检查是否是 PENDING 状态（未成交）还是立即成交
+                    is_pending = result.get('status') == 'PENDING'
 
-                    logger.info(f"📋 {symbol} 限价单已挂出: {direction} {quantity:.8f} @ {limit_price:.4f} "
-                               f"(市价:{current_price:.4f}, 偏离:{((limit_price-current_price)/current_price*100):+.2f}%), "
-                               f"超时:{timeout_minutes}分钟")
+                    if is_pending:
+                        # PENDING 状态：限价单已挂出，等待成交
+                        timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 30)
+                        logger.info(f"📋 {symbol} 限价单已挂出: {direction} {quantity:.8f} @ {limit_price:.4f} "
+                                   f"(市价:{current_price:.4f}, 偏离:{((limit_price-current_price)/current_price*100):+.2f}%), "
+                                   f"超时:{timeout_minutes}分钟")
+                        # 注意：PENDING 限价单创建时不同步实盘，等模拟盘成交后再同步
+                        # 实盘同步在 futures_limit_order_executor.py 中处理
+                    else:
+                        # 立即成交：限价单条件已满足，直接开仓
+                        entry_price = result.get('entry_price', limit_price)
+                        logger.info(f"✅ {symbol} 限价单立即成交: {direction} {quantity:.8f} @ {entry_price:.4f} "
+                                   f"(限价:{limit_price:.4f})")
 
-                    # 注意：限价单创建时不同步实盘，等模拟盘成交后再同步
-                    # 实盘同步在 futures_limit_order_executor.py 中处理
+                        # 如果策略启用实盘同步，需要同步到实盘
+                        if sync_live and self.live_engine and position_id:
+                            try:
+                                await self._sync_limit_order_to_live(
+                                    symbol=symbol,
+                                    direction=direction,
+                                    strategy=strategy,
+                                    entry_price=entry_price,
+                                    quantity=quantity,
+                                    leverage=leverage,
+                                    stop_loss_pct=stop_loss_pct,
+                                    take_profit_pct=take_profit_pct,
+                                    paper_position_id=position_id
+                                )
+                            except Exception as live_ex:
+                                logger.error(f"[同步实盘] ❌ {symbol} {direction} 限价单立即成交同步失败: {live_ex}")
 
                     return {
                         'success': True,
@@ -857,7 +881,7 @@ class StrategyExecutorV2:
                         'quantity': quantity,
                         'limit_price': limit_price,
                         'signal_type': 'limit_order',
-                        'is_pending': True
+                        'is_pending': is_pending
                     }
                 else:
                     return {'success': False, 'error': result.get('error', '挂单失败')}
@@ -867,6 +891,92 @@ class StrategyExecutorV2:
         except Exception as e:
             logger.error(f"限价单执行失败: {e}")
             return {'success': False, 'error': str(e)}
+
+    async def _sync_limit_order_to_live(self, symbol: str, direction: str, strategy: Dict,
+                                         entry_price: float, quantity: float, leverage: int,
+                                         stop_loss_pct: float, take_profit_pct: float,
+                                         paper_position_id: int = None) -> int:
+        """
+        同步限价单立即成交到实盘
+
+        当限价单条件已满足并立即成交时，同步开仓到实盘
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            strategy: 策略配置
+            entry_price: 入场价格
+            quantity: 模拟盘开仓数量（不使用，实盘数量单独计算）
+            leverage: 杠杆倍数
+            stop_loss_pct: 止损百分比
+            take_profit_pct: 止盈百分比
+            paper_position_id: 模拟盘持仓ID（用于关联）
+
+        Returns:
+            实盘持仓ID，失败返回None
+        """
+        try:
+            if not self.live_engine:
+                return None
+
+            # 从配置读取实盘保证金（支持固定金额或百分比模式）
+            live_balance = None
+            if self.live_margin_mode == 'percent':
+                try:
+                    balance_info = self.live_engine.get_account_balance()
+                    live_balance = float(balance_info.get('available', 0)) if balance_info else None
+                except Exception as e:
+                    logger.warning(f"获取实盘余额失败: {e}")
+
+            live_margin = self.calculate_margin(is_live=True, account_balance=live_balance)
+
+            # 使用入场价格计算实盘开仓数量: 数量 = 保证金 * 杠杆 / 价格
+            live_quantity = (live_margin * leverage) / float(entry_price)
+
+            logger.info(f"[同步实盘-限价单立即成交] {symbol} 保证金={live_margin}U, 杠杆={leverage}x, "
+                       f"入场价={entry_price}, 数量={live_quantity:.4f}")
+
+            # 调用实盘引擎开仓（市价执行），传入模拟盘持仓ID用于关联
+            position_side = 'LONG' if direction == 'long' else 'SHORT'
+            result = self.live_engine.open_position(
+                account_id=2,  # 实盘账户ID
+                symbol=symbol,
+                position_side=position_side,
+                quantity=Decimal(str(live_quantity)),
+                leverage=leverage,
+                stop_loss_pct=Decimal(str(stop_loss_pct)),
+                take_profit_pct=Decimal(str(take_profit_pct)),
+                source='limit_order_sync',
+                paper_position_id=paper_position_id
+            )
+
+            if result.get('success'):
+                live_position_id = result.get('position_id')
+                logger.info(f"[同步实盘-限价单立即成交] ✅ {symbol} {direction} 成功, 实盘持仓ID: {live_position_id}")
+
+                # 更新模拟盘持仓记录，关联实盘持仓ID
+                if paper_position_id and live_position_id:
+                    try:
+                        conn = self.get_db_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            UPDATE futures_positions
+                            SET live_position_id = %s
+                            WHERE id = %s
+                        """, (live_position_id, paper_position_id))
+                        conn.commit()
+                        logger.debug(f"[同步实盘-限价单立即成交] 已更新模拟盘持仓 {paper_position_id} 关联实盘 {live_position_id}")
+                    except Exception as db_ex:
+                        logger.warning(f"[同步实盘-限价单立即成交] 更新关联ID失败: {db_ex}")
+
+                return live_position_id
+            else:
+                logger.warning(f"[同步实盘-限价单立即成交] ⚠️ {symbol} {direction} 失败: {result.get('error')}")
+                return None
+
+        except Exception as e:
+            logger.error(f"[同步实盘-限价单立即成交] ❌ {symbol} {direction} 异常: {e}")
+            return None
 
     async def check_and_cancel_timeout_orders(self, strategy: Dict, account_id: int = 2):
         """

@@ -1064,7 +1064,22 @@ class FuturesLimitOrderExecutor:
                                                         )
 
                                                         if live_result.get('success'):
-                                                            logger.info(f"[同步实盘] ✅ {symbol} {position_side} 成功: 数量={live_quantity}, 价格={execution_price}")
+                                                            live_position_id = live_result.get('position_id')
+                                                            logger.info(f"[同步实盘] ✅ {symbol} {position_side} 成功: 数量={live_quantity}, 价格={execution_price}, 实盘持仓ID={live_position_id}")
+
+                                                            # 更新模拟盘持仓记录，关联实盘持仓ID
+                                                            if paper_position_id and live_position_id:
+                                                                try:
+                                                                    with connection.cursor() as update_cursor:
+                                                                        update_cursor.execute("""
+                                                                            UPDATE futures_positions
+                                                                            SET live_position_id = %s
+                                                                            WHERE id = %s
+                                                                        """, (live_position_id, paper_position_id))
+                                                                    connection.commit()
+                                                                    logger.info(f"[同步实盘] 已关联模拟盘持仓 {paper_position_id} -> 实盘 {live_position_id}")
+                                                                except Exception as db_ex:
+                                                                    logger.warning(f"[同步实盘] 更新关联ID失败: {db_ex}")
                                                         else:
                                                             live_error = live_result.get('error', live_result.get('message', '未知错误'))
                                                             logger.error(f"[同步实盘] ❌ {symbol} {position_side} 失败: {live_error}")
