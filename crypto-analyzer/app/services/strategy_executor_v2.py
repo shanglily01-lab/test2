@@ -402,18 +402,21 @@ class StrategyExecutorV2:
         if not ema_5m:
             return False, ""
 
-        is_golden_cross = ema_5m['is_golden_cross']
-        is_death_cross = ema_5m['is_death_cross']
+        ema9 = ema_5m['ema9']
+        ema26 = ema_5m['ema26']
 
-        # 做多持仓亏损 + 5M EMA死叉 → 立即止损
-        if position_side == 'LONG' and is_death_cross:
-            reason = f"5M EMA死叉止损(亏损{abs(current_pnl_pct):.2f}%, 5M EMA出现死叉)"
+        # 做多持仓亏损 + 5M EMA处于死叉状态（EMA9 < EMA26）→ 立即止损
+        # 持续检测死叉状态，而不是只检测交叉发生的瞬间，避免错过平仓机会
+        if position_side == 'LONG' and ema9 < ema26:
+            ema_diff_pct = (ema26 - ema9) / ema26 * 100
+            reason = f"5M EMA死叉状态止损(亏损{abs(current_pnl_pct):.2f}%, EMA9={ema9:.6f} < EMA26={ema26:.6f}, 差{ema_diff_pct:.2f}%)"
             logger.info(f"🔴 [智能止损] {symbol} {reason}")
             return True, reason
 
-        # 做空持仓亏损 + 5M EMA金叉 → 立即止损
-        if position_side == 'SHORT' and is_golden_cross:
-            reason = f"5M EMA金叉止损(亏损{abs(current_pnl_pct):.2f}%, 5M EMA出现金叉)"
+        # 做空持仓亏损 + 5M EMA处于金叉状态（EMA9 > EMA26）→ 立即止损
+        if position_side == 'SHORT' and ema9 > ema26:
+            ema_diff_pct = (ema9 - ema26) / ema26 * 100
+            reason = f"5M EMA金叉状态止损(亏损{abs(current_pnl_pct):.2f}%, EMA9={ema9:.6f} > EMA26={ema26:.6f}, 差{ema_diff_pct:.2f}%)"
             logger.info(f"🟢 [智能止损] {symbol} {reason}")
             return True, reason
 
@@ -912,8 +915,13 @@ class StrategyExecutorV2:
                 # 同步取消实盘限价单
                 if strategy.get('syncLive') and self.live_engine:
                     try:
-                        self.live_engine.cancel_pending_order(symbol)
-                        logger.info(f"✅ {symbol} 实盘限价单已取消")
+                        success, message = self.live_engine.cancel_pending_order(symbol)
+                        if "没有" not in message:
+                            # 只有真正取消了订单才输出日志
+                            logger.info(f"✅ {symbol} 实盘限价单已取消: {message}")
+                        else:
+                            # 没有实盘挂单，静默处理
+                            logger.debug(f"{symbol} {message}")
                     except Exception as e:
                         logger.warning(f"⚠️ {symbol} 取消实盘限价单失败: {e}")
 

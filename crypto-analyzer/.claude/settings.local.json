@@ -64,7 +64,8 @@
       "Bash(/home/tonny01/test2/crypto-analyzer/.venv/bin/python3:*)",
       "Bash(netstat:*)",
       "Bash(ss:*)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(/dev/null <<'EOF'\nSELECT id, name, is_active FROM trading_strategies WHERE is_active = 1 LIMIT 3;\nEOF)"
     ],
     "deny": [],
     "ask": []
