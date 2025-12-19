@@ -405,20 +405,24 @@ class StrategyExecutorV2:
         ema9 = ema_5m['ema9']
         ema26 = ema_5m['ema26']
 
-        # 做多持仓亏损 + 5M EMA处于死叉状态（EMA9 < EMA26）→ 立即止损
-        # 持续检测死叉状态，而不是只检测交叉发生的瞬间，避免错过平仓机会
+        # 强度阈值：EMA差距百分比需要达到0.07%才触发止损
+        min_ema_diff_pct = 0.07
+
+        # 做多持仓亏损 + 5M EMA处于死叉状态（EMA9 < EMA26）+ 强度足够 → 立即止损
         if position_side == 'LONG' and ema9 < ema26:
             ema_diff_pct = (ema26 - ema9) / ema26 * 100
-            reason = f"5M EMA死叉状态止损(亏损{abs(current_pnl_pct):.2f}%, EMA9={ema9:.6f} < EMA26={ema26:.6f}, 差{ema_diff_pct:.2f}%)"
-            logger.info(f"🔴 [智能止损] {symbol} {reason}")
-            return True, reason
+            if ema_diff_pct >= min_ema_diff_pct:
+                reason = f"5M EMA死叉状态止损(亏损{abs(current_pnl_pct):.2f}%, EMA9={ema9:.6f} < EMA26={ema26:.6f}, 差{ema_diff_pct:.2f}%)"
+                logger.info(f"🔴 [智能止损] {symbol} {reason}")
+                return True, reason
 
-        # 做空持仓亏损 + 5M EMA处于金叉状态（EMA9 > EMA26）→ 立即止损
+        # 做空持仓亏损 + 5M EMA处于金叉状态（EMA9 > EMA26）+ 强度足够 → 立即止损
         if position_side == 'SHORT' and ema9 > ema26:
             ema_diff_pct = (ema9 - ema26) / ema26 * 100
-            reason = f"5M EMA金叉状态止损(亏损{abs(current_pnl_pct):.2f}%, EMA9={ema9:.6f} > EMA26={ema26:.6f}, 差{ema_diff_pct:.2f}%)"
-            logger.info(f"🟢 [智能止损] {symbol} {reason}")
-            return True, reason
+            if ema_diff_pct >= min_ema_diff_pct:
+                reason = f"5M EMA金叉状态止损(亏损{abs(current_pnl_pct):.2f}%, EMA9={ema9:.6f} > EMA26={ema26:.6f}, 差{ema_diff_pct:.2f}%)"
+                logger.info(f"🟢 [智能止损] {symbol} {reason}")
+                return True, reason
 
         return False, ""
 
