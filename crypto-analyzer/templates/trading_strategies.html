@@ -1229,10 +1229,15 @@
                                                 <input type="number" class="form-input" id="trailingCallback" value="0.5" step="0.1" min="0.1" style="padding: 6px 10px; font-size: 13px;">
                                                 <small style="color: var(--text-tertiary); font-size: 10px;">从最高点回撤此比例触发平仓</small>
                                             </div>
+                                            <div class="form-group" style="flex: 1; min-width: 150px; margin-bottom: 8px;">
+                                                <label class="form-label" style="font-size: 11px;">冷却时间（分钟）</label>
+                                                <input type="number" class="form-input" id="trailingCooldownMinutes" value="15" step="1" min="0" style="padding: 6px 10px; font-size: 13px;">
+                                                <small style="color: var(--text-tertiary); font-size: 10px;">开仓后N分钟内不检查移动止盈</small>
+                                            </div>
                                         </div>
                                         <div style="background: var(--bg-tertiary); border-radius: 6px; padding: 8px; margin-top: 8px;">
                                             <small style="color: var(--text-secondary);">
-                                                💡 <strong>示例：</strong>激活1.5%，回调0.5%。若盈利达到3%，价格从最高点回落0.5%时平仓，锁定约2.5%利润。
+                                                💡 <strong>示例：</strong>激活1.5%，回调0.5%，冷却15分钟。开仓15分钟后开始检查，若盈利达到3%，价格从最高点回落0.5%时平仓。
                                             </small>
                                         </div>
                                     </div>
@@ -2362,6 +2367,7 @@
                 takeProfit: document.getElementById('takeProfit').value ? parseFloat(document.getElementById('takeProfit').value) : null,
                 trailingActivate: document.getElementById('trailingActivate').value ? parseFloat(document.getElementById('trailingActivate').value) : 1.5,
                 trailingCallback: document.getElementById('trailingCallback').value ? parseFloat(document.getElementById('trailingCallback').value) : 0.5,
+                trailingCooldownMinutes: document.getElementById('trailingCooldownMinutes').value ? parseInt(document.getElementById('trailingCooldownMinutes').value) : 15,
                 closeOppositeOnEntry: document.getElementById('closeOppositeOnEntry') ? document.getElementById('closeOppositeOnEntry').checked : false,
                 // V2策略固定参数
                 ma10Ema10TrendFilter: true,
@@ -3000,6 +3006,7 @@
             // 移动止盈
             document.getElementById('trailingActivate').value = strategy.trailingActivate || 1.5;
             document.getElementById('trailingCallback').value = strategy.trailingCallback || 0.5;
+            document.getElementById('trailingCooldownMinutes').value = strategy.trailingCooldownMinutes || 15;
 
             // V2策略使用固定参数，MA10/EMA10过滤、信号强度过滤、趋势确认、退出机制、开仓冷却等已移除
 

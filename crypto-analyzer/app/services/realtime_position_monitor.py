@@ -67,7 +67,7 @@ class RealtimePositionMonitor:
             cursor.execute("""
                 SELECT id, symbol, position_side, entry_price, quantity, leverage,
                        max_profit_pct, trailing_stop_activated, trailing_stop_price,
-                       stop_loss_price, take_profit_price, strategy_id
+                       stop_loss_price, take_profit_price, strategy_id, open_time
                 FROM futures_positions
                 WHERE account_id = %s AND status = 'open'
             """, (account_id,))
@@ -116,6 +116,7 @@ class RealtimePositionMonitor:
                     'trailing_callback': config.get('trailingCallback', 0.5),
                     'stop_loss_pct': config.get('stopLossPercent') or config.get('stopLoss', 2.5),
                     'take_profit_pct': config.get('takeProfitPercent') or config.get('takeProfit', 8.0),
+                    'trailing_cooldown_minutes': config.get('trailingCooldownMinutes', 15),
                     'sync_live': config.get('syncLive', False)
                 }
                 self.strategy_params[strategy_id] = params
@@ -127,6 +128,7 @@ class RealtimePositionMonitor:
                 'trailing_callback': 0.5,
                 'stop_loss_pct': 2.5,
                 'take_profit_pct': 8.0,
+                'trailing_cooldown_minutes': 15,
                 'sync_live': False
             }
 
@@ -209,14 +211,31 @@ class RealtimePositionMonitor:
 
         updates = {}
 
-        # 1. 检查硬止损
+        # 1. 检查硬止损（不受冷却时间限制）
         if current_pnl_pct <= -stop_loss_pct:
             close_reason = f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)"
             logger.info(f"🚨 [实时监控] {symbol} {close_reason}")
             await self._close_position(position, close_reason)
             return
 
-        # 2. 更新最高盈利
+        # 2. 检查开仓冷却时间（冷却期内不检查移动止盈/止损）
+        trailing_cooldown_minutes = params.get('trailing_cooldown_minutes', 15)
+        open_time = position.get('open_time')
+        if open_time:
+            now = datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
+            # 确保 open_time 是 datetime 对象
+            if isinstance(open_time, datetime):
+                elapsed_minutes = (now - open_time).total_seconds() / 60
+                if elapsed_minutes < trailing_cooldown_minutes:
+                    # 冷却期内只更新最高盈利，不触发移动止盈/止损
+                    if current_pnl_pct > max_profit_pct + 0.01:
+                        updates['max_profit_pct'] = current_pnl_pct
+                        updates['max_profit_price'] = current_price
+                        position['max_profit_pct'] = current_pnl_pct
+                        self.update_position_db(pos_id, updates)
+                    return  # 冷却期内跳过后续移动止盈/止损检查
+
+        # 3. 更新最高盈利
         if current_pnl_pct > max_profit_pct + 0.01:
             updates['max_profit_pct'] = current_pnl_pct
             updates['max_profit_price'] = current_price
@@ -226,7 +245,7 @@ class RealtimePositionMonitor:
             # 同步更新缓存
             position['max_profit_pct'] = current_pnl_pct
 
-        # 3. 检查是否激活移动止盈
+        # 4. 检查是否激活移动止盈
         if not trailing_activated and max_profit_pct >= trailing_activate:
             updates['trailing_stop_activated'] = True
             trailing_activated = True
@@ -243,7 +262,7 @@ class RealtimePositionMonitor:
             position['trailing_stop_activated'] = True
             position['trailing_stop_price'] = trailing_stop_price
 
-        # 4. 检查移动止盈回撤
+        # 5. 检查移动止盈回撤
         if trailing_activated:
             callback_pct = max_profit_pct - current_pnl_pct
             if callback_pct >= trailing_callback:
