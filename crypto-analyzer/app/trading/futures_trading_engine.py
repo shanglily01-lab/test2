@@ -588,11 +588,13 @@ class FuturesTradingEngine:
                 # 如果限价单可以立即成交，继续执行下面的市价单逻辑
 
             # 2. 确定开仓价格
-            # 限价单使用限价，市价单使用实时价格
+            # 限价单立即成交时使用市价，因为实际是按市价成交的
+            # 只有PENDING限价单成交时才用限价（由futures_limit_order_executor处理）
             logger.info(f"🔍 {symbol} {position_side} 开仓价格确定: limit_price={limit_price}, current_price={current_price}")
             if limit_price and limit_price > 0:
-                entry_price = limit_price
-                logger.info(f"📌 {symbol} {position_side} 使用限价开仓: entry_price={entry_price}")
+                # 限价单立即成交：使用市价作为入场价（实际成交价）
+                entry_price = current_price
+                logger.info(f"📌 {symbol} {position_side} 限价单立即成交，使用市价开仓: entry_price={entry_price} (限价:{limit_price})")
             else:
                 # 市价单：再次获取实时价格，确保使用最新价格开仓
                 try:
