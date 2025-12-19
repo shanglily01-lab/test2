@@ -368,6 +368,136 @@ class FuturesLimitOrderExecutor:
             logger.error(f"检查EMA状态时出错: {e}")
             return None
 
+    def _calculate_rsi(self, prices: List[float], period: int = 14) -> Optional[float]:
+        """
+        计算RSI (Relative Strength Index)
+
+        Args:
+            prices: 价格列表（从旧到新）
+            period: RSI周期，默认14
+
+        Returns:
+            RSI值 (0-100)，如果数据不足返回None
+        """
+        if len(prices) < period + 1:
+            return None
+
+        # 计算价格变化
+        deltas = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+
+        # 初始平均涨跌幅
+        gains = [d if d > 0 else 0 for d in deltas[:period]]
+        losses = [-d if d < 0 else 0 for d in deltas[:period]]
+
+        avg_gain = sum(gains) / period
+        avg_loss = sum(losses) / period
+
+        # 使用Wilder平滑法计算后续RSI
+        for i in range(period, len(deltas)):
+            delta = deltas[i]
+            gain = delta if delta > 0 else 0
+            loss = -delta if delta < 0 else 0
+
+            avg_gain = (avg_gain * (period - 1) + gain) / period
+            avg_loss = (avg_loss * (period - 1) + loss) / period
+
+        if avg_loss == 0:
+            return 100.0
+
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+
+        return rsi
+
+    def _check_rsi_filter(self, connection, order: Dict) -> Optional[str]:
+        """
+        检查RSI过滤条件（限价单触发前检查）
+
+        判断逻辑：
+        - 做多(OPEN_LONG): 如果 RSI > longMax（默认65），说明超买，不适合做多
+        - 做空(OPEN_SHORT): 如果 RSI < shortMin（默认35），说明超卖，不适合做空
+
+        Args:
+            connection: 数据库连接
+            order: 订单信息（包含 strategy_config, symbol, side）
+
+        Returns:
+            如果RSI条件不满足，返回原因字符串；否则返回None
+        """
+        try:
+            strategy_config = order.get('strategy_config')
+            if not strategy_config:
+                return None
+
+            # 解析策略配置
+            config = strategy_config
+            parse_attempts = 0
+            while isinstance(config, str) and parse_attempts < 3:
+                try:
+                    config = json.loads(config)
+                    parse_attempts += 1
+                except json.JSONDecodeError:
+                    return None
+
+            if not isinstance(config, dict):
+                return None
+
+            # 检查RSI过滤器配置
+            rsi_config = config.get('rsiFilter', {})
+            if not isinstance(rsi_config, dict):
+                return None
+
+            # 如果RSI过滤器被禁用，跳过检查
+            if rsi_config.get('enabled', True) == False:
+                return None
+
+            symbol = order['symbol']
+            side = order['side']  # OPEN_LONG 或 OPEN_SHORT
+
+            # 获取RSI阈值（默认值与策略执行器一致）
+            long_max = rsi_config.get('longMax', 65)   # 做多时RSI上限
+            short_min = rsi_config.get('shortMin', 35)  # 做空时RSI下限
+            rsi_period = rsi_config.get('period', 14)   # RSI周期
+            rsi_timeframe = rsi_config.get('timeframe', '15m')  # RSI使用的时间周期
+
+            # 查询K线数据计算RSI（需要更多数据点来计算准确的RSI）
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY timestamp DESC
+                    LIMIT 100""",
+                    (symbol, rsi_timeframe)
+                )
+                klines = cursor.fetchall()
+
+            if not klines or len(klines) < rsi_period + 1:
+                logger.debug(f"K线数据不足，无法计算RSI: {symbol} ({len(klines) if klines else 0}条)")
+                return None
+
+            # 将K线反转为正序（从旧到新）
+            prices = [float(k['close_price']) for k in reversed(klines)]
+
+            # 计算RSI
+            rsi = self._calculate_rsi(prices, rsi_period)
+            if rsi is None:
+                return None
+
+            # 做多但RSI超过上限（超买）
+            if side == 'OPEN_LONG' and rsi > long_max:
+                return f"RSI超买: RSI={rsi:.1f} > {long_max} (上限), 不适合做多"
+
+            # 做空但RSI低于下限（超卖）
+            if side == 'OPEN_SHORT' and rsi < short_min:
+                return f"RSI超卖: RSI={rsi:.1f} < {short_min} (下限), 不适合做空"
+
+            return None
+
+        except Exception as e:
+            logger.error(f"检查RSI过滤条件时出错: {e}")
+            return None
+
     def _get_ema_data_for_validation(self, connection, symbol: str, timeframe: str = '15m') -> Optional[Dict]:
         """
         获取 EMA 数据用于创建待开仓记录
@@ -696,6 +826,95 @@ class FuturesLimitOrderExecutor:
                                     logger.info(f"✅ 做空限价单触发: {symbol} @ {current_price} >= {limit_price}")
                         
                         if should_execute:
+                            # ===== RSI过滤检查：限价单触发前检查RSI是否超买/超卖 =====
+                            rsi_rejection_reason = self._check_rsi_filter(connection, order)
+                            if rsi_rejection_reason:
+                                logger.info(f"📊 限价单RSI过滤取消: {symbol} {position_side} - {rsi_rejection_reason}")
+
+                                # 解冻保证金
+                                frozen_margin = Decimal(str(order.get('margin', 0)))
+                                if frozen_margin > 0:
+                                    with connection.cursor() as update_cursor:
+                                        update_cursor.execute(
+                                            """UPDATE paper_trading_accounts
+                                            SET current_balance = current_balance + %s,
+                                                frozen_balance = GREATEST(0, frozen_balance - %s)
+                                            WHERE id = %s""",
+                                            (float(frozen_margin), float(frozen_margin), account_id)
+                                        )
+
+                                # 更新订单状态为已取消
+                                with connection.cursor() as update_cursor:
+                                    update_cursor.execute(
+                                        """UPDATE futures_orders
+                                        SET status = 'CANCELLED',
+                                            cancellation_reason = 'rsi_filter',
+                                            canceled_at = NOW(),
+                                            notes = CONCAT(COALESCE(notes, ''), ' RSI_FILTER: ', %s)
+                                        WHERE order_id = %s""",
+                                        (rsi_rejection_reason, order_id)
+                                    )
+
+                                connection.commit()
+
+                                # ========== 同步取消实盘订单 (RSI过滤) ==========
+                                try:
+                                    strategy_config = order.get('strategy_config')
+                                    if strategy_config and self.live_engine:
+                                        config = strategy_config
+                                        if isinstance(config, str):
+                                            try:
+                                                config = json.loads(config)
+                                            except:
+                                                config = {}
+
+                                        sync_live = config.get('syncLive', False) if isinstance(config, dict) else False
+                                        if sync_live:
+                                            # 查找对应的实盘PENDING持仓
+                                            with connection.cursor() as cursor:
+                                                cursor.execute("""
+                                                    SELECT id, binance_order_id
+                                                    FROM live_futures_positions
+                                                    WHERE symbol = %s
+                                                      AND position_side = %s
+                                                      AND status = 'PENDING'
+                                                    ORDER BY created_at DESC
+                                                    LIMIT 1
+                                                """, (symbol, position_side))
+                                                live_pos = cursor.fetchone()
+
+                                            if live_pos and live_pos.get('binance_order_id'):
+                                                binance_order_id = live_pos['binance_order_id']
+                                                logger.info(f"[同步实盘] 取消限价单(RSI过滤): {symbol} {position_side}, 订单ID={binance_order_id}")
+
+                                                # 调用实盘引擎取消订单
+                                                cancel_result = self.live_engine.cancel_order(
+                                                    symbol=symbol,
+                                                    order_id=binance_order_id
+                                                )
+
+                                                if cancel_result.get('success'):
+                                                    # 更新实盘持仓状态
+                                                    with connection.cursor() as cursor:
+                                                        cursor.execute("""
+                                                            UPDATE live_futures_positions
+                                                            SET status = 'CANCELED',
+                                                                close_reason = 'rsi_filter',
+                                                                close_time = NOW(),
+                                                                notes = CONCAT(COALESCE(notes, ''), ' SYNCED_CANCEL_RSI_FILTER')
+                                                            WHERE id = %s
+                                                        """, (live_pos['id'],))
+                                                    connection.commit()
+                                                    logger.info(f"[同步实盘] ✅ 限价单已取消(RSI过滤): {symbol} {position_side}")
+                                                else:
+                                                    error_msg = cancel_result.get('error', cancel_result.get('message', '未知错误'))
+                                                    logger.error(f"[同步实盘] ❌ 取消限价单失败(RSI过滤): {symbol} {position_side} - {error_msg}")
+                                except Exception as sync_ex:
+                                    logger.error(f"[同步实盘] ❌ 取消限价单异常(RSI过滤): {symbol} {position_side} - {sync_ex}")
+                                # ========== 同步取消实盘订单结束 ==========
+
+                                continue  # 跳过此订单
+
                             # 执行开仓（使用限价作为成交价）
                             try:
                                 # 先解冻保证金（因为限价单创建时已经冻结了保证金）
