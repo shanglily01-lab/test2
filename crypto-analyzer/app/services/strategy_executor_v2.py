@@ -957,12 +957,12 @@ class StrategyExecutorV2:
         if rsi_config.get('enabled', True) == False:
             return True, "RSI过滤器已禁用"
 
-        # 获取K线数据计算RSI
-        ema_data = self.get_ema_data(symbol, '15m', 50)
-        if not ema_data or 'klines' not in ema_data:
-            return True, "RSI数据不足，跳过过滤"
+        # 使用5M K线计算RSI（更实时，5分钟收盘一次，减少滞后）
+        ema_data_5m = self.get_ema_data(symbol, '5m', 50)
+        if not ema_data_5m or 'klines' not in ema_data_5m:
+            return True, "RSI数据不足(5M)，跳过过滤"
 
-        close_prices = [float(k['close_price']) for k in ema_data['klines']]
+        close_prices = [float(k['close_price']) for k in ema_data_5m['klines']]
         rsi_values = self.calculate_rsi(close_prices, 14)
 
         if not rsi_values:
@@ -977,13 +977,13 @@ class StrategyExecutorV2:
         if direction == 'long':
             # 做多时RSI不能太高（超买）
             if current_rsi > long_max:
-                return False, f"RSI过滤失败: 做多RSI={current_rsi:.1f} > {long_max}(超买)"
-            return True, f"RSI过滤通过: 做多RSI={current_rsi:.1f} <= {long_max}"
+                return False, f"RSI过滤失败: 做多RSI(5M)={current_rsi:.1f} > {long_max}(超买)"
+            return True, f"RSI过滤通过: 做多RSI(5M)={current_rsi:.1f} <= {long_max}"
         else:  # short
             # 做空时RSI不能太低（超卖）
             if current_rsi < short_min:
-                return False, f"RSI过滤失败: 做空RSI={current_rsi:.1f} < {short_min}(超卖)"
-            return True, f"RSI过滤通过: 做空RSI={current_rsi:.1f} >= {short_min}"
+                return False, f"RSI过滤失败: 做空RSI(5M)={current_rsi:.1f} < {short_min}(超卖)"
+            return True, f"RSI过滤通过: 做空RSI(5M)={current_rsi:.1f} >= {short_min}"
 
     def check_macd_filter(self, symbol: str, direction: str, strategy: Dict) -> Tuple[bool, str]:
         """
