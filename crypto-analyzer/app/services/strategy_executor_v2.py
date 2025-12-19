@@ -2053,10 +2053,10 @@ class StrategyExecutorV2:
         cursor = conn.cursor()
 
         try:
-            # 获取所有开放持仓
+            # 获取所有开放持仓（包含 open_time 用于冷却时间检查）
             cursor.execute("""
                 SELECT id, symbol, position_side, entry_price, max_profit_pct,
-                       trailing_stop_activated, trailing_stop_price, stop_loss_price
+                       trailing_stop_activated, trailing_stop_price, stop_loss_price, open_time
                 FROM futures_positions
                 WHERE account_id = %s AND status = 'open'
             """, (account_id,))
@@ -2126,20 +2126,38 @@ class StrategyExecutorV2:
                 # 获取策略止损参数
                 stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
 
-                # 快速检查硬止损
+                # 快速检查硬止损（不受冷却时间限制）
                 if current_pnl_pct <= -stop_loss_pct:
                     close_reason = f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)"
                     logger.info(f"🚨 [快速监控] {symbol} {close_reason}")
                     await self.execute_close_position(position, close_reason, strategy)
                     continue  # 已平仓，跳过后续处理
 
+                # 检查冷却时间（冷却期内不检查移动止盈/止损）
+                trailing_cooldown_minutes = strategy.get('trailingCooldownMinutes', 15)
+                open_time = position.get('open_time')
+                in_cooldown = False
+                if open_time:
+                    now = self.get_local_time()
+                    if isinstance(open_time, datetime):
+                        elapsed_minutes = (now - open_time).total_seconds() / 60
+                        if elapsed_minutes < trailing_cooldown_minutes:
+                            in_cooldown = True
+
                 # 更新最高盈利（只在有明显变化时更新，避免浮点数精度导致重复更新）
                 # 最小变化阈值：0.01%
                 if current_pnl_pct > max_profit_pct + 0.01:
                     updates['max_profit_pct'] = current_pnl_pct
                     updates['max_profit_price'] = current_price
-                    logger.info(f"[快速更新] {symbol} 最高盈利: {max_profit_pct:.2f}% -> {current_pnl_pct:.2f}%")
+                    if not in_cooldown:
+                        logger.info(f"[快速更新] {symbol} 最高盈利: {max_profit_pct:.2f}% -> {current_pnl_pct:.2f}%")
                     max_profit_pct = current_pnl_pct
+
+                # 冷却期内只更新最高盈利，跳过移动止盈检查
+                if in_cooldown:
+                    if updates:
+                        self._update_position(position_id, updates)
+                    continue
 
                 # 检查是否激活移动止盈
                 if not trailing_activated and max_profit_pct >= trailing_activate:
