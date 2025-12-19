@@ -798,8 +798,9 @@ class StrategyExecutorV2:
             (是否通过, 原因说明)
         """
         rsi_config = strategy.get('rsiFilter', {})
-        if not rsi_config.get('enabled', False):
-            return True, "RSI过滤器未启用"
+        # RSI过滤器默认启用，防止超买追多、超卖追空
+        if rsi_config.get('enabled', True) == False:
+            return True, "RSI过滤器已禁用"
 
         # 获取K线数据计算RSI
         ema_data = self.get_ema_data(symbol, '15m', 50)
@@ -1219,14 +1220,11 @@ class StrategyExecutorV2:
         filter_results = []
         all_passed = True
 
-        # 注意：过滤器1-5暂时全部禁用
-        # 如需启用，取消下面的注释
-
-        # # 1. RSI过滤
-        # passed, reason = self.check_rsi_filter(symbol, direction, strategy)
-        # filter_results.append(f"RSI: {reason}")
-        # if not passed:
-        #     all_passed = False
+        # 1. RSI过滤（防止超买追多、超卖追空）
+        passed, reason = self.check_rsi_filter(symbol, direction, strategy)
+        filter_results.append(f"RSI: {reason}")
+        if not passed:
+            all_passed = False
 
         # # 2. MACD过滤
         # passed, reason = self.check_macd_filter(symbol, direction, strategy)
@@ -1252,7 +1250,6 @@ class StrategyExecutorV2:
         # if not passed:
         #     all_passed = False
 
-        filter_results.append("过滤器已禁用")
         return all_passed, filter_results
 
     # ==================== 平仓信号检测 ====================
