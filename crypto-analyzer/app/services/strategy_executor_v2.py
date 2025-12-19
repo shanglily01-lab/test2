@@ -815,8 +815,9 @@ class StrategyExecutorV2:
 
         current_rsi = rsi_values[-1]
 
-        long_max = rsi_config.get('longMax', 70)
-        short_min = rsi_config.get('shortMin', 30)
+        # 硬编码RSI阈值，防止超买追多、超卖追空
+        long_max = 65   # 做多时RSI上限
+        short_min = 35  # 做空时RSI下限
 
         if direction == 'long':
             # 做多时RSI不能太高（超买）
