@@ -1542,11 +1542,25 @@ class StrategyExecutorV2:
         # 获取当前止损价
         current_stop_loss = float(position.get('stop_loss_price') or 0)
 
+        # 获取冷却时间配置
+        trailing_cooldown_minutes = strategy.get('trailingCooldownMinutes', 15)
+        open_time = position.get('open_time')
+        in_cooldown = False
+        if open_time:
+            from datetime import datetime, timedelta, timezone
+            local_tz = timezone(timedelta(hours=8))
+            now = datetime.now(local_tz).replace(tzinfo=None)
+            if isinstance(open_time, datetime):
+                elapsed_minutes = (now - open_time).total_seconds() / 60
+                if elapsed_minutes < trailing_cooldown_minutes:
+                    in_cooldown = True
+
         # 0. 移动止损检查（在硬止损之前）
         # 当启用移动止损且盈利达到阈值时，动态调整止损价
         # 最小移动阈值：只有当新止损价变动超过0.1%时才更新，避免频繁微小调整
+        # 冷却期内不执行移动止损
         min_move_pct = 0.1
-        if trailing_sl_enabled and current_pnl_pct >= trailing_sl_activate and current_stop_loss > 0:
+        if trailing_sl_enabled and current_pnl_pct >= trailing_sl_activate and current_stop_loss > 0 and not in_cooldown:
             if position_side == 'LONG':
                 # 做多：止损价 = 当前价 - 距离%
                 new_stop_loss = current_price * (1 - trailing_sl_distance / 100)
