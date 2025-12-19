@@ -1707,17 +1707,25 @@ class StrategyExecutorV2:
             if position_side == 'LONG':
                 # 做多：止损价 = 当前价 - 距离%
                 new_stop_loss = current_price * (1 - trailing_sl_distance / 100)
-                move_pct = abs(new_stop_loss - current_stop_loss) / current_stop_loss * 100
-                if new_stop_loss > current_stop_loss and move_pct >= min_move_pct:
-                    updates['stop_loss_price'] = new_stop_loss
-                    logger.info(f"移动止损上移: {position.get('symbol')} 做多, 盈利{current_pnl_pct:.2f}%, 止损从{current_stop_loss:.6f}上移到{new_stop_loss:.6f} (移动{move_pct:.2f}%)")
+                # 入场价保护：做多时止损价不能超过入场价，否则盈利时会触发"止损"
+                if new_stop_loss >= entry_price:
+                    logger.debug(f"移动止损跳过: {position.get('symbol')} 做多, 新止损{new_stop_loss:.6f} >= 入场价{entry_price:.6f}")
+                else:
+                    move_pct = abs(new_stop_loss - current_stop_loss) / current_stop_loss * 100
+                    if new_stop_loss > current_stop_loss and move_pct >= min_move_pct:
+                        updates['stop_loss_price'] = new_stop_loss
+                        logger.info(f"移动止损上移: {position.get('symbol')} 做多, 盈利{current_pnl_pct:.2f}%, 止损从{current_stop_loss:.6f}上移到{new_stop_loss:.6f} (移动{move_pct:.2f}%)")
             else:
                 # 做空：止损价 = 当前价 + 距离%
                 new_stop_loss = current_price * (1 + trailing_sl_distance / 100)
-                move_pct = abs(current_stop_loss - new_stop_loss) / current_stop_loss * 100
-                if new_stop_loss < current_stop_loss and move_pct >= min_move_pct:
-                    updates['stop_loss_price'] = new_stop_loss
-                    logger.info(f"移动止损下移: {position.get('symbol')} 做空, 盈利{current_pnl_pct:.2f}%, 止损从{current_stop_loss:.6f}下移到{new_stop_loss:.6f} (移动{move_pct:.2f}%)")
+                # 入场价保护：做空时止损价不能低于入场价，否则盈利时会触发"止损"
+                if new_stop_loss <= entry_price:
+                    logger.debug(f"移动止损跳过: {position.get('symbol')} 做空, 新止损{new_stop_loss:.6f} <= 入场价{entry_price:.6f}")
+                else:
+                    move_pct = abs(current_stop_loss - new_stop_loss) / current_stop_loss * 100
+                    if new_stop_loss < current_stop_loss and move_pct >= min_move_pct:
+                        updates['stop_loss_price'] = new_stop_loss
+                        logger.info(f"移动止损下移: {position.get('symbol')} 做空, 盈利{current_pnl_pct:.2f}%, 止损从{current_stop_loss:.6f}下移到{new_stop_loss:.6f} (移动{move_pct:.2f}%)")
 
         # 1. 检查是否触发止损价（包括移动止损后的价格）
         updated_stop_loss = updates.get('stop_loss_price', current_stop_loss)
