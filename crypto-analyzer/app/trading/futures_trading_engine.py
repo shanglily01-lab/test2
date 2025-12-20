@@ -1258,13 +1258,13 @@ class FuturesTradingEngine:
                         logger.info(f"[同步实盘] {symbol} {position_side} 无策略ID，默认同步实盘平仓")
 
                     if should_sync:
-                        # 同步实盘平仓（按数量比例平仓，避免一次性平掉所有持仓）
-                        logger.info(f"[同步实盘] {symbol} {position_side} 开始平仓同步 (原因: {reason})，数量={float(close_quantity)}")
+                        # 同步实盘平仓（全部平仓，不传数量，避免因精度差异导致残留）
+                        logger.info(f"[同步实盘] {symbol} {position_side} 开始平仓同步 (原因: {reason})")
 
                         live_result = self.live_engine.close_position_by_symbol(
                             symbol=symbol,
                             position_side=position_side,
-                            close_quantity=close_quantity,  # 只平当前这笔持仓的数量
+                            close_quantity=None,  # 全部平仓，避免残留
                             reason=f'paper_sync_{reason}'
                         )
 
