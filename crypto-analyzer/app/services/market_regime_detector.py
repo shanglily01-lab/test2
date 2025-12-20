@@ -962,29 +962,243 @@ def get_regime_trading_suggestion(regime_type: str) -> str:
     return suggestions.get(regime_type, '未知行情类型')
 
 
+def check_ranging_market(db_config: Dict, symbol: str, timeframe: str = '15m') -> Tuple[bool, str]:
+    """
+    检查是否处于震荡行情（开仓前调用）
+
+    规则（使用15分钟K线）：
+    - EMA差值 < 0.8%（EMA9和EMA26接近）
+    - ADX < 25（趋势强度弱）
+
+    Args:
+        db_config: 数据库配置
+        symbol: 交易对
+        timeframe: 时间周期（默认15分钟）
+
+    Returns:
+        (是否震荡行情, 描述)
+        - (True, "描述"): 震荡行情，禁止开仓
+        - (False, "描述"): 非震荡，可以开仓
+    """
+    try:
+        detector = MarketRegimeDetector(db_config)
+        result = detector.detect_regime(symbol, timeframe)
+
+        regime_type = result.get('regime_type', 'ranging')
+        ema_diff_pct = result.get('ema_diff_pct', 0)
+        adx_value = result.get('adx_value', 0)
+
+        if regime_type == 'ranging':
+            desc = f"震荡行情(EMA差{ema_diff_pct:.2f}%, ADX={adx_value:.1f})"
+            logger.info(f"🚫 [震荡检查] {symbol} {desc} - 禁止开仓")
+            return True, desc
+        else:
+            desc = f"趋势行情({regime_type}, EMA差{ema_diff_pct:.2f}%, ADX={adx_value:.1f})"
+            return False, desc
+
+    except Exception as e:
+        logger.error(f"[震荡检查] {symbol} 检测失败: {e}")
+        # 出错时返回非震荡，允许开仓
+        return False, f"检测失败: {e}"
+
+
+def should_allow_opening(
+    db_config: Dict,
+    symbol: str,
+    direction: str,
+    circuit_breaker: 'CircuitBreaker' = None
+) -> Tuple[bool, str, Dict]:
+    """
+    综合检查是否允许开仓
+
+    检查项：
+    1. 震荡行情检查（15M K线）
+    2. 熔断/哨兵模式检查
+
+    Args:
+        db_config: 数据库配置
+        symbol: 交易对
+        direction: 方向 'long' 或 'short'
+        circuit_breaker: 熔断器实例（可选）
+
+    Returns:
+        (是否允许开仓, 原因描述, 详细信息)
+    """
+    details = {
+        'symbol': symbol,
+        'direction': direction,
+        'ranging_check': None,
+        'circuit_breaker_check': None
+    }
+
+    # 1. 震荡行情检查
+    is_ranging, ranging_desc = check_ranging_market(db_config, symbol)
+    details['ranging_check'] = {'is_ranging': is_ranging, 'description': ranging_desc}
+
+    if is_ranging:
+        return False, f"震荡行情禁止开仓: {ranging_desc}", details
+
+    # 2. 熔断/哨兵模式检查
+    if circuit_breaker:
+        is_active, breaker_desc = circuit_breaker.is_circuit_breaker_active(direction)
+        details['circuit_breaker_check'] = {'is_active': is_active, 'description': breaker_desc}
+
+        if is_active:
+            return False, f"哨兵模式禁止开仓: {breaker_desc}", details
+
+    return True, "允许开仓", details
+
+
+def handle_circuit_breaker_positions(
+    db_config: Dict,
+    direction: str,
+    cancel_pending_orders: bool = True,
+    close_positions: bool = True
+) -> Dict:
+    """
+    熔断触发时处理同方向的仓位
+
+    规则：
+    - 取消同方向的所有挂单（未成交限价单）
+    - 平掉同方向的所有持仓
+    - 不同方向的挂单和持仓保留
+
+    Args:
+        db_config: 数据库配置
+        direction: 交易方向 'long' 或 'short'
+        cancel_pending_orders: 是否取消挂单
+        close_positions: 是否平仓
+
+    Returns:
+        处理结果
+    """
+    result = {
+        'direction': direction,
+        'canceled_orders': [],
+        'closed_positions': [],
+        'errors': []
+    }
+
+    position_side = direction.upper()  # LONG 或 SHORT
+
+    try:
+        connection = pymysql.connect(
+            host=db_config.get('host', 'localhost'),
+            port=db_config.get('port', 3306),
+            user=db_config.get('user', 'root'),
+            password=db_config.get('password', ''),
+            database=db_config.get('database', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+
+        # 1. 取消同方向的挂单
+        if cancel_pending_orders:
+            with connection.cursor() as cursor:
+                # 查询同方向的待成交挂单
+                cursor.execute("""
+                    SELECT id, symbol, side, quantity, price
+                    FROM futures_orders
+                    WHERE status = 'pending' AND side = %s
+                """, (position_side,))
+                pending_orders = cursor.fetchall()
+
+                for order in pending_orders:
+                    try:
+                        # 更新订单状态为已取消
+                        cursor.execute("""
+                            UPDATE futures_orders
+                            SET status = 'canceled',
+                                cancellation_reason = '熔断自动取消',
+                                canceled_at = NOW()
+                            WHERE id = %s
+                        """, (order['id'],))
+                        result['canceled_orders'].append({
+                            'id': order['id'],
+                            'symbol': order['symbol'],
+                            'side': order['side']
+                        })
+                        logger.info(f"[熔断] 取消挂单 #{order['id']}: {order['symbol']} {order['side']}")
+                    except Exception as e:
+                        result['errors'].append(f"取消挂单 #{order['id']} 失败: {e}")
+
+            connection.commit()
+
+        # 2. 平掉同方向的持仓
+        if close_positions:
+            with connection.cursor() as cursor:
+                # 查询同方向的持仓
+                cursor.execute("""
+                    SELECT id, symbol, position_side, quantity, entry_price
+                    FROM futures_positions
+                    WHERE status = 'open' AND position_side = %s
+                """, (position_side,))
+                open_positions = cursor.fetchall()
+
+                for pos in open_positions:
+                    try:
+                        # 标记持仓为已平仓（实际平仓需要调用交易API）
+                        # 这里只更新数据库状态，实际平仓由其他服务处理
+                        cursor.execute("""
+                            UPDATE futures_positions
+                            SET status = 'pending_close',
+                                close_reason = '熔断强制平仓',
+                                notes = CONCAT(IFNULL(notes, ''), ' [熔断平仓]')
+                            WHERE id = %s AND status = 'open'
+                        """, (pos['id'],))
+
+                        if cursor.rowcount > 0:
+                            result['closed_positions'].append({
+                                'id': pos['id'],
+                                'symbol': pos['symbol'],
+                                'position_side': pos['position_side']
+                            })
+                            logger.info(f"[熔断] 标记平仓 #{pos['id']}: {pos['symbol']} {pos['position_side']}")
+                    except Exception as e:
+                        result['errors'].append(f"平仓 #{pos['id']} 失败: {e}")
+
+            connection.commit()
+
+        connection.close()
+
+        logger.info(f"[熔断] {direction.upper()}方向处理完成: "
+                   f"取消{len(result['canceled_orders'])}个挂单, "
+                   f"平仓{len(result['closed_positions'])}个持仓")
+
+    except Exception as e:
+        logger.error(f"[熔断] 处理仓位失败: {e}")
+        result['errors'].append(str(e))
+
+    return result
+
+
 class CircuitBreaker:
     """
-    连续亏损熔断器（侦察单模式）
+    连续亏损熔断器（哨兵单模式）
 
     功能：
     - 统计某方向连续亏损次数
-    - 达到阈值后进入"侦察模式"
-    - 侦察模式：放出3个侦察单，2个盈利即可恢复正常交易
-    - 侦察单使用较小仓位（正常的50%）
+    - 达到阈值后进入"哨兵模式"
+    - 哨兵模式：创建虚拟哨兵单监控市场，连续2单盈利即可恢复
+    - 哨兵单不实际开仓，只记录"如果开仓会怎样"
 
     状态：
     - normal: 正常交易
-    - scout: 侦察模式（等待侦察单验证市场）
+    - sentinel: 哨兵模式（虚拟单监控市场）
     """
 
     DEFAULT_CONSECUTIVE_LOSS_LIMIT = 4  # 连续亏损次数限制
-    SCOUT_POSITION_RATIO = 0.5  # 侦察单仓位比例（正常仓位的50%）
-    SCOUT_TOTAL_COUNT = 3  # 侦察单总数
-    SCOUT_WIN_REQUIRED = 2  # 需要盈利的侦察单数量
+    SENTINEL_CONSECUTIVE_WINS_REQUIRED = 2  # 哨兵单连续盈利次数要求
 
     # 状态常量
     STATUS_NORMAL = 'normal'
-    STATUS_SCOUT = 'scout'
+    STATUS_SENTINEL = 'sentinel'
+
+    # 兼容旧代码
+    STATUS_SCOUT = 'sentinel'
+    SCOUT_POSITION_RATIO = 0.5  # 保留兼容性（哨兵模式不需要）
+    SCOUT_TOTAL_COUNT = 3  # 保留兼容性
+    SCOUT_WIN_REQUIRED = 2  # 保留兼容性
 
     def __init__(self, db_config: Dict):
         """
@@ -994,21 +1208,30 @@ class CircuitBreaker:
             db_config: 数据库配置
         """
         self.db_config = db_config
-        # 熔断状态: {'long': 'normal'/'scout', 'short': 'normal'/'scout'}
+        # 熔断状态: {'long': 'normal'/'sentinel', 'short': 'normal'/'sentinel'}
         self._breaker_status: Dict[str, str] = {
             'long': self.STATUS_NORMAL,
             'short': self.STATUS_NORMAL
         }
-        # 侦察单ID列表: {'long': [id1, id2, id3], 'short': [id1, id2, id3]}
+        # 哨兵单管理器（延迟初始化）
+        self._sentinel_manager = None
+
+        # 兼容旧代码的属性
         self._scout_position_ids: Dict[str, List[int]] = {
             'long': [],
             'short': []
         }
-        # 侦察单结果: {'long': {'wins': 0, 'losses': 0}, 'short': {...}}
         self._scout_results: Dict[str, Dict[str, int]] = {
             'long': {'wins': 0, 'losses': 0},
             'short': {'wins': 0, 'losses': 0}
         }
+
+    def _get_sentinel_manager(self):
+        """获取哨兵单管理器（延迟初始化）"""
+        if self._sentinel_manager is None:
+            from app.services.sentinel_order_manager import SentinelOrderManager
+            self._sentinel_manager = SentinelOrderManager(self.db_config)
+        return self._sentinel_manager
 
     def _get_local_time(self) -> datetime:
         """获取本地时间（新加坡时区 UTC+8）"""
@@ -1136,100 +1359,117 @@ class CircuitBreaker:
 
     def is_circuit_breaker_active(self, direction: str) -> Tuple[bool, str]:
         """
-        检查是否处于熔断/侦察模式
+        检查是否处于熔断/哨兵模式
 
         Returns:
             (是否限制开仓, 描述)
-            - 正常模式：(False, "正常")
-            - 侦察模式：根据侦察单情况决定
+            - 正常模式：(False, "正常") - 可以正常开仓
+            - 哨兵模式：(True, "描述") - 禁止开仓，只能创建哨兵单
         """
         current_status = self._breaker_status.get(direction, self.STATUS_NORMAL)
 
-        # 正常模式 - 检查是否需要进入侦察模式
+        # 正常模式 - 检查是否需要进入哨兵模式
         if current_status == self.STATUS_NORMAL:
             triggered, losses, desc = self.check_consecutive_losses(direction)
             if triggered:
-                # 进入侦察模式
-                self._breaker_status[direction] = self.STATUS_SCOUT
-                self._scout_position_ids[direction] = []
-                self._scout_results[direction] = {'wins': 0, 'losses': 0}
-                logger.warning(f"🚨 [熔断] {direction.upper()} 方向进入侦察模式: {desc}")
-                return False, f"进入侦察模式: {desc}，需要3个侦察单中2个盈利"
+                # 进入哨兵模式
+                self._breaker_status[direction] = self.STATUS_SENTINEL
+                # 重置哨兵单管理器的连续盈利计数
+                sentinel_mgr = self._get_sentinel_manager()
+                sentinel_mgr.reset_consecutive_wins(direction)
+                logger.warning(f"🚨 [熔断] {direction.upper()} 方向进入哨兵模式: {desc}")
+                return True, f"哨兵模式: {desc}，需要连续2单盈利恢复"
             else:
                 return False, f"正常({desc})"
 
-        # 侦察模式
-        if current_status == self.STATUS_SCOUT:
-            # 更新侦察单结果
-            self._update_scout_results(direction)
+        # 哨兵模式
+        if current_status == self.STATUS_SENTINEL:
+            sentinel_mgr = self._get_sentinel_manager()
+            consecutive_wins = sentinel_mgr.get_consecutive_wins(direction)
+            stats = sentinel_mgr.get_sentinel_stats()
+            direction_stats = stats.get(direction, {})
+            open_count = direction_stats.get('open', 0)
 
-            results = self._scout_results.get(direction, {'wins': 0, 'losses': 0})
-            wins = results['wins']
-            losses = results['losses']
-            pending_count = len(self._scout_position_ids.get(direction, []))
-            total_sent = wins + losses + pending_count
-
-            # 检查是否已达到2胜
-            if wins >= self.SCOUT_WIN_REQUIRED:
-                # 2个盈利 → 恢复正常
+            # 检查是否达到恢复条件
+            if sentinel_mgr.is_recovery_triggered(direction):
+                # 连续2单盈利 → 恢复正常
                 self._breaker_status[direction] = self.STATUS_NORMAL
-                self._scout_position_ids[direction] = []
-                self._scout_results[direction] = {'wins': 0, 'losses': 0}
-                logger.info(f"✅ [熔断] {direction.upper()} 侦察单{wins}胜{losses}负，恢复正常交易")
-                return False, f"侦察成功({wins}胜{losses}负)，已恢复正常"
+                # 清除该方向的未平仓哨兵单
+                sentinel_mgr.clear_open_sentinels(direction)
+                logger.info(f"🎉 [熔断] {direction.upper()} 哨兵单连续{consecutive_wins}单盈利，恢复正常交易!")
+                return False, f"哨兵成功(连续{consecutive_wins}盈利)，已恢复正常"
 
-            # 检查是否已经不可能达到2胜（例如已经2负+1待定）
-            max_possible_wins = wins + pending_count + (self.SCOUT_TOTAL_COUNT - total_sent)
-            if max_possible_wins < self.SCOUT_WIN_REQUIRED:
-                # 重置侦察，重新开始
-                self._scout_position_ids[direction] = []
-                self._scout_results[direction] = {'wins': 0, 'losses': 0}
-                logger.info(f"⚠️ [熔断] {direction.upper()} 侦察失败({wins}胜{losses}负)，重新开始侦察")
-                return False, f"侦察失败({wins}胜{losses}负)，重新侦察"
-
-            # 还有侦察单在持仓中
-            if pending_count > 0:
-                return True, f"侦察中({wins}胜{losses}负{pending_count}待定)，等待结果"
-
-            # 还需要发送更多侦察单
-            remaining = self.SCOUT_TOTAL_COUNT - total_sent
-            if remaining > 0:
-                return False, f"侦察模式({wins}胜{losses}负)，还需{remaining}个侦察单"
-
-            # 所有侦察单已完成但未达到2胜，重新开始
-            self._scout_position_ids[direction] = []
-            self._scout_results[direction] = {'wins': 0, 'losses': 0}
-            return False, f"侦察失败({wins}胜{losses}负)，重新侦察"
+            # 仍在哨兵模式
+            return True, f"哨兵模式(连续盈利{consecutive_wins}/{self.SENTINEL_CONSECUTIVE_WINS_REQUIRED}, 活跃{open_count}单)"
 
         return False, "未知状态"
 
-    def register_scout_position(self, direction: str, position_id: int):
+    def create_sentinel_order(
+        self,
+        direction: str,
+        symbol: str,
+        entry_price: float,
+        stop_loss_pct: float,
+        take_profit_pct: float,
+        strategy_id: int = None
+    ) -> Optional[int]:
         """
-        注册侦察单
+        创建哨兵单（仅在哨兵模式下有效）
 
         Args:
-            direction: 交易方向
-            position_id: 持仓ID
+            direction: 方向 'long' 或 'short'
+            symbol: 交易对
+            entry_price: 入场价
+            stop_loss_pct: 止损百分比
+            take_profit_pct: 止盈百分比
+            strategy_id: 策略ID
+
+        Returns:
+            哨兵单ID，非哨兵模式或失败返回None
         """
-        if self._breaker_status.get(direction) == self.STATUS_SCOUT:
-            if direction not in self._scout_position_ids:
-                self._scout_position_ids[direction] = []
-            self._scout_position_ids[direction].append(position_id)
-            total = len(self._scout_position_ids[direction]) + self._scout_results[direction]['wins'] + self._scout_results[direction]['losses']
-            logger.info(f"🔍 [熔断] {direction.upper()} 注册侦察单 #{total}: ID={position_id}")
+        if self._breaker_status.get(direction) != self.STATUS_SENTINEL:
+            return None
+
+        sentinel_mgr = self._get_sentinel_manager()
+        return sentinel_mgr.create_sentinel_order(
+            direction=direction,
+            symbol=symbol,
+            entry_price=entry_price,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+            strategy_id=strategy_id
+        )
+
+    def register_scout_position(self, direction: str, position_id: int):
+        """
+        注册侦察单（已废弃，保留兼容性）
+
+        哨兵模式不再使用真实持仓作为侦察单，而是使用虚拟哨兵单
+        """
+        logger.warning(f"[熔断] register_scout_position 已废弃，哨兵模式使用虚拟哨兵单")
 
     def is_scout_mode(self, direction: str) -> bool:
         """
-        检查是否处于侦察模式
+        检查是否处于哨兵模式（兼容旧接口名）
 
         Returns:
-            True: 侦察模式
+            True: 哨兵模式
             False: 正常模式
         """
-        return self._breaker_status.get(direction) == self.STATUS_SCOUT
+        return self._breaker_status.get(direction) == self.STATUS_SENTINEL
+
+    def is_sentinel_mode(self, direction: str) -> bool:
+        """
+        检查是否处于哨兵模式
+
+        Returns:
+            True: 哨兵模式
+            False: 正常模式
+        """
+        return self._breaker_status.get(direction) == self.STATUS_SENTINEL
 
     def get_scout_position_ratio(self) -> float:
-        """获取侦察单仓位比例"""
+        """获取侦察单仓位比例（已废弃，保留兼容性）"""
         return self.SCOUT_POSITION_RATIO
 
     def clear_circuit_breaker(self, direction: str = None):
@@ -1239,15 +1479,17 @@ class CircuitBreaker:
         Args:
             direction: 交易方向，None 表示清除所有
         """
+        sentinel_mgr = self._get_sentinel_manager()
+
         if direction:
             self._breaker_status[direction] = self.STATUS_NORMAL
-            self._scout_position_ids[direction] = []
-            self._scout_results[direction] = {'wins': 0, 'losses': 0}
+            # 清除哨兵单
+            sentinel_mgr.clear_open_sentinels(direction)
             logger.info(f"[熔断] 已清除 {direction.upper()} 方向熔断状态")
         else:
             self._breaker_status = {'long': self.STATUS_NORMAL, 'short': self.STATUS_NORMAL}
-            self._scout_position_ids = {'long': [], 'short': []}
-            self._scout_results = {'long': {'wins': 0, 'losses': 0}, 'short': {'wins': 0, 'losses': 0}}
+            # 清除所有哨兵单
+            sentinel_mgr.clear_open_sentinels()
             logger.info("[熔断] 已清除所有熔断状态")
 
     def get_status(self) -> Dict:
@@ -1258,36 +1500,50 @@ class CircuitBreaker:
             熔断状态信息
         """
         now = self._get_local_time()
+        sentinel_mgr = self._get_sentinel_manager()
+        sentinel_stats = sentinel_mgr.get_sentinel_stats()
 
         # 检查 long 方向
         long_active, long_desc = self.is_circuit_breaker_active('long')
         long_status = self._breaker_status.get('long', self.STATUS_NORMAL)
-        long_scout_ids = self._scout_position_ids.get('long', [])
-        long_results = self._scout_results.get('long', {'wins': 0, 'losses': 0})
+        long_stats = sentinel_stats.get('long', {})
+        long_consecutive_wins = sentinel_mgr.get_consecutive_wins('long')
 
         # 检查 short 方向
         short_active, short_desc = self.is_circuit_breaker_active('short')
         short_status = self._breaker_status.get('short', self.STATUS_NORMAL)
-        short_scout_ids = self._scout_position_ids.get('short', [])
-        short_results = self._scout_results.get('short', {'wins': 0, 'losses': 0})
+        short_stats = sentinel_stats.get('short', {})
+        short_consecutive_wins = sentinel_mgr.get_consecutive_wins('short')
 
         return {
             'long': {
                 'is_active': long_active,
                 'status': long_status,
                 'description': long_desc,
-                'scout_position_ids': long_scout_ids,
-                'scout_results': long_results,
-                'is_scout_mode': long_status == self.STATUS_SCOUT
+                'is_scout_mode': long_status == self.STATUS_SENTINEL,
+                'is_sentinel_mode': long_status == self.STATUS_SENTINEL,
+                'sentinel_stats': long_stats,
+                'consecutive_wins': long_consecutive_wins,
+                # 兼容旧字段
+                'scout_position_ids': [],
+                'scout_results': {'wins': long_stats.get('win', 0), 'losses': long_stats.get('loss', 0)}
             },
             'short': {
                 'is_active': short_active,
                 'status': short_status,
                 'description': short_desc,
-                'scout_position_ids': short_scout_ids,
-                'scout_results': short_results,
-                'is_scout_mode': short_status == self.STATUS_SCOUT
+                'is_scout_mode': short_status == self.STATUS_SENTINEL,
+                'is_sentinel_mode': short_status == self.STATUS_SENTINEL,
+                'sentinel_stats': short_stats,
+                'consecutive_wins': short_consecutive_wins,
+                # 兼容旧字段
+                'scout_position_ids': [],
+                'scout_results': {'wins': short_stats.get('win', 0), 'losses': short_stats.get('loss', 0)}
             },
+            'sentinel_config': {
+                'consecutive_wins_required': self.SENTINEL_CONSECUTIVE_WINS_REQUIRED
+            },
+            # 兼容旧字段
             'scout_config': {
                 'total_count': self.SCOUT_TOTAL_COUNT,
                 'win_required': self.SCOUT_WIN_REQUIRED,
@@ -1295,3 +1551,28 @@ class CircuitBreaker:
             },
             'timestamp': now.isoformat()
         }
+
+
+# 全局 CircuitBreaker 实例
+_circuit_breaker: Optional[CircuitBreaker] = None
+
+
+def get_circuit_breaker(db_config: Dict = None) -> Optional[CircuitBreaker]:
+    """
+    获取熔断器实例（单例模式）
+
+    Args:
+        db_config: 数据库配置（首次调用时必须提供）
+
+    Returns:
+        CircuitBreaker 实例
+    """
+    global _circuit_breaker
+
+    if _circuit_breaker is None:
+        if db_config is None:
+            return None
+        _circuit_breaker = CircuitBreaker(db_config)
+
+    return _circuit_breaker
+

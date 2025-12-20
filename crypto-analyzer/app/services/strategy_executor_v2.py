@@ -18,6 +18,7 @@ from loguru import logger
 from app.services.position_validator import PositionValidator
 from app.utils.indicators import calculate_ema, calculate_ma, calculate_rsi, calculate_macd, calculate_kdj
 from app.utils.db import create_connection
+from app.services.market_regime_detector import check_ranging_market, get_circuit_breaker, CircuitBreaker
 
 
 class StrategyExecutorV2:
@@ -1964,6 +1965,32 @@ class StrategyExecutorV2:
 
             current_price = ema_data['current_price']
 
+            # ========== 震荡行情检查（15M K线）==========
+            is_ranging, ranging_desc = check_ranging_market(self.db_config, symbol, '15m')
+            if is_ranging:
+                logger.warning(f"🚫 {symbol} {direction} 禁止开仓: 震荡行情 - {ranging_desc}")
+                return {'success': False, 'error': f'震荡行情禁止开仓: {ranging_desc}', 'blocked_by': 'ranging_market'}
+
+            # ========== 熔断/哨兵模式检查 ==========
+            circuit_breaker = get_circuit_breaker(self.db_config)
+            if circuit_breaker:
+                cb_status = circuit_breaker.get_status(direction)
+                if cb_status == CircuitBreaker.STATUS_SENTINEL:
+                    # 哨兵模式：创建哨兵单而非实际开仓
+                    logger.info(f"🔒 {symbol} {direction} 熔断中(哨兵模式)，创建哨兵单监控...")
+                    sentinel_result = await self._create_sentinel_order(
+                        symbol=symbol,
+                        direction=direction,
+                        entry_price=current_price,
+                        strategy=strategy
+                    )
+                    return {
+                        'success': True,
+                        'sentinel': True,
+                        'sentinel_id': sentinel_result.get('sentinel_id'),
+                        'message': f'哨兵模式: 已创建哨兵单 #{sentinel_result.get("sentinel_id")}'
+                    }
+
             # ========== 强制市价开仓（反转信号）或金叉/死叉信号直接市价开仓 ==========
             is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover', 'reversal_cross')
             cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
@@ -2169,6 +2196,50 @@ class StrategyExecutorV2:
 
         except Exception as e:
             logger.error(f"执行开仓失败: {e}")
+            return {'success': False, 'error': str(e)}
+
+    async def _create_sentinel_order(self, symbol: str, direction: str,
+                                      entry_price: float, strategy: Dict) -> Dict:
+        """
+        创建哨兵单（熔断后的虚拟监控单）
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            entry_price: 入场价格
+            strategy: 策略配置
+
+        Returns:
+            {'success': bool, 'sentinel_id': int}
+        """
+        try:
+            from app.services.sentinel_order_manager import SentinelOrderManager
+
+            # 获取止损止盈配置
+            stop_loss_pct = strategy.get('stopLossPct', 2.5)
+            take_profit_pct = strategy.get('takeProfitPct', 5.0)
+            strategy_id = strategy.get('id')
+
+            sentinel_manager = SentinelOrderManager(self.db_config)
+            sentinel_id = sentinel_manager.create_sentinel_order(
+                direction=direction,
+                symbol=symbol,
+                entry_price=entry_price,
+                stop_loss_pct=stop_loss_pct,
+                take_profit_pct=take_profit_pct,
+                strategy_id=strategy_id
+            )
+
+            if sentinel_id:
+                logger.info(f"🔒 {symbol} {direction} 哨兵单创建成功: #{sentinel_id}, "
+                           f"入场价={entry_price:.4f}, 止损={stop_loss_pct}%, 止盈={take_profit_pct}%")
+                return {'success': True, 'sentinel_id': sentinel_id}
+            else:
+                logger.error(f"❌ {symbol} {direction} 哨兵单创建失败")
+                return {'success': False, 'error': '哨兵单创建失败'}
+
+        except Exception as e:
+            logger.error(f"创建哨兵单异常: {e}")
             return {'success': False, 'error': str(e)}
 
     async def _sync_live_open(self, symbol: str, direction: str, quantity: float,

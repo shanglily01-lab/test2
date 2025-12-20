@@ -291,11 +291,11 @@
         }
 
         /* Tab pagination styles */
-        #positionsTab, #ordersTab, #cancelledTab, #pendingValidationTab {
+        #positionsTab, #ordersTab, #cancelledTab, #pendingValidationTab, #sentinelTab {
             display: flex;
             flex-direction: column;
         }
-        #positionsTable, #ordersTable, #cancelledTable, #pendingValidationTable {
+        #positionsTable, #ordersTable, #cancelledTable, #pendingValidationTable, #sentinelTable {
             display: flex !important;
             flex-direction: column;
         }
@@ -580,12 +580,17 @@
                                 <i class="bi bi-search"></i>
                                 <span id="pending-validation-title">待检查订单</span>
                             </button>
+                            <button class="btn btn-secondary" id="tabSentinelTitle" onclick="showPositionsTab('sentinel')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
+                                <i class="bi bi-binoculars"></i>
+                                <span id="sentinel-title">哨兵单</span>
+                            </button>
                         </div>
                         <div class="d-flex align-center gap-md">
                             <span class="badge badge-info" id="positionCount" style="display: none;">0 个持仓</span>
                             <span class="badge badge-warning" id="orderCount" style="display: none;">0 个订单</span>
                             <span class="badge badge-secondary" id="cancelledCount" style="display: none;">0 个已取消</span>
                             <span class="badge badge-primary" id="pendingValidationCount" style="display: none;">0 个待检查</span>
+                            <span class="badge" id="sentinelCount" style="display: none; background: rgba(210, 153, 34, 0.2); color: #d29922;">0 个哨兵单</span>
                             <div class="last-update" id="positions-update">-</div>
                         </div>
                     </div>
@@ -782,6 +787,52 @@
                             <div id="pendingValidationEmpty" class="empty-state" style="display: none;">
                                 <div class="empty-state-icon">🔍</div>
                                 <div class="empty-state-text">暂无待检查订单</div>
+                            </div>
+                        </div>
+
+                        <!-- 哨兵单标签页 -->
+                        <div id="sentinelTab" style="display: none;">
+                            <div id="sentinelLoading" class="loading-overlay" style="min-height: 200px;">
+                                <div class="spinner"></div>
+                            </div>
+                            <div id="sentinelTable" style="display: none;">
+                                <div class="tab-content-container">
+                                    <div style="padding: 12px; background: rgba(210, 153, 34, 0.1); border-radius: var(--radius-md); margin-bottom: 16px; border-left: 3px solid #d29922;">
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                            <i class="bi bi-info-circle" style="color: #d29922;"></i>
+                                            <strong style="color: #d29922;">哨兵单说明</strong>
+                                        </div>
+                                        <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
+                                            哨兵单是熔断后的虚拟监控单，不实际开仓。当哨兵单连续2单盈利后，系统将恢复正常交易。
+                                        </p>
+                                    </div>
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>交易对</th>
+                                                <th>方向</th>
+                                                <th>入场价</th>
+                                                <th>止损价</th>
+                                                <th>止盈价</th>
+                                                <th>当前价</th>
+                                                <th>浮动盈亏</th>
+                                                <th>状态</th>
+                                                <th>平仓原因</th>
+                                                <th>创建时间</th>
+                                                <th>平仓时间</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="sentinelBody">
+                                            <!-- 动态加载 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div id="sentinelEmpty" class="empty-state" style="display: none;">
+                                <div class="empty-state-icon">🔭</div>
+                                <div class="empty-state-text">暂无哨兵单</div>
+                                <p class="text-sm text-secondary" style="margin-top: 8px;">熔断触发后，系统会创建虚拟哨兵单监控市场</p>
                             </div>
                         </div>
                     </div>
@@ -1440,10 +1491,12 @@
             const ordersTab = document.getElementById('ordersTab');
             const cancelledTab = document.getElementById('cancelledTab');
             const pendingValidationTab = document.getElementById('pendingValidationTab');
+            const sentinelTab = document.getElementById('sentinelTab');
             const positionsTitle = document.getElementById('tabPositionsTitle');
             const ordersTitle = document.getElementById('tabOrdersTitle');
             const cancelledTitle = document.getElementById('tabCancelledTitle');
             const pendingValidationTitle = document.getElementById('tabPendingValidationTitle');
+            const sentinelTitle = document.getElementById('tabSentinelTitle');
 
             // 重置所有标签页样式
             const resetButton = (btn) => {
@@ -1462,15 +1515,18 @@
             ordersTab.style.display = 'none';
             cancelledTab.style.display = 'none';
             pendingValidationTab.style.display = 'none';
+            sentinelTab.style.display = 'none';
             document.getElementById('positionCount').style.display = 'none';
             document.getElementById('orderCount').style.display = 'none';
             document.getElementById('cancelledCount').style.display = 'none';
             document.getElementById('pendingValidationCount').style.display = 'none';
+            document.getElementById('sentinelCount').style.display = 'none';
 
             resetButton(positionsTitle);
             resetButton(ordersTitle);
             resetButton(cancelledTitle);
             resetButton(pendingValidationTitle);
+            resetButton(sentinelTitle);
 
             // 根据tab参数显示对应标签页
             if (tab === 'positions') {
@@ -1492,6 +1548,11 @@
                 activateButton(pendingValidationTitle);
                 document.getElementById('pendingValidationCount').style.display = 'inline-flex';
                 loadPendingValidations();
+            } else if (tab === 'sentinel') {
+                sentinelTab.style.display = 'block';
+                activateButton(sentinelTitle);
+                document.getElementById('sentinelCount').style.display = 'inline-flex';
+                loadSentinelOrders();
             }
         }
 
@@ -2280,6 +2341,101 @@
             } catch (error) {
                 document.getElementById('pendingValidationLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
                 showToast('加载待检查订单失败', 'error');
+            }
+        }
+
+        // 加载哨兵单列表
+        async function loadSentinelOrders() {
+            try {
+                const response = await fetch('/api/sentinel/list');
+                const data = await response.json();
+
+                const sentinelBody = document.getElementById('sentinelBody');
+                const sentinelTable = document.getElementById('sentinelTable');
+                const sentinelEmpty = document.getElementById('sentinelEmpty');
+                const sentinelLoading = document.getElementById('sentinelLoading');
+                const sentinelCount = document.getElementById('sentinelCount');
+                const sentinelTitle = document.getElementById('sentinel-title');
+
+                sentinelLoading.style.display = 'none';
+
+                if (data.success && data.data && data.data.length > 0) {
+                    sentinelBody.innerHTML = data.data.map(item => {
+                        const direction = (item.direction || '').toLowerCase();
+                        const sideClass = direction === 'long' ? 'badge-success' : 'badge-danger';
+                        const sideText = direction === 'long' ? '做多' : '做空';
+
+                        // 状态显示
+                        const statusMap = {
+                            'open': { text: '监控中', class: 'badge-warning', icon: '🔭' },
+                            'win': { text: '盈利', class: 'badge-success', icon: '✓' },
+                            'loss': { text: '亏损', class: 'badge-danger', icon: '✗' }
+                        };
+                        const statusInfo = statusMap[item.status] || { text: item.status, class: 'badge-neutral', icon: '' };
+
+                        // 平仓原因
+                        const closeReasonMap = {
+                            'take_profit': '止盈',
+                            'stop_loss': '止损',
+                            null: '--',
+                            '': '--'
+                        };
+                        const closeReason = closeReasonMap[item.close_reason] || item.close_reason || '--';
+
+                        // 计算浮动盈亏（只对监控中的哨兵单）
+                        let pnlDisplay = '--';
+                        let pnlClass = '';
+                        if (item.status === 'open' && item.current_price && item.entry_price) {
+                            const entryPrice = parseFloat(item.entry_price);
+                            const currentPrice = parseFloat(item.current_price);
+                            const pnlPct = direction === 'long'
+                                ? ((currentPrice - entryPrice) / entryPrice * 100)
+                                : ((entryPrice - currentPrice) / entryPrice * 100);
+                            pnlDisplay = pnlPct.toFixed(2) + '%';
+                            pnlClass = pnlPct >= 0 ? 'pnl-positive' : 'pnl-negative';
+                        } else if (item.status === 'win') {
+                            pnlDisplay = '+' + (item.take_profit_pct || '?') + '%';
+                            pnlClass = 'pnl-positive';
+                        } else if (item.status === 'loss') {
+                            pnlDisplay = '-' + (item.stop_loss_pct || '?') + '%';
+                            pnlClass = 'pnl-negative';
+                        }
+
+                        return `
+                            <tr style="background: ${item.status === 'open' ? 'rgba(210, 153, 34, 0.05)' : 'transparent'};">
+                                <td class="font-mono text-secondary">#${item.id}</td>
+                                <td><strong>${item.symbol}</strong></td>
+                                <td><span class="badge ${sideClass}">${sideText}</span></td>
+                                <td class="font-mono">$${formatPrice(item.entry_price)}</td>
+                                <td class="font-mono text-danger">$${formatPrice(item.stop_loss_price)}</td>
+                                <td class="font-mono text-success">$${formatPrice(item.take_profit_price)}</td>
+                                <td class="font-mono">${item.current_price ? '$' + formatPrice(item.current_price) : '--'}</td>
+                                <td class="font-mono ${pnlClass}">${pnlDisplay}</td>
+                                <td><span class="badge ${statusInfo.class}">${statusInfo.icon} ${statusInfo.text}</span></td>
+                                <td class="text-secondary">${closeReason}</td>
+                                <td class="text-sm text-secondary">${item.created_at ? new Date(item.created_at).toLocaleString('zh-CN') : '--'}</td>
+                                <td class="text-sm text-secondary">${item.closed_at ? new Date(item.closed_at).toLocaleString('zh-CN') : '--'}</td>
+                            </tr>
+                        `;
+                    }).join('');
+
+                    const count = data.data.length;
+                    const openCount = data.data.filter(x => x.status === 'open').length;
+                    sentinelCount.textContent = `${openCount} 个监控中`;
+                    sentinelTitle.textContent = `哨兵单 [${count}]`;
+                    sentinelTable.style.display = 'block';
+                    sentinelEmpty.style.display = 'none';
+                    document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
+                } else {
+                    sentinelCount.textContent = '0 个哨兵单';
+                    sentinelTitle.textContent = '哨兵单 [0]';
+                    sentinelTable.style.display = 'none';
+                    sentinelEmpty.style.display = 'block';
+                    document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
+                }
+            } catch (error) {
+                document.getElementById('sentinelLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
+                showToast('加载哨兵单失败', 'error');
             }
         }
 
