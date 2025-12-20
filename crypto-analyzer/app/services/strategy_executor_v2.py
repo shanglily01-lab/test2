@@ -488,15 +488,15 @@ class StrategyExecutorV2:
         # 死叉：前一根EMA9 >= EMA26，当前EMA9 < EMA26（已收盘确认）
         is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
 
-        # 金叉/死叉是趋势反转的强信号，暂时跳过强度检查
+        # 金叉/死叉需要检查信号强度
         if is_golden_cross:
-            # if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
-            #     return None, f"金叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)"
+            if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
+                return None, f"金叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)"
             return 'long', f"金叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
 
         if is_death_cross:
-            # if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
-            #     return None, f"死叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)"
+            if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
+                return None, f"死叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)"
             return 'short', f"死叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
 
         return None, "无金叉/死叉信号"
@@ -2712,21 +2712,16 @@ class StrategyExecutorV2:
                     debug_info.append(f"EMA+MA一致性: {reason}")
 
                     if consistent:
-                        # 金叉/死叉信号跳过RSI等过滤器，直接检查冷却
-                        debug_info.append("✅ 金叉/死叉信号跳过RSI过滤器")
+                        # 金叉/死叉信号跳过RSI过滤器和开仓冷却，直接开仓
+                        debug_info.append("✅ 金叉/死叉信号跳过RSI过滤器和开仓冷却")
 
-                        # 检查开仓冷却
-                        in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, signal, strategy, strategy_id)
-                        if in_cooldown:
-                            debug_info.append(f"⏳ {cooldown_msg}")
-                        else:
-                            # 构建开仓原因
-                            entry_reason = f"crossover: {reason}, EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
-                            open_result = await self.execute_open_position(
-                                symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
-                                strategy, account_id, signal_reason=entry_reason
-                            )
-                            debug_info.append(f"📊 金叉/死叉开仓结果: {open_result}")
+                        # 构建开仓原因
+                        entry_reason = f"crossover: {reason}, EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
+                        open_result = await self.execute_open_position(
+                            symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
+                            strategy, account_id, signal_reason=entry_reason
+                        )
+                        debug_info.append(f"📊 金叉/死叉开仓结果: {open_result}")
 
             # 3.2 检查连续趋势信号（原有的5M放大检测）
             if not open_result or not open_result.get('success'):
