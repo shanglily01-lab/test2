@@ -373,6 +373,7 @@
 
         <div class="tabs">
             <div class="tab active" onclick="showTab('overview')">行情总览</div>
+            <div class="tab" onclick="showTab('circuit-breaker')">连续亏损熔断</div>
             <div class="tab" onclick="showTab('params')">策略参数配置</div>
             <div class="tab" onclick="showTab('history')">行情切换历史</div>
         </div>
@@ -410,6 +411,68 @@
                 </div>
                 <button class="btn btn-primary" onclick="detectRegime()">检测行情</button>
                 <div id="detect-result" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+
+        <!-- 连续亏损熔断 -->
+        <div id="circuit-breaker" class="tab-content">
+            <div class="card">
+                <h2>熔断状态
+                    <button class="btn btn-secondary refresh-btn" onclick="loadCircuitBreakerStatus()">刷新</button>
+                </h2>
+                <p style="color: #8b949e; margin-bottom: 15px;">
+                    当某方向连续4单亏损时，自动暂停该方向开仓1小时
+                </p>
+                <div class="regime-grid" style="grid-template-columns: repeat(2, 1fr);">
+                    <div id="long-breaker" class="regime-card" style="border-left-color: #3fb950;">
+                        <div class="regime-icon">📈</div>
+                        <div class="regime-name">做多方向</div>
+                        <div id="long-status" class="regime-count" style="font-size: 16px;">检查中...</div>
+                        <div id="long-losses" style="margin-top: 10px; font-size: 14px; color: #8b949e;"></div>
+                        <button id="long-clear-btn" class="btn btn-secondary" style="margin-top: 10px; display: none;" onclick="clearBreaker('long')">解除熔断</button>
+                    </div>
+                    <div id="short-breaker" class="regime-card" style="border-left-color: #f85149;">
+                        <div class="regime-icon">📉</div>
+                        <div class="regime-name">做空方向</div>
+                        <div id="short-status" class="regime-count" style="font-size: 16px;">检查中...</div>
+                        <div id="short-losses" style="margin-top: 10px; font-size: 14px; color: #8b949e;"></div>
+                        <button id="short-clear-btn" class="btn btn-secondary" style="margin-top: 10px; display: none;" onclick="clearBreaker('short')">解除熔断</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>熔断规则说明</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>规则</th>
+                            <th>说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>触发条件</strong></td>
+                            <td>某方向（做多/做空）连续4单亏损</td>
+                        </tr>
+                        <tr>
+                            <td><strong>熔断效果</strong></td>
+                            <td>暂停该方向的开仓操作</td>
+                        </tr>
+                        <tr>
+                            <td><strong>冷却时间</strong></td>
+                            <td>1小时后自动解除</td>
+                        </tr>
+                        <tr>
+                            <td><strong>统计范围</strong></td>
+                            <td>所有币种的同方向交易</td>
+                        </tr>
+                        <tr>
+                            <td><strong>手动解除</strong></td>
+                            <td>可点击"解除熔断"按钮提前解除</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
 
@@ -1067,12 +1130,80 @@
             }
         }
 
+        // ==================== 熔断状态 ====================
+
+        // 加载熔断状态
+        async function loadCircuitBreakerStatus() {
+            try {
+                const resp = await fetch('/api/market-regime/circuit-breaker/status');
+                const data = await resp.json();
+
+                if (data.success) {
+                    updateBreakerDisplay('long', data.data.long);
+                    updateBreakerDisplay('short', data.data.short);
+                }
+            } catch (e) {
+                console.error('加载熔断状态失败:', e);
+            }
+        }
+
+        function updateBreakerDisplay(direction, info) {
+            const statusEl = document.getElementById(`${direction}-status`);
+            const lossesEl = document.getElementById(`${direction}-losses`);
+            const clearBtn = document.getElementById(`${direction}-clear-btn`);
+            const cardEl = document.getElementById(`${direction}-breaker`);
+
+            if (info.is_active) {
+                statusEl.innerHTML = '<span style="color: #f85149;">🚨 熔断中</span>';
+                statusEl.style.color = '#f85149';
+                lossesEl.textContent = info.description;
+                clearBtn.style.display = 'inline-block';
+                cardEl.style.background = 'rgba(248, 81, 73, 0.1)';
+                cardEl.style.borderColor = '#f85149';
+            } else {
+                statusEl.innerHTML = '<span style="color: #3fb950;">✓ 正常</span>';
+                statusEl.style.color = '#3fb950';
+                lossesEl.textContent = info.description;
+                clearBtn.style.display = 'none';
+                cardEl.style.background = '#21262d';
+                cardEl.style.borderColor = '#30363d';
+            }
+        }
+
+        // 清除熔断
+        async function clearBreaker(direction) {
+            const confirmed = await showConfirmDialog(
+                '解除熔断',
+                `确定要解除 <strong>${direction === 'long' ? '做多' : '做空'}</strong> 方向的熔断吗？<br><br><span style="color: #d29922;">注意：如果市场条件未改善，可能会再次触发熔断</span>`,
+                'warning'
+            );
+
+            if (!confirmed) return;
+
+            try {
+                const resp = await fetch(`/api/market-regime/circuit-breaker/clear?direction=${direction}`, {
+                    method: 'POST'
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    loadCircuitBreakerStatus();
+                } else {
+                    showToast('解除失败: ' + (data.detail || data.message), 'error');
+                }
+            } catch (e) {
+                showToast('解除失败: ' + e.message, 'error');
+            }
+        }
+
         // 页面加载
         window.onload = function() {
             loadSummary();
             loadStrategies();
             loadSymbols();  // 加载交易对列表
             loadAllHistory();  // 自动加载切换历史
+            loadCircuitBreakerStatus();  // 加载熔断状态
         };
     </script>
 </body>

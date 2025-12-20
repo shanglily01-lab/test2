@@ -14,6 +14,7 @@ import logging
 
 from app.services.market_regime_detector import (
     MarketRegimeDetector,
+    CircuitBreaker,
     get_regime_display_name,
     get_regime_trading_suggestion
 )
@@ -593,3 +594,126 @@ async def get_regime_types():
             }
         ]
     }
+
+
+# ==================== 连续亏损熔断 API ====================
+
+# 全局熔断器实例
+_circuit_breaker = None
+
+def get_circuit_breaker():
+    """获取熔断器实例（单例）"""
+    global _circuit_breaker
+    if _circuit_breaker is None:
+        _circuit_breaker = CircuitBreaker(db_config)
+    return _circuit_breaker
+
+
+@router.get('/circuit-breaker/status')
+async def get_circuit_breaker_status():
+    """
+    获取熔断器状态
+
+    Returns:
+        各方向的熔断状态
+    """
+    try:
+        breaker = get_circuit_breaker()
+        status = breaker.get_status()
+        return {
+            'success': True,
+            'data': status
+        }
+    except Exception as e:
+        logger.error(f"获取熔断状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/circuit-breaker/check/{direction}')
+async def check_circuit_breaker(
+    direction: str = Path(..., description='交易方向 (long/short)')
+):
+    """
+    检查指定方向的熔断状态
+
+    Args:
+        direction: 交易方向 long 或 short
+
+    Returns:
+        是否熔断及描述
+    """
+    if direction not in ['long', 'short']:
+        raise HTTPException(status_code=400, detail='方向必须是 long 或 short')
+
+    try:
+        breaker = get_circuit_breaker()
+        is_active, description = breaker.is_circuit_breaker_active(direction)
+        return {
+            'success': True,
+            'direction': direction,
+            'is_active': is_active,
+            'description': description
+        }
+    except Exception as e:
+        logger.error(f"检查熔断状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post('/circuit-breaker/clear')
+async def clear_circuit_breaker(
+    direction: Optional[str] = Query(None, description='交易方向 (long/short)，留空清除全部')
+):
+    """
+    清除熔断状态
+
+    Args:
+        direction: 交易方向，留空表示清除全部
+
+    Returns:
+        清除结果
+    """
+    if direction and direction not in ['long', 'short']:
+        raise HTTPException(status_code=400, detail='方向必须是 long 或 short')
+
+    try:
+        breaker = get_circuit_breaker()
+        breaker.clear_circuit_breaker(direction)
+        return {
+            'success': True,
+            'message': f"已清除{'所有' if not direction else direction.upper() + '方向'}熔断状态"
+        }
+    except Exception as e:
+        logger.error(f"清除熔断状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/circuit-breaker/losses/{direction}')
+async def get_consecutive_losses(
+    direction: str = Path(..., description='交易方向 (long/short)')
+):
+    """
+    获取指定方向的连续亏损次数
+
+    Args:
+        direction: 交易方向 long 或 short
+
+    Returns:
+        连续亏损统计
+    """
+    if direction not in ['long', 'short']:
+        raise HTTPException(status_code=400, detail='方向必须是 long 或 short')
+
+    try:
+        breaker = get_circuit_breaker()
+        triggered, losses, description = breaker.check_consecutive_losses(direction)
+        return {
+            'success': True,
+            'direction': direction,
+            'consecutive_losses': losses,
+            'triggered': triggered,
+            'description': description,
+            'limit': breaker.DEFAULT_CONSECUTIVE_LOSS_LIMIT
+        }
+    except Exception as e:
+        logger.error(f"获取连续亏损次数失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

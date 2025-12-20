@@ -960,3 +960,176 @@ def get_regime_trading_suggestion(regime_type: str) -> str:
         'ranging': '震荡行情，建议观望或降低仓位，等待趋势明确'
     }
     return suggestions.get(regime_type, '未知行情类型')
+
+
+class CircuitBreaker:
+    """
+    连续亏损熔断器
+
+    功能：
+    - 统计某方向连续亏损次数
+    - 达到阈值后触发熔断，暂停同方向开仓
+    - 冷却期后自动恢复
+    """
+
+    DEFAULT_CONSECUTIVE_LOSS_LIMIT = 4  # 连续亏损次数限制
+    DEFAULT_COOLDOWN_HOURS = 1  # 熔断冷却时间（小时）
+
+    def __init__(self, db_config: Dict):
+        """
+        初始化熔断器
+
+        Args:
+            db_config: 数据库配置
+        """
+        self.db_config = db_config
+        # 熔断状态缓存: {'long': datetime, 'short': datetime}
+        # 记录每个方向的熔断解除时间
+        self._circuit_breaker_until: Dict[str, datetime] = {}
+
+    def _get_local_time(self) -> datetime:
+        """获取本地时间（新加坡时区 UTC+8）"""
+        from datetime import timezone, timedelta
+        local_tz = timezone(timedelta(hours=8))
+        return datetime.now(local_tz).replace(tzinfo=None)
+
+    def check_consecutive_losses(self, direction: str, limit: int = None) -> Tuple[bool, int, str]:
+        """
+        检查是否触发连续亏损熔断
+
+        Args:
+            direction: 交易方向 'long' 或 'short'
+            limit: 连续亏损次数限制（默认 4）
+
+        Returns:
+            (是否触发熔断, 连续亏损次数, 描述)
+        """
+        if limit is None:
+            limit = self.DEFAULT_CONSECUTIVE_LOSS_LIMIT
+
+        try:
+            connection = pymysql.connect(
+                host=self.db_config.get('host', 'localhost'),
+                port=self.db_config.get('port', 3306),
+                user=self.db_config.get('user', 'root'),
+                password=self.db_config.get('password', ''),
+                database=self.db_config.get('database', 'binance-data'),
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+
+            with connection.cursor() as cursor:
+                # 查询最近的平仓记录（所有币种），按时间倒序
+                position_side = direction.upper()
+                cursor.execute("""
+                    SELECT id, symbol, position_side, realized_pnl, close_time
+                    FROM futures_positions
+                    WHERE status = 'closed' AND position_side = %s
+                    ORDER BY close_time DESC
+                    LIMIT %s
+                """, (position_side, limit + 5))  # 多取几条以防万一
+
+                rows = cursor.fetchall()
+
+            connection.close()
+
+            if not rows:
+                return False, 0, "无历史交易记录"
+
+            # 统计连续亏损次数（从最近开始）
+            consecutive_losses = 0
+            for row in rows:
+                pnl = float(row['realized_pnl'] or 0)
+                if pnl < 0:
+                    consecutive_losses += 1
+                else:
+                    break  # 遇到盈利就停止
+
+            if consecutive_losses >= limit:
+                return True, consecutive_losses, f"连续{consecutive_losses}单亏损(>={limit})"
+            else:
+                return False, consecutive_losses, f"连续亏损{consecutive_losses}次(<{limit})"
+
+        except Exception as e:
+            logger.error(f"[熔断检查] 查询失败: {e}")
+            return False, 0, f"查询失败: {e}"
+
+    def is_circuit_breaker_active(self, direction: str, cooldown_hours: float = None) -> Tuple[bool, str]:
+        """
+        检查熔断是否生效中
+
+        Args:
+            direction: 交易方向 'long' 或 'short'
+            cooldown_hours: 冷却时间（小时）
+
+        Returns:
+            (是否熔断中, 描述)
+        """
+        if cooldown_hours is None:
+            cooldown_hours = self.DEFAULT_COOLDOWN_HOURS
+
+        now = self._get_local_time()
+
+        # 检查是否在冷却期内
+        if direction in self._circuit_breaker_until:
+            until = self._circuit_breaker_until[direction]
+            if now < until:
+                remaining = (until - now).total_seconds() / 60
+                return True, f"熔断冷却中，剩余{remaining:.0f}分钟"
+
+        # 检查是否需要触发熔断
+        triggered, losses, desc = self.check_consecutive_losses(direction)
+
+        if triggered:
+            # 设置熔断解除时间
+            self._circuit_breaker_until[direction] = now + timedelta(hours=cooldown_hours)
+            logger.warning(f"🚨 [熔断] {direction.upper()} 方向触发熔断: {desc}，冷却{cooldown_hours}小时")
+            return True, f"触发熔断: {desc}，冷却{cooldown_hours}小时"
+
+        return False, desc
+
+    def clear_circuit_breaker(self, direction: str = None):
+        """
+        清除熔断状态
+
+        Args:
+            direction: 交易方向，None 表示清除所有
+        """
+        if direction:
+            if direction in self._circuit_breaker_until:
+                del self._circuit_breaker_until[direction]
+                logger.info(f"[熔断] 已清除 {direction.upper()} 方向熔断状态")
+        else:
+            self._circuit_breaker_until.clear()
+            logger.info("[熔断] 已清除所有熔断状态")
+
+    def get_status(self) -> Dict:
+        """
+        获取熔断状态摘要
+
+        Returns:
+            熔断状态信息
+        """
+        now = self._get_local_time()
+
+        # 检查 long 方向
+        long_active, long_desc = self.is_circuit_breaker_active('long')
+        long_until = self._circuit_breaker_until.get('long')
+
+        # 检查 short 方向
+        short_active, short_desc = self.is_circuit_breaker_active('short')
+        short_until = self._circuit_breaker_until.get('short')
+
+        return {
+            'long': {
+                'is_active': long_active,
+                'description': long_desc,
+                'until': long_until.isoformat() if long_until else None
+            },
+            'short': {
+                'is_active': short_active,
+                'description': short_desc,
+                'until': short_until.isoformat() if short_until else None
+            },
+            'timestamp': now.isoformat()
+        }
