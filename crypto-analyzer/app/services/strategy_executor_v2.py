@@ -16,6 +16,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 from loguru import logger
 from app.services.position_validator import PositionValidator
+from app.services.market_regime_analyzer import MarketRegimeAnalyzer
 from app.utils.indicators import calculate_ema, calculate_ma, calculate_rsi, calculate_macd, calculate_kdj
 from app.utils.db import create_connection
 
@@ -78,6 +79,9 @@ class StrategyExecutorV2:
 
         # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
         self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
+
+        # 初始化市场状态分析器（趋势/震荡判断 + 连续亏损熔断）
+        self.market_analyzer = MarketRegimeAnalyzer(db_config)
 
     def _load_margin_config(self):
         """加载保证金配置"""
@@ -1957,6 +1961,17 @@ class StrategyExecutorV2:
             执行结果
         """
         try:
+            # ========== 市场状态检查（趋势/震荡判断 + 连续亏损熔断）==========
+            # 检查是否启用市场状态分析
+            market_regime_enabled = strategy.get('marketRegime', {}).get('enabled', True)
+            circuit_breaker_enabled = strategy.get('circuitBreaker', {}).get('enabled', True)
+
+            if market_regime_enabled or circuit_breaker_enabled:
+                can_open, regime_reason = self.market_analyzer.can_open_position(symbol, direction, strategy)
+                if not can_open:
+                    logger.info(f"[市场状态] {symbol} {direction} 开仓被拦截: {regime_reason}")
+                    return {'success': False, 'error': regime_reason, 'blocked_by': 'market_regime'}
+
             # 获取当前价格和EMA数据
             ema_data = self.get_ema_data(symbol, '15m', 50)
             if not ema_data:
