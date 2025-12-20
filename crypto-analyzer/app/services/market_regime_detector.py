@@ -964,16 +964,27 @@ def get_regime_trading_suggestion(regime_type: str) -> str:
 
 class CircuitBreaker:
     """
-    连续亏损熔断器
+    连续亏损熔断器（侦察单模式）
 
     功能：
     - 统计某方向连续亏损次数
-    - 达到阈值后触发熔断，暂停同方向开仓
-    - 冷却期后自动恢复
+    - 达到阈值后进入"侦察模式"
+    - 侦察模式：放出3个侦察单，2个盈利即可恢复正常交易
+    - 侦察单使用较小仓位（正常的50%）
+
+    状态：
+    - normal: 正常交易
+    - scout: 侦察模式（等待侦察单验证市场）
     """
 
     DEFAULT_CONSECUTIVE_LOSS_LIMIT = 4  # 连续亏损次数限制
-    DEFAULT_COOLDOWN_HOURS = 1  # 熔断冷却时间（小时）
+    SCOUT_POSITION_RATIO = 0.5  # 侦察单仓位比例（正常仓位的50%）
+    SCOUT_TOTAL_COUNT = 3  # 侦察单总数
+    SCOUT_WIN_REQUIRED = 2  # 需要盈利的侦察单数量
+
+    # 状态常量
+    STATUS_NORMAL = 'normal'
+    STATUS_SCOUT = 'scout'
 
     def __init__(self, db_config: Dict):
         """
@@ -983,9 +994,21 @@ class CircuitBreaker:
             db_config: 数据库配置
         """
         self.db_config = db_config
-        # 熔断状态缓存: {'long': datetime, 'short': datetime}
-        # 记录每个方向的熔断解除时间
-        self._circuit_breaker_until: Dict[str, datetime] = {}
+        # 熔断状态: {'long': 'normal'/'scout', 'short': 'normal'/'scout'}
+        self._breaker_status: Dict[str, str] = {
+            'long': self.STATUS_NORMAL,
+            'short': self.STATUS_NORMAL
+        }
+        # 侦察单ID列表: {'long': [id1, id2, id3], 'short': [id1, id2, id3]}
+        self._scout_position_ids: Dict[str, List[int]] = {
+            'long': [],
+            'short': []
+        }
+        # 侦察单结果: {'long': {'wins': 0, 'losses': 0}, 'short': {...}}
+        self._scout_results: Dict[str, Dict[str, int]] = {
+            'long': {'wins': 0, 'losses': 0},
+            'short': {'wins': 0, 'losses': 0}
+        }
 
     def _get_local_time(self) -> datetime:
         """获取本地时间（新加坡时区 UTC+8）"""
@@ -995,14 +1018,14 @@ class CircuitBreaker:
 
     def check_consecutive_losses(self, direction: str, limit: int = None) -> Tuple[bool, int, str]:
         """
-        检查是否触发连续亏损熔断
+        检查连续亏损次数
 
         Args:
             direction: 交易方向 'long' 或 'short'
             limit: 连续亏损次数限制（默认 4）
 
         Returns:
-            (是否触发熔断, 连续亏损次数, 描述)
+            (是否达到熔断阈值, 连续亏损次数, 描述)
         """
         if limit is None:
             limit = self.DEFAULT_CONSECUTIVE_LOSS_LIMIT
@@ -1027,7 +1050,7 @@ class CircuitBreaker:
                     WHERE status = 'closed' AND position_side = %s
                     ORDER BY close_time DESC
                     LIMIT %s
-                """, (position_side, limit + 5))  # 多取几条以防万一
+                """, (position_side, limit + 5))
 
                 rows = cursor.fetchall()
 
@@ -1054,53 +1077,177 @@ class CircuitBreaker:
             logger.error(f"[熔断检查] 查询失败: {e}")
             return False, 0, f"查询失败: {e}"
 
-    def is_circuit_breaker_active(self, direction: str, cooldown_hours: float = None) -> Tuple[bool, str]:
+    def _update_scout_results(self, direction: str):
         """
-        检查熔断是否生效中
+        更新侦察单结果统计
 
-        Args:
-            direction: 交易方向 'long' 或 'short'
-            cooldown_hours: 冷却时间（小时）
+        检查所有已注册的侦察单，统计盈亏情况
+        """
+        scout_ids = self._scout_position_ids.get(direction, [])
+        if not scout_ids:
+            return
+
+        try:
+            connection = pymysql.connect(
+                host=self.db_config.get('host', 'localhost'),
+                port=self.db_config.get('port', 3306),
+                user=self.db_config.get('user', 'root'),
+                password=self.db_config.get('password', ''),
+                database=self.db_config.get('database', 'binance-data'),
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+
+            wins = 0
+            losses = 0
+            pending_ids = []
+
+            with connection.cursor() as cursor:
+                for scout_id in scout_ids:
+                    cursor.execute("""
+                        SELECT status, realized_pnl
+                        FROM futures_positions
+                        WHERE id = %s
+                    """, (scout_id,))
+                    row = cursor.fetchone()
+
+                    if not row:
+                        continue
+
+                    if row['status'] == 'closed':
+                        pnl = float(row['realized_pnl'] or 0)
+                        if pnl > 0:
+                            wins += 1
+                        else:
+                            losses += 1
+                    else:
+                        # 仍在持仓中
+                        pending_ids.append(scout_id)
+
+            connection.close()
+
+            # 更新结果统计
+            self._scout_results[direction] = {'wins': wins, 'losses': losses}
+            # 更新仍在持仓的侦察单列表
+            self._scout_position_ids[direction] = pending_ids
+
+        except Exception as e:
+            logger.error(f"[熔断] 更新侦察单结果失败: {e}")
+
+    def is_circuit_breaker_active(self, direction: str) -> Tuple[bool, str]:
+        """
+        检查是否处于熔断/侦察模式
 
         Returns:
-            (是否熔断中, 描述)
+            (是否限制开仓, 描述)
+            - 正常模式：(False, "正常")
+            - 侦察模式：根据侦察单情况决定
         """
-        if cooldown_hours is None:
-            cooldown_hours = self.DEFAULT_COOLDOWN_HOURS
+        current_status = self._breaker_status.get(direction, self.STATUS_NORMAL)
 
-        now = self._get_local_time()
+        # 正常模式 - 检查是否需要进入侦察模式
+        if current_status == self.STATUS_NORMAL:
+            triggered, losses, desc = self.check_consecutive_losses(direction)
+            if triggered:
+                # 进入侦察模式
+                self._breaker_status[direction] = self.STATUS_SCOUT
+                self._scout_position_ids[direction] = []
+                self._scout_results[direction] = {'wins': 0, 'losses': 0}
+                logger.warning(f"🚨 [熔断] {direction.upper()} 方向进入侦察模式: {desc}")
+                return False, f"进入侦察模式: {desc}，需要3个侦察单中2个盈利"
+            else:
+                return False, f"正常({desc})"
 
-        # 检查是否在冷却期内
-        if direction in self._circuit_breaker_until:
-            until = self._circuit_breaker_until[direction]
-            if now < until:
-                remaining = (until - now).total_seconds() / 60
-                return True, f"熔断冷却中，剩余{remaining:.0f}分钟"
+        # 侦察模式
+        if current_status == self.STATUS_SCOUT:
+            # 更新侦察单结果
+            self._update_scout_results(direction)
 
-        # 检查是否需要触发熔断
-        triggered, losses, desc = self.check_consecutive_losses(direction)
+            results = self._scout_results.get(direction, {'wins': 0, 'losses': 0})
+            wins = results['wins']
+            losses = results['losses']
+            pending_count = len(self._scout_position_ids.get(direction, []))
+            total_sent = wins + losses + pending_count
 
-        if triggered:
-            # 设置熔断解除时间
-            self._circuit_breaker_until[direction] = now + timedelta(hours=cooldown_hours)
-            logger.warning(f"🚨 [熔断] {direction.upper()} 方向触发熔断: {desc}，冷却{cooldown_hours}小时")
-            return True, f"触发熔断: {desc}，冷却{cooldown_hours}小时"
+            # 检查是否已达到2胜
+            if wins >= self.SCOUT_WIN_REQUIRED:
+                # 2个盈利 → 恢复正常
+                self._breaker_status[direction] = self.STATUS_NORMAL
+                self._scout_position_ids[direction] = []
+                self._scout_results[direction] = {'wins': 0, 'losses': 0}
+                logger.info(f"✅ [熔断] {direction.upper()} 侦察单{wins}胜{losses}负，恢复正常交易")
+                return False, f"侦察成功({wins}胜{losses}负)，已恢复正常"
 
-        return False, desc
+            # 检查是否已经不可能达到2胜（例如已经2负+1待定）
+            max_possible_wins = wins + pending_count + (self.SCOUT_TOTAL_COUNT - total_sent)
+            if max_possible_wins < self.SCOUT_WIN_REQUIRED:
+                # 重置侦察，重新开始
+                self._scout_position_ids[direction] = []
+                self._scout_results[direction] = {'wins': 0, 'losses': 0}
+                logger.info(f"⚠️ [熔断] {direction.upper()} 侦察失败({wins}胜{losses}负)，重新开始侦察")
+                return False, f"侦察失败({wins}胜{losses}负)，重新侦察"
+
+            # 还有侦察单在持仓中
+            if pending_count > 0:
+                return True, f"侦察中({wins}胜{losses}负{pending_count}待定)，等待结果"
+
+            # 还需要发送更多侦察单
+            remaining = self.SCOUT_TOTAL_COUNT - total_sent
+            if remaining > 0:
+                return False, f"侦察模式({wins}胜{losses}负)，还需{remaining}个侦察单"
+
+            # 所有侦察单已完成但未达到2胜，重新开始
+            self._scout_position_ids[direction] = []
+            self._scout_results[direction] = {'wins': 0, 'losses': 0}
+            return False, f"侦察失败({wins}胜{losses}负)，重新侦察"
+
+        return False, "未知状态"
+
+    def register_scout_position(self, direction: str, position_id: int):
+        """
+        注册侦察单
+
+        Args:
+            direction: 交易方向
+            position_id: 持仓ID
+        """
+        if self._breaker_status.get(direction) == self.STATUS_SCOUT:
+            if direction not in self._scout_position_ids:
+                self._scout_position_ids[direction] = []
+            self._scout_position_ids[direction].append(position_id)
+            total = len(self._scout_position_ids[direction]) + self._scout_results[direction]['wins'] + self._scout_results[direction]['losses']
+            logger.info(f"🔍 [熔断] {direction.upper()} 注册侦察单 #{total}: ID={position_id}")
+
+    def is_scout_mode(self, direction: str) -> bool:
+        """
+        检查是否处于侦察模式
+
+        Returns:
+            True: 侦察模式
+            False: 正常模式
+        """
+        return self._breaker_status.get(direction) == self.STATUS_SCOUT
+
+    def get_scout_position_ratio(self) -> float:
+        """获取侦察单仓位比例"""
+        return self.SCOUT_POSITION_RATIO
 
     def clear_circuit_breaker(self, direction: str = None):
         """
-        清除熔断状态
+        清除熔断状态，恢复正常
 
         Args:
             direction: 交易方向，None 表示清除所有
         """
         if direction:
-            if direction in self._circuit_breaker_until:
-                del self._circuit_breaker_until[direction]
-                logger.info(f"[熔断] 已清除 {direction.upper()} 方向熔断状态")
+            self._breaker_status[direction] = self.STATUS_NORMAL
+            self._scout_position_ids[direction] = []
+            self._scout_results[direction] = {'wins': 0, 'losses': 0}
+            logger.info(f"[熔断] 已清除 {direction.upper()} 方向熔断状态")
         else:
-            self._circuit_breaker_until.clear()
+            self._breaker_status = {'long': self.STATUS_NORMAL, 'short': self.STATUS_NORMAL}
+            self._scout_position_ids = {'long': [], 'short': []}
+            self._scout_results = {'long': {'wins': 0, 'losses': 0}, 'short': {'wins': 0, 'losses': 0}}
             logger.info("[熔断] 已清除所有熔断状态")
 
     def get_status(self) -> Dict:
@@ -1114,22 +1261,37 @@ class CircuitBreaker:
 
         # 检查 long 方向
         long_active, long_desc = self.is_circuit_breaker_active('long')
-        long_until = self._circuit_breaker_until.get('long')
+        long_status = self._breaker_status.get('long', self.STATUS_NORMAL)
+        long_scout_ids = self._scout_position_ids.get('long', [])
+        long_results = self._scout_results.get('long', {'wins': 0, 'losses': 0})
 
         # 检查 short 方向
         short_active, short_desc = self.is_circuit_breaker_active('short')
-        short_until = self._circuit_breaker_until.get('short')
+        short_status = self._breaker_status.get('short', self.STATUS_NORMAL)
+        short_scout_ids = self._scout_position_ids.get('short', [])
+        short_results = self._scout_results.get('short', {'wins': 0, 'losses': 0})
 
         return {
             'long': {
                 'is_active': long_active,
+                'status': long_status,
                 'description': long_desc,
-                'until': long_until.isoformat() if long_until else None
+                'scout_position_ids': long_scout_ids,
+                'scout_results': long_results,
+                'is_scout_mode': long_status == self.STATUS_SCOUT
             },
             'short': {
                 'is_active': short_active,
+                'status': short_status,
                 'description': short_desc,
-                'until': short_until.isoformat() if short_until else None
+                'scout_position_ids': short_scout_ids,
+                'scout_results': short_results,
+                'is_scout_mode': short_status == self.STATUS_SCOUT
+            },
+            'scout_config': {
+                'total_count': self.SCOUT_TOTAL_COUNT,
+                'win_required': self.SCOUT_WIN_REQUIRED,
+                'position_ratio': self.SCOUT_POSITION_RATIO
             },
             'timestamp': now.isoformat()
         }
