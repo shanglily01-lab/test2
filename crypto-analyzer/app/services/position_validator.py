@@ -896,7 +896,10 @@ class PositionValidator:
             )
 
             if result.get('success'):
-                logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={result.get('position_id')}")
+                if result.get('sentinel'):
+                    logger.info(f"[待开仓自检] 🔭 {symbol} {direction} 熔断中，已创建哨兵单 #{result.get('sentinel_id')}")
+                else:
+                    logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={result.get('position_id')}")
             else:
                 logger.error(f"[待开仓自检] ❌ {symbol} {direction} 开仓失败: {result.get('error')}")
 
