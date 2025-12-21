@@ -75,7 +75,6 @@ price_cache_service = None  # 价格缓存服务
 pending_order_executor = None  # 待成交订单自动执行器（现货限价单）
 futures_limit_order_executor = None  # 合约限价单自动执行器
 futures_monitor_service = None  # 合约止盈止损监控服务
-sentinel_monitor_service = None  # 哨兵单监控服务（熔断后虚拟监控）
 
 
 @asynccontextmanager
@@ -91,7 +90,6 @@ async def lifespan(app: FastAPI):
     global config, price_collector, news_aggregator
     global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
     global pending_order_executor, futures_limit_order_executor, futures_monitor_service, live_order_monitor
-    global sentinel_monitor_service
 
     # 加载配置（支持环境变量）
     from app.utils.config_loader import load_config, get_config_summary
@@ -281,30 +279,6 @@ async def lifespan(app: FastAPI):
             traceback.print_exc()
             live_order_monitor = None
 
-        # 初始化哨兵单监控服务（熔断后虚拟监控）
-        try:
-            from app.services.sentinel_monitor_service import get_sentinel_monitor
-            from app.services.market_regime_detector import get_circuit_breaker
-
-            db_config = config.get('database', {}).get('mysql', {})
-
-            # 恢复回调：当哨兵单连续盈利达到阈值时，恢复正常交易
-            def on_sentinel_recovery(direction: str):
-                """哨兵单恢复回调"""
-                logger.info(f"🎉 [哨兵恢复] {direction.upper()} 方向连续盈利达标，恢复正常交易！")
-                circuit_breaker = get_circuit_breaker(db_config)
-                if circuit_breaker:
-                    circuit_breaker.clear_circuit_breaker(direction)
-                    logger.info(f"✅ [哨兵恢复] {direction.upper()} 方向熔断已重置")
-
-            sentinel_monitor_service = get_sentinel_monitor(db_config, on_recovery_callback=on_sentinel_recovery)
-            logger.info("✅ 哨兵单监控服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  哨兵单监控服务初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-            sentinel_monitor_service = None
-
         # Telegram通知服务已在前面初始化
 
         # 初始化用户认证服务
@@ -359,7 +333,6 @@ async def lifespan(app: FastAPI):
         futures_limit_order_executor = None
         futures_monitor_service = None
         live_order_monitor = None
-        sentinel_monitor_service = None
         logger.warning("⚠️  系统以降级模式运行")
 
     logger.info("🚀 FastAPI 启动完成")
@@ -413,15 +386,6 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  启动实盘订单监控任务失败: {e}")
             live_order_monitor = None
 
-    # 启动哨兵单监控服务（熔断后虚拟监控）
-    if sentinel_monitor_service:
-        try:
-            await sentinel_monitor_service.start()
-            logger.info("✅ 哨兵单监控服务已启动（每5秒检查哨兵单止盈止损）")
-        except Exception as e:
-            logger.warning(f"⚠️  启动哨兵单监控任务失败: {e}")
-            sentinel_monitor_service = None
-
     yield
 
     # 关闭时的清理工作
@@ -458,14 +422,6 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 实盘订单监控服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止实盘订单监控服务失败: {e}")
-
-    # 停止哨兵单监控服务
-    if sentinel_monitor_service:
-        try:
-            await sentinel_monitor_service.stop()
-            logger.info("✅ 哨兵单监控服务已停止")
-        except Exception as e:
-            logger.warning(f"⚠️  停止哨兵单监控服务失败: {e}")
 
     # 停止价格缓存服务
     if price_cache_service:
@@ -637,16 +593,6 @@ try:
     logger.info("✅ 策略分析API路由已注册（/api/strategy-analyzer）")
 except Exception as e:
     logger.warning(f"⚠️  策略分析API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
-
-# 注册哨兵单API路由
-try:
-    from app.api.sentinel_api import router as sentinel_router
-    app.include_router(sentinel_router)
-    logger.info("✅ 哨兵单API路由已注册（/api/sentinel）")
-except Exception as e:
-    logger.warning(f"⚠️  哨兵单API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 

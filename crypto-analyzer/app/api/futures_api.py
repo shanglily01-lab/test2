@@ -426,7 +426,7 @@ async def open_position(request: OpenPositionRequest):
             raise HTTPException(status_code=400, detail="数量必须大于0")
         if request.leverage < 1 or request.leverage > 125:
             raise HTTPException(status_code=400, detail="杠杆倍数必须在1-125之间")
-
+        
         # 开仓
         result = engine.open_position(
             account_id=request.account_id,

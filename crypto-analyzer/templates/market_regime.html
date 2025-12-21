@@ -373,7 +373,6 @@
 
         <div class="tabs">
             <div class="tab active" onclick="showTab('overview')">行情总览</div>
-            <div class="tab" onclick="showTab('circuit-breaker')">连续亏损熔断</div>
             <div class="tab" onclick="showTab('params')">策略参数配置</div>
             <div class="tab" onclick="showTab('history')">行情切换历史</div>
         </div>
@@ -411,78 +410,6 @@
                 </div>
                 <button class="btn btn-primary" onclick="detectRegime()">检测行情</button>
                 <div id="detect-result" style="margin-top: 15px;"></div>
-            </div>
-        </div>
-
-        <!-- 连续亏损熔断 -->
-        <div id="circuit-breaker" class="tab-content">
-            <div class="card">
-                <h2>熔断状态
-                    <button class="btn btn-secondary refresh-btn" onclick="loadCircuitBreakerStatus()">刷新</button>
-                </h2>
-                <p style="color: #8b949e; margin-bottom: 15px;">
-                    当某方向连续3单亏损时，自动进入哨兵模式：创建虚拟哨兵单监控市场，连续2单盈利即可恢复正常交易
-                </p>
-                <div class="regime-grid" style="grid-template-columns: repeat(2, 1fr);">
-                    <div id="long-breaker" class="regime-card" style="border-left-color: #3fb950;">
-                        <div class="regime-icon">📈</div>
-                        <div class="regime-name">做多方向</div>
-                        <div id="long-status" class="regime-count" style="font-size: 16px;">检查中...</div>
-                        <div id="long-losses" style="margin-top: 10px; font-size: 14px; color: #8b949e;"></div>
-                        <div id="long-sentinel-info" style="margin-top: 10px; display: none;"></div>
-                        <button id="long-clear-btn" class="btn btn-secondary" style="margin-top: 10px; display: none;" onclick="clearBreaker('long')">解除熔断</button>
-                    </div>
-                    <div id="short-breaker" class="regime-card" style="border-left-color: #f85149;">
-                        <div class="regime-icon">📉</div>
-                        <div class="regime-name">做空方向</div>
-                        <div id="short-status" class="regime-count" style="font-size: 16px;">检查中...</div>
-                        <div id="short-losses" style="margin-top: 10px; font-size: 14px; color: #8b949e;"></div>
-                        <div id="short-sentinel-info" style="margin-top: 10px; display: none;"></div>
-                        <button id="short-clear-btn" class="btn btn-secondary" style="margin-top: 10px; display: none;" onclick="clearBreaker('short')">解除熔断</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>熔断规则说明</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>规则</th>
-                            <th>说明</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td><strong>触发条件</strong></td>
-                            <td>某方向（做多/做空）连续3单亏损</td>
-                        </tr>
-                        <tr>
-                            <td><strong>熔断处理</strong></td>
-                            <td>取消同方向挂单，平掉同方向持仓</td>
-                        </tr>
-                        <tr>
-                            <td><strong>哨兵模式</strong></td>
-                            <td>创建虚拟哨兵单监控市场（不实际开仓）</td>
-                        </tr>
-                        <tr>
-                            <td><strong>恢复条件</strong></td>
-                            <td>哨兵单<strong style="color: #3fb950;">连续2单盈利</strong>即可恢复正常交易</td>
-                        </tr>
-                        <tr>
-                            <td><strong>恢复处理</strong></td>
-                            <td>删除所有未平仓哨兵单，恢复正常开仓</td>
-                        </tr>
-                        <tr>
-                            <td><strong>统计范围</strong></td>
-                            <td>所有币种的同方向交易</td>
-                        </tr>
-                        <tr>
-                            <td><strong>手动解除</strong></td>
-                            <td>可点击"解除熔断"按钮立即恢复正常</td>
-                        </tr>
-                    </tbody>
-                </table>
             </div>
         </div>
 
@@ -1140,117 +1067,12 @@
             }
         }
 
-        // ==================== 熔断状态 ====================
-
-        // 加载熔断状态
-        async function loadCircuitBreakerStatus() {
-            try {
-                const resp = await fetch('/api/market-regime/circuit-breaker/status');
-                const data = await resp.json();
-
-                if (data.success) {
-                    updateBreakerDisplay('long', data.data.long);
-                    updateBreakerDisplay('short', data.data.short);
-                }
-            } catch (e) {
-                console.error('加载熔断状态失败:', e);
-            }
-        }
-
-        function updateBreakerDisplay(direction, info) {
-            const statusEl = document.getElementById(`${direction}-status`);
-            const lossesEl = document.getElementById(`${direction}-losses`);
-            const sentinelInfoEl = document.getElementById(`${direction}-sentinel-info`);
-            const clearBtn = document.getElementById(`${direction}-clear-btn`);
-            const cardEl = document.getElementById(`${direction}-breaker`);
-
-            // 检查是否是哨兵模式（兼容新旧字段名）
-            const isSentinelMode = info.is_sentinel_mode || info.is_scout_mode;
-
-            if (isSentinelMode) {
-                // 哨兵模式
-                statusEl.innerHTML = '<span style="color: #d29922;">🔭 哨兵监控中</span>';
-                statusEl.style.color = '#d29922';
-                lossesEl.textContent = info.description;
-
-                // 显示哨兵单详情
-                const stats = info.sentinel_stats || {};
-                const consecutiveWins = info.consecutive_wins || 0;
-                const openCount = stats.open || 0;
-                const winCount = stats.win || 0;
-                const lossCount = stats.loss || 0;
-
-                let sentinelHtml = '<div style="font-size: 13px; padding: 8px; background: rgba(210, 153, 34, 0.1); border-radius: 6px;">';
-                sentinelHtml += `<div style="margin-bottom: 5px;"><strong>连续盈利:</strong> ${consecutiveWins}/2</div>`;
-                sentinelHtml += '<div style="display: flex; gap: 15px; justify-content: center;">';
-                sentinelHtml += `<span style="color: #8b949e;">🔭 活跃: ${openCount}</span>`;
-                sentinelHtml += `<span style="color: #3fb950;">✓ 盈利: ${winCount}</span>`;
-                sentinelHtml += `<span style="color: #f85149;">✗ 亏损: ${lossCount}</span>`;
-                sentinelHtml += '</div>';
-                sentinelHtml += '<div style="margin-top: 5px; color: #8b949e; font-size: 12px;">连续2单盈利恢复正常</div>';
-                sentinelHtml += '</div>';
-
-                sentinelInfoEl.innerHTML = sentinelHtml;
-                sentinelInfoEl.style.display = 'block';
-
-                clearBtn.style.display = 'inline-block';
-                cardEl.style.background = 'rgba(210, 153, 34, 0.1)';
-                cardEl.style.borderColor = '#d29922';
-            } else if (info.is_active) {
-                // 熔断中（等待哨兵单结果）
-                statusEl.innerHTML = '<span style="color: #f85149;">🚨 熔断中</span>';
-                statusEl.style.color = '#f85149';
-                lossesEl.textContent = info.description;
-                sentinelInfoEl.style.display = 'none';
-                clearBtn.style.display = 'inline-block';
-                cardEl.style.background = 'rgba(248, 81, 73, 0.1)';
-                cardEl.style.borderColor = '#f85149';
-            } else {
-                // 正常
-                statusEl.innerHTML = '<span style="color: #3fb950;">✓ 正常</span>';
-                statusEl.style.color = '#3fb950';
-                lossesEl.textContent = info.description;
-                sentinelInfoEl.style.display = 'none';
-                clearBtn.style.display = 'none';
-                cardEl.style.background = '#21262d';
-                cardEl.style.borderColor = '#30363d';
-            }
-        }
-
-        // 清除熔断
-        async function clearBreaker(direction) {
-            const confirmed = await showConfirmDialog(
-                '解除熔断',
-                `确定要解除 <strong>${direction === 'long' ? '做多' : '做空'}</strong> 方向的熔断吗？<br><br><span style="color: #d29922;">注意：如果市场条件未改善，可能会再次触发熔断</span>`,
-                'warning'
-            );
-
-            if (!confirmed) return;
-
-            try {
-                const resp = await fetch(`/api/market-regime/circuit-breaker/clear?direction=${direction}`, {
-                    method: 'POST'
-                });
-                const data = await resp.json();
-
-                if (data.success) {
-                    showToast(data.message, 'success');
-                    loadCircuitBreakerStatus();
-                } else {
-                    showToast('解除失败: ' + (data.detail || data.message), 'error');
-                }
-            } catch (e) {
-                showToast('解除失败: ' + e.message, 'error');
-            }
-        }
-
         // 页面加载
         window.onload = function() {
             loadSummary();
             loadStrategies();
             loadSymbols();  // 加载交易对列表
             loadAllHistory();  // 自动加载切换历史
-            loadCircuitBreakerStatus();  // 加载熔断状态
         };
     </script>
 </body>

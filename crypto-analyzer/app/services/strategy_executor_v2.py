@@ -18,7 +18,6 @@ from loguru import logger
 from app.services.position_validator import PositionValidator
 from app.utils.indicators import calculate_ema, calculate_ma, calculate_rsi, calculate_macd, calculate_kdj
 from app.utils.db import create_connection
-from app.services.market_regime_detector import check_ranging_market
 
 
 class StrategyExecutorV2:
@@ -1965,14 +1964,6 @@ class StrategyExecutorV2:
                 return {'success': False, 'error': '获取价格数据失败'}
 
             current_price = ema_data['current_price']
-
-            # ========== 震荡行情检查（15M K线）==========
-            is_ranging, ranging_desc = check_ranging_market(self.db_config, symbol, '15m')
-            if is_ranging:
-                logger.warning(f"🚫 {symbol} {direction} 禁止开仓: 震荡行情 - {ranging_desc}")
-                return {'success': False, 'error': f'震荡行情禁止开仓: {ranging_desc}', 'blocked_by': 'ranging_market'}
-
-            # 熔断检查已移至 FuturesTradingEngine.open_position() 统一处理
 
             # ========== 强制市价开仓（反转信号）或金叉/死叉信号直接市价开仓 ==========
             is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover', 'reversal_cross')
