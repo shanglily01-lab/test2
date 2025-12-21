@@ -882,19 +882,17 @@ class PositionValidator:
             strategy['leverage'] = pending['leverage']
             strategy['positionSizePct'] = float(pending['margin_pct']) if pending['margin_pct'] else strategy.get('positionSizePct', 1)
 
-            # 调用 strategy_executor 的 _do_open_position 方法执行开仓
-            # 熔断检查已在 _do_open_position 内部统一处理
-            # 使用待开仓记录中的 account_id（通常是2=实盘）
+            # 调用 strategy_executor 的 execute_open_position 方法执行开仓
+            # 该方法内部会检查熔断状态，熔断时创建哨兵单而非实际开仓
             account_id = pending.get('account_id', 2)
-            result = await self.strategy_executor._do_open_position(
+            result = await self.strategy_executor.execute_open_position(
                 symbol=symbol,
                 direction=direction,
                 signal_type=signal_type,
                 strategy=strategy,
                 account_id=account_id,
                 signal_reason=signal_reason or "",
-                current_price=current_price,
-                ema_data=ema_data
+                force_market=True  # 自检通过后直接市价开仓
             )
 
             if result.get('success'):
