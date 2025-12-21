@@ -106,7 +106,7 @@ class SentinelMonitorService:
         """获取数据库连接"""
         return pymysql.connect(
             host=self.db_config.get('host', 'localhost'),
-            port=self.db_config.get('port', 3306),
+            port=int(self.db_config.get('port', 3306)),
             user=self.db_config.get('user', 'root'),
             password=self.db_config.get('password', ''),
             database=self.db_config.get('database', 'binance-data'),
