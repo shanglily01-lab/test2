@@ -882,24 +882,70 @@ class PositionValidator:
             strategy['leverage'] = pending['leverage']
             strategy['positionSizePct'] = float(pending['margin_pct']) if pending['margin_pct'] else strategy.get('positionSizePct', 1)
 
-            # 调用 strategy_executor 的 _do_open_position 方法执行开仓
             # 使用待开仓记录中的 account_id（通常是2=实盘）
             account_id = pending.get('account_id', 2)
-            result = await self.strategy_executor._do_open_position(
-                symbol=symbol,
-                direction=direction,
-                signal_type=signal_type,
-                strategy=strategy,
-                account_id=account_id,
-                signal_reason=signal_reason or "",
-                current_price=current_price,
-                ema_data=ema_data
-            )
 
-            if result.get('success'):
-                logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={result.get('position_id')}")
+            # 检查是否启用双向对比模式
+            dual_mode = strategy.get('dualMode', False)
+            if dual_mode:
+                logger.info(f"[待开仓自检] 🔀 {symbol} 双向对比模式，同时开正向({direction})和反向仓位")
+
+                dual_results = []
+
+                # 1. 开正向仓（原信号方向）
+                正向_signal_type = f"{signal_type}_正向"
+                正向_reason = f"[正向]{signal_reason}" if signal_reason else "[正向]双向对比"
+                result_正向 = await self.strategy_executor._do_open_position(
+                    symbol=symbol,
+                    direction=direction,
+                    signal_type=正向_signal_type,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=正向_reason,
+                    current_price=current_price,
+                    ema_data=ema_data,
+                    is_dual_mode=True
+                )
+                dual_results.append({'type': '正向', 'direction': direction, 'result': result_正向})
+                logger.info(f"[待开仓自检] 🔀 {symbol} 正向({direction})开仓结果: {result_正向.get('success')}")
+
+                # 2. 开反向仓（相反方向）
+                reverse_direction = 'short' if direction == 'long' else 'long'
+                反向_signal_type = f"{signal_type}_反向"
+                反向_reason = f"[反向]{signal_reason}" if signal_reason else "[反向]双向对比"
+                result_反向 = await self.strategy_executor._do_open_position(
+                    symbol=symbol,
+                    direction=reverse_direction,
+                    signal_type=反向_signal_type,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=反向_reason,
+                    current_price=current_price,
+                    ema_data=ema_data,
+                    is_dual_mode=True
+                )
+                dual_results.append({'type': '反向', 'direction': reverse_direction, 'result': result_反向})
+                logger.info(f"[待开仓自检] 🔀 {symbol} 反向({reverse_direction})开仓结果: {result_反向.get('success')}")
+
+                success_count = sum(1 for r in dual_results if r['result'].get('success'))
+                logger.info(f"[待开仓自检] 🔀 {symbol} 双向开仓完成: {success_count}/2 成功")
             else:
-                logger.error(f"[待开仓自检] ❌ {symbol} {direction} 开仓失败: {result.get('error')}")
+                # 原有逻辑：单向开仓
+                result = await self.strategy_executor._do_open_position(
+                    symbol=symbol,
+                    direction=direction,
+                    signal_type=signal_type,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=signal_reason or "",
+                    current_price=current_price,
+                    ema_data=ema_data
+                )
+
+                if result.get('success'):
+                    logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={result.get('position_id')}")
+                else:
+                    logger.error(f"[待开仓自检] ❌ {symbol} {direction} 开仓失败: {result.get('error')}")
 
         except Exception as e:
             logger.error(f"[待开仓自检] {symbol} 开仓异常: {e}")
