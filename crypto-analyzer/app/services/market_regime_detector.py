@@ -747,7 +747,7 @@ class MarketRegimeDetector:
         try:
             connection = pymysql.connect(
                 host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
+                port=int(self.db_config.get('port', 3306)),
                 user=self.db_config.get('user', 'root'),
                 password=self.db_config.get('password', ''),
                 database=self.db_config.get('database', 'binance-data'),
@@ -779,7 +779,7 @@ class MarketRegimeDetector:
         try:
             connection = pymysql.connect(
                 host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
+                port=int(self.db_config.get('port', 3306)),
                 user=self.db_config.get('user', 'root'),
                 password=self.db_config.get('password', ''),
                 database=self.db_config.get('database', 'binance-data'),
@@ -854,7 +854,7 @@ class MarketRegimeDetector:
         try:
             connection = pymysql.connect(
                 host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
+                port=int(self.db_config.get('port', 3306)),
                 user=self.db_config.get('user', 'root'),
                 password=self.db_config.get('password', ''),
                 database=self.db_config.get('database', 'binance-data'),
@@ -893,7 +893,7 @@ class MarketRegimeDetector:
         try:
             connection = pymysql.connect(
                 host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
+                port=int(self.db_config.get('port', 3306)),
                 user=self.db_config.get('user', 'root'),
                 password=self.db_config.get('password', ''),
                 database=self.db_config.get('database', 'binance-data'),
@@ -1084,7 +1084,7 @@ def handle_circuit_breaker_positions(
     try:
         connection = pymysql.connect(
             host=db_config.get('host', 'localhost'),
-            port=db_config.get('port', 3306),
+            port=int(db_config.get('port', 3306)),
             user=db_config.get('user', 'root'),
             password=db_config.get('password', ''),
             database=db_config.get('database', 'binance-data'),
@@ -1256,7 +1256,7 @@ class CircuitBreaker:
         try:
             connection = pymysql.connect(
                 host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
+                port=int(self.db_config.get('port', 3306)),
                 user=self.db_config.get('user', 'root'),
                 password=self.db_config.get('password', ''),
                 database=self.db_config.get('database', 'binance-data'),
@@ -1313,7 +1313,7 @@ class CircuitBreaker:
         try:
             connection = pymysql.connect(
                 host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
+                port=int(self.db_config.get('port', 3306)),
                 user=self.db_config.get('user', 'root'),
                 password=self.db_config.get('password', ''),
                 database=self.db_config.get('database', 'binance-data'),
