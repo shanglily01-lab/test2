@@ -1762,12 +1762,14 @@ async def set_strategy_trade_direction(strategy_id: int, request: Request):
 
             # 更新 config JSON 中的 tradeForward 或 tradeReverse
             json_key = 'tradeForward' if direction == 'forward' else 'tradeReverse'
+            # MySQL JSON_SET 需要用 CAST 或者直接用 true/false 字符串
+            json_value = 'true' if enabled else 'false'
             cursor.execute(f"""
                 UPDATE trading_strategies
-                SET config = JSON_SET(config, '$.{json_key}', %s),
+                SET config = JSON_SET(config, '$.{json_key}', CAST(%s AS JSON)),
                     updated_at = NOW()
                 WHERE id = %s
-            """, (enabled, strategy_id))
+            """, (json_value, strategy_id))
             connection.commit()
 
             dir_text = '正向' if direction == 'forward' else '反向'
