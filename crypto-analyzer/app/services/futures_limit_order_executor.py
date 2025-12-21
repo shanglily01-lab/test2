@@ -970,15 +970,22 @@ class FuturesLimitOrderExecutor:
                                     )
                                     logger.info(f"🔀 {symbol} 正向({position_side})开仓结果: {result.get('success')}")
 
-                                    # 2. 开反向仓（相反方向）
+                                    # 2. 开反向仓（相反方向，使用相同止盈止损比例）
                                     reverse_side = 'SHORT' if position_side == 'LONG' else 'LONG'
-                                    # 反向仓位使用更宽松的止盈止损（5%止损，10%止盈）
-                                    if reverse_side == 'LONG':
-                                        reverse_stop_loss = execution_price * Decimal('0.95')  # 下方5%
-                                        reverse_take_profit = execution_price * Decimal('1.10')  # 上方10%
+                                    # 反向的止盈止损根据方向重新计算（使用相同比例）
+                                    # 正向的止损/止盈比例
+                                    if stop_loss_price and take_profit_price:
+                                        sl_pct = abs(stop_loss_price - execution_price) / execution_price
+                                        tp_pct = abs(take_profit_price - execution_price) / execution_price
+                                        if reverse_side == 'LONG':
+                                            reverse_stop_loss = execution_price * (1 - sl_pct)  # 下方
+                                            reverse_take_profit = execution_price * (1 + tp_pct)  # 上方
+                                        else:
+                                            reverse_stop_loss = execution_price * (1 + sl_pct)  # 上方
+                                            reverse_take_profit = execution_price * (1 - tp_pct)  # 下方
                                     else:
-                                        reverse_stop_loss = execution_price * Decimal('1.05')  # 上方5%
-                                        reverse_take_profit = execution_price * Decimal('0.90')  # 下方10%
+                                        reverse_stop_loss = None
+                                        reverse_take_profit = None
                                     result_reverse = self.trading_engine.open_position(
                                         account_id=account_id,
                                         symbol=symbol,
