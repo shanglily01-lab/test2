@@ -972,9 +972,13 @@ class FuturesLimitOrderExecutor:
 
                                     # 2. 开反向仓（相反方向）
                                     reverse_side = 'SHORT' if position_side == 'LONG' else 'LONG'
-                                    # 反向的止损止盈需要互换
-                                    reverse_stop_loss = take_profit_price  # 原止盈变止损
-                                    reverse_take_profit = stop_loss_price  # 原止损变止盈
+                                    # 反向仓位使用更宽松的止盈止损（5%止损，10%止盈）
+                                    if reverse_side == 'LONG':
+                                        reverse_stop_loss = execution_price * Decimal('0.95')  # 下方5%
+                                        reverse_take_profit = execution_price * Decimal('1.10')  # 上方10%
+                                    else:
+                                        reverse_stop_loss = execution_price * Decimal('1.05')  # 上方5%
+                                        reverse_take_profit = execution_price * Decimal('0.90')  # 下方10%
                                     result_reverse = self.trading_engine.open_position(
                                         account_id=account_id,
                                         symbol=symbol,

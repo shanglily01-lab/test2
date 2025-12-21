@@ -1995,11 +1995,15 @@ class StrategyExecutorV2:
                 reverse_direction = 'short' if direction == 'long' else 'long'
                 反向_signal_type = f"{signal_type}_反向"
                 反向_reason = f"[反向]{signal_reason}" if signal_reason else "[反向]双向对比"
+                # 反向仓位使用更宽松的止盈止损（避免和正向重叠导致秒平）
+                reverse_strategy = strategy.copy()
+                reverse_strategy['stopLoss'] = 5  # 反向止损5%
+                reverse_strategy['takeProfit'] = 10  # 反向止盈10%
                 result_反向 = await self._do_open_position(
                     symbol=symbol,
                     direction=reverse_direction,
                     signal_type=反向_signal_type,
-                    strategy=strategy,
+                    strategy=reverse_strategy,
                     account_id=account_id,
                     signal_reason=反向_reason,
                     current_price=current_price,
