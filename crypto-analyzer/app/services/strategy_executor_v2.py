@@ -1967,8 +1967,8 @@ class StrategyExecutorV2:
 
             current_price = ema_data['current_price']
 
-            # ========== 双向对比模式：同时开正向和反向仓位 ==========
-            dual_mode = strategy.get('dualMode', False)
+            # ========== 双向对比模式：强制开启 ==========
+            dual_mode = True
             if dual_mode and not is_dual_call:
                 logger.info(f"🔀 {symbol} 双向对比模式启动，同时开正向({direction})和反向仓位")
 

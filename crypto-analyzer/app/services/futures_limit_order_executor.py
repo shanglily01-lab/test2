@@ -944,20 +944,8 @@ class FuturesLimitOrderExecutor:
                                 # 止损止盈已基于限价计算好，直接传入价格
                                 execution_price = current_price  # 实际成交价为市价
 
-                                # ========== 检查双向对比模式 ==========
-                                strategy_config = order.get('strategy_config')
-                                dual_mode = False
-                                logger.info(f"[双向检查] {symbol} strategy_config类型={type(strategy_config)}, 值={str(strategy_config)[:200] if strategy_config else 'None'}")
-                                if strategy_config:
-                                    config = strategy_config
-                                    if isinstance(config, str):
-                                        try:
-                                            config = json.loads(config)
-                                        except:
-                                            config = {}
-                                    if isinstance(config, dict):
-                                        dual_mode = config.get('dualMode', False)
-                                        logger.info(f"[双向检查] {symbol} dualMode={dual_mode}")
+                                # ========== 双向对比模式：强制开启 ==========
+                                dual_mode = True
 
                                 if dual_mode:
                                     # 双向对比模式：同时开正向和反向仓位

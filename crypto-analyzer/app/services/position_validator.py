@@ -885,8 +885,8 @@ class PositionValidator:
             # 使用待开仓记录中的 account_id（通常是2=实盘）
             account_id = pending.get('account_id', 2)
 
-            # 检查是否启用双向对比模式
-            dual_mode = strategy.get('dualMode', False)
+            # 双向对比模式：强制开启
+            dual_mode = True
             if dual_mode:
                 logger.info(f"[待开仓自检] 🔀 {symbol} 双向对比模式，同时开正向({direction})和反向仓位")
 
