@@ -1941,7 +1941,8 @@ class StrategyExecutorV2:
 
     async def execute_open_position(self, symbol: str, direction: str, signal_type: str,
                                      strategy: Dict, account_id: int = 2,
-                                     signal_reason: str = None, force_market: bool = False) -> Dict:
+                                     signal_reason: str = None, force_market: bool = False,
+                                     is_dual_call: bool = False) -> Dict:
         """
         执行开仓（或创建待开仓记录）
 
@@ -1953,6 +1954,7 @@ class StrategyExecutorV2:
             account_id: 账户ID
             signal_reason: 开仓原因详情
             force_market: 强制市价开仓（跳过自检）
+            is_dual_call: 是否是双向模式的内部调用（避免递归）
 
         Returns:
             执行结果
@@ -1964,6 +1966,57 @@ class StrategyExecutorV2:
                 return {'success': False, 'error': '获取价格数据失败'}
 
             current_price = ema_data['current_price']
+
+            # ========== 双向对比模式：同时开正向和反向仓位 ==========
+            dual_mode = strategy.get('dualMode', False)
+            if dual_mode and not is_dual_call:
+                logger.info(f"🔀 {symbol} 双向对比模式启动，同时开正向({direction})和反向仓位")
+
+                dual_results = []
+
+                # 1. 开正向仓（原信号方向）
+                正向_signal_type = f"{signal_type}_正向"
+                正向_reason = f"[正向]{signal_reason}" if signal_reason else "[正向]双向对比"
+                result_正向 = await self._do_open_position(
+                    symbol=symbol,
+                    direction=direction,
+                    signal_type=正向_signal_type,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=正向_reason,
+                    current_price=current_price,
+                    ema_data=ema_data,
+                    is_dual_mode=True
+                )
+                dual_results.append({'type': '正向', 'direction': direction, 'result': result_正向})
+                logger.info(f"🔀 {symbol} 正向({direction})开仓结果: {result_正向.get('success')}")
+
+                # 2. 开反向仓（相反方向）
+                reverse_direction = 'short' if direction == 'long' else 'long'
+                反向_signal_type = f"{signal_type}_反向"
+                反向_reason = f"[反向]{signal_reason}" if signal_reason else "[反向]双向对比"
+                result_反向 = await self._do_open_position(
+                    symbol=symbol,
+                    direction=reverse_direction,
+                    signal_type=反向_signal_type,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=反向_reason,
+                    current_price=current_price,
+                    ema_data=ema_data,
+                    is_dual_mode=True
+                )
+                dual_results.append({'type': '反向', 'direction': reverse_direction, 'result': result_反向})
+                logger.info(f"🔀 {symbol} 反向({reverse_direction})开仓结果: {result_反向.get('success')}")
+
+                # 返回双向结果
+                success_count = sum(1 for r in dual_results if r['result'].get('success'))
+                return {
+                    'success': success_count > 0,
+                    'dual_mode': True,
+                    'dual_results': dual_results,
+                    'message': f"双向开仓完成: {success_count}/2 成功"
+                }
 
             # ========== 强制市价开仓（反转信号）或金叉/死叉信号直接市价开仓 ==========
             is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover', 'reversal_cross')
@@ -2027,7 +2080,8 @@ class StrategyExecutorV2:
 
     async def _do_open_position(self, symbol: str, direction: str, signal_type: str,
                                  strategy: Dict, account_id: int, signal_reason: str,
-                                 current_price: float, ema_data: Dict) -> Dict:
+                                 current_price: float, ema_data: Dict,
+                                 is_dual_mode: bool = False) -> Dict:
         """
         执行实际的开仓操作（被 execute_open_position 和待开仓自检调用）
 
@@ -2040,6 +2094,7 @@ class StrategyExecutorV2:
             signal_reason: 开仓原因
             current_price: 当前价格
             ema_data: EMA数据
+            is_dual_mode: 是否是双向对比模式（保证金减半）
 
         Returns:
             执行结果
@@ -2067,6 +2122,12 @@ class StrategyExecutorV2:
                 balance = float(account['current_balance'])
                 # 从配置读取保证金（支持固定金额或百分比模式）
                 margin = self.calculate_margin(is_live=False, account_balance=balance)
+
+                # 双向对比模式：保证金减半（正向+反向各用一半）
+                if is_dual_mode:
+                    margin = margin / 2
+                    logger.info(f"🔀 {symbol} 双向模式保证金减半: {margin:.2f}")
+
                 notional = margin * leverage
                 quantity = notional / current_price
 
