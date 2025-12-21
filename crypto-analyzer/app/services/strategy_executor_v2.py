@@ -2072,6 +2072,14 @@ class StrategyExecutorV2:
             执行结果
         """
         try:
+            # ========== 熔断检查（统一入口）==========
+            circuit_breaker = get_circuit_breaker(self.db_config)
+            if circuit_breaker:
+                is_sentinel, sentinel_desc = circuit_breaker.is_circuit_breaker_active(direction)
+                if is_sentinel:
+                    logger.warning(f"🔒 [熔断] {symbol} {direction} 熔断中({sentinel_desc})，禁止开仓")
+                    return {'success': False, 'error': f'熔断模式({sentinel_desc})，禁止开仓', 'blocked_by': 'circuit_breaker'}
+
             leverage = strategy.get('leverage', 10)
             position_size_pct = strategy.get('positionSizePct', 1)  # 账户资金的1%
             sync_live = strategy.get('syncLive', False)
