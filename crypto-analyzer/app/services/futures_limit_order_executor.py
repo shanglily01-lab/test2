@@ -944,19 +944,77 @@ class FuturesLimitOrderExecutor:
                                 # 止损止盈已基于限价计算好，直接传入价格
                                 execution_price = current_price  # 实际成交价为市价
 
-                                result = self.trading_engine.open_position(
-                                    account_id=account_id,
-                                    symbol=symbol,
-                                    position_side=position_side,
-                                    quantity=quantity,
-                                    leverage=leverage,
-                                    limit_price=None,  # 不传限价，直接执行，避免再创建PENDING
-                                    stop_loss_price=stop_loss_price,  # 已基于限价计算好
-                                    take_profit_price=take_profit_price,  # 已基于限价计算好
-                                    source=original_source,  # 保留原始来源（strategy 或 limit_order）
-                                    signal_id=original_signal_id,  # 保留原始信号ID
-                                    strategy_id=original_strategy_id  # 保留原始策略ID（用于实盘同步）
-                                )
+                                # ========== 检查双向对比模式 ==========
+                                strategy_config = order.get('strategy_config')
+                                dual_mode = False
+                                if strategy_config:
+                                    config = strategy_config
+                                    if isinstance(config, str):
+                                        try:
+                                            config = json.loads(config)
+                                        except:
+                                            config = {}
+                                    if isinstance(config, dict):
+                                        dual_mode = config.get('dualMode', False)
+
+                                if dual_mode:
+                                    # 双向对比模式：同时开正向和反向仓位
+                                    logger.info(f"🔀 {symbol} 限价单触发双向对比模式，同时开{position_side}和反向仓位")
+
+                                    # 保证金减半
+                                    dual_quantity = quantity / Decimal('2')
+
+                                    # 1. 开正向仓（原信号方向）
+                                    result = self.trading_engine.open_position(
+                                        account_id=account_id,
+                                        symbol=symbol,
+                                        position_side=position_side,
+                                        quantity=dual_quantity,
+                                        leverage=leverage,
+                                        limit_price=None,
+                                        stop_loss_price=stop_loss_price,
+                                        take_profit_price=take_profit_price,
+                                        source=f"{original_source}_正向",
+                                        signal_id=original_signal_id,
+                                        strategy_id=original_strategy_id
+                                    )
+                                    logger.info(f"🔀 {symbol} 正向({position_side})开仓结果: {result.get('success')}")
+
+                                    # 2. 开反向仓（相反方向）
+                                    reverse_side = 'SHORT' if position_side == 'LONG' else 'LONG'
+                                    # 反向的止损止盈需要互换
+                                    reverse_stop_loss = take_profit_price  # 原止盈变止损
+                                    reverse_take_profit = stop_loss_price  # 原止损变止盈
+                                    result_reverse = self.trading_engine.open_position(
+                                        account_id=account_id,
+                                        symbol=symbol,
+                                        position_side=reverse_side,
+                                        quantity=dual_quantity,
+                                        leverage=leverage,
+                                        limit_price=None,
+                                        stop_loss_price=reverse_stop_loss,
+                                        take_profit_price=reverse_take_profit,
+                                        source=f"{original_source}_反向",
+                                        signal_id=original_signal_id,
+                                        strategy_id=original_strategy_id
+                                    )
+                                    logger.info(f"🔀 {symbol} 反向({reverse_side})开仓结果: {result_reverse.get('success')}")
+
+                                else:
+                                    # 原有逻辑：单向开仓
+                                    result = self.trading_engine.open_position(
+                                        account_id=account_id,
+                                        symbol=symbol,
+                                        position_side=position_side,
+                                        quantity=quantity,
+                                        leverage=leverage,
+                                        limit_price=None,  # 不传限价，直接执行，避免再创建PENDING
+                                        stop_loss_price=stop_loss_price,  # 已基于限价计算好
+                                        take_profit_price=take_profit_price,  # 已基于限价计算好
+                                        source=original_source,  # 保留原始来源（strategy 或 limit_order）
+                                        signal_id=original_signal_id,  # 保留原始信号ID
+                                        strategy_id=original_strategy_id  # 保留原始策略ID（用于实盘同步）
+                                    )
 
                                 if result.get('success'):
                                     # 从结果中获取实际的 symbol 和 position_id
