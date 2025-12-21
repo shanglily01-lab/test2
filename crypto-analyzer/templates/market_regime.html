@@ -421,7 +421,7 @@
                     <button class="btn btn-secondary refresh-btn" onclick="loadCircuitBreakerStatus()">刷新</button>
                 </h2>
                 <p style="color: #8b949e; margin-bottom: 15px;">
-                    当某方向连续4单亏损时，自动进入哨兵模式：创建虚拟哨兵单监控市场，连续2单盈利即可恢复正常交易
+                    当某方向连续3单亏损时，自动进入哨兵模式：创建虚拟哨兵单监控市场，连续2单盈利即可恢复正常交易
                 </p>
                 <div class="regime-grid" style="grid-template-columns: repeat(2, 1fr);">
                     <div id="long-breaker" class="regime-card" style="border-left-color: #3fb950;">
@@ -455,7 +455,7 @@
                     <tbody>
                         <tr>
                             <td><strong>触发条件</strong></td>
-                            <td>某方向（做多/做空）连续4单亏损</td>
+                            <td>某方向（做多/做空）连续3单亏损</td>
                         </tr>
                         <tr>
                             <td><strong>熔断处理</strong></td>

@@ -1187,7 +1187,7 @@ class CircuitBreaker:
     - sentinel: 哨兵模式（虚拟单监控市场）
     """
 
-    DEFAULT_CONSECUTIVE_LOSS_LIMIT = 4  # 连续亏损次数限制
+    DEFAULT_CONSECUTIVE_LOSS_LIMIT = 3  # 连续亏损次数限制
     SENTINEL_CONSECUTIVE_WINS_REQUIRED = 2  # 哨兵单连续盈利次数要求
 
     # 状态常量
