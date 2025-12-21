@@ -882,6 +882,15 @@ class PositionValidator:
             strategy['leverage'] = pending['leverage']
             strategy['positionSizePct'] = float(pending['margin_pct']) if pending['margin_pct'] else strategy.get('positionSizePct', 1)
 
+            # ========== 熔断检查 ==========
+            from app.services.market_regime_detector import get_circuit_breaker
+            circuit_breaker = get_circuit_breaker(self.db_config)
+            if circuit_breaker:
+                is_sentinel, sentinel_desc = circuit_breaker.is_circuit_breaker_active(direction)
+                if is_sentinel:
+                    logger.warning(f"🔒 [待开仓自检] {symbol} {direction} 熔断中({sentinel_desc})，跳过开仓")
+                    return
+
             # 调用 strategy_executor 的 _do_open_position 方法执行开仓
             # 使用待开仓记录中的 account_id（通常是2=实盘）
             account_id = pending.get('account_id', 2)
