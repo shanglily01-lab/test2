@@ -406,33 +406,7 @@ class FuturesTradingEngine:
                     direction = 'long' if position_side == 'LONG' else 'short'
                     is_sentinel, sentinel_desc = circuit_breaker.is_circuit_breaker_active(direction)
                     if is_sentinel:
-                        # 熔断状态：创建哨兵单代替真实开仓
-                        try:
-                            # 获取当前价格作为入场价
-                            current_price = self.get_current_price(symbol, use_realtime=True)
-                            if current_price and current_price > 0:
-                                # 从参数获取止损止盈百分比
-                                sl_pct = float(stop_loss_pct) if stop_loss_pct else 2.0
-                                tp_pct = float(take_profit_pct) if take_profit_pct else 4.0
-
-                                sentinel_id = circuit_breaker.create_sentinel_order(
-                                    direction=direction,
-                                    symbol=symbol,
-                                    entry_price=float(current_price),
-                                    stop_loss_pct=sl_pct,
-                                    take_profit_pct=tp_pct,
-                                    strategy_id=strategy_id
-                                )
-                                if sentinel_id:
-                                    logger.info(f"🔭 熔断拦截→创建哨兵单 #{sentinel_id}: {symbol} {position_side} @ {current_price} (来源: {source})")
-                                else:
-                                    logger.info(f"🔒 熔断拦截: {symbol} {position_side} - {sentinel_desc} (来源: {source})")
-                            else:
-                                logger.info(f"🔒 熔断拦截: {symbol} {position_side} - {sentinel_desc}，无法获取价格 (来源: {source})")
-                        except Exception as sentinel_err:
-                            logger.warning(f"创建哨兵单失败: {sentinel_err}")
-                            logger.info(f"🔒 熔断拦截: {symbol} {position_side} - {sentinel_desc} (来源: {source})")
-
+                        logger.info(f"🔒 熔断拦截: {symbol} {position_side} - {sentinel_desc} (来源: {source})")
                         return {
                             'success': False,
                             'message': f'熔断模式: {sentinel_desc}',
