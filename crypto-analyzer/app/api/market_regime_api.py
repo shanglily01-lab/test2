@@ -15,6 +15,7 @@ import logging
 from app.services.market_regime_detector import (
     MarketRegimeDetector,
     CircuitBreaker,
+    get_circuit_breaker as get_global_circuit_breaker,
     get_regime_display_name,
     get_regime_trading_suggestion
 )
@@ -598,15 +599,9 @@ async def get_regime_types():
 
 # ==================== 连续亏损熔断 API ====================
 
-# 全局熔断器实例
-_circuit_breaker = None
-
 def get_circuit_breaker():
-    """获取熔断器实例（单例）"""
-    global _circuit_breaker
-    if _circuit_breaker is None:
-        _circuit_breaker = CircuitBreaker(db_config)
-    return _circuit_breaker
+    """获取熔断器实例（使用全局单例）"""
+    return get_global_circuit_breaker(db_config)
 
 
 @router.get('/circuit-breaker/status')
