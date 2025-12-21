@@ -944,10 +944,25 @@ class FuturesLimitOrderExecutor:
                                 # 止损止盈已基于限价计算好，直接传入价格
                                 execution_price = current_price  # 实际成交价为市价
 
-                                # ========== 双向对比模式：强制开启 ==========
-                                dual_mode = True
+                                # ========== 交易方向配置：从策略配置读取 ==========
+                                strategy_config = order.get('strategy_config')
+                                trade_forward = True  # 默认开正向
+                                trade_reverse = False  # 默认不开反向
 
-                                if dual_mode:
+                                if strategy_config:
+                                    config = strategy_config
+                                    if isinstance(config, str):
+                                        try:
+                                            config = json.loads(config)
+                                        except:
+                                            config = {}
+                                    if isinstance(config, dict):
+                                        trade_forward = config.get('tradeForward', True)
+                                        trade_reverse = config.get('tradeReverse', False)
+
+                                is_dual_mode = trade_forward and trade_reverse
+
+                                if is_dual_mode:
                                     # 双向对比模式：同时开正向和反向仓位
                                     logger.info(f"🔀 {symbol} 限价单触发双向对比模式，同时开{position_side}和反向仓位")
 
@@ -973,16 +988,15 @@ class FuturesLimitOrderExecutor:
                                     # 2. 开反向仓（相反方向，使用相同止盈止损比例）
                                     reverse_side = 'SHORT' if position_side == 'LONG' else 'LONG'
                                     # 反向的止盈止损根据方向重新计算（使用相同比例）
-                                    # 正向的止损/止盈比例
                                     if stop_loss_price and take_profit_price:
                                         sl_pct = abs(stop_loss_price - execution_price) / execution_price
                                         tp_pct = abs(take_profit_price - execution_price) / execution_price
                                         if reverse_side == 'LONG':
-                                            reverse_stop_loss = execution_price * (1 - sl_pct)  # 下方
-                                            reverse_take_profit = execution_price * (1 + tp_pct)  # 上方
+                                            reverse_stop_loss = execution_price * (1 - sl_pct)
+                                            reverse_take_profit = execution_price * (1 + tp_pct)
                                         else:
-                                            reverse_stop_loss = execution_price * (1 + sl_pct)  # 上方
-                                            reverse_take_profit = execution_price * (1 - tp_pct)  # 下方
+                                            reverse_stop_loss = execution_price * (1 + sl_pct)
+                                            reverse_take_profit = execution_price * (1 - tp_pct)
                                     else:
                                         reverse_stop_loss = None
                                         reverse_take_profit = None
@@ -1000,6 +1014,38 @@ class FuturesLimitOrderExecutor:
                                         strategy_id=original_strategy_id
                                     )
                                     logger.info(f"🔀 {symbol} REVERSE({reverse_side})开仓结果: {result_reverse.get('success')}")
+
+                                elif trade_reverse and not trade_forward:
+                                    # 仅反向模式
+                                    reverse_side = 'SHORT' if position_side == 'LONG' else 'LONG'
+                                    logger.info(f"🔄 {symbol} 限价单仅反向模式，原信号{position_side}→反向{reverse_side}")
+
+                                    if stop_loss_price and take_profit_price:
+                                        sl_pct = abs(stop_loss_price - execution_price) / execution_price
+                                        tp_pct = abs(take_profit_price - execution_price) / execution_price
+                                        if reverse_side == 'LONG':
+                                            reverse_stop_loss = execution_price * (1 - sl_pct)
+                                            reverse_take_profit = execution_price * (1 + tp_pct)
+                                        else:
+                                            reverse_stop_loss = execution_price * (1 + sl_pct)
+                                            reverse_take_profit = execution_price * (1 - tp_pct)
+                                    else:
+                                        reverse_stop_loss = None
+                                        reverse_take_profit = None
+
+                                    result = self.trading_engine.open_position(
+                                        account_id=account_id,
+                                        symbol=symbol,
+                                        position_side=reverse_side,
+                                        quantity=quantity,
+                                        leverage=leverage,
+                                        limit_price=None,
+                                        stop_loss_price=reverse_stop_loss,
+                                        take_profit_price=reverse_take_profit,
+                                        source=f"{original_source}_REVERSE",
+                                        signal_id=original_signal_id,
+                                        strategy_id=original_strategy_id
+                                    )
 
                                 else:
                                     # 原有逻辑：单向开仓

@@ -1967,10 +1967,17 @@ class StrategyExecutorV2:
 
             current_price = ema_data['current_price']
 
-            # ========== 双向对比模式：强制开启 ==========
-            dual_mode = True
-            if dual_mode and not is_dual_call:
-                logger.info(f"🔀 {symbol} 双向对比模式启动，同时开FORWARD({direction})和REVERSE仓位")
+            # ========== 交易方向配置：从策略配置读取 ==========
+            # tradeForward: 是否开正向仓（默认True）
+            # tradeReverse: 是否开反向仓（默认False）
+            trade_forward = strategy.get('tradeForward', True)  # 默认开正向
+            trade_reverse = strategy.get('tradeReverse', False)  # 默认不开反向
+
+            # 判断是否双向模式（同时开正向和反向）
+            is_dual_mode_config = trade_forward and trade_reverse
+
+            if is_dual_mode_config and not is_dual_call:
+                logger.info(f"🔀 {symbol} 双向对比模式，同时开FORWARD({direction})和REVERSE仓位")
 
                 dual_results = []
 
@@ -2017,6 +2024,29 @@ class StrategyExecutorV2:
                     'dual_results': dual_results,
                     'message': f"双向开仓完成: {success_count}/2 成功"
                 }
+
+            # ========== 仅反向模式：只开反向仓 ==========
+            if trade_reverse and not trade_forward and not is_dual_call:
+                reverse_direction = 'short' if direction == 'long' else 'long'
+                logger.info(f"🔄 {symbol} 仅反向模式，原信号{direction}→反向{reverse_direction}")
+
+                reverse_signal_type = f"{signal_type}_REVERSE"
+                reverse_reason = f"[REVERSE]{signal_reason}" if signal_reason else "[REVERSE]reverse_only"
+                return await self._do_open_position(
+                    symbol=symbol,
+                    direction=reverse_direction,
+                    signal_type=reverse_signal_type,
+                    strategy=strategy,
+                    account_id=account_id,
+                    signal_reason=reverse_reason,
+                    current_price=current_price,
+                    ema_data=ema_data
+                )
+
+            # ========== 仅正向模式（默认）：检查是否禁用正向 ==========
+            if not trade_forward and not trade_reverse:
+                logger.warning(f"⚠️ {symbol} 正向和反向都未启用，跳过开仓")
+                return {'success': False, 'error': '正向和反向交易都未启用'}
 
             # ========== 强制市价开仓（反转信号）或金叉/死叉信号直接市价开仓 ==========
             is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover', 'reversal_cross')

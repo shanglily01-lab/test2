@@ -2632,6 +2632,22 @@
                                 <button class="btn btn-sm ${strategy.syncLive ? 'btn-danger' : 'btn-outline-secondary'}" onclick="toggleSyncLive(${strategy.id})" title="${strategy.syncLive ? '点击关闭实盘同步' : '点击启用实盘同步'}">
                                     <i class="bi bi-lightning-charge"></i> ${strategy.syncLive ? '关闭实盘' : '启用实盘'}
                                 </button>
+                                <div style="display: inline-flex; gap: 8px; align-items: center; padding: 4px 8px; background: var(--bg-tertiary); border-radius: 4px; border: 1px solid var(--border-default);">
+                                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px;">
+                                        <input type="checkbox"
+                                               ${strategy.tradeForward !== false ? 'checked' : ''}
+                                               onchange="setTradeDirection(${strategy.id}, 'forward', this.checked)"
+                                               style="cursor: pointer;">
+                                        <span style="color: var(--primary-purple);">正向</span>
+                                    </label>
+                                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px;">
+                                        <input type="checkbox"
+                                               ${strategy.tradeReverse === true ? 'checked' : ''}
+                                               onchange="setTradeDirection(${strategy.id}, 'reverse', this.checked)"
+                                               style="cursor: pointer;">
+                                        <span style="color: var(--warning-yellow);">反向</span>
+                                    </label>
+                                </div>
                                 <button class="btn btn-sm btn-secondary" onclick="editStrategy(${strategy.id})">
                                     <i class="bi bi-pencil"></i> 编辑
                                 </button>
@@ -2893,6 +2909,47 @@
             } catch (error) {
                 console.error('切换实盘同步失败:', error);
                 showToast(`${actionText}失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 设置交易方向（正向/反向复选框）
+        async function setTradeDirection(id, direction, enabled) {
+            const strategyId = typeof id === 'string' ? parseInt(id) : id;
+            const strategy = strategies.find(s => {
+                const sId = typeof s.id === 'string' ? parseInt(s.id) : s.id;
+                return sId === strategyId;
+            });
+
+            if (!strategy) {
+                showToast('策略未找到', 'error');
+                return;
+            }
+
+            const dirText = direction === 'forward' ? '正向' : '反向';
+            const actionText = enabled ? '启用' : '禁用';
+
+            try {
+                const response = await fetch(`/api/futures/strategies/${strategyId}/trade-direction`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ direction: direction, enabled: enabled })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    if (direction === 'forward') {
+                        strategy.tradeForward = enabled;
+                    } else {
+                        strategy.tradeReverse = enabled;
+                    }
+                    await loadStrategies();
+                    showToast(`已${actionText}${dirText}交易`, 'success');
+                } else {
+                    showToast(data.detail || '设置交易方向失败', 'error');
+                }
+            } catch (error) {
+                console.error('设置交易方向失败:', error);
+                showToast(`设置交易方向失败: ${error.message}`, 'error');
             }
         }
 
