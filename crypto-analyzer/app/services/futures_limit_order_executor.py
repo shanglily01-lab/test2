@@ -947,6 +947,7 @@ class FuturesLimitOrderExecutor:
                                 # ========== 检查双向对比模式 ==========
                                 strategy_config = order.get('strategy_config')
                                 dual_mode = False
+                                logger.info(f"[双向检查] {symbol} strategy_config类型={type(strategy_config)}, 值={str(strategy_config)[:200] if strategy_config else 'None'}")
                                 if strategy_config:
                                     config = strategy_config
                                     if isinstance(config, str):
@@ -956,6 +957,7 @@ class FuturesLimitOrderExecutor:
                                             config = {}
                                     if isinstance(config, dict):
                                         dual_mode = config.get('dualMode', False)
+                                        logger.info(f"[双向检查] {symbol} dualMode={dual_mode}")
 
                                 if dual_mode:
                                     # 双向对比模式：同时开正向和反向仓位
