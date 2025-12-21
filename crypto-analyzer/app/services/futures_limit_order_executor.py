@@ -917,6 +917,9 @@ class FuturesLimitOrderExecutor:
 
                             # 执行开仓（使用限价作为成交价）
                             try:
+                                # 熔断检查已移至 FuturesTradingEngine.open_position() 统一处理
+                                # 限价单触发时会调用 trading_engine.open_position()，那里会进行熔断检查
+
                                 # 先解冻保证金（因为限价单创建时已经冻结了保证金）
                                 # 开仓时会重新冻结，所以这里先解冻避免重复冻结
                                 frozen_margin = Decimal(str(order.get('margin', 0)))
@@ -932,7 +935,7 @@ class FuturesLimitOrderExecutor:
 
                                 # 提交解冻操作
                                 connection.commit()
-                                
+
                                 # 执行开仓
                                 # 保留原始订单的来源、信号ID和策略ID（如果是策略订单）
                                 original_source = order.get('order_source', 'limit_order')

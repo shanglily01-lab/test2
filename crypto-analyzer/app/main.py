@@ -294,7 +294,7 @@ async def lifespan(app: FastAPI):
                 logger.info(f"🎉 [哨兵恢复] {direction.upper()} 方向连续盈利达标，恢复正常交易！")
                 circuit_breaker = get_circuit_breaker(db_config)
                 if circuit_breaker:
-                    circuit_breaker.reset(direction)
+                    circuit_breaker.clear_circuit_breaker(direction)
                     logger.info(f"✅ [哨兵恢复] {direction.upper()} 方向熔断已重置")
 
             sentinel_monitor_service = get_sentinel_monitor(db_config, on_recovery_callback=on_sentinel_recovery)

@@ -883,7 +883,7 @@ class PositionValidator:
             strategy['positionSizePct'] = float(pending['margin_pct']) if pending['margin_pct'] else strategy.get('positionSizePct', 1)
 
             # 调用 strategy_executor 的 execute_open_position 方法执行开仓
-            # 该方法内部会检查熔断状态，熔断时创建哨兵单而非实际开仓
+            # 该方法内部会检查熔断状态，熔断时禁止开仓
             account_id = pending.get('account_id', 2)
             result = await self.strategy_executor.execute_open_position(
                 symbol=symbol,
@@ -896,10 +896,9 @@ class PositionValidator:
             )
 
             if result.get('success'):
-                if result.get('sentinel'):
-                    logger.info(f"[待开仓自检] 🔭 {symbol} {direction} 熔断中，已创建哨兵单 #{result.get('sentinel_id')}")
-                else:
-                    logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={result.get('position_id')}")
+                logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={result.get('position_id')}")
+            elif result.get('blocked_by') == 'circuit_breaker':
+                logger.info(f"[待开仓自检] 🔒 {symbol} {direction} 熔断中，禁止开仓")
             else:
                 logger.error(f"[待开仓自检] ❌ {symbol} {direction} 开仓失败: {result.get('error')}")
 

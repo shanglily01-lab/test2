@@ -396,6 +396,25 @@ class FuturesTradingEngine:
         Returns:
             开仓结果
         """
+        # ===== 熔断检查：自动策略开仓前检查是否熔断 =====
+        # 只有策略自动开仓需要检查熔断，手动开仓(manual)不检查
+        if source not in ('manual', 'api'):
+            try:
+                from app.services.market_regime_detector import get_circuit_breaker
+                circuit_breaker = get_circuit_breaker(self.db_config)
+                if circuit_breaker:
+                    direction = 'long' if position_side == 'LONG' else 'short'
+                    is_sentinel, sentinel_desc = circuit_breaker.is_circuit_breaker_active(direction)
+                    if is_sentinel:
+                        logger.info(f"🔒 熔断拦截: {symbol} {position_side} - {sentinel_desc} (来源: {source})")
+                        return {
+                            'success': False,
+                            'message': f'熔断模式: {sentinel_desc}',
+                            'blocked_by': 'circuit_breaker'
+                        }
+            except Exception as cb_error:
+                logger.warning(f"熔断检查异常，继续开仓: {cb_error}")
+
         try:
             cursor = self._get_cursor()
         except Exception as cursor_error:

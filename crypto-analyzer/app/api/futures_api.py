@@ -427,19 +427,6 @@ async def open_position(request: OpenPositionRequest):
         if request.leverage < 1 or request.leverage > 125:
             raise HTTPException(status_code=400, detail="杠杆倍数必须在1-125之间")
 
-        # ========== 熔断检查 ==========
-        from app.services.market_regime_detector import get_circuit_breaker
-        circuit_breaker = get_circuit_breaker(db_config)
-        if circuit_breaker:
-            direction = request.position_side.lower()
-            is_sentinel, sentinel_desc = circuit_breaker.is_circuit_breaker_active(direction)
-            if is_sentinel:
-                logger.warning(f"🔒 [熔断] {request.symbol} {direction.upper()} 熔断中({sentinel_desc})，禁止开仓")
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"熔断模式中({sentinel_desc})，禁止开仓。请等待哨兵单恢复后再试。"
-                )
-
         # 开仓
         result = engine.open_position(
             account_id=request.account_id,

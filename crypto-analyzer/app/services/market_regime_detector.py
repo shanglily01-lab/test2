@@ -1378,6 +1378,10 @@ class CircuitBreaker:
                 sentinel_mgr = self._get_sentinel_manager()
                 sentinel_mgr.reset_consecutive_wins(direction)
                 logger.warning(f"🚨 [熔断] {direction.upper()} 方向进入哨兵模式: {desc}")
+
+                # 熔断触发时立即创建哨兵单
+                self._create_sentinel_orders_on_breaker(direction)
+
                 return True, f"哨兵模式: {desc}，需要连续2单盈利恢复"
             else:
                 return False, f"正常({desc})"
@@ -1467,6 +1471,229 @@ class CircuitBreaker:
             False: 正常模式
         """
         return self._breaker_status.get(direction) == self.STATUS_SENTINEL
+
+    def _get_active_strategies(self) -> List[Dict]:
+        """
+        获取所有活跃策略的配置
+
+        Returns:
+            策略列表，每个策略包含 id, symbols, stopLoss, takeProfit 等配置
+        """
+        try:
+            connection = pymysql.connect(
+                host=self.db_config.get('host', 'localhost'),
+                port=int(self.db_config.get('port', 3306)),
+                user=self.db_config.get('user', 'root'),
+                password=self.db_config.get('password', ''),
+                database=self.db_config.get('database', 'binance-data'),
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, name, config
+                    FROM trading_strategies
+                    WHERE enabled = 1
+                """)
+                rows = cursor.fetchall()
+
+            connection.close()
+
+            strategies = []
+            for row in rows:
+                try:
+                    config = json.loads(row['config']) if row['config'] else {}
+                    strategies.append({
+                        'id': row['id'],
+                        'name': row['name'],
+                        'symbols': config.get('symbols', []),
+                        'stop_loss_pct': config.get('stopLoss', 2),
+                        'take_profit_pct': config.get('takeProfit', 4),
+                        'buy_direction': config.get('buyDirection', ['long', 'short'])
+                    })
+                except Exception as e:
+                    logger.error(f"[熔断] 解析策略 {row['id']} 配置失败: {e}")
+
+            return strategies
+
+        except Exception as e:
+            logger.error(f"[熔断] 获取活跃策略失败: {e}")
+            return []
+
+    def _get_ema_direction(self, symbol: str, timeframe: str = '15m') -> Optional[str]:
+        """
+        根据EMA判断交易方向
+
+        Args:
+            symbol: 交易对
+            timeframe: 时间周期
+
+        Returns:
+            'long' (EMA9 > EMA26) 或 'short' (EMA9 < EMA26)，失败返回 None
+        """
+        try:
+            connection = pymysql.connect(
+                host=self.db_config.get('host', 'localhost'),
+                port=int(self.db_config.get('port', 3306)),
+                user=self.db_config.get('user', 'root'),
+                password=self.db_config.get('password', ''),
+                database=self.db_config.get('database', 'binance-data'),
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
+                    ORDER BY timestamp DESC
+                    LIMIT 30
+                """, (symbol, timeframe))
+                rows = cursor.fetchall()
+
+            connection.close()
+
+            if len(rows) < 26:
+                return None
+
+            # 计算EMA9和EMA26
+            close_prices = [float(row['close_price']) for row in reversed(rows)]
+
+            def calculate_ema(prices, period):
+                if len(prices) < period:
+                    return None
+                multiplier = 2 / (period + 1)
+                ema = sum(prices[:period]) / period
+                for price in prices[period:]:
+                    ema = (price - ema) * multiplier + ema
+                return ema
+
+            ema9 = calculate_ema(close_prices, 9)
+            ema26 = calculate_ema(close_prices, 26)
+
+            if ema9 is None or ema26 is None:
+                return None
+
+            return 'long' if ema9 > ema26 else 'short'
+
+        except Exception as e:
+            logger.error(f"[熔断] 获取 {symbol} EMA方向失败: {e}")
+            return None
+
+    def _get_current_price(self, symbol: str) -> Optional[float]:
+        """
+        获取当前市价
+
+        Args:
+            symbol: 交易对
+
+        Returns:
+            当前价格，失败返回 None
+        """
+        try:
+            # 优先从 WebSocket 获取实时价格
+            from app.services.binance_ws_price import get_ws_price_service
+            ws_service = get_ws_price_service()
+            if ws_service.is_healthy():
+                price = ws_service.get_price(symbol)
+                if price and price > 0:
+                    return price
+        except Exception as e:
+            logger.debug(f"[熔断] WebSocket获取{symbol}价格失败: {e}")
+
+        # 从数据库获取
+        try:
+            connection = pymysql.connect(
+                host=self.db_config.get('host', 'localhost'),
+                port=int(self.db_config.get('port', 3306)),
+                user=self.db_config.get('user', 'root'),
+                password=self.db_config.get('password', ''),
+                database=self.db_config.get('database', 'binance-data'),
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT price FROM price_data
+                    WHERE symbol = %s
+                    ORDER BY timestamp DESC LIMIT 1
+                """, (symbol,))
+                row = cursor.fetchone()
+
+            connection.close()
+
+            if row:
+                return float(row['price'])
+
+        except Exception as e:
+            logger.error(f"[熔断] 获取 {symbol} 价格失败: {e}")
+
+        return None
+
+    def _create_sentinel_orders_on_breaker(self, breaker_direction: str):
+        """
+        熔断触发时自动创建哨兵单
+
+        根据策略配置的币种，使用EMA判断方向，用当前市价创建哨兵单
+
+        Args:
+            breaker_direction: 熔断的方向 ('long' 或 'short')
+        """
+        strategies = self._get_active_strategies()
+        if not strategies:
+            logger.warning(f"[熔断] 无活跃策略，无法创建哨兵单")
+            return
+
+        sentinel_mgr = self._get_sentinel_manager()
+        created_count = 0
+
+        for strategy in strategies:
+            strategy_id = strategy['id']
+            symbols = strategy['symbols']
+            stop_loss_pct = strategy['stop_loss_pct']
+            take_profit_pct = strategy['take_profit_pct']
+            buy_direction = strategy['buy_direction']
+
+            for symbol in symbols:
+                # 检查EMA方向
+                ema_direction = self._get_ema_direction(symbol)
+                if ema_direction is None:
+                    logger.debug(f"[熔断] {symbol} 无法获取EMA方向，跳过")
+                    continue
+
+                # 只为熔断方向创建哨兵单
+                if ema_direction != breaker_direction:
+                    continue
+
+                # 检查策略是否允许该方向
+                if breaker_direction not in buy_direction and breaker_direction + '_only' not in str(buy_direction):
+                    continue
+
+                # 获取当前价格
+                current_price = self._get_current_price(symbol)
+                if current_price is None:
+                    logger.warning(f"[熔断] {symbol} 无法获取当前价格，跳过")
+                    continue
+
+                # 创建哨兵单
+                sentinel_id = sentinel_mgr.create_sentinel_order(
+                    direction=breaker_direction,
+                    symbol=symbol,
+                    entry_price=current_price,
+                    stop_loss_pct=stop_loss_pct,
+                    take_profit_pct=take_profit_pct,
+                    strategy_id=strategy_id
+                )
+
+                if sentinel_id:
+                    created_count += 1
+                    logger.info(f"🔭 [熔断] 自动创建哨兵单 #{sentinel_id}: {symbol} {breaker_direction.upper()} "
+                               f"价格={current_price:.4f}, 止损={stop_loss_pct}%, 止盈={take_profit_pct}%")
+
+        logger.info(f"[熔断] {breaker_direction.upper()} 方向熔断，共创建 {created_count} 个哨兵单")
 
     def get_scout_position_ratio(self) -> float:
         """获取侦察单仓位比例（已废弃，保留兼容性）"""
