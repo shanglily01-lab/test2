@@ -1975,10 +1975,10 @@ class StrategyExecutorV2:
             # ========== 熔断/哨兵模式检查 ==========
             circuit_breaker = get_circuit_breaker(self.db_config)
             if circuit_breaker:
-                is_sentinel = circuit_breaker.is_sentinel_mode(direction)
+                is_sentinel, sentinel_desc = circuit_breaker.is_circuit_breaker_active(direction)
                 if is_sentinel:
                     # 哨兵模式：创建哨兵单而非实际开仓
-                    logger.info(f"🔒 {symbol} {direction} 熔断中(哨兵模式)，创建哨兵单监控...")
+                    logger.info(f"🔒 {symbol} {direction} 熔断中({sentinel_desc})，创建哨兵单监控...")
                     sentinel_result = await self._create_sentinel_order(
                         symbol=symbol,
                         direction=direction,
