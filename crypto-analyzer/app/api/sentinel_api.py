@@ -8,8 +8,8 @@ from typing import Optional, List
 from datetime import datetime
 import logging
 import pymysql
-import yaml
-from pathlib import Path
+
+from app.utils.config_loader import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +18,9 @@ router = APIRouter(prefix='/api/sentinel', tags=['Sentinel Orders'])
 # 加载数据库配置
 def get_db_config():
     """获取数据库配置"""
-    config_path = Path(__file__).parent.parent.parent / 'config.yaml'
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-            return config.get('database', {}).get('mysql', {})
+        config = load_config()
+        return config.get('database', {}).get('mysql', {})
     except Exception as e:
         logger.error(f"加载配置失败: {e}")
         return {}
