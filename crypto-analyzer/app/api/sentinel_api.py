@@ -33,7 +33,7 @@ def get_db_connection():
     db_config = get_db_config()
     return pymysql.connect(
         host=db_config.get('host', 'localhost'),
-        port=db_config.get('port', 3306),
+        port=int(db_config.get('port', 3306)),
         user=db_config.get('user', 'root'),
         password=db_config.get('password', ''),
         database=db_config.get('database', 'binance-data'),
