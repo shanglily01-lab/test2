@@ -1873,6 +1873,8 @@
                                                     ${pos.position_side === 'LONG' ? '做多' : '做空'}
                                                 </span>
                                                 <span class="badge badge-info" style="margin-left: 8px;">${pos.leverage || 1}x</span>
+                                                ${(pos.source && pos.source.includes('_FORWARD')) || (pos.entry_signal_type && pos.entry_signal_type.includes('_FORWARD')) ? '<span class="badge" style="margin-left: 8px; background: var(--primary-purple); color: white;">FORWARD</span>' : ''}
+                                                ${(pos.source && pos.source.includes('_REVERSE')) || (pos.entry_signal_type && pos.entry_signal_type.includes('_REVERSE')) ? '<span class="badge" style="margin-left: 8px; background: var(--warning-yellow); color: black;">REVERSE</span>' : ''}
                                             </div>
                                             <span class="${pnlClass} font-mono" style="font-size: 16px; font-weight: 600;" data-pnl="${dbId}">
                                 ${pos.unrealized_pnl >= 0 ? '+' : ''}${formatLargeNumber(pos.unrealized_pnl || 0)}

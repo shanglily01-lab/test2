@@ -964,11 +964,11 @@ class FuturesLimitOrderExecutor:
                                         limit_price=None,
                                         stop_loss_price=stop_loss_price,
                                         take_profit_price=take_profit_price,
-                                        source=f"{original_source}_正向",
+                                        source=f"{original_source}_FORWARD",
                                         signal_id=original_signal_id,
                                         strategy_id=original_strategy_id
                                     )
-                                    logger.info(f"🔀 {symbol} 正向({position_side})开仓结果: {result.get('success')}")
+                                    logger.info(f"🔀 {symbol} FORWARD({position_side})开仓结果: {result.get('success')}")
 
                                     # 2. 开反向仓（相反方向，使用相同止盈止损比例）
                                     reverse_side = 'SHORT' if position_side == 'LONG' else 'LONG'
@@ -995,11 +995,11 @@ class FuturesLimitOrderExecutor:
                                         limit_price=None,
                                         stop_loss_price=reverse_stop_loss,
                                         take_profit_price=reverse_take_profit,
-                                        source=f"{original_source}_反向",
+                                        source=f"{original_source}_REVERSE",
                                         signal_id=original_signal_id,
                                         strategy_id=original_strategy_id
                                     )
-                                    logger.info(f"🔀 {symbol} 反向({reverse_side})开仓结果: {result_reverse.get('success')}")
+                                    logger.info(f"🔀 {symbol} REVERSE({reverse_side})开仓结果: {result_reverse.get('success')}")
 
                                 else:
                                     # 原有逻辑：单向开仓
