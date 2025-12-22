@@ -579,6 +579,9 @@
                             </button>
                         </div>
                         <div class="d-flex align-center gap-md">
+                            <button class="btn btn-danger btn-sm" id="closeAllPositionsBtn" onclick="closeAllPositions()" style="display: none; font-size: 12px; padding: 6px 12px;">
+                                <i class="bi bi-x-circle"></i> 一键平仓
+                            </button>
                             <span class="badge badge-info" id="positionCount" style="display: none;">0 个持仓</span>
                             <span class="badge badge-warning" id="orderCount" style="display: none;">0 个订单</span>
                             <span class="badge badge-secondary" id="cancelledCount" style="display: none;">0 个已取消</span>
@@ -1943,12 +1946,18 @@
                     positionsTable.style.display = 'block';
                     positionsEmpty.style.display = 'none';
                     document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
+                    // 显示一键平仓按钮
+                    const closeAllBtn = document.getElementById('closeAllPositionsBtn');
+                    if (closeAllBtn) closeAllBtn.style.display = 'inline-flex';
                 } else {
                     positionCount.textContent = '0 个持仓';
                     positionsTitle.textContent = '持仓中 [0]';
                     positionsTable.style.display = 'none';
                     positionsEmpty.style.display = 'block';
                     document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
+                    // 隐藏一键平仓按钮
+                    const closeAllBtn = document.getElementById('closeAllPositionsBtn');
+                    if (closeAllBtn) closeAllBtn.style.display = 'none';
                 }
             } catch (error) {
                 // 静默处理持仓加载失败
@@ -2891,6 +2900,112 @@
         function refreshData() {
             loadData();
             showToast('正在刷新数据...', 'info');
+        }
+
+        // 一键平仓所有持仓
+        async function closeAllPositions() {
+            // 获取所有持仓卡片
+            const positionCards = document.querySelectorAll('#positionsBody .position-card');
+            if (positionCards.length === 0) {
+                showToast('没有持仓需要平仓', 'warning');
+                return;
+            }
+
+            // 收集所有持仓ID
+            const positionIds = [];
+            positionCards.forEach(card => {
+                const positionId = card.getAttribute('data-position-id');
+                if (positionId) {
+                    positionIds.push(parseInt(positionId));
+                }
+            });
+
+            if (positionIds.length === 0) {
+                showToast('没有有效的持仓ID', 'warning');
+                return;
+            }
+
+            // 确认对话框
+            const confirmed = await showConfirmDialog(
+                `确定要平仓全部 ${positionIds.length} 个持仓吗？`,
+                '此操作不可撤销，所有持仓将按市价平仓。',
+                'warning'
+            );
+            if (!confirmed) return;
+
+            // 显示进度提示
+            showToast(`正在平仓 ${positionIds.length} 个持仓...`, 'info');
+
+            // 禁用按钮防止重复点击
+            const closeAllBtn = document.getElementById('closeAllPositionsBtn');
+            if (closeAllBtn) {
+                closeAllBtn.disabled = true;
+                closeAllBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 平仓中...';
+            }
+
+            // 逐个平仓（避免并发问题）
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const positionId of positionIds) {
+                try {
+                    const response = await fetch(`${API_BASE}/close/${positionId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            close_quantity: null,
+                            reason: 'manual_close_all'
+                        })
+                    });
+
+                    const responseText = await response.text();
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch (e) {
+                        failCount++;
+                        continue;
+                    }
+
+                    if (response.ok && data.success) {
+                        successCount++;
+                        // 移除对应的持仓卡片
+                        const card = document.querySelector(`#positionsBody .position-card[data-position-id="${positionId}"]`);
+                        if (card) {
+                            card.style.transition = 'opacity 0.3s, transform 0.3s';
+                            card.style.opacity = '0';
+                            card.style.transform = 'translateX(50px)';
+                            setTimeout(() => card.remove(), 300);
+                        }
+                    } else {
+                        failCount++;
+                    }
+                } catch (error) {
+                    failCount++;
+                }
+            }
+
+            // 恢复按钮状态
+            if (closeAllBtn) {
+                closeAllBtn.disabled = false;
+                closeAllBtn.innerHTML = '<i class="bi bi-x-circle"></i> 一键平仓';
+            }
+
+            // 显示结果
+            if (successCount > 0 && failCount === 0) {
+                showToast(`✅ 成功平仓 ${successCount} 个持仓`, 'success');
+            } else if (successCount > 0 && failCount > 0) {
+                showToast(`平仓完成: ${successCount} 个成功, ${failCount} 个失败`, 'warning');
+            } else {
+                showToast(`❌ 平仓失败: ${failCount} 个持仓`, 'error');
+            }
+
+            // 刷新数据
+            setTimeout(() => {
+                loadPositions();
+                loadAccount();
+                loadTrades();
+            }, 500);
         }
 
         // 更新止盈止损
