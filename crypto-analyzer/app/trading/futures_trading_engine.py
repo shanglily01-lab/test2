@@ -507,14 +507,13 @@ class FuturesTradingEngine:
                     order_id = f"FUT-{uuid.uuid4().hex[:16].upper()}"
                     side = f"OPEN_{position_side}"
                     
-                    # 冻结保证金和手续费
-                    total_frozen = limit_margin_required + limit_fee
-                    new_balance = current_balance - total_frozen
+                    # 手续费直接扣除，只冻结保证金
+                    new_balance = current_balance - limit_margin_required - limit_fee
                     cursor.execute(
                         """UPDATE paper_trading_accounts
                         SET current_balance = %s, frozen_balance = frozen_balance + %s
                         WHERE id = %s""",
-                        (float(new_balance), float(total_frozen), account_id)
+                        (float(new_balance), float(limit_margin_required), account_id)  # 只冻结保证金
                     )
                     
                     # 创建订单记录（包含止盈止损和策略ID）
@@ -797,19 +796,18 @@ class FuturesTradingEngine:
             ))
 
             # 9. 更新账户余额
-            # 减少当前余额，增加冻结余额（保证金和手续费）
-            total_frozen = margin_required + fee
-            new_balance = current_balance - total_frozen
+            # 手续费直接扣除，只冻结保证金
+            new_balance = current_balance - margin_required - fee  # 扣除保证金和手续费
             cursor.execute(
                 """UPDATE paper_trading_accounts
                 SET current_balance = %s, frozen_balance = frozen_balance + %s
                 WHERE id = %s""",
-                (float(new_balance), float(total_frozen), account_id)
+                (float(new_balance), float(margin_required), account_id)  # 只冻结保证金
             )
-            
+
             # 获取变化后的余额信息（用于资金管理记录）
             balance_after = float(new_balance)
-            frozen_after = float(frozen_balance + total_frozen)
+            frozen_after = float(frozen_balance + margin_required)  # 只冻结保证金
             available_after = balance_after - frozen_after
 
             # 10. 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
