@@ -885,100 +885,22 @@ class PositionValidator:
             # 使用待开仓记录中的 account_id（通常是2=实盘）
             account_id = pending.get('account_id', 2)
 
-            # ========== 交易方向配置：从策略配置读取 ==========
-            trade_forward = strategy.get('tradeForward', True)  # 默认开正向
-            trade_reverse = strategy.get('tradeReverse', False)  # 默认不开反向
+            # 正向开仓
+            result = await self.strategy_executor._do_open_position(
+                symbol=symbol,
+                direction=direction,
+                signal_type=signal_type,
+                strategy=strategy,
+                account_id=account_id,
+                signal_reason=signal_reason or "",
+                current_price=current_price,
+                ema_data=ema_data
+            )
 
-            # 判断是否双向模式
-            is_dual_mode_config = trade_forward and trade_reverse
-
-            if is_dual_mode_config:
-                logger.info(f"[待开仓自检] 🔀 {symbol} 双向对比模式，同时开FORWARD({direction})和REVERSE仓位")
-
-                dual_results = []
-
-                # 1. 开正向仓（原信号方向）
-                forward_signal_type = f"{signal_type}_FORWARD"
-                forward_reason = f"[FORWARD]{signal_reason}" if signal_reason else "[FORWARD]dual_compare"
-                result_forward = await self.strategy_executor._do_open_position(
-                    symbol=symbol,
-                    direction=direction,
-                    signal_type=forward_signal_type,
-                    strategy=strategy,
-                    account_id=account_id,
-                    signal_reason=forward_reason,
-                    current_price=current_price,
-                    ema_data=ema_data,
-                    is_dual_mode=True
-                )
-                dual_results.append({'type': 'FORWARD', 'direction': direction, 'result': result_forward})
-                logger.info(f"[待开仓自检] 🔀 {symbol} FORWARD({direction})开仓结果: {result_forward.get('success')}")
-
-                # 2. 开反向仓（相反方向，使用相同止盈止损）
-                reverse_direction = 'short' if direction == 'long' else 'long'
-                reverse_signal_type = f"{signal_type}_REVERSE"
-                reverse_reason = f"[REVERSE]{signal_reason}" if signal_reason else "[REVERSE]dual_compare"
-                result_reverse = await self.strategy_executor._do_open_position(
-                    symbol=symbol,
-                    direction=reverse_direction,
-                    signal_type=reverse_signal_type,
-                    strategy=strategy,
-                    account_id=account_id,
-                    signal_reason=reverse_reason,
-                    current_price=current_price,
-                    ema_data=ema_data,
-                    is_dual_mode=True
-                )
-                dual_results.append({'type': 'REVERSE', 'direction': reverse_direction, 'result': result_reverse})
-                logger.info(f"[待开仓自检] 🔀 {symbol} REVERSE({reverse_direction})开仓结果: {result_reverse.get('success')}")
-
-                success_count = sum(1 for r in dual_results if r['result'].get('success'))
-                logger.info(f"[待开仓自检] 🔀 {symbol} 双向开仓完成: {success_count}/2 成功")
-
-            elif trade_reverse and not trade_forward:
-                # 仅反向模式
-                reverse_direction = 'short' if direction == 'long' else 'long'
-                logger.info(f"[待开仓自检] 🔄 {symbol} 仅反向模式，原信号{direction}→反向{reverse_direction}")
-
-                reverse_signal_type = f"{signal_type}_REVERSE"
-                reverse_reason = f"[REVERSE]{signal_reason}" if signal_reason else "[REVERSE]reverse_only"
-                result = await self.strategy_executor._do_open_position(
-                    symbol=symbol,
-                    direction=reverse_direction,
-                    signal_type=reverse_signal_type,
-                    strategy=strategy,
-                    account_id=account_id,
-                    signal_reason=reverse_reason,
-                    current_price=current_price,
-                    ema_data=ema_data
-                )
-
-                if result.get('success'):
-                    logger.info(f"[待开仓自检] ✅ {symbol} {reverse_direction}(反向) 开仓成功, ID={result.get('position_id')}")
-                else:
-                    logger.error(f"[待开仓自检] ❌ {symbol} {reverse_direction}(反向) 开仓失败: {result.get('error')}")
-
-            elif not trade_forward and not trade_reverse:
-                # 都未启用
-                logger.warning(f"[待开仓自检] ⚠️ {symbol} 正向和反向都未启用，跳过开仓")
-
+            if result.get('success'):
+                logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={result.get('position_id')}")
             else:
-                # 原有逻辑：单向开仓
-                result = await self.strategy_executor._do_open_position(
-                    symbol=symbol,
-                    direction=direction,
-                    signal_type=signal_type,
-                    strategy=strategy,
-                    account_id=account_id,
-                    signal_reason=signal_reason or "",
-                    current_price=current_price,
-                    ema_data=ema_data
-                )
-
-                if result.get('success'):
-                    logger.info(f"[待开仓自检] ✅ {symbol} {direction} 开仓成功, ID={result.get('position_id')}")
-                else:
-                    logger.error(f"[待开仓自检] ❌ {symbol} {direction} 开仓失败: {result.get('error')}")
+                logger.error(f"[待开仓自检] ❌ {symbol} {direction} 开仓失败: {result.get('error')}")
 
         except Exception as e:
             logger.error(f"[待开仓自检] {symbol} 开仓异常: {e}")
