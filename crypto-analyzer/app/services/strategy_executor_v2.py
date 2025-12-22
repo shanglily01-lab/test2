@@ -806,9 +806,16 @@ class StrategyExecutorV2:
                 price_type = strategy.get('shortPrice', 'market')
 
             # 计算限价
-            limit_price = self._calculate_limit_price(current_price, price_type, direction)
-            if limit_price is None:
-                return {'success': False, 'error': '无法计算限价'}
+            # 如果是 market 类型，使用默认 0.4% 回调
+            if price_type == 'market':
+                if direction == 'long':
+                    limit_price = current_price * (1 - 0.4 / 100)  # 做多：市价减0.4%
+                else:
+                    limit_price = current_price * (1 + 0.4 / 100)  # 做空：市价加0.4%
+            else:
+                limit_price = self._calculate_limit_price(current_price, price_type, direction)
+                if limit_price is None:
+                    return {'success': False, 'error': '无法计算限价'}
 
             # 计算开仓保证金（从配置读取）
             margin = self.calculate_margin(is_live=False)
@@ -2084,8 +2091,20 @@ class StrategyExecutorV2:
                 stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
                 take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
 
-                # ========== 市价单开仓 ==========
-                # 信号触发 → 自检 → 通过后市价开单
+                # ========== 限价单开仓（原市价单改为限价单）==========
+                # 信号触发 → 自检 → 通过后挂限价单等待回调
+                # 做多: 当前价 - 0.4% 的限价买入（等回调）
+                # 做空: 当前价 + 0.4% 的限价卖出（等反弹）
+                # 30分钟未成交自动取消
+
+                # 计算限价（固定使用 0.4% 回调）
+                if direction == 'long':
+                    limit_price = current_price * (1 - 0.4 / 100)  # 做多：市价减0.4%
+                else:
+                    limit_price = current_price * (1 + 0.4 / 100)  # 做空：市价加0.4%
+
+                # 根据限价重新计算数量
+                quantity = notional / limit_price
 
                 result = self.futures_engine.open_position(
                     account_id=account_id,
@@ -2093,17 +2112,17 @@ class StrategyExecutorV2:
                     position_side=position_side,
                     quantity=Decimal(str(quantity)),
                     leverage=leverage,
-                    limit_price=None,  # 统一使用市价单
+                    limit_price=Decimal(str(limit_price)),  # 使用限价单
                     stop_loss_pct=Decimal(str(stop_loss_pct)),
                     take_profit_pct=Decimal(str(take_profit_pct)),
-                    source='strategy',
+                    source='strategy_limit',  # 标记为策略限价单
                     strategy_id=strategy.get('id')
                 )
 
                 if result.get('success'):
                     position_id = result.get('position_id')
-                    order_type = result.get('order_type', 'MARKET')
-                    order_status = result.get('status', 'FILLED')
+                    order_id = result.get('order_id')
+                    is_pending = result.get('status') == 'PENDING'
 
                     # 更新开仓时的EMA差值和开仓原因
                     conn = self.get_db_connection()
@@ -2121,37 +2140,53 @@ class StrategyExecutorV2:
                         cursor.close()
                         conn.close()
 
-                    logger.info(f"✅ {symbol} 开仓成功: {direction} {quantity:.8f} @ {current_price:.4f}, 信号:{signal_type}")
+                    if is_pending:
+                        # PENDING 状态：限价单已挂出，等待成交
+                        timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 30)
+                        offset_pct = -0.4 if direction == 'long' else 0.4
+                        logger.info(f"📋 {symbol} 限价单已挂出: {direction} {quantity:.8f} @ {limit_price:.4f} "
+                                   f"(市价:{current_price:.4f}, 偏离:{offset_pct:+.1f}%), "
+                                   f"超时:{timeout_minutes}分钟, 信号:{signal_type}")
+                        # 注意：PENDING 限价单创建时不同步实盘，等模拟盘成交后再同步
+                        # 实盘同步在 futures_limit_order_executor.py 中处理
+                    else:
+                        # 立即成交：限价条件已满足，直接开仓
+                        entry_price = result.get('entry_price', limit_price)
+                        logger.info(f"✅ {symbol} 限价单立即成交: {direction} {quantity:.8f} @ {entry_price:.4f} "
+                                   f"(限价:{limit_price:.4f}), 信号:{signal_type}")
 
-                    # 同步实盘（市价单立即成交，直接同步）
-                    live_position_id = None
-                    if sync_live and self.live_engine:
-                        live_position_id = await self._sync_live_open(symbol, direction, quantity, leverage, strategy, position_id)
-                    elif sync_live and not self.live_engine:
-                        logger.warning(f"⚠️ [开仓] {symbol} sync_live=True 但 live_engine 未初始化，无法同步实盘！")
+                        # 同步实盘（立即成交时才同步）
+                        live_position_id = None
+                        if sync_live and self.live_engine:
+                            live_position_id = await self._sync_live_open(symbol, direction, quantity, leverage, strategy, position_id)
+                        elif sync_live and not self.live_engine:
+                            logger.warning(f"⚠️ [开仓] {symbol} sync_live=True 但 live_engine 未初始化，无法同步实盘！")
 
-                    # 保存实盘持仓ID到模拟盘持仓
-                    if live_position_id:
-                        try:
-                            conn = self.get_db_connection()
-                            cursor = conn.cursor()
-                            cursor.execute(
-                                "UPDATE futures_positions SET live_position_id = %s WHERE id = %s",
-                                (live_position_id, position_id)
-                            )
-                            conn.commit()
-                            cursor.close()
-                            conn.close()
-                        except Exception as e:
-                            logger.warning(f"保存实盘持仓ID失败: {e}")
+                        # 保存实盘持仓ID到模拟盘持仓
+                        if live_position_id:
+                            try:
+                                conn = self.get_db_connection()
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    "UPDATE futures_positions SET live_position_id = %s WHERE id = %s",
+                                    (live_position_id, position_id)
+                                )
+                                conn.commit()
+                                cursor.close()
+                                conn.close()
+                            except Exception as e:
+                                logger.warning(f"保存实盘持仓ID失败: {e}")
 
                     return {
                         'success': True,
                         'position_id': position_id,
+                        'order_id': order_id,
                         'direction': direction,
                         'quantity': quantity,
+                        'limit_price': limit_price,
                         'price': current_price,
-                        'signal_type': signal_type
+                        'signal_type': signal_type,
+                        'is_pending': is_pending
                     }
                 else:
                     return {'success': False, 'error': result.get('error', '开仓失败')}
