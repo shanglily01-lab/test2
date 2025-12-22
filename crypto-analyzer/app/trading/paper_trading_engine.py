@@ -1101,6 +1101,36 @@ class PaperTradingEngine:
         finally:
             conn.close()
 
+    def get_cancelled_orders(self, account_id: int, limit: int = 50) -> List[Dict]:
+        """
+        获取已取消/已过期的订单列表
+
+        Args:
+            account_id: 账户ID
+            limit: 返回的最大订单数
+
+        Returns:
+            已取消订单列表
+        """
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """SELECT *
+                    FROM paper_trading_pending_orders
+                    WHERE account_id = %s AND status IN ('CANCELLED', 'EXPIRED')
+                    ORDER BY updated_at DESC
+                    LIMIT %s""",
+                    (account_id, limit)
+                )
+                orders = cursor.fetchall()
+                return orders
+        except Exception as e:
+            logger.error(f"获取已取消订单失败: {e}")
+            return []
+        finally:
+            conn.close()
+
     def create_pending_order(
         self,
         account_id: int,

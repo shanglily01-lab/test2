@@ -728,6 +728,55 @@ async def get_pending_orders(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/cancelled-orders")
+async def get_cancelled_orders(
+    account_id: Optional[int] = None,
+    limit: int = 50,
+    engine: PaperTradingEngine = Depends(get_engine)
+):
+    """
+    获取已取消/已过期的订单列表
+
+    Args:
+        account_id: 账户ID
+        limit: 返回的最大订单数
+
+    Returns:
+        已取消订单列表
+    """
+    try:
+        orders = engine.get_cancelled_orders(account_id or 1, limit=limit)
+
+        # 转换数据格式，确保所有字段都可以序列化
+        result = []
+        for order in orders:
+            result.append({
+                "order_id": order.get('order_id', ''),
+                "symbol": order.get('symbol', ''),
+                "side": order.get('side', ''),
+                "quantity": float(order.get('quantity', 0)) if order.get('quantity') is not None else 0,
+                "trigger_price": float(order.get('trigger_price', 0)) if order.get('trigger_price') is not None else 0,
+                "frozen_amount": float(order.get('frozen_amount', 0)) if order.get('frozen_amount') is not None else 0,
+                "status": order.get('status', 'CANCELLED'),
+                "order_source": order.get('order_source', 'auto'),
+                "stop_loss_price": float(order.get('stop_loss_price', 0)) if order.get('stop_loss_price') else None,
+                "take_profit_price": float(order.get('take_profit_price', 0)) if order.get('take_profit_price') else None,
+                "created_at": order.get('created_at').strftime('%Y-%m-%d %H:%M:%S') if order.get('created_at') else None,
+                "updated_at": order.get('updated_at').strftime('%Y-%m-%d %H:%M:%S') if order.get('updated_at') else None
+            })
+
+        return {
+            "success": True,
+            "orders": result,
+            "count": len(result)
+        }
+    except Exception as e:
+        logger.error(f"获取已取消订单失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class UpdatePendingOrderStopLossTakeProfitRequest(BaseModel):
     """更新待成交订单止盈止损请求"""
     order_id: str

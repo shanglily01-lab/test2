@@ -456,6 +456,9 @@
                             <button class="btn btn-secondary" id="tabHistoryTitle" onclick="showTab('history')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
                                 <i class="bi bi-clock-history"></i> 交易历史
                             </button>
+                            <button class="btn btn-secondary" id="tabCancelledTitle" onclick="showTab('cancelled')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
+                                <i class="bi bi-x-circle"></i> 已取消
+                            </button>
                         </div>
                     </div>
                     <div class="card-body" id="positionsCardBody" style="overflow-y: auto; overflow-x: hidden; padding: var(--spacing-md);">
@@ -480,6 +483,14 @@
                         <div id="trades-list">
                             <div class="empty-state">
                                 <div class="empty-state-text">加载中...</div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Cancelled Orders Content -->
+                        <div id="cancelledTab" style="display: none;">
+                            <div id="cancelled-orders-list">
+                                <div class="empty-state">
+                                    <div class="empty-state-text">加载中...</div>
                                 </div>
                             </div>
                         </div>
@@ -805,12 +816,14 @@
             const tabPositionsTitle = document.getElementById('tabPositionsTitle');
             const tabPendingTitle = document.getElementById('tabPendingTitle');
             const tabHistoryTitle = document.getElementById('tabHistoryTitle');
+            const tabCancelledTitle = document.getElementById('tabCancelledTitle');
             const positionsTab = document.getElementById('positionsTab');
             const pendingTab = document.getElementById('pendingTab');
             const historyTab = document.getElementById('historyTab');
+            const cancelledTab = document.getElementById('cancelledTab');
 
             // 重置所有标签样式
-            [tabPositionsTitle, tabPendingTitle, tabHistoryTitle].forEach(title => {
+            [tabPositionsTitle, tabPendingTitle, tabHistoryTitle, tabCancelledTitle].forEach(title => {
                 title.className = 'btn btn-secondary';
                 title.style.opacity = '0.7';
                 title.style.boxShadow = 'var(--shadow-sm)';
@@ -820,6 +833,7 @@
             positionsTab.style.display = 'none';
             pendingTab.style.display = 'none';
             historyTab.style.display = 'none';
+            cancelledTab.style.display = 'none';
 
             if (tab === 'positions') {
                 tabPositionsTitle.className = 'btn btn-primary';
@@ -838,6 +852,12 @@
                 tabHistoryTitle.style.boxShadow = 'var(--shadow-md)';
                 historyTab.style.display = 'block';
                 loadTrades(); // 加载交易历史
+            } else if (tab === 'cancelled') {
+                tabCancelledTitle.className = 'btn btn-primary';
+                tabCancelledTitle.style.opacity = '1';
+                tabCancelledTitle.style.boxShadow = 'var(--shadow-md)';
+                cancelledTab.style.display = 'block';
+                loadCancelledOrders(); // 加载已取消订单
             }
             // 切换后重新同步高度
             setTimeout(syncPanelHeights, 50);
@@ -1556,7 +1576,73 @@
                 container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无待成交订单</div></div>';
             }
         }
-        
+
+        // 加载已取消订单
+        async function loadCancelledOrders() {
+            const container = document.getElementById('cancelled-orders-list');
+            if (!container) {
+                return;
+            }
+
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载中...</div></div>';
+
+            try {
+                const response = await fetch('/api/paper-trading/cancelled-orders?limit=50');
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载失败</div></div>';
+                    return;
+                }
+
+                const orders = data.orders || [];
+
+                if (orders.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无已取消订单</div></div>';
+                    return;
+                }
+
+                // 格式化订单状态
+                function formatCancelledStatus(status) {
+                    const statusMap = {
+                        'CANCELLED': '已取消',
+                        'EXPIRED': '已过期'
+                    };
+                    return statusMap[status] || status;
+                }
+
+                container.innerHTML = orders.map(order => {
+                    const sideClass = order.side === 'BUY' ? 'badge-success' : 'badge-danger';
+                    const sideText = order.side === 'BUY' ? '买入' : '卖出';
+                    const statusClass = order.status === 'EXPIRED' ? 'text-warning' : 'text-secondary';
+
+                    return `
+                        <div class="position-card" style="margin-bottom: 8px; opacity: 0.7;">
+                            <div class="d-flex justify-between align-center" style="margin-bottom: 4px;">
+                                <div>
+                                    <span class="badge ${sideClass}">${sideText}</span>
+                                    <strong class="text-lg" style="margin-left: 8px;">${order.symbol}</strong>
+                                </div>
+                                <span class="${statusClass}" style="font-size: 12px;">${formatCancelledStatus(order.status)}</span>
+                            </div>
+                            <div class="text-sm text-secondary" style="margin-bottom: 3px;">
+                                数量: ${order.quantity} | 触发价格: ${formatPrice(order.trigger_price)}
+                            </div>
+                            <div class="text-sm text-secondary" style="margin-bottom: 3px;">
+                                止损: ${order.stop_loss_price ? formatPrice(order.stop_loss_price) : '-'} | 止盈: ${order.take_profit_price ? formatPrice(order.take_profit_price) : '-'}
+                            </div>
+                            <div class="text-sm text-secondary">
+                                创建: ${order.created_at || '-'} | 取消: ${order.updated_at || '-'}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载失败: ' + error.message + '</div></div>';
+            }
+        }
+
         // 检查并执行待成交订单
         async function checkAndExecutePendingOrders() {
             // 从数据库重新加载待成交订单
