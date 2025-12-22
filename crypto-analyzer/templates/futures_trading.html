@@ -1514,7 +1514,14 @@
         async function loadAccount() {
             try {
                 const response = await fetch(`${API_BASE}/account/2`);
-                const data = await response.json();
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('账户数据解析失败:', responseText);
+                    return;
+                }
 
                 if (data.success) {
                     const account = data.data;
@@ -1726,7 +1733,16 @@
         async function loadPositions() {
             try {
                 const response = await fetch(`${API_BASE}/positions?account_id=2&status=open`);
-                const data = await response.json();
+
+                // 安全解析 JSON
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (parseError) {
+                    console.error('持仓数据解析失败:', responseText);
+                    throw new Error('服务器返回无效数据');
+                }
 
                 const positionsBody = document.getElementById('positionsBody');
                 const positionsTable = document.getElementById('positionsTable');
@@ -1970,7 +1986,14 @@
         async function loadOrders() {
             try {
                 const response = await fetch(`${API_BASE}/orders?account_id=2&status=PENDING`);
-                const data = await response.json();
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('订单数据解析失败:', responseText);
+                    return;
+                }
 
                 const ordersBody = document.getElementById('ordersBody');
                 const ordersTable = document.getElementById('ordersTable');
@@ -2204,7 +2227,14 @@
         async function loadPendingValidations() {
             try {
                 const response = await fetch(`${API_BASE}/pending-positions`);
-                const data = await response.json();
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('待检查订单数据解析失败:', responseText);
+                    return;
+                }
 
                 const pendingValidationBody = document.getElementById('pendingValidationBody');
                 const pendingValidationTable = document.getElementById('pendingValidationTable');
@@ -2484,7 +2514,14 @@
         async function loadTradesPage(page = 1) {
             try {
                 const response = await fetch(`${API_BASE}/trades?account_id=2&page=${page}&page_size=${tradesPageSize}`);
-                const data = await response.json();
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('交易记录数据解析失败:', responseText);
+                    return;
+                }
 
                 const tradesBody = document.getElementById('tradesBody');
                 const tradesTable = document.getElementById('tradesTable');
