@@ -405,8 +405,8 @@ class StrategyExecutorV2:
         ema9 = ema_5m['ema9']
         ema26 = ema_5m['ema26']
 
-        # 强度阈值：EMA差距百分比需要达到0.07%才触发止损
-        min_ema_diff_pct = 0.07
+        # 强度阈值：EMA差距百分比需要达到0.15%才触发止损
+        min_ema_diff_pct = 0.15
 
         # 做多持仓亏损 + 5M EMA处于死叉状态（EMA9 < EMA26）+ 强度足够 → 立即止损
         if position_side == 'LONG' and ema9 < ema26:
