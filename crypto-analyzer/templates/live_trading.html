@@ -670,8 +670,6 @@
                                 <span class="badge ${pos.position_side === 'LONG' ? 'badge-success' : 'badge-danger'}">
                                     ${pos.position_side === 'LONG' ? '做多' : '做空'}
                                 </span>
-                                ${(pos.source && pos.source.includes('_FORWARD')) || (pos.entry_signal_type && pos.entry_signal_type.includes('_FORWARD')) ? '<span class="badge" style="margin-left: 4px; background: var(--primary-purple); color: white; font-size: 10px;">FORWARD</span>' : ''}
-                                ${(pos.source && pos.source.includes('_REVERSE')) || (pos.entry_signal_type && pos.entry_signal_type.includes('_REVERSE')) ? '<span class="badge" style="margin-left: 4px; background: var(--warning-yellow); color: black; font-size: 10px;">REVERSE</span>' : ''}
                             </td>
                             <td class="font-mono">${formatNumber(pos.quantity, 4)}</td>
                             <td class="font-mono">${formatPrice(pos.entry_price)}</td>
