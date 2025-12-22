@@ -1387,7 +1387,10 @@ class StrategyExecutorV2:
 
     def check_entry_cooldown(self, symbol: str, direction: str, strategy: Dict, strategy_id: int) -> Tuple[bool, str]:
         """
-        检查全局开仓冷却时间
+        检查开仓限制（基于持仓数量而非时间冷却）
+
+        每个方向最多同时开 maxPositionsPerDirection 个单（默认3个）
+        不同交易对独立计算
 
         Args:
             symbol: 交易对
@@ -1396,78 +1399,55 @@ class StrategyExecutorV2:
             strategy_id: 策略ID
 
         Returns:
-            (是否在冷却中, 原因说明)
+            (是否被限制, 原因说明)
         """
         entry_cooldown = strategy.get('entryCooldown', {})
         if not entry_cooldown.get('enabled', True):  # 默认启用
-            return False, "开仓冷却未启用"
+            return False, "开仓限制未启用"
 
-        cooldown_minutes = entry_cooldown.get('minutes', 30)  # 默认30分钟
-        per_direction = entry_cooldown.get('perDirection', True)  # 默认按方向独立冷却
+        # 每个方向最多同时开几个单（默认3个）
+        max_positions_per_direction = entry_cooldown.get('maxPositionsPerDirection', 3)
 
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
-
-            current_time = self.get_local_time()
-            cooldown_start = current_time - timedelta(minutes=cooldown_minutes)
 
             # 注意：futures_positions 表使用 position_side 字段（LONG/SHORT）
             position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
             # futures_orders 表使用 side 字段（OPEN_LONG/OPEN_SHORT）
             order_side = f'OPEN_{position_side}'
 
-            # 1. 先检查是否有 PENDING 状态的限价单（未成交）
-            # 注意：限价单写入 futures_orders 表，status='PENDING'
+            # 1. 查询当前方向的 open 持仓数量
             cursor.execute("""
-                SELECT created_at, side FROM futures_orders
+                SELECT COUNT(*) as count FROM futures_positions
+                WHERE symbol = %s AND strategy_id = %s
+                AND position_side = %s AND status = 'open'
+            """, (symbol, strategy_id, position_side))
+
+            open_count = cursor.fetchone()['count']
+
+            # 2. 查询当前方向的 PENDING 限价单数量
+            cursor.execute("""
+                SELECT COUNT(*) as count FROM futures_orders
                 WHERE symbol = %s AND strategy_id = %s
                 AND side = %s AND status = 'PENDING'
-                ORDER BY created_at DESC LIMIT 1
             """, (symbol, strategy_id, order_side))
 
-            pending_order = cursor.fetchone()
-            if pending_order:
-                cursor.close()
-                conn.close()
-                return True, f"已有PENDING限价单等待成交"
+            pending_count = cursor.fetchone()['count']
 
-            # 2. 查询冷却期内的开仓记录
-            if per_direction:
-                # 按方向独立冷却：只查同方向的开仓
-                cursor.execute("""
-                    SELECT created_at, position_side FROM futures_positions
-                    WHERE symbol = %s AND strategy_id = %s
-                    AND position_side = %s AND created_at >= %s
-                    ORDER BY created_at DESC LIMIT 1
-                """, (symbol, strategy_id, position_side, cooldown_start))
-            else:
-                # 全局冷却：查任意方向的开仓
-                cursor.execute("""
-                    SELECT created_at, position_side FROM futures_positions
-                    WHERE symbol = %s AND strategy_id = %s
-                    AND created_at >= %s
-                    ORDER BY created_at DESC LIMIT 1
-                """, (symbol, strategy_id, cooldown_start))
-
-            recent_entry = cursor.fetchone()
             cursor.close()
             conn.close()
 
-            if recent_entry:
-                entry_time = recent_entry['created_at']
-                last_direction = recent_entry['position_side']
-                time_since_entry = (current_time - entry_time).total_seconds() / 60
-                remaining_cooldown = cooldown_minutes - time_since_entry
+            total_count = open_count + pending_count
 
-                direction_text = f"同方向({last_direction})" if per_direction else "任意方向"
-                return True, f"开仓冷却中: 距离上次{direction_text}开仓仅{time_since_entry:.0f}分钟，还需等待{remaining_cooldown:.0f}分钟"
+            if total_count >= max_positions_per_direction:
+                return True, f"{position_side}方向已有{open_count}个持仓+{pending_count}个挂单，达到上限{max_positions_per_direction}"
 
-            return False, "冷却检查通过"
+            return False, f"{position_side}方向: {open_count}个持仓+{pending_count}个挂单，未达上限{max_positions_per_direction}"
 
         except Exception as e:
-            logger.warning(f"{symbol} 检查开仓冷却失败: {e}")
-            return False, f"冷却检查异常: {e}"
+            logger.warning(f"{symbol} 检查开仓限制失败: {e}")
+            return False, f"检查异常: {e}"
 
     def apply_all_filters(self, symbol: str, direction: str, current_price: float,
                           ema_data: Dict, strategy: Dict) -> Tuple[bool, List[str]]:
