@@ -1998,57 +1998,19 @@ class StrategyExecutorV2:
             is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover', 'reversal_cross')
             cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
 
-            if force_market or (is_cross_signal and cross_signal_force_market):
-                # 反转信号或金叉/死叉信号直接市价开仓，不走自检
-                log_msg = "反转信号" if force_market else "金叉/死叉信号"
-                logger.info(f"⚡ {symbol} {direction} {log_msg}，直接市价开仓")
-                return await self._do_open_position(
-                    symbol=symbol,
-                    direction=direction,
-                    signal_type=signal_type,
-                    strategy=strategy,
-                    account_id=account_id,
-                    signal_reason=signal_reason,
-                    current_price=current_price,
-                    ema_data=ema_data
-                )
-
-            # 其他信号（sustained_trend等）走自检流程
-            from app.services.position_validator import get_position_validator
-
-            position_validator = get_position_validator()
-            if position_validator:
-                # 创建待开仓记录，由自检服务验证后开仓
-                result = position_validator.create_pending_position(
-                    symbol=symbol,
-                    direction=direction,
-                    signal_type=signal_type,
-                    signal_price=current_price,
-                    ema_data=ema_data,
-                    strategy=strategy,
-                    account_id=account_id,
-                    signal_reason=signal_reason
-                )
-
-                if result.get('success'):
-                    logger.info(f"📋 {symbol} {direction} 信号已进入自检队列，pending_id={result.get('pending_id')}")
-                    return {'success': True, 'pending': True, 'pending_id': result.get('pending_id')}
-                else:
-                    # 可能是已有相同的待开仓信号
-                    return {'success': False, 'error': result.get('error', '创建待开仓记录失败')}
-            else:
-                logger.warning(f"⚠️ 自检服务未初始化，直接市价开仓")
-                # 自检服务未初始化，回退到直接开仓
-                return await self._do_open_position(
-                    symbol=symbol,
-                    direction=direction,
-                    signal_type=signal_type,
-                    strategy=strategy,
-                    account_id=account_id,
-                    signal_reason=signal_reason,
-                    current_price=current_price,
-                    ema_data=ema_data
-                )
+            # 所有信号直接创建限价单，不走自检流程
+            # 限价单本身就是等待回调，不需要再自检价格位置
+            logger.info(f"📋 {symbol} {direction} 信号触发，直接创建限价单")
+            return await self._do_open_position(
+                symbol=symbol,
+                direction=direction,
+                signal_type=signal_type,
+                strategy=strategy,
+                account_id=account_id,
+                signal_reason=signal_reason,
+                current_price=current_price,
+                ema_data=ema_data
+            )
 
         except Exception as e:
             logger.error(f"开仓执行失败: {e}")
