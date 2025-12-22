@@ -2093,15 +2093,23 @@ class StrategyExecutorV2:
 
                 # ========== 限价单开仓（原市价单改为限价单）==========
                 # 信号触发 → 自检 → 通过后挂限价单等待回调
-                # 做多: 当前价 - 0.4% 的限价买入（等回调）
-                # 做空: 当前价 + 0.4% 的限价卖出（等反弹）
+                # 使用策略配置的 longPrice / shortPrice 参数
                 # 30分钟未成交自动取消
 
-                # 计算限价（固定使用 0.4% 回调）
+                # 获取策略配置的限价参数
                 if direction == 'long':
-                    limit_price = current_price * (1 - 0.4 / 100)  # 做多：市价减0.4%
+                    price_type = strategy.get('longPrice', 'market_minus_0_4')
                 else:
-                    limit_price = current_price * (1 + 0.4 / 100)  # 做空：市价加0.4%
+                    price_type = strategy.get('shortPrice', 'market_plus_0_4')
+
+                # 计算限价
+                limit_price = self._calculate_limit_price(current_price, price_type, direction)
+                if limit_price is None:
+                    # 如果配置为 market，使用默认 0.4% 回调
+                    if direction == 'long':
+                        limit_price = current_price * (1 - 0.4 / 100)
+                    else:
+                        limit_price = current_price * (1 + 0.4 / 100)
 
                 # 根据限价重新计算数量
                 quantity = notional / limit_price
@@ -2143,9 +2151,10 @@ class StrategyExecutorV2:
                     if is_pending:
                         # PENDING 状态：限价单已挂出，等待成交
                         timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 30)
-                        offset_pct = -0.4 if direction == 'long' else 0.4
+                        # 计算实际偏离百分比
+                        actual_offset_pct = (limit_price - current_price) / current_price * 100
                         logger.info(f"📋 {symbol} 限价单已挂出: {direction} {quantity:.8f} @ {limit_price:.4f} "
-                                   f"(市价:{current_price:.4f}, 偏离:{offset_pct:+.1f}%), "
+                                   f"(市价:{current_price:.4f}, 偏离:{actual_offset_pct:+.2f}%, 配置:{price_type}), "
                                    f"超时:{timeout_minutes}分钟, 信号:{signal_type}")
                         # 注意：PENDING 限价单创建时不同步实盘，等模拟盘成交后再同步
                         # 实盘同步在 futures_limit_order_executor.py 中处理
