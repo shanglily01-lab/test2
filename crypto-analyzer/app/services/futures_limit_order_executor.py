@@ -942,6 +942,7 @@ class FuturesLimitOrderExecutor:
                                 # 限价单触发：以市价执行
                                 # 限价只是触发条件，实际成交价为市价
                                 # 止损止盈已基于限价计算好，直接传入价格
+                                execution_price = current_price  # 实际成交价为市价
 
                                 # 正向开仓
                                 result = self.trading_engine.open_position(
