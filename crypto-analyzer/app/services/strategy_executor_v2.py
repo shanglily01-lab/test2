@@ -1130,9 +1130,9 @@ class StrategyExecutorV2:
 
         current_rsi = rsi_values[-1]
 
-        # 从策略配置读取RSI阈值，默认75/25（限价单模式下放宽）
-        long_max = rsi_config.get('longMax', 75)   # 做多时RSI上限
-        short_min = rsi_config.get('shortMin', 25)  # 做空时RSI下限
+        # 从策略配置读取RSI阈值
+        long_max = rsi_config.get('longMax', 65)   # 做多时RSI上限
+        short_min = rsi_config.get('shortMin', 35)  # 做空时RSI下限
 
         if direction == 'long':
             # 做多时RSI不能太高（超买）
