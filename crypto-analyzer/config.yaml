@@ -13,11 +13,12 @@ symbols:
 - ADA/USDT
 - DOT/USDT
 - LINK/USDT
-- ASTER/USDT
 - SUI/USDT
 - ETC/USDT
 - NEAR/USDT
-
+- AAVE/USDT
+- UNI/USDT
+- ENA/USDT
 demo_mode: false
 exchanges:
   binance:
