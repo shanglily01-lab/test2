@@ -2646,12 +2646,12 @@
                 });
 
                 let data;
+                const responseText = await response.text();
                 try {
-                    data = await response.json();
+                    data = JSON.parse(responseText);
                 } catch (jsonError) {
-                    // 如果响应不是JSON，尝试获取文本
-                    const text = await response.text();
                     // 响应格式错误
+                    console.error('平仓响应解析失败:', responseText);
                     showToast('平仓失败: 服务器返回了无效的响应', 'error');
                     return;
                 }
