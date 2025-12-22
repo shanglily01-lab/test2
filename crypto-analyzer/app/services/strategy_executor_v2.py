@@ -24,7 +24,7 @@ class StrategyExecutorV2:
     """V2版策略执行器 - 简化逻辑"""
 
     # 策略参数常量（来自需求文档）
-    MIN_SIGNAL_STRENGTH = 0.15  # 最小开仓强度阈值 (%)
+    MIN_SIGNAL_STRENGTH = 0.05  # 最小开仓强度阈值 (%) - 限价单模式下放宽
     HIGH_SIGNAL_STRENGTH = 0.5  # 高强度阈值，立即开仓 (%)
     OSCILLATION_RANGE = 0.5  # 震荡区间判断幅度 (%)
     OSCILLATION_BARS = 4  # 震荡判断连续K线数
@@ -1130,9 +1130,9 @@ class StrategyExecutorV2:
 
         current_rsi = rsi_values[-1]
 
-        # 从策略配置读取RSI阈值，默认65/35
-        long_max = rsi_config.get('longMax', 65)   # 做多时RSI上限
-        short_min = rsi_config.get('shortMin', 35)  # 做空时RSI下限
+        # 从策略配置读取RSI阈值，默认75/25（限价单模式下放宽）
+        long_max = rsi_config.get('longMax', 75)   # 做多时RSI上限
+        short_min = rsi_config.get('shortMin', 25)  # 做空时RSI下限
 
         if direction == 'long':
             # 做多时RSI不能太高（超买）
