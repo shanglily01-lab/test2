@@ -1396,14 +1396,14 @@ class StrategyExecutorV2:
         """
         检查开仓限制（基于持仓数量而非时间冷却）
 
-        每个方向最多同时开 maxPositionsPerDirection 个单（默认3个）
-        不同交易对独立计算
+        每个币种、每个方向最多同时开 maxPositionsPerDirection 个单（默认3个）
+        不区分策略，全局统计
 
         Args:
             symbol: 交易对
             direction: 'long' 或 'short'
             strategy: 策略配置
-            strategy_id: 策略ID
+            strategy_id: 策略ID（仅用于日志，不参与限制计算）
 
         Returns:
             (是否被限制, 原因说明)
@@ -1424,21 +1424,19 @@ class StrategyExecutorV2:
             # futures_orders 表使用 side 字段（OPEN_LONG/OPEN_SHORT）
             order_side = f'OPEN_{position_side}'
 
-            # 1. 查询当前方向的 open 持仓数量
+            # 1. 查询当前币种、当前方向的 open 持仓数量（不区分策略）
             cursor.execute("""
                 SELECT COUNT(*) as count FROM futures_positions
-                WHERE symbol = %s AND strategy_id = %s
-                AND position_side = %s AND status = 'open'
-            """, (symbol, strategy_id, position_side))
+                WHERE symbol = %s AND position_side = %s AND status = 'open'
+            """, (symbol, position_side))
 
             open_count = cursor.fetchone()['count']
 
-            # 2. 查询当前方向的 PENDING 限价单数量
+            # 2. 查询当前币种、当前方向的 PENDING 限价单数量（不区分策略）
             cursor.execute("""
                 SELECT COUNT(*) as count FROM futures_orders
-                WHERE symbol = %s AND strategy_id = %s
-                AND side = %s AND status = 'PENDING'
-            """, (symbol, strategy_id, order_side))
+                WHERE symbol = %s AND side = %s AND status = 'PENDING'
+            """, (symbol, order_side))
 
             pending_count = cursor.fetchone()['count']
 
@@ -1448,9 +1446,9 @@ class StrategyExecutorV2:
             total_count = open_count + pending_count
 
             if total_count >= max_positions_per_direction:
-                return True, f"{position_side}方向已有{open_count}个持仓+{pending_count}个挂单，达到上限{max_positions_per_direction}"
+                return True, f"{symbol} {position_side}方向已有{open_count}个持仓+{pending_count}个挂单，达到上限{max_positions_per_direction}"
 
-            return False, f"{position_side}方向: {open_count}个持仓+{pending_count}个挂单，未达上限{max_positions_per_direction}"
+            return False, f"{symbol} {position_side}方向: {open_count}个持仓+{pending_count}个挂单，未达上限{max_positions_per_direction}"
 
         except Exception as e:
             logger.warning(f"{symbol} 检查开仓限制失败: {e}")
