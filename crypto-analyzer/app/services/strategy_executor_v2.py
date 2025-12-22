@@ -783,6 +783,7 @@ class StrategyExecutorV2:
                                    account_id: int, ema_data: Dict) -> Dict:
         """
         执行限价单开仓（不需要自检，直接挂单）
+        一次性批量创建多个限价单直到达到上限
 
         Args:
             symbol: 交易对
@@ -798,6 +799,7 @@ class StrategyExecutorV2:
             current_price = ema_data['current_price']
             leverage = strategy.get('leverage', 10)
             sync_live = strategy.get('syncLive', False)
+            position_side = direction.upper()
 
             # 获取限价配置
             if direction == 'long':
@@ -828,71 +830,111 @@ class StrategyExecutorV2:
 
             # 执行模拟挂单
             if self.futures_engine:
-                position_side = direction.upper()
+                # ========== 一次性挂多个限价单 ==========
+                # 查询当前方向已有多少持仓+挂单
+                entry_cooldown = strategy.get('entryCooldown', {})
+                max_positions = entry_cooldown.get('maxPositionsPerDirection', 3)
 
-                result = self.futures_engine.open_position(
-                    account_id=account_id,
-                    symbol=symbol,
-                    position_side=position_side,
-                    quantity=Decimal(str(quantity)),
-                    leverage=leverage,
-                    limit_price=Decimal(str(limit_price)),  # 限价单
-                    stop_loss_pct=Decimal(str(stop_loss_pct)),
-                    take_profit_pct=Decimal(str(take_profit_pct)),
-                    source='strategy_limit',
-                    strategy_id=strategy.get('id')
-                )
+                conn = self.get_db_connection()
+                cursor = conn.cursor()
+                try:
+                    # 查询当前币种、当前方向的 open 持仓数量
+                    cursor.execute("""
+                        SELECT COUNT(*) as count FROM futures_positions
+                        WHERE symbol = %s AND position_side = %s AND status = 'open'
+                    """, (symbol, position_side))
+                    open_count = cursor.fetchone()['count']
 
-                if result.get('success'):
-                    position_id = result.get('position_id')
-                    order_id = result.get('order_id')
+                    # 查询当前币种、当前方向的 PENDING 限价单数量
+                    order_side = f'OPEN_{position_side}'
+                    cursor.execute("""
+                        SELECT COUNT(*) as count FROM futures_orders
+                        WHERE symbol = %s AND side = %s AND status = 'PENDING'
+                    """, (symbol, order_side))
+                    pending_count = cursor.fetchone()['count']
+                finally:
+                    cursor.close()
+                    conn.close()
 
-                    # 检查是否是 PENDING 状态（未成交）还是立即成交
-                    is_pending = result.get('status') == 'PENDING'
+                # 计算还能开多少单
+                current_total = open_count + pending_count
+                orders_to_create = max(0, max_positions - current_total)
 
-                    if is_pending:
-                        # PENDING 状态：限价单已挂出，等待成交
-                        timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 30)
-                        logger.info(f"📋 {symbol} 限价单已挂出: {direction} {quantity:.8f} @ {limit_price:.4f} "
-                                   f"(市价:{current_price:.4f}, 偏离:{((limit_price-current_price)/current_price*100):+.2f}%), "
-                                   f"超时:{timeout_minutes}分钟")
-                        # 注意：PENDING 限价单创建时不同步实盘，等模拟盘成交后再同步
-                        # 实盘同步在 futures_limit_order_executor.py 中处理
+                if orders_to_create == 0:
+                    return {'success': False, 'error': f'{symbol} {position_side}方向已达上限{max_positions}'}
+
+                logger.info(f"📊 {symbol} {position_side}: 当前{open_count}持仓+{pending_count}挂单，将创建{orders_to_create}个限价单")
+
+                # 创建多个限价单
+                created_orders = []
+                for i in range(orders_to_create):
+                    result = self.futures_engine.open_position(
+                        account_id=account_id,
+                        symbol=symbol,
+                        position_side=position_side,
+                        quantity=Decimal(str(quantity)),
+                        leverage=leverage,
+                        limit_price=Decimal(str(limit_price)),  # 限价单
+                        stop_loss_pct=Decimal(str(stop_loss_pct)),
+                        take_profit_pct=Decimal(str(take_profit_pct)),
+                        source='strategy_limit',
+                        strategy_id=strategy.get('id')
+                    )
+
+                    if result.get('success'):
+                        position_id = result.get('position_id')
+                        order_id = result.get('order_id')
+                        is_pending = result.get('status') == 'PENDING'
+
+                        created_orders.append({
+                            'position_id': position_id,
+                            'order_id': order_id,
+                            'is_pending': is_pending
+                        })
+
+                        if is_pending:
+                            timeout_minutes = strategy.get('limitOrderTimeoutMinutes', 30)
+                            actual_offset_pct = (limit_price - current_price) / current_price * 100
+                            logger.info(f"📋 {symbol} 限价单#{i+1}已挂出: {direction} {quantity:.8f} @ {limit_price:.4f} "
+                                       f"(偏离:{actual_offset_pct:+.2f}%), 超时:{timeout_minutes}分钟")
+                        else:
+                            entry_price = result.get('entry_price', limit_price)
+                            logger.info(f"✅ {symbol} 限价单#{i+1}立即成交: {direction} @ {entry_price:.4f}")
+
+                            # 同步实盘
+                            if sync_live and self.live_engine and position_id:
+                                try:
+                                    await self._sync_limit_order_to_live(
+                                        symbol=symbol,
+                                        direction=direction,
+                                        strategy=strategy,
+                                        entry_price=entry_price,
+                                        quantity=quantity,
+                                        leverage=leverage,
+                                        stop_loss_pct=stop_loss_pct,
+                                        take_profit_pct=take_profit_pct,
+                                        paper_position_id=position_id
+                                    )
+                                except Exception as live_ex:
+                                    logger.error(f"[同步实盘] ❌ {symbol} 限价单#{i+1}同步失败: {live_ex}")
                     else:
-                        # 立即成交：限价单条件已满足，直接开仓
-                        entry_price = result.get('entry_price', limit_price)
-                        logger.info(f"✅ {symbol} 限价单立即成交: {direction} {quantity:.8f} @ {entry_price:.4f} "
-                                   f"(限价:{limit_price:.4f})")
+                        logger.warning(f"❌ {symbol} 限价单#{i+1}创建失败: {result.get('error')}")
 
-                        # 如果策略启用实盘同步，需要同步到实盘
-                        if sync_live and self.live_engine and position_id:
-                            try:
-                                await self._sync_limit_order_to_live(
-                                    symbol=symbol,
-                                    direction=direction,
-                                    strategy=strategy,
-                                    entry_price=entry_price,
-                                    quantity=quantity,
-                                    leverage=leverage,
-                                    stop_loss_pct=stop_loss_pct,
-                                    take_profit_pct=take_profit_pct,
-                                    paper_position_id=position_id
-                                )
-                            except Exception as live_ex:
-                                logger.error(f"[同步实盘] ❌ {symbol} {direction} 限价单立即成交同步失败: {live_ex}")
-
+                if created_orders:
+                    logger.info(f"✅ {symbol} 批量创建{len(created_orders)}个限价单完成")
                     return {
                         'success': True,
-                        'position_id': position_id,
-                        'order_id': order_id,
+                        'position_id': created_orders[0]['position_id'],
+                        'order_id': created_orders[0]['order_id'],
                         'direction': direction,
                         'quantity': quantity,
                         'limit_price': limit_price,
                         'signal_type': 'limit_order',
-                        'is_pending': is_pending
+                        'is_pending': created_orders[0]['is_pending'],
+                        'total_orders': len(created_orders)
                     }
                 else:
-                    return {'success': False, 'error': result.get('error', '挂单失败')}
+                    return {'success': False, 'error': '所有限价单创建失败'}
 
             return {'success': False, 'error': '交易引擎未初始化'}
 
