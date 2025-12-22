@@ -527,20 +527,20 @@ class StrategyExecutorV2:
         if ema_diff_pct_15m < self.MIN_SIGNAL_STRENGTH:
             return None, f"15M趋势强度不足({ema_diff_pct_15m:.3f}%)"
 
-        # 检查5M连续3根K线差值放大
+        # 检查5M连续3根K线差值放大（限价单模式下放宽为3根）
         ema9_values = ema_5m['ema9_values']
         ema26_values = ema_5m['ema26_values']
 
-        if len(ema9_values) < 4 or len(ema26_values) < 4:
+        if len(ema9_values) < 3 or len(ema26_values) < 3:
             return None, "5M EMA数据不足"
 
-        # 计算最近4根K线的EMA差值
+        # 计算最近3根K线的EMA差值
         diff_values = []
-        for i in range(-4, 0):
+        for i in range(-3, 0):
             diff = abs(ema9_values[i] - ema26_values[i])
             diff_values.append(diff)
 
-        # 检查是否连续放大（后3根比前1根大，且后面的比前面的大）
+        # 检查是否连续放大
         expanding = True
         for i in range(1, len(diff_values)):
             if diff_values[i] <= diff_values[i-1]:
