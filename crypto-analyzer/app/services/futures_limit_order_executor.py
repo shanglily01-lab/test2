@@ -368,6 +368,78 @@ class FuturesLimitOrderExecutor:
             logger.error(f"检查EMA状态时出错: {e}")
             return None
 
+    def _check_ema_diff_too_small(self, connection, order) -> Optional[str]:
+        """
+        检查EMA差值是否过小（限价单触发前检查）
+
+        当EMA9和EMA26的差值过小时，说明趋势不明朗，不适合开仓
+
+        判断逻辑：
+        - EMA差值百分比 < 最小阈值（默认0.05%）时取消限价单
+
+        Returns:
+            如果EMA差值过小，返回原因字符串；否则返回None
+        """
+        try:
+            strategy_config = order.get('strategy_config')
+            symbol = order['symbol']
+            side = order['side']  # OPEN_LONG 或 OPEN_SHORT
+
+            # 从策略配置获取最小EMA差值阈值
+            min_ema_diff = 0.05  # 默认0.05%
+            if strategy_config:
+                config = strategy_config
+                if isinstance(config, str):
+                    try:
+                        config = json.loads(config)
+                    except:
+                        config = {}
+                if isinstance(config, dict):
+                    min_ema_diff = config.get('minEmaDiff', 0.05)
+
+            # 使用15m周期检查EMA差值
+            timeframe = '15m'
+
+            # 查询最近的K线数据
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY timestamp DESC
+                    LIMIT 50""",
+                    (symbol, timeframe)
+                )
+                klines = cursor.fetchall()
+
+            if not klines or len(klines) < 30:
+                return None  # K线数据不足，跳过检查
+
+            # 将K线反转为正序（从旧到新）
+            prices = [float(k['close_price']) for k in reversed(klines)]
+
+            # 计算EMA9和EMA26
+            ema9_values = self._calculate_ema(prices, 9)
+            ema26_values = self._calculate_ema(prices, 26)
+
+            if not ema9_values or not ema26_values:
+                return None
+
+            curr_ema9 = ema9_values[-1]
+            curr_ema26 = ema26_values[-1]
+            ema_diff_pct = abs((curr_ema9 - curr_ema26) / curr_ema26 * 100)
+
+            # EMA差值过小，取消限价单
+            if ema_diff_pct < min_ema_diff:
+                position_side = 'LONG' if side == 'OPEN_LONG' else 'SHORT'
+                return f"[{timeframe}] EMA差值过小: {ema_diff_pct:.3f}% < {min_ema_diff}%, 趋势不明朗"
+
+            return None
+
+        except Exception as e:
+            logger.error(f"检查EMA差值时出错: {e}")
+            return None
+
     def _calculate_rsi(self, prices: List[float], period: int = 14) -> Optional[float]:
         """
         计算RSI (Relative Strength Index)
@@ -953,6 +1025,38 @@ class FuturesLimitOrderExecutor:
                                     logger.error(f"[同步实盘] ❌ 取消限价单异常(RSI过滤): {symbol} {position_side} - {sync_ex}")
                                 # ========== 同步取消实盘订单结束 ==========
 
+                                continue  # 跳过此订单
+
+                            # ===== EMA差值检查：限价单触发前检查EMA差值是否过小 =====
+                            ema_diff_rejection_reason = self._check_ema_diff_too_small(connection, order)
+                            if ema_diff_rejection_reason:
+                                logger.info(f"📉 限价单EMA差值过小取消: {symbol} {position_side} - {ema_diff_rejection_reason}")
+
+                                # 解冻保证金
+                                frozen_margin = Decimal(str(order.get('margin', 0)))
+                                if frozen_margin > 0:
+                                    with connection.cursor() as update_cursor:
+                                        update_cursor.execute(
+                                            """UPDATE paper_trading_accounts
+                                            SET current_balance = current_balance + %s,
+                                                frozen_balance = GREATEST(0, frozen_balance - %s)
+                                            WHERE id = %s""",
+                                            (float(frozen_margin), float(frozen_margin), account_id)
+                                        )
+
+                                # 更新订单状态为已取消
+                                with connection.cursor() as update_cursor:
+                                    update_cursor.execute(
+                                        """UPDATE futures_orders
+                                        SET status = 'CANCELLED',
+                                            cancellation_reason = 'ema_diff_small',
+                                            canceled_at = NOW(),
+                                            notes = CONCAT(COALESCE(notes, ''), ' EMA_DIFF_SMALL: ', %s)
+                                        WHERE order_id = %s""",
+                                        (ema_diff_rejection_reason, order_id)
+                                    )
+
+                                connection.commit()
                                 continue  # 跳过此订单
 
                             # 执行开仓（使用限价作为成交价）
