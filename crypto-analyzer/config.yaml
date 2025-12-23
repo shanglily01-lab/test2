@@ -19,6 +19,8 @@ symbols:
 - AAVE/USDT
 - UNI/USDT
 - ENA/USDT
+- AVAX/USDT
+- APT/USDT
 demo_mode: false
 exchanges:
   binance:
