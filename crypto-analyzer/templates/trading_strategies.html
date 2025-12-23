@@ -1588,14 +1588,6 @@
                                             <label for="longPriceMarket" class="radio-label">市价</label>
                                         </div>
                                         <div class="radio-option">
-                                            <input type="radio" id="longPriceMinus0_2" name="longPrice" value="market_minus_0_2">
-                                            <label for="longPriceMinus0_2" class="radio-label">-0.2%市价</label>
-                                        </div>
-                                        <div class="radio-option">
-                                            <input type="radio" id="longPriceMinus0_4" name="longPrice" value="market_minus_0_4">
-                                            <label for="longPriceMinus0_4" class="radio-label">-0.4%市价</label>
-                                        </div>
-                                        <div class="radio-option">
                                             <input type="radio" id="longPriceMinus0_6" name="longPrice" value="market_minus_0_6">
                                             <label for="longPriceMinus0_6" class="radio-label">-0.6%市价</label>
                                         </div>
@@ -1606,6 +1598,14 @@
                                         <div class="radio-option">
                                             <input type="radio" id="longPriceMinus1" name="longPrice" value="market_minus_1">
                                             <label for="longPriceMinus1" class="radio-label">-1%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="longPriceMinus1_2" name="longPrice" value="market_minus_1_2">
+                                            <label for="longPriceMinus1_2" class="radio-label">-1.2%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="longPriceMinus1_4" name="longPrice" value="market_minus_1_4">
+                                            <label for="longPriceMinus1_4" class="radio-label">-1.4%市价</label>
                                         </div>
                                     </div>
                                 </div>
@@ -1619,14 +1619,6 @@
                                             <label for="shortPriceMarket" class="radio-label">市价</label>
                                         </div>
                                         <div class="radio-option">
-                                            <input type="radio" id="shortPricePlus0_2" name="shortPrice" value="market_plus_0_2">
-                                            <label for="shortPricePlus0_2" class="radio-label">+0.2%市价</label>
-                                        </div>
-                                        <div class="radio-option">
-                                            <input type="radio" id="shortPricePlus0_4" name="shortPrice" value="market_plus_0_4">
-                                            <label for="shortPricePlus0_4" class="radio-label">+0.4%市价</label>
-                                        </div>
-                                        <div class="radio-option">
                                             <input type="radio" id="shortPricePlus0_6" name="shortPrice" value="market_plus_0_6">
                                             <label for="shortPricePlus0_6" class="radio-label">+0.6%市价</label>
                                         </div>
@@ -1637,6 +1629,14 @@
                                         <div class="radio-option">
                                             <input type="radio" id="shortPricePlus1" name="shortPrice" value="market_plus_1">
                                             <label for="shortPricePlus1" class="radio-label">+1%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="shortPricePlus1_2" name="shortPrice" value="market_plus_1_2">
+                                            <label for="shortPricePlus1_2" class="radio-label">+1.2%市价</label>
+                                        </div>
+                                        <div class="radio-option">
+                                            <input type="radio" id="shortPricePlus1_4" name="shortPrice" value="market_plus_1_4">
+                                            <label for="shortPricePlus1_4" class="radio-label">+1.4%市价</label>
                                         </div>
                                     </div>
                                 </div>
@@ -2809,16 +2809,16 @@
         function getBuyPriceTypeText(type) {
             const types = {
                 'market': '市价',
-                'market_minus_0_2': '-0.2%市价',
-                'market_minus_0_4': '-0.4%市价',
                 'market_minus_0_6': '-0.6%市价',
                 'market_minus_0_8': '-0.8%市价',
                 'market_minus_1': '-1%市价',
-                'market_plus_0_2': '+0.2%市价',
-                'market_plus_0_4': '+0.4%市价',
+                'market_minus_1_2': '-1.2%市价',
+                'market_minus_1_4': '-1.4%市价',
                 'market_plus_0_6': '+0.6%市价',
                 'market_plus_0_8': '+0.8%市价',
                 'market_plus_1': '+1%市价',
+                'market_plus_1_2': '+1.2%市价',
+                'market_plus_1_4': '+1.4%市价',
                 'limit': '限价'
             };
             return types[type] || type || '未设置';

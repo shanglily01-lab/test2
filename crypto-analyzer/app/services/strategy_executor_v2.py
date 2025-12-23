@@ -808,12 +808,12 @@ class StrategyExecutorV2:
                 price_type = strategy.get('shortPrice', 'market')
 
             # 计算限价
-            # 如果是 market 类型，使用默认 0.4% 回调
+            # 如果是 market 类型，使用默认 0.6% 回调
             if price_type == 'market':
                 if direction == 'long':
-                    limit_price = current_price * (1 - 0.4 / 100)  # 做多：市价减0.4%
+                    limit_price = current_price * (1 - 0.6 / 100)  # 做多：市价减0.6%
                 else:
-                    limit_price = current_price * (1 + 0.4 / 100)  # 做空：市价加0.4%
+                    limit_price = current_price * (1 + 0.6 / 100)  # 做空：市价加0.6%
             else:
                 limit_price = self._calculate_limit_price(current_price, price_type, direction)
                 if limit_price is None:
@@ -1688,16 +1688,16 @@ class StrategyExecutorV2:
         # 做多: market_minus_X 表示市价减X%（更低的买入价）
         # 做空: market_plus_X 表示市价加X%（更高的卖出价）
         price_adjustments = {
-            'market_minus_0_2': -0.2,
-            'market_minus_0_4': -0.4,
             'market_minus_0_6': -0.6,
             'market_minus_0_8': -0.8,
             'market_minus_1': -1.0,
-            'market_plus_0_2': 0.2,
-            'market_plus_0_4': 0.4,
+            'market_minus_1_2': -1.2,
+            'market_minus_1_4': -1.4,
             'market_plus_0_6': 0.6,
             'market_plus_0_8': 0.8,
             'market_plus_1': 1.0,
+            'market_plus_1_2': 1.2,
+            'market_plus_1_4': 1.4,
         }
 
         adjustment_pct = price_adjustments.get(price_type)
@@ -2101,18 +2101,18 @@ class StrategyExecutorV2:
 
                 # 获取策略配置的限价参数
                 if direction == 'long':
-                    price_type = strategy.get('longPrice', 'market_minus_0_4')
+                    price_type = strategy.get('longPrice', 'market_minus_0_6')
                 else:
-                    price_type = strategy.get('shortPrice', 'market_plus_0_4')
+                    price_type = strategy.get('shortPrice', 'market_plus_0_6')
 
                 # 计算限价
                 limit_price = self._calculate_limit_price(current_price, price_type, direction)
                 if limit_price is None:
-                    # 如果配置为 market，使用默认 0.4% 回调
+                    # 如果配置为 market，使用默认 0.6% 回调
                     if direction == 'long':
-                        limit_price = current_price * (1 - 0.4 / 100)
+                        limit_price = current_price * (1 - 0.6 / 100)
                     else:
-                        limit_price = current_price * (1 + 0.4 / 100)
+                        limit_price = current_price * (1 + 0.6 / 100)
 
                 # 根据限价重新计算数量
                 quantity = notional / limit_price
