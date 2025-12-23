@@ -1672,14 +1672,14 @@ class StrategyExecutorV2:
     def check_ema_diff_take_profit(self, position: Dict, ema_data: Dict,
                                     current_pnl_pct: float, strategy: Dict) -> Tuple[bool, str]:
         """
-        EMA差值止盈检测
+        EMA差值止盈检测（使用5分钟周期）
 
         当EMA9与EMA26的差值百分比超过设定阈值，且持仓盈利达到最小盈利要求时，触发止盈平仓。
         适用于趋势过度延伸后的回撤风险控制。
 
         Args:
             position: 持仓信息
-            ema_data: EMA数据
+            ema_data: EMA数据（未使用，改为查询5m数据）
             current_pnl_pct: 当前盈亏百分比
             strategy: 策略配置
 
@@ -1698,28 +1698,76 @@ class StrategyExecutorV2:
         if current_pnl_pct < min_profit_pct:
             return False, ""
 
-        # 获取EMA数据
-        if not ema_data:
-            return False, ""
-
-        # 使用15m周期的EMA数据
-        ema9 = ema_data.get('ema9')
-        ema26 = ema_data.get('ema26')
-
-        if ema9 is None or ema26 is None or ema26 == 0:
-            return False, ""
-
-        # 计算EMA差值百分比
-        ema_diff_pct = abs((ema9 - ema26) / ema26 * 100)
-
-        position_side = position.get('position_side', 'LONG')
         symbol = position.get('symbol', '')
+        position_side = position.get('position_side', 'LONG')
 
-        # EMA差值超过阈值时触发止盈
-        if ema_diff_pct >= threshold:
-            return True, f"EMA差值止盈(差值{ema_diff_pct:.2f}% >= {threshold}%, 盈利{current_pnl_pct:.2f}%)"
+        # 使用5m周期计算EMA
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """SELECT close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = '5m'
+                    ORDER BY timestamp DESC
+                    LIMIT 50""",
+                    (symbol,)
+                )
+                klines = cursor.fetchall()
+            finally:
+                cursor.close()
+                conn.close()
+
+            if not klines or len(klines) < 30:
+                return False, ""  # K线数据不足
+
+            # 将K线反转为正序（从旧到新）
+            prices = [float(k['close_price']) for k in reversed(klines)]
+
+            # 计算EMA9和EMA26
+            ema9_values = self._calculate_ema_values(prices, 9)
+            ema26_values = self._calculate_ema_values(prices, 26)
+
+            if not ema9_values or not ema26_values:
+                return False, ""
+
+            ema9 = ema9_values[-1]
+            ema26 = ema26_values[-1]
+
+            if ema26 == 0:
+                return False, ""
+
+            # 计算EMA差值百分比
+            ema_diff_pct = abs((ema9 - ema26) / ema26 * 100)
+
+            # EMA差值超过阈值时触发止盈
+            if ema_diff_pct >= threshold:
+                return True, f"EMA差值止盈[5m](差值{ema_diff_pct:.2f}% >= {threshold}%, 盈利{current_pnl_pct:.2f}%)"
+
+        except Exception as e:
+            logger.error(f"检查EMA差值止盈时出错: {e}")
 
         return False, ""
+
+    def _calculate_ema_values(self, prices: list, period: int) -> list:
+        """计算EMA值列表"""
+        if len(prices) < period:
+            return []
+
+        ema_values = []
+        multiplier = 2 / (period + 1)
+
+        # 第一个EMA使用SMA
+        sma = sum(prices[:period]) / period
+        ema_values.append(sma)
+
+        # 计算后续的EMA
+        for i in range(period, len(prices)):
+            ema = (prices[i] - ema_values[-1]) * multiplier + ema_values[-1]
+            ema_values.append(ema)
+
+        return ema_values
 
     def _calculate_limit_price(self, current_price: float, price_type: str, direction: str) -> Optional[float]:
         """
