@@ -2062,6 +2062,56 @@ class StrategyExecutorV2:
             执行结果
         """
         try:
+            # ========== 信号去重检查（同一K线周期内不重复触发）==========
+            position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
+            signal_key = f"{symbol}_{position_side}"
+
+            # 获取当前15分钟K线的开始时间作为去重key
+            now = datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
+            kline_start = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
+            kline_key = f"{signal_key}_{kline_start.strftime('%Y%m%d%H%M')}"
+
+            # 检查是否在同一K线周期内已触发过信号
+            if not hasattr(self, '_signal_triggered'):
+                self._signal_triggered = {}
+
+            if kline_key in self._signal_triggered:
+                # 静默跳过，不打印日志（避免日志刷屏）
+                return {'success': False, 'error': f'当前K线周期内已触发过{direction}信号', 'skipped': True}
+
+            # ========== 检查是否已达持仓+挂单上限 ==========
+            entry_cooldown = strategy.get('entryCooldown', {})
+            max_positions = entry_cooldown.get('maxPositionsPerDirection', 3)
+
+            try:
+                conn = self.get_db_connection()
+                cursor = conn.cursor()
+
+                # 查询当前币种、当前方向的 open 持仓数量
+                cursor.execute("""
+                    SELECT COUNT(*) as count FROM futures_positions
+                    WHERE symbol = %s AND position_side = %s AND status = 'open'
+                """, (symbol, position_side))
+                open_count = cursor.fetchone()['count']
+
+                # 查询当前币种、当前方向的 PENDING 限价单数量
+                order_side = f'OPEN_{position_side}'
+                cursor.execute("""
+                    SELECT COUNT(*) as count FROM futures_orders
+                    WHERE symbol = %s AND side = %s AND status = 'PENDING'
+                """, (symbol, order_side))
+                pending_count = cursor.fetchone()['count']
+
+                cursor.close()
+                conn.close()
+
+                # 如果已达上限，直接返回（不打印日志）
+                if open_count + pending_count >= max_positions:
+                    return {'success': False, 'error': f'{symbol} {direction}方向已达上限{max_positions}', 'skipped': True}
+
+            except Exception as e:
+                logger.warning(f"检查持仓上限失败: {e}")
+
             # 获取当前价格和EMA数据
             ema_data = self.get_ema_data(symbol, '15m', 50)
             if not ema_data:
@@ -2073,9 +2123,17 @@ class StrategyExecutorV2:
             is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover', 'reversal_cross')
             cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
 
+            # 标记当前K线周期已触发信号（在实际创建订单前标记）
+            self._signal_triggered[kline_key] = now
+
+            # 清理过期的信号记录（保留最近1小时的）
+            expired_keys = [k for k, v in self._signal_triggered.items()
+                          if (now - v).total_seconds() > 3600]
+            for k in expired_keys:
+                del self._signal_triggered[k]
+
             # 所有信号直接创建限价单，不走自检流程
-            # 限价单本身就是等待回调，不需要再自检价格位置
-            logger.info(f"📋 {symbol} {direction} 信号触发，直接创建限价单")
+            # 日志移到 _do_open_position 成功后打印
             return await self._do_open_position(
                 symbol=symbol,
                 direction=direction,
