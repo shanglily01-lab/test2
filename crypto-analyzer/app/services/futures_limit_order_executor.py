@@ -702,17 +702,7 @@ class FuturesLimitOrderExecutor:
                         if trend_reversal_reason:
                             logger.info(f"📉 限价单趋势转向取消: {symbol} {position_side} - {trend_reversal_reason}")
 
-                            # 解冻保证金
-                            frozen_margin = Decimal(str(order.get('margin', 0)))
-                            if frozen_margin > 0:
-                                with connection.cursor() as update_cursor:
-                                    update_cursor.execute(
-                                        """UPDATE paper_trading_accounts
-                                        SET current_balance = current_balance + %s,
-                                            frozen_balance = GREATEST(0, frozen_balance - %s)
-                                        WHERE id = %s""",
-                                        (float(frozen_margin), float(frozen_margin), account_id)
-                                    )
+                            # 限价单不冻结保证金，无需解冻
 
                             # 更新订单状态为已取消
                             with connection.cursor() as update_cursor:
@@ -803,17 +793,7 @@ class FuturesLimitOrderExecutor:
                                 # ========== 限价单超时：直接取消，不转自检 ==========
                                 logger.info(f"⏰ 限价单超时取消: {symbol} {position_side} 已等待 {elapsed_minutes:.1f} 分钟, 限价={limit_price}, 当前={current_price}")
 
-                                # 解冻保证金
-                                frozen_margin = Decimal(str(order.get('margin', 0)))
-                                if frozen_margin > 0:
-                                    with connection.cursor() as update_cursor:
-                                        update_cursor.execute(
-                                            """UPDATE paper_trading_accounts
-                                            SET current_balance = current_balance + %s,
-                                                frozen_balance = GREATEST(0, frozen_balance - %s)
-                                            WHERE id = %s""",
-                                            (float(frozen_margin), float(frozen_margin), account_id)
-                                        )
+                                # 限价单不冻结保证金，无需解冻
 
                                 # 更新限价单状态为 EXPIRED（超时取消）
                                 with connection.cursor() as update_cursor:
@@ -911,17 +891,7 @@ class FuturesLimitOrderExecutor:
                                 if existing_count >= MAX_POSITIONS_PER_DIRECTION:
                                     logger.info(f"⏭️ 限价单跳过: {symbol} {position_side} 已有{existing_count}个持仓(上限{MAX_POSITIONS_PER_DIRECTION})，取消此限价单")
 
-                                    # 解冻保证金
-                                    frozen_margin = Decimal(str(order.get('margin', 0)))
-                                    if frozen_margin > 0:
-                                        with connection.cursor() as update_cursor:
-                                            update_cursor.execute(
-                                                """UPDATE paper_trading_accounts
-                                                SET current_balance = current_balance + %s,
-                                                    frozen_balance = GREATEST(0, frozen_balance - %s)
-                                                WHERE id = %s""",
-                                                (float(frozen_margin), float(frozen_margin), account_id)
-                                            )
+                                    # 限价单不冻结保证金，无需解冻
 
                                     # 更新订单状态为已取消
                                     with connection.cursor() as update_cursor:
@@ -943,17 +913,7 @@ class FuturesLimitOrderExecutor:
                             if rsi_rejection_reason:
                                 logger.info(f"📊 限价单RSI过滤取消: {symbol} {position_side} - {rsi_rejection_reason}")
 
-                                # 解冻保证金
-                                frozen_margin = Decimal(str(order.get('margin', 0)))
-                                if frozen_margin > 0:
-                                    with connection.cursor() as update_cursor:
-                                        update_cursor.execute(
-                                            """UPDATE paper_trading_accounts
-                                            SET current_balance = current_balance + %s,
-                                                frozen_balance = GREATEST(0, frozen_balance - %s)
-                                            WHERE id = %s""",
-                                            (float(frozen_margin), float(frozen_margin), account_id)
-                                        )
+                                # 限价单不冻结保证金，无需解冻
 
                                 # 更新订单状态为已取消
                                 with connection.cursor() as update_cursor:
@@ -1032,17 +992,7 @@ class FuturesLimitOrderExecutor:
                             if ema_diff_rejection_reason:
                                 logger.info(f"📉 限价单EMA差值过小取消: {symbol} {position_side} - {ema_diff_rejection_reason}")
 
-                                # 解冻保证金
-                                frozen_margin = Decimal(str(order.get('margin', 0)))
-                                if frozen_margin > 0:
-                                    with connection.cursor() as update_cursor:
-                                        update_cursor.execute(
-                                            """UPDATE paper_trading_accounts
-                                            SET current_balance = current_balance + %s,
-                                                frozen_balance = GREATEST(0, frozen_balance - %s)
-                                            WHERE id = %s""",
-                                            (float(frozen_margin), float(frozen_margin), account_id)
-                                        )
+                                # 限价单不冻结保证金，无需解冻
 
                                 # 更新订单状态为已取消
                                 with connection.cursor() as update_cursor:
@@ -1061,22 +1011,9 @@ class FuturesLimitOrderExecutor:
 
                             # 执行开仓（使用限价作为成交价）
                             try:
-                                # 先解冻保证金（因为限价单创建时已经冻结了保证金）
-                                # 开仓时会重新冻结，所以这里先解冻避免重复冻结
-                                frozen_margin = Decimal(str(order.get('margin', 0)))
-                                if frozen_margin > 0:
-                                    with connection.cursor() as update_cursor:
-                                        update_cursor.execute(
-                                            """UPDATE paper_trading_accounts
-                                            SET current_balance = current_balance + %s,
-                                                frozen_balance = GREATEST(0, frozen_balance - %s)
-                                            WHERE id = %s""",
-                                            (float(frozen_margin), float(frozen_margin), account_id)
-                                        )
+                                # 限价单不冻结保证金，所以不需要解冻
+                                # 直接执行开仓，开仓时会从余额扣除保证金
 
-                                # 提交解冻操作
-                                connection.commit()
-                                
                                 # 执行开仓
                                 # 保留原始订单的来源、信号ID和策略ID（如果是策略订单）
                                 original_source = order.get('order_source', 'limit_order')
@@ -1247,37 +1184,15 @@ class FuturesLimitOrderExecutor:
                                             WHERE order_id = %s""",
                                             (f"执行失败: {error_message[:100]}", order_id)
                                         )
-
-                                        # 恢复冻结的保证金到可用余额
-                                        if frozen_margin > 0:
-                                            update_cursor.execute(
-                                                """UPDATE paper_trading_accounts
-                                                SET frozen_balance = GREATEST(0, frozen_balance - %s)
-                                                WHERE id = %s""",
-                                                (float(frozen_margin), account_id)
-                                            )
+                                        # 限价单不冻结保证金，无需恢复
                                     connection.commit()
                                     logger.info(f"📛 已取消限价单 {order_id}，原因: {error_message}")
-                                    
+
                             except Exception as e:
                                 logger.error(f"执行限价单 {order_id} 时出错: {e}")
                                 import traceback
                                 traceback.print_exc()
-                                # 如果出错，尝试恢复冻结的保证金
-                                try:
-                                    frozen_margin = Decimal(str(order.get('margin', 0)))
-                                    if frozen_margin > 0:
-                                        with connection.cursor() as update_cursor:
-                                            update_cursor.execute(
-                                                """UPDATE paper_trading_accounts
-                                                SET current_balance = current_balance - %s,
-                                                    frozen_balance = frozen_balance + %s
-                                                WHERE id = %s""",
-                                                (float(frozen_margin), float(frozen_margin), account_id)
-                                            )
-                                        connection.commit()
-                                except:
-                                    pass
+                                # 限价单不冻结保证金，无需恢复
                                 continue
                         else:
                             pass

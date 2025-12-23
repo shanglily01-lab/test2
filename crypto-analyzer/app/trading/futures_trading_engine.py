@@ -506,15 +506,9 @@ class FuturesTradingEngine:
                     # 创建未成交订单
                     order_id = f"FUT-{uuid.uuid4().hex[:16].upper()}"
                     side = f"OPEN_{position_side}"
-                    
-                    # 手续费直接扣除，只冻结保证金
-                    new_balance = current_balance - limit_margin_required - limit_fee
-                    cursor.execute(
-                        """UPDATE paper_trading_accounts
-                        SET current_balance = %s, frozen_balance = frozen_balance + %s
-                        WHERE id = %s""",
-                        (float(new_balance), float(limit_margin_required), account_id)  # 只冻结保证金
-                    )
+
+                    # 限价单不冻结保证金，只在成交时扣除
+                    # 只记录订单，不修改账户余额
                     
                     # 创建订单记录（包含止盈止损和策略ID）
                     order_sql = """
