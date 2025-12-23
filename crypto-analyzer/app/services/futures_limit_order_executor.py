@@ -826,7 +826,8 @@ class FuturesLimitOrderExecutor:
                                     logger.info(f"✅ 做空限价单触发: {symbol} @ {current_price} >= {limit_price}")
                         
                         if should_execute:
-                            # ===== 检查是否已有同方向持仓，避免重复开仓 =====
+                            # ===== 检查同方向持仓数量，最多允许3个 =====
+                            MAX_POSITIONS_PER_DIRECTION = 3
                             with connection.cursor() as check_cursor:
                                 check_cursor.execute(
                                     """SELECT COUNT(*) as cnt FROM futures_positions
@@ -834,8 +835,9 @@ class FuturesLimitOrderExecutor:
                                     (account_id, symbol, position_side)
                                 )
                                 existing = check_cursor.fetchone()
-                                if existing and existing.get('cnt', 0) > 0:
-                                    logger.info(f"⏭️ 限价单跳过: {symbol} {position_side} 已有持仓，取消此限价单")
+                                existing_count = existing.get('cnt', 0) if existing else 0
+                                if existing_count >= MAX_POSITIONS_PER_DIRECTION:
+                                    logger.info(f"⏭️ 限价单跳过: {symbol} {position_side} 已有{existing_count}个持仓(上限{MAX_POSITIONS_PER_DIRECTION})，取消此限价单")
 
                                     # 解冻保证金
                                     frozen_margin = Decimal(str(order.get('margin', 0)))
