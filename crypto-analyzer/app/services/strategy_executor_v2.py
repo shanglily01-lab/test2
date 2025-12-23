@@ -1903,10 +1903,11 @@ class StrategyExecutorV2:
         if current_pnl_pct >= max_take_profit:
             return True, f"最大止盈平仓(盈利{current_pnl_pct:.2f}% >= {max_take_profit}%)", updates
 
-        # 4. 金叉/死叉反转检查
-        close_needed, close_reason = self.check_cross_reversal(position, ema_data)
-        if close_needed:
-            return True, close_reason, updates
+        # 4. 金叉/死叉反转检查（冷却期内跳过，避免刚开仓就被反转信号平掉）
+        if not in_cooldown:
+            close_needed, close_reason = self.check_cross_reversal(position, ema_data)
+            if close_needed:
+                return True, close_reason, updates
 
         # 5. 趋势减弱检查（传入当前价格用于判断盈亏，亏损时不触发）
         close_needed, close_reason = self.check_trend_weakening(position, ema_data, current_price)
