@@ -1669,6 +1669,58 @@ class StrategyExecutorV2:
 
         return False, ""
 
+    def check_ema_diff_take_profit(self, position: Dict, ema_data: Dict,
+                                    current_pnl_pct: float, strategy: Dict) -> Tuple[bool, str]:
+        """
+        EMA差值止盈检测
+
+        当EMA9与EMA26的差值百分比超过设定阈值，且持仓盈利达到最小盈利要求时，触发止盈平仓。
+        适用于趋势过度延伸后的回撤风险控制。
+
+        Args:
+            position: 持仓信息
+            ema_data: EMA数据
+            current_pnl_pct: 当前盈亏百分比
+            strategy: 策略配置
+
+        Returns:
+            (是否需要平仓, 原因)
+        """
+        # 获取EMA差值止盈配置
+        ema_diff_tp = strategy.get('emaDiffTakeProfit', {})
+        if not ema_diff_tp.get('enabled', False):
+            return False, ""
+
+        threshold = ema_diff_tp.get('threshold', 0.5)  # EMA差值阈值，默认0.5%
+        min_profit_pct = ema_diff_tp.get('minProfitPct', 0.3)  # 最小盈利要求，默认0.3%
+
+        # 检查是否达到最小盈利要求
+        if current_pnl_pct < min_profit_pct:
+            return False, ""
+
+        # 获取EMA数据
+        if not ema_data:
+            return False, ""
+
+        # 使用15m周期的EMA数据
+        ema9 = ema_data.get('ema9')
+        ema26 = ema_data.get('ema26')
+
+        if ema9 is None or ema26 is None or ema26 == 0:
+            return False, ""
+
+        # 计算EMA差值百分比
+        ema_diff_pct = abs((ema9 - ema26) / ema26 * 100)
+
+        position_side = position.get('position_side', 'LONG')
+        symbol = position.get('symbol', '')
+
+        # EMA差值超过阈值时触发止盈
+        if ema_diff_pct >= threshold:
+            return True, f"EMA差值止盈(差值{ema_diff_pct:.2f}% >= {threshold}%, 盈利{current_pnl_pct:.2f}%)"
+
+        return False, ""
+
     def _calculate_limit_price(self, current_price: float, price_type: str, direction: str) -> Optional[float]:
         """
         根据价格类型计算限价
@@ -1902,6 +1954,11 @@ class StrategyExecutorV2:
         # 3. 最大止盈检查
         if current_pnl_pct >= max_take_profit:
             return True, f"最大止盈平仓(盈利{current_pnl_pct:.2f}% >= {max_take_profit}%)", updates
+
+        # 3.5 EMA差值止盈检查
+        close_needed, close_reason = self.check_ema_diff_take_profit(position, ema_data, current_pnl_pct, strategy)
+        if close_needed:
+            return True, close_reason, updates
 
         # 4. 金叉/死叉反转检查（冷却期内跳过，避免刚开仓就被反转信号平掉）
         if not in_cooldown:
