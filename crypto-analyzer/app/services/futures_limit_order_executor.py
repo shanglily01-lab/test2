@@ -826,6 +826,44 @@ class FuturesLimitOrderExecutor:
                                     logger.info(f"✅ 做空限价单触发: {symbol} @ {current_price} >= {limit_price}")
                         
                         if should_execute:
+                            # ===== 检查是否已有同方向持仓，避免重复开仓 =====
+                            with connection.cursor() as check_cursor:
+                                check_cursor.execute(
+                                    """SELECT COUNT(*) as cnt FROM futures_positions
+                                    WHERE account_id = %s AND symbol = %s AND position_side = %s AND status = 'open'""",
+                                    (account_id, symbol, position_side)
+                                )
+                                existing = check_cursor.fetchone()
+                                if existing and existing.get('cnt', 0) > 0:
+                                    logger.info(f"⏭️ 限价单跳过: {symbol} {position_side} 已有持仓，取消此限价单")
+
+                                    # 解冻保证金
+                                    frozen_margin = Decimal(str(order.get('margin', 0)))
+                                    if frozen_margin > 0:
+                                        with connection.cursor() as update_cursor:
+                                            update_cursor.execute(
+                                                """UPDATE paper_trading_accounts
+                                                SET current_balance = current_balance + %s,
+                                                    frozen_balance = GREATEST(0, frozen_balance - %s)
+                                                WHERE id = %s""",
+                                                (float(frozen_margin), float(frozen_margin), account_id)
+                                            )
+
+                                    # 更新订单状态为已取消
+                                    with connection.cursor() as update_cursor:
+                                        update_cursor.execute(
+                                            """UPDATE futures_orders
+                                            SET status = 'CANCELLED',
+                                                cancellation_reason = 'position_exists',
+                                                canceled_at = NOW(),
+                                                notes = CONCAT(COALESCE(notes, ''), ' POSITION_EXISTS')
+                                            WHERE order_id = %s""",
+                                            (order_id,)
+                                        )
+
+                                    connection.commit()
+                                    continue  # 跳过此订单
+
                             # ===== RSI过滤检查：限价单触发前检查RSI是否超买/超卖 =====
                             rsi_rejection_reason = self._check_rsi_filter(connection, order)
                             if rsi_rejection_reason:
