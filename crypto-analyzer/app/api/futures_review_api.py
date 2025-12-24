@@ -188,20 +188,95 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
     return 'unknown', '未知'
 
 
-def parse_cancel_reason(reason: str) -> tuple:
+def parse_cancel_reason(reason: str, notes: str = None) -> tuple:
     """
     解析取消原因，返回 (代码, 中文名称)
+
+    会结合 notes 字段来提取详细的取消原因
     """
     if not reason:
         return 'unknown', '未知'
 
     reason_lower = reason.lower()
 
-    # 直接匹配英文代码
-    if reason in CANCEL_REASON_MAP:
-        return reason, CANCEL_REASON_MAP[reason]
+    # 从 notes 中提取详细原因
+    detail = ''
+    if notes:
+        # notes 格式: " VALIDATION_FAILED: 趋势末端(差值缩小36.3%); 弱趋势(EMA差值0.048%<0.05%)"
+        # 或: " TREND_REVERSAL: 死叉(做多): EMA9=5.7346 < EMA26=5.7347, 差值=0.00%"
+        if 'VALIDATION_FAILED:' in notes:
+            detail = notes.split('VALIDATION_FAILED:')[-1].strip()
+        elif 'TREND_REVERSAL:' in notes:
+            detail = notes.split('TREND_REVERSAL:')[-1].strip()
+        elif 'RSI_FILTER:' in notes:
+            detail = notes.split('RSI_FILTER:')[-1].strip()
+        elif 'EMA_DIFF_SMALL:' in notes:
+            detail = notes.split('EMA_DIFF_SMALL:')[-1].strip()
+        elif 'TIMEOUT' in notes:
+            detail = '超时'
 
-    # 关键字匹配
+    # 直接匹配英文代码
+    if reason == 'validation_failed':
+        # 解析详细原因
+        if detail:
+            # 尝试从英文关键词解析
+            reasons = []
+            if 'EMA' in detail:
+                if '<' in detail or '>' in detail:
+                    reasons.append('EMA方向不符')
+                if '%<' in detail or '差值' in detail or 'diff' in detail.lower():
+                    reasons.append('EMA差值过小')
+            if '缩小' in detail or 'shrink' in detail.lower() or '末端' in detail:
+                reasons.append('趋势末端')
+            if '弱' in detail or 'weak' in detail.lower():
+                reasons.append('弱趋势')
+            if reasons:
+                return 'validation_failed', '自检: ' + '+'.join(reasons)
+        return 'validation_failed', '自检未通过'
+
+    if reason == 'trend_reversal':
+        if detail:
+            if 'EMA9' in detail:
+                # 解析EMA数值
+                import re
+                match = re.search(r'EMA9[=:]?\s*([\d.]+).*EMA26[=:]?\s*([\d.]+)', detail)
+                if match:
+                    ema9 = float(match.group(1))
+                    ema26 = float(match.group(2))
+                    if ema9 < ema26:
+                        return 'trend_reversal', '死叉反转'
+                    else:
+                        return 'trend_reversal', '金叉反转'
+        return 'trend_reversal', '趋势转向'
+
+    if reason == 'timeout':
+        return 'timeout', '超时取消'
+
+    if reason == 'rsi_filter':
+        if detail and 'RSI' in detail:
+            import re
+            match = re.search(r'RSI[=:]?\s*([\d.]+)', detail)
+            if match:
+                rsi = float(match.group(1))
+                if rsi > 60:
+                    return 'rsi_filter', f'RSI超买({rsi:.0f})'
+                elif rsi < 40:
+                    return 'rsi_filter', f'RSI超卖({rsi:.0f})'
+        return 'rsi_filter', 'RSI过滤'
+
+    if reason == 'ema_diff_small':
+        return 'ema_diff_small', 'EMA差值过小'
+
+    if reason == 'position_exists':
+        return 'position_exists', '持仓已存在'
+
+    if reason == 'execution_failed':
+        return 'execution_failed', '执行失败'
+
+    if reason == 'manual':
+        return 'manual', '手动取消'
+
+    # 关键字匹配（兼容旧数据）
     if 'timeout' in reason_lower:
         return 'timeout', '超时取消'
     if 'validation' in reason_lower or '自检' in reason:
@@ -481,7 +556,7 @@ async def get_cancelled_orders(
 
         # 获取所有取消订单用于统计原因分布
         cursor.execute("""
-            SELECT cancellation_reason
+            SELECT cancellation_reason, notes
             FROM futures_orders
             WHERE account_id = %s AND status = 'CANCELLED' AND created_at >= %s
         """, (account_id, time_threshold))
@@ -490,7 +565,7 @@ async def get_cancelled_orders(
         # 统计取消原因分布
         reason_stats = {}
         for row in all_reasons:
-            reason_code, reason_cn = parse_cancel_reason(row['cancellation_reason'])
+            reason_code, reason_cn = parse_cancel_reason(row['cancellation_reason'], row.get('notes'))
             if reason_code not in reason_stats:
                 reason_stats[reason_code] = {
                     "code": reason_code,
@@ -520,7 +595,7 @@ async def get_cancelled_orders(
         # 处理订单列表
         cancelled_list = []
         for order in orders:
-            reason_code, reason_cn = parse_cancel_reason(order['cancellation_reason'])
+            reason_code, reason_cn = parse_cancel_reason(order['cancellation_reason'], order.get('notes'))
 
             cancelled_list.append({
                 "id": order['id'],
