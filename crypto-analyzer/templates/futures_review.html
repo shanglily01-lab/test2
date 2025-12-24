@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>复盘合约(24H) - AlphaFlow</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
+        :root {
+            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
+            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
+            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
+            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
+            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
+            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
+            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
+            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
+            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
+            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
+        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
+        .header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-lg); }
+        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
+        .header-subtitle { color: var(--text-secondary); font-size: 13px; }
+        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; flex-wrap: wrap; }
+        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
+        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
+        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
+        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
+        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
+        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
+        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
+        .card-body { padding: 0; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--spacing-md); }
+        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-lg); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
+        .stat-card:hover::before { opacity: 1; }
+        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
+        .stat-value { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
+        .stat-change { font-size: 13px; color: var(--text-secondary); }
+        .stat-change.positive { color: var(--success-green); }
+        .stat-change.negative { color: var(--danger-red); }
+        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
+        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
+        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
+        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
+        tr:last-child td { border-bottom: none; }
+        tbody tr { transition: background-color var(--transition-fast); }
+        tbody tr:hover { background: var(--bg-hover); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
+        .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-muted); }
+        .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
+        .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
+        .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
+        .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
+        .badge-success { background: var(--success-green-bg); color: var(--success-green); }
+        .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
+        .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
+        .badge-warning { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
+        .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
+        .pnl-positive { color: var(--success-green); }
+        .pnl-negative { color: var(--danger-red); }
+        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
+        .empty-state-icon { font-size: 48px; margin-bottom: var(--spacing-lg); opacity: 0.5; }
+        .empty-state-text { font-size: 15px; margin-bottom: var(--spacing-sm); }
+        .loading-overlay { display: flex; justify-content: center; align-items: center; min-height: 200px; }
+        .spinner { width: 40px; height: 40px; border: 4px solid var(--bg-tertiary); border-top-color: var(--primary-blue); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .text-primary { color: var(--text-primary); }
+        .text-secondary { color: var(--text-secondary); }
+        .text-success { color: var(--success-green); }
+        .text-danger { color: var(--danger-red); }
+        .d-flex { display: flex; }
+        .align-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-sm { gap: var(--spacing-sm); }
+        .gap-md { gap: var(--spacing-md); }
+        .mb-sm { margin-bottom: var(--spacing-sm); }
+        .font-mono { font-family: var(--font-mono); }
+        .text-sm { font-size: 13px; }
+        .text-xs { font-size: 11px; }
+        .last-update { font-size: 12px; color: var(--text-secondary); }
+
+        /* Filter buttons */
+        .filter-group { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; }
+        .filter-btn { padding: var(--spacing-sm) var(--spacing-lg); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-secondary); cursor: pointer; transition: all var(--transition-base); font-size: 13px; }
+        .filter-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .filter-btn.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
+
+        /* Suggestion cards */
+        .suggestion-card { background: var(--bg-tertiary); border-left: 4px solid var(--info-blue); border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); }
+        .suggestion-card.warning { border-left-color: var(--warning-yellow); }
+        .suggestion-card.danger { border-left-color: var(--danger-red); }
+        .suggestion-card.success { border-left-color: var(--success-green); }
+        .suggestion-card.info { border-left-color: var(--info-blue); }
+        .suggestion-category { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-xs); color: var(--text-secondary); }
+        .suggestion-message { font-size: 14px; color: var(--text-primary); line-height: 1.5; }
+
+        /* Analysis grid */
+        .analysis-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-xl); }
+        @media (max-width: 1200px) { .analysis-grid { grid-template-columns: 1fr; } }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container { padding: var(--spacing-md); }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); }
+            .stat-value { font-size: 18px; }
+            .stat-label { font-size: 11px; }
+            .stat-card { padding: var(--spacing-md); }
+            .nav-links { flex-direction: column; }
+            th, td { padding: var(--spacing-sm); font-size: 11px; }
+        }
+
+        /* Tab styles */
+        .tabs { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); padding-bottom: var(--spacing-md); }
+        .tab-btn { padding: var(--spacing-md) var(--spacing-xl); background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; font-weight: 500; transition: all var(--transition-base); border-radius: var(--radius-md) var(--radius-md) 0 0; }
+        .tab-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+        .tab-btn.active { color: var(--primary-blue); border-bottom: 2px solid var(--primary-blue); margin-bottom: -1px; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div>
+                    <h1 class="header-title">
+                        <i class="bi bi-journal-check"></i>
+                        复盘合约(24H)
+                    </h1>
+                    <p class="header-subtitle">模拟合约交易复盘分析 - 发现问题，优化策略</p>
+                </div>
+                <div class="header-actions">
+                    <select id="hours-select" class="btn btn-secondary" style="padding: 8px 16px; cursor: pointer;">
+                        <option value="24">24小时</option>
+                        <option value="48">48小时</option>
+                        <option value="72">72小时</option>
+                        <option value="168">7天</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="refreshAll()">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="nav-container">
+            <div class="nav-links">
+                <a href="/" class="nav-link">
+                    <i class="bi bi-house"></i> 首页
+                </a>
+                <a href="/dashboard" class="nav-link">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+                <a href="/technical-signals" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 技术信号
+                </a>
+                <a href="/paper_trading" class="nav-link">
+                    <i class="bi bi-journals"></i> 模拟现货
+                </a>
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 模拟合约
+                </a>
+                <a href="/futures_review" class="nav-link active">
+                    <i class="bi bi-journal-check"></i> 复盘(24H)
+                </a>
+                <a href="/live_trading" class="nav-link">
+                    <i class="bi bi-currency-exchange"></i> 实盘合约
+                </a>
+                <a href="/trading-strategies" class="nav-link">
+                    <i class="bi bi-diagram-3"></i> 交易策略
+                </a>
+                <a href="/etf_data" class="nav-link">
+                    <i class="bi bi-pie-chart"></i> ETF 数据
+                </a>
+                <a href="/corporate_treasury" class="nav-link">
+                    <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/blockchain_gas" class="nav-link">
+                    <i class="bi bi-lightning-charge"></i> Gas统计
+                </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
+                </a>
+            </div>
+        </nav>
+
+        <!-- Summary Cards -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-bar-chart-line"></i>
+                    <span id="summary-title">24小时交易统计</span>
+                </h2>
+                <div class="last-update" id="summary-update">-</div>
+            </div>
+            <div class="card-body">
+                <div id="summaryLoading" class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+                <div id="summaryStats" class="stats-grid" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Tabs Section -->
+        <div class="card">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('trades')">
+                    <i class="bi bi-list-check"></i> 交易清单
+                </button>
+                <button class="tab-btn" onclick="switchTab('cancelled')">
+                    <i class="bi bi-x-circle"></i> 取消订单
+                </button>
+                <button class="tab-btn" onclick="switchTab('analysis')">
+                    <i class="bi bi-pie-chart"></i> 原因分析
+                </button>
+                <button class="tab-btn" onclick="switchTab('suggestions')">
+                    <i class="bi bi-lightbulb"></i> 优化建议
+                </button>
+            </div>
+
+            <!-- Trades Tab -->
+            <div id="trades-tab" class="tab-content active">
+                <div class="d-flex justify-between align-center mb-sm" style="margin-bottom: 16px;">
+                    <div class="filter-group">
+                        <button class="filter-btn active" onclick="filterTrades('all')">全部</button>
+                        <button class="filter-btn" onclick="filterTrades('profit')">盈利</button>
+                        <button class="filter-btn" onclick="filterTrades('loss')">亏损</button>
+                    </div>
+                    <div class="filter-group">
+                        <button class="filter-btn active" onclick="sortTrades('time')">按时间</button>
+                        <button class="filter-btn" onclick="sortTrades('pnl')">按盈亏</button>
+                    </div>
+                </div>
+                <div id="tradesLoading" class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+                <div id="tradesContent" style="display: none;">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>交易对</th>
+                                    <th>方向</th>
+                                    <th>杠杆</th>
+                                    <th>开仓价</th>
+                                    <th>平仓价</th>
+                                    <th>盈亏</th>
+                                    <th>盈亏%</th>
+                                    <th>持仓时长</th>
+                                    <th>开仓原因</th>
+                                    <th>平仓原因</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trades-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cancelled Tab -->
+            <div id="cancelled-tab" class="tab-content">
+                <div id="cancelledLoading" class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+                <div id="cancelledContent" style="display: none;">
+                    <div class="analysis-grid" style="margin-bottom: 24px;">
+                        <div>
+                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">取消原因分布</h3>
+                            <div id="cancel-reason-stats"></div>
+                        </div>
+                        <div>
+                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">统计概览</h3>
+                            <div id="cancel-summary"></div>
+                        </div>
+                    </div>
+                    <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">取消订单列表</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>交易对</th>
+                                    <th>方向</th>
+                                    <th>价格</th>
+                                    <th>数量</th>
+                                    <th>取消原因</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cancelled-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis Tab -->
+            <div id="analysis-tab" class="tab-content">
+                <div id="analysisLoading" class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+                <div id="analysisContent" style="display: none;">
+                    <div class="analysis-grid">
+                        <div>
+                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                                <i class="bi bi-arrow-up-circle"></i> 开仓原因分析
+                            </h3>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>开仓原因</th>
+                                            <th>次数</th>
+                                            <th>胜率</th>
+                                            <th>总盈亏</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="entry-analysis-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                                <i class="bi bi-arrow-down-circle"></i> 平仓原因分析
+                            </h3>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>平仓原因</th>
+                                            <th>次数</th>
+                                            <th>平均盈亏</th>
+                                            <th>总盈亏</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="close-analysis-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 24px;">
+                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                            <i class="bi bi-arrows-expand"></i> 方向分析
+                        </h3>
+                        <div id="direction-analysis" class="stats-grid" style="grid-template-columns: repeat(2, 1fr);"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Suggestions Tab -->
+            <div id="suggestions-tab" class="tab-content">
+                <div id="suggestionsLoading" class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+                <div id="suggestionsContent" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentFilter = 'all';
+        let currentSort = 'time';
+        let hours = 24;
+
+        // Format helpers
+        function formatNumber(num, decimals = 2) {
+            if (num === null || num === undefined) return '-';
+            return Number(num).toFixed(decimals);
+        }
+
+        function formatPnl(pnl) {
+            if (pnl === null || pnl === undefined) return '-';
+            const value = Number(pnl);
+            const formatted = value >= 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
+            const className = value >= 0 ? 'pnl-positive' : 'pnl-negative';
+            return `<span class="${className}">${formatted}</span>`;
+        }
+
+        function formatPnlPct(pct) {
+            if (pct === null || pct === undefined) return '-';
+            const value = Number(pct);
+            const formatted = value >= 0 ? `+${value.toFixed(2)}%` : `${value.toFixed(2)}%`;
+            const className = value >= 0 ? 'pnl-positive' : 'pnl-negative';
+            return `<span class="${className}">${formatted}</span>`;
+        }
+
+        function formatTime(isoString) {
+            if (!isoString) return '-';
+            const date = new Date(isoString);
+            return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatHoldingTime(hours) {
+            if (hours === null || hours === undefined) return '-';
+            if (hours < 1) return `${Math.round(hours * 60)}分钟`;
+            if (hours < 24) return `${hours.toFixed(1)}小时`;
+            return `${(hours / 24).toFixed(1)}天`;
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        // Filter and sort
+        function filterTrades(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-group:first-child .filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            loadTrades();
+        }
+
+        function sortTrades(sort) {
+            currentSort = sort;
+            document.querySelectorAll('.filter-group:last-child .filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            loadTrades();
+        }
+
+        // API calls
+        async function loadSummary() {
+            document.getElementById('summaryLoading').style.display = 'flex';
+            document.getElementById('summaryStats').style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/futures/review/summary?hours=${hours}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const data = result.data;
+                    const overview = data.order_overview;
+                    const pnl = data.pnl_summary;
+                    const winLoss = data.win_loss_analysis;
+                    const extremes = data.extremes;
+
+                    document.getElementById('summary-title').textContent = `${hours}小时交易统计`;
+                    document.getElementById('summary-update').textContent = `更新于 ${new Date().toLocaleTimeString('zh-CN')}`;
+
+                    document.getElementById('summaryStats').innerHTML = `
+                        <div class="stat-card">
+                            <div class="stat-label">总订单/成交</div>
+                            <div class="stat-value">${overview.total_orders}/${overview.filled_orders}</div>
+                            <div class="stat-change">成功率 ${overview.success_rate}%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">已实现盈亏</div>
+                            <div class="stat-value ${pnl.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                ${pnl.realized_pnl >= 0 ? '+' : ''}${formatNumber(pnl.realized_pnl)}
+                            </div>
+                            <div class="stat-change">手续费: ${formatNumber(pnl.total_fee)}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">胜率</div>
+                            <div class="stat-value">${winLoss.win_rate}%</div>
+                            <div class="stat-change">${winLoss.winning_trades}胜 / ${winLoss.losing_trades}负</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">盈亏比</div>
+                            <div class="stat-value">${winLoss.profit_loss_ratio}</div>
+                            <div class="stat-change">均盈${formatNumber(winLoss.avg_profit)} / 均亏${formatNumber(winLoss.avg_loss)}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">最大盈利</div>
+                            <div class="stat-value pnl-positive">+${formatNumber(extremes.max_profit)}</div>
+                            <div class="stat-change">单笔最高</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">最大亏损</div>
+                            <div class="stat-value pnl-negative">${formatNumber(extremes.max_loss)}</div>
+                            <div class="stat-change">单笔最低</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">取消订单</div>
+                            <div class="stat-value">${overview.cancelled_orders}</div>
+                            <div class="stat-change">挂单: ${overview.pending_orders}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">平均持仓</div>
+                            <div class="stat-value">${formatHoldingTime(data.avg_holding_hours)}</div>
+                            <div class="stat-change">持仓时长</div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('加载统计失败:', error);
+            }
+
+            document.getElementById('summaryLoading').style.display = 'none';
+            document.getElementById('summaryStats').style.display = 'grid';
+        }
+
+        async function loadTrades() {
+            document.getElementById('tradesLoading').style.display = 'flex';
+            document.getElementById('tradesContent').style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/futures/review/trades?hours=${hours}&filter_type=${currentFilter}&sort_by=${currentSort}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const trades = result.data.trades;
+                    const tbody = document.getElementById('trades-table-body');
+
+                    if (trades.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="11" class="empty-state">暂无交易记录</td></tr>`;
+                    } else {
+                        tbody.innerHTML = trades.map(trade => `
+                            <tr>
+                                <td>${formatTime(trade.close_time)}</td>
+                                <td><strong>${trade.symbol}</strong></td>
+                                <td>
+                                    <span class="badge ${trade.position_side === 'LONG' ? 'badge-success' : 'badge-danger'}">
+                                        ${trade.position_side_cn}
+                                    </span>
+                                </td>
+                                <td>${trade.leverage}x</td>
+                                <td class="font-mono">${formatNumber(trade.entry_price, 4)}</td>
+                                <td class="font-mono">${formatNumber(trade.close_price, 4)}</td>
+                                <td class="font-mono">${formatPnl(trade.realized_pnl)}</td>
+                                <td class="font-mono">${formatPnlPct(trade.pnl_pct)}</td>
+                                <td>${formatHoldingTime(trade.holding_hours)}</td>
+                                <td><span class="badge badge-info">${trade.entry_reason_cn}</span></td>
+                                <td><span class="badge badge-neutral">${trade.close_reason_cn}</span></td>
+                            </tr>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('加载交易记录失败:', error);
+            }
+
+            document.getElementById('tradesLoading').style.display = 'none';
+            document.getElementById('tradesContent').style.display = 'block';
+        }
+
+        async function loadCancelled() {
+            document.getElementById('cancelledLoading').style.display = 'flex';
+            document.getElementById('cancelledContent').style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/futures/review/cancelled?hours=${hours}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const data = result.data;
+
+                    // Reason distribution
+                    document.getElementById('cancel-reason-stats').innerHTML = data.reason_distribution.map(r => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-default);">
+                            <span>${r.name_cn}</span>
+                            <span class="font-mono">${r.count} <span class="text-secondary">(${r.percentage}%)</span></span>
+                        </div>
+                    `).join('');
+
+                    // Summary
+                    document.getElementById('cancel-summary').innerHTML = `
+                        <div class="stat-card" style="text-align: left; padding: 16px;">
+                            <div style="font-size: 36px; font-weight: 700; color: var(--warning-yellow); margin-bottom: 8px;">${data.total_cancelled}</div>
+                            <div style="color: var(--text-secondary);">取消订单总数</div>
+                        </div>
+                    `;
+
+                    // Table
+                    const tbody = document.getElementById('cancelled-table-body');
+                    if (data.cancelled_orders.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">暂无取消订单</td></tr>`;
+                    } else {
+                        tbody.innerHTML = data.cancelled_orders.map(order => `
+                            <tr>
+                                <td>${formatTime(order.canceled_at || order.created_at)}</td>
+                                <td><strong>${order.symbol}</strong></td>
+                                <td>
+                                    <span class="badge ${order.side.includes('LONG') ? 'badge-success' : 'badge-danger'}">
+                                        ${order.side_cn}
+                                    </span>
+                                </td>
+                                <td class="font-mono">${formatNumber(order.price, 4)}</td>
+                                <td class="font-mono">${formatNumber(order.quantity, 6)}</td>
+                                <td><span class="badge badge-warning">${order.cancel_reason_cn}</span></td>
+                            </tr>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('加载取消订单失败:', error);
+            }
+
+            document.getElementById('cancelledLoading').style.display = 'none';
+            document.getElementById('cancelledContent').style.display = 'block';
+        }
+
+        async function loadAnalysis() {
+            document.getElementById('analysisLoading').style.display = 'flex';
+            document.getElementById('analysisContent').style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/futures/review/analysis?hours=${hours}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const data = result.data;
+
+                    // Entry analysis
+                    const entryBody = document.getElementById('entry-analysis-body');
+                    if (data.entry_analysis.length === 0) {
+                        entryBody.innerHTML = `<tr><td colspan="4" class="empty-state">暂无数据</td></tr>`;
+                    } else {
+                        entryBody.innerHTML = data.entry_analysis.map(e => `
+                            <tr>
+                                <td><span class="badge badge-info">${e.name_cn}</span></td>
+                                <td>${e.count}</td>
+                                <td>${e.win_rate}%</td>
+                                <td>${formatPnl(e.total_pnl)}</td>
+                            </tr>
+                        `).join('');
+                    }
+
+                    // Close analysis
+                    const closeBody = document.getElementById('close-analysis-body');
+                    if (data.close_analysis.length === 0) {
+                        closeBody.innerHTML = `<tr><td colspan="4" class="empty-state">暂无数据</td></tr>`;
+                    } else {
+                        closeBody.innerHTML = data.close_analysis.map(c => `
+                            <tr>
+                                <td><span class="badge badge-neutral">${c.name_cn}</span></td>
+                                <td>${c.count}</td>
+                                <td>${formatPnl(c.avg_pnl)}</td>
+                                <td>${formatPnl(c.total_pnl)}</td>
+                            </tr>
+                        `).join('');
+                    }
+
+                    // Direction analysis
+                    document.getElementById('direction-analysis').innerHTML = data.direction_analysis.map(d => `
+                        <div class="stat-card" style="border-left: 4px solid ${d.side === 'LONG' ? 'var(--success-green)' : 'var(--danger-red)'};">
+                            <div class="stat-label">${d.side_cn}</div>
+                            <div class="stat-value">${d.win_rate}%</div>
+                            <div class="stat-change">${d.wins}胜/${d.count}总 | ${formatPnl(d.total_pnl)}</div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('加载分析数据失败:', error);
+            }
+
+            document.getElementById('analysisLoading').style.display = 'none';
+            document.getElementById('analysisContent').style.display = 'block';
+        }
+
+        async function loadSuggestions() {
+            document.getElementById('suggestionsLoading').style.display = 'flex';
+            document.getElementById('suggestionsContent').style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/futures/review/suggestions?hours=${hours}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const suggestions = result.data.suggestions;
+                    const container = document.getElementById('suggestionsContent');
+
+                    if (suggestions.length === 0) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon"><i class="bi bi-check-circle"></i></div>
+                                <div class="empty-state-text">暂无优化建议，继续保持！</div>
+                            </div>
+                        `;
+                    } else {
+                        container.innerHTML = suggestions.map(s => `
+                            <div class="suggestion-card ${s.type}">
+                                <div class="suggestion-category">
+                                    <i class="bi bi-${s.type === 'danger' ? 'exclamation-triangle' : s.type === 'warning' ? 'exclamation-circle' : s.type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+                                    ${s.category}
+                                </div>
+                                <div class="suggestion-message">${s.message}</div>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('加载建议失败:', error);
+            }
+
+            document.getElementById('suggestionsLoading').style.display = 'none';
+            document.getElementById('suggestionsContent').style.display = 'block';
+        }
+
+        function refreshAll() {
+            hours = parseInt(document.getElementById('hours-select').value);
+            loadSummary();
+            loadTrades();
+            loadCancelled();
+            loadAnalysis();
+            loadSuggestions();
+        }
+
+        // Initialize
+        document.getElementById('hours-select').addEventListener('change', refreshAll);
+        refreshAll();
+    </script>
+</body>
+</html>

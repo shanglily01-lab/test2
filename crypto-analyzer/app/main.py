@@ -520,6 +520,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册复盘合约API路由
+try:
+    from app.api.futures_review_api import router as futures_review_router
+    app.include_router(futures_review_router)
+    logger.info("✅ 复盘合约API路由已注册")
+except Exception as e:
+    logger.warning(f"⚠️  复盘合约API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册企业金库监控API路由
 ENABLE_CORPORATE_TREASURY = True  # 启用企业金库API
 
@@ -903,6 +913,18 @@ async def live_trading_page():
         return FileResponse(str(live_path))
     else:
         raise HTTPException(status_code=404, detail="Live trading page not found")
+
+
+@app.get("/futures_review")
+async def futures_review_page():
+    """
+    复盘合约(24H)页面
+    """
+    review_path = project_root / "templates" / "futures_review.html"
+    if review_path.exists():
+        return FileResponse(str(review_path))
+    else:
+        raise HTTPException(status_code=404, detail="Futures review page not found")
 
 
 @app.get("/market_regime")
