@@ -2165,15 +2165,25 @@
                             'timeout': '超时取消',
                             'timeout_price_deviation': '超时价格偏离',
                             'timeout_ema_unfavorable': '超时EMA不利',
-                            'trend_reversal': '趋势反转',
-                            'sell_ema_unfavorable': '卖出信号EMA不利'
+                            'trend_reversal': '趋势转向',
+                            'sell_ema_unfavorable': '卖出信号EMA不利',
+                            'validation_failed': '自检未通过',
+                            'position_exists': '持仓已存在',
+                            'rsi_filter': 'RSI过滤',
+                            'ema_diff_small': 'EMA差值过小',
+                            'execution_failed': '执行失败'
                         };
                         const reasonText = order.cancellation_reason ? reasonMap[order.cancellation_reason] || order.cancellation_reason : '未知';
                         const reasonClass = order.cancellation_reason === 'manual' ? 'badge-neutral' :
                                           order.cancellation_reason === 'strategy_signal' ? 'badge-info' :
                                           order.cancellation_reason === 'risk_control' ? 'badge-warning' :
                                           order.cancellation_reason === 'timeout' ? 'badge-warning' :
-                                          order.cancellation_reason === 'trend_reversal' ? 'badge-info' : 'badge-secondary';
+                                          order.cancellation_reason === 'trend_reversal' ? 'badge-info' :
+                                          order.cancellation_reason === 'validation_failed' ? 'badge-warning' :
+                                          order.cancellation_reason === 'position_exists' ? 'badge-neutral' :
+                                          order.cancellation_reason === 'rsi_filter' ? 'badge-warning' :
+                                          order.cancellation_reason === 'ema_diff_small' ? 'badge-warning' :
+                                          order.cancellation_reason === 'execution_failed' ? 'badge-error' : 'badge-secondary';
 
                         // 格式化订单来源
                         const orderSource = order.order_source || 'manual';
