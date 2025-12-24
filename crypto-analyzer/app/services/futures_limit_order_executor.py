@@ -362,12 +362,15 @@ class FuturesLimitOrderExecutor:
                 elif direction == 'short' and ema9 >= ema26:
                     reject_reasons.append(f"EMA方向不符(EMA9={ema9:.4f}>=EMA26={ema26:.4f})")
 
-            # 2. MA方向确认
-            if pending_validation.get('require_ma_confirm', True):
-                if direction == 'long' and current_price <= ma10:
-                    reject_reasons.append(f"MA方向不符(价格{current_price:.4f}<=MA10={ma10:.4f})")
-                elif direction == 'short' and current_price >= ma10:
-                    reject_reasons.append(f"MA方向不符(价格{current_price:.4f}>=MA10={ma10:.4f})")
+            # 2. MA方向确认（已禁用）
+            # 注意：限价单设置为低于市价0.6%（做多）或高于市价0.6%（做空）
+            # 因此当限价触发时，价格自然会低于/高于MA10，这是预期行为
+            # MA方向检查对限价单没有意义，跳过此检查
+            # if pending_validation.get('require_ma_confirm', True):
+            #     if direction == 'long' and current_price <= ma10:
+            #         reject_reasons.append(f"MA方向不符(价格{current_price:.4f}<=MA10={ma10:.4f})")
+            #     elif direction == 'short' and current_price >= ma10:
+            #         reject_reasons.append(f"MA方向不符(价格{current_price:.4f}>=MA10={ma10:.4f})")
 
             # 3. 趋势末端检查（EMA差值快速收窄）
             if pending_validation.get('check_trend_end', True):
