@@ -104,6 +104,12 @@ class ClosePositionRequest(BaseModel):
     reason: str = Field(default='manual', description="原因: manual, stop_loss, take_profit, liquidation")
 
 
+class BatchCloseRequest(BaseModel):
+    """批量平仓请求"""
+    position_ids: List[int] = Field(..., description="持仓ID列表")
+    reason: str = Field(default='manual_close_all', description="平仓原因")
+
+
 class AutoOpenRequest(BaseModel):
     """自动开仓请求"""
     account_id: int = Field(default=2, description="账户ID")
@@ -841,6 +847,58 @@ async def close_position(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post('/close-batch')
+async def close_positions_batch(request: BatchCloseRequest):
+    """
+    批量平仓
+
+    一次性平仓多个持仓，使用并发处理提高效率
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    position_ids = request.position_ids
+    reason = request.reason
+
+    if not position_ids:
+        return {'success': True, 'message': '没有持仓需要平仓', 'results': []}
+
+    results = []
+    success_count = 0
+    fail_count = 0
+
+    # 使用线程池并发执行平仓操作
+    def close_single(pos_id):
+        try:
+            result = engine.close_position(
+                position_id=pos_id,
+                close_quantity=None,
+                reason=reason
+            )
+            return {'position_id': pos_id, 'success': result.get('success', False), 'data': result}
+        except Exception as e:
+            return {'position_id': pos_id, 'success': False, 'error': str(e)}
+
+    # 并发执行所有平仓操作
+    with ThreadPoolExecutor(max_workers=min(len(position_ids), 10)) as executor:
+        futures = [executor.submit(close_single, pid) for pid in position_ids]
+        for future in futures:
+            result = future.result()
+            results.append(result)
+            if result['success']:
+                success_count += 1
+            else:
+                fail_count += 1
+
+    return {
+        'success': fail_count == 0,
+        'message': f'平仓完成: {success_count} 成功, {fail_count} 失败',
+        'success_count': success_count,
+        'fail_count': fail_count,
+        'results': results
+    }
 
 
 # ==================== 基于投资建议自动开仓 ====================

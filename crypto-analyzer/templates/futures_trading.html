@@ -3020,61 +3020,53 @@
                 closeAllBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 平仓中...';
             }
 
-            // 逐个平仓（避免并发问题）
-            let successCount = 0;
-            let failCount = 0;
+            try {
+                // 使用批量平仓API
+                const response = await fetch(`${API_BASE}/close-batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        position_ids: positionIds,
+                        reason: 'manual_close_all'
+                    })
+                });
 
-            for (const positionId of positionIds) {
-                try {
-                    const response = await fetch(`${API_BASE}/close/${positionId}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            close_quantity: null,
-                            reason: 'manual_close_all'
-                        })
-                    });
+                const data = await response.json();
+                const successCount = data.success_count || 0;
+                const failCount = data.fail_count || 0;
 
-                    const responseText = await response.text();
-                    let data;
-                    try {
-                        data = JSON.parse(responseText);
-                    } catch (e) {
-                        failCount++;
-                        continue;
-                    }
-
-                    if (response.ok && data.success) {
-                        successCount++;
-                        // 移除对应的持仓卡片
-                        const card = document.querySelector(`#positionsBody .position-card[data-position-id="${positionId}"]`);
-                        if (card) {
-                            card.style.transition = 'opacity 0.3s, transform 0.3s';
-                            card.style.opacity = '0';
-                            card.style.transform = 'translateX(50px)';
-                            setTimeout(() => card.remove(), 300);
+                // 移除成功平仓的持仓卡片
+                if (data.results) {
+                    data.results.forEach(result => {
+                        if (result.success) {
+                            const card = document.querySelector(`#positionsBody .position-card[data-position-id="${result.position_id}"]`);
+                            if (card) {
+                                card.style.transition = 'opacity 0.3s, transform 0.3s';
+                                card.style.opacity = '0';
+                                card.style.transform = 'translateX(50px)';
+                                setTimeout(() => card.remove(), 300);
+                            }
                         }
-                    } else {
-                        failCount++;
-                    }
-                } catch (error) {
-                    failCount++;
+                    });
                 }
+
+                // 显示结果
+                if (successCount > 0 && failCount === 0) {
+                    showToast(`成功平仓 ${successCount} 个持仓`, 'success');
+                } else if (successCount > 0 && failCount > 0) {
+                    showToast(`平仓完成: ${successCount} 个成功, ${failCount} 个失败`, 'warning');
+                } else {
+                    showToast(`平仓失败: ${failCount} 个持仓`, 'error');
+                }
+            } catch (error) {
+                console.error('批量平仓失败:', error);
+                showToast('批量平仓请求失败', 'error');
             }
 
             // 恢复按钮状态
             if (closeAllBtn) {
                 closeAllBtn.disabled = false;
                 closeAllBtn.innerHTML = '<i class="bi bi-x-circle"></i> 一键平仓';
-            }
-
-            // 显示结果
-            if (successCount > 0 && failCount === 0) {
-                showToast(`✅ 成功平仓 ${successCount} 个持仓`, 'success');
-            } else if (successCount > 0 && failCount > 0) {
-                showToast(`平仓完成: ${successCount} 个成功, ${failCount} 个失败`, 'warning');
-            } else {
-                showToast(`❌ 平仓失败: ${failCount} 个持仓`, 'error');
             }
 
             // 刷新数据
