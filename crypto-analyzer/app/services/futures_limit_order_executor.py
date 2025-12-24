@@ -995,6 +995,10 @@ class FuturesLimitOrderExecutor:
                                 # 止损止盈已基于限价计算好，直接传入价格
                                 execution_price = current_price  # 实际成交价为市价
 
+                                # 从订单中获取开仓原因
+                                original_entry_signal_type = order.get('entry_signal_type', 'limit_order')
+                                original_entry_reason = order.get('notes', '限价单触发')
+
                                 # 正向开仓
                                 result = self.trading_engine.open_position(
                                     account_id=account_id,
@@ -1007,7 +1011,9 @@ class FuturesLimitOrderExecutor:
                                     take_profit_price=take_profit_price,
                                     source=original_source,
                                     signal_id=original_signal_id,
-                                    strategy_id=original_strategy_id
+                                    strategy_id=original_strategy_id,
+                                    entry_signal_type=original_entry_signal_type,
+                                    entry_reason=original_entry_reason
                                 )
 
                                 if result.get('success'):

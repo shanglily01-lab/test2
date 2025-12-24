@@ -375,7 +375,9 @@ class FuturesTradingEngine:
         take_profit_price: Optional[Decimal] = None,
         source: str = 'manual',
         signal_id: Optional[int] = None,
-        strategy_id: Optional[int] = None
+        strategy_id: Optional[int] = None,
+        entry_signal_type: Optional[str] = None,
+        entry_reason: Optional[str] = None
     ) -> Dict:
         """
         开仓
@@ -392,6 +394,9 @@ class FuturesTradingEngine:
             take_profit_price: 止盈价格（可选，优先于百分比）
             source: 来源
             signal_id: 信号ID
+            strategy_id: 策略ID
+            entry_signal_type: 开仓信号类型（如 golden_cross, death_cross, sustained_trend_FORWARD 等）
+            entry_reason: 开仓原因详细说明
 
         Returns:
             开仓结果
@@ -510,7 +515,7 @@ class FuturesTradingEngine:
                     # 限价单不冻结保证金，只在成交时扣除
                     # 只记录订单，不修改账户余额
                     
-                    # 创建订单记录（包含止盈止损和策略ID）
+                    # 创建订单记录（包含止盈止损、策略ID和开仓原因）
                     order_sql = """
                         INSERT INTO futures_orders (
                             account_id, order_id, symbol,
@@ -519,7 +524,7 @@ class FuturesTradingEngine:
                             margin, total_value, executed_value,
                             fee, fee_rate, status,
                             stop_loss_price, take_profit_price,
-                            order_source, signal_id, strategy_id, created_at
+                            order_source, entry_signal_type, signal_id, strategy_id, created_at
                         ) VALUES (
                             %s, %s, %s,
                             %s, 'LIMIT', %s,
@@ -527,7 +532,7 @@ class FuturesTradingEngine:
                             %s, %s, 0,
                             %s, %s, 'PENDING',
                             %s, %s,
-                            %s, %s, %s, %s
+                            %s, %s, %s, %s, %s
                         )
                     """
 
@@ -539,7 +544,7 @@ class FuturesTradingEngine:
                         float(limit_fee), float(Decimal('0.0004')),
                         float(limit_stop_loss_price) if limit_stop_loss_price else None,
                         float(limit_take_profit_price) if limit_take_profit_price else None,
-                        source, signal_id, strategy_id, get_local_time()
+                        source, entry_signal_type, signal_id, strategy_id, get_local_time()
                     ))
                     
                     # 更新总权益（限价单时还没有持仓，未实现盈亏为0）
@@ -702,14 +707,14 @@ class FuturesTradingEngine:
                     quantity, notional_value, margin,
                     entry_price, mark_price, liquidation_price,
                     stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct,
-                    entry_ema_diff,
+                    entry_ema_diff, entry_signal_type, entry_reason,
                     open_time, source, signal_id, strategy_id, status
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s, %s,
-                    %s,
+                    %s, %s, %s,
                     %s, %s, %s, %s, 'open'
                 )
             """
@@ -722,7 +727,7 @@ class FuturesTradingEngine:
                 float(take_profit_price) if take_profit_price else None,
                 float(stop_loss_pct) if stop_loss_pct else None,
                 float(take_profit_pct) if take_profit_pct else None,
-                entry_ema_diff,
+                entry_ema_diff, entry_signal_type, entry_reason,
                 get_local_time(), source, signal_id, strategy_id
             ))
 

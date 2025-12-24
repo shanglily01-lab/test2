@@ -2444,7 +2444,9 @@ class StrategyExecutorV2:
                         stop_loss_pct=Decimal(str(stop_loss_pct)),
                         take_profit_pct=Decimal(str(take_profit_pct)),
                         source='strategy_limit',  # 标记为策略限价单
-                        strategy_id=strategy.get('id')
+                        strategy_id=strategy.get('id'),
+                        entry_signal_type=signal_type,  # 开仓信号类型
+                        entry_reason=f"{signal_reason} (#{i+1}/{orders_to_create})"  # 开仓原因
                     )
 
                     if result.get('success'):
@@ -2452,21 +2454,23 @@ class StrategyExecutorV2:
                         order_id = result.get('order_id')
                         is_pending = result.get('status') == 'PENDING'
 
-                        # 更新开仓时的EMA差值和开仓原因
-                        conn = self.get_db_connection()
-                        cursor = conn.cursor()
-                        try:
-                            cursor.execute("""
-                                UPDATE futures_positions
-                                SET entry_signal_type = %s, entry_ema_diff = %s, entry_reason = %s
-                                WHERE id = %s
-                            """, (signal_type, ema_diff_pct, f"{signal_reason} (#{i+1}/{orders_to_create})", position_id))
-                            conn.commit()
-                        except Exception as e:
-                            logger.warning(f"更新开仓信号类型失败: {e}")
-                        finally:
-                            cursor.close()
-                            conn.close()
+                        # 更新开仓时的EMA差值（只有当持仓已创建时才更新）
+                        # 注意：entry_signal_type 和 entry_reason 已在 open_position 调用时传递
+                        if position_id:
+                            conn = self.get_db_connection()
+                            cursor = conn.cursor()
+                            try:
+                                cursor.execute("""
+                                    UPDATE futures_positions
+                                    SET entry_ema_diff = %s
+                                    WHERE id = %s
+                                """, (ema_diff_pct, position_id))
+                                conn.commit()
+                            except Exception as e:
+                                logger.warning(f"更新开仓EMA差值失败: {e}")
+                            finally:
+                                cursor.close()
+                                conn.close()
 
                         created_orders.append({
                             'position_id': position_id,
