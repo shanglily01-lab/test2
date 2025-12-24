@@ -726,13 +726,8 @@ class StrategyExecutorV2:
         if price_type == 'market':
             return None, f"{direction}方向未配置限价单"
 
-        # 检查EMA+MA方向一致性
-        if direction == 'long':
-            if current_price <= ma10:
-                return None, f"限价单做多: 价格{current_price:.4f} <= MA10{ma10:.4f}, 趋势不一致"
-        else:
-            if current_price >= ma10:
-                return None, f"限价单做空: 价格{current_price:.4f} >= MA10{ma10:.4f}, 趋势不一致"
+        # 注：已移除MA方向检查，因为限价单使用回调入场策略（做多限价低于市价0.6%）
+        # 当限价单触发时，价格自然会低于/高于MA10，这是预期行为
 
         # 检查是否已有open持仓（防止重复开仓）
         try:
@@ -2131,16 +2126,10 @@ class StrategyExecutorV2:
                 if ema9 >= ema26:
                     reject_reasons.append(f"EMA方向不符(EMA9={ema9:.4f} >= EMA26={ema26:.4f})")
 
-        # 2. MA方向确认
-        if pending_validation.get('require_ma_confirm', True):
-            if direction == 'long':
-                if current_price <= ma10:
-                    reject_reasons.append(f"MA方向不符(价格{current_price:.4f} <= MA10={ma10:.4f})")
-            else:  # short
-                if current_price >= ma10:
-                    reject_reasons.append(f"MA方向不符(价格{current_price:.4f} >= MA10={ma10:.4f})")
+        # 注：已移除MA方向检查（require_ma_confirm），因为限价单使用回调入场策略
+        # 做多限价低于市价0.6%，触发时价格自然会低于MA10，这是预期行为
 
-        # 3. 震荡市检查
+        # 2. 震荡市检查
         if pending_validation.get('check_ranging', True):
             # 简单震荡检测：EMA差值很小
             ranging_threshold = 0.1  # 0.1%以下视为震荡
