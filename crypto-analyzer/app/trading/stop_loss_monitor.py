@@ -769,12 +769,14 @@ class StopLossMonitor:
             else:  # SHORT
                 current_profit_pct = float((entry_price - current_price) / entry_price * 100)
 
+            # 获取symbol（在日志之前获取）
+            symbol = position['symbol']
+
             # 连续反向K线检查 - 不限制盈亏状态
             # 设计理念：连续反向K线说明趋势转向，应立即平仓，不管当前盈亏
             logger.debug(f"[连续K线止损] {symbol} {position_side} 当前盈亏 {current_profit_pct:.2f}%，开始检查连续K线")
 
             # 获取K线数据
-            symbol = position['symbol']
             cursor = self.connection.cursor(pymysql.cursors.DictCursor)
             cursor.execute("""
                 SELECT open_price, close_price
