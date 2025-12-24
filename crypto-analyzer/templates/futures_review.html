@@ -276,6 +276,7 @@
                             <tbody id="trades-table-body"></tbody>
                         </table>
                     </div>
+                    <div id="trades-pagination"></div>
                 </div>
             </div>
 
@@ -311,6 +312,7 @@
                             <tbody id="cancelled-table-body"></tbody>
                         </table>
                     </div>
+                    <div id="cancelled-pagination"></div>
                 </div>
             </div>
 
@@ -382,6 +384,9 @@
         let currentFilter = 'all';
         let currentSort = 'time';
         let hours = 24;
+        let tradesPage = 1;
+        let cancelledPage = 1;
+        const pageSize = 100;
 
         // Format helpers
         function formatNumber(num, decimals = 2) {
@@ -430,6 +435,7 @@
         // Filter and sort
         function filterTrades(filter) {
             currentFilter = filter;
+            tradesPage = 1;  // Reset to first page
             document.querySelectorAll('.filter-group:first-child .filter-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
             loadTrades();
@@ -437,9 +443,46 @@
 
         function sortTrades(sort) {
             currentSort = sort;
+            tradesPage = 1;  // Reset to first page
             document.querySelectorAll('.filter-group:last-child .filter-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
             loadTrades();
+        }
+
+        // Pagination helper
+        function renderPagination(containerId, currentPage, totalPages, onPageChange) {
+            if (totalPages <= 1) {
+                document.getElementById(containerId).innerHTML = '';
+                return;
+            }
+
+            let html = '<div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 16px; padding: 16px 0;">';
+
+            // Previous button
+            html += `<button class="btn btn-sm btn-secondary" onclick="${onPageChange}(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>
+                <i class="bi bi-chevron-left"></i> 上一页
+            </button>`;
+
+            // Page info
+            html += `<span style="color: var(--text-secondary); margin: 0 16px;">第 ${currentPage} / ${totalPages} 页</span>`;
+
+            // Next button
+            html += `<button class="btn btn-sm btn-secondary" onclick="${onPageChange}(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>
+                下一页 <i class="bi bi-chevron-right"></i>
+            </button>`;
+
+            html += '</div>';
+            document.getElementById(containerId).innerHTML = html;
+        }
+
+        function goToTradesPage(page) {
+            tradesPage = page;
+            loadTrades();
+        }
+
+        function goToCancelledPage(page) {
+            cancelledPage = page;
+            loadCancelled();
         }
 
         // API calls
@@ -519,15 +562,17 @@
             document.getElementById('tradesContent').style.display = 'none';
 
             try {
-                const response = await fetch(`/api/futures/review/trades?hours=${hours}&filter_type=${currentFilter}&sort_by=${currentSort}`);
+                const response = await fetch(`/api/futures/review/trades?hours=${hours}&filter_type=${currentFilter}&sort_by=${currentSort}&page=${tradesPage}&page_size=${pageSize}`);
                 const result = await response.json();
 
                 if (result.success) {
-                    const trades = result.data.trades;
+                    const data = result.data;
+                    const trades = data.trades;
                     const tbody = document.getElementById('trades-table-body');
 
                     if (trades.length === 0) {
                         tbody.innerHTML = `<tr><td colspan="11" class="empty-state">暂无交易记录</td></tr>`;
+                        document.getElementById('trades-pagination').innerHTML = '';
                     } else {
                         tbody.innerHTML = trades.map(trade => `
                             <tr>
@@ -548,6 +593,9 @@
                                 <td><span class="badge badge-neutral">${trade.close_reason_cn}</span></td>
                             </tr>
                         `).join('');
+
+                        // Render pagination
+                        renderPagination('trades-pagination', data.page, data.total_pages, 'goToTradesPage');
                     }
                 }
             } catch (error) {
@@ -563,7 +611,7 @@
             document.getElementById('cancelledContent').style.display = 'none';
 
             try {
-                const response = await fetch(`/api/futures/review/cancelled?hours=${hours}`);
+                const response = await fetch(`/api/futures/review/cancelled?hours=${hours}&page=${cancelledPage}&page_size=${pageSize}`);
                 const result = await response.json();
 
                 if (result.success) {
@@ -589,6 +637,7 @@
                     const tbody = document.getElementById('cancelled-table-body');
                     if (data.cancelled_orders.length === 0) {
                         tbody.innerHTML = `<tr><td colspan="6" class="empty-state">暂无取消订单</td></tr>`;
+                        document.getElementById('cancelled-pagination').innerHTML = '';
                     } else {
                         tbody.innerHTML = data.cancelled_orders.map(order => `
                             <tr>
@@ -604,6 +653,9 @@
                                 <td><span class="badge badge-warning">${order.cancel_reason_cn}</span></td>
                             </tr>
                         `).join('');
+
+                        // Render pagination
+                        renderPagination('cancelled-pagination', data.page, data.total_pages, 'goToCancelledPage');
                     }
                 }
             } catch (error) {
@@ -713,6 +765,9 @@
 
         function refreshAll() {
             hours = parseInt(document.getElementById('hours-select').value);
+            // Reset page numbers when time range changes
+            tradesPage = 1;
+            cancelledPage = 1;
             loadSummary();
             loadTrades();
             loadCancelled();

@@ -29,7 +29,7 @@ from app.utils.config_loader import load_config
 config = load_config()
 db_config = config['database']['mysql']
 
-# 平仓原因中英文映射
+# 平仓原因中英文映射（基于数据库实际存储格式）
 CLOSE_REASON_MAP = {
     'hard_stop_loss': '硬止损',
     'trailing_stop_loss': '移动止损',
@@ -41,15 +41,19 @@ CLOSE_REASON_MAP = {
     '5m_death_cross_sl': '5分钟死叉止损',
     '5m_golden_cross_sl': '5分钟金叉止损',
     'manual': '手动平仓',
+    'manual_close_all': '一键平仓',
     'liquidation': '强制平仓',
     'sync_close': '同步平仓',
 }
 
-# 开仓原因中英文映射
+# 开仓原因中英文映射（基于 entry_signal_type 字段）
 ENTRY_REASON_MAP = {
     'golden_cross': '金叉信号',
     'death_cross': '死叉信号',
     'sustained_trend': '持续趋势',
+    'sustained_trend_FORWARD': '顺向持续趋势',
+    'sustained_trend_REVERSE': '反转持续趋势',
+    'sustained_trend_entry': '趋势入场',
     'ema_trend': 'EMA趋势',
     'limit_order': '限价单',
     'manual': '手动开仓',
@@ -65,6 +69,10 @@ CANCEL_REASON_MAP = {
     'manual': '手动取消',
     'trend_end': '趋势结束',
     'min_ema_diff': 'EMA差值不足',
+    'rsi_filter': 'RSI过滤',
+    'ema_diff_small': 'EMA差值过小',
+    'position_exists': '持仓已存在',
+    'execution_failed': '执行失败',
 }
 
 
@@ -73,27 +81,145 @@ def get_db_connection():
     return pymysql.connect(**db_config, autocommit=True)
 
 
-def parse_close_reason(notes: str) -> str:
-    """解析平仓原因代码"""
+def parse_close_reason(notes: str) -> tuple:
+    """
+    解析平仓原因，返回 (代码, 中文名称)
+
+    数据库中的格式示例：
+    - "死叉反转(EMA9 > EMA26)"
+    - "金叉反转(EMA9 < EMA26)"
+    - "manual_close_all"
+    - "硬止损"
+    - "移动止盈"
+    - "5M EMA死叉止损(...)"
+    - "移动止盈(距离2.00%，回撤0.79% >= 0.3%)"
+    """
     if not notes:
-        return 'unknown'
-    # 格式: reason_code|param1:value|param2:value
-    return notes.split('|')[0] if '|' in notes else notes
+        return 'unknown', '未知'
+
+    notes_lower = notes.lower()
+
+    # 英文代码直接匹配
+    if notes in CLOSE_REASON_MAP:
+        return notes, CLOSE_REASON_MAP[notes]
+
+    # 特殊处理一键平仓
+    if 'manual_close_all' in notes:
+        return 'manual_close_all', '一键平仓'
+
+    # 中文关键字匹配
+    if '死叉反转' in notes:
+        return 'death_cross_reversal', '死叉反转平仓'
+    if '金叉反转' in notes:
+        return 'golden_cross_reversal', '金叉反转平仓'
+    if '硬止损' in notes:
+        return 'hard_stop_loss', '硬止损'
+    if '移动止损' in notes:
+        return 'trailing_stop_loss', '移动止损'
+    if '移动止盈' in notes:
+        return 'trailing_take_profit', '移动止盈'
+    if '最大止盈' in notes or '达到最大' in notes:
+        return 'max_take_profit', '最大止盈'
+    if '5M' in notes and ('死叉' in notes or '金叉' in notes):
+        if '死叉' in notes:
+            return '5m_death_cross_sl', '5分钟死叉止损'
+        else:
+            return '5m_golden_cross_sl', '5分钟金叉止损'
+    if 'EMA' in notes and '收窄' in notes:
+        return 'ema_diff_narrowing_tp', 'EMA差值收窄止盈'
+    if '手动' in notes:
+        return 'manual', '手动平仓'
+    if '强平' in notes or '强制' in notes:
+        return 'liquidation', '强制平仓'
+    if '同步' in notes:
+        return 'sync_close', '同步平仓'
+
+    # 无法识别，返回原始值（截取前20字符）
+    display = notes[:20] + '...' if len(notes) > 20 else notes
+    return 'other', display
 
 
-def parse_entry_reason(entry_reason: str) -> str:
-    """解析开仓原因代码"""
-    if not entry_reason:
-        return 'unknown'
-    # 格式可能包含详细信息，取第一部分
-    return entry_reason.split('|')[0] if '|' in entry_reason else entry_reason
+def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
+    """
+    解析开仓原因，返回 (代码, 中文名称)
+
+    优先使用 entry_signal_type 字段，如果为空则解析 entry_reason
+    """
+    # 优先使用 entry_signal_type
+    if entry_signal_type:
+        signal_type = entry_signal_type.strip()
+
+        # 直接匹配
+        if signal_type in ENTRY_REASON_MAP:
+            return signal_type, ENTRY_REASON_MAP[signal_type]
+
+        # 包含匹配
+        if 'sustained_trend' in signal_type:
+            if 'FORWARD' in signal_type:
+                return 'sustained_trend_FORWARD', '顺向持续趋势'
+            elif 'REVERSE' in signal_type:
+                return 'sustained_trend_REVERSE', '反转持续趋势'
+            else:
+                return 'sustained_trend', '持续趋势'
+        if 'golden_cross' in signal_type.lower():
+            return 'golden_cross', '金叉信号'
+        if 'death_cross' in signal_type.lower():
+            return 'death_cross', '死叉信号'
+
+    # 解析 entry_reason
+    if entry_reason:
+        reason = entry_reason.strip()
+
+        if '金叉' in reason:
+            return 'golden_cross', '金叉信号'
+        if '死叉' in reason:
+            return 'death_cross', '死叉信号'
+        if 'sustained' in reason.lower() or '持续' in reason:
+            if 'FORWARD' in reason or '顺向' in reason:
+                return 'sustained_trend_FORWARD', '顺向持续趋势'
+            elif 'REVERSE' in reason or '反转' in reason:
+                return 'sustained_trend_REVERSE', '反转持续趋势'
+            return 'sustained_trend', '持续趋势'
+        if '手动' in reason or 'manual' in reason.lower():
+            return 'manual', '手动开仓'
+        if '限价' in reason or 'limit' in reason.lower():
+            return 'limit_order', '限价单'
+
+    return 'unknown', '未知'
 
 
-def parse_cancel_reason(reason: str) -> str:
-    """解析取消原因代码"""
+def parse_cancel_reason(reason: str) -> tuple:
+    """
+    解析取消原因，返回 (代码, 中文名称)
+    """
     if not reason:
-        return 'unknown'
-    return reason.split('|')[0] if '|' in reason else reason
+        return 'unknown', '未知'
+
+    reason_lower = reason.lower()
+
+    # 直接匹配英文代码
+    if reason in CANCEL_REASON_MAP:
+        return reason, CANCEL_REASON_MAP[reason]
+
+    # 关键字匹配
+    if 'timeout' in reason_lower:
+        return 'timeout', '超时取消'
+    if 'validation' in reason_lower or '自检' in reason:
+        return 'validation_failed', '自检未通过'
+    if 'reversal' in reason_lower or '转向' in reason:
+        return 'trend_reversal', '趋势转向'
+    if 'rsi' in reason_lower:
+        return 'rsi_filter', 'RSI过滤'
+    if 'ema_diff' in reason_lower or 'EMA差值' in reason:
+        return 'ema_diff_small', 'EMA差值过小'
+    if 'position' in reason_lower or '持仓' in reason:
+        return 'position_exists', '持仓已存在'
+    if 'manual' in reason_lower or '手动' in reason:
+        return 'manual', '手动取消'
+
+    # 无法识别
+    display = reason[:20] + '...' if len(reason) > 20 else reason
+    return 'other', display
 
 
 @router.get("/summary")
@@ -216,10 +342,12 @@ async def get_review_trades(
     hours: int = Query(default=24, ge=1, le=168, description="统计时间范围（小时）"),
     account_id: int = Query(default=2, description="账户ID"),
     filter_type: str = Query(default="all", description="筛选类型: all/profit/loss"),
-    sort_by: str = Query(default="time", description="排序方式: time/pnl")
+    sort_by: str = Query(default="time", description="排序方式: time/pnl"),
+    page: int = Query(default=1, ge=1, description="页码"),
+    page_size: int = Query(default=100, ge=10, le=200, description="每页数量")
 ):
     """
-    获取24H成交订单列表
+    获取24H成交订单列表（分页）
 
     包含: 时间、交易对、方向、开仓价、平仓价、数量、杠杆、盈亏、盈亏%、持仓时长、开仓原因、平仓原因
     """
@@ -239,6 +367,17 @@ async def get_review_trades(
         # 构建排序
         order_by = "close_time DESC" if sort_by == "time" else "realized_pnl DESC"
 
+        # 获取总数
+        cursor.execute(f"""
+            SELECT COUNT(*) as total
+            FROM futures_positions
+            WHERE account_id = %s AND status = 'closed' AND close_time >= %s
+            {filter_condition}
+        """, (account_id, time_threshold))
+        total_count = cursor.fetchone()['total']
+
+        # 分页查询
+        offset = (page - 1) * page_size
         cursor.execute(f"""
             SELECT
                 id, symbol, position_side, leverage,
@@ -250,8 +389,8 @@ async def get_review_trades(
             WHERE account_id = %s AND status = 'closed' AND close_time >= %s
             {filter_condition}
             ORDER BY {order_by}
-            LIMIT 100
-        """, (account_id, time_threshold))
+            LIMIT %s OFFSET %s
+        """, (account_id, time_threshold, page_size, offset))
 
         positions = cursor.fetchall()
 
@@ -261,8 +400,12 @@ async def get_review_trades(
         # 处理数据，添加中文映射
         trades = []
         for pos in positions:
-            close_reason_code = parse_close_reason(pos['close_reason'])
-            entry_reason_code = parse_entry_reason(pos['entry_reason']) if pos['entry_reason'] else (pos['entry_signal_type'] or 'unknown')
+            # 使用新的解析函数
+            close_reason_code, close_reason_cn = parse_close_reason(pos['close_reason'])
+            entry_reason_code, entry_reason_cn = parse_entry_reason(
+                pos['entry_reason'],
+                pos['entry_signal_type']
+            )
 
             trades.append({
                 "id": pos['id'],
@@ -277,19 +420,26 @@ async def get_review_trades(
                 "pnl_pct": float(pos['pnl_pct'] or 0),
                 "holding_hours": pos['holding_hours'] or 0,
                 "entry_reason_code": entry_reason_code,
-                "entry_reason_cn": ENTRY_REASON_MAP.get(entry_reason_code, entry_reason_code),
+                "entry_reason_cn": entry_reason_cn,
                 "close_reason_code": close_reason_code,
-                "close_reason_cn": CLOSE_REASON_MAP.get(close_reason_code, close_reason_code),
+                "close_reason_cn": close_reason_cn,
                 "close_reason_detail": pos['close_reason'],
                 "open_time": pos['open_time'].isoformat() if pos['open_time'] else None,
                 "close_time": pos['close_time'].isoformat() if pos['close_time'] else None
             })
+
+        # 计算分页信息
+        total_pages = (total_count + page_size - 1) // page_size
 
         return {
             "success": True,
             "data": {
                 "trades": trades,
                 "count": len(trades),
+                "total_count": total_count,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
                 "filter": filter_type,
                 "sort_by": sort_by
             }
@@ -303,15 +453,17 @@ async def get_review_trades(
 @router.get("/cancelled")
 async def get_cancelled_orders(
     hours: int = Query(default=24, ge=1, le=168, description="统计时间范围（小时）"),
-    account_id: int = Query(default=2, description="账户ID")
+    account_id: int = Query(default=2, description="账户ID"),
+    page: int = Query(default=1, ge=1, description="页码"),
+    page_size: int = Query(default=100, ge=10, le=200, description="每页数量")
 ):
     """
-    获取24H取消订单列表及原因分析
+    获取24H取消订单列表及原因分析（分页）
 
     返回:
     - 取消总数
     - 各取消原因统计
-    - 取消订单详情列表
+    - 取消订单详情列表（分页）
     """
     try:
         conn = get_db_connection()
@@ -319,7 +471,36 @@ async def get_cancelled_orders(
 
         time_threshold = datetime.now() - timedelta(hours=hours)
 
-        # 获取取消订单
+        # 获取总数
+        cursor.execute("""
+            SELECT COUNT(*) as total
+            FROM futures_orders
+            WHERE account_id = %s AND status = 'CANCELLED' AND created_at >= %s
+        """, (account_id, time_threshold))
+        total_cancelled = cursor.fetchone()['total']
+
+        # 获取所有取消订单用于统计原因分布
+        cursor.execute("""
+            SELECT cancellation_reason
+            FROM futures_orders
+            WHERE account_id = %s AND status = 'CANCELLED' AND created_at >= %s
+        """, (account_id, time_threshold))
+        all_reasons = cursor.fetchall()
+
+        # 统计取消原因分布
+        reason_stats = {}
+        for row in all_reasons:
+            reason_code, reason_cn = parse_cancel_reason(row['cancellation_reason'])
+            if reason_code not in reason_stats:
+                reason_stats[reason_code] = {
+                    "code": reason_code,
+                    "name_cn": reason_cn,
+                    "count": 0
+                }
+            reason_stats[reason_code]["count"] += 1
+
+        # 分页查询取消订单详情
+        offset = (page - 1) * page_size
         cursor.execute("""
             SELECT
                 id, order_id, symbol, side, order_type, leverage,
@@ -328,29 +509,18 @@ async def get_cancelled_orders(
             FROM futures_orders
             WHERE account_id = %s AND status = 'CANCELLED' AND created_at >= %s
             ORDER BY canceled_at DESC
-            LIMIT 200
-        """, (account_id, time_threshold))
+            LIMIT %s OFFSET %s
+        """, (account_id, time_threshold, page_size, offset))
 
         orders = cursor.fetchall()
 
         cursor.close()
         conn.close()
 
-        # 统计取消原因分布
-        reason_stats = {}
+        # 处理订单列表
         cancelled_list = []
-
         for order in orders:
-            reason_code = parse_cancel_reason(order['cancellation_reason'])
-            reason_cn = CANCEL_REASON_MAP.get(reason_code, reason_code)
-
-            if reason_code not in reason_stats:
-                reason_stats[reason_code] = {
-                    "code": reason_code,
-                    "name_cn": reason_cn,
-                    "count": 0
-                }
-            reason_stats[reason_code]["count"] += 1
+            reason_code, reason_cn = parse_cancel_reason(order['cancellation_reason'])
 
             cancelled_list.append({
                 "id": order['id'],
@@ -372,18 +542,23 @@ async def get_cancelled_orders(
             })
 
         # 计算占比
-        total_cancelled = len(orders)
         reason_distribution = []
         for code, stats in sorted(reason_stats.items(), key=lambda x: x[1]['count'], reverse=True):
             stats["percentage"] = round(stats["count"] / total_cancelled * 100, 1) if total_cancelled > 0 else 0
             reason_distribution.append(stats)
+
+        # 计算分页信息
+        total_pages = (total_cancelled + page_size - 1) // page_size
 
         return {
             "success": True,
             "data": {
                 "total_cancelled": total_cancelled,
                 "reason_distribution": reason_distribution,
-                "cancelled_orders": cancelled_list
+                "cancelled_orders": cancelled_list,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages
             }
         }
 
@@ -438,12 +613,12 @@ async def get_reason_analysis(
             pnl = float(pos['realized_pnl'] or 0)
             is_profit = pnl > 0
 
-            # 开仓原因统计
-            entry_code = parse_entry_reason(pos['entry_reason']) if pos['entry_reason'] else (pos['entry_signal_type'] or 'unknown')
+            # 开仓原因统计（使用新的解析函数）
+            entry_code, entry_cn = parse_entry_reason(pos['entry_reason'], pos['entry_signal_type'])
             if entry_code not in entry_stats:
                 entry_stats[entry_code] = {
                     "code": entry_code,
-                    "name_cn": ENTRY_REASON_MAP.get(entry_code, entry_code),
+                    "name_cn": entry_cn,
                     "count": 0,
                     "wins": 0,
                     "losses": 0,
@@ -456,12 +631,12 @@ async def get_reason_analysis(
             else:
                 entry_stats[entry_code]["losses"] += 1
 
-            # 平仓原因统计
-            close_code = parse_close_reason(pos['close_reason'])
+            # 平仓原因统计（使用新的解析函数）
+            close_code, close_cn = parse_close_reason(pos['close_reason'])
             if close_code not in close_stats:
                 close_stats[close_code] = {
                     "code": close_code,
-                    "name_cn": CLOSE_REASON_MAP.get(close_code, close_code),
+                    "name_cn": close_cn,
                     "count": 0,
                     "total_pnl": 0,
                     "pnl_list": []
@@ -596,7 +771,7 @@ async def get_strategy_suggestions(
         trailing_tp_drawdowns = []
 
         for pos in positions:
-            close_code = parse_close_reason(pos['close_reason'])
+            close_code, _ = parse_close_reason(pos['close_reason'])
             pnl = float(pos['realized_pnl'] or 0)
 
             if close_code == 'hard_stop_loss':
@@ -664,7 +839,7 @@ async def get_strategy_suggestions(
             # 找出主要取消原因
             main_reason = max(cancel_stats, key=lambda x: x['count']) if cancel_stats else None
             if main_reason:
-                reason_cn = CANCEL_REASON_MAP.get(parse_cancel_reason(main_reason['cancellation_reason']), main_reason['cancellation_reason'])
+                _, reason_cn = parse_cancel_reason(main_reason['cancellation_reason'])
                 suggestions.append({
                     "type": "warning",
                     "category": "订单取消",
