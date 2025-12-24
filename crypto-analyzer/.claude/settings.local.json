@@ -66,7 +66,8 @@
       "Bash(ss:*)",
       "Bash(xxd:*)",
       "Bash(/dev/null <<'EOF'\nSELECT id, name, is_active FROM trading_strategies WHERE is_active = 1 LIMIT 3;\nEOF)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(/dev/null <<'EOF'\nSELECT id, name, LEFT\\(config, 2000\\) as config_part\nFROM trading_strategies \nWHERE is_active = 1 \nLIMIT 1;\nEOF)"
     ],
     "deny": [],
     "ask": []

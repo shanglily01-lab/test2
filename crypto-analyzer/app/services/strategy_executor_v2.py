@@ -1674,8 +1674,8 @@ class StrategyExecutorV2:
         """
         EMA差值止盈检测（使用15分钟周期）
 
-        当EMA9与EMA26的差值百分比超过设定阈值，且持仓盈利达到最小盈利要求时，触发止盈平仓。
-        适用于趋势过度延伸后的回撤风险控制。
+        当EMA9与EMA26的差值百分比**收窄**到阈值以下时，说明趋势减弱，触发止盈平仓。
+        逻辑：开仓时EMA差值大（趋势强），持仓期间差值缩小说明趋势减弱，应该止盈。
 
         Args:
             position: 持仓信息
@@ -1708,14 +1708,33 @@ class StrategyExecutorV2:
         if ema9 is None or ema26 is None or ema26 == 0:
             return False, ""
 
-        # 计算EMA差值百分比
+        # 计算当前EMA差值百分比
         ema_diff_pct = abs((ema9 - ema26) / ema26 * 100)
 
         symbol = position.get('symbol', '')
+        position_side = position.get('position_side', 'LONG')
 
-        # EMA差值超过阈值时触发止盈
-        if ema_diff_pct >= threshold:
-            return True, f"EMA差值止盈[15m](差值{ema_diff_pct:.2f}% >= {threshold}%, 盈利{current_pnl_pct:.2f}%)"
+        # 获取开仓时的EMA差值（如果有记录）
+        entry_ema_diff = position.get('entry_ema_diff')
+        if entry_ema_diff is not None:
+            entry_ema_diff_pct = abs(float(entry_ema_diff))
+        else:
+            # 没有记录开仓时的EMA差值，使用阈值的2倍作为默认值
+            entry_ema_diff_pct = threshold * 2
+
+        # 检查EMA方向是否仍然支持持仓方向
+        # 做多时EMA9应该 > EMA26，做空时EMA9应该 < EMA26
+        ema_supports_position = (position_side == 'LONG' and ema9 > ema26) or \
+                                (position_side == 'SHORT' and ema9 < ema26)
+
+        # EMA差值收窄止盈：当差值缩小到阈值以下，且盈利达标时止盈
+        # 条件：当前差值 < 阈值，说明趋势减弱
+        if ema_diff_pct < threshold:
+            return True, f"EMA差值收窄止盈[15m](差值{ema_diff_pct:.2f}% < {threshold}%, 盈利{current_pnl_pct:.2f}%)"
+
+        # EMA方向反转止盈：趋势已经反转，但还有盈利时止盈
+        if not ema_supports_position and current_pnl_pct >= min_profit_pct:
+            return True, f"EMA方向反转止盈[15m](EMA9{'>' if ema9 > ema26 else '<'}EMA26, 盈利{current_pnl_pct:.2f}%)"
 
         return False, ""
 
