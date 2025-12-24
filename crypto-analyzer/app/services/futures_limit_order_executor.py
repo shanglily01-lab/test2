@@ -271,6 +271,210 @@ class FuturesLimitOrderExecutor:
             logger.error(f"检查趋势转向时出错: {e}")
             return None
 
+    def _check_pending_validation(self, connection, order: Dict, current_price: float) -> Optional[str]:
+        """
+        待开仓自检：根据 pendingValidation 配置检查限价单是否应该取消
+
+        自检项目：
+        1. EMA方向确认
+        2. MA方向确认
+        3. 震荡市检查
+        4. 趋势末端检查
+        5. EMA收敛检查
+        6. 最小EMA差值检查
+
+        Args:
+            connection: 数据库连接
+            order: 订单信息
+            current_price: 当前价格
+
+        Returns:
+            如果自检未通过返回拒绝原因，否则返回 None
+        """
+        try:
+            strategy_config = order.get('strategy_config')
+            if not strategy_config:
+                return None
+
+            # 解析策略配置
+            config = strategy_config
+            parse_attempts = 0
+            while isinstance(config, str) and parse_attempts < 3:
+                try:
+                    config = json.loads(config)
+                    parse_attempts += 1
+                except json.JSONDecodeError:
+                    break
+
+            if not isinstance(config, dict):
+                return None
+
+            # 获取 pendingValidation 配置
+            pending_validation = config.get('pendingValidation', {})
+            if not pending_validation.get('enabled', False):
+                return None  # 未启用自检，直接通过
+
+            symbol = order['symbol']
+            side = order['side']  # OPEN_LONG 或 OPEN_SHORT
+            direction = 'long' if side == 'OPEN_LONG' else 'short'
+
+            # 获取K线数据计算EMA
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = '15m'
+                    ORDER BY timestamp DESC
+                    LIMIT 50""",
+                    (symbol,)
+                )
+                klines = cursor.fetchall()
+
+            if not klines or len(klines) < 30:
+                return None  # 数据不足，跳过检查
+
+            # 将K线反转为正序
+            prices = [float(k['close_price']) for k in reversed(klines)]
+
+            # 计算EMA和MA
+            ema9_values = self._calculate_ema(prices, 9)
+            ema26_values = self._calculate_ema(prices, 26)
+            ma10_values = self._calculate_ma(prices, 10)
+
+            if len(ema9_values) < 2 or len(ema26_values) < 2 or len(ma10_values) < 1:
+                return None
+
+            # 取当前和前一个值
+            ema9 = ema9_values[-1]
+            ema26 = ema26_values[-1]
+            prev_ema9 = ema9_values[-2]
+            prev_ema26 = ema26_values[-2]
+            ma10 = ma10_values[-1]
+
+            # 计算EMA差值百分比
+            ema_diff_pct = abs((ema9 - ema26) / ema26 * 100) if ema26 != 0 else 0
+            prev_diff_pct = abs((prev_ema9 - prev_ema26) / prev_ema26 * 100) if prev_ema26 != 0 else 0
+
+            reject_reasons = []
+
+            # 1. EMA方向确认
+            if pending_validation.get('require_ema_confirm', True):
+                if direction == 'long' and ema9 <= ema26:
+                    reject_reasons.append(f"EMA方向不符(EMA9={ema9:.4f}<=EMA26={ema26:.4f})")
+                elif direction == 'short' and ema9 >= ema26:
+                    reject_reasons.append(f"EMA方向不符(EMA9={ema9:.4f}>=EMA26={ema26:.4f})")
+
+            # 2. MA方向确认
+            if pending_validation.get('require_ma_confirm', True):
+                if direction == 'long' and current_price <= ma10:
+                    reject_reasons.append(f"MA方向不符(价格{current_price:.4f}<=MA10={ma10:.4f})")
+                elif direction == 'short' and current_price >= ma10:
+                    reject_reasons.append(f"MA方向不符(价格{current_price:.4f}>=MA10={ma10:.4f})")
+
+            # 3. 震荡市检查
+            if pending_validation.get('check_ranging', True):
+                ranging_threshold = 0.1
+                if ema_diff_pct < ranging_threshold:
+                    reject_reasons.append(f"震荡市(EMA差值{ema_diff_pct:.3f}%<{ranging_threshold}%)")
+
+            # 4. 趋势末端检查
+            if pending_validation.get('check_trend_end', True):
+                if prev_diff_pct > 0 and ema_diff_pct < prev_diff_pct * 0.7:
+                    shrink = (prev_diff_pct - ema_diff_pct) / prev_diff_pct * 100
+                    reject_reasons.append(f"趋势末端(差值缩小{shrink:.1f}%)")
+
+            # 5. EMA收敛检查
+            if pending_validation.get('check_ema_converging', True):
+                current_diff = abs(ema9 - ema26)
+                prev_diff = abs(prev_ema9 - prev_ema26)
+                if current_diff < prev_diff and prev_diff > 0:
+                    shrink_pct = (prev_diff - current_diff) / prev_diff * 100
+                    if shrink_pct >= 30:
+                        reject_reasons.append(f"EMA收敛(收窄{shrink_pct:.1f}%>=30%)")
+
+            # 6. 最小EMA差值检查
+            min_ema_diff_pct = pending_validation.get('min_ema_diff_pct', 0.05)
+            if ema_diff_pct < min_ema_diff_pct:
+                reject_reasons.append(f"弱趋势(EMA差值{ema_diff_pct:.3f}%<{min_ema_diff_pct}%)")
+
+            if reject_reasons:
+                return "; ".join(reject_reasons)
+
+            return None
+
+        except Exception as e:
+            logger.error(f"待开仓自检出错: {e}")
+            return None
+
+    def _calculate_ma(self, prices: list, period: int) -> list:
+        """计算简单移动平均"""
+        if len(prices) < period:
+            return []
+        ma_values = []
+        for i in range(period - 1, len(prices)):
+            ma = sum(prices[i - period + 1:i + 1]) / period
+            ma_values.append(ma)
+        return ma_values
+
+    def _sync_cancel_live_order(self, connection, order: Dict, symbol: str, position_side: str, reason: str):
+        """同步取消实盘限价单"""
+        try:
+            strategy_config = order.get('strategy_config')
+            if not strategy_config or not self.live_engine:
+                return
+
+            config = strategy_config
+            if isinstance(config, str):
+                try:
+                    config = json.loads(config)
+                except:
+                    config = {}
+
+            sync_live = config.get('syncLive', False) if isinstance(config, dict) else False
+            if not sync_live:
+                return
+
+            # 查找对应的实盘PENDING持仓
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT id, binance_order_id
+                    FROM live_futures_positions
+                    WHERE symbol = %s
+                      AND position_side = %s
+                      AND status = 'PENDING'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (symbol, position_side))
+                live_pos = cursor.fetchone()
+
+            if live_pos and live_pos.get('binance_order_id'):
+                binance_order_id = live_pos['binance_order_id']
+                logger.info(f"[同步实盘] 取消限价单({reason}): {symbol} {position_side}, 订单ID={binance_order_id}")
+
+                cancel_result = self.live_engine.cancel_order(
+                    symbol=symbol,
+                    order_id=binance_order_id
+                )
+
+                if cancel_result.get('success'):
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            UPDATE live_futures_positions
+                            SET status = 'CANCELED',
+                                close_reason = %s,
+                                close_time = NOW(),
+                                notes = CONCAT(COALESCE(notes, ''), ' SYNCED_CANCEL_', %s)
+                            WHERE id = %s
+                        """, (reason, reason.upper(), live_pos['id']))
+                    connection.commit()
+                    logger.info(f"[同步实盘] ✅ 限价单已取消({reason}): {symbol} {position_side}")
+                else:
+                    error_msg = cancel_result.get('error', cancel_result.get('message', '未知错误'))
+                    logger.error(f"[同步实盘] ❌ 取消限价单失败({reason}): {symbol} {position_side} - {error_msg}")
+
+        except Exception as e:
+            logger.error(f"[同步实盘] ❌ 取消限价单异常({reason}): {symbol} {position_side} - {e}")
+
     def _check_ema_unfavorable(self, connection, order) -> Optional[str]:
         """
         检查EMA状态是否不利于开仓（用于超时转市价前的检查）
@@ -696,6 +900,30 @@ class FuturesLimitOrderExecutor:
                         # 检查是否达到触发条件
                         should_execute = False
                         position_side = 'LONG' if side == 'OPEN_LONG' else 'SHORT'
+
+                        # ===== 待开仓自检：检查pendingValidation配置 =====
+                        validation_reject_reason = self._check_pending_validation(connection, order, current_price)
+                        if validation_reject_reason:
+                            logger.info(f"🚫 限价单自检未通过取消: {symbol} {position_side} - {validation_reject_reason}")
+
+                            # 更新订单状态为已取消
+                            with connection.cursor() as update_cursor:
+                                update_cursor.execute(
+                                    """UPDATE futures_orders
+                                    SET status = 'CANCELLED',
+                                        cancellation_reason = 'validation_failed',
+                                        canceled_at = NOW(),
+                                        notes = CONCAT(COALESCE(notes, ''), ' VALIDATION_FAILED: ', %s)
+                                    WHERE order_id = %s""",
+                                    (validation_reject_reason, order_id)
+                                )
+
+                            connection.commit()
+
+                            # 同步取消实盘订单
+                            self._sync_cancel_live_order(connection, order, symbol, position_side, 'validation_failed')
+
+                            continue  # 跳过此订单
 
                         # ===== 趋势转向检测：在趋势转向时取消限价单 =====
                         trend_reversal_reason = self._check_trend_reversal(connection, order)
