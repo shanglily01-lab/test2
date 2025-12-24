@@ -2084,6 +2084,111 @@ class StrategyExecutorV2:
 
         return False, "", updates
 
+    # ==================== 待开仓自检 ====================
+
+    def _validate_pending_entry(self, symbol: str, direction: str, ema_data: Dict,
+                                  strategy: Dict) -> Tuple[bool, str]:
+        """
+        待开仓自检：在开仓前验证各项条件
+
+        自检项目：
+        1. EMA方向确认 - EMA9和EMA26方向与开仓方向一致
+        2. MA方向确认 - 价格与MA10的关系符合开仓方向
+        3. 震荡市检查 - 检测是否处于震荡区间
+        4. 趋势末端检查 - 检测是否处于趋势末端
+        5. EMA收敛检查 - EMA差值是否在收窄
+        6. 最小EMA差值检查 - EMA差值是否大于阈值
+
+        Args:
+            symbol: 交易对
+            direction: 开仓方向 'long' 或 'short'
+            ema_data: 15M EMA数据
+            strategy: 策略配置
+
+        Returns:
+            (是否通过, 拒绝原因)
+        """
+        pending_validation = strategy.get('pendingValidation', {})
+
+        # 获取EMA数据
+        ema9 = ema_data.get('ema9')
+        ema26 = ema_data.get('ema26')
+        ma10 = ema_data.get('ma10')
+        current_price = ema_data.get('current_price')
+        ema_diff_pct = ema_data.get('ema_diff_pct', 0)
+
+        # 使用已收盘K线的EMA差值（更准确）
+        confirmed_ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_diff_pct)
+
+        reject_reasons = []
+
+        # 1. EMA方向确认
+        if pending_validation.get('require_ema_confirm', True):
+            if direction == 'long':
+                if ema9 <= ema26:
+                    reject_reasons.append(f"EMA方向不符(EMA9={ema9:.4f} <= EMA26={ema26:.4f})")
+            else:  # short
+                if ema9 >= ema26:
+                    reject_reasons.append(f"EMA方向不符(EMA9={ema9:.4f} >= EMA26={ema26:.4f})")
+
+        # 2. MA方向确认
+        if pending_validation.get('require_ma_confirm', True):
+            if direction == 'long':
+                if current_price <= ma10:
+                    reject_reasons.append(f"MA方向不符(价格{current_price:.4f} <= MA10={ma10:.4f})")
+            else:  # short
+                if current_price >= ma10:
+                    reject_reasons.append(f"MA方向不符(价格{current_price:.4f} >= MA10={ma10:.4f})")
+
+        # 3. 震荡市检查
+        if pending_validation.get('check_ranging', True):
+            # 简单震荡检测：EMA差值很小
+            ranging_threshold = 0.1  # 0.1%以下视为震荡
+            if confirmed_ema_diff_pct < ranging_threshold:
+                reject_reasons.append(f"震荡市(EMA差值{confirmed_ema_diff_pct:.3f}% < {ranging_threshold}%)")
+
+        # 4. 趋势末端检查
+        if pending_validation.get('check_trend_end', True):
+            # 通过比较当前EMA差值与前一个K线的差值来判断趋势是否减弱
+            prev_ema9 = ema_data.get('prev_ema9')
+            prev_ema26 = ema_data.get('prev_ema26')
+            if prev_ema9 and prev_ema26 and prev_ema26 != 0:
+                prev_diff_pct = abs((prev_ema9 - prev_ema26) / prev_ema26 * 100)
+                # 如果差值减小超过30%，可能是趋势末端
+                if prev_diff_pct > 0 and confirmed_ema_diff_pct < prev_diff_pct * 0.7:
+                    reject_reasons.append(f"趋势末端(差值缩小{((prev_diff_pct - confirmed_ema_diff_pct) / prev_diff_pct * 100):.1f}%)")
+
+        # 5. EMA收敛检查
+        if pending_validation.get('check_ema_converging', True):
+            # 检查EMA是否在收敛（差值持续缩小）
+            confirmed_ema9 = ema_data.get('confirmed_ema9', ema9)
+            confirmed_ema26 = ema_data.get('confirmed_ema26', ema26)
+            prev_ema9 = ema_data.get('prev_ema9')
+            prev_ema26 = ema_data.get('prev_ema26')
+
+            if prev_ema9 and prev_ema26:
+                current_diff = abs(confirmed_ema9 - confirmed_ema26)
+                prev_diff = abs(prev_ema9 - prev_ema26)
+
+                # 如果差值在缩小，说明EMA在收敛
+                if current_diff < prev_diff:
+                    shrink_pct = (prev_diff - current_diff) / prev_diff * 100 if prev_diff > 0 else 0
+                    # 收窄超过30%时拒绝开仓
+                    shrink_threshold = 30
+                    if shrink_pct >= shrink_threshold:
+                        reject_reasons.append(f"EMA收敛(收窄{shrink_pct:.1f}% >= {shrink_threshold}%)")
+
+        # 6. 最小EMA差值检查
+        min_ema_diff_pct = pending_validation.get('min_ema_diff_pct', 0.05)
+        if confirmed_ema_diff_pct < min_ema_diff_pct:
+            reject_reasons.append(f"弱趋势(EMA差值{confirmed_ema_diff_pct:.3f}% < {min_ema_diff_pct}%)")
+
+        # 汇总结果
+        if reject_reasons:
+            return False, "; ".join(reject_reasons)
+
+        return True, ""
+
     # ==================== 开仓执行 ====================
 
     async def execute_open_position(self, symbol: str, direction: str, signal_type: str,
@@ -2164,9 +2269,18 @@ class StrategyExecutorV2:
 
             current_price = ema_data['current_price']
 
-            # ========== 强制市价开仓（反转信号）或金叉/死叉信号直接市价开仓 ==========
-            is_cross_signal = signal_type in ('golden_cross', 'death_cross', 'ema_crossover', 'reversal_cross')
-            cross_signal_force_market = strategy.get('crossSignalForceMarket', True)
+            # ========== 待开仓自检 ==========
+            pending_validation = strategy.get('pendingValidation', {})
+            validation_enabled = pending_validation.get('enabled', False)
+
+            # 强制市价开仓时跳过自检
+            if validation_enabled and not force_market:
+                passed, reject_reason = self._validate_pending_entry(
+                    symbol, direction, ema_data, strategy
+                )
+                if not passed:
+                    logger.info(f"🚫 {symbol} 待开仓自检未通过: {reject_reason}")
+                    return {'success': False, 'error': f'自检未通过: {reject_reason}', 'validation_failed': True}
 
             # 标记当前K线周期已触发信号（在实际创建订单前标记）
             self._signal_triggered[kline_key] = now
@@ -2177,8 +2291,7 @@ class StrategyExecutorV2:
             for k in expired_keys:
                 del self._signal_triggered[k]
 
-            # 所有信号直接创建限价单，不走自检流程
-            # 日志移到 _do_open_position 成功后打印
+            # 执行开仓
             return await self._do_open_position(
                 symbol=symbol,
                 direction=direction,
