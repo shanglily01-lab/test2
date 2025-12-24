@@ -466,9 +466,13 @@ class StrategyExecutorV2:
                 return False, f"MA方向不符合做空(价格{price:.4f} >= MA10={ma10:.4f})"
             return True, "EMA+MA方向一致(做空)"
 
-    def check_golden_death_cross(self, ema_data: Dict) -> Tuple[Optional[str], str]:
+    def check_golden_death_cross(self, ema_data: Dict, strategy: Dict = None) -> Tuple[Optional[str], str]:
         """
         检测金叉/死叉信号（使用已收盘K线判断，避免误判）
+
+        Args:
+            ema_data: EMA数据
+            strategy: 策略配置（用于获取minSignalStrength）
 
         Returns:
             (信号方向 'long'/'short'/None, 信号描述)
@@ -481,6 +485,13 @@ class StrategyExecutorV2:
         # 使用已收盘K线的EMA差值
         ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
 
+        # 从策略配置获取最小信号强度，默认使用类常量
+        min_strength = self.MIN_SIGNAL_STRENGTH
+        if strategy:
+            min_signal_strength = strategy.get('minSignalStrength', {})
+            if isinstance(min_signal_strength, dict):
+                min_strength = min_signal_strength.get('ema9_26', self.MIN_SIGNAL_STRENGTH)
+
         # 金叉：前一根EMA9 <= EMA26，当前EMA9 > EMA26（已收盘确认）
         is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
 
@@ -489,21 +500,25 @@ class StrategyExecutorV2:
 
         # 金叉/死叉需要检查信号强度
         if is_golden_cross:
-            if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
-                return None, f"金叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)"
+            if ema_diff_pct < min_strength:
+                return None, f"金叉信号强度不足({ema_diff_pct:.3f}% < {min_strength}%)"
             return 'long', f"金叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
 
         if is_death_cross:
-            if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
-                return None, f"死叉信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)"
+            if ema_diff_pct < min_strength:
+                return None, f"死叉信号强度不足({ema_diff_pct:.3f}% < {min_strength}%)"
             return 'short', f"死叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
 
         return None, "无金叉/死叉信号"
 
-    def check_sustained_trend(self, symbol: str) -> Tuple[Optional[str], str]:
+    def check_sustained_trend(self, symbol: str, strategy: Dict = None) -> Tuple[Optional[str], str]:
         """
         检测连续趋势信号
         需要15M和5M周期EMA差值同时放大
+
+        Args:
+            symbol: 交易对
+            strategy: 策略配置（用于获取minSignalStrength）
 
         Returns:
             (信号方向 'long'/'short'/None, 信号描述)
@@ -518,14 +533,21 @@ class StrategyExecutorV2:
         if not ema_5m:
             return None, "5M数据不足"
 
+        # 从策略配置获取最小信号强度
+        min_strength = self.MIN_SIGNAL_STRENGTH
+        if strategy:
+            min_signal_strength = strategy.get('minSignalStrength', {})
+            if isinstance(min_signal_strength, dict):
+                min_strength = min_signal_strength.get('ema9_26', self.MIN_SIGNAL_STRENGTH)
+
         # 检查15M趋势方向
         ema_diff_15m = ema_15m['ema_diff']
         is_uptrend = ema_diff_15m > 0
 
         # 检查15M差值是否在合理范围内
         ema_diff_pct_15m = ema_15m['ema_diff_pct']
-        if ema_diff_pct_15m < self.MIN_SIGNAL_STRENGTH:
-            return None, f"15M趋势强度不足({ema_diff_pct_15m:.3f}%)"
+        if ema_diff_pct_15m < min_strength:
+            return None, f"15M趋势强度不足({ema_diff_pct_15m:.3f}% < {min_strength}%)"
 
         # 检查5M连续3根K线差值放大（限价单模式下放宽为3根）
         ema9_values = ema_5m['ema9_values']
@@ -682,11 +704,15 @@ class StrategyExecutorV2:
         current_price = ema_data['current_price']
         ma10 = ema_data['ma10']
 
-        # 限价单要求更强的趋势强度（0.25%）
-        LIMIT_ORDER_MIN_STRENGTH = 0.25
+        # 从策略配置获取最小信号强度，默认0.25%（限价单要求更强的趋势）
+        min_signal_strength = strategy.get('minSignalStrength', {})
+        if isinstance(min_signal_strength, dict):
+            min_strength = min_signal_strength.get('ema9_26', 0.25)
+        else:
+            min_strength = 0.25
 
-        if ema_diff_pct < LIMIT_ORDER_MIN_STRENGTH:
-            return None, f"限价单信号强度不足({ema_diff_pct:.3f}% < {LIMIT_ORDER_MIN_STRENGTH}%)"
+        if ema_diff_pct < min_strength:
+            return None, f"限价单信号强度不足({ema_diff_pct:.3f}% < {min_strength}%)"
 
         # 判断方向
         if ema_diff > 0:  # EMA9 > EMA26, 上升趋势
@@ -2838,10 +2864,17 @@ class StrategyExecutorV2:
             if reversal_direction:
                 logger.info(f"🔄 {symbol} 反转开仓: {reversal_direction}, buy_directions={buy_directions}")
 
+                # 从策略配置获取最小信号强度
+                min_signal_strength = strategy.get('minSignalStrength', {})
+                if isinstance(min_signal_strength, dict):
+                    min_strength = min_signal_strength.get('ema9_26', self.MIN_SIGNAL_STRENGTH)
+                else:
+                    min_strength = self.MIN_SIGNAL_STRENGTH
+
                 # 检查信号强度（使用已收盘K线的EMA差值，和普通金叉/死叉开仓逻辑一致）
                 ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
-                if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
-                    logger.info(f"🔄 {symbol} Reversal entry skipped: weak signal ({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)")
+                if ema_diff_pct < min_strength:
+                    logger.info(f"🔄 {symbol} Reversal entry skipped: weak signal ({ema_diff_pct:.3f}% < {min_strength}%)")
                 else:
                     entry_reason = f"reversal_entry|diff:{ema_diff_pct:.3f}%"
                     try:
@@ -2859,7 +2892,7 @@ class StrategyExecutorV2:
             # 3.1 检查金叉/死叉信号（非反转情况）
             # 金叉/死叉是趋势反转的强信号，不受RSI等过滤器限制
             if not open_result or not open_result.get('success'):
-                signal, signal_desc = self.check_golden_death_cross(ema_data)
+                signal, signal_desc = self.check_golden_death_cross(ema_data, strategy)
                 debug_info.append(f"金叉/死叉: {signal_desc}")
 
                 if signal and signal in buy_directions:
@@ -2881,7 +2914,7 @@ class StrategyExecutorV2:
 
             # 3.2 检查连续趋势信号（原有的5M放大检测）
             if not open_result or not open_result.get('success'):
-                signal, signal_desc = self.check_sustained_trend(symbol)
+                signal, signal_desc = self.check_sustained_trend(symbol, strategy)
                 debug_info.append(f"连续趋势(5M放大): {signal_desc}")
 
                 if signal and signal in buy_directions:
