@@ -276,12 +276,10 @@ class FuturesLimitOrderExecutor:
         待开仓自检：根据 pendingValidation 配置检查限价单是否应该取消
 
         自检项目：
-        1. EMA方向确认
-        2. MA方向确认
-        3. 震荡市检查
-        4. 趋势末端检查
-        5. EMA收敛检查
-        6. 最小EMA差值检查
+        1. EMA方向确认 - 做多要求EMA9>EMA26，做空相反
+        2. MA方向确认 - 做多要求价格>MA10，做空相反
+        3. 趋势末端检查 - EMA差值快速收窄说明趋势即将结束
+        4. 最小EMA差值检查 - EMA差值过小说明趋势太弱/震荡市
 
         Args:
             connection: 数据库连接
@@ -371,28 +369,13 @@ class FuturesLimitOrderExecutor:
                 elif direction == 'short' and current_price >= ma10:
                     reject_reasons.append(f"MA方向不符(价格{current_price:.4f}>=MA10={ma10:.4f})")
 
-            # 3. 震荡市检查
-            if pending_validation.get('check_ranging', True):
-                ranging_threshold = 0.1
-                if ema_diff_pct < ranging_threshold:
-                    reject_reasons.append(f"震荡市(EMA差值{ema_diff_pct:.3f}%<{ranging_threshold}%)")
-
-            # 4. 趋势末端检查
+            # 3. 趋势末端检查（EMA差值快速收窄）
             if pending_validation.get('check_trend_end', True):
                 if prev_diff_pct > 0 and ema_diff_pct < prev_diff_pct * 0.7:
                     shrink = (prev_diff_pct - ema_diff_pct) / prev_diff_pct * 100
                     reject_reasons.append(f"趋势末端(差值缩小{shrink:.1f}%)")
 
-            # 5. EMA收敛检查
-            if pending_validation.get('check_ema_converging', True):
-                current_diff = abs(ema9 - ema26)
-                prev_diff = abs(prev_ema9 - prev_ema26)
-                if current_diff < prev_diff and prev_diff > 0:
-                    shrink_pct = (prev_diff - current_diff) / prev_diff * 100
-                    if shrink_pct >= 30:
-                        reject_reasons.append(f"EMA收敛(收窄{shrink_pct:.1f}%>=30%)")
-
-            # 6. 最小EMA差值检查
+            # 4. 最小EMA差值检查（过小说明震荡市或趋势太弱）
             min_ema_diff_pct = pending_validation.get('min_ema_diff_pct', 0.05)
             if ema_diff_pct < min_ema_diff_pct:
                 reject_reasons.append(f"弱趋势(EMA差值{ema_diff_pct:.3f}%<{min_ema_diff_pct}%)")
