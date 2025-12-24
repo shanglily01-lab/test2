@@ -685,34 +685,35 @@ async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual
             (reason, order_id, account_id)
         )
         
-        # 释放冻结的保证金和手续费
-        cursor.execute(
-            """SELECT margin, fee FROM futures_orders 
-            WHERE order_id = %s AND account_id = %s""",
-            (order_id, account_id)
-        )
-        order_info = cursor.fetchone()
-        
-        if order_info and order_info['margin']:
+        # 限价单(LIMIT+PENDING)不冻结保证金，取消时也不需要释放
+        # 只有已冻结保证金的订单（部分成交或市价单）才需要释放
+        order_type = order.get('order_type', 'MARKET')
+        original_status = order.get('status', 'PENDING')
+
+        # 只有非限价单的PENDING订单或部分成交订单才冻结了保证金
+        # 限价单PENDING状态不冻结保证金
+        needs_release = not (order_type == 'LIMIT' and original_status == 'PENDING')
+
+        if needs_release and order.get('margin'):
             # 计算总冻结金额（保证金 + 手续费）
-            total_frozen = float(order_info['margin']) + float(order_info.get('fee', 0) or 0)
-            
+            total_frozen = float(order['margin']) + float(order.get('fee', 0) or 0)
+
             # 释放保证金和手续费到可用余额
             cursor.execute(
-                """UPDATE paper_trading_accounts 
+                """UPDATE paper_trading_accounts
                 SET current_balance = current_balance + %s,
                     frozen_balance = frozen_balance - %s,
                     updated_at = NOW()
                 WHERE id = %s""",
                 (total_frozen, total_frozen, account_id)
             )
-            
+
             # 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
             cursor.execute(
                 """UPDATE paper_trading_accounts a
                 SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
-                    SELECT SUM(p.unrealized_pnl) 
-                    FROM futures_positions p 
+                    SELECT SUM(p.unrealized_pnl)
+                    FROM futures_positions p
                     WHERE p.account_id = a.id AND p.status = 'open'
                 ), 0)
                 WHERE a.id = %s""",
