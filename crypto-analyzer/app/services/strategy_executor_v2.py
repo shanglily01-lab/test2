@@ -1980,11 +1980,12 @@ class StrategyExecutorV2:
         if current_pnl_pct <= -stop_loss_pct:
             return True, f"hard_stop_loss|loss:{abs(current_pnl_pct):.2f}%", updates
 
-        # 2.5 5M信号智能止损已禁用（容易误触发）
-        # if not in_cooldown:
-        #     close_needed, close_reason = self.check_5m_signal_stop_loss(position, current_pnl_pct, strategy)
-        #     if close_needed:
-        #         return True, close_reason, updates
+        # 2.5 5M信号智能止损（亏损时检测5M反向交叉）
+        # 注意：冷却期内不检查5M信号止损
+        if not in_cooldown:
+            close_needed, close_reason = self.check_5m_signal_stop_loss(position, current_pnl_pct, strategy)
+            if close_needed:
+                return True, close_reason, updates
 
         # 3. 最大止盈检查
         if current_pnl_pct >= max_take_profit:
