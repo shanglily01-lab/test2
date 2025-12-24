@@ -2269,6 +2269,8 @@ class StrategyExecutorV2:
                 )
                 if not passed:
                     logger.info(f"🚫 {symbol} 待开仓自检未通过: {reject_reason}")
+                    # 标记信号已触发，避免同一K线周期内重复打印日志
+                    self._signal_triggered[kline_key] = now
                     return {'success': False, 'error': f'自检未通过: {reject_reason}', 'validation_failed': True}
 
             # 标记当前K线周期已触发信号（在实际创建订单前标记）
