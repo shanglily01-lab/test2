@@ -1013,7 +1013,7 @@ class FuturesTradingEngine:
                     fee, fee_rate, status,
                     avg_fill_price, fill_time,
                     realized_pnl, pnl_pct,
-                    order_source
+                    order_source, notes
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, 'MARKET', %s,
@@ -1022,7 +1022,7 @@ class FuturesTradingEngine:
                     %s, %s, 'FILLED',
                     %s, %s,
                     %s, %s,
-                    %s
+                    %s, %s
                 )
             """
 
@@ -1034,7 +1034,7 @@ class FuturesTradingEngine:
                 float(fee), float(fee_rate),
                 float(current_price), get_local_time(),
                 float(realized_pnl), float(pnl_pct),
-                reason
+                'strategy', reason
             ))
 
             # 6. 创建交易记录
