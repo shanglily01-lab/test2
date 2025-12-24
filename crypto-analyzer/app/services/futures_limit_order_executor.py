@@ -277,9 +277,8 @@ class FuturesLimitOrderExecutor:
 
         自检项目：
         1. EMA方向确认 - 做多要求EMA9>EMA26，做空相反
-        2. MA方向确认 - 做多要求价格>MA10，做空相反
-        3. 趋势末端检查 - EMA差值快速收窄说明趋势即将结束
-        4. 最小EMA差值检查 - EMA差值过小说明趋势太弱/震荡市
+        2. 趋势末端检查 - EMA差值快速收窄说明趋势即将结束
+        3. 最小EMA差值检查 - EMA差值过小说明趋势太弱/震荡市
 
         Args:
             connection: 数据库连接
@@ -334,12 +333,11 @@ class FuturesLimitOrderExecutor:
             # 将K线反转为正序
             prices = [float(k['close_price']) for k in reversed(klines)]
 
-            # 计算EMA和MA
+            # 计算EMA
             ema9_values = self._calculate_ema(prices, 9)
             ema26_values = self._calculate_ema(prices, 26)
-            ma10_values = self._calculate_ma(prices, 10)
 
-            if len(ema9_values) < 2 or len(ema26_values) < 2 or len(ma10_values) < 1:
+            if len(ema9_values) < 2 or len(ema26_values) < 2:
                 return None
 
             # 取当前和前一个值
@@ -347,7 +345,6 @@ class FuturesLimitOrderExecutor:
             ema26 = ema26_values[-1]
             prev_ema9 = ema9_values[-2]
             prev_ema26 = ema26_values[-2]
-            ma10 = ma10_values[-1]
 
             # 计算EMA差值百分比
             ema_diff_pct = abs((ema9 - ema26) / ema26 * 100) if ema26 != 0 else 0
@@ -362,23 +359,13 @@ class FuturesLimitOrderExecutor:
                 elif direction == 'short' and ema9 >= ema26:
                     reject_reasons.append(f"EMA方向不符(EMA9={ema9:.4f}>=EMA26={ema26:.4f})")
 
-            # 2. MA方向确认（已禁用）
-            # 注意：限价单设置为低于市价0.6%（做多）或高于市价0.6%（做空）
-            # 因此当限价触发时，价格自然会低于/高于MA10，这是预期行为
-            # MA方向检查对限价单没有意义，跳过此检查
-            # if pending_validation.get('require_ma_confirm', True):
-            #     if direction == 'long' and current_price <= ma10:
-            #         reject_reasons.append(f"MA方向不符(价格{current_price:.4f}<=MA10={ma10:.4f})")
-            #     elif direction == 'short' and current_price >= ma10:
-            #         reject_reasons.append(f"MA方向不符(价格{current_price:.4f}>=MA10={ma10:.4f})")
-
-            # 3. 趋势末端检查（EMA差值快速收窄）
+            # 2. 趋势末端检查（EMA差值快速收窄）
             if pending_validation.get('check_trend_end', True):
                 if prev_diff_pct > 0 and ema_diff_pct < prev_diff_pct * 0.7:
                     shrink = (prev_diff_pct - ema_diff_pct) / prev_diff_pct * 100
                     reject_reasons.append(f"趋势末端(差值缩小{shrink:.1f}%)")
 
-            # 4. 最小EMA差值检查（过小说明震荡市或趋势太弱）
+            # 3. 最小EMA差值检查（过小说明震荡市或趋势太弱）
             min_ema_diff_pct = pending_validation.get('min_ema_diff_pct', 0.05)
             if ema_diff_pct < min_ema_diff_pct:
                 reject_reasons.append(f"弱趋势(EMA差值{ema_diff_pct:.3f}%<{min_ema_diff_pct}%)")
