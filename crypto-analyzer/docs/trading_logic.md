@@ -230,6 +230,20 @@ EMA 数据对应关系:
 - **EMA差值过滤**: 成交时刻EMA差值必须大于 `minEmaDiff`
 - **持仓数量限制**: 同一交易对同方向最多3个持仓
 
+### 取消原因代码
+
+限价单取消时，`cancellation_reason` 字段使用英文代码存储，前端显示中文。
+
+| 英文代码 | 中文说明 | 触发场景 |
+|----------|----------|----------|
+| validation_failed | 自检未通过 | pendingValidation 检查失败（EMA方向、MA方向、趋势末端、弱趋势） |
+| trend_reversal | 趋势转向 | 检测到反向EMA交叉（做多遇死叉、做空遇金叉） |
+| timeout | 超时取消 | 超过 limitOrderTimeoutMinutes 设定时间 |
+| position_exists | 持仓已存在 | 同交易对同方向已有3个持仓 |
+| rsi_filter | RSI过滤 | 做多时RSI超买(>65)或做空时RSI超卖(<35) |
+| ema_diff_small | EMA差值过小 | 成交时EMA差值低于 minEmaDiff 阈值 |
+| execution_failed | 执行失败 | 开仓时发生错误 |
+
 ### 同步实盘
 
 **注意**：实盘同步只在限价单**成交后**才发生（以市价执行）。因此：
