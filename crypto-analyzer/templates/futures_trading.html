@@ -2539,6 +2539,46 @@
                     
                     const recentTrades = data.data;
 
+                    // 平仓原因英文到中文的映射
+                    const closeReasonMap = {
+                        // 止损相关
+                        'hard_stop_loss': '硬止损',
+                        'stop_loss': '止损',
+                        'trailing_stop_loss': '移动止损',
+                        '5m_death_cross_sl': '5分钟死叉止损',
+                        '5m_golden_cross_sl': '5分钟金叉止损',
+                        // 止盈相关
+                        'max_take_profit': '最大止盈',
+                        'trailing_take_profit': '移动止盈',
+                        'ema_diff_narrowing_tp': 'EMA差值收窄止盈',
+                        'ema_direction_reversal_tp': 'EMA方向反转止盈',
+                        // 反转相关
+                        'death_cross_reversal': '死叉反转平仓',
+                        'golden_cross_reversal': '金叉反转平仓',
+                        'trend_reversal_bearish': '趋势反转平仓(空)',
+                        'trend_reversal_bullish': '趋势反转平仓(多)',
+                        // 趋势相关
+                        'trend_weakening': '趋势减弱平仓',
+                        // 手动/其他
+                        'manual': '手动',
+                        'strategy': '策略',
+                        'liquidation': '强平'
+                    };
+
+                    // 格式化平仓原因（notes字段）
+                    function formatNotes(notes) {
+                        if (!notes) return '--';
+                        // 提取第一个关键字（在|之前的部分）
+                        const key = notes.split('|')[0].trim();
+                        const chineseReason = closeReasonMap[key];
+                        if (chineseReason) {
+                            // 提取参数部分（|之后的内容）
+                            const params = notes.includes('|') ? notes.substring(notes.indexOf('|') + 1) : '';
+                            return params ? `${chineseReason} (${params})` : chineseReason;
+                        }
+                        return notes;
+                    }
+
                     // 格式化平仓原因
                     function formatCloseReason(orderSource) {
                         // 如果 order_source 为空或未定义，默认为手动
@@ -2614,7 +2654,7 @@
                             <td class="pnl ${trade.pnl_pct >= 0 ? 'pnl-positive' : 'pnl-negative'}">
                                 ${trade.pnl_pct >= 0 ? '+' : ''}${(trade.pnl_pct || 0).toFixed(2)}%
                             </td>
-                            <td class="text-sm">${formatCloseReason(trade.order_source)}</td>
+                            <td class="text-sm" title="${trade.close_reason || ''}">${formatNotes(trade.close_reason) || formatCloseReason(trade.order_source)}</td>
                             <td class="text-sm">${formatStopLossTakeProfit(trade.stop_loss_price, trade.take_profit_price)}</td>
                             <td class="text-sm">${formatLargeNumber(trade.fee || 0)}</td>
                             <td class="text-sm text-secondary">${formatTradeTime(trade.open_time)}</td>

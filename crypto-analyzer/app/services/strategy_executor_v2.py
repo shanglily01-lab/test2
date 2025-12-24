@@ -412,16 +412,16 @@ class StrategyExecutorV2:
         if position_side == 'LONG' and ema9 < ema26:
             ema_diff_pct = (ema26 - ema9) / ema26 * 100
             if ema_diff_pct >= min_ema_diff_pct:
-                reason = f"5M EMA死叉状态止损(亏损{abs(current_pnl_pct):.2f}%, EMA9={ema9:.6f} < EMA26={ema26:.6f}, 差{ema_diff_pct:.2f}%)"
-                logger.info(f"🔴 [智能止损] {symbol} {reason}")
+                reason = f"5m_death_cross_sl|loss:{abs(current_pnl_pct):.2f}%|diff:{ema_diff_pct:.2f}%"
+                logger.info(f"🔴 [Smart SL] {symbol} {reason}")
                 return True, reason
 
         # 做空持仓亏损 + 5M EMA处于金叉状态（EMA9 > EMA26）+ 强度足够 → 立即止损
         if position_side == 'SHORT' and ema9 > ema26:
             ema_diff_pct = (ema9 - ema26) / ema26 * 100
             if ema_diff_pct >= min_ema_diff_pct:
-                reason = f"5M EMA金叉状态止损(亏损{abs(current_pnl_pct):.2f}%, EMA9={ema9:.6f} > EMA26={ema26:.6f}, 差{ema_diff_pct:.2f}%)"
-                logger.info(f"🟢 [智能止损] {symbol} {reason}")
+                reason = f"5m_golden_cross_sl|loss:{abs(current_pnl_pct):.2f}%|diff:{ema_diff_pct:.2f}%"
+                logger.info(f"🟢 [Smart SL] {symbol} {reason}")
                 return True, reason
 
         return False, ""
@@ -1573,21 +1573,21 @@ class StrategyExecutorV2:
             # 持多仓 + 死叉 → 立即平仓
             is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
             if is_death_cross:
-                return True, "死叉反转平仓(已收盘确认)"
+                return True, "death_cross_reversal"
 
             # 趋势反转：EMA9 < EMA26（已收盘确认）
             if ema9 < ema26:
-                return True, "趋势反转平仓(EMA9 < EMA26)"
+                return True, "trend_reversal_bearish"
 
         else:  # SHORT
             # 持空仓 + 金叉 → 立即平仓
             is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
             if is_golden_cross:
-                return True, "金叉反转平仓(已收盘确认)"
+                return True, "golden_cross_reversal"
 
             # 趋势反转：EMA9 > EMA26（已收盘确认）
             if ema9 > ema26:
-                return True, "趋势反转平仓(EMA9 > EMA26)"
+                return True, "trend_reversal_bullish"
 
         return False, ""
 
@@ -1625,19 +1625,19 @@ class StrategyExecutorV2:
 
         # 检查是否触发最大止盈
         if current_pnl_pct >= self.MAX_TAKE_PROFIT:
-            return True, f"最大止盈平仓(盈利{current_pnl_pct:.2f}% >= {self.MAX_TAKE_PROFIT}%)", updates
+            return True, f"max_take_profit|pnl:{current_pnl_pct:.2f}%", updates
 
         # 检查是否激活移动止盈
         if not trailing_activated and max_profit_pct >= self.TRAILING_ACTIVATE:
             updates['trailing_stop_activated'] = True
             trailing_activated = True
-            logger.info(f"移动止盈已激活: 最高盈利{max_profit_pct:.2f}% >= {self.TRAILING_ACTIVATE}%")
+            logger.info(f"Trailing TP activated: max_pnl={max_profit_pct:.2f}% >= {self.TRAILING_ACTIVATE}%")
 
         # 移动止盈已激活，检查回撤
         if trailing_activated:
             callback_pct = max_profit_pct - current_pnl_pct
             if callback_pct >= self.TRAILING_CALLBACK:
-                return True, f"移动止盈平仓(从最高{max_profit_pct:.2f}%回撤{callback_pct:.2f}%)", updates
+                return True, f"trailing_take_profit|max:{max_profit_pct:.2f}%|cb:{callback_pct:.2f}%", updates
 
         return False, "", updates
 
@@ -1665,7 +1665,7 @@ class StrategyExecutorV2:
             current_pnl_pct = (entry_price - current_price) / entry_price * 100
 
         if current_pnl_pct <= -self.HARD_STOP_LOSS:
-            return True, f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {self.HARD_STOP_LOSS}%)"
+            return True, f"hard_stop_loss|loss:{abs(current_pnl_pct):.2f}%"
 
         return False, ""
 
@@ -1730,11 +1730,11 @@ class StrategyExecutorV2:
         # EMA差值收窄止盈：当差值缩小到阈值以下，且盈利达标时止盈
         # 条件：当前差值 < 阈值，说明趋势减弱
         if ema_diff_pct < threshold:
-            return True, f"EMA差值收窄止盈[15m](差值{ema_diff_pct:.2f}% < {threshold}%, 盈利{current_pnl_pct:.2f}%)"
+            return True, f"ema_diff_narrowing_tp|diff:{ema_diff_pct:.2f}%|pnl:{current_pnl_pct:.2f}%"
 
         # EMA方向反转止盈：趋势已经反转，但还有盈利时止盈
         if not ema_supports_position and current_pnl_pct >= min_profit_pct:
-            return True, f"EMA方向反转止盈[15m](EMA9{'>' if ema9 > ema26 else '<'}EMA26, 盈利{current_pnl_pct:.2f}%)"
+            return True, f"ema_direction_reversal_tp|pnl:{current_pnl_pct:.2f}%"
 
         return False, ""
 
@@ -1852,14 +1852,14 @@ class StrategyExecutorV2:
                         pnl_pct = (entry_price - current_price) / entry_price * 100
 
                     if pnl_pct < 0:
-                        return False, f"趋势减弱但仍亏损({pnl_pct:.2f}%)，继续持有"
+                        return False, f"trend_weakening_but_losing|pnl:{pnl_pct:.2f}%"
 
                     if pnl_pct < MIN_PROFIT_FOR_TREND_EXIT:
-                        return False, f"趋势减弱但盈利不足({pnl_pct:.2f}%<{MIN_PROFIT_FOR_TREND_EXIT}%)，继续持有"
+                        return False, f"trend_weakening_insufficient_profit|pnl:{pnl_pct:.2f}%"
 
-            return True, f"趋势减弱平仓(当前强度{confirmed_ema_diff_pct:.3f}% < 开仓时{entry_ema_diff:.3f}%的50%，已收盘确认)"
+            return True, f"trend_weakening|curr:{confirmed_ema_diff_pct:.3f}%|entry:{entry_ema_diff:.3f}%"
 
-        return False, f"趋势强度正常(当前{confirmed_ema_diff_pct:.3f}%, 开仓时{entry_ema_diff:.3f}%)"
+        return False, f"trend_normal|curr:{confirmed_ema_diff_pct:.3f}%|entry:{entry_ema_diff:.3f}%"
 
     def check_smart_exit(self, position: Dict, current_price: float, ema_data: Dict,
                           strategy: Dict) -> Tuple[bool, str, Dict]:
@@ -1970,15 +1970,15 @@ class StrategyExecutorV2:
         if updated_stop_loss > 0:
             # 判断是移动止损还是普通止损（通过盈亏判断：盈利时触发的是移动止损）
             is_trailing_stop = current_pnl_pct > 0
-            stop_type = "移动止损" if is_trailing_stop else "止损"
+            stop_type = "trailing_stop_loss" if is_trailing_stop else "stop_loss"
             if position_side == 'LONG' and current_price <= updated_stop_loss:
-                return True, f"{stop_type}平仓(价格{current_price:.4f} <= 止损价{updated_stop_loss:.4f})", updates
+                return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
             elif position_side == 'SHORT' and current_price >= updated_stop_loss:
-                return True, f"{stop_type}平仓(价格{current_price:.4f} >= 止损价{updated_stop_loss:.4f})", updates
+                return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
 
         # 2. 硬止损检查（百分比止损，作为后备）
         if current_pnl_pct <= -stop_loss_pct:
-            return True, f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)", updates
+            return True, f"hard_stop_loss|loss:{abs(current_pnl_pct):.2f}%", updates
 
         # 2.5 5M信号智能止损（亏损时检测5M反向交叉）
         # 注意：冷却期内不检查5M信号止损
@@ -1989,7 +1989,7 @@ class StrategyExecutorV2:
 
         # 3. 最大止盈检查
         if current_pnl_pct >= max_take_profit:
-            return True, f"最大止盈平仓(盈利{current_pnl_pct:.2f}% >= {max_take_profit}%)", updates
+            return True, f"max_take_profit|pnl:{current_pnl_pct:.2f}%", updates
 
         # 3.5 EMA差值止盈检查
         close_needed, close_reason = self.check_ema_diff_take_profit(position, ema_data, current_pnl_pct, strategy)
@@ -2033,13 +2033,13 @@ class StrategyExecutorV2:
                 trailing_stop_price = current_price * (1 + trailing_callback / 100)
             updates['trailing_stop_price'] = trailing_stop_price
 
-            logger.info(f"移动止盈已激活: 最高盈利{max_profit_pct:.2f}% >= {trailing_activate}%，止损价={trailing_stop_price:.4f}")
+            logger.info(f"Trailing TP activated: max_pnl={max_profit_pct:.2f}% >= {trailing_activate}%, sl_price={trailing_stop_price:.4f}")
 
         # 移动止盈已激活，检查回撤
         if trailing_activated:
             callback_pct = max_profit_pct - current_pnl_pct
             if callback_pct >= trailing_callback:
-                return True, f"移动止盈平仓(从最高{max_profit_pct:.2f}%回撤{callback_pct:.2f}% >= {trailing_callback}%)", updates
+                return True, f"trailing_take_profit|max:{max_profit_pct:.2f}%|cb:{callback_pct:.2f}%", updates
 
             # 更新移动止损价格
             symbol = position.get('symbol', '')
@@ -2636,8 +2636,8 @@ class StrategyExecutorV2:
 
                 # 快速检查硬止损（不受冷却时间限制）
                 if current_pnl_pct <= -stop_loss_pct:
-                    close_reason = f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)"
-                    logger.info(f"🚨 [快速监控] {symbol} {close_reason}")
+                    close_reason = f"hard_stop_loss|loss:{abs(current_pnl_pct):.2f}%"
+                    logger.info(f"🚨 [Fast Monitor] {symbol} {close_reason}")
                     await self.execute_close_position(position, close_reason, strategy)
                     continue  # 已平仓，跳过后续处理
 
@@ -2685,8 +2685,8 @@ class StrategyExecutorV2:
                     callback_pct = max_profit_pct - current_pnl_pct
                     if callback_pct >= trailing_callback:
                         # 触发移动止盈平仓！
-                        close_reason = f"移动止盈平仓(从最高{max_profit_pct:.2f}%回撤{callback_pct:.2f}% >= {trailing_callback}%)"
-                        logger.info(f"🚨 [快速监控] {symbol} {close_reason}")
+                        close_reason = f"trailing_take_profit|max:{max_profit_pct:.2f}%|cb:{callback_pct:.2f}%"
+                        logger.info(f"🚨 [Fast Monitor] {symbol} {close_reason}")
 
                         # 先更新数据库
                         if updates:
@@ -2821,13 +2821,13 @@ class StrategyExecutorV2:
             if close_results:
                 logger.info(f"[反转检测] {symbol} 持仓id={p.get('id')}, status={p_status}, close_reason={p_reason}")
             if p_status == 'closed':
-                if '金叉反转平仓' in p_reason:
+                if 'golden_cross_reversal' in p_reason:
                     reversal_direction = 'long'
-                    logger.info(f"🔄 {symbol} 检测到金叉反转平仓，准备开多")
+                    logger.info(f"🔄 {symbol} Golden cross reversal detected, preparing LONG")
                     break
-                elif '死叉反转平仓' in p_reason:
+                elif 'death_cross_reversal' in p_reason:
                     reversal_direction = 'short'
-                    logger.info(f"🔄 {symbol} 检测到死叉反转平仓，准备开空")
+                    logger.info(f"🔄 {symbol} Death cross reversal detected, preparing SHORT")
                     break
 
         # 只在有平仓发生时输出日志
@@ -2841,9 +2841,9 @@ class StrategyExecutorV2:
                 # 检查信号强度（使用已收盘K线的EMA差值，和普通金叉/死叉开仓逻辑一致）
                 ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
                 if ema_diff_pct < self.MIN_SIGNAL_STRENGTH:
-                    logger.info(f"🔄 {symbol} 反转开仓跳过: 信号强度不足({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%，已收盘确认)")
+                    logger.info(f"🔄 {symbol} Reversal entry skipped: weak signal ({ema_diff_pct:.3f}% < {self.MIN_SIGNAL_STRENGTH}%)")
                 else:
-                    entry_reason = f"reversal_entry(已收盘确认): EMA_diff:{ema_diff_pct:.3f}%"
+                    entry_reason = f"reversal_entry|diff:{ema_diff_pct:.3f}%"
                     try:
                         open_result = await self.execute_open_position(
                             symbol, reversal_direction, 'reversal_cross',
