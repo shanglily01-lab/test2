@@ -17,7 +17,7 @@ if str(project_root) not in sys.path:
 
 import pymysql
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from loguru import logger
 import time
@@ -64,6 +64,43 @@ class StopLossMonitor:
         self.engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier, live_engine=self.live_engine)
 
         logger.info("StopLossMonitor initialized")
+
+    def _set_cooldown(self, symbol: str, cooldown_type: str, cooldown_minutes: int):
+        """设置交易冷却期（写入数据库）"""
+        try:
+            self._ensure_connection()
+            cursor = self.connection.cursor()
+            cooldown_until = datetime.now() + timedelta(minutes=cooldown_minutes)
+            cursor.execute("""
+                INSERT INTO trading_cooldowns (symbol, cooldown_type, cooldown_until)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE cooldown_until = %s, created_at = NOW()
+            """, (symbol, cooldown_type, cooldown_until, cooldown_until))
+            self.connection.commit()
+            cursor.close()
+            logger.info(f"[冷却期] {symbol} {cooldown_type} 冷却至 {cooldown_until.strftime('%H:%M:%S')}")
+        except Exception as e:
+            logger.error(f"[冷却期] 设置冷却期失败: {e}")
+
+    def _check_cooldown(self, symbol: str, cooldown_type: str) -> bool:
+        """检查是否在冷却期内（从数据库读取）"""
+        try:
+            self._ensure_connection()
+            cursor = self.connection.cursor(pymysql.cursors.DictCursor)
+            cursor.execute("""
+                SELECT cooldown_until FROM trading_cooldowns
+                WHERE symbol = %s AND cooldown_type = %s AND cooldown_until > NOW()
+            """, (symbol, cooldown_type))
+            result = cursor.fetchone()
+            cursor.close()
+            if result:
+                remaining = (result['cooldown_until'] - datetime.now()).total_seconds()
+                logger.debug(f"[冷却期] {symbol} {cooldown_type} 冷却中，剩余 {int(remaining)} 秒")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"[冷却期] 检查冷却期失败: {e}")
+            return False
 
     def _should_refresh_connection(self):
         """检查是否需要刷新连接（基于连接年龄）"""
@@ -730,6 +767,12 @@ class StopLossMonitor:
             如果触发止损返回 {'reason': str}，否则返回 None
         """
         try:
+            symbol = position.get('symbol')
+
+            # 检查冷却期：如果该symbol还在冷却期内，跳过检查
+            if self._check_cooldown(symbol, 'consecutive_kline_stop'):
+                return None
+
             # 获取策略配置
             strategy_id = position.get('strategy_id')
             if not strategy_id:
@@ -755,6 +798,7 @@ class StopLossMonitor:
 
             bars = consecutive_config.get('bars', 2)
             timeframe = consecutive_config.get('timeframe', '5m')
+            cooldown_minutes = consecutive_config.get('cooldownMinutes', 15)  # 默认15分钟冷却期
             max_loss_pct = consecutive_config.get('maxLossPct', -0.5)
 
             # 计算当前盈亏
@@ -800,7 +844,9 @@ class StopLossMonitor:
                 consecutive_bearish = all(k[2] for k in kline_status)
                 logger.debug(f"[连续K线止损] {symbol} LONG 检查连续阴线: {kline_status} -> 结果={consecutive_bearish}")
                 if consecutive_bearish:
-                    logger.info(f"[连续K线止损] ⚠️ {symbol} LONG 触发连续{bars}根阴线止损，当前亏损 {current_profit_pct:.2f}%")
+                    # 设置冷却期（写入数据库）
+                    self._set_cooldown(symbol, 'consecutive_kline_stop', cooldown_minutes)
+                    logger.info(f"[连续K线止损] ⚠️ {symbol} LONG 触发连续{bars}根阴线止损，当前亏损 {current_profit_pct:.2f}%，冷却{cooldown_minutes}分钟")
                     return {
                         'reason': f"连续{bars}根阴线止损(亏损{current_profit_pct:.2f}%)"
                     }
@@ -810,7 +856,9 @@ class StopLossMonitor:
                 consecutive_bullish = all(k[2] for k in kline_status)
                 logger.debug(f"[连续K线止损] {symbol} SHORT 检查连续阳线: {kline_status} -> 结果={consecutive_bullish}")
                 if consecutive_bullish:
-                    logger.info(f"[连续K线止损] ⚠️ {symbol} SHORT 触发连续{bars}根阳线止损，当前亏损 {current_profit_pct:.2f}%")
+                    # 设置冷却期（写入数据库）
+                    self._set_cooldown(symbol, 'consecutive_kline_stop', cooldown_minutes)
+                    logger.info(f"[连续K线止损] ⚠️ {symbol} SHORT 触发连续{bars}根阳线止损，当前亏损 {current_profit_pct:.2f}%，冷却{cooldown_minutes}分钟")
                     return {
                         'reason': f"连续{bars}根阳线止损(亏损{current_profit_pct:.2f}%)"
                     }
