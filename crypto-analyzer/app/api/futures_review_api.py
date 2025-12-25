@@ -40,6 +40,8 @@ CLOSE_REASON_MAP = {
     'golden_cross_reversal': '金叉反转平仓',
     '5m_death_cross_sl': '5分钟死叉止损',
     '5m_golden_cross_sl': '5分钟金叉止损',
+    'consecutive_kline_stop': '连续K线止损',
+    'ema_direction_reversal_tp': 'EMA方向反转止盈',
     'manual': '手动平仓',
     'manual_close_all': '一键平仓',
     'liquidation': '强制平仓',
