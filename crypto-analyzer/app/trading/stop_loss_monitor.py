@@ -828,7 +828,7 @@ class StopLossMonitor:
                 cursor.execute("""
                     SELECT open_price, close_price, timestamp
                     FROM kline_data
-                    WHERE symbol = %s AND timeframe = %s AND timestamp >= %s
+                    WHERE symbol = %s AND timeframe = %s AND timestamp > %s
                     ORDER BY timestamp DESC
                     LIMIT %s
                 """, (symbol, timeframe, open_time, bars))
