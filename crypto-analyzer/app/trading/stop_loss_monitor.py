@@ -813,28 +813,40 @@ class StopLossMonitor:
             else:  # SHORT
                 current_profit_pct = float((entry_price - current_price) / entry_price * 100)
 
-            # 获取symbol（在日志之前获取）
+            # 获取symbol和开仓时间
             symbol = position['symbol']
+            open_time = position.get('open_time')
 
             # 连续反向K线检查 - 不限制盈亏状态
             # 设计理念：连续反向K线说明趋势转向，应立即平仓，不管当前盈亏
-            logger.debug(f"[连续K线止损] {symbol} {position_side} 当前盈亏 {current_profit_pct:.2f}%，开始检查连续K线")
+            # 重要：只检查开仓之后的K线，开仓前的K线不算
+            logger.debug(f"[连续K线止损] {symbol} {position_side} 当前盈亏 {current_profit_pct:.2f}%，开仓时间 {open_time}，开始检查连续K线")
 
-            # 获取K线数据
+            # 获取开仓之后的K线数据
             cursor = self.connection.cursor(pymysql.cursors.DictCursor)
-            cursor.execute("""
-                SELECT open_price, close_price
-                FROM kline_data
-                WHERE symbol = %s AND timeframe = %s
-                ORDER BY timestamp DESC
-                LIMIT %s
-            """, (symbol, timeframe, bars))
+            if open_time:
+                cursor.execute("""
+                    SELECT open_price, close_price, timestamp
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s AND timestamp >= %s
+                    ORDER BY timestamp DESC
+                    LIMIT %s
+                """, (symbol, timeframe, open_time, bars))
+            else:
+                # 如果没有开仓时间，回退到原来的逻辑
+                cursor.execute("""
+                    SELECT open_price, close_price, timestamp
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY timestamp DESC
+                    LIMIT %s
+                """, (symbol, timeframe, bars))
 
             klines = cursor.fetchall()
             cursor.close()
 
             if not klines or len(klines) < bars:
-                logger.debug(f"[连续K线止损] {symbol} K线数据不足: 需要{bars}根，实际{len(klines) if klines else 0}根")
+                logger.debug(f"[连续K线止损] {symbol} 开仓后K线数据不足: 需要{bars}根，实际{len(klines) if klines else 0}根（开仓时间: {open_time}）")
                 return None
 
             # 检查连续K线
