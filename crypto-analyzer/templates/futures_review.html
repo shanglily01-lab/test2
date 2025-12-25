@@ -416,11 +416,11 @@
             return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
         }
 
-        function formatHoldingTime(hours) {
-            if (hours === null || hours === undefined) return '-';
-            if (hours < 1) return `${Math.round(hours * 60)}分钟`;
-            if (hours < 24) return `${hours.toFixed(1)}小时`;
-            return `${(hours / 24).toFixed(1)}天`;
+        function formatHoldingTime(minutes) {
+            if (minutes === null || minutes === undefined) return '-';
+            if (minutes < 60) return `${minutes}分钟`;
+            if (minutes < 1440) return `${(minutes / 60).toFixed(1)}小时`;
+            return `${(minutes / 1440).toFixed(1)}天`;
         }
 
         // Tab switching
@@ -544,7 +544,7 @@
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">平均持仓</div>
-                            <div class="stat-value">${formatHoldingTime(data.avg_holding_hours)}</div>
+                            <div class="stat-value">${formatHoldingTime(data.avg_holding_minutes)}</div>
                             <div class="stat-change">持仓时长</div>
                         </div>
                     `;
@@ -588,7 +588,7 @@
                                 <td class="font-mono">${formatNumber(trade.close_price, 4)}</td>
                                 <td class="font-mono">${formatPnl(trade.realized_pnl)}</td>
                                 <td class="font-mono">${formatPnlPct(trade.pnl_pct)}</td>
-                                <td>${formatHoldingTime(trade.holding_hours)}</td>
+                                <td>${formatHoldingTime(trade.holding_minutes)}</td>
                                 <td><span class="badge badge-info">${trade.entry_reason_cn}</span></td>
                                 <td><span class="badge badge-neutral">${trade.close_reason_cn}</span></td>
                             </tr>

@@ -344,7 +344,7 @@ async def get_review_summary(
                 AVG(CASE WHEN realized_pnl < 0 THEN realized_pnl ELSE NULL END) as avg_loss,
                 MAX(realized_pnl) as max_profit,
                 MIN(realized_pnl) as max_loss,
-                AVG(holding_hours) as avg_holding_hours
+                AVG(TIMESTAMPDIFF(MINUTE, open_time, close_time)) as avg_holding_minutes
             FROM futures_positions
             WHERE account_id = %s AND status = 'closed' AND close_time >= %s
         """, (account_id, time_threshold))
@@ -405,7 +405,7 @@ async def get_review_summary(
                     "max_profit": float(position_stats['max_profit'] or 0),
                     "max_loss": float(position_stats['max_loss'] or 0)
                 },
-                "avg_holding_hours": round(float(position_stats['avg_holding_hours'] or 0), 1)
+                "avg_holding_minutes": round(float(position_stats['avg_holding_minutes'] or 0), 1)
             }
         }
 
@@ -484,6 +484,12 @@ async def get_review_trades(
                 pos['entry_signal_type']
             )
 
+            # 计算实际持仓时长（分钟）
+            holding_minutes = 0
+            if pos['open_time'] and pos['close_time']:
+                delta = pos['close_time'] - pos['open_time']
+                holding_minutes = int(delta.total_seconds() / 60)
+
             trades.append({
                 "id": pos['id'],
                 "symbol": pos['symbol'],
@@ -495,7 +501,7 @@ async def get_review_trades(
                 "close_price": float(pos['close_price']) if pos['close_price'] else None,
                 "realized_pnl": float(pos['realized_pnl'] or 0),
                 "pnl_pct": float(pos['pnl_pct'] or 0),
-                "holding_hours": pos['holding_hours'] or 0,
+                "holding_minutes": holding_minutes,
                 "entry_reason_code": entry_reason_code,
                 "entry_reason_cn": entry_reason_cn,
                 "close_reason_code": close_reason_code,
