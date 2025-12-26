@@ -364,10 +364,14 @@ class StrategyExecutorV2:
 
     def _check_reversal_warning(self, symbol: str, direction: str, ema_data: Dict, strategy: Dict) -> Tuple[bool, str]:
         """
-        检测反转预警信号
+        检测反转预警信号 - 检测斜率的突然剧变
+
+        核心逻辑：
+        真正危险的不是斜率方向变化，而是斜率发生"质变"——突然剧烈变化
+        例如：斜率从 -0.5% 突然变成 +0.3%，变化幅度达到 0.8%，这才是危险信号
 
         反转预警条件（满足任一即触发）：
-        1. EMA斜率快速变化：EMA9斜率从负变正（做空危险）或从正变负（做多危险）
+        1. 斜率突变：斜率变化的绝对值超过阈值（不管方向，只看变化幅度）
         2. EMA差距快速收窄：差距收窄速度超过阈值，说明即将交叉
 
         触发后：
@@ -391,7 +395,9 @@ class StrategyExecutorV2:
             return False, ""
 
         # 配置参数
-        slope_change_threshold = reversal_warning.get('slopeChangeThreshold', 0.05)  # EMA斜率变化阈值(%)
+        # slopeChangeThreshold: 斜率突变阈值(%)，斜率变化幅度超过此值触发预警
+        # 例如: 阈值0.3表示斜率从-0.5%变到+0.3%（变化0.8%）会触发
+        slope_change_threshold = reversal_warning.get('slopeChangeThreshold', 0.3)  # 斜率突变阈值(%)
         diff_shrink_threshold = reversal_warning.get('diffShrinkThreshold', 30)  # 差距收窄阈值(%)
         cooldown_minutes = reversal_warning.get('cooldownMinutes', 30)  # 冷却时间(分钟)
 
@@ -418,6 +424,9 @@ class StrategyExecutorV2:
         slope_current = (ema9_current - ema9_prev1) / ema9_prev1 * 100 if ema9_prev1 > 0 else 0
         slope_prev = (ema9_prev1 - ema9_prev2) / ema9_prev2 * 100 if ema9_prev2 > 0 else 0
 
+        # 计算斜率突变幅度（关键：斜率变化的绝对值）
+        slope_change = abs(slope_current - slope_prev)
+
         # 计算EMA差距变化
         diff_current = ema9_current - ema26_current
         diff_prev = ema9_prev1 - ema26_prev1
@@ -432,28 +441,30 @@ class StrategyExecutorV2:
 
         if direction.lower() == 'short':
             # 做空时的反转预警：
-            # 1. EMA9斜率从负变正（价格开始上涨）
+            # 1. 斜率突变且向不利方向（斜率变大，说明价格加速上涨）
+            #    - 只有当斜率向上突变（当前斜率比之前更正/更大）才危险
+            slope_sudden_change = slope_change > slope_change_threshold and slope_current > slope_prev
             # 2. 差距快速收窄（EMA9向上靠近EMA26，即将金叉）
-            slope_reversal = slope_prev < 0 and slope_current > slope_change_threshold
             diff_shrinking = diff_current < 0 and shrink_rate > diff_shrink_threshold
 
-            if slope_reversal:
+            if slope_sudden_change:
                 warning_triggered = True
-                warning_reason = f"EMA9斜率反转: {slope_prev:.3f}% -> {slope_current:.3f}%"
+                warning_reason = f"EMA9斜率突变: {slope_prev:.3f}% -> {slope_current:.3f}% (变化{slope_change:.3f}%)"
             elif diff_shrinking:
                 warning_triggered = True
                 warning_reason = f"EMA差距快速收窄: {shrink_rate:.1f}%"
 
         else:  # direction == 'long'
             # 做多时的反转预警：
-            # 1. EMA9斜率从正变负（价格开始下跌）
+            # 1. 斜率突变且向不利方向（斜率变小，说明价格加速下跌）
+            #    - 只有当斜率向下突变（当前斜率比之前更负/更小）才危险
+            slope_sudden_change = slope_change > slope_change_threshold and slope_current < slope_prev
             # 2. 差距快速收窄（EMA9向下靠近EMA26，即将死叉）
-            slope_reversal = slope_prev > 0 and slope_current < -slope_change_threshold
             diff_shrinking = diff_current > 0 and shrink_rate > diff_shrink_threshold
 
-            if slope_reversal:
+            if slope_sudden_change:
                 warning_triggered = True
-                warning_reason = f"EMA9斜率反转: {slope_prev:.3f}% -> {slope_current:.3f}%"
+                warning_reason = f"EMA9斜率突变: {slope_prev:.3f}% -> {slope_current:.3f}% (变化{slope_change:.3f}%)"
             elif diff_shrinking:
                 warning_triggered = True
                 warning_reason = f"EMA差距快速收窄: {shrink_rate:.1f}%"

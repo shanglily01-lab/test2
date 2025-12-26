@@ -1143,9 +1143,9 @@
 
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label class="form-label">斜率变化阈值（%）</label>
-                                        <input type="number" class="form-input" id="reversalSlopeThreshold" value="0.05" min="0.01" max="0.2" step="0.01">
-                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">EMA9斜率从负变正超过此值触发预警</small>
+                                        <label class="form-label">斜率突变阈值（%）</label>
+                                        <input type="number" class="form-input" id="reversalSlopeThreshold" value="0.3" min="0.1" max="1.0" step="0.05">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">斜率变化幅度超过此值触发预警（如-0.5%→+0.3%变化0.8%）</small>
                                     </div>
 
                                     <div class="form-group">
@@ -1164,7 +1164,7 @@
                                 <div style="margin-top: 8px; padding: 8px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; border-left: 3px solid var(--warning-yellow);">
                                     <small style="color: var(--text-secondary); font-size: 11px;">
                                         <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
-                                        当检测到趋势可能反转时，取消待成交订单并进入冷却期。做多需等待金叉、做空需等待死叉才解除冷却。
+                                        检测EMA斜率突然剧变（质变信号），触发后进入冷却期。做多需等待金叉、做空需等待死叉才解除冷却。
                                     </small>
                                 </div>
                             </div>
