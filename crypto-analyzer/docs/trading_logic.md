@@ -51,7 +51,7 @@
 条件:
   1. 15M周期 EMA9 与 EMA26 差值 > 0.15%
   2. 5M周期连续3根K线 EMA 差值持续放大
-  3. EMA + MA 方向一致
+  3. EMA 方向一致（已移除 MA 方向检查）
 ```
 
 #### 1.3 反转开仓信号
@@ -69,9 +69,10 @@
    ├── 计算: ema_diff_pct = |EMA9 - EMA26| / EMA26 * 100
    └── 要求: ema_diff_pct >= 0.15% (MIN_SIGNAL_STRENGTH)
 
-2. EMA + MA 方向一致性检查
-   ├── 做多: EMA9 > EMA26 且 价格 > MA10
-   └── 做空: EMA9 < EMA26 且 价格 < MA10
+2. EMA 方向检查
+   ├── 做多: EMA9 > EMA26
+   └── 做空: EMA9 < EMA26
+   （注：已移除 MA10 方向检查，因为限价单使用回调入场策略）
 
 3. 持仓检查
    └── 该策略下该交易对无已开仓位
@@ -124,7 +125,6 @@ EMA 数据对应关系:
 ┌──────────────────────────────────────┐
 │  1. 待开仓自检 (pendingValidation)    │
 │     - EMA方向确认                     │
-│     - MA方向确认                      │
 │     - 趋势末端检查                    │
 │     - 最小EMA差值检查                 │
 │     不通过 → 取消订单                 │
@@ -174,7 +174,6 @@ EMA 数据对应关系:
 {
   "enabled": true,                 # 是否启用自检
   "require_ema_confirm": true,     # 检查EMA方向
-  "require_ma_confirm": true,      # 检查MA方向
   "check_trend_end": true,         # 检查趋势末端
   "min_ema_diff_pct": 0.05         # 最小EMA差值阈值(%)
 }
@@ -183,9 +182,10 @@ EMA 数据对应关系:
 | 检查项 | 配置键 | 做多条件 | 做空条件 | 说明 |
 |--------|--------|----------|----------|------|
 | EMA方向 | `require_ema_confirm` | EMA9 > EMA26 | EMA9 < EMA26 | 确保EMA趋势未反转 |
-| MA方向 | `require_ma_confirm` | 价格 > MA10 | 价格 < MA10 | 确保价格在均线有利侧 |
 | 趋势末端 | `check_trend_end` | EMA差值未快速收窄 | EMA差值未快速收窄 | 差值收窄>30%说明趋势将结束 |
 | 最小差值 | `min_ema_diff_pct` | >= 设定阈值 | >= 设定阈值 | 低于阈值说明震荡市/弱趋势 |
+
+> **注意**: 已移除 MA 方向检查（`require_ma_confirm`），因为限价单使用回调入场策略（做多限价低于市价0.6%），触发时价格自然会低于/高于 MA10，这是预期行为。
 
 **示例**：
 ```
@@ -236,8 +236,9 @@ EMA 数据对应关系:
 
 | 英文代码 | 中文说明 | 触发场景 |
 |----------|----------|----------|
-| validation_failed | 自检未通过 | pendingValidation 检查失败（EMA方向、MA方向、趋势末端、弱趋势） |
+| validation_failed | 自检未通过 | pendingValidation 检查失败（EMA方向、趋势末端、弱趋势）|
 | trend_reversal | 趋势转向 | 检测到反向EMA交叉（做多遇死叉、做空遇金叉） |
+| reversal_warning | 反转预警 | EMA9斜率突变触发预警 |
 | timeout | 超时取消 | 超过 limitOrderTimeoutMinutes 设定时间 |
 | position_exists | 持仓已存在 | 同交易对同方向已有3个持仓 |
 | rsi_filter | RSI过滤 | 做多时RSI超买(>65)或做空时RSI超卖(<35) |
@@ -274,11 +275,12 @@ EMA 数据对应关系:
 2. 硬止损
    └── 亏损 ≥ 2.5%
 
-2.5 5M EMA信号智能止损 ⭐ 新增
+2.5 5M EMA信号智能止损
    ├── 条件: 当前亏损(pnl < 0) 且 不在冷却期
    ├── 做多亏损 + 5M EMA死叉 → 立即止损
    ├── 做空亏损 + 5M EMA金叉 → 立即止损
-   └── 不检查信号强度，交叉发生即触发
+   ├── 信号强度阈值: 可配置 (默认0.15%，前端可调)
+   └── EMA差值低于阈值时触发
 
 3. 最大止盈
    └── 盈利 ≥ 8%
@@ -295,6 +297,12 @@ EMA 数据对应关系:
 6. 移动止盈回撤
    ├── 最高盈利 ≥ 1.5% 时激活
    └── 从最高点回撤 ≥ 0.5% 时平仓
+
+7. 反转预警 ⭐ 新增
+   ├── 检测EMA9斜率突变（而非方向反转）
+   ├── 斜率变化幅度 = |当前斜率 - 前斜率|
+   ├── 超过阈值(默认0.3%) → 触发预警
+   └── 触发后：阻止新开仓 + 取消挂单 + 平仓模拟盘
 ```
 
 ### 5M EMA信号智能止损详解
@@ -307,6 +315,10 @@ def check_5m_signal_stop_loss(position, current_pnl_pct, strategy):
     if current_pnl_pct >= 0:
         return False, ""  # 盈利或持平不检查
 
+    # 从策略配置读取阈值（前端可配置）
+    signal_stop_config = config.get('smartStopLoss', {}).get('signalStopLoss', {})
+    min_ema_diff_pct = signal_stop_config.get('minEmaDiffPct', 0.15)  # 默认0.15%
+
     # 获取5M EMA数据
     ema_5m = get_ema_data_5m(symbol)
 
@@ -314,20 +326,65 @@ def check_5m_signal_stop_loss(position, current_pnl_pct, strategy):
     is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
     is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
 
-    # 做多亏损 + 5M死叉 → 立即止损
-    if position_side == 'LONG' and is_death_cross:
+    # 计算当前EMA差值强度
+    ema_diff_pct = abs(ema9 - ema26) / ema26 * 100
+
+    # 做多亏损 + 5M死叉 + EMA差值超过阈值 → 立即止损
+    if position_side == 'LONG' and is_death_cross and ema_diff_pct >= min_ema_diff_pct:
         return True, "5M EMA死叉止损"
 
-    # 做空亏损 + 5M金叉 → 立即止损
-    if position_side == 'SHORT' and is_golden_cross:
+    # 做空亏损 + 5M金叉 + EMA差值超过阈值 → 立即止损
+    if position_side == 'SHORT' and is_golden_cross and ema_diff_pct >= min_ema_diff_pct:
         return True, "5M EMA金叉止损"
 ```
+
+**前端配置**：
+- 位置：策略编辑 → 智能止损 → 5M信号止损
+- 启用/禁用：勾选框（默认启用）
+- EMA差值阈值：可调整（默认0.15%，范围0.05%-1%）
 
 **设计理念**：
 1. 只在亏损时触发，盈利时不干预
 2. 使用更短周期(5M)的信号作为预警
-3. 不检查信号强度，交叉发生即认为趋势可能反转
+3. EMA差值阈值可配置，避免微小波动触发止损
 4. 冷却期内不检查，避免刚开仓就被止损
+
+### 反转预警机制详解 ⭐ 新增
+
+反转预警检测的是EMA9斜率的**突变**，而非简单的方向反转。正常的反转（斜率从正慢慢变负）是自然趋势变化，真正危险的是斜率突然发生"质变"。
+
+```python
+def _check_reversal_warning(strategy_id, symbol, position_side, kline_data):
+    # 获取最近已收盘K线的EMA9数据
+    ema9_values = kline_data.get('ema9_values', [])
+
+    # 计算当前斜率和前斜率
+    slope_current = (ema9_values[-2] - ema9_values[-3]) / ema9_values[-3] * 100
+    slope_prev = (ema9_values[-3] - ema9_values[-4]) / ema9_values[-4] * 100
+
+    # 检测斜率突变（斜率变化幅度）
+    slope_change = abs(slope_current - slope_prev)
+
+    # 默认阈值0.3%，从配置读取
+    threshold = config.get('reversalWarning', {}).get('slopeChangeThreshold', 0.3)
+
+    if slope_change >= threshold:
+        return True, f"斜率突变: {slope_change:.3f}%"
+
+    return False, ""
+```
+
+**预警触发后的干预措施**：
+1. **阻止新开仓**：该策略进入冷却期，不再开新仓
+2. **取消模拟盘挂单**：取消该方向的所有PENDING限价单
+3. **平仓模拟盘持仓**：自动平掉该方向的模拟盘持仓
+
+**注意**：实盘不使用限价单，所以不需要取消实盘挂单。
+
+**前端配置**：
+- 位置：策略编辑 → 高级设置 → 反转预警
+- 启用/禁用：勾选框
+- 斜率变化阈值：可调整（默认0.3%）
 
 ### 金叉/死叉反转平仓详解（15M周期）
 
@@ -558,11 +615,12 @@ class StrategyExecutorV2:
                               │ 强度不足             │ 强度满足
                               ▼                      ▼
                          ┌────────┐    ┌─────────────────────────┐
-                         │ 跳过   │    │ 检查 EMA+MA 方向一致性    │
-                         └────────┘    └─────────────────────────┘
+                         │ 跳过   │    │ 检查 EMA 方向            │
+                         └────────┘    │ (已移除MA方向检查)        │
+                                       └─────────────────────────┘
                                                     │
                                           ┌────────┴────────┐
-                                          │ 方向不一致      │ 方向一致
+                                          │ EMA方向不符     │ EMA方向符合
                                           ▼                ▼
                                      ┌────────┐   ┌─────────────────┐
                                      │ 跳过   │   │ 开单自检         │
@@ -700,7 +758,17 @@ A:
 
 A: 如果持仓盈利中，即使 5M 出现反向交叉，也不一定意味着趋势结束，可能只是短期回调。让移动止盈机制来保护利润更合适。但如果已经亏损，5M 反向交叉说明短期趋势已经不利，应该及时止损。
 
+### Q: 已取消订单的详细原因在哪里看？
+
+A: 在模拟盘交易页面的"已取消订单"表格中，有一列"详细原因"，显示具体的取消原因，如：
+- `EMA方向与开仓方向不一致`
+- `趋势已结束`
+- `弱趋势不开仓`
+- `斜率突变触发预警`
+
+长文本会截断显示，鼠标悬停可查看完整内容。
+
 ---
 
-*文档版本: 2025-12-24*
-*基于 strategy_executor_v2.py, futures_limit_order_executor.py*
+*文档版本: 2025-12-26*
+*基于 strategy_executor_v2.py, futures_limit_order_executor.py, stop_loss_monitor.py*
