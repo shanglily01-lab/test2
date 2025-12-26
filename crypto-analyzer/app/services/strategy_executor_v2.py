@@ -76,6 +76,9 @@ class StrategyExecutorV2:
         # 冷却时间记录
         self.last_entry_time = {}  # {symbol_direction: datetime}
 
+        # 反转预警冷却记录 {symbol: {'cooldown_until': datetime, 'direction': 'long'/'short', 'reason': str}}
+        self._reversal_cooldowns = {}
+
         # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
         self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
 
@@ -356,6 +359,217 @@ class StrategyExecutorV2:
         finally:
             cursor.close()
             conn.close()
+
+    # ==================== 反转预警机制 ====================
+
+    def _check_reversal_warning(self, symbol: str, direction: str, ema_data: Dict, strategy: Dict) -> Tuple[bool, str]:
+        """
+        检测反转预警信号
+
+        反转预警条件（满足任一即触发）：
+        1. EMA斜率快速变化：EMA9斜率从负变正（做空危险）或从正变负（做多危险）
+        2. EMA差距快速收窄：差距收窄速度超过阈值，说明即将交叉
+
+        触发后：
+        - 进入冷却期，暂停该方向开仓
+        - 直到出现明确的金叉（做多）或死叉（做空）才解除冷却
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            ema_data: EMA数据
+            strategy: 策略配置
+
+        Returns:
+            (是否触发反转预警, 原因)
+        """
+        # 获取反转预警配置
+        reversal_warning = strategy.get('reversalWarning', {})
+        enabled = reversal_warning.get('enabled', True)  # 默认启用
+
+        if not enabled:
+            return False, ""
+
+        # 配置参数
+        slope_change_threshold = reversal_warning.get('slopeChangeThreshold', 0.05)  # EMA斜率变化阈值(%)
+        diff_shrink_threshold = reversal_warning.get('diffShrinkThreshold', 30)  # 差距收窄阈值(%)
+        cooldown_minutes = reversal_warning.get('cooldownMinutes', 30)  # 冷却时间(分钟)
+
+        ema9_values = ema_data.get('ema9_values', [])
+        ema26_values = ema_data.get('ema26_values', [])
+
+        if len(ema9_values) < 5 or len(ema26_values) < 5:
+            return False, ""
+
+        now = datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
+        warning_triggered = False
+        warning_reason = ""
+
+        # 计算最近几根K线的EMA9斜率（使用已收盘的K线）
+        # ema9_values[-2] 是最近已收盘K线，[-3]是前一根，[-4]是再前一根
+        ema9_current = ema9_values[-2]  # 最近已收盘
+        ema9_prev1 = ema9_values[-3]    # 前一根
+        ema9_prev2 = ema9_values[-4]    # 再前一根
+
+        ema26_current = ema26_values[-2]
+        ema26_prev1 = ema26_values[-3]
+
+        # 计算EMA9斜率（相对于价格的百分比变化）
+        slope_current = (ema9_current - ema9_prev1) / ema9_prev1 * 100 if ema9_prev1 > 0 else 0
+        slope_prev = (ema9_prev1 - ema9_prev2) / ema9_prev2 * 100 if ema9_prev2 > 0 else 0
+
+        # 计算EMA差距变化
+        diff_current = ema9_current - ema26_current
+        diff_prev = ema9_prev1 - ema26_prev1
+        diff_current_pct = abs(diff_current) / ema26_current * 100 if ema26_current > 0 else 0
+        diff_prev_pct = abs(diff_prev) / ema26_prev1 * 100 if ema26_prev1 > 0 else 0
+
+        # 差距收窄速度（百分比）
+        if diff_prev_pct > 0:
+            shrink_rate = (diff_prev_pct - diff_current_pct) / diff_prev_pct * 100
+        else:
+            shrink_rate = 0
+
+        if direction.lower() == 'short':
+            # 做空时的反转预警：
+            # 1. EMA9斜率从负变正（价格开始上涨）
+            # 2. 差距快速收窄（EMA9向上靠近EMA26，即将金叉）
+            slope_reversal = slope_prev < 0 and slope_current > slope_change_threshold
+            diff_shrinking = diff_current < 0 and shrink_rate > diff_shrink_threshold
+
+            if slope_reversal:
+                warning_triggered = True
+                warning_reason = f"EMA9斜率反转: {slope_prev:.3f}% -> {slope_current:.3f}%"
+            elif diff_shrinking:
+                warning_triggered = True
+                warning_reason = f"EMA差距快速收窄: {shrink_rate:.1f}%"
+
+        else:  # direction == 'long'
+            # 做多时的反转预警：
+            # 1. EMA9斜率从正变负（价格开始下跌）
+            # 2. 差距快速收窄（EMA9向下靠近EMA26，即将死叉）
+            slope_reversal = slope_prev > 0 and slope_current < -slope_change_threshold
+            diff_shrinking = diff_current > 0 and shrink_rate > diff_shrink_threshold
+
+            if slope_reversal:
+                warning_triggered = True
+                warning_reason = f"EMA9斜率反转: {slope_prev:.3f}% -> {slope_current:.3f}%"
+            elif diff_shrinking:
+                warning_triggered = True
+                warning_reason = f"EMA差距快速收窄: {shrink_rate:.1f}%"
+
+        if warning_triggered:
+            # 设置冷却期
+            cooldown_until = now + timedelta(minutes=cooldown_minutes)
+            self._reversal_cooldowns[symbol] = {
+                'cooldown_until': cooldown_until,
+                'direction': direction.lower(),
+                'reason': warning_reason,
+                'created_at': now
+            }
+            logger.warning(f"⚠️ [反转预警] {symbol} {direction}: {warning_reason}，冷却{cooldown_minutes}分钟直到明确交叉")
+
+        return warning_triggered, warning_reason
+
+    def _check_reversal_cooldown(self, symbol: str, direction: str, ema_data: Dict) -> Tuple[bool, str]:
+        """
+        检查是否在反转冷却期内
+
+        冷却期解除条件：
+        - 做空方向：出现明确的死叉（EMA9下穿EMA26）
+        - 做多方向：出现明确的金叉（EMA9上穿EMA26）
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+            ema_data: EMA数据
+
+        Returns:
+            (是否在冷却期, 原因)
+        """
+        cooldown_info = self._reversal_cooldowns.get(symbol)
+        if not cooldown_info:
+            return False, ""
+
+        # 检查冷却方向是否匹配
+        if cooldown_info['direction'] != direction.lower():
+            return False, ""
+
+        now = datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
+
+        # 检查是否超时（强制解除冷却）
+        if now > cooldown_info['cooldown_until']:
+            logger.info(f"[反转冷却] {symbol} {direction} 冷却超时，已解除")
+            del self._reversal_cooldowns[symbol]
+            return False, ""
+
+        # 检查是否出现明确的金叉/死叉（解除冷却）
+        ema9_values = ema_data.get('ema9_values', [])
+        ema26_values = ema_data.get('ema26_values', [])
+
+        if len(ema9_values) >= 3 and len(ema26_values) >= 3:
+            # 使用已收盘的K线判断交叉
+            ema9_curr = ema9_values[-2]
+            ema26_curr = ema26_values[-2]
+            ema9_prev = ema9_values[-3]
+            ema26_prev = ema26_values[-3]
+
+            if direction.lower() == 'short':
+                # 做空需要死叉解除冷却
+                is_death_cross = ema9_prev > ema26_prev and ema9_curr < ema26_curr
+                if is_death_cross:
+                    logger.info(f"✅ [反转冷却] {symbol} 出现死叉，解除做空冷却")
+                    del self._reversal_cooldowns[symbol]
+                    return False, ""
+            else:
+                # 做多需要金叉解除冷却
+                is_golden_cross = ema9_prev < ema26_prev and ema9_curr > ema26_curr
+                if is_golden_cross:
+                    logger.info(f"✅ [反转冷却] {symbol} 出现金叉，解除做多冷却")
+                    del self._reversal_cooldowns[symbol]
+                    return False, ""
+
+        # 仍在冷却期
+        remaining = (cooldown_info['cooldown_until'] - now).total_seconds() / 60
+        return True, f"反转冷却中({remaining:.0f}分钟): {cooldown_info['reason']}"
+
+    def _cancel_pending_orders_for_direction(self, symbol: str, direction: str):
+        """
+        取消指定方向的待成交订单
+
+        Args:
+            symbol: 交易对
+            direction: 'long' 或 'short'
+        """
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
+            order_side = f'OPEN_{position_side}'
+
+            # 查询待取消的订单
+            cursor.execute("""
+                SELECT id, order_id FROM futures_orders
+                WHERE symbol = %s AND side = %s AND status = 'PENDING'
+            """, (symbol, order_side))
+            pending_orders = cursor.fetchall()
+
+            if pending_orders:
+                # 更新订单状态为取消
+                cursor.execute("""
+                    UPDATE futures_orders
+                    SET status = 'CANCELLED', updated_at = NOW(), notes = CONCAT(IFNULL(notes, ''), ' | 反转预警取消')
+                    WHERE symbol = %s AND side = %s AND status = 'PENDING'
+                """, (symbol, order_side))
+                conn.commit()
+                logger.warning(f"⚠️ [反转预警] 取消 {symbol} {direction} 方向 {len(pending_orders)} 个待成交订单")
+
+            cursor.close()
+            conn.close()
+
+        except Exception as e:
+            logger.error(f"取消待成交订单失败: {e}")
 
     def check_5m_signal_stop_loss(self, position: Dict, current_pnl_pct: float,
                                    strategy: Dict) -> Tuple[bool, str]:
@@ -2257,6 +2471,21 @@ class StrategyExecutorV2:
                 return {'success': False, 'error': '获取价格数据失败'}
 
             current_price = ema_data['current_price']
+
+            # ========== 反转预警检测 ==========
+            # 1. 先检查是否在反转冷却期内
+            in_cooldown, cooldown_reason = self._check_reversal_cooldown(symbol, direction, ema_data)
+            if in_cooldown:
+                return {'success': False, 'error': cooldown_reason, 'reversal_cooldown': True}
+
+            # 2. 检测是否触发反转预警
+            reversal_warning = strategy.get('reversalWarning', {})
+            if reversal_warning.get('enabled', True):  # 默认启用
+                warning_triggered, warning_reason = self._check_reversal_warning(symbol, direction, ema_data, strategy)
+                if warning_triggered:
+                    # 取消该方向的待成交订单
+                    self._cancel_pending_orders_for_direction(symbol, direction)
+                    return {'success': False, 'error': f'反转预警: {warning_reason}', 'reversal_warning': True}
 
             # ========== 待开仓自检 ==========
             pending_validation = strategy.get('pendingValidation', {})

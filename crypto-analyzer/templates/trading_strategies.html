@@ -1121,6 +1121,54 @@
                                 </div>
                             </div>
 
+                            <!-- 反转预警 -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    反转预警
+                                    <span style="font-size: 11px; color: var(--warning-yellow); font-weight: normal; margin-left: 8px;">检测趋势反转信号，避免逆势开仓</span>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">
+                                            <input type="checkbox" id="reversalWarningEnabled" style="margin-right: 8px;" checked>
+                                            启用反转预警
+                                        </label>
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block; margin-left: 24px;">
+                                            当EMA斜率反转或差距快速收窄时，暂停开仓直到出现明确交叉
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">斜率变化阈值（%）</label>
+                                        <input type="number" class="form-input" id="reversalSlopeThreshold" value="0.05" min="0.01" max="0.2" step="0.01">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">EMA9斜率从负变正超过此值触发预警</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">差距收窄阈值（%）</label>
+                                        <input type="number" class="form-input" id="reversalShrinkThreshold" value="30" min="10" max="50" step="5">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">EMA差距收窄超过此比例触发预警</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">冷却时间（分钟）</label>
+                                        <input type="number" class="form-input" id="reversalCooldownMinutes" value="30" min="10" max="60" step="5">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">预警后暂停开仓的最长时间</small>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 8px; padding: 8px; background: rgba(245, 158, 11, 0.1); border-radius: 4px; border-left: 3px solid var(--warning-yellow);">
+                                    <small style="color: var(--text-secondary); font-size: 11px;">
+                                        <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
+                                        当检测到趋势可能反转时，取消待成交订单并进入冷却期。做多需等待金叉、做空需等待死叉才解除冷却。
+                                    </small>
+                                </div>
+                            </div>
+
                             <!-- 待开仓自检 -->
                             <div class="form-section">
                                 <div class="form-section-title">
@@ -2437,6 +2485,13 @@
                 adaptiveRegime: document.getElementById('adaptiveRegimeEnabled') ? document.getElementById('adaptiveRegimeEnabled').checked : false,
                 // 行情自适应参数配置
                 regimeParams: document.getElementById('adaptiveRegimeEnabled') && document.getElementById('adaptiveRegimeEnabled').checked ? getRegimeParams() : null,
+                // 反转预警配置
+                reversalWarning: {
+                    enabled: document.getElementById('reversalWarningEnabled') ? document.getElementById('reversalWarningEnabled').checked : true,
+                    slopeChangeThreshold: document.getElementById('reversalSlopeThreshold') ? parseFloat(document.getElementById('reversalSlopeThreshold').value) : 0.05,
+                    diffShrinkThreshold: document.getElementById('reversalShrinkThreshold') ? parseFloat(document.getElementById('reversalShrinkThreshold').value) : 30,
+                    cooldownMinutes: document.getElementById('reversalCooldownMinutes') ? parseInt(document.getElementById('reversalCooldownMinutes').value) : 30
+                },
                 // 待开仓自检配置
                 pendingValidation: {
                     enabled: document.getElementById('pendingValidationEnabled') ? document.getElementById('pendingValidationEnabled').checked : true,
@@ -2964,6 +3019,23 @@
             // 风险控制 - 开仓前平反向持仓
             if (document.getElementById('closeOppositeOnEntry')) {
                 document.getElementById('closeOppositeOnEntry').checked = strategy.closeOppositeOnEntry === true;
+            }
+
+            // 反转预警配置
+            if (strategy.reversalWarning) {
+                const rw = strategy.reversalWarning;
+                if (document.getElementById('reversalWarningEnabled')) {
+                    document.getElementById('reversalWarningEnabled').checked = rw.enabled !== false;
+                }
+                if (document.getElementById('reversalSlopeThreshold')) {
+                    document.getElementById('reversalSlopeThreshold').value = rw.slopeChangeThreshold || 0.05;
+                }
+                if (document.getElementById('reversalShrinkThreshold')) {
+                    document.getElementById('reversalShrinkThreshold').value = rw.diffShrinkThreshold || 30;
+                }
+                if (document.getElementById('reversalCooldownMinutes')) {
+                    document.getElementById('reversalCooldownMinutes').value = rw.cooldownMinutes || 30;
+                }
             }
 
             // 待开仓自检配置
