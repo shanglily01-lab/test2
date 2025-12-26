@@ -70,15 +70,15 @@ class StopLossMonitor:
         try:
             self._ensure_connection()
             cursor = self.connection.cursor()
-            cooldown_until = datetime.now() + timedelta(minutes=cooldown_minutes)
+            # 使用数据库的 NOW() 计算时间，避免时区问题
             cursor.execute("""
                 INSERT INTO trading_cooldowns (symbol, cooldown_type, cooldown_until)
-                VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE cooldown_until = %s, created_at = NOW()
-            """, (symbol, cooldown_type, cooldown_until, cooldown_until))
+                VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL %s MINUTE))
+                ON DUPLICATE KEY UPDATE cooldown_until = DATE_ADD(NOW(), INTERVAL %s MINUTE), created_at = NOW()
+            """, (symbol, cooldown_type, cooldown_minutes, cooldown_minutes))
             self.connection.commit()
             cursor.close()
-            logger.info(f"[冷却期] {symbol} {cooldown_type} 冷却至 {cooldown_until.strftime('%H:%M:%S')}")
+            logger.info(f"[冷却期] {symbol} {cooldown_type} 设置冷却 {cooldown_minutes} 分钟")
         except Exception as e:
             logger.error(f"[冷却期] 设置冷却期失败: {e}")
 
