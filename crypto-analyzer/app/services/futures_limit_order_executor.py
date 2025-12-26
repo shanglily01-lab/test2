@@ -732,12 +732,154 @@ class FuturesLimitOrderExecutor:
             return {
                 'ema9': ema9,
                 'ema26': ema26,
+                'ema9_values': ema9_values,
+                'ema26_values': ema26_values,
                 'ema_diff_pct': ema_diff_pct,
                 'current_price': current_price
             }
 
         except Exception as e:
             logger.error(f"获取EMA数据时出错: {e}")
+            return None
+
+    def _check_reversal_warning(self, connection, order: Dict) -> Optional[str]:
+        """
+        检查反转预警信号 - 检测EMA9斜率的突然剧变
+
+        在限价单等待期间持续检查，发现斜率突变时取消限价单
+
+        核心逻辑：
+        真正危险的不是斜率方向变化，而是斜率发生"质变"——突然剧烈变化
+        例如：斜率从 -0.5% 突然变成 +0.3%，变化幅度达到 0.8%，这才是危险信号
+
+        Args:
+            connection: 数据库连接
+            order: 订单信息（包含 strategy_config, symbol, side）
+
+        Returns:
+            如果触发反转预警，返回原因字符串；否则返回None
+        """
+        try:
+            strategy_config = order.get('strategy_config')
+            if not strategy_config:
+                return None
+
+            # 解析策略配置
+            config = strategy_config
+            parse_attempts = 0
+            while isinstance(config, str) and parse_attempts < 3:
+                try:
+                    config = json.loads(config)
+                    parse_attempts += 1
+                except json.JSONDecodeError:
+                    return None
+
+            if not isinstance(config, dict):
+                return None
+
+            # 获取反转预警配置
+            reversal_warning = config.get('reversalWarning', {})
+            enabled = reversal_warning.get('enabled', True)  # 默认启用
+
+            if not enabled:
+                return None
+
+            # 配置参数
+            slope_change_threshold = reversal_warning.get('slopeChangeThreshold', 0.3)  # 斜率突变阈值(%)
+            diff_shrink_threshold = reversal_warning.get('diffShrinkThreshold', 30)  # 差距收窄阈值(%)
+
+            symbol = order['symbol']
+            side = order['side']  # OPEN_LONG 或 OPEN_SHORT
+            direction = 'long' if side == 'OPEN_LONG' else 'short'
+
+            # 使用15m周期检查（与开仓信号一致）
+            timeframe = '15m'
+
+            # 查询最近的K线数据
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """SELECT close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY timestamp DESC
+                    LIMIT 50""",
+                    (symbol, timeframe)
+                )
+                klines = cursor.fetchall()
+
+            if not klines or len(klines) < 30:
+                return None  # K线数据不足，跳过检查
+
+            # 将K线反转为正序（从旧到新）
+            prices = [float(k['close_price']) for k in reversed(klines)]
+
+            # 计算EMA9和EMA26
+            ema9_values = self._calculate_ema(prices, 9)
+            ema26_values = self._calculate_ema(prices, 26)
+
+            if not ema9_values or len(ema9_values) < 5:
+                return None
+            if not ema26_values or len(ema26_values) < 5:
+                return None
+
+            # 计算最近几根K线的EMA9斜率（使用已收盘的K线）
+            # ema9_values[-2] 是最近已收盘K线，[-3]是前一根，[-4]是再前一根
+            ema9_current = ema9_values[-2]  # 最近已收盘
+            ema9_prev1 = ema9_values[-3]    # 前一根
+            ema9_prev2 = ema9_values[-4]    # 再前一根
+
+            ema26_current = ema26_values[-2]
+            ema26_prev1 = ema26_values[-3]
+
+            # 计算EMA9斜率（相对于价格的百分比变化）
+            slope_current = (ema9_current - ema9_prev1) / ema9_prev1 * 100 if ema9_prev1 > 0 else 0
+            slope_prev = (ema9_prev1 - ema9_prev2) / ema9_prev2 * 100 if ema9_prev2 > 0 else 0
+
+            # 计算斜率突变幅度（关键：斜率变化的绝对值）
+            slope_change = abs(slope_current - slope_prev)
+
+            # 计算EMA差距变化
+            diff_current = ema9_current - ema26_current
+            diff_prev = ema9_prev1 - ema26_prev1
+            diff_current_pct = abs(diff_current) / ema26_current * 100 if ema26_current > 0 else 0
+            diff_prev_pct = abs(diff_prev) / ema26_prev1 * 100 if ema26_prev1 > 0 else 0
+
+            # 差距收窄速度（百分比）
+            if diff_prev_pct > 0:
+                shrink_rate = (diff_prev_pct - diff_current_pct) / diff_prev_pct * 100
+            else:
+                shrink_rate = 0
+
+            warning_reason = None
+
+            if direction == 'short':
+                # 做空时的反转预警：
+                # 1. 斜率突变且向不利方向（斜率变大，说明价格加速上涨）
+                slope_sudden_change = slope_change > slope_change_threshold and slope_current > slope_prev
+                # 2. 差距快速收窄（EMA9向上靠近EMA26，即将金叉）
+                diff_shrinking = diff_current < 0 and shrink_rate > diff_shrink_threshold
+
+                if slope_sudden_change:
+                    warning_reason = f"斜率突变: {slope_prev:.3f}% -> {slope_current:.3f}% (变化{slope_change:.3f}%)"
+                elif diff_shrinking:
+                    warning_reason = f"EMA差距快速收窄: {shrink_rate:.1f}%"
+
+            else:  # direction == 'long'
+                # 做多时的反转预警：
+                # 1. 斜率突变且向不利方向（斜率变小，说明价格加速下跌）
+                slope_sudden_change = slope_change > slope_change_threshold and slope_current < slope_prev
+                # 2. 差距快速收窄（EMA9向下靠近EMA26，即将死叉）
+                diff_shrinking = diff_current > 0 and shrink_rate > diff_shrink_threshold
+
+                if slope_sudden_change:
+                    warning_reason = f"斜率突变: {slope_prev:.3f}% -> {slope_current:.3f}% (变化{slope_change:.3f}%)"
+                elif diff_shrinking:
+                    warning_reason = f"EMA差距快速收窄: {shrink_rate:.1f}%"
+
+            return warning_reason
+
+        except Exception as e:
+            logger.error(f"检查反转预警时出错: {e}")
             return None
 
     async def check_and_execute_limit_orders(self):
@@ -852,6 +994,26 @@ class FuturesLimitOrderExecutor:
                                         notes = CONCAT(COALESCE(notes, ''), ' TREND_REVERSAL: ', %s)
                                     WHERE order_id = %s""",
                                     (trend_reversal_reason, order_id)
+                                )
+
+                            connection.commit()
+                            continue  # 跳过此订单
+
+                        # ===== 反转预警检测：检测EMA9斜率突变 =====
+                        reversal_warning_reason = self._check_reversal_warning(connection, order)
+                        if reversal_warning_reason:
+                            logger.warning(f"⚠️ 限价单反转预警取消: {symbol} {position_side} - {reversal_warning_reason}")
+
+                            # 更新订单状态为已取消
+                            with connection.cursor() as update_cursor:
+                                update_cursor.execute(
+                                    """UPDATE futures_orders
+                                    SET status = 'CANCELLED',
+                                        cancellation_reason = 'reversal_warning',
+                                        canceled_at = NOW(),
+                                        notes = CONCAT(COALESCE(notes, ''), ' REVERSAL_WARNING: ', %s)
+                                    WHERE order_id = %s""",
+                                    (reversal_warning_reason, order_id)
                                 )
 
                             connection.commit()
