@@ -106,10 +106,10 @@ class StrategyExecutorV2:
         except Exception as e:
             logger.warning(f"加载保证金配置失败，使用默认值: {e}")
             self.paper_margin_mode = 'fixed'
-            self.paper_margin_fixed = 100
+            self.paper_margin_fixed = 200
             self.paper_margin_percent = 1
             self.live_margin_mode = 'fixed'
-            self.live_margin_fixed = 100
+            self.live_margin_fixed = 200
             self.live_margin_percent = 1
 
     def calculate_margin(self, is_live: bool = False, account_balance: float = None) -> float:
@@ -1114,10 +1114,10 @@ class StrategyExecutorV2:
 
             # 执行模拟挂单
             if self.futures_engine:
-                # ========== 一次性挂多个限价单 ==========
+                # ========== 挂限价单 ==========
                 # 查询当前方向已有多少持仓+挂单
                 entry_cooldown = strategy.get('entryCooldown', {})
-                max_positions = entry_cooldown.get('maxPositionsPerDirection', 3)
+                max_positions = entry_cooldown.get('maxPositionsPerDirection', 1)
 
                 conn = self.get_db_connection()
                 cursor = conn.cursor()
@@ -1722,7 +1722,7 @@ class StrategyExecutorV2:
         """
         检查开仓限制（基于持仓数量而非时间冷却）
 
-        每个币种、每个方向最多同时开 maxPositionsPerDirection 个单（默认3个）
+        每个币种、每个方向最多同时开 maxPositionsPerDirection 个单（默认1个）
         不区分策略，全局统计
 
         Args:
@@ -1738,8 +1738,8 @@ class StrategyExecutorV2:
         if not entry_cooldown.get('enabled', True):  # 默认启用
             return False, "开仓限制未启用"
 
-        # 每个方向最多同时开几个单（默认3个）
-        max_positions_per_direction = entry_cooldown.get('maxPositionsPerDirection', 3)
+        # 每个方向最多同时开几个单（默认1个）
+        max_positions_per_direction = entry_cooldown.get('maxPositionsPerDirection', 1)
 
         try:
             conn = self.get_db_connection()
@@ -2676,10 +2676,10 @@ class StrategyExecutorV2:
                 # 根据限价重新计算数量
                 quantity = notional / limit_price
 
-                # ========== 一次性挂多个限价单 ==========
+                # ========== 挂限价单 ==========
                 # 查询当前方向已有多少持仓+挂单
                 entry_cooldown = strategy.get('entryCooldown', {})
-                max_positions = entry_cooldown.get('maxPositionsPerDirection', 3)
+                max_positions = entry_cooldown.get('maxPositionsPerDirection', 1)
 
                 conn = self.get_db_connection()
                 cursor = conn.cursor()

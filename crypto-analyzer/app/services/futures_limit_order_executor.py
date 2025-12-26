@@ -905,8 +905,8 @@ class FuturesLimitOrderExecutor:
                                     logger.info(f"✅ 做空限价单触发: {symbol} @ {current_price} >= {limit_price}")
                         
                         if should_execute:
-                            # ===== 检查同方向持仓数量，最多允许3个 =====
-                            MAX_POSITIONS_PER_DIRECTION = 3
+                            # ===== 检查同方向持仓数量，最多允许1个 =====
+                            MAX_POSITIONS_PER_DIRECTION = 1
                             with connection.cursor() as check_cursor:
                                 check_cursor.execute(
                                     """SELECT COUNT(*) as cnt FROM futures_positions

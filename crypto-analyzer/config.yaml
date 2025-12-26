@@ -172,12 +172,12 @@ signals:
     # 模拟盘保证金配置
     paper:
       mode: fixed  # fixed=固定金额, percent=按资金百分比
-      fixed_amount: 100  # 固定金额模式：每笔100 USDT
+      fixed_amount: 200  # 固定金额模式：每笔200 USDT
       percent: 1  # 百分比模式：账户资金的1%
     # 实盘保证金配置
     live:
       mode: fixed  # fixed=固定金额, percent=按资金百分比
-      fixed_amount: 100  # 固定金额模式：每笔100 USDT
+      fixed_amount: 200  # 固定金额模式：每笔200 USDT
       percent: 1  # 百分比模式：账户资金的1%
 api:
   host: 0.0.0.0
