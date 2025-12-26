@@ -45,6 +45,7 @@ CLOSE_REASON_MAP = {
     'manual_close_all': '一键平仓',
     'liquidation': '强制平仓',
     'sync_close': '同步平仓',
+    'reversal_warning': '反转预警平仓',
 }
 
 # 开仓原因中英文映射（基于 entry_signal_type 字段）

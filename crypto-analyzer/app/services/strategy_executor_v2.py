@@ -546,18 +546,48 @@ class StrategyExecutorV2:
 
     def _cancel_pending_orders_for_direction(self, symbol: str, direction: str):
         """
-        取消指定方向的待成交订单
+        取消指定方向的待成交订单，并平仓模拟盘该方向持仓
+
+        干预措施：
+        1. 取消实盘限价单挂单（币安交易所）
+        2. 取消模拟盘待成交订单（数据库记录）
+        3. 平仓模拟盘该方向的持仓
 
         Args:
             symbol: 交易对
             direction: 'long' 或 'short'
         """
+        position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
+        order_side = f'OPEN_{position_side}'
+
+        # ========== 1. 取消实盘限价单 ==========
+        if self.live_engine:
+            try:
+                # 转换交易对格式 BTC/USDT -> BTCUSDT
+                binance_symbol = symbol.replace('/', '')
+                # 获取该交易对的所有挂单
+                open_orders = self.live_engine.exchange.fetch_open_orders(binance_symbol)
+                cancelled_count = 0
+                for order in open_orders:
+                    # 只取消该方向的开仓订单
+                    # 币安的 positionSide 区分方向
+                    order_position_side = order.get('info', {}).get('positionSide', '')
+                    if order_position_side == position_side:
+                        try:
+                            self.live_engine.exchange.cancel_order(order['id'], binance_symbol)
+                            cancelled_count += 1
+                            logger.warning(f"⚠️ [反转预警] 取消实盘限价单: {symbol} {direction} 订单ID={order['id']}")
+                        except Exception as e:
+                            logger.error(f"取消实盘订单失败: {order['id']} - {e}")
+                if cancelled_count > 0:
+                    logger.warning(f"⚠️ [反转预警] 共取消 {symbol} {direction} 方向 {cancelled_count} 个实盘限价单")
+            except Exception as e:
+                logger.error(f"查询/取消实盘挂单失败: {e}")
+
+        # ========== 2. 取消模拟盘待成交订单 ==========
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
-
-            position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
-            order_side = f'OPEN_{position_side}'
 
             # 查询待取消的订单
             cursor.execute("""
@@ -574,13 +604,46 @@ class StrategyExecutorV2:
                     WHERE symbol = %s AND side = %s AND status = 'PENDING'
                 """, (symbol, order_side))
                 conn.commit()
-                logger.warning(f"⚠️ [反转预警] 取消 {symbol} {direction} 方向 {len(pending_orders)} 个待成交订单")
+                logger.warning(f"⚠️ [反转预警] 取消 {symbol} {direction} 方向 {len(pending_orders)} 个模拟盘待成交订单")
 
             cursor.close()
             conn.close()
 
         except Exception as e:
-            logger.error(f"取消待成交订单失败: {e}")
+            logger.error(f"取消模拟盘待成交订单失败: {e}")
+
+        # ========== 3. 平仓模拟盘该方向持仓 ==========
+        if self.futures_engine:
+            try:
+                conn = self.get_db_connection()
+                cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+                # 查询该方向的持仓
+                cursor.execute("""
+                    SELECT id, symbol, position_side, quantity, entry_price
+                    FROM futures_positions
+                    WHERE symbol = %s AND position_side = %s AND status = 'open'
+                """, (symbol, position_side))
+                positions = cursor.fetchall()
+
+                cursor.close()
+                conn.close()
+
+                for pos in positions:
+                    try:
+                        result = self.futures_engine.close_position(
+                            position_id=pos['id'],
+                            reason='reversal_warning'
+                        )
+                        if result.get('success'):
+                            logger.warning(f"⚠️ [反转预警] 平仓模拟盘持仓: {symbol} {direction} 仓位ID={pos['id']}")
+                        else:
+                            logger.error(f"平仓模拟盘持仓失败: {pos['id']} - {result.get('error')}")
+                    except Exception as e:
+                        logger.error(f"平仓模拟盘持仓异常: {pos['id']} - {e}")
+
+            except Exception as e:
+                logger.error(f"查询/平仓模拟盘持仓失败: {e}")
 
     def check_5m_signal_stop_loss(self, position: Dict, current_pnl_pct: float,
                                    strategy: Dict) -> Tuple[bool, str]:
