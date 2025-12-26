@@ -291,11 +291,11 @@
         }
 
         /* Tab pagination styles */
-        #positionsTab, #ordersTab, #cancelledTab, #pendingValidationTab {
+        #positionsTab, #ordersTab, #cancelledTab {
             display: flex;
             flex-direction: column;
         }
-        #positionsTable, #ordersTable, #cancelledTable, #pendingValidationTable {
+        #positionsTable, #ordersTable, #cancelledTable {
             display: flex !important;
             flex-direction: column;
         }
@@ -576,10 +576,6 @@
                                 <i class="bi bi-x-circle"></i>
                                 <span id="cancelled-title">已取消订单</span>
                             </button>
-                            <button class="btn btn-secondary" id="tabPendingValidationTitle" onclick="showPositionsTab('pendingValidation')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
-                                <i class="bi bi-search"></i>
-                                <span id="pending-validation-title">待检查订单</span>
-                            </button>
                         </div>
                         <div class="d-flex align-center gap-md">
                             <button class="btn btn-danger btn-sm" id="closeAllPositionsBtn" onclick="closeAllPositions()" style="display: none; font-size: 12px; padding: 6px 12px;">
@@ -588,7 +584,6 @@
                             <span class="badge badge-info" id="positionCount" style="display: none;">0 个持仓</span>
                             <span class="badge badge-warning" id="orderCount" style="display: none;">0 个订单</span>
                             <span class="badge badge-secondary" id="cancelledCount" style="display: none;">0 个已取消</span>
-                            <span class="badge badge-primary" id="pendingValidationCount" style="display: none;">0 个待检查</span>
                             <div class="last-update" id="positions-update">-</div>
                         </div>
                     </div>
@@ -751,41 +746,6 @@
                             <div id="cancelledEmpty" class="empty-state" style="display: none;">
                                 <div class="empty-state-icon">✅</div>
                                 <div class="empty-state-text">暂无已取消订单</div>
-                            </div>
-                        </div>
-
-                        <!-- 待检查订单标签页 -->
-                        <div id="pendingValidationTab" style="display: none;">
-                            <div id="pendingValidationLoading" class="loading-overlay" style="min-height: 200px;">
-                                <div class="spinner"></div>
-                            </div>
-                            <div id="pendingValidationTable" style="display: none;">
-                                <div class="tab-content-container">
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>交易对</th>
-                                                <th>方向</th>
-                                                <th>策略</th>
-                                                <th>信号类型</th>
-                                                <th>信号价格</th>
-                                                <th>当前价格</th>
-                                                <th>价差</th>
-                                                <th>检查状态</th>
-                                                <th>剩余时间</th>
-                                                <th>创建时间</th>
-                                                <th>操作</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="pendingValidationBody">
-                                            <!-- 动态加载 -->
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            <div id="pendingValidationEmpty" class="empty-state" style="display: none;">
-                                <div class="empty-state-icon">🔍</div>
-                                <div class="empty-state-text">暂无待检查订单</div>
                             </div>
                         </div>
                     </div>
@@ -1443,11 +1403,9 @@
             const positionsTab = document.getElementById('positionsTab');
             const ordersTab = document.getElementById('ordersTab');
             const cancelledTab = document.getElementById('cancelledTab');
-            const pendingValidationTab = document.getElementById('pendingValidationTab');
             const positionsTitle = document.getElementById('tabPositionsTitle');
             const ordersTitle = document.getElementById('tabOrdersTitle');
             const cancelledTitle = document.getElementById('tabCancelledTitle');
-            const pendingValidationTitle = document.getElementById('tabPendingValidationTitle');
 
             // 重置所有标签页样式
             const resetButton = (btn) => {
@@ -1465,16 +1423,13 @@
             positionsTab.style.display = 'none';
             ordersTab.style.display = 'none';
             cancelledTab.style.display = 'none';
-            pendingValidationTab.style.display = 'none';
             document.getElementById('positionCount').style.display = 'none';
             document.getElementById('orderCount').style.display = 'none';
             document.getElementById('cancelledCount').style.display = 'none';
-            document.getElementById('pendingValidationCount').style.display = 'none';
 
             resetButton(positionsTitle);
             resetButton(ordersTitle);
             resetButton(cancelledTitle);
-            resetButton(pendingValidationTitle);
 
             // 根据tab参数显示对应标签页
             if (tab === 'positions') {
@@ -1491,11 +1446,6 @@
                 activateButton(cancelledTitle);
                 document.getElementById('cancelledCount').style.display = 'inline-flex';
                 loadCancelledOrders();
-            } else if (tab === 'pendingValidation') {
-                pendingValidationTab.style.display = 'block';
-                activateButton(pendingValidationTitle);
-                document.getElementById('pendingValidationCount').style.display = 'inline-flex';
-                loadPendingValidations();
             }
         }
 
@@ -2256,124 +2206,6 @@
             }
         }
 
-        // 加载待检查订单
-        async function loadPendingValidations() {
-            try {
-                const response = await fetch(`${API_BASE}/pending-positions`);
-                const responseText = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(responseText);
-                } catch (e) {
-                    console.error('待检查订单数据解析失败:', responseText);
-                    return;
-                }
-
-                const pendingValidationBody = document.getElementById('pendingValidationBody');
-                const pendingValidationTable = document.getElementById('pendingValidationTable');
-                const pendingValidationEmpty = document.getElementById('pendingValidationEmpty');
-                const pendingValidationLoading = document.getElementById('pendingValidationLoading');
-                const pendingValidationCount = document.getElementById('pendingValidationCount');
-                const pendingValidationTitle = document.getElementById('pending-validation-title');
-
-                pendingValidationLoading.style.display = 'none';
-
-                if (data.status === 'success' && data.data && data.data.length > 0) {
-                    pendingValidationBody.innerHTML = data.data.map(item => {
-                        const sideUpper = (item.side || '').toUpperCase();
-                        const sideClass = sideUpper === 'BUY' || sideUpper === 'LONG' ? 'badge-success' : 'badge-danger';
-                        const sideText = sideUpper === 'BUY' || sideUpper === 'LONG' ? '做多' : '做空';
-
-                        // 计算价差百分比
-                        const priceDiff = item.current_price && item.signal_price
-                            ? ((item.current_price - item.signal_price) / item.signal_price * 100).toFixed(2)
-                            : '--';
-                        const priceDiffClass = parseFloat(priceDiff) > 0 ? 'text-success' : parseFloat(priceDiff) < 0 ? 'text-danger' : '';
-
-                        // 计算剩余时间
-                        const createdAt = new Date(item.created_at);
-                        const expireSeconds = item.expire_seconds || 300;
-                        const expireTime = new Date(createdAt.getTime() + expireSeconds * 1000);
-                        const remainingMs = expireTime - new Date();
-                        const remainingSeconds = Math.max(0, Math.floor(remainingMs / 1000));
-                        const remainingText = remainingSeconds > 0
-                            ? `${Math.floor(remainingSeconds / 60)}分${remainingSeconds % 60}秒`
-                            : '已过期';
-                        const remainingClass = remainingSeconds > 60 ? 'badge-success' : remainingSeconds > 0 ? 'badge-warning' : 'badge-danger';
-
-                        // 检查状态
-                        const statusMap = {
-                            'pending': { text: '等待检查', class: 'badge-warning' },
-                            'checking': { text: '检查中', class: 'badge-info' },
-                            'passed': { text: '已通过', class: 'badge-success' },
-                            'failed': { text: '未通过', class: 'badge-danger' },
-                            'expired': { text: '已过期', class: 'badge-secondary' },
-                            'executed': { text: '已执行', class: 'badge-success' }
-                        };
-                        const statusInfo = statusMap[item.status] || { text: item.status, class: 'badge-neutral' };
-
-                        return `
-                            <tr>
-                                <td><strong>${item.symbol}</strong></td>
-                                <td><span class="badge ${sideClass}">${sideText}</span></td>
-                                <td class="text-sm">${item.strategy_name || item.strategy_id || '--'}</td>
-                                <td class="text-sm">${item.signal_type || '--'}</td>
-                                <td class="font-mono">${item.signal_price ? '$' + formatPrice(item.signal_price) : '--'}</td>
-                                <td class="font-mono">${item.current_price ? '$' + formatPrice(item.current_price) : '--'}</td>
-                                <td class="font-mono ${priceDiffClass}">${priceDiff !== '--' ? priceDiff + '%' : '--'}</td>
-                                <td><span class="badge ${statusInfo.class}">${statusInfo.text}</span></td>
-                                <td><span class="badge ${remainingClass}">${remainingText}</span></td>
-                                <td class="text-sm text-secondary">${new Date(item.created_at).toLocaleString('zh-CN')}</td>
-                                <td>
-                                    <button class="btn btn-sm btn-danger" onclick="cancelPendingValidation(${item.id})" title="取消">
-                                        <i class="bi bi-x-circle"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        `;
-                    }).join('');
-
-                    const count = data.data.length;
-                    pendingValidationCount.textContent = `${count} 个待检查`;
-                    pendingValidationTitle.textContent = `待检查订单 [${count}]`;
-                    pendingValidationTable.style.display = 'block';
-                    pendingValidationEmpty.style.display = 'none';
-                    document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
-                } else {
-                    pendingValidationCount.textContent = '0 个待检查';
-                    pendingValidationTitle.textContent = '待检查订单 [0]';
-                    pendingValidationTable.style.display = 'none';
-                    pendingValidationEmpty.style.display = 'block';
-                    document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
-                }
-            } catch (error) {
-                document.getElementById('pendingValidationLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
-                showToast('加载待检查订单失败', 'error');
-            }
-        }
-
-        // 取消待检查订单
-        async function cancelPendingValidation(id) {
-            if (!confirm('确定要取消这个待检查订单吗？')) {
-                return;
-            }
-            try {
-                const response = await fetch(`${API_BASE}/pending-positions/${id}`, {
-                    method: 'DELETE'
-                });
-                const data = await response.json();
-                if (data.status === 'success') {
-                    showToast('已取消待检查订单', 'success');
-                    loadPendingValidations();
-                } else {
-                    showToast(data.message || '取消失败', 'error');
-                }
-            } catch (error) {
-                showToast('取消失败: ' + error.message, 'error');
-            }
-        }
-
-        // 撤销订单
         // 更新订单止盈止损
         async function updateOrderStopLossTakeProfit(orderId, type, price) {
             const priceValue = price && price.trim() !== '' ? parseFloat(price) : null;
