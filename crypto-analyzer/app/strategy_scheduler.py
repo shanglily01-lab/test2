@@ -24,7 +24,6 @@ from datetime import datetime
 from loguru import logger
 from typing import Optional
 
-from app.services.strategy_executor import StrategyExecutor
 from app.services.strategy_executor_v2 import StrategyExecutorV2
 from app.services.strategy_test_service import StrategyTestService
 from app.services.position_validator import PositionValidator, init_position_validator
@@ -37,15 +36,13 @@ from app.analyzers.technical_indicators import TechnicalIndicators
 class StrategyScheduler:
     """交易策略自动执行调度器"""
 
-    def __init__(self, config_path: str = 'config.yaml', use_v2: bool = True):
+    def __init__(self, config_path: str = 'config.yaml'):
         """
         初始化调度器
 
         Args:
             config_path: 配置文件路径
-            use_v2: 是否使用V2策略执行器（默认True，简化版）
         """
-        self.use_v2 = use_v2
 
         # 加载配置（支持环境变量）
         from app.utils.config_loader import load_config
@@ -80,21 +77,13 @@ class StrategyScheduler:
             self.live_engine = None
 
         # 初始化策略执行器
-        if use_v2:
-            logger.info("初始化策略执行器 V2（简化版）...")
-            self.strategy_executor = StrategyExecutorV2(
-                db_config=db_config,
-                futures_engine=self.futures_engine,
-                live_engine=self.live_engine
-            )
-            logger.info("  ✓ 策略执行器 V2 初始化成功")
-        else:
-            logger.info("初始化策略执行器...")
-            self.strategy_executor = StrategyExecutor(
-                db_config=db_config,
-                futures_engine=self.futures_engine
-            )
-            logger.info("  ✓ 策略执行器初始化成功")
+        logger.info("初始化策略执行器...")
+        self.strategy_executor = StrategyExecutorV2(
+            db_config=db_config,
+            futures_engine=self.futures_engine,
+            live_engine=self.live_engine
+        )
+        logger.info("  ✓ 策略执行器初始化成功")
         
         # 初始化技术分析器（用于策略测试）
         logger.info("初始化技术分析器...")
@@ -461,19 +450,10 @@ def main():
         type=int,
         help='测试策略：从配置文件加载指定ID的策略进行测试'
     )
-    parser.add_argument(
-        '--v2',
-        action='store_true',
-        default=True,
-        help='使用V2策略执行器（简化版，新逻辑）- 默认启用'
-    )
     args = parser.parse_args()
 
     # 创建调度器
-    scheduler = StrategyScheduler(config_path=args.config, use_v2=args.v2)
-
-    if args.v2:
-        logger.info("🆕 使用 V2 策略执行器（简化版）")
+    scheduler = StrategyScheduler(config_path=args.config)
 
     # 如果指定了测试参数，执行测试
     if args.test or args.test_strategy_id:

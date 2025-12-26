@@ -163,35 +163,6 @@ class StrategyExecutorV2:
         """获取数据库连接"""
         return create_connection(self.db_config)
 
-    def _check_trading_cooldown(self, symbol: str, cooldown_type: str) -> bool:
-        """
-        检查是否在交易冷却期内（从数据库读取）
-
-        Args:
-            symbol: 交易对
-            cooldown_type: 冷却类型，如 'consecutive_kline_stop'
-
-        Returns:
-            True 表示在冷却期内，不能开仓
-        """
-        try:
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT cooldown_until FROM trading_cooldowns
-                WHERE symbol = %s AND cooldown_type = %s AND cooldown_until > NOW()
-            """, (symbol, cooldown_type))
-            result = cursor.fetchone()
-            cursor.close()
-            conn.close()
-            if result:
-                logger.debug(f"[冷却期] {symbol} {cooldown_type} 冷却中，跳过开仓")
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"[冷却期] 检查冷却期失败: {e}")
-            return False
-
     # ==================== 技术指标计算（使用公共模块）====================
     # 保留方法签名以保持向后兼容，内部调用公共模块
 
@@ -2230,10 +2201,6 @@ class StrategyExecutorV2:
             执行结果
         """
         try:
-            # ========== 检查交易冷却期（连续K线止损后需要冷却）==========
-            if self._check_trading_cooldown(symbol, 'consecutive_kline_stop'):
-                return {'success': False, 'error': f'{symbol} 连续K线止损冷却期中', 'cooldown': True}
-
             # ========== 信号去重检查（同一K线周期内不重复触发）==========
             position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
             signal_key = f"{symbol}_{position_side}"

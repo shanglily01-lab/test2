@@ -65,43 +65,6 @@ class StopLossMonitor:
 
         logger.info("StopLossMonitor initialized")
 
-    def _set_cooldown(self, symbol: str, cooldown_type: str, cooldown_minutes: int):
-        """设置交易冷却期（写入数据库）"""
-        try:
-            self._ensure_connection()
-            cursor = self.connection.cursor()
-            # 使用数据库的 NOW() 计算时间，避免时区问题
-            cursor.execute("""
-                INSERT INTO trading_cooldowns (symbol, cooldown_type, cooldown_until)
-                VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL %s MINUTE))
-                ON DUPLICATE KEY UPDATE cooldown_until = DATE_ADD(NOW(), INTERVAL %s MINUTE), created_at = NOW()
-            """, (symbol, cooldown_type, cooldown_minutes, cooldown_minutes))
-            self.connection.commit()
-            cursor.close()
-            logger.info(f"[冷却期] {symbol} {cooldown_type} 设置冷却 {cooldown_minutes} 分钟")
-        except Exception as e:
-            logger.error(f"[冷却期] 设置冷却期失败: {e}")
-
-    def _check_cooldown(self, symbol: str, cooldown_type: str) -> bool:
-        """检查是否在冷却期内（从数据库读取）"""
-        try:
-            self._ensure_connection()
-            cursor = self.connection.cursor(pymysql.cursors.DictCursor)
-            cursor.execute("""
-                SELECT cooldown_until FROM trading_cooldowns
-                WHERE symbol = %s AND cooldown_type = %s AND cooldown_until > NOW()
-            """, (symbol, cooldown_type))
-            result = cursor.fetchone()
-            cursor.close()
-            if result:
-                remaining = (result['cooldown_until'] - datetime.now()).total_seconds()
-                logger.debug(f"[冷却期] {symbol} {cooldown_type} 冷却中，剩余 {int(remaining)} 秒")
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"[冷却期] 检查冷却期失败: {e}")
-            return False
-
     def _should_refresh_connection(self):
         """检查是否需要刷新连接（基于连接年龄）"""
         if self._connection_created_at is None:
@@ -609,27 +572,7 @@ class StopLossMonitor:
                 'result': result
             }
 
-        # 优先级2: 检查连续K线止损（亏损时提前离场）
-        consecutive_stop_result = self._check_consecutive_kline_stop_loss(position, current_price)
-        if consecutive_stop_result:
-            logger.warning(f"🔻 Consecutive kline stop-loss triggered for position #{position_id} {symbol}: {consecutive_stop_result['reason']}")
-            result = self.engine.close_position(
-                position_id=position_id,
-                reason='consecutive_kline_stop',
-                close_price=current_price
-            )
-            # 同步平掉实盘仓位
-            self._sync_close_live_position(position, 'consecutive_kline_stop')
-            return {
-                'position_id': position_id,
-                'symbol': symbol,
-                'status': 'consecutive_kline_stop',
-                'current_price': float(current_price),
-                'reason': consecutive_stop_result['reason'],
-                'result': result
-            }
-
-        # 优先级3: 检查止损（移动止损和固定止损）
+        # 优先级2: 检查止损（移动止损和固定止损）
         if self.should_trigger_stop_loss(position, current_price):
             entry_price = Decimal(str(position.get('entry_price', 0)))
             position_side = position.get('position_side', 'LONG')
@@ -672,7 +615,7 @@ class StopLossMonitor:
                 'result': result
             }
 
-        # 优先级4: 检查止盈（使用持仓中保存的止盈价格）
+        # 优先级3: 检查止盈（使用持仓中保存的止盈价格）
         if self.should_trigger_take_profit(position, current_price):
             take_profit_price = Decimal(str(position.get('take_profit_price', 0)))
             logger.info(f"✅ Take-profit triggered for position #{position_id} {symbol} @ {current_price:.8f} (take_profit={take_profit_price:.8f})")
@@ -751,135 +694,6 @@ class StopLossMonitor:
             logger.error(f"[止损监控] 同步实盘平仓异常: {e}")
             import traceback
             traceback.print_exc()
-
-    def _check_consecutive_kline_stop_loss(self, position: Dict, current_price: Decimal) -> Optional[Dict]:
-        """
-        检查连续K线止损条件（亏损时提前离场）
-
-        做多时：连续N根阴线（收盘<开盘）则提前止损
-        做空时：连续N根阳线（收盘>开盘）则提前止损
-
-        Args:
-            position: 持仓信息
-            current_price: 当前价格
-
-        Returns:
-            如果触发止损返回 {'reason': str}，否则返回 None
-        """
-        try:
-            symbol = position.get('symbol')
-
-            # 检查冷却期：如果该symbol还在冷却期内，跳过检查
-            if self._check_cooldown(symbol, 'consecutive_kline_stop'):
-                return None
-
-            # 获取策略配置
-            strategy_id = position.get('strategy_id')
-            if not strategy_id:
-                return None
-
-            # 从数据库获取策略配置
-            self._ensure_connection()
-            cursor = self.connection.cursor(pymysql.cursors.DictCursor)
-            cursor.execute("SELECT config FROM trading_strategies WHERE id = %s", (strategy_id,))
-            strategy = cursor.fetchone()
-            cursor.close()
-
-            if not strategy or not strategy.get('config'):
-                return None
-
-            # 解析策略配置
-            import json
-            config = json.loads(strategy['config']) if isinstance(strategy['config'], str) else strategy['config']
-            consecutive_config = config.get('consecutiveBearishStopLoss', {})
-
-            if not consecutive_config.get('enabled', False):
-                return None
-
-            bars = consecutive_config.get('bars', 2)
-            timeframe = consecutive_config.get('timeframe', '5m')
-            cooldown_minutes = consecutive_config.get('cooldownMinutes', 15)  # 默认15分钟冷却期
-            max_loss_pct = consecutive_config.get('maxLossPct', -0.5)
-
-            # 计算当前盈亏
-            entry_price = Decimal(str(position.get('entry_price', 0)))
-            position_side = position.get('position_side')
-
-            if entry_price == 0:
-                return None
-
-            if position_side == 'LONG':
-                current_profit_pct = float((current_price - entry_price) / entry_price * 100)
-            else:  # SHORT
-                current_profit_pct = float((entry_price - current_price) / entry_price * 100)
-
-            # 获取symbol和开仓时间
-            symbol = position['symbol']
-            open_time = position.get('open_time')
-
-            # 连续反向K线检查 - 不限制盈亏状态
-            # 设计理念：连续反向K线说明趋势转向，应立即平仓，不管当前盈亏
-            # 重要：只检查开仓之后的K线，开仓前的K线不算
-            logger.debug(f"[连续K线止损] {symbol} {position_side} 当前盈亏 {current_profit_pct:.2f}%，开仓时间 {open_time}，开始检查连续K线")
-
-            # 获取开仓之后的K线数据
-            cursor = self.connection.cursor(pymysql.cursors.DictCursor)
-            if open_time:
-                cursor.execute("""
-                    SELECT open_price, close_price, timestamp
-                    FROM kline_data
-                    WHERE symbol = %s AND timeframe = %s AND timestamp > %s
-                    ORDER BY timestamp DESC
-                    LIMIT %s
-                """, (symbol, timeframe, open_time, bars))
-            else:
-                # 如果没有开仓时间，回退到原来的逻辑
-                cursor.execute("""
-                    SELECT open_price, close_price, timestamp
-                    FROM kline_data
-                    WHERE symbol = %s AND timeframe = %s
-                    ORDER BY timestamp DESC
-                    LIMIT %s
-                """, (symbol, timeframe, bars))
-
-            klines = cursor.fetchall()
-            cursor.close()
-
-            if not klines or len(klines) < bars:
-                logger.debug(f"[连续K线止损] {symbol} 开仓后K线数据不足: 需要{bars}根，实际{len(klines) if klines else 0}根（开仓时间: {open_time}）")
-                return None
-
-            # 检查连续K线
-            if position_side == 'LONG':
-                # 做多：检查连续阴线（价格持续下跌）
-                kline_status = [(float(k['open_price']), float(k['close_price']), float(k['close_price']) < float(k['open_price'])) for k in klines[:bars]]
-                consecutive_bearish = all(k[2] for k in kline_status)
-                logger.debug(f"[连续K线止损] {symbol} LONG 检查连续阴线: {kline_status} -> 结果={consecutive_bearish}")
-                if consecutive_bearish:
-                    # 设置冷却期（写入数据库）
-                    self._set_cooldown(symbol, 'consecutive_kline_stop', cooldown_minutes)
-                    logger.info(f"[连续K线止损] ⚠️ {symbol} LONG 触发连续{bars}根阴线止损，当前亏损 {current_profit_pct:.2f}%，冷却{cooldown_minutes}分钟")
-                    return {
-                        'reason': f"连续{bars}根阴线止损(亏损{current_profit_pct:.2f}%)"
-                    }
-            else:  # SHORT
-                # 做空：检查连续阳线（价格持续上涨）
-                kline_status = [(float(k['open_price']), float(k['close_price']), float(k['close_price']) > float(k['open_price'])) for k in klines[:bars]]
-                consecutive_bullish = all(k[2] for k in kline_status)
-                logger.debug(f"[连续K线止损] {symbol} SHORT 检查连续阳线: {kline_status} -> 结果={consecutive_bullish}")
-                if consecutive_bullish:
-                    # 设置冷却期（写入数据库）
-                    self._set_cooldown(symbol, 'consecutive_kline_stop', cooldown_minutes)
-                    logger.info(f"[连续K线止损] ⚠️ {symbol} SHORT 触发连续{bars}根阳线止损，当前亏损 {current_profit_pct:.2f}%，冷却{cooldown_minutes}分钟")
-                    return {
-                        'reason': f"连续{bars}根阳线止损(亏损{current_profit_pct:.2f}%)"
-                    }
-
-            return None
-
-        except Exception as e:
-            logger.error(f"连续K线止损检测失败: {e}")
-            return None
 
     def monitor_all_positions(self) -> Dict:
         """
