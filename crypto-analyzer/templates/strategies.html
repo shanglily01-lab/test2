@@ -1655,27 +1655,8 @@
                             </div>
                         </div>
                         <div class="form-section-title" style="font-size: 12px; margin-top: 12px;">自检项目</div>
+                        <div style="font-size: 10px; color: var(--text-tertiary); margin-bottom: 8px;">注：EMA/MA方向检查已移除，限价单是回调入场策略</div>
                         <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-checkbox-label">
-                                    <input type="checkbox" class="form-checkbox" id="pv_require_ema_confirm" \${pendingValidation.require_ema_confirm !== false ? 'checked' : ''} \${editMode && !isDefault ? '' : 'disabled'}>
-                                    <span>EMA方向确认</span>
-                                </label>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-checkbox-label">
-                                    <input type="checkbox" class="form-checkbox" id="pv_require_ma_confirm" \${pendingValidation.require_ma_confirm !== false ? 'checked' : ''} \${editMode && !isDefault ? '' : 'disabled'}>
-                                    <span>MA方向确认</span>
-                                </label>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label class="form-checkbox-label">
-                                    <input type="checkbox" class="form-checkbox" id="pv_check_ranging" \${pendingValidation.check_ranging !== false ? 'checked' : ''} \${editMode && !isDefault ? '' : 'disabled'}>
-                                    <span>震荡市检查</span>
-                                </label>
-                            </div>
                             <div class="form-group">
                                 <label class="form-checkbox-label">
                                     <input type="checkbox" class="form-checkbox" id="pv_check_trend_end" \${pendingValidation.check_trend_end !== false ? 'checked' : ''} \${editMode && !isDefault ? '' : 'disabled'}>
@@ -2145,6 +2126,8 @@
                 }
 
                 // 收集待开仓自检配置
+                // 已移除 require_ema_confirm, require_ma_confirm, check_ranging
+                // 限价单是回调入场策略，短暂反向是正常的
                 const pv_enabled = document.getElementById('pv_enabled');
                 if (pv_enabled) {
                     updateData.pending_validation = {
@@ -2152,9 +2135,6 @@
                         expire_seconds: parseInt(document.getElementById('pv_expire_seconds')?.value || 300),
                         check_interval: parseInt(document.getElementById('pv_check_interval')?.value || 10),
                         max_price_diff: parseFloat(document.getElementById('pv_max_price_diff')?.value || 0.5),
-                        require_ema_confirm: document.getElementById('pv_require_ema_confirm')?.checked !== false,
-                        require_ma_confirm: document.getElementById('pv_require_ma_confirm')?.checked !== false,
-                        check_ranging: document.getElementById('pv_check_ranging')?.checked !== false,
                         check_trend_end: document.getElementById('pv_check_trend_end')?.checked !== false
                     };
                 }

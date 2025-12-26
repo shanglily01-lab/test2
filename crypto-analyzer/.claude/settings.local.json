@@ -67,7 +67,9 @@
       "Bash(xxd:*)",
       "Bash(/dev/null <<'EOF'\nSELECT id, name, is_active FROM trading_strategies WHERE is_active = 1 LIMIT 3;\nEOF)",
       "Bash(git reset:*)",
-      "Bash(/dev/null <<'EOF'\nSELECT id, name, LEFT\\(config, 2000\\) as config_part\nFROM trading_strategies \nWHERE is_active = 1 \nLIMIT 1;\nEOF)"
+      "Bash(/dev/null <<'EOF'\nSELECT id, name, LEFT\\(config, 2000\\) as config_part\nFROM trading_strategies \nWHERE is_active = 1 \nLIMIT 1;\nEOF)",
+      "Bash(/dev/null <<'EOF'\nSELECT \n    COUNT\\(*\\) as total_trades,\n    SUM\\(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END\\) as profitable,\n    SUM\\(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END\\) as losing,\n    SUM\\(realized_pnl\\) as total_pnl,\n    SUM\\(fee\\) as total_fee\nFROM futures_positions \nWHERE symbol = 'LTC/USDT' \n  AND status = 'closed'\n  AND created_at >= '2025-12-24 23:00:00'\n  AND created_at < '2025-12-25 04:00:00';\nEOF)",
+      "Bash(/dev/null <<'EOF'\n-- 查看有连续K线配置的策略数量\nSELECT COUNT\\(*\\) as total, \n       SUM\\(CASE WHEN config LIKE '%consecutiveBearish%' THEN 1 ELSE 0 END\\) as with_consecutive \nFROM trading_strategies WHERE is_active = 1;\nEOF)"
     ],
     "deny": [],
     "ask": []

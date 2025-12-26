@@ -1211,25 +1211,8 @@
 
                                 <div style="margin-top: 12px; padding: 12px; background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
                                     <div style="font-weight: 600; margin-bottom: 8px; font-size: 13px;">自检项目</div>
+                                    <small style="color: var(--text-tertiary); font-size: 10px; display: block; margin-bottom: 8px;">注：EMA/MA方向检查已移除，限价单是回调入场策略，短暂反向是正常的</small>
                                     <div class="form-row" style="gap: 16px;">
-                                        <div class="form-group" style="flex: none; margin-bottom: 8px;">
-                                            <label class="form-label" style="cursor: pointer;">
-                                                <input type="checkbox" id="pendingRequireEmaConfirm" style="margin-right: 8px;" checked>
-                                                EMA方向确认
-                                            </label>
-                                        </div>
-                                        <div class="form-group" style="flex: none; margin-bottom: 8px;">
-                                            <label class="form-label" style="cursor: pointer;">
-                                                <input type="checkbox" id="pendingRequireMaConfirm" style="margin-right: 8px;" checked>
-                                                MA方向确认
-                                            </label>
-                                        </div>
-                                        <div class="form-group" style="flex: none; margin-bottom: 8px;">
-                                            <label class="form-label" style="cursor: pointer;">
-                                                <input type="checkbox" id="pendingCheckRanging" style="margin-right: 8px;" checked>
-                                                震荡市检查
-                                            </label>
-                                        </div>
                                         <div class="form-group" style="flex: none; margin-bottom: 8px;">
                                             <label class="form-label" style="cursor: pointer;">
                                                 <input type="checkbox" id="pendingCheckTrendEnd" style="margin-right: 8px;" checked>
@@ -2527,14 +2510,13 @@
                     cooldownMinutes: document.getElementById('reversalCooldownMinutes') ? parseInt(document.getElementById('reversalCooldownMinutes').value) : 30
                 },
                 // 待开仓自检配置
+                // 注：已移除 require_ema_confirm, require_ma_confirm, check_ranging
+                // 限价单是回调入场策略，短暂反向是正常的市场波动
                 pendingValidation: {
                     enabled: document.getElementById('pendingValidationEnabled') ? document.getElementById('pendingValidationEnabled').checked : true,
                     expire_seconds: document.getElementById('pendingExpireSeconds') ? parseInt(document.getElementById('pendingExpireSeconds').value) : 300,
                     check_interval: document.getElementById('pendingCheckInterval') ? parseInt(document.getElementById('pendingCheckInterval').value) : 10,
                     max_price_diff: document.getElementById('pendingMaxPriceDiff') ? parseFloat(document.getElementById('pendingMaxPriceDiff').value) : 0.5,
-                    require_ema_confirm: document.getElementById('pendingRequireEmaConfirm') ? document.getElementById('pendingRequireEmaConfirm').checked : true,
-                    require_ma_confirm: document.getElementById('pendingRequireMaConfirm') ? document.getElementById('pendingRequireMaConfirm').checked : true,
-                    check_ranging: document.getElementById('pendingCheckRanging') ? document.getElementById('pendingCheckRanging').checked : true,
                     check_trend_end: document.getElementById('pendingCheckTrendEnd') ? document.getElementById('pendingCheckTrendEnd').checked : true,
                     check_ema_converging: document.getElementById('pendingCheckEmaConverging') ? document.getElementById('pendingCheckEmaConverging').checked : true,
                     min_ema_diff_pct: document.getElementById('pendingMinEmaDiffPct') ? parseFloat(document.getElementById('pendingMinEmaDiffPct').value) : 0.15
@@ -3087,15 +3069,8 @@
                 if (document.getElementById('pendingMaxPriceDiff')) {
                     document.getElementById('pendingMaxPriceDiff').value = pv.max_price_diff || 0.5;
                 }
-                if (document.getElementById('pendingRequireEmaConfirm')) {
-                    document.getElementById('pendingRequireEmaConfirm').checked = pv.require_ema_confirm !== false;
-                }
-                if (document.getElementById('pendingRequireMaConfirm')) {
-                    document.getElementById('pendingRequireMaConfirm').checked = pv.require_ma_confirm !== false;
-                }
-                if (document.getElementById('pendingCheckRanging')) {
-                    document.getElementById('pendingCheckRanging').checked = pv.check_ranging !== false;
-                }
+                // 已移除 require_ema_confirm, require_ma_confirm, check_ranging 的加载
+                // 这些检查已被移除，限价单是回调入场策略
                 if (document.getElementById('pendingCheckTrendEnd')) {
                     document.getElementById('pendingCheckTrendEnd').checked = pv.check_trend_end !== false;
                 }

@@ -276,9 +276,12 @@ class FuturesLimitOrderExecutor:
         待开仓自检：根据 pendingValidation 配置检查限价单是否应该取消
 
         自检项目：
-        1. EMA方向确认 - 做多要求EMA9>EMA26，做空相反
-        2. 趋势末端检查 - EMA差值快速收窄说明趋势即将结束
-        3. 最小EMA差值检查 - EMA差值过小说明趋势太弱/震荡市
+        1. 趋势末端检查 - EMA差值快速收窄说明趋势即将结束
+        2. 最小EMA差值检查 - EMA差值过小说明趋势太弱/震荡市
+
+        注意：已移除EMA方向检查，因为限价单是回调入场策略，
+        等待回调期间EMA9短暂低于EMA26是正常的市场波动。
+        真正的趋势反转由 cancelOnTrendReversal（金叉/死叉检测）处理。
 
         Args:
             connection: 数据库连接
@@ -352,20 +355,17 @@ class FuturesLimitOrderExecutor:
 
             reject_reasons = []
 
-            # 1. EMA方向确认
-            if pending_validation.get('require_ema_confirm', True):
-                if direction == 'long' and ema9 <= ema26:
-                    reject_reasons.append(f"EMA方向不符(EMA9={ema9:.4f}<=EMA26={ema26:.4f})")
-                elif direction == 'short' and ema9 >= ema26:
-                    reject_reasons.append(f"EMA方向不符(EMA9={ema9:.4f}>=EMA26={ema26:.4f})")
+            # 注意：已移除EMA方向检查（require_ema_confirm）
+            # 限价单是回调入场策略，EMA9短暂低于EMA26是正常的
+            # 真正的趋势反转由 cancelOnTrendReversal 检测（金叉/死叉）
 
-            # 2. 趋势末端检查（EMA差值快速收窄）
+            # 1. 趋势末端检查（EMA差值快速收窄）
             if pending_validation.get('check_trend_end', True):
                 if prev_diff_pct > 0 and ema_diff_pct < prev_diff_pct * 0.7:
                     shrink = (prev_diff_pct - ema_diff_pct) / prev_diff_pct * 100
-                    reject_reasons.append(f"趋势末端(差值缩小{shrink:.1f}%)")
+                    reject_reasons.append(f"趋势已结束(差值缩小{shrink:.1f}%)")
 
-            # 3. 最小EMA差值检查（过小说明震荡市或趋势太弱）
+            # 2. 最小EMA差值检查（过小说明震荡市或趋势太弱）
             min_ema_diff_pct = pending_validation.get('min_ema_diff_pct', 0.05)
             if ema_diff_pct < min_ema_diff_pct:
                 reject_reasons.append(f"弱趋势(EMA差值{ema_diff_pct:.3f}%<{min_ema_diff_pct}%)")

@@ -173,19 +173,17 @@ EMA 数据对应关系:
 配置项: pendingValidation
 {
   "enabled": true,                 # 是否启用自检
-  "require_ema_confirm": true,     # 检查EMA方向
   "check_trend_end": true,         # 检查趋势末端
   "min_ema_diff_pct": 0.05         # 最小EMA差值阈值(%)
 }
 ```
 
-| 检查项 | 配置键 | 做多条件 | 做空条件 | 说明 |
-|--------|--------|----------|----------|------|
-| EMA方向 | `require_ema_confirm` | EMA9 > EMA26 | EMA9 < EMA26 | 确保EMA趋势未反转 |
-| 趋势末端 | `check_trend_end` | EMA差值未快速收窄 | EMA差值未快速收窄 | 差值收窄>30%说明趋势将结束 |
-| 最小差值 | `min_ema_diff_pct` | >= 设定阈值 | >= 设定阈值 | 低于阈值说明震荡市/弱趋势 |
+| 检查项 | 配置键 | 条件 | 说明 |
+|--------|--------|------|------|
+| 趋势末端 | `check_trend_end` | EMA差值未快速收窄 | 差值收窄>30%说明趋势将结束 |
+| 最小差值 | `min_ema_diff_pct` | >= 设定阈值 | 低于阈值说明震荡市/弱趋势 |
 
-> **注意**: 已移除 MA 方向检查（`require_ma_confirm`），因为限价单使用回调入场策略（做多限价低于市价0.6%），触发时价格自然会低于/高于 MA10，这是预期行为。
+> **注意**: 已移除 EMA方向检查（`require_ema_confirm`）和 MA方向检查（`require_ma_confirm`），因为限价单是回调入场策略（做多限价低于市价），等待回调期间EMA9短暂低于EMA26是正常的市场波动。真正的趋势反转由 `cancelOnTrendReversal`（金叉/死叉检测）处理。
 
 **示例**：
 ```
@@ -194,11 +192,13 @@ EMA 数据对应关系:
 检查时刻：
   EMA9 = 96500, EMA26 = 96600
   EMA差值 = |96500-96600|/96600 = 0.10%
+  前EMA差值 = 0.35%
 
 自检结果：
-  ❌ EMA方向不符 (EMA9=96500 <= EMA26=96600)
+  ✅ EMA方向检查已跳过（限价单回调入场，短暂反向正常）
+  ❌ 趋势已结束（差值从0.35%缩小到0.10%，缩小71%）
 
-结论：取消限价单
+结论：取消限价单（趋势已结束）
 ```
 
 #### 2. 趋势转向检测 (cancelOnTrendReversal)
@@ -236,7 +236,7 @@ EMA 数据对应关系:
 
 | 英文代码 | 中文说明 | 触发场景 |
 |----------|----------|----------|
-| validation_failed | 自检未通过 | pendingValidation 检查失败（EMA方向、趋势末端、弱趋势）|
+| validation_failed | 自检未通过 | pendingValidation 检查失败（趋势末端、弱趋势）|
 | trend_reversal | 趋势转向 | 检测到反向EMA交叉（做多遇死叉、做空遇金叉） |
 | reversal_warning | 反转预警 | EMA9斜率突变触发预警 |
 | timeout | 超时取消 | 超过 limitOrderTimeoutMinutes 设定时间 |
