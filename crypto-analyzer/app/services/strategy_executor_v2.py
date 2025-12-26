@@ -2483,7 +2483,7 @@ class StrategyExecutorV2:
 
             # ========== 检查是否已达持仓+挂单上限 ==========
             entry_cooldown = strategy.get('entryCooldown', {})
-            max_positions = entry_cooldown.get('maxPositionsPerDirection', 3)
+            max_positions = entry_cooldown.get('maxPositionsPerDirection', 1)
 
             try:
                 conn = self.get_db_connection()

@@ -155,7 +155,7 @@ EMA 数据对应关系:
 │  5. 成交前额外检查                    │
 │     - RSI过滤 (rsiFilter)             │
 │     - EMA差值过滤 (minEmaDiff)        │
-│     - 持仓数量限制 (最多3个同向)       │
+│     - 持仓数量限制 (最多1个同向)       │
 │     不通过 → 取消订单                 │
 └──────────────────────────────────────┘
        │ 通过
@@ -228,7 +228,7 @@ EMA 数据对应关系:
 
 - **RSI过滤**: 做多时RSI不能超买(>65)，做空时RSI不能超卖(<35)
 - **EMA差值过滤**: 成交时刻EMA差值必须大于 `minEmaDiff`
-- **持仓数量限制**: 同一交易对同方向最多3个持仓
+- **持仓数量限制**: 同一交易对同方向最多1个持仓
 
 ### 取消原因代码
 
@@ -240,7 +240,7 @@ EMA 数据对应关系:
 | trend_reversal | 趋势转向 | 检测到反向EMA交叉（做多遇死叉、做空遇金叉） |
 | reversal_warning | 反转预警 | EMA9斜率突变触发预警 |
 | timeout | 超时取消 | 超过 limitOrderTimeoutMinutes 设定时间 |
-| position_exists | 持仓已存在 | 同交易对同方向已有3个持仓 |
+| position_exists | 持仓已存在 | 同交易对同方向已有1个持仓 |
 | rsi_filter | RSI过滤 | 做多时RSI超买(>65)或做空时RSI超卖(<35) |
 | ema_diff_small | EMA差值过小 | 成交时EMA差值低于 minEmaDiff 阈值 |
 | execution_failed | 执行失败 | 开仓时发生错误 |
