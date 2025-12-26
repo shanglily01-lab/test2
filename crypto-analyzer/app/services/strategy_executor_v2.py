@@ -2468,6 +2468,8 @@ class StrategyExecutorV2:
 
                 # 创建多个限价单
                 created_orders = []
+                # 确保 signal_reason 有默认值
+                reason_text = signal_reason or signal_type or 'strategy_signal'
                 for i in range(orders_to_create):
                     result = self.futures_engine.open_position(
                         account_id=account_id,
@@ -2481,7 +2483,7 @@ class StrategyExecutorV2:
                         source='strategy_limit',  # 标记为策略限价单
                         strategy_id=strategy.get('id'),
                         entry_signal_type=signal_type,  # 开仓信号类型
-                        entry_reason=f"{signal_reason} (#{i+1}/{orders_to_create})"  # 开仓原因
+                        entry_reason=f"{reason_text} (#{i+1}/{orders_to_create})"  # 开仓原因
                     )
 
                     if result.get('success'):
