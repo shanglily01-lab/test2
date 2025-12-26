@@ -549,9 +549,8 @@ class StrategyExecutorV2:
         取消指定方向的待成交订单，并平仓模拟盘该方向持仓
 
         干预措施：
-        1. 取消实盘限价单挂单（币安交易所）
-        2. 取消模拟盘待成交订单（数据库记录）
-        3. 平仓模拟盘该方向的持仓
+        1. 取消模拟盘待成交订单（数据库记录）
+        2. 平仓模拟盘该方向的持仓
 
         Args:
             symbol: 交易对
@@ -560,31 +559,7 @@ class StrategyExecutorV2:
         position_side = 'LONG' if direction.lower() == 'long' else 'SHORT'
         order_side = f'OPEN_{position_side}'
 
-        # ========== 1. 取消实盘限价单 ==========
-        if self.live_engine:
-            try:
-                # 转换交易对格式 BTC/USDT -> BTCUSDT
-                binance_symbol = symbol.replace('/', '')
-                # 获取该交易对的所有挂单
-                open_orders = self.live_engine.exchange.fetch_open_orders(binance_symbol)
-                cancelled_count = 0
-                for order in open_orders:
-                    # 只取消该方向的开仓订单
-                    # 币安的 positionSide 区分方向
-                    order_position_side = order.get('info', {}).get('positionSide', '')
-                    if order_position_side == position_side:
-                        try:
-                            self.live_engine.exchange.cancel_order(order['id'], binance_symbol)
-                            cancelled_count += 1
-                            logger.warning(f"⚠️ [反转预警] 取消实盘限价单: {symbol} {direction} 订单ID={order['id']}")
-                        except Exception as e:
-                            logger.error(f"取消实盘订单失败: {order['id']} - {e}")
-                if cancelled_count > 0:
-                    logger.warning(f"⚠️ [反转预警] 共取消 {symbol} {direction} 方向 {cancelled_count} 个实盘限价单")
-            except Exception as e:
-                logger.error(f"查询/取消实盘挂单失败: {e}")
-
-        # ========== 2. 取消模拟盘待成交订单 ==========
+        # ========== 1. 取消模拟盘待成交订单 ==========
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
@@ -612,7 +587,7 @@ class StrategyExecutorV2:
         except Exception as e:
             logger.error(f"取消模拟盘待成交订单失败: {e}")
 
-        # ========== 3. 平仓模拟盘该方向持仓 ==========
+        # ========== 2. 平仓模拟盘该方向持仓 ==========
         if self.futures_engine:
             try:
                 conn = self.get_db_connection()
