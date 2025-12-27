@@ -101,8 +101,15 @@ class StrategyExecutorV2:
             self.live_margin_fixed = live_config.get('fixed_amount', 200)
             self.live_margin_percent = live_config.get('percent', 1)
 
+            # 趋势减弱平仓配置
+            trend_exit_config = config.get('signals', {}).get('trend_weakening_exit', {})
+            self.trend_exit_enabled = trend_exit_config.get('enabled', True)
+            self.trend_exit_ema_threshold = trend_exit_config.get('ema_diff_threshold', 0.5)
+            self.trend_exit_min_profit = trend_exit_config.get('min_profit_pct', 1.0)
+
             logger.info(f"✅ 保证金配置已加载: 模拟盘={self.paper_margin_mode}({self.paper_margin_fixed}U/{self.paper_margin_percent}%), "
                        f"实盘={self.live_margin_mode}({self.live_margin_fixed}U/{self.live_margin_percent}%)")
+            logger.info(f"✅ 趋势减弱平仓配置: enabled={self.trend_exit_enabled}, threshold={self.trend_exit_ema_threshold*100}%, min_profit={self.trend_exit_min_profit}%")
         except Exception as e:
             logger.warning(f"加载保证金配置失败，使用默认值: {e}")
             self.paper_margin_mode = 'fixed'
@@ -111,6 +118,10 @@ class StrategyExecutorV2:
             self.live_margin_mode = 'fixed'
             self.live_margin_fixed = 200
             self.live_margin_percent = 1
+            # 趋势减弱平仓默认值
+            self.trend_exit_enabled = True
+            self.trend_exit_ema_threshold = 0.5
+            self.trend_exit_min_profit = 1.0
 
     def calculate_margin(self, is_live: bool = False, account_balance: float = None) -> float:
         """
@@ -2127,11 +2138,16 @@ class StrategyExecutorV2:
         # 这里只检查趋势减弱（强度下降），不再重复检查趋势反转
         # check_cross_reversal 使用已收盘K线判断，更准确
 
-        # 检查强度是否减弱到开仓时的50%以下（使用已收盘K线数据）
-        if confirmed_ema_diff_pct < entry_ema_diff * 0.5:
+        # 检查是否启用趋势减弱平仓
+        if not self.trend_exit_enabled:
+            return False, "trend_weakening_disabled"
+
+        # 检查强度是否减弱到配置的阈值以下（使用已收盘K线数据）
+        # 默认阈值为0.5（50%），可通过config.yaml配置
+        if confirmed_ema_diff_pct < entry_ema_diff * self.trend_exit_ema_threshold:
             # 需要满足最小盈利要求才触发趋势减弱平仓
             # 避免刚开始盈利就被平仓的情况
-            MIN_PROFIT_FOR_TREND_EXIT = 1.0  # 最小盈利1%才触发趋势减弱平仓
+            # 默认最小盈利1%，可通过config.yaml配置
 
             if current_price:
                 entry_price = float(position.get('entry_price', 0))
@@ -2144,12 +2160,12 @@ class StrategyExecutorV2:
                     if pnl_pct < 0:
                         return False, f"trend_weakening_but_losing|pnl:{pnl_pct:.2f}%"
 
-                    if pnl_pct < MIN_PROFIT_FOR_TREND_EXIT:
-                        return False, f"trend_weakening_insufficient_profit|pnl:{pnl_pct:.2f}%"
+                    if pnl_pct < self.trend_exit_min_profit:
+                        return False, f"trend_weakening_insufficient_profit|pnl:{pnl_pct:.2f}%|min:{self.trend_exit_min_profit}%"
 
-            return True, f"trend_weakening|curr:{confirmed_ema_diff_pct:.3f}%|entry:{entry_ema_diff:.3f}%"
+            return True, f"trend_weakening|curr:{confirmed_ema_diff_pct:.3f}%|entry:{entry_ema_diff:.3f}%|threshold:{self.trend_exit_ema_threshold*100}%"
 
-        return False, f"trend_normal|curr:{confirmed_ema_diff_pct:.3f}%|entry:{entry_ema_diff:.3f}%"
+        return False, f"trend_normal|curr:{confirmed_ema_diff_pct:.3f}%|entry:{entry_ema_diff:.3f}%|threshold:{self.trend_exit_ema_threshold*100}%"
 
     def check_smart_exit(self, position: Dict, current_price: float, ema_data: Dict,
                           strategy: Dict) -> Tuple[bool, str, Dict]:
