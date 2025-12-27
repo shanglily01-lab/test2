@@ -129,6 +129,8 @@ class PendingValidationConfigModel(BaseModel):
     require_ma_confirm: bool = True   # MA方向确认
     check_ranging: bool = True        # 震荡市检查
     check_trend_end: bool = True      # 趋势末端检查
+    trend_end_shrink_threshold: float = 0.5  # 趋势末端判断阈值（EMA差值缩小比例，默认0.5=缩小50%）
+    min_ema_diff_pct: float = 0.05    # 最小EMA差值百分比（默认0.05%）
 
 
 class StrategyCreateModel(BaseModel):

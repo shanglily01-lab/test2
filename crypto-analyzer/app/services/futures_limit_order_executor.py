@@ -361,7 +361,9 @@ class FuturesLimitOrderExecutor:
 
             # 1. 趋势末端检查（EMA差值快速收窄）
             if pending_validation.get('check_trend_end', True):
-                if prev_diff_pct > 0 and ema_diff_pct < prev_diff_pct * 0.7:
+                # 使用可配置阈值（默认0.5=缩小50%才触发，而非之前的0.7=缩小30%）
+                threshold = pending_validation.get('trend_end_shrink_threshold', 0.5)
+                if prev_diff_pct > 0 and ema_diff_pct < prev_diff_pct * threshold:
                     shrink = (prev_diff_pct - ema_diff_pct) / prev_diff_pct * 100
                     reject_reasons.append(f"趋势已结束(差值缩小{shrink:.1f}%)")
 
