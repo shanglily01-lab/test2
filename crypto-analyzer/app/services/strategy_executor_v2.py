@@ -92,13 +92,13 @@ class StrategyExecutorV2:
             # 模拟盘配置
             paper_config = margin_config.get('paper', {})
             self.paper_margin_mode = paper_config.get('mode', 'fixed')
-            self.paper_margin_fixed = paper_config.get('fixed_amount', 100)
+            self.paper_margin_fixed = paper_config.get('fixed_amount', 200)
             self.paper_margin_percent = paper_config.get('percent', 1)
 
             # 实盘配置
             live_config = margin_config.get('live', {})
             self.live_margin_mode = live_config.get('mode', 'fixed')
-            self.live_margin_fixed = live_config.get('fixed_amount', 100)
+            self.live_margin_fixed = live_config.get('fixed_amount', 200)
             self.live_margin_percent = live_config.get('percent', 1)
 
             logger.info(f"✅ 保证金配置已加载: 模拟盘={self.paper_margin_mode}({self.paper_margin_fixed}U/{self.paper_margin_percent}%), "
