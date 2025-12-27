@@ -2669,11 +2669,9 @@ class StrategyExecutorV2:
                 # 计算限价
                 limit_price = self._calculate_limit_price(current_price, price_type, direction)
                 if limit_price is None:
-                    # 如果配置为 market，使用默认 0.6% 回调
-                    if direction == 'long':
-                        limit_price = current_price * (1 - 0.6 / 100)
-                    else:
-                        limit_price = current_price * (1 + 0.6 / 100)
+                    # 如果配置为 market，使用当前价格（立即成交）
+                    limit_price = current_price
+                    logger.info(f"💰 {symbol} 使用市价开仓: {limit_price:.8f}")
 
                 # 根据限价重新计算数量
                 quantity = notional / limit_price
