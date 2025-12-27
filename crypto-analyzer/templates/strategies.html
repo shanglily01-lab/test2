@@ -1664,6 +1664,18 @@
                                 </label>
                             </div>
                         </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">趋势末端阈值</label>
+                                <input type="number" class="form-input" id="pv_trend_end_threshold" value="\${pendingValidation.trend_end_shrink_threshold || 0.5}" step="0.05" min="0" max="1" \${editMode && !isDefault ? '' : 'readonly'}>
+                                <div class="form-help-text">EMA差值低于此比例(0.5=缩小50%)时视为趋势结束</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">最小EMA差值 (%)</label>
+                                <input type="number" class="form-input" id="pv_min_ema_diff_pct" value="\${pendingValidation.min_ema_diff_pct || 0.05}" step="0.01" min="0" \${editMode && !isDefault ? '' : 'readonly'}>
+                                <div class="form-help-text">低于此值视为弱趋势，拒绝开仓</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             \`;
@@ -2135,7 +2147,9 @@
                         expire_seconds: parseInt(document.getElementById('pv_expire_seconds')?.value || 300),
                         check_interval: parseInt(document.getElementById('pv_check_interval')?.value || 10),
                         max_price_diff: parseFloat(document.getElementById('pv_max_price_diff')?.value || 0.5),
-                        check_trend_end: document.getElementById('pv_check_trend_end')?.checked !== false
+                        check_trend_end: document.getElementById('pv_check_trend_end')?.checked !== false,
+                        trend_end_shrink_threshold: parseFloat(document.getElementById('pv_trend_end_threshold')?.value || 0.5),
+                        min_ema_diff_pct: parseFloat(document.getElementById('pv_min_ema_diff_pct')?.value || 0.05)
                     };
                 }
 
