@@ -445,6 +445,7 @@ class StrategyExecutorV2:
             #    - 只有当斜率向上突变（当前斜率比之前更正/更大）才危险
             slope_sudden_change = slope_change > slope_change_threshold and slope_current > slope_prev
             # 2. 差距快速收窄（EMA9向上靠近EMA26，即将金叉）
+            #    - 但如果已经金叉了（diff_current > 0），就不应该触发这个预警
             diff_shrinking = diff_current < 0 and shrink_rate > diff_shrink_threshold
 
             if slope_sudden_change:
@@ -460,6 +461,7 @@ class StrategyExecutorV2:
             #    - 只有当斜率向下突变（当前斜率比之前更负/更小）才危险
             slope_sudden_change = slope_change > slope_change_threshold and slope_current < slope_prev
             # 2. 差距快速收窄（EMA9向下靠近EMA26，即将死叉）
+            #    - 但如果已经死叉了（diff_current < 0），就不应该触发这个预警
             diff_shrinking = diff_current > 0 and shrink_rate > diff_shrink_threshold
 
             if slope_sudden_change:
