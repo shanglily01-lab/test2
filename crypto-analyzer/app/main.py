@@ -246,9 +246,7 @@ async def lifespan(app: FastAPI):
                 price_cache_service=price_cache_service,
                 live_engine=live_engine
             )
-            # 启动限价单自动执行服务（每5秒扫描一次）
-            futures_limit_order_executor.start(interval=5)
-            logger.info("✅ 合约限价单自动执行服务初始化并启动成功（5秒扫描间隔）")
+            logger.info("✅ 合约限价单自动执行服务初始化成功")
         except Exception as e:
             logger.warning(f"⚠️  合约限价单自动执行服务初始化失败: {e}")
             import traceback
