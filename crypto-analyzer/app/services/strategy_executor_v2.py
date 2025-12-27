@@ -2062,11 +2062,15 @@ class StrategyExecutorV2:
         # 做多: market_minus_X 表示市价减X%（更低的买入价）
         # 做空: market_plus_X 表示市价加X%（更高的卖出价）
         price_adjustments = {
+            'market_minus_0_2': -0.2,
+            'market_minus_0_4': -0.4,
             'market_minus_0_6': -0.6,
             'market_minus_0_8': -0.8,
             'market_minus_1': -1.0,
             'market_minus_1_2': -1.2,
             'market_minus_1_4': -1.4,
+            'market_plus_0_2': 0.2,
+            'market_plus_0_4': 0.4,
             'market_plus_0_6': 0.6,
             'market_plus_0_8': 0.8,
             'market_plus_1': 1.0,
