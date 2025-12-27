@@ -369,8 +369,8 @@ class FuturesLimitOrderExecutor:
 
             # 2. 最小EMA差值检查（过小说明震荡市或趋势太弱）
             min_ema_diff_pct = pending_validation.get('min_ema_diff_pct', 0.05)
-            if ema_diff_pct < min_ema_diff_pct:
-                reject_reasons.append(f"弱趋势(EMA差值{ema_diff_pct:.3f}%<{min_ema_diff_pct}%)")
+            if abs(ema_diff_pct) < min_ema_diff_pct:
+                reject_reasons.append(f"弱趋势(EMA差值{ema_diff_pct:.3f}%,绝对值<{min_ema_diff_pct}%)")
 
             if reject_reasons:
                 return "; ".join(reject_reasons)
