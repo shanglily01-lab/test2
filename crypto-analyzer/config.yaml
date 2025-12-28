@@ -21,6 +21,7 @@ symbols:
 - ENA/USDT
 - AVAX/USDT
 - APT/USDT
+- DASH/USDT
 demo_mode: false
 exchanges:
   binance:
