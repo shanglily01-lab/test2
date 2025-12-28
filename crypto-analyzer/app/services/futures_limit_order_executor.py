@@ -32,7 +32,26 @@ class FuturesLimitOrderExecutor:
         self.running = False
         self.task = None
         self.connection = None  # 持久数据库连接
-        
+
+        # 加载保证金配置
+        self._load_margin_config()
+
+    def _load_margin_config(self):
+        """加载保证金配置"""
+        try:
+            from app.utils.config_loader import load_config
+            config = load_config()
+            margin_config = config.get('signals', {}).get('margin', {})
+
+            # 实盘配置
+            live_config = margin_config.get('live', {})
+            self.live_margin_fixed = live_config.get('fixed_amount', 200)
+
+            logger.info(f"✅ [限价单执行器] 实盘保证金配置已加载: {self.live_margin_fixed}U")
+        except Exception as e:
+            logger.warning(f"[限价单执行器] 加载保证金配置失败，使用默认值200U: {e}")
+            self.live_margin_fixed = 200
+
     def _get_connection(self):
         """获取数据库连接（复用持久连接）"""
         # 如果连接不存在或已断开，创建新连接
@@ -1231,7 +1250,7 @@ class FuturesLimitOrderExecutor:
                                                 if isinstance(config, dict):
                                                     sync_live = config.get('syncLive', False)
                                                     live_quantity_pct = config.get('liveQuantityPct', 10)
-                                                    live_max_position_usdt = config.get('liveMaxPositionUsdt', 100)
+                                                    live_max_position_usdt = config.get('liveMaxPositionUsdt', self.live_margin_fixed)
 
                                                     if sync_live:
                                                         # 获取实盘可用余额
