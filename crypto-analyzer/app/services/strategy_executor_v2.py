@@ -1164,6 +1164,11 @@ class StrategyExecutorV2:
 
                 # 创建多个限价单
                 created_orders = []
+                # 限价单信号类型
+                entry_signal_type = 'limit_order_trend'  # 限价单趋势跟踪
+                ema_diff_pct = ema_data.get('ema_diff_pct', 0)
+                entry_reason = f"限价单({direction}, EMA强度{ema_diff_pct:.3f}%, 回调入场)"
+
                 for i in range(orders_to_create):
                     result = self.futures_engine.open_position(
                         account_id=account_id,
@@ -1175,7 +1180,9 @@ class StrategyExecutorV2:
                         stop_loss_pct=Decimal(str(stop_loss_pct)),
                         take_profit_pct=Decimal(str(take_profit_pct)),
                         source='strategy_limit',
-                        strategy_id=strategy.get('id')
+                        strategy_id=strategy.get('id'),
+                        entry_signal_type=entry_signal_type,
+                        entry_reason=entry_reason
                     )
 
                     if result.get('success'):
