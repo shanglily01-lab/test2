@@ -179,11 +179,6 @@ signals:
       mode: fixed  # fixed=固定金额, percent=按资金百分比
       fixed_amount: 200  # 固定金额模式：每笔200 USDT
       percent: 1  # 百分比模式：账户资金的1%
-  # 趋势减弱平仓配置
-  trend_weakening_exit:
-    enabled: true  # 是否启用趋势减弱平仓
-    ema_diff_threshold: 0.5  # EMA差值收窄阈值（0.5=50%，即当前EMA差值<入场时的50%时触发）
-    min_profit_pct: 1.0  # 最小盈利要求（1.0=1%，必须盈利超过1%才允许趋势减弱平仓）
 api:
   host: 0.0.0.0
   port: 9020
