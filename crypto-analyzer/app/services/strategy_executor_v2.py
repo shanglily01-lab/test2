@@ -611,9 +611,8 @@ class StrategyExecutorV2:
             close_time = result['close_time']
             closed_direction = result['position_side'].lower()
 
-            # 计算冷却时间
-            local_tz = timezone(timedelta(hours=8))
-            now = datetime.now(local_tz).replace(tzinfo=None)
+            # 计算冷却时间（数据库存储的是UTC时间）
+            now = datetime.utcnow()
 
             # 确保 close_time 是 datetime 对象
             if isinstance(close_time, str):
