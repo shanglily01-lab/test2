@@ -79,9 +79,6 @@ class StrategyExecutorV2:
         # 反转预警冷却记录 {symbol: {'cooldown_until': datetime, 'direction': 'long'/'short', 'reason': str}}
         self._reversal_cooldowns = {}
 
-        # 平仓冷却记录 {symbol: {'close_time': datetime, 'direction': 'long'/'short'}}
-        self._close_cooldowns = {}
-
         # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
         self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
 
@@ -551,7 +548,7 @@ class StrategyExecutorV2:
 
     def _check_close_cooldown(self, symbol: str, direction: str, strategy: Dict) -> Tuple[bool, str]:
         """
-        检查平仓冷却期
+        检查平仓冷却期（从数据库查询最近平仓记录）
 
         Args:
             symbol: 交易对
@@ -562,6 +559,7 @@ class StrategyExecutorV2:
             (是否在冷却期, 原因)
         """
         from datetime import datetime, timezone, timedelta
+        import pymysql
 
         # 读取策略配置
         cooldown_minutes = strategy.get('closeReopenCooldownMinutes', 15)  # 默认15分钟
@@ -571,30 +569,67 @@ class StrategyExecutorV2:
         if cooldown_minutes <= 0:
             return False, ""
 
-        # 检查是否有平仓记录
-        cooldown_info = self._close_cooldowns.get(symbol)
-        if not cooldown_info:
-            return False, ""
+        try:
+            # 从数据库查询最近的平仓记录
+            connection = pymysql.connect(**self.db_config)
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
 
-        local_tz = timezone(timedelta(hours=8))
-        now = datetime.now(local_tz).replace(tzinfo=None)
-        close_time = cooldown_info['close_time']
-        closed_direction = cooldown_info['direction']
+            # 查询最近的平仓（只看该交易对）
+            if apply_to_same_direction:
+                # 只限制同方向
+                query = """
+                    SELECT position_side, close_time
+                    FROM futures_positions
+                    WHERE symbol = %s
+                      AND position_side = %s
+                      AND status = 'closed'
+                      AND close_time IS NOT NULL
+                    ORDER BY close_time DESC
+                    LIMIT 1
+                """
+                cursor.execute(query, (symbol, direction.upper()))
+            else:
+                # 限制所有方向
+                query = """
+                    SELECT position_side, close_time
+                    FROM futures_positions
+                    WHERE symbol = %s
+                      AND status = 'closed'
+                      AND close_time IS NOT NULL
+                    ORDER BY close_time DESC
+                    LIMIT 1
+                """
+                cursor.execute(query, (symbol,))
 
-        # 如果只限制同方向，检查方向是否匹配
-        if apply_to_same_direction and closed_direction != direction.lower():
-            return False, ""
+            result = cursor.fetchone()
+            cursor.close()
+            connection.close()
 
-        # 计算冷却时间
-        elapsed_minutes = (now - close_time).total_seconds() / 60
+            if not result:
+                return False, ""
 
-        if elapsed_minutes < cooldown_minutes:
-            remaining = cooldown_minutes - elapsed_minutes
-            direction_text = f"{direction}方向" if apply_to_same_direction else ""
-            return True, f"平仓冷却中({remaining:.0f}分钟, 刚平仓{closed_direction}{direction_text})"
-        else:
-            # 冷却期已过，清除记录
-            del self._close_cooldowns[symbol]
+            close_time = result['close_time']
+            closed_direction = result['position_side'].lower()
+
+            # 计算冷却时间
+            local_tz = timezone(timedelta(hours=8))
+            now = datetime.now(local_tz).replace(tzinfo=None)
+
+            # 确保 close_time 是 datetime 对象
+            if isinstance(close_time, str):
+                close_time = datetime.strptime(close_time, '%Y-%m-%d %H:%M:%S')
+
+            elapsed_minutes = (now - close_time).total_seconds() / 60
+
+            if elapsed_minutes < cooldown_minutes:
+                remaining = cooldown_minutes - elapsed_minutes
+                direction_text = f"{direction}方向" if apply_to_same_direction else ""
+                return True, f"平仓冷却中({remaining:.0f}分钟, 刚平仓{closed_direction}{direction_text})"
+            else:
+                return False, ""
+
+        except Exception as e:
+            logger.error(f"检查平仓冷却失败: {e}")
             return False, ""
 
     def _cancel_pending_orders_for_direction(self, symbol: str, direction: str):
@@ -2994,17 +3029,9 @@ class StrategyExecutorV2:
                 if result.get('success'):
                     logger.info(f"✅ {symbol} 平仓成功: {reason}")
 
-                    # 记录平仓冷却时间
-                    from datetime import datetime, timezone, timedelta
-                    local_tz = timezone(timedelta(hours=8))
-                    direction = position.get('position_side', '').lower()
-                    self._close_cooldowns[symbol] = {
-                        'close_time': datetime.now(local_tz).replace(tzinfo=None),
-                        'direction': direction
-                    }
-
                     # 注意: 实盘同步平仓已在 futures_engine.close_position 内部处理
                     # 无需再次调用 _sync_live_close，避免重复平仓
+                    # 平仓冷却检查会直接从数据库 futures_positions 表查询最近平仓时间
 
                     return {
                         'success': True,
