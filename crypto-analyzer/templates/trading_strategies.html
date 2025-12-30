@@ -1242,6 +1242,41 @@
                                 </div>
                             </div>
 
+                            <!-- 平仓冷却 -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-hourglass-split"></i>
+                                    平仓冷却
+                                    <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal; margin-left: 8px;">防止频繁开平仓</span>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">冷却时间（分钟）</label>
+                                        <input type="number" class="form-input" id="closeReopenCooldownMinutes" value="15" min="0" max="60" step="5">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">平仓后N分钟内不再开仓（设为0禁用）</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">
+                                            <input type="checkbox" id="closeReopenSameDirectionOnly" style="margin-right: 8px;">
+                                            仅限制同方向
+                                        </label>
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block; margin-left: 24px;">
+                                            勾选：做多平仓后只限制做多，可以做空<br>
+                                            不勾选：做多平仓后，做多和做空都限制
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 8px; padding: 8px; background: rgba(43, 111, 237, 0.1); border-radius: 4px; border-left: 3px solid var(--primary-blue);">
+                                    <small style="color: var(--text-secondary); font-size: 11px;">
+                                        <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
+                                        <strong>作用：</strong>避免在价格临界点反复开平仓造成手续费损失。建议设置15分钟，让市场方向更明确后再开仓。
+                                    </small>
+                                </div>
+                            </div>
+
                             <!-- 智能出场 -->
                             <div class="form-section">
                                 <div class="form-section-title">
@@ -2584,7 +2619,10 @@
                     trend_end_shrink_threshold: document.getElementById('pendingTrendEndThreshold') ? parseFloat(document.getElementById('pendingTrendEndThreshold').value) : 0.5,
                     check_ema_converging: document.getElementById('pendingCheckEmaConverging') ? document.getElementById('pendingCheckEmaConverging').checked : true,
                     min_ema_diff_pct: document.getElementById('pendingMinEmaDiffPct') ? parseFloat(document.getElementById('pendingMinEmaDiffPct').value) : 0.05
-                }
+                },
+                // 平仓冷却配置
+                closeReopenCooldownMinutes: document.getElementById('closeReopenCooldownMinutes') ? parseInt(document.getElementById('closeReopenCooldownMinutes').value) : 15,
+                closeReopenSameDirectionOnly: document.getElementById('closeReopenSameDirectionOnly') ? document.getElementById('closeReopenSameDirectionOnly').checked : false
             };
 
             // 验证
@@ -3151,6 +3189,14 @@
                 if (document.getElementById('pendingMinEmaDiffPct')) {
                     document.getElementById('pendingMinEmaDiffPct').value = pv.min_ema_diff_pct || 0.05;
                 }
+            }
+
+            // 平仓冷却配置
+            if (strategy.closeReopenCooldownMinutes !== undefined && document.getElementById('closeReopenCooldownMinutes')) {
+                document.getElementById('closeReopenCooldownMinutes').value = strategy.closeReopenCooldownMinutes || 15;
+            }
+            if (strategy.closeReopenSameDirectionOnly !== undefined && document.getElementById('closeReopenSameDirectionOnly')) {
+                document.getElementById('closeReopenSameDirectionOnly').checked = strategy.closeReopenSameDirectionOnly === true;
             }
 
             // 技术指标过滤器
