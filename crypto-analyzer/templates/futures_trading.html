@@ -2963,34 +2963,16 @@
             }
             
             try {
-                // 先获取当前持仓信息，保留另一个字段的值
-                const positionResponse = await fetch(`${API_BASE}/positions?account_id=2&status=open`);
-                const positionData = await positionResponse.json();
-                let currentStopLoss = null;
-                let currentTakeProfit = null;
-                
-                if (positionData.success && positionData.data) {
-                    const position = positionData.data.find(p => (p.position_id || p.id) == positionId);
-                    if (position) {
-                        currentStopLoss = position.stop_loss_price || null;
-                        currentTakeProfit = position.take_profit_price || null;
-                    }
-                }
-                
-                // 构建请求数据，保留另一个字段
+                // 只发送需要更新的字段，后端API会保留未提供的字段
                 const requestData = {};
                 if (type === 'stop_loss') {
                     requestData.stop_loss_price = price;
-                    // 保留原有的止盈（即使为 null 也要明确传递）
-                    requestData.take_profit_price = currentTakeProfit !== null && currentTakeProfit !== undefined ? currentTakeProfit : null;
                 } else if (type === 'take_profit') {
                     requestData.take_profit_price = price;
-                    // 保留原有的止损（即使为 null 也要明确传递）
-                    requestData.stop_loss_price = currentStopLoss !== null && currentStopLoss !== undefined ? currentStopLoss : null;
                 }
-                
+
                 const url = `${API_BASE}/positions/${positionId}/stop-loss-take-profit`;
-                
+
                 const response = await fetch(url, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -3029,24 +3011,11 @@
             }
             
             try {
-                // 先获取当前持仓信息，保留止盈
-                const positionResponse = await fetch(`${API_BASE}/positions?account_id=2&status=open`);
-                const positionData = await positionResponse.json();
-                let currentTakeProfit = null;
-                
-                if (positionData.success && positionData.data) {
-                    const position = positionData.data.find(p => (p.position_id || p.id) == positionId);
-                    if (position) {
-                        currentTakeProfit = position.take_profit_price || null;
-                    }
-                }
-                
-                // 构建请求数据，清除止损但保留止盈（即使为 null 也要明确传递）
-                const requestData = { 
-                    stop_loss_price: null,
-                    take_profit_price: currentTakeProfit !== null && currentTakeProfit !== undefined ? currentTakeProfit : null
+                // 只发送需要清除的字段，后端API会保留未提供的字段
+                const requestData = {
+                    stop_loss_price: null
                 };
-                
+
                 const response = await fetch(`${API_BASE}/positions/${positionId}/stop-loss-take-profit`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -3076,24 +3045,11 @@
             }
             
             try {
-                // 先获取当前持仓信息，保留止损
-                const positionResponse = await fetch(`${API_BASE}/positions?account_id=2&status=open`);
-                const positionData = await positionResponse.json();
-                let currentStopLoss = null;
-                
-                if (positionData.success && positionData.data) {
-                    const position = positionData.data.find(p => (p.position_id || p.id) == positionId);
-                    if (position) {
-                        currentStopLoss = position.stop_loss_price || null;
-                    }
-                }
-                
-                // 构建请求数据，清除止盈但保留止损（即使为 null 也要明确传递）
-                const requestData = { 
-                    take_profit_price: null,
-                    stop_loss_price: currentStopLoss !== null && currentStopLoss !== undefined ? currentStopLoss : null
+                // 只发送需要清除的字段，后端API会保留未提供的字段
+                const requestData = {
+                    take_profit_price: null
                 };
-                
+
                 const response = await fetch(`${API_BASE}/positions/${positionId}/stop-loss-take-profit`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
