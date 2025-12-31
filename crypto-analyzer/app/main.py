@@ -12,6 +12,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 import asyncio
+import threading
 from datetime import datetime
 from typing import Optional
 from fastapi import FastAPI, HTTPException
@@ -75,6 +76,21 @@ price_cache_service = None  # 价格缓存服务
 pending_order_executor = None  # 待成交订单自动执行器（现货限价单）
 futures_limit_order_executor = None  # 合约限价单自动执行器
 futures_monitor_service = None  # 合约止盈止损监控服务
+
+# 技术信号页面API缓存配置（5分钟缓存）
+_technical_signals_cache = None
+_technical_signals_cache_time = None
+_technical_signals_cache_lock = threading.Lock()
+
+_trend_analysis_cache = None
+_trend_analysis_cache_time = None
+_trend_analysis_cache_lock = threading.Lock()
+
+_futures_signals_cache = None
+_futures_signals_cache_time = None
+_futures_signals_cache_lock = threading.Lock()
+
+TECHNICAL_SIGNALS_CACHE_TTL = 300  # 5分钟缓存
 
 
 @asynccontextmanager
@@ -2348,10 +2364,20 @@ async def get_technical_signals():
     """
     获取所有交易对的技术信号（15m, 1h, 1d）
     包含 EMA, MACD, RSI, BOLL 等技术指标和技术评分
-    
+
     Returns:
         各交易对在不同时间周期的技术指标数据
     """
+    global _technical_signals_cache, _technical_signals_cache_time
+
+    # 检查缓存
+    with _technical_signals_cache_lock:
+        if _technical_signals_cache is not None and _technical_signals_cache_time is not None:
+            cache_age = (datetime.now() - _technical_signals_cache_time).total_seconds()
+            if cache_age < TECHNICAL_SIGNALS_CACHE_TTL:
+                logger.debug(f"✅ 使用缓存的技术信号数据 (缓存年龄: {cache_age:.0f}秒)")
+                return _technical_signals_cache
+
     try:
         import pymysql
         
@@ -2443,12 +2469,20 @@ async def get_technical_signals():
                     else:
                         item['current_price'] = None
                         item['change_24h'] = None
-            
-            return {
+
+            result = {
                 'success': True,
                 'data': signals_list,
                 'total': len(signals_list)
             }
+
+            # 更新缓存
+            with _technical_signals_cache_lock:
+                _technical_signals_cache = result
+                _technical_signals_cache_time = datetime.now()
+                logger.debug(f"✅ 技术信号数据已缓存 ({len(signals_list)} 条记录)")
+
+            return result
             
         finally:
             cursor.close()
@@ -2471,6 +2505,16 @@ async def get_trend_analysis():
     Returns:
         各交易对在不同时间周期的趋势评估
     """
+    global _trend_analysis_cache, _trend_analysis_cache_time
+
+    # 检查缓存
+    with _trend_analysis_cache_lock:
+        if _trend_analysis_cache is not None and _trend_analysis_cache_time is not None:
+            cache_age = (datetime.now() - _trend_analysis_cache_time).total_seconds()
+            if cache_age < TECHNICAL_SIGNALS_CACHE_TTL:
+                logger.debug(f"✅ 使用缓存的趋势分析数据 (缓存年龄: {cache_age:.0f}秒)")
+                return _trend_analysis_cache
+
     try:
         import pymysql
 
@@ -2623,11 +2667,19 @@ async def get_trend_analysis():
                         item['change_24h'] = None
                         item['price_updated_at'] = None
 
-            return {
+            result = {
                 'success': True,
                 'data': trend_list,
                 'total': len(trend_list)
             }
+
+            # 更新缓存
+            with _trend_analysis_cache_lock:
+                _trend_analysis_cache = result
+                _trend_analysis_cache_time = datetime.now()
+                logger.debug(f"✅ 趋势分析数据已缓存 ({len(trend_list)} 条记录)")
+
+            return result
 
         finally:
             cursor.close()
@@ -3040,17 +3092,27 @@ async def get_realtime_prices(symbols: str = None):
 async def get_futures_signals():
     """
     获取合约交易信号分析
-    
+
     综合考虑：
     - 资金费率（funding rate）
     - 多空比（long/short ratio）
     - 持仓量变化（open interest）
     - 技术指标（RSI、MACD、EMA等）
     - 价格趋势
-    
+
     Returns:
         各交易对的合约信号分析
     """
+    global _futures_signals_cache, _futures_signals_cache_time
+
+    # 检查缓存
+    with _futures_signals_cache_lock:
+        if _futures_signals_cache is not None and _futures_signals_cache_time is not None:
+            cache_age = (datetime.now() - _futures_signals_cache_time).total_seconds()
+            if cache_age < TECHNICAL_SIGNALS_CACHE_TTL:
+                logger.debug(f"✅ 使用缓存的合约信号数据 (缓存年龄: {cache_age:.0f}秒)")
+                return _futures_signals_cache
+
     try:
         import pymysql
         
@@ -3153,12 +3215,20 @@ async def get_futures_signals():
             
             # 按信号强度排序
             futures_signals.sort(key=lambda x: abs(x.get('signal_score', 0)), reverse=True)
-            
-            return {
+
+            result = {
                 'success': True,
                 'data': futures_signals,
                 'total': len(futures_signals)
             }
+
+            # 更新缓存
+            with _futures_signals_cache_lock:
+                _futures_signals_cache = result
+                _futures_signals_cache_time = datetime.now()
+                logger.debug(f"✅ 合约信号数据已缓存 ({len(futures_signals)} 条记录)")
+
+            return result
             
         finally:
             cursor.close()
