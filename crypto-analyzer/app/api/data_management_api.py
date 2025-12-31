@@ -27,6 +27,12 @@ _db_pool = None
 _db_pool_lock = threading.Lock()
 _db_config = None
 
+# collection-status缓存（数据采集情况不需要实时更新，缓存5分钟）
+_collection_status_cache = None
+_collection_status_cache_time = None
+_collection_status_cache_lock = threading.Lock()
+COLLECTION_STATUS_CACHE_TTL = 300  # 缓存5分钟
+
 
 def get_db_config():
     """获取数据库配置（缓存）"""
@@ -789,7 +795,18 @@ async def get_collection_status():
     """
     获取各类数据的采集情况
     包括实时数据、合约数据、新闻数据等的最新采集时间
+    使用5分钟缓存以提升性能
     """
+    global _collection_status_cache, _collection_status_cache_time
+
+    # 检查缓存是否有效
+    with _collection_status_cache_lock:
+        if _collection_status_cache is not None and _collection_status_cache_time is not None:
+            cache_age = (datetime.now() - _collection_status_cache_time).total_seconds()
+            if cache_age < COLLECTION_STATUS_CACHE_TTL:
+                logger.debug(f"使用缓存的数据采集情况 (缓存年龄: {cache_age:.0f}秒)")
+                return _collection_status_cache
+
     conn = None
     try:
         conn = get_db_connection()
@@ -833,128 +850,52 @@ async def get_collection_status():
                 'error': str(e)
             })
         
-        # 2. K线数据采集情况
+        # 2. K线数据采集情况（优化：一次查询获取所有信息）
         try:
             conn = _ensure_connection(conn)
             cursor = conn.cursor()
-            # 尝试使用timestamp字段，如果失败则使用created_at
-            try:
-                cursor.execute("""
-                    SELECT 
-                        COUNT(*) as count,
-                        MAX(timestamp) as latest_time,
-                        MIN(timestamp) as oldest_time,
-                        COUNT(DISTINCT symbol) as symbol_count,
-                        COUNT(DISTINCT timeframe) as timeframe_count
-                    FROM kline_data
-                """)
-            except:
-                # 如果timestamp字段不存在或出错，使用created_at
-                cursor.execute("""
-                    SELECT 
-                        COUNT(*) as count,
-                        MAX(created_at) as latest_time,
-                        MIN(created_at) as oldest_time,
-                        COUNT(DISTINCT symbol) as symbol_count,
-                        COUNT(DISTINCT timeframe) as timeframe_count
-                    FROM kline_data
-                """)
+
+            # 一次查询获取所有统计信息和各时间周期的最新时间
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as count,
+                    COUNT(DISTINCT symbol) as symbol_count,
+                    COUNT(DISTINCT timeframe) as timeframe_count,
+                    MAX(CASE WHEN created_at IS NOT NULL THEN created_at ELSE timestamp END) as latest_time,
+                    MIN(CASE WHEN created_at IS NOT NULL THEN created_at ELSE timestamp END) as oldest_time,
+                    MAX(CASE WHEN timeframe = '1m' AND created_at IS NOT NULL THEN created_at END) as latest_1m,
+                    MAX(CASE WHEN timeframe = '5m' AND created_at IS NOT NULL THEN created_at END) as latest_5m,
+                    MAX(CASE WHEN timeframe = '15m' AND created_at IS NOT NULL THEN created_at END) as latest_15m,
+                    MAX(CASE WHEN timeframe = '1h' AND created_at IS NOT NULL THEN created_at END) as latest_1h,
+                    MAX(CASE WHEN timeframe = '1d' AND created_at IS NOT NULL THEN created_at END) as latest_1d
+                FROM kline_data
+            """)
             kline_result = cursor.fetchone()
-            
-            # 对于K线数据，使用created_at字段来判断状态（本地时间，更准确）
-            # 因为timestamp字段可能是UTC时间，会导致时区判断错误
-            # 不同时间周期的采集频率不同，使用最严格的时间周期（1m）来判断
-            # 但也要考虑其他时间周期（5m, 15m, 1h, 1d）的采集频率
+
+            # 根据各时间周期判断状态（优先级从高到低）
             status = 'inactive'
-            
-            # 检查1分钟K线的最新created_at时间（最严格，阈值10分钟）
-            cursor.execute("""
-                SELECT MAX(created_at) as latest_created
-                FROM kline_data
-                WHERE timeframe = '1m' AND created_at IS NOT NULL
-            """)
-            kline_1m_result = cursor.fetchone()
-            if kline_1m_result and kline_1m_result['latest_created']:
-                status_1m = _check_status_active(kline_1m_result['latest_created'], 600)  # 10分钟阈值
-                if status_1m == 'active':
-                    status = 'active'
-                elif status_1m == 'warning' and status != 'active':
-                    status = 'warning'
-            
-            # 如果1分钟数据不活跃，检查其他时间周期
-            if status == 'inactive':
-                # 检查5分钟K线（阈值30分钟）
-                cursor.execute("""
-                    SELECT MAX(created_at) as latest_created
-                    FROM kline_data
-                    WHERE timeframe = '5m' AND created_at IS NOT NULL
-                """)
-                kline_5m_result = cursor.fetchone()
-                if kline_5m_result and kline_5m_result['latest_created']:
-                    status_5m = _check_status_active(kline_5m_result['latest_created'], 1800)  # 30分钟阈值
-                    if status_5m == 'active':
+            thresholds = [
+                ('latest_1m', 600),      # 1分钟: 10分钟阈值
+                ('latest_5m', 1800),     # 5分钟: 30分钟阈值
+                ('latest_15m', 3600),    # 15分钟: 1小时阈值
+                ('latest_1h', 10800),    # 1小时: 3小时阈值
+                ('latest_1d', 172800)    # 1天: 2天阈值
+            ]
+
+            for field, threshold in thresholds:
+                if kline_result and kline_result[field]:
+                    check_status = _check_status_active(kline_result[field], threshold)
+                    if check_status == 'active':
                         status = 'active'
-                    elif status_5m == 'warning' and status != 'active':
+                        break
+                    elif check_status == 'warning' and status == 'inactive':
                         status = 'warning'
-                
-                # 检查15分钟K线（阈值1小时）
-                cursor.execute("""
-                    SELECT MAX(created_at) as latest_created
-                    FROM kline_data
-                    WHERE timeframe = '15m' AND created_at IS NOT NULL
-                """)
-                kline_15m_result = cursor.fetchone()
-                if kline_15m_result and kline_15m_result['latest_created']:
-                    status_15m = _check_status_active(kline_15m_result['latest_created'], 3600)  # 1小时阈值
-                    if status_15m == 'active':
-                        status = 'active'
-                    elif status_15m == 'warning' and status != 'active':
-                        status = 'warning'
-                
-                # 检查1小时K线（阈值3小时）
-                cursor.execute("""
-                    SELECT MAX(created_at) as latest_created
-                    FROM kline_data
-                    WHERE timeframe = '1h' AND created_at IS NOT NULL
-                """)
-                kline_1h_result = cursor.fetchone()
-                if kline_1h_result and kline_1h_result['latest_created']:
-                    status_1h = _check_status_active(kline_1h_result['latest_created'], 10800)  # 3小时阈值
-                    if status_1h == 'active':
-                        status = 'active'
-                    elif status_1h == 'warning' and status != 'active':
-                        status = 'warning'
-                
-                # 检查1天K线（阈值2天）
-                cursor.execute("""
-                    SELECT MAX(created_at) as latest_created
-                    FROM kline_data
-                    WHERE timeframe = '1d' AND created_at IS NOT NULL
-                """)
-                kline_1d_result = cursor.fetchone()
-                if kline_1d_result and kline_1d_result['latest_created']:
-                    status_1d = _check_status_active(kline_1d_result['latest_created'], 172800)  # 2天阈值
-                    if status_1d == 'active':
-                        status = 'active'
-                    elif status_1d == 'warning' and status != 'active':
-                        status = 'warning'
-            
-            # 如果created_at字段为空，回退到使用timestamp字段（考虑时区问题）
-            if status == 'inactive':
-                latest_time = kline_result['latest_time'] if kline_result else None
-                if latest_time:
-                    # timestamp可能是UTC时间，需要加上8小时（UTC+8）来判断
-                    # 或者直接使用timestamp，但阈值放宽
-                    status = _check_status_active(latest_time, 1800)  # 放宽到30分钟阈值
-            
-            # 获取最新的created_at时间用于显示（更准确）
-            cursor.execute("""
-                SELECT MAX(created_at) as latest_created
-                FROM kline_data
-                WHERE created_at IS NOT NULL
-            """)
-            latest_created_result = cursor.fetchone()
-            display_time = latest_created_result['latest_created'] if latest_created_result and latest_created_result['latest_created'] else latest_time
+
+            # 如果所有时间周期都没有created_at，回退到timestamp
+            if status == 'inactive' and kline_result and kline_result['latest_time']:
+                status = _check_status_active(kline_result['latest_time'], 1800)
+
+            display_time = kline_result['latest_time'] if kline_result else None
             
             collection_status.append({
                 'type': 'K线数据',
@@ -1337,11 +1278,20 @@ async def get_collection_status():
         if 'cursor' in locals() and cursor:
             cursor.close()
         return_db_connection(conn)
-        
-        return {
+
+        # 准备返回结果
+        result = {
             'success': True,
             'data': collection_status
         }
+
+        # 更新缓存
+        with _collection_status_cache_lock:
+            _collection_status_cache = result
+            _collection_status_cache_time = datetime.now()
+            logger.debug("已更新数据采集情况缓存")
+
+        return result
         
     except Exception as e:
         logger.error(f"获取数据采集情况失败: {e}")
