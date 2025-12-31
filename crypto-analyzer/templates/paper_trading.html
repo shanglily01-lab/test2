@@ -1278,56 +1278,29 @@
             }
         }
 
-        // 加载持仓
+        // 加载持仓（优化：直接使用API返回的价格，无需额外请求）
         async function loadPositions() {
             try {
                 const response = await fetch('/api/paper-trading/positions');
                 const data = await response.json();
 
                 const container = document.getElementById('positions-list');
-                
+
                 // 更新持仓映射表
                 positionsMap = {};
                 const positions = data.positions || [];
-                
-                // 为每个持仓实时获取当前价格
-                const positionsWithPrices = await Promise.all(positions.map(async (pos) => {
-                    let currentPrice = pos.current_price || 0;
-                    try {
-                        // 实时获取当前价格
-                        const priceResponse = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(pos.symbol)}&force_refresh=true`);
-                        if (priceResponse.ok) {
-                            const priceData = await priceResponse.json();
-                            if (priceData.price && priceData.price > 0) {
-                                currentPrice = parseFloat(priceData.price);
-                            }
-                        }
-                    } catch (e) {
-                        // 如果获取失败，使用后端返回的价格
-                    }
-                    
-                    // 计算实时盈亏
+
+                // 直接使用API返回的价格和计算好的盈亏数据，无需额外请求
+                const positionsWithPrices = positions.map(pos => {
+                    const currentPrice = parseFloat(pos.current_price) || 0;
                     const quantity = parseFloat(pos.quantity) || 0;
                     const avgEntryPrice = parseFloat(pos.avg_entry_price) || 0;
-                    
-                    let unrealizedPnl = 0;
-                    let unrealizedPnlPct = 0;
-                    let marketValue = 0;
-                    
-                    if (currentPrice > 0 && avgEntryPrice > 0 && quantity > 0) {
-                        marketValue = currentPrice * quantity;
-                        unrealizedPnl = (currentPrice - avgEntryPrice) * quantity;
-                        const cost = avgEntryPrice * quantity;
-                        if (cost > 0) {
-                            unrealizedPnlPct = (unrealizedPnl / cost) * 100;
-                        }
-                    } else {
-                        // 使用后端计算的值
-                        unrealizedPnl = parseFloat(pos.unrealized_pnl) || 0;
-                        unrealizedPnlPct = parseFloat(pos.unrealized_pnl_pct) || 0;
-                        marketValue = parseFloat(pos.market_value) || 0;
-                    }
-                    
+
+                    // 优先使用后端计算的值（已经考虑了实时价格）
+                    const unrealizedPnl = parseFloat(pos.unrealized_pnl) || 0;
+                    const unrealizedPnlPct = parseFloat(pos.unrealized_pnl_pct) || 0;
+                    const marketValue = parseFloat(pos.market_value) || 0;
+
                     const updatedPos = {
                         ...pos,
                         current_price: currentPrice,
@@ -1335,10 +1308,10 @@
                         unrealized_pnl_pct: unrealizedPnlPct,
                         market_value: marketValue
                     };
-                    
+
                     positionsMap[pos.symbol] = updatedPos;
                     return updatedPos;
-                }));
+                });
                 
                 let htmlContent = '';
                 
