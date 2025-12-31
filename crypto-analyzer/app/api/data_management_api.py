@@ -33,6 +33,12 @@ _collection_status_cache_time = None
 _collection_status_cache_lock = threading.Lock()
 COLLECTION_STATUS_CACHE_TTL = 300  # 缓存5分钟
 
+# statistics缓存（数据统计不需要实时更新，缓存5分钟）
+_statistics_cache = None
+_statistics_cache_time = None
+_statistics_cache_lock = threading.Lock()
+STATISTICS_CACHE_TTL = 300  # 缓存5分钟
+
 
 def get_db_config():
     """获取数据库配置（缓存）"""
@@ -337,6 +343,16 @@ async def get_data_statistics():
     包括记录数、最新数据时间、数据范围等
     对于大表使用近似计数和索引优化查询
     """
+    global _statistics_cache, _statistics_cache_time
+
+    # 检查缓存是否有效
+    with _statistics_cache_lock:
+        if _statistics_cache is not None and _statistics_cache_time is not None:
+            cache_age = (datetime.now() - _statistics_cache_time).total_seconds()
+            if cache_age < STATISTICS_CACHE_TTL:
+                logger.debug(f"使用缓存的数据统计 (缓存年龄: {cache_age:.0f}秒)")
+                return _statistics_cache
+
     try:
         with DBConnection() as conn:
             cursor = conn.cursor()
@@ -563,8 +579,8 @@ async def get_data_statistics():
         # 计算总计
         total_count = sum(s['count'] for s in statistics)
         total_size = sum(s['size_mb'] for s in statistics)
-        
-        return {
+
+        result = {
             'success': True,
             'data': {
                 'tables': statistics,
@@ -575,6 +591,14 @@ async def get_data_statistics():
                 }
             }
         }
+
+        # 更新缓存
+        with _statistics_cache_lock:
+            _statistics_cache = result
+            _statistics_cache_time = datetime.now()
+            logger.debug("数据统计已缓存")
+
+        return result
         
     except Exception as e:
         logger.error(f"获取数据统计失败: {e}")
