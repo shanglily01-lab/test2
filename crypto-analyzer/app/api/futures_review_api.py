@@ -358,6 +358,26 @@ async def get_review_summary(
         """, (account_id,))
         unrealized = cursor.fetchone()
 
+        # 按交易对统计胜负
+        cursor.execute("""
+            SELECT
+                symbol,
+                COUNT(*) as total_trades,
+                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) as losses,
+                SUM(CASE WHEN realized_pnl = 0 THEN 1 ELSE 0 END) as break_even,
+                SUM(realized_pnl) as total_pnl,
+                AVG(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE NULL END) as avg_win,
+                AVG(CASE WHEN realized_pnl < 0 THEN realized_pnl ELSE NULL END) as avg_loss,
+                MAX(realized_pnl) as max_win,
+                MIN(realized_pnl) as max_loss
+            FROM futures_positions
+            WHERE account_id = %s AND status = 'closed' AND close_time >= %s
+            GROUP BY symbol
+            ORDER BY total_pnl DESC
+        """, (account_id, time_threshold))
+        symbol_stats = cursor.fetchall()
+
         cursor.close()
         conn.close()
 
@@ -374,6 +394,28 @@ async def get_review_summary(
         total_orders = order_stats['total_orders'] or 0
         filled_orders = order_stats['filled_orders'] or 0
         success_rate = (filled_orders / total_orders * 100) if total_orders > 0 else 0
+
+        # 处理交易对统计数据
+        symbol_performance = []
+        for row in symbol_stats:
+            total = row['total_trades'] or 0
+            wins = row['wins'] or 0
+            losses = row['losses'] or 0
+            win_rate_sym = (wins / total * 100) if total > 0 else 0
+
+            symbol_performance.append({
+                "symbol": row['symbol'],
+                "total_trades": total,
+                "wins": wins,
+                "losses": losses,
+                "break_even": row['break_even'] or 0,
+                "win_rate": round(win_rate_sym, 1),
+                "total_pnl": round(float(row['total_pnl'] or 0), 2),
+                "avg_win": round(float(row['avg_win'] or 0), 2),
+                "avg_loss": round(float(row['avg_loss'] or 0), 2),
+                "max_win": round(float(row['max_win'] or 0), 2),
+                "max_loss": round(float(row['max_loss'] or 0), 2)
+            })
 
         return {
             "success": True,
@@ -405,7 +447,8 @@ async def get_review_summary(
                     "max_profit": float(position_stats['max_profit'] or 0),
                     "max_loss": float(position_stats['max_loss'] or 0)
                 },
-                "avg_holding_minutes": round(float(position_stats['avg_holding_minutes'] or 0), 1)
+                "avg_holding_minutes": round(float(position_stats['avg_holding_minutes'] or 0), 1),
+                "symbol_performance": symbol_performance
             }
         }
 

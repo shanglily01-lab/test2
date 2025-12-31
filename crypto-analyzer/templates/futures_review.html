@@ -228,6 +228,9 @@
                 <button class="tab-btn active" onclick="switchTab('trades')">
                     <i class="bi bi-list-check"></i> 交易清单
                 </button>
+                <button class="tab-btn" onclick="switchTab('symbols')">
+                    <i class="bi bi-bar-chart-line"></i> 交易对表现
+                </button>
                 <button class="tab-btn" onclick="switchTab('cancelled')">
                     <i class="bi bi-x-circle"></i> 取消订单
                 </button>
@@ -277,6 +280,40 @@
                         </table>
                     </div>
                     <div id="trades-pagination"></div>
+                </div>
+            </div>
+
+            <!-- Symbols Performance Tab -->
+            <div id="symbols-tab" class="tab-content">
+                <div id="symbolsContent">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>排名</th>
+                                    <th>交易对</th>
+                                    <th>交易次数</th>
+                                    <th>盈利次数</th>
+                                    <th>亏损次数</th>
+                                    <th>平局次数</th>
+                                    <th>胜率</th>
+                                    <th>总盈亏</th>
+                                    <th>平均盈利</th>
+                                    <th>平均亏损</th>
+                                    <th>最大盈利</th>
+                                    <th>最大亏损</th>
+                                </tr>
+                            </thead>
+                            <tbody id="symbolsTableBody">
+                                <tr>
+                                    <td colspan="12" class="empty-state">
+                                        <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
+                                        <div class="empty-state-text">暂无数据</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -548,6 +585,33 @@
                             <div class="stat-change">持仓时长</div>
                         </div>
                     `;
+
+                    // 更新交易对表现表格
+                    if (data.symbol_performance && data.symbol_performance.length > 0) {
+                        const symbolsTableBody = document.getElementById('symbolsTableBody');
+                        symbolsTableBody.innerHTML = data.symbol_performance.map((item, index) => `
+                            <tr>
+                                <td><strong>${index + 1}</strong></td>
+                                <td><strong>${item.symbol}</strong></td>
+                                <td>${item.total_trades}</td>
+                                <td class="pnl-positive">${item.wins}</td>
+                                <td class="pnl-negative">${item.losses}</td>
+                                <td class="text-secondary">${item.break_even}</td>
+                                <td>
+                                    <span class="${item.win_rate >= 50 ? 'pnl-positive' : 'pnl-negative'}">
+                                        ${item.win_rate}%
+                                    </span>
+                                </td>
+                                <td>
+                                    ${formatPnl(item.total_pnl)}
+                                </td>
+                                <td class="pnl-positive">+${formatNumber(item.avg_win)}</td>
+                                <td class="pnl-negative">${formatNumber(item.avg_loss)}</td>
+                                <td class="pnl-positive">+${formatNumber(item.max_win)}</td>
+                                <td class="pnl-negative">${formatNumber(item.max_loss)}</td>
+                            </tr>
+                        `).join('');
+                    }
                 }
             } catch (error) {
                 console.error('加载统计失败:', error);
