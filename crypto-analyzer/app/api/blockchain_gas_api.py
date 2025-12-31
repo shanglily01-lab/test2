@@ -40,10 +40,15 @@ def get_db_connection():
             config = load_config(config_path)
 
             mysql_config = config.get('database', {}).get('mysql', {})
-            
+
+            # 确保端口号是整数类型
+            port = mysql_config.get('port', 3306)
+            if isinstance(port, str):
+                port = int(port)
+
             db_config = {
                 "host": mysql_config.get('host', 'localhost'),
-                "port": mysql_config.get('port', 3306),
+                "port": port,
                 "user": mysql_config.get('user', 'root'),
                 "password": mysql_config.get('password', ''),
                 "database": mysql_config.get('database', 'crypto_analyzer'),

@@ -97,10 +97,10 @@ class BlockchainGasCollector:
         self._load_api_keys()
     
     def _load_config(self) -> dict:
-        """加载配置文件"""
+        """加载配置文件（支持环境变量替换）"""
         try:
-            with open(self.config_path, 'r', encoding='utf-8') as f:
-                return yaml.safe_load(f)
+            from app.utils.config_loader import load_config
+            return load_config(self.config_path)
         except Exception as e:
             logger.error(f"加载配置文件失败: {e}")
             return {}
@@ -134,13 +134,18 @@ class BlockchainGasCollector:
         """初始化数据库连接池"""
         # 从 config.yaml 的 database.mysql 路径读取配置
         mysql_config = self.config.get('database', {}).get('mysql', {})
-        
+
+        # 确保端口号是整数类型
+        port = mysql_config.get('port', 3306)
+        if isinstance(port, str):
+            port = int(port)
+
         pool_config = {
             'pool_name': 'gas_collector_pool',
             'pool_size': 10,  # 增加连接池大小
             'pool_reset_session': True,
             'host': mysql_config.get('host', 'localhost'),
-            'port': mysql_config.get('port', 3306),
+            'port': port,
             'user': mysql_config.get('user', 'root'),
             'password': mysql_config.get('password', ''),
             'database': mysql_config.get('database', 'binance-data'),
