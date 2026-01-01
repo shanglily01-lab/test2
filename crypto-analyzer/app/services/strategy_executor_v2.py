@@ -836,12 +836,14 @@ class StrategyExecutorV2:
         # 使用已收盘K线的EMA差值
         ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
 
-        # 从策略配置获取最小信号强度，默认使用类常量
-        min_strength = self.MIN_SIGNAL_STRENGTH
+        # 金叉/死叉使用独立的最小强度阈值（默认0.01%，比普通信号0.05%低）
+        # 因为金叉/死叉刚发生时差值很小，但信号本身已经很强
+        crossover_min_strength = 0.01
         if strategy:
             min_signal_strength = strategy.get('minSignalStrength', {})
             if isinstance(min_signal_strength, dict):
-                min_strength = min_signal_strength.get('ema9_26', self.MIN_SIGNAL_STRENGTH)
+                # 如果配置了 crossover 字段，使用它；否则使用默认0.01%
+                crossover_min_strength = min_signal_strength.get('crossover', 0.01)
 
         # 金叉：前一根EMA9 <= EMA26，当前EMA9 > EMA26（已收盘确认）
         is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
@@ -849,15 +851,15 @@ class StrategyExecutorV2:
         # 死叉：前一根EMA9 >= EMA26，当前EMA9 < EMA26（已收盘确认）
         is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
 
-        # 金叉/死叉需要检查信号强度
+        # 金叉/死叉使用更低的强度要求
         if is_golden_cross:
-            if ema_diff_pct < min_strength:
-                return None, f"金叉信号强度不足({ema_diff_pct:.3f}% < {min_strength}%)"
+            if ema_diff_pct < crossover_min_strength:
+                return None, f"金叉信号强度不足({ema_diff_pct:.3f}% < {crossover_min_strength}%)"
             return 'long', f"金叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
 
         if is_death_cross:
-            if ema_diff_pct < min_strength:
-                return None, f"死叉信号强度不足({ema_diff_pct:.3f}% < {min_strength}%)"
+            if ema_diff_pct < crossover_min_strength:
+                return None, f"死叉信号强度不足({ema_diff_pct:.3f}% < {crossover_min_strength}%)"
             return 'short', f"死叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
 
         return None, "无金叉/死叉信号"
