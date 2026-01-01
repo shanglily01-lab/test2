@@ -2874,10 +2874,10 @@ class StrategyExecutorV2:
                 # 使用策略配置的 longPrice / shortPrice 参数
                 # 30分钟未成交自动取消
 
-                # 金叉/死叉/反转开仓强制使用市价单（立即成交）
-                if signal_type in ['golden_cross', 'death_cross', 'reversal_cross']:
+                # 金叉/死叉/反转/RSI信号强制使用市价单（立即成交）
+                if signal_type in ['golden_cross', 'death_cross', 'reversal_cross', 'rsi_signal']:
                     limit_price = current_price
-                    logger.info(f"⚡ {symbol} 金叉/死叉/反转信号使用市价开仓: {limit_price:.8f}")
+                    logger.info(f"⚡ {symbol} {signal_type}信号使用市价开仓: {limit_price:.8f}")
                 else:
                     # 获取策略配置的限价参数
                     if direction == 'long':
@@ -3630,7 +3630,8 @@ class StrategyExecutorV2:
                         debug_info.append(f"🚀 准备执行RSI信号开仓: {entry_reason}")
                         open_result = await self.execute_open_position(
                             symbol, rsi_signal, 'rsi_signal', strategy, account_id,
-                            signal_reason=entry_reason
+                            signal_reason=entry_reason,
+                            force_market=True  # RSI信号强制市价开仓
                         )
                         debug_info.append(f"📊 RSI信号开仓结果: {open_result}")
 
