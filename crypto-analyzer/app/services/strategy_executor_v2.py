@@ -1018,6 +1018,100 @@ class StrategyExecutorV2:
             cursor.close()
             conn.close()
 
+    # ==================== RSI信号检测 ====================
+
+    def check_rsi_signal(self, symbol: str, ema_data: Dict, strategy: Dict) -> Tuple[Optional[str], str]:
+        """
+        检测RSI极值+EMA强度变化信号（独立开仓机制，不受金叉/死叉逻辑影响）
+
+        条件：
+        - LONG: RSI(15M) < longThreshold(默认30) AND EMA强度连续上升 AND 当前强度 > minEmaStrengthLong
+        - SHORT: RSI(15M) > shortThreshold(默认75) AND EMA强度连续下降 AND 当前强度 < maxEmaStrengthShort
+
+        Args:
+            symbol: 交易对
+            ema_data: EMA数据
+            strategy: 策略配置
+
+        Returns:
+            (信号方向 'long'/'short'/None, 信号描述)
+        """
+        # 检查是否启用RSI信号
+        rsi_signal_config = strategy.get('rsiSignal', {})
+        if not rsi_signal_config.get('enabled', False):
+            return None, "RSI信号未启用"
+
+        # 获取15M K线数据计算RSI
+        ema_data_15m = self.get_ema_data(symbol, '15m', 50)
+        if not ema_data_15m or 'klines' not in ema_data_15m:
+            return None, "15M数据不足"
+
+        klines = ema_data_15m['klines']
+        if len(klines) < 20:  # RSI需要至少14根K线，我们需要更多来计算趋势
+            return None, "15M K线数据不足"
+
+        # 计算RSI
+        close_prices = [float(k['close_price']) for k in klines]
+        rsi_values = self.calculate_rsi(close_prices, 14)
+        if not rsi_values or len(rsi_values) < 1:
+            return None, "RSI计算失败"
+
+        current_rsi = rsi_values[-1]
+
+        # 获取配置参数
+        long_threshold = rsi_signal_config.get('longThreshold', 30)
+        short_threshold = rsi_signal_config.get('shortThreshold', 75)
+        trend_bars = rsi_signal_config.get('emaStrengthTrendBars', 2)  # 连续趋势K线数
+        min_ema_strength_long = rsi_signal_config.get('minEmaStrengthLong', 0.15)
+        max_ema_strength_short = rsi_signal_config.get('maxEmaStrengthShort', 1.0)
+
+        # 获取EMA9和EMA26数据
+        ema9_values = ema_data_15m.get('ema9_values', [])
+        ema26_values = ema_data_15m.get('ema26_values', [])
+
+        if len(ema9_values) < trend_bars + 1 or len(ema26_values) < trend_bars + 1:
+            return None, f"EMA数据不足(需要{trend_bars + 1}根K线)"
+
+        # 计算最近N根K线的EMA强度（差值百分比）
+        ema_strength_trend = []
+        for i in range(-2, -2 - trend_bars, -1):  # 从倒数第2根开始（已收盘K线）
+            if i >= -len(ema9_values) and i >= -len(ema26_values):
+                ema_diff_pct = abs(ema9_values[i] - ema26_values[i]) / ema26_values[i] * 100
+                ema_strength_trend.append(ema_diff_pct)
+
+        if len(ema_strength_trend) < trend_bars:
+            return None, f"EMA强度数据不足(需要{trend_bars}个数据点)"
+
+        # 检查是否连续上升或下降
+        is_increasing = all(ema_strength_trend[i] > ema_strength_trend[i+1]
+                           for i in range(len(ema_strength_trend)-1))
+        is_decreasing = all(ema_strength_trend[i] < ema_strength_trend[i+1]
+                           for i in range(len(ema_strength_trend)-1))
+
+        current_strength = ema_strength_trend[0]
+
+        # LONG信号: RSI < 30 AND EMA强度上升
+        if current_rsi < long_threshold:
+            if is_increasing and current_strength >= min_ema_strength_long:
+                trend_desc = ' > '.join([f"{s:.2f}%" for s in reversed(ema_strength_trend)])
+                return 'long', f"RSI超卖({current_rsi:.1f}<{long_threshold}) + EMA强度上升({trend_desc}, 当前{current_strength:.2f}%>={min_ema_strength_long}%)"
+            elif not is_increasing:
+                return None, f"RSI超卖({current_rsi:.1f}<{long_threshold})但EMA强度未连续上升"
+            else:
+                return None, f"RSI超卖({current_rsi:.1f}<{long_threshold})但EMA强度不足({current_strength:.2f}%<{min_ema_strength_long}%)"
+
+        # SHORT信号: RSI > 75 AND EMA强度下降
+        if current_rsi > short_threshold:
+            if is_decreasing and current_strength <= max_ema_strength_short:
+                trend_desc = ' > '.join([f"{s:.2f}%" for s in reversed(ema_strength_trend)])
+                return 'short', f"RSI超买({current_rsi:.1f}>{short_threshold}) + EMA强度下降({trend_desc}, 当前{current_strength:.2f}%<={max_ema_strength_short}%)"
+            elif not is_decreasing:
+                return None, f"RSI超买({current_rsi:.1f}>{short_threshold})但EMA强度未连续下降"
+            else:
+                return None, f"RSI超买({current_rsi:.1f}>{short_threshold})但EMA强度过高({current_strength:.2f}%>{max_ema_strength_short}%)"
+
+        return None, f"RSI({current_rsi:.1f})在正常区间[{long_threshold}, {short_threshold}]"
+
     # ==================== 限价单信号检测 ====================
 
     def check_limit_entry_signal(self, symbol: str, ema_data: Dict, strategy: Dict,
@@ -3510,7 +3604,29 @@ class StrategyExecutorV2:
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
-            # 3.5 检查限价单信号（无需自检，直接挂单）
+            # 3.5 检查RSI信号（独立开仓机制，不受金叉/死叉逻辑影响）
+            if not open_result or not open_result.get('success'):
+                rsi_signal, rsi_desc = self.check_rsi_signal(symbol, ema_data, strategy)
+                debug_info.append(f"RSI信号: {rsi_desc}")
+
+                if rsi_signal and rsi_signal in buy_directions:
+                    debug_info.append(f"✅ RSI信号匹配方向: signal={rsi_signal}")
+                    # RSI信号是独立机制，跳过技术指标过滤器
+                    # 但仍需检查开仓冷却
+                    in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, rsi_signal, strategy, strategy_id)
+                    if in_cooldown:
+                        debug_info.append(f"⏳ {cooldown_msg}")
+                    else:
+                        # 构建开仓原因
+                        entry_reason = f"rsi_signal: {rsi_desc}"
+                        debug_info.append(f"🚀 准备执行RSI信号开仓: {entry_reason}")
+                        open_result = await self.execute_open_position(
+                            symbol, rsi_signal, 'rsi_signal', strategy, account_id,
+                            signal_reason=entry_reason
+                        )
+                        debug_info.append(f"📊 RSI信号开仓结果: {open_result}")
+
+            # 3.6 检查限价单信号（无需自检，直接挂单）
             if not open_result or not open_result.get('success'):
                 limit_signal, limit_desc = self.check_limit_entry_signal(symbol, ema_data, strategy, strategy_id)
                 debug_info.append(f"限价单信号: {limit_desc}")
