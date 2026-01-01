@@ -2874,18 +2874,23 @@ class StrategyExecutorV2:
                 # 使用策略配置的 longPrice / shortPrice 参数
                 # 30分钟未成交自动取消
 
-                # 获取策略配置的限价参数
-                if direction == 'long':
-                    price_type = strategy.get('longPrice', 'market_minus_0_6')
-                else:
-                    price_type = strategy.get('shortPrice', 'market_plus_0_6')
-
-                # 计算限价
-                limit_price = self._calculate_limit_price(current_price, price_type, direction)
-                if limit_price is None:
-                    # 如果配置为 market，使用当前价格（立即成交）
+                # 金叉/死叉/反转开仓强制使用市价单（立即成交）
+                if signal_type in ['golden_cross', 'death_cross', 'reversal_cross']:
                     limit_price = current_price
-                    logger.info(f"💰 {symbol} 使用市价开仓: {limit_price:.8f}")
+                    logger.info(f"⚡ {symbol} 金叉/死叉/反转信号使用市价开仓: {limit_price:.8f}")
+                else:
+                    # 获取策略配置的限价参数
+                    if direction == 'long':
+                        price_type = strategy.get('longPrice', 'market_minus_0_6')
+                    else:
+                        price_type = strategy.get('shortPrice', 'market_plus_0_6')
+
+                    # 计算限价
+                    limit_price = self._calculate_limit_price(current_price, price_type, direction)
+                    if limit_price is None:
+                        # 如果配置为 market，使用当前价格（立即成交）
+                        limit_price = current_price
+                        logger.info(f"💰 {symbol} 使用市价开仓: {limit_price:.8f}")
 
                 # 根据限价重新计算数量
                 quantity = notional / limit_price
@@ -3504,14 +3509,15 @@ class StrategyExecutorV2:
                     debug_info.append(f"EMA+MA一致性: {reason}")
 
                     if consistent:
-                        # 金叉/死叉信号跳过RSI过滤器和开仓冷却，直接开仓
-                        debug_info.append("✅ 金叉/死叉信号跳过RSI过滤器和开仓冷却")
+                        # 金叉/死叉信号跳过RSI过滤器和开仓冷却，使用市价单立即开仓
+                        debug_info.append("✅ 金叉/死叉信号跳过RSI过滤器和开仓冷却，使用市价单")
 
                         # 构建开仓原因
                         entry_reason = f"crossover: {reason}, EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
                         open_result = await self.execute_open_position(
                             symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
-                            strategy, account_id, signal_reason=entry_reason
+                            strategy, account_id, signal_reason=entry_reason,
+                            force_market=True  # 金叉/死叉强制市价开仓
                         )
                         debug_info.append(f"📊 金叉/死叉开仓结果: {open_result}")
 
