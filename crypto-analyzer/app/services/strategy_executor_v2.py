@@ -2034,6 +2034,13 @@ class StrategyExecutorV2:
         Returns:
             (是否需要平仓, 原因)
         """
+        # RSI信号开的仓位不受反转平仓影响
+        # 原因：RSI超卖做多/超买做空本身就是"逆势"策略，短期趋势反转是正常的
+        # 应该由止损/止盈来管理，而不是反转信号
+        entry_signal_type = position.get('entry_signal_type', '')
+        if entry_signal_type == 'rsi_signal':
+            return False, "rsi_signal_skip_reversal"
+
         position_side = position.get('position_side', 'LONG')
 
         # 使用已收盘K线的EMA判断金叉/死叉，避免未收盘K线波动导致误判
