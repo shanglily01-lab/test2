@@ -1911,10 +1911,10 @@ class StrategyExecutorV2:
 
     def check_entry_cooldown(self, symbol: str, direction: str, strategy: Dict, strategy_id: int) -> Tuple[bool, str]:
         """
-        检查开仓限制（基于持仓数量而非时间冷却）
+        检查开仓限制（持仓数量 + 时间冷却）
 
-        每个币种、每个方向最多同时开 maxPositionsPerDirection 个单（默认1个）
-        不区分策略，全局统计
+        1. 每个币种、每个方向最多同时开 maxPositionsPerDirection 个单（默认1个）
+        2. 平仓后需要等待 minutes 分钟才能再次开仓（默认30分钟）
 
         Args:
             symbol: 交易对
@@ -1931,6 +1931,8 @@ class StrategyExecutorV2:
 
         # 每个方向最多同时开几个单（默认1个）
         max_positions_per_direction = entry_cooldown.get('maxPositionsPerDirection', 1)
+        # 平仓后冷却时间（分钟，默认30分钟）
+        cooldown_minutes = entry_cooldown.get('minutes', 30)
 
         try:
             conn = self.get_db_connection()
@@ -1957,15 +1959,42 @@ class StrategyExecutorV2:
 
             pending_count = cursor.fetchone()['count']
 
-            cursor.close()
-            conn.close()
-
             total_count = open_count + pending_count
 
             if total_count >= max_positions_per_direction:
+                cursor.close()
+                conn.close()
                 return True, f"{symbol} {position_side}方向已有{open_count}个持仓+{pending_count}个挂单，达到上限{max_positions_per_direction}"
 
-            return False, f"{symbol} {position_side}方向: {open_count}个持仓+{pending_count}个挂单，未达上限{max_positions_per_direction}"
+            # 3. 检查时间冷却：查询最近一次平仓时间
+            cursor.execute("""
+                SELECT close_time
+                FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND status = 'closed'
+                ORDER BY close_time DESC
+                LIMIT 1
+            """, (symbol, position_side))
+
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if result and result['close_time']:
+                from datetime import datetime, timezone, timedelta
+                last_close_time = result['close_time']
+
+                # 确保时间对象有时区信息
+                local_tz = timezone(timedelta(hours=8))
+                now = datetime.now(local_tz).replace(tzinfo=None)
+
+                if isinstance(last_close_time, datetime):
+                    minutes_since_close = (now - last_close_time).total_seconds() / 60
+
+                    if minutes_since_close < cooldown_minutes:
+                        remaining_minutes = cooldown_minutes - minutes_since_close
+                        return True, f"{symbol} {position_side}方向冷却中: 上次平仓于{last_close_time.strftime('%H:%M:%S')}，还需等待{remaining_minutes:.1f}分钟（冷却时间{cooldown_minutes}分钟）"
+
+            return False, f"{symbol} {position_side}方向: {open_count}个持仓+{pending_count}个挂单，未达上限{max_positions_per_direction}，冷却时间已过"
 
         except Exception as e:
             logger.warning(f"{symbol} 检查开仓限制失败: {e}")
