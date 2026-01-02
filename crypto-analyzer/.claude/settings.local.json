@@ -78,7 +78,12 @@
       "Bash(timeout 120 python:*)",
       "Bash(cd:*)",
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" add -A)",
-      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" status)"
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" status)",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" commit -m \"$\\(cat <<''EOF''\nfeat: RSI信号豁免反转平仓，避免过早止盈\n\n问题：RSI超卖做多后短期出现死叉被反转平仓，错过后续反弹\n根因：RSI信号是逆势策略，短期趋势反转是正常的\n\n解决方案：\n- RSI信号开的仓位跳过金叉/死叉反转平仓检查\n- 仍由止损/止盈/移动止损等机制管理风险\n- 符合逆势策略的设计逻辑\n\n修改文件：\n- app/services/strategy_executor_v2.py: 添加RSI信号豁免逻辑\n- docs/rsi_signal_feature.md: 更新v1.2，添加豁免说明\n- docs/rsi_signal_reversal_exemption.md: 新增详细说明文档\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" push origin master)",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" diff config.yaml)",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" check-ignore config.yaml)",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" ls-files:*)"
     ],
     "deny": [],
     "ask": []
