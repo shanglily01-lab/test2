@@ -44,6 +44,7 @@ class FuturesMonitorService:
         self.trade_notifier = init_trade_notifier(self.config)
 
         self.monitor = None
+        self.signal_monitor = None  # 信号反转监控器
 
         logger.info("FuturesMonitorService initialized")
 
@@ -53,6 +54,11 @@ class FuturesMonitorService:
             self.monitor = StopLossMonitor(self.db_config, self.binance_config, trade_notifier=self.trade_notifier)
             logger.info("Stop-loss monitor created")
 
+        if not self.signal_monitor:
+            from app.services.signal_reversal_monitor import SignalReversalMonitor
+            self.signal_monitor = SignalReversalMonitor(self.db_config, self.binance_config, trade_notifier=self.trade_notifier)
+            logger.info("Signal reversal monitor created")
+
     def monitor_positions(self):
         """
         监控持仓（供调度器调用）
@@ -60,9 +66,10 @@ class FuturesMonitorService:
         这个方法会被APScheduler定期调用
         """
         try:
-            if not self.monitor:
+            if not self.monitor or not self.signal_monitor:
                 self.start_monitor()
 
+            # 1. 止损止盈监控
             results = self.monitor.monitor_all_positions()
 
             # 记录重要事件
@@ -74,6 +81,13 @@ class FuturesMonitorService:
 
             if results['take_profit'] > 0:
                 logger.info(f"✅ {results['take_profit']} positions hit take-profit")
+
+            # 2. 信号反转监控
+            signal_results = self.signal_monitor.monitor_all_positions()
+
+            if signal_results and signal_results.get('reversal_closed', 0) > 0:
+                logger.info(f"🔄 {signal_results['reversal_closed']} positions closed due to signal reversal")
+                results['reversal_closed'] = signal_results['reversal_closed']
 
             return results
 
@@ -87,6 +101,11 @@ class FuturesMonitorService:
             self.monitor.close()
             self.monitor = None
             logger.info("Stop-loss monitor stopped")
+
+        if self.signal_monitor:
+            self.signal_monitor.close()
+            self.signal_monitor = None
+            logger.info("Signal reversal monitor stopped")
 
 
 # 全局实例（供调度器使用）
