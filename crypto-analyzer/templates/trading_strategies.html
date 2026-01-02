@@ -697,60 +697,6 @@
                                             </div>
                                         </div>
 
-                                        <!-- RSI信号开仓 -->
-                                        <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-md); background: linear-gradient(135deg, rgba(156, 39, 176, 0.05) 0%, rgba(103, 58, 183, 0.05) 100%); border-radius: var(--radius-md); border: 1px solid rgba(156, 39, 176, 0.3);">
-                                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                                                <input type="checkbox" id="rsiSignalEnabled" name="rsiSignalEnabled">
-                                                <label for="rsiSignalEnabled" class="checkbox-label" style="margin: 0; font-weight: 500;">🎯 启用 RSI 信号开仓</label>
-                                                <span style="background: rgba(156, 39, 176, 0.15); color: #9c27b0; font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-left: 4px;">独立机制</span>
-                                            </div>
-                                            <small style="color: var(--text-secondary); font-size: 11px; margin-bottom: 8px; display: block; margin-left: 26px;">
-                                                RSI极值+EMA强度变化信号，与金叉/死叉并存使用，不受其他过滤器影响
-                                            </small>
-
-                                            <div style="background: rgba(103, 58, 183, 0.1); border: 1px solid rgba(103, 58, 183, 0.3); border-radius: 6px; padding: 8px 12px; margin-left: 26px; margin-bottom: 12px;">
-                                                <small style="color: #673ab7; font-size: 11px; display: block;">
-                                                    💡 <strong>信号逻辑：</strong>
-                                                </small>
-                                                <small style="color: var(--text-secondary); font-size: 10px; display: block; margin-top: 4px; line-height: 1.5;">
-                                                    • 做多：15M RSI < 30 + EMA强度连续上升<br>
-                                                    • 做空：15M RSI > 75 + EMA强度连续下降
-                                                </small>
-                                            </div>
-
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 8px;">
-                                                <div>
-                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">做多RSI阈值</label>
-                                                    <input type="number" class="form-input" id="rsiSignalLongThreshold" placeholder="30" min="20" max="40" step="1" value="30" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">RSI < 此值视为超卖</small>
-                                                </div>
-                                                <div>
-                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">做空RSI阈值</label>
-                                                    <input type="number" class="form-input" id="rsiSignalShortThreshold" placeholder="75" min="60" max="85" step="1" value="75" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">RSI > 此值视为超买</small>
-                                                </div>
-                                            </div>
-
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-left: 26px; margin-top: 12px;">
-                                                <div>
-                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">做多最小EMA强度(%)</label>
-                                                    <input type="number" class="form-input" id="rsiSignalMinEmaStrengthLong" placeholder="0.15" min="0.05" max="0.5" step="0.05" value="0.15" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">做多时当前EMA强度需 ≥ 此值</small>
-                                                </div>
-                                                <div>
-                                                    <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">做空最大EMA强度(%)</label>
-                                                    <input type="number" class="form-input" id="rsiSignalMaxEmaStrengthShort" placeholder="1.0" min="0.05" max="3.0" step="0.05" value="1.0" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                    <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">做空时当前EMA强度需 ≤ 此值</small>
-                                                </div>
-                                            </div>
-
-                                            <div style="margin-left: 26px; margin-top: 12px;">
-                                                <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">连续趋势K线数</label>
-                                                <input type="number" class="form-input" id="rsiSignalEmaStrengthTrendBars" placeholder="2" min="2" max="4" step="1" value="2" style="width: 100%; padding: 6px; font-size: 13px;">
-                                                <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">EMA强度需连续上升/下降的K线数（推荐2-3）</small>
-                                            </div>
-                                        </div>
-
                                         <!-- MACD过滤器 -->
                                         <div style="margin-bottom: var(--spacing-md); padding: var(--spacing-md); background: var(--bg-secondary); border-radius: var(--radius-md); border: 1px solid var(--border-default);">
                                             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">

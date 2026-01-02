@@ -120,11 +120,6 @@ class SignalReversalMonitor:
         symbol = position['symbol']
         position_id = position['id']
         position_side = position['position_side']
-        entry_signal_type = position.get('entry_signal_type', '')
-
-        # RSI信号豁免反转平仓
-        if entry_signal_type == 'rsi_signal':
-            return False
 
         try:
             # 获取策略配置
