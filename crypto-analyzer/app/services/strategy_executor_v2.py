@@ -2215,7 +2215,21 @@ class StrategyExecutorV2:
             return True, f"ema_diff_narrowing_tp|diff:{ema_diff_pct:.2f}%|pnl:{current_pnl_pct:.2f}%"
 
         # EMA方向反转止盈：趋势已经反转，但还有盈利时止盈
+        # 添加最小持仓时间保护（15分钟），避免刚开仓就被平掉
         if not ema_supports_position and current_pnl_pct >= min_profit_pct:
+            # 检查持仓时长
+            open_time = position.get('open_time')
+            if open_time:
+                from datetime import datetime, timezone, timedelta
+                local_tz = timezone(timedelta(hours=8))
+                now = datetime.now(local_tz).replace(tzinfo=None)
+                if isinstance(open_time, datetime):
+                    duration_minutes = (now - open_time).total_seconds() / 60
+                    # 持仓时间必须 >= 15分钟才允许EMA方向反转止盈
+                    if duration_minutes < 15:
+                        logger.debug(f"{symbol} EMA方向反转止盈被跳过: 持仓时长{duration_minutes:.1f}分钟 < 15分钟")
+                        return False, ""
+
             return True, f"ema_direction_reversal_tp|pnl:{current_pnl_pct:.2f}%"
 
         return False, ""
