@@ -1151,6 +1151,11 @@ class StrategyExecutorV2:
             logger.warning(f"{symbol} 检查限价单状态失败: {e}")
             return None, f"检查限价单状态失败: {e}"
 
+        # 检查平仓后的冷却时间（使用统一的开仓冷却检查）
+        in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, direction, strategy, strategy_id)
+        if in_cooldown:
+            return None, f"限价单{cooldown_msg}"
+
         return direction, f"限价单信号({direction}, 强度{ema_diff_pct:.3f}%)"
 
     async def execute_limit_order(self, symbol: str, direction: str, strategy: Dict,
