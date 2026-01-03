@@ -2052,6 +2052,20 @@ class StrategyExecutorV2:
         if trailing_activated:
             callback_pct = max_profit_pct - current_pnl_pct
             if callback_pct >= self.TRAILING_CALLBACK:
+                # 添加最小持仓时间保护（15分钟），避免刚开仓就被移动止盈平掉
+                open_time = position.get('open_time')
+                if open_time:
+                    from datetime import datetime, timezone, timedelta
+                    local_tz = timezone(timedelta(hours=8))
+                    now = datetime.now(local_tz).replace(tzinfo=None)
+                    if isinstance(open_time, datetime):
+                        duration_minutes = (now - open_time).total_seconds() / 60
+                        # 持仓时间必须 >= 15分钟才允许移动止盈平仓
+                        if duration_minutes < 15:
+                            symbol = position.get('symbol', '')
+                            logger.debug(f"{symbol} 移动止盈被跳过: 持仓时长{duration_minutes:.1f}分钟 < 15分钟")
+                            return False, "", updates
+
                 return True, f"trailing_take_profit|max:{max_profit_pct:.2f}%|cb:{callback_pct:.2f}%", updates
 
         return False, "", updates
