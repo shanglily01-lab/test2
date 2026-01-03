@@ -2159,6 +2159,19 @@ class StrategyExecutorV2:
         # EMA差值收窄止盈：当差值缩小到阈值以下，且盈利达标时止盈
         # 条件：当前差值 < 阈值，说明趋势减弱
         if ema_diff_pct < threshold:
+            # 添加最小持仓时间保护（15分钟），避免刚开仓就被平掉
+            open_time = position.get('open_time')
+            if open_time:
+                from datetime import datetime, timezone, timedelta
+                local_tz = timezone(timedelta(hours=8))
+                now = datetime.now(local_tz).replace(tzinfo=None)
+                if isinstance(open_time, datetime):
+                    duration_minutes = (now - open_time).total_seconds() / 60
+                    # 持仓时间必须 >= 15分钟才允许EMA差值收窄止盈
+                    if duration_minutes < 15:
+                        logger.debug(f"{symbol} EMA差值收窄止盈被跳过: 持仓时长{duration_minutes:.1f}分钟 < 15分钟")
+                        return False, ""
+
             return True, f"ema_diff_narrowing_tp|diff:{ema_diff_pct:.2f}%|pnl:{current_pnl_pct:.2f}%"
 
         # EMA方向反转止盈：趋势已经反转，但还有盈利时止盈
