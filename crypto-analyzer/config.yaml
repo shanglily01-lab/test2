@@ -19,14 +19,11 @@ symbols:
 - AAVE/USDT
 - UNI/USDT
 - ENA/USDT
-- AVAX/USDT
 - APT/USDT
-- DASH/USDT
 - VET/USDT
 - CHZ/USDT
 - XLM/USDT
 - XMR/USDT
-- XTZ/USDT
 - ALGO/USDT
 - ZRX/USDT
 demo_mode: false
