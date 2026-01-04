@@ -26,6 +26,17 @@ symbols:
 - XMR/USDT
 - ALGO/USDT
 - ZRX/USDT
+- ATOM/USDT
+- MATIC/USDT
+- DYDX/USDT
+- COMP/USDT
+- CRV/USDT
+- LDO/USDT
+- KPEPE/USDT
+- RNDR/USDT
+- KSHIB/USDT
+- PUMP/USDT
+
 demo_mode: false
 exchanges:
   binance:
