@@ -2121,7 +2121,7 @@ class StrategyExecutorV2:
             return False, ""
 
         threshold = ema_diff_tp.get('threshold', 0.5)  # EMA差值阈值，默认0.5%
-        min_profit_pct = ema_diff_tp.get('minProfitPct', 0.3)  # 最小盈利要求，默认0.3%
+        min_profit_pct = ema_diff_tp.get('minProfitPct', 1.5)  # 最小盈利要求，默认1.5%
 
         # 检查是否达到最小盈利要求
         if current_pnl_pct < min_profit_pct:
