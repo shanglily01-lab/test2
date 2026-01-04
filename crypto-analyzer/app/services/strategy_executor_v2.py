@@ -2001,6 +2001,19 @@ class StrategyExecutorV2:
             (是否需要平仓, 原因)
         """
         position_side = position.get('position_side', 'LONG')
+        symbol = position.get('symbol', '')
+
+        # 计算当前盈亏百分比
+        entry_price = float(position.get('entry_price') or 0)
+        current_price = ema_data.get('current_price', 0)
+
+        if entry_price <= 0 or current_price <= 0:
+            return False, ""
+
+        if position_side == 'LONG':
+            current_pnl_pct = (current_price - entry_price) / entry_price * 100
+        else:  # SHORT
+            current_pnl_pct = (entry_price - current_price) / entry_price * 100
 
         # 使用已收盘K线的EMA判断金叉/死叉，避免未收盘K线波动导致误判
         ema9 = ema_data.get('confirmed_ema9', ema_data['ema9'])
@@ -2008,27 +2021,44 @@ class StrategyExecutorV2:
         prev_ema9 = ema_data['prev_ema9']
         prev_ema26 = ema_data['prev_ema26']
 
-        # 平仓不检查信号强度，趋势已变应尽快平仓
+        # 平仓策略：只有在盈利或盈亏平衡时才执行金叉/死叉平仓
+        # 亏损时给仓位翻盘的机会，避免过早止损
 
         if position_side == 'LONG':
-            # 持多仓 + 死叉 → 立即平仓
+            # 持多仓 + 死叉 → 检查是否盈利
             is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
             if is_death_cross:
-                return True, "death_cross_reversal"
+                if current_pnl_pct >= 0:
+                    return True, "death_cross_reversal"
+                else:
+                    logger.info(f"{symbol} 死叉信号出现但持仓亏损{current_pnl_pct:.2f}%，不平仓，给予翻盘机会")
+                    return False, ""
 
-            # 趋势反转：EMA9 < EMA26（已收盘确认）
+            # 趋势反转：EMA9 < EMA26（已收盘确认）→ 检查是否盈利
             if ema9 < ema26:
-                return True, "trend_reversal_bearish"
+                if current_pnl_pct >= 0:
+                    return True, "trend_reversal_bearish"
+                else:
+                    logger.debug(f"{symbol} 趋势转跌但持仓亏损{current_pnl_pct:.2f}%，不平仓")
+                    return False, ""
 
         else:  # SHORT
-            # 持空仓 + 金叉 → 立即平仓
+            # 持空仓 + 金叉 → 检查是否盈利
             is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
             if is_golden_cross:
-                return True, "golden_cross_reversal"
+                if current_pnl_pct >= 0:
+                    return True, "golden_cross_reversal"
+                else:
+                    logger.info(f"{symbol} 金叉信号出现但持仓亏损{current_pnl_pct:.2f}%，不平仓，给予翻盘机会")
+                    return False, ""
 
-            # 趋势反转：EMA9 > EMA26（已收盘确认）
+            # 趋势反转：EMA9 > EMA26（已收盘确认）→ 检查是否盈利
             if ema9 > ema26:
-                return True, "trend_reversal_bullish"
+                if current_pnl_pct >= 0:
+                    return True, "trend_reversal_bullish"
+                else:
+                    logger.debug(f"{symbol} 趋势转涨但持仓亏损{current_pnl_pct:.2f}%，不平仓")
+                    return False, ""
 
         return False, ""
 
