@@ -166,6 +166,32 @@ class StrategyExecutorV2:
         """获取数据库连接"""
         return create_connection(self.db_config)
 
+    # ==================== 统一保护机制 ====================
+
+    def check_min_holding_duration(self, position: Dict, min_minutes: int = 15) -> Tuple[bool, float]:
+        """
+        检查是否满足最小持仓时间要求
+
+        Args:
+            position: 持仓信息字典
+            min_minutes: 最小持仓分钟数，默认15分钟
+
+        Returns:
+            (是否满足要求, 已持仓分钟数)
+            - True: 已满足最小持仓时间
+            - False: 未满足，不应平仓
+        """
+        open_time = position.get('open_time')
+        if not open_time:
+            return True, 0
+
+        now = self.get_local_time()
+        if isinstance(open_time, datetime):
+            duration_minutes = (now - open_time).total_seconds() / 60
+            return duration_minutes >= min_minutes, duration_minutes
+
+        return True, 0
+
     # ==================== 技术指标计算（使用公共模块）====================
     # 保留方法签名以保持向后兼容，内部调用公共模块
 
@@ -2053,18 +2079,11 @@ class StrategyExecutorV2:
             callback_pct = max_profit_pct - current_pnl_pct
             if callback_pct >= self.TRAILING_CALLBACK:
                 # 添加最小持仓时间保护（15分钟），避免刚开仓就被移动止盈平掉
-                open_time = position.get('open_time')
-                if open_time:
-                    from datetime import datetime, timezone, timedelta
-                    local_tz = timezone(timedelta(hours=8))
-                    now = datetime.now(local_tz).replace(tzinfo=None)
-                    if isinstance(open_time, datetime):
-                        duration_minutes = (now - open_time).total_seconds() / 60
-                        # 持仓时间必须 >= 15分钟才允许移动止盈平仓
-                        if duration_minutes < 15:
-                            symbol = position.get('symbol', '')
-                            logger.debug(f"{symbol} 移动止盈被跳过: 持仓时长{duration_minutes:.1f}分钟 < 15分钟")
-                            return False, "", updates
+                satisfied, duration = self.check_min_holding_duration(position, 15)
+                if not satisfied:
+                    symbol = position.get('symbol', '')
+                    logger.debug(f"{symbol} 移动止盈被跳过: 持仓时长{duration:.1f}分钟 < 15分钟")
+                    return False, "", updates
 
                 return True, f"trailing_take_profit|max:{max_profit_pct:.2f}%|cb:{callback_pct:.2f}%", updates
 
@@ -2162,17 +2181,10 @@ class StrategyExecutorV2:
         # 条件：当前差值 < 阈值，说明趋势减弱
         if ema_diff_pct < threshold:
             # 添加最小持仓时间保护（15分钟），避免刚开仓就被平掉
-            open_time = position.get('open_time')
-            if open_time:
-                from datetime import datetime, timezone, timedelta
-                local_tz = timezone(timedelta(hours=8))
-                now = datetime.now(local_tz).replace(tzinfo=None)
-                if isinstance(open_time, datetime):
-                    duration_minutes = (now - open_time).total_seconds() / 60
-                    # 持仓时间必须 >= 15分钟才允许EMA差值收窄止盈
-                    if duration_minutes < 15:
-                        logger.debug(f"{symbol} EMA差值收窄止盈被跳过: 持仓时长{duration_minutes:.1f}分钟 < 15分钟")
-                        return False, ""
+            satisfied, duration = self.check_min_holding_duration(position, 15)
+            if not satisfied:
+                logger.debug(f"{symbol} EMA差值收窄止盈被跳过: 持仓时长{duration:.1f}分钟 < 15分钟")
+                return False, ""
 
             return True, f"ema_diff_narrowing_tp|diff:{ema_diff_pct:.2f}%|pnl:{current_pnl_pct:.2f}%"
 
@@ -2180,17 +2192,10 @@ class StrategyExecutorV2:
         # 添加最小持仓时间保护（15分钟），避免刚开仓就被平掉
         if not ema_supports_position and current_pnl_pct >= min_profit_pct:
             # 检查持仓时长
-            open_time = position.get('open_time')
-            if open_time:
-                from datetime import datetime, timezone, timedelta
-                local_tz = timezone(timedelta(hours=8))
-                now = datetime.now(local_tz).replace(tzinfo=None)
-                if isinstance(open_time, datetime):
-                    duration_minutes = (now - open_time).total_seconds() / 60
-                    # 持仓时间必须 >= 15分钟才允许EMA方向反转止盈
-                    if duration_minutes < 15:
-                        logger.debug(f"{symbol} EMA方向反转止盈被跳过: 持仓时长{duration_minutes:.1f}分钟 < 15分钟")
-                        return False, ""
+            satisfied, duration = self.check_min_holding_duration(position, 15)
+            if not satisfied:
+                logger.debug(f"{symbol} EMA方向反转止盈被跳过: 持仓时长{duration:.1f}分钟 < 15分钟")
+                return False, ""
 
             return True, f"ema_direction_reversal_tp|pnl:{current_pnl_pct:.2f}%"
 
