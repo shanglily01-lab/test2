@@ -1523,16 +1523,18 @@
                 });
                 
                 if (isSuccess && hasItems) {
-                    let html = '';
                     console.log(`开始处理 ${data.data.length} 条数据...`);
-                    
+
                     try {
+                        // 性能优化：使用DocumentFragment批量插入DOM
+                        const fragment = document.createDocumentFragment();
+
                         data.data.forEach((item, index) => {
                             try {
                         const indicators15m = item['15m'];
                         const indicators1h = item['1h'];
                         const indicators1d = item['1d'];
-                        
+
                         // 计算综合评分（15m、1h和1d的平均值）
                         let overallScore = 0;
                         let count = 0;
@@ -1630,38 +1632,41 @@
                             scoreText = '强烈卖出';
                         }
                         
-                        html += `
-                            <tr>
-                                <td><strong>${item.symbol}</strong></td>
-                                <td>
-                                    <div class="realtime-price">
-                                        ${priceHtml}
-                                    </div>
-                                </td>
-                                <td>${formatIndicators(indicators15m)}</td>
-                                <td>${formatIndicators(indicators1h)}</td>
-                                <td>${formatIndicators(indicators1d)}</td>
-                                <td>
-                                    <div style="text-align: center;">
-                                        <div class="${scoreClass}" style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">${scoreText}</div>
-                                        <div style="font-size: 12px; color: var(--text-secondary);">${formatNumber(avgScore, 1)}</div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${item.symbol}')" title="查看详情">
-                                        <i class="bi bi-eye"></i>
-                                    </button>
-                                </td>
-                            </tr>
+                        // 性能优化：创建tr元素而不是字符串拼接
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>${item.symbol}</strong></td>
+                            <td>
+                                <div class="realtime-price">
+                                    ${priceHtml}
+                                </div>
+                            </td>
+                            <td>${formatIndicators(indicators15m)}</td>
+                            <td>${formatIndicators(indicators1h)}</td>
+                            <td>${formatIndicators(indicators1d)}</td>
+                            <td>
+                                <div style="text-align: center;">
+                                    <div class="${scoreClass}" style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">${scoreText}</div>
+                                    <div style="font-size: 12px; color: var(--text-secondary);">${formatNumber(avgScore, 1)}</div>
+                                </div>
+                            </td>
+                            <td>
+                                <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${item.symbol}')" title="查看详情">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </td>
                         `;
+                        fragment.appendChild(tr);
                             } catch (itemError) {
                                 console.error(`处理第 ${index + 1} 条数据时出错:`, itemError, item);
                                 // 跳过这条数据，继续处理下一条
                             }
                         });
-                        
+
                         console.log(`成功加载 ${data.data.length} 条技术信号数据`);
-                        tbody.innerHTML = html;
+                        // 性能优化：一次性插入所有DOM节点
+                        tbody.innerHTML = '';
+                        tbody.appendChild(fragment);
                     } catch (processError) {
                         console.error('处理数据时出错:', processError);
                         throw processError;
@@ -1714,15 +1719,15 @@
         async function loadTrendAnalysis() {
             try {
                 const tbody = document.getElementById('trendAnalysisTableBody');
-                // 每次刷新都更新表格内容，确保价格等数据能及时更新
-                // 不显示"加载中"提示，直接更新数据，避免闪烁
-                
-                const response = await fetch('/api/trend-analysis');
+                if (!tbody) return;
+
+                const response = await fetchWithTimeout('/api/trend-analysis', 10000);
                 const data = await response.json();
-                
+
                 if (data.success && data.data && data.data.length > 0) {
-                    let html = '';
-                    
+                    // 性能优化：使用DocumentFragment
+                    const fragment = document.createDocumentFragment();
+
                     data.data.forEach(item => {
                         const trend5m = item['5m'];
                         const trend15m = item['15m'];
@@ -1776,32 +1781,36 @@
                             `;
                         }
                         
-                        html += `
-                            <tr data-symbol="${item.symbol}">
-                                <td>
-                                    <strong>${item.symbol}</strong>
-                                    <div id="price-${item.symbol.replace('/', '-')}" class="realtime-price">
-                                        ${priceHtml}
-                                    </div>
-                                </td>
-                                <td>${formatTrendCell(trend5m)}</td>
-                                <td>${formatTrendCell(trend15m)}</td>
-                                <td>${formatTrendCell(trend1h)}</td>
-                                <td>${formatTrendCell(trend1d)}</td>
-                                <td>
-                                    <span class="badge ${overallClass}">${overallText}</span>
-                                    <br><small style="color: #666;">评分: ${avgScore.toFixed(1)}</small>
-                                </td>
-                                <td>
-                                    <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${item.symbol}')" title="查看详情">
-                                        <i class="bi bi-eye"></i>
-                                    </button>
-                                </td>
-                            </tr>
+                        // 性能优化：创建tr元素
+                        const tr = document.createElement('tr');
+                        tr.dataset.symbol = item.symbol;
+                        tr.innerHTML = `
+                            <td>
+                                <strong>${item.symbol}</strong>
+                                <div id="price-${item.symbol.replace('/', '-')}" class="realtime-price">
+                                    ${priceHtml}
+                                </div>
+                            </td>
+                            <td>${formatTrendCell(trend5m)}</td>
+                            <td>${formatTrendCell(trend15m)}</td>
+                            <td>${formatTrendCell(trend1h)}</td>
+                            <td>${formatTrendCell(trend1d)}</td>
+                            <td>
+                                <span class="badge ${overallClass}">${overallText}</span>
+                                <br><small style="color: #666;">评分: ${avgScore.toFixed(1)}</small>
+                            </td>
+                            <td>
+                                <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${item.symbol}')" title="查看详情">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </td>
                         `;
+                        fragment.appendChild(tr);
                     });
-                    
-                    tbody.innerHTML = html;
+
+                    // 性能优化：一次性插入DOM
+                    tbody.innerHTML = '';
+                    tbody.appendChild(fragment);
                         } else {
                     tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无数据</td></tr>';
                 }
@@ -1931,14 +1940,15 @@
         async function loadFuturesSignals() {
             try {
                 const tbody = document.getElementById('futuresSignalsTableBody');
-                tbody.innerHTML = '<tr><td colspan="11" class="loading">加载中...</td></tr>';
-                
-                const response = await fetch('/api/futures-signals');
+                if (!tbody) return;
+
+                const response = await fetchWithTimeout('/api/futures-signals', 10000);
                 const data = await response.json();
-                
+
                 if (data.success && data.data && data.data.length > 0) {
-                        let html = '';
-                    
+                    // 性能优化：使用DocumentFragment
+                    const fragment = document.createDocumentFragment();
+
                     data.data.forEach(signal => {
                         // 格式化价格显示
                         let priceHtml = '<span class="text-muted">-</span>';
@@ -1954,44 +1964,48 @@
                             `;
                         }
                             
-                            html += `
-                            <tr data-symbol="${signal.symbol}">
-                                <td><strong>${signal.symbol}</strong></td>
-                                <td>${priceHtml}</td>
-                                <td>
-                                    <span class="badge ${signal.signal_class}">${signal.signal_text}</span>
-                                    </td>
-                                <td class="${signal.signal_score >= 0 ? 'signal-buy' : 'signal-sell'}" style="font-weight: 600;">
-                                    ${signal.signal_score >= 0 ? '+' : ''}${formatNumber(signal.signal_score, 1)}
+                        // 性能优化：创建tr元素
+                        const tr = document.createElement('tr');
+                        tr.dataset.symbol = signal.symbol;
+                        tr.innerHTML = `
+                            <td><strong>${signal.symbol}</strong></td>
+                            <td>${priceHtml}</td>
+                            <td>
+                                <span class="badge ${signal.signal_class}">${signal.signal_text}</span>
                                 </td>
-                                <td>
-                                    ${signal.funding_rate !== null && signal.funding_rate !== undefined 
-                                        ? `<span class="${signal.funding_rate > 0 ? 'signal-buy' : signal.funding_rate < 0 ? 'signal-sell' : ''}">${formatNumber(signal.funding_rate, 4)}%</span>`
-                                        : '<span class="text-muted">-</span>'}
+                            <td class="${signal.signal_score >= 0 ? 'signal-buy' : 'signal-sell'}" style="font-weight: 600;">
+                                ${signal.signal_score >= 0 ? '+' : ''}${formatNumber(signal.signal_score, 1)}
+                            </td>
+                            <td>
+                                ${signal.funding_rate !== null && signal.funding_rate !== undefined
+                                    ? `<span class="${signal.funding_rate > 0 ? 'signal-buy' : signal.funding_rate < 0 ? 'signal-sell' : ''}">${formatNumber(signal.funding_rate, 4)}%</span>`
+                                    : '<span class="text-muted">-</span>'}
+                            </td>
+                            <td>
+                                ${signal.long_short_ratio !== null && signal.long_short_ratio !== undefined
+                                    ? `${formatNumber(signal.long_short_ratio, 2)}`
+                                    : '<span class="text-muted">-</span>'}
+                            </td>
+                            <td>
+                                ${signal.oi_change_pct !== null && signal.oi_change_pct !== undefined
+                                    ? `<span class="${signal.oi_change_pct >= 0 ? 'signal-buy' : 'signal-sell'}">${signal.oi_change_pct >= 0 ? '+' : ''}${formatNumber(signal.oi_change_pct, 2)}%</span>`
+                                    : '<span class="text-muted">-</span>'}
+                            </td>
+                            <td style="min-width: 120px;">${formatIndicatorCell(signal.indicators_5m)}</td>
+                            <td style="min-width: 120px;">${formatIndicatorCell(signal.indicators_15m)}</td>
+                            <td style="min-width: 120px;">${formatIndicatorCell(signal.indicators_1h)}</td>
+                            <td>
+                                <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${signal.symbol}')" title="查看详情">
+                                    <i class="bi bi-eye"></i>
+                                    </button>
                                 </td>
-                                <td>
-                                    ${signal.long_short_ratio !== null && signal.long_short_ratio !== undefined 
-                                        ? `${formatNumber(signal.long_short_ratio, 2)}`
-                                        : '<span class="text-muted">-</span>'}
-                                </td>
-                                <td>
-                                    ${signal.oi_change_pct !== null && signal.oi_change_pct !== undefined 
-                                        ? `<span class="${signal.oi_change_pct >= 0 ? 'signal-buy' : 'signal-sell'}">${signal.oi_change_pct >= 0 ? '+' : ''}${formatNumber(signal.oi_change_pct, 2)}%</span>`
-                                        : '<span class="text-muted">-</span>'}
-                                </td>
-                                <td style="min-width: 120px;">${formatIndicatorCell(signal.indicators_5m)}</td>
-                                <td style="min-width: 120px;">${formatIndicatorCell(signal.indicators_15m)}</td>
-                                <td style="min-width: 120px;">${formatIndicatorCell(signal.indicators_1h)}</td>
-                                <td>
-                                    <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${signal.symbol}')" title="查看详情">
-                                        <i class="bi bi-eye"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                            `;
-                        });
-                    
-                        tbody.innerHTML = html;
+                        `;
+                        fragment.appendChild(tr);
+                    });
+
+                    // 性能优化：一次性插入DOM
+                    tbody.innerHTML = '';
+                    tbody.appendChild(fragment);
                     } else {
                     tbody.innerHTML = '<tr><td colspan="12" class="empty-state">暂无合约信号数据</td></tr>';
                 }
@@ -2053,29 +2067,79 @@
 
         // 已移除：实时价格更新功能（不再需要，定时刷新会更新所有数据包括价格）
 
+        // 性能优化：防抖函数
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // 性能优化：节流函数
+        function throttle(func, limit) {
+            let inThrottle;
+            return function(...args) {
+                if (!inThrottle) {
+                    func.apply(this, args);
+                    inThrottle = true;
+                    setTimeout(() => inThrottle = false, limit);
+                }
+            };
+        }
+
+        // 全局定时器管理
+        const timers = {
+            dataRefresh: null,
+            priceUpdate: null
+        };
+
+        // 统一的数据刷新函数（根据当前激活的tab刷新对应数据）
+        async function refreshCurrentTabData() {
+            const activeTab = document.querySelector('.tab-button.active');
+            if (!activeTab) return;
+
+            const tabName = activeTab.textContent.trim();
+
+            try {
+                if (tabName.includes('趋势判断')) {
+                    await loadTrendAnalysis();
+                } else if (tabName.includes('技术信号')) {
+                    await loadTechnicalSignals();
+                } else if (tabName.includes('合约信号')) {
+                    await loadFuturesSignals();
+                    await updateFuturesPrices();
+                }
+            } catch (error) {
+                console.error('刷新数据失败:', error);
+            }
+        }
+
         // 初始化
         async function init() {
             // 加载初始数据（趋势判断作为默认TAB）
             await loadTrendAnalysis();
-            
-            // 设置定时刷新（每5分钟刷新一次，包含价格和指标数据）
-            // 无论当前在哪个标签页，都刷新所有数据，确保数据是最新的
-            setInterval(() => {
-                loadTrendAnalysis();
-            }, 300000); // 每5分钟刷新趋势分析
-            
-            setInterval(() => {
-                loadTechnicalSignals();
-            }, 300000); // 每5分钟刷新技术信号
-            
-            setInterval(() => {
-                loadFuturesSignals();
-            }, 300000); // 每5分钟刷新合约信号
-            
-            // 实时价格更新（每5秒更新一次价格，不影响其他数据）
-            setInterval(() => {
-                updateFuturesPrices();
-            }, 5000); // 每5秒更新价格
+
+            // 清除旧定时器
+            if (timers.dataRefresh) clearInterval(timers.dataRefresh);
+            if (timers.priceUpdate) clearInterval(timers.priceUpdate);
+
+            // 统一的数据刷新定时器（每5分钟，只刷新当前激活的tab）
+            timers.dataRefresh = setInterval(() => {
+                refreshCurrentTabData();
+            }, 300000); // 5分钟
+
+            // 价格更新定时器（仅在合约信号tab时更新）
+            timers.priceUpdate = setInterval(() => {
+                const activeTab = document.querySelector('.tab-button.active');
+                if (activeTab && activeTab.textContent.includes('合约信号')) {
+                    updateFuturesPrices();
+                }
+            }, 10000); // 改为10秒，减少请求频率
         }
 
         // 带超时的fetch请求
