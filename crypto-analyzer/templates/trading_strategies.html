@@ -1074,7 +1074,53 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
+                            <!-- 开仓冷却与限制 -->
+                            <div class="form-section">
+                                <div class="form-section-title">
+                                    <i class="bi bi-clock-history"></i>
+                                    开仓冷却与限制
+                                    <span style="font-size: 11px; color: var(--text-secondary); font-weight: normal; margin-left: 8px;">控制开仓频率和每方向持仓数量</span>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">
+                                            <input type="checkbox" id="entryCooldownEnabled" style="margin-right: 8px;" checked>
+                                            启用开仓冷却
+                                        </label>
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block; margin-left: 24px;">
+                                            控制同一方向的开仓频率，避免过度交易
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label class="form-label">冷却时间（分钟）</label>
+                                        <input type="number" class="form-input" id="entryCooldownMinutes" value="30" min="0" max="1440" step="5">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">
+                                            平仓后N分钟内不再同方向开仓（0禁用）
+                                        </small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label class="form-label">每方向最大持仓数</label>
+                                        <input type="number" class="form-input" id="entryCooldownMaxPositionsPerDirection" value="1" min="1" max="10" step="1">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">
+                                            同一币种、同一方向最多同时持有几个仓位（建议1个）
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 8px; padding: 8px; background: rgba(43, 111, 237, 0.1); border-radius: 4px; border-left: 3px solid var(--primary-blue);">
+                                    <small style="color: var(--text-secondary); font-size: 11px;">
+                                        <i class="bi bi-info-circle" style="margin-right: 4px;"></i>
+                                        <strong>示例：</strong>冷却30分钟，每方向1个。做多BTC平仓后30分钟内不再做多BTC，但可以做空BTC或做多其他币种。
+                                    </small>
+                                </div>
+                            </div>
+
                             <!-- 风险控制 -->
                         </div> <!-- 结束板块1: 开仓设置 -->
 
@@ -2506,7 +2552,12 @@
                 earlyStopLossPct: null,
                 preventDuplicateEntry: false,
                 minHoldingTimeHours: 0,
-                entryCooldown: { enabled: true, minutes: 30, perDirection: true },
+                // 开仓冷却配置
+                entryCooldown: {
+                    enabled: document.getElementById('entryCooldownEnabled') ? document.getElementById('entryCooldownEnabled').checked : true,
+                    minutes: document.getElementById('entryCooldownMinutes') ? parseInt(document.getElementById('entryCooldownMinutes').value) : 30,
+                    maxPositionsPerDirection: document.getElementById('entryCooldownMaxPositionsPerDirection') ? parseInt(document.getElementById('entryCooldownMaxPositionsPerDirection').value) : 1
+                },
                 rsiFilter: {
                     enabled: document.getElementById('rsiFilterEnabled') ? document.getElementById('rsiFilterEnabled').checked : false,
                     longMax: document.getElementById('rsiLongMax') ? parseFloat(document.getElementById('rsiLongMax').value) : 70,
@@ -3164,7 +3215,20 @@
             document.getElementById('trailingCallback').value = strategy.trailingCallback || 0.5;
             document.getElementById('trailingCooldownMinutes').value = strategy.trailingCooldownMinutes || 15;
 
-            // V2策略使用固定参数，MA10/EMA10过滤、信号强度过滤、趋势确认、退出机制、开仓冷却等已移除
+            // V2策略使用固定参数，MA10/EMA10过滤、信号强度过滤、趋势确认、退出机制等已移除
+
+            // 开仓冷却配置
+            if (strategy.entryCooldown) {
+                if (document.getElementById('entryCooldownEnabled')) {
+                    document.getElementById('entryCooldownEnabled').checked = strategy.entryCooldown.enabled !== false;
+                }
+                if (document.getElementById('entryCooldownMinutes')) {
+                    document.getElementById('entryCooldownMinutes').value = strategy.entryCooldown.minutes || 30;
+                }
+                if (document.getElementById('entryCooldownMaxPositionsPerDirection')) {
+                    document.getElementById('entryCooldownMaxPositionsPerDirection').value = strategy.entryCooldown.maxPositionsPerDirection || 1;
+                }
+            }
 
             // 风险控制 - 开仓前平反向持仓
             if (document.getElementById('closeOppositeOnEntry')) {
