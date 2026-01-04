@@ -141,8 +141,11 @@ class SignalReversalMonitor:
             import json
             strategy = json.loads(result['config'])
 
+            # 获取策略配置的信号周期（用于反转检测）
+            timeframe = strategy.get('buySignal', '15m')
+
             # 获取EMA数据
-            ema_data = await self.executor.get_ema_data(symbol)
+            ema_data = await self.executor.get_ema_data(symbol, timeframe)
             if not ema_data:
                 return False
 
