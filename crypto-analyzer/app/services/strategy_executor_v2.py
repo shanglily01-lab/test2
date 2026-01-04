@@ -2122,9 +2122,11 @@ class StrategyExecutorV2:
 
         threshold = ema_diff_tp.get('threshold', 0.5)  # EMA差值阈值，默认0.5%
         min_profit_pct = ema_diff_tp.get('minProfitPct', 1.5)  # 最小盈利要求，默认1.5%
+        min_loss_pct = ema_diff_tp.get('minLossPct', -0.8)  # 最小亏损要求，默认-0.8%
 
-        # 检查是否达到最小盈利要求
-        if current_pnl_pct < min_profit_pct:
+        # 检查是否达到触发条件：盈利 >= 1.5% 或 亏损 <= -0.8%
+        # -0.8% ~ 1.5% 之间不触发任何平仓逻辑，给仓位发展空间
+        if min_loss_pct <= current_pnl_pct < min_profit_pct:
             return False, ""
 
         # 使用传入的15m周期EMA数据
