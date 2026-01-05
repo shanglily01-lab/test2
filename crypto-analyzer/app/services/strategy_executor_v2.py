@@ -3407,15 +3407,15 @@ class StrategyExecutorV2:
         debug_info = []
         debug_info.append(f"允许方向: {buy_directions}")
 
-        # 1. 获取EMA数据
-        ema_data = self.get_ema_data(symbol, '15m', 50)
+        # 1. 获取EMA数据（使用1H周期判断方向，更稳定可靠）
+        ema_data = self.get_ema_data(symbol, '1h', 50)
         if not ema_data:
             return {'symbol': symbol, 'error': 'EMA数据不足', 'debug': debug_info}
 
         current_price = ema_data['current_price']
         debug_info.append(f"当前价格: {current_price:.4f}")
-        debug_info.append(f"EMA9: {ema_data['ema9']:.4f}, EMA26: {ema_data['ema26']:.4f}")
-        debug_info.append(f"EMA差值: {ema_data['ema_diff_pct']:.3f}%")
+        debug_info.append(f"EMA9(1H): {ema_data['ema9']:.4f}, EMA26(1H): {ema_data['ema26']:.4f}")
+        debug_info.append(f"EMA差值(1H): {ema_data['ema_diff_pct']:.3f}%")
 
         # 2. 检查现有持仓，处理平仓（使用智能出场检测）
         positions = self._get_open_positions(symbol, account_id)
