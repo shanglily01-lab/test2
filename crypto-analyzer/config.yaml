@@ -34,6 +34,7 @@ symbols:
 - RNDR/USDT
 - 1000SHIB/USDT
 - RLC/USDT
+- VIRTUAL/USDT
 
 demo_mode: false
 exchanges:
