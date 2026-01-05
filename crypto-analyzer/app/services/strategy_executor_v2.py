@@ -3558,6 +3558,8 @@ class StrategyExecutorV2:
         # 获取实时价格用于平仓决策（而不是使用历史K线的收盘价）
         # 原因：数据库中的K线价格可能延迟，导致平仓决策时计算的盈亏不准确
         current_price = self.futures_engine.get_current_price(symbol, use_realtime=True) if self.futures_engine else ema_data_1h['current_price']
+        # 确保转换为float类型，避免Decimal和float混合运算错误
+        current_price = float(current_price) if current_price else ema_data_1h['current_price']
         debug_info.append(f"当前价格(实时): {current_price:.4f}")
         debug_info.append(f"1H EMA9: {ema_data_1h['ema9']:.4f}, EMA26: {ema_data_1h['ema26']:.4f}, 差值: {ema_data_1h['ema_diff_pct']:.3f}%")
         debug_info.append(f"15M EMA9: {ema_data_15m['ema9']:.4f}, EMA26: {ema_data_15m['ema26']:.4f}, 差值: {ema_data_15m['ema_diff_pct']:.3f}%")
