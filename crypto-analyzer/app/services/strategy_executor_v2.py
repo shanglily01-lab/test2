@@ -116,6 +116,10 @@ class StrategyExecutorV2:
         """
         计算开仓保证金
 
+        逻辑：
+        1. 固定金额模式：优先使用配置的固定金额，余额不足时使用全部可用余额
+        2. 百分比模式：使用余额的百分比
+
         Args:
             is_live: 是否实盘
             account_balance: 账户余额（百分比模式需要）
@@ -136,8 +140,13 @@ class StrategyExecutorV2:
             margin = account_balance * percent / 100
             logger.debug(f"保证金计算: {mode}模式, 余额={account_balance}, 百分比={percent}%, 保证金={margin:.2f}")
         else:
+            # 固定金额模式：如果提供了余额且余额不足，使用全部余额
             margin = fixed
-            logger.debug(f"保证金计算: fixed模式, 保证金={margin:.2f}")
+            if account_balance is not None and account_balance < fixed:
+                margin = account_balance
+                logger.warning(f"⚠️ 保证金不足: 配置={fixed}U, 可用余额={account_balance:.2f}U, 使用全部可用余额")
+            else:
+                logger.debug(f"保证金计算: fixed模式, 保证金={margin:.2f}")
 
         return margin
 
@@ -2316,6 +2325,11 @@ class StrategyExecutorV2:
         # EMA差值收窄止盈：当差值缩小到阈值以下，且盈利达标时止盈
         # 条件：当前差值 < 阈值，说明趋势减弱
         if ema_diff_pct < threshold:
+            # 必须在盈利状态才能触发EMA差值收窄止盈，亏损时不触发
+            if current_pnl_pct < min_profit_pct:
+                logger.debug(f"{symbol} EMA差值收窄止盈被跳过: 盈利{current_pnl_pct:.2f}% < {min_profit_pct}%")
+                return False, ""
+
             # 添加最小持仓时间保护（15分钟），避免刚开仓就被平掉
             satisfied, duration = self.check_min_holding_duration(position, 15)
             if not satisfied:
