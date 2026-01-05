@@ -10,6 +10,7 @@ import pymysql
 from loguru import logger
 from typing import Dict, List, Optional
 import asyncio
+from datetime import datetime, timedelta
 
 
 class SignalReversalMonitor:
@@ -31,6 +32,10 @@ class SignalReversalMonitor:
         # 初始化策略执行器（用于调用平仓逻辑）
         from app.services.strategy_executor_v2 import StrategyExecutorV2
         self.executor = StrategyExecutorV2(db_config)
+
+        # 反转检测冷却：防止重复日志，格式 {(symbol, position_side, reason): timestamp}
+        self._detected_reversals = {}
+        self.REVERSAL_LOG_COOLDOWN_MINUTES = 5  # 同一反转信号5分钟内只记录一次
 
         logger.info("SignalReversalMonitor initialized")
 
@@ -153,8 +158,6 @@ class SignalReversalMonitor:
             should_close, close_reason = self.executor.check_cross_reversal(position, ema_data)
 
             if should_close:
-                logger.info(f"🔄 [信号反转] {symbol} {position_side} 触发反转: {close_reason}")
-
                 # 执行平仓
                 await self.executor.execute_close_position(position, close_reason, strategy)
 
@@ -170,13 +173,85 @@ class SignalReversalMonitor:
                     except Exception as e:
                         logger.warning(f"发送通知失败: {e}")
 
+                # 清除冷却记录（已成功平仓）
+                reversal_key = (symbol, position_side, close_reason)
+                if reversal_key in self._detected_reversals:
+                    del self._detected_reversals[reversal_key]
+
+                logger.info(f"🔄 [信号反转] {symbol} {position_side} 触发反转并平仓: {close_reason}")
                 return True
+
+            # 检查是否检测到反转但无法平仓（盈利不足）
+            # 从check_cross_reversal的实现可知，返回False但内部已检测到反转
+            # 需要检查是否有反转但被盈利要求拦截
+            reversal_detected = self._check_reversal_without_profit_requirement(position, ema_data)
+
+            if reversal_detected:
+                reversal_key = (symbol, position_side, reversal_detected)
+                now = datetime.now()
+
+                # 检查冷却
+                if reversal_key in self._detected_reversals:
+                    last_log_time = self._detected_reversals[reversal_key]
+                    if (now - last_log_time).total_seconds() < self.REVERSAL_LOG_COOLDOWN_MINUTES * 60:
+                        # 冷却中，跳过日志
+                        return False
+
+                # 记录新的反转检测
+                self._detected_reversals[reversal_key] = now
+                logger.debug(
+                    f"[信号反转] {symbol} {position_side} 检测到反转信号 {reversal_detected}，"
+                    f"但盈利不足无法平仓（需≥1.0%）"
+                )
 
             return False
 
         except Exception as e:
             logger.error(f"[信号反转监控] 检查 {symbol} 失败: {e}", exc_info=True)
             return False
+
+    def _check_reversal_without_profit_requirement(self, position: Dict, ema_data: Dict) -> Optional[str]:
+        """
+        检查是否存在反转信号（不考虑盈利要求）
+        用于日志记录，避免重复打印
+
+        Args:
+            position: 持仓信息
+            ema_data: EMA数据
+
+        Returns:
+            反转类型字符串，如果没有反转则返回None
+        """
+        try:
+            symbol = position['symbol']
+            position_side = position['position_side']
+
+            ema9 = ema_data.get('ema9')
+            ema26 = ema_data.get('ema26')
+            prev_ema9 = ema_data.get('prev_ema9')
+            prev_ema26 = ema_data.get('prev_ema26')
+
+            if not all([ema9, ema26, prev_ema9, prev_ema26]):
+                return None
+
+            # 检查金叉/死叉反转（不检查盈利）
+            if position_side == 'LONG':
+                # 多头持仓，检查死叉（看跌反转）
+                is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
+                if is_death_cross:
+                    return "trend_reversal_bearish"
+
+            elif position_side == 'SHORT':
+                # 空头持仓，检查金叉（看涨反转）
+                is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
+                if is_golden_cross:
+                    return "trend_reversal_bullish"
+
+            return None
+
+        except Exception as e:
+            logger.debug(f"检查反转信号失败 {position.get('symbol')}: {e}")
+            return None
 
     def close(self):
         """关闭监控器"""
