@@ -843,50 +843,71 @@ class StrategyExecutorV2:
                 return False, f"MA方向不符合做空(价格{price:.4f} >= MA10={ma10:.4f})"
             return True, "EMA+MA方向一致(做空)"
 
-    def check_golden_death_cross(self, ema_data: Dict, strategy: Dict = None) -> Tuple[Optional[str], str]:
+    def check_golden_death_cross(self, symbol: str, ema_data_15m: Dict, ema_data_1h: Dict, strategy: Dict = None) -> Tuple[Optional[str], str]:
         """
-        检测金叉/死叉信号（使用已收盘K线判断，避免误判）
+        检测金叉/死叉信号（双周期确认：15M信号 + 1H方向）
+
+        策略：
+        - 15M出现金叉 + 1H也是多头趋势 → 做多
+        - 15M出现死叉 + 1H也是空头趋势 → 做空
+        - 方向冲突时跳过，避免逆大趋势交易
 
         Args:
-            ema_data: EMA数据
+            symbol: 交易对
+            ema_data_15m: 15M周期EMA数据（用于检测金叉/死叉信号）
+            ema_data_1h: 1H周期EMA数据（用于确认大趋势方向）
             strategy: 策略配置（用于获取minSignalStrength）
 
         Returns:
             (信号方向 'long'/'short'/None, 信号描述)
         """
-        # 使用已收盘K线的EMA判断金叉/死叉
-        ema9 = ema_data.get('confirmed_ema9', ema_data['ema9'])
-        ema26 = ema_data.get('confirmed_ema26', ema_data['ema26'])
-        prev_ema9 = ema_data['prev_ema9']
-        prev_ema26 = ema_data['prev_ema26']
-        # 使用已收盘K线的EMA差值
-        ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
+        # 15M：检测金叉/死叉信号
+        ema9_15m = ema_data_15m.get('confirmed_ema9', ema_data_15m['ema9'])
+        ema26_15m = ema_data_15m.get('confirmed_ema26', ema_data_15m['ema26'])
+        prev_ema9_15m = ema_data_15m['prev_ema9']
+        prev_ema26_15m = ema_data_15m['prev_ema26']
+        ema_diff_pct_15m = ema_data_15m.get('confirmed_ema_diff_pct', ema_data_15m['ema_diff_pct'])
+
+        # 1H：确认大趋势方向
+        ema9_1h = ema_data_1h['ema9']
+        ema26_1h = ema_data_1h['ema26']
 
         # 金叉/死叉使用独立的最小强度阈值（默认0.01%，比普通信号0.05%低）
-        # 因为金叉/死叉刚发生时差值很小，但信号本身已经很强
         crossover_min_strength = 0.01
         if strategy:
             min_signal_strength = strategy.get('minSignalStrength', {})
             if isinstance(min_signal_strength, dict):
-                # 如果配置了 crossover 字段，使用它；否则使用默认0.01%
                 crossover_min_strength = min_signal_strength.get('crossover', 0.01)
 
-        # 金叉：前一根EMA9 <= EMA26，当前EMA9 > EMA26（已收盘确认）
-        is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
+        # 15M金叉：前一根EMA9 <= EMA26，当前EMA9 > EMA26
+        is_golden_cross_15m = prev_ema9_15m <= prev_ema26_15m and ema9_15m > ema26_15m
 
-        # 死叉：前一根EMA9 >= EMA26，当前EMA9 < EMA26（已收盘确认）
-        is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
+        # 15M死叉：前一根EMA9 >= EMA26，当前EMA9 < EMA26
+        is_death_cross_15m = prev_ema9_15m >= prev_ema26_15m and ema9_15m < ema26_15m
 
-        # 金叉/死叉使用更低的强度要求
-        if is_golden_cross:
-            if ema_diff_pct < crossover_min_strength:
-                return None, f"金叉信号强度不足({ema_diff_pct:.3f}% < {crossover_min_strength}%)"
-            return 'long', f"金叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
+        # 1H方向判断
+        is_bullish_1h = ema9_1h > ema26_1h  # 1H多头
+        is_bearish_1h = ema9_1h < ema26_1h  # 1H空头
 
-        if is_death_cross:
-            if ema_diff_pct < crossover_min_strength:
-                return None, f"死叉信号强度不足({ema_diff_pct:.3f}% < {crossover_min_strength}%)"
-            return 'short', f"死叉信号(已收盘确认,强度{ema_diff_pct:.3f}%)"
+        # 双周期确认：15M金叉 + 1H多头
+        if is_golden_cross_15m:
+            if ema_diff_pct_15m < crossover_min_strength:
+                return None, f"15M金叉信号强度不足({ema_diff_pct_15m:.3f}% < {crossover_min_strength}%)"
+
+            if is_bullish_1h:
+                return 'long', f"15M金叉+1H多头确认(15M强度{ema_diff_pct_15m:.3f}%)"
+            else:
+                return None, f"15M金叉但1H空头，方向冲突跳过(15M:{ema_diff_pct_15m:.3f}%, 1H EMA9<EMA26)"
+
+        # 双周期确认：15M死叉 + 1H空头
+        if is_death_cross_15m:
+            if ema_diff_pct_15m < crossover_min_strength:
+                return None, f"15M死叉信号强度不足({ema_diff_pct_15m:.3f}% < {crossover_min_strength}%)"
+
+            if is_bearish_1h:
+                return 'short', f"15M死叉+1H空头确认(15M强度{ema_diff_pct_15m:.3f}%)"
+            else:
+                return None, f"15M死叉但1H多头，方向冲突跳过(15M:{ema_diff_pct_15m:.3f}%, 1H EMA9>EMA26)"
 
         return None, "无金叉/死叉信号"
 
@@ -3407,15 +3428,24 @@ class StrategyExecutorV2:
         debug_info = []
         debug_info.append(f"允许方向: {buy_directions}")
 
-        # 1. 获取EMA数据（使用1H周期判断方向，更稳定可靠）
-        ema_data = self.get_ema_data(symbol, '1h', 50)
-        if not ema_data:
-            return {'symbol': symbol, 'error': 'EMA数据不足', 'debug': debug_info}
+        # 1. 获取双周期EMA数据
+        # 1H：用于判断大趋势方向
+        ema_data_1h = self.get_ema_data(symbol, '1h', 50)
+        if not ema_data_1h:
+            return {'symbol': symbol, 'error': '1H EMA数据不足', 'debug': debug_info}
 
-        current_price = ema_data['current_price']
+        # 15M：用于检测金叉/死叉信号
+        ema_data_15m = self.get_ema_data(symbol, '15m', 50)
+        if not ema_data_15m:
+            return {'symbol': symbol, 'error': '15M EMA数据不足', 'debug': debug_info}
+
+        current_price = ema_data_1h['current_price']
         debug_info.append(f"当前价格: {current_price:.4f}")
-        debug_info.append(f"EMA9(1H): {ema_data['ema9']:.4f}, EMA26(1H): {ema_data['ema26']:.4f}")
-        debug_info.append(f"EMA差值(1H): {ema_data['ema_diff_pct']:.3f}%")
+        debug_info.append(f"1H EMA9: {ema_data_1h['ema9']:.4f}, EMA26: {ema_data_1h['ema26']:.4f}, 差值: {ema_data_1h['ema_diff_pct']:.3f}%")
+        debug_info.append(f"15M EMA9: {ema_data_15m['ema9']:.4f}, EMA26: {ema_data_15m['ema26']:.4f}, 差值: {ema_data_15m['ema_diff_pct']:.3f}%")
+
+        # 为了兼容性，保留ema_data变量指向1H数据（用于平仓逻辑）
+        ema_data = ema_data_1h
 
         # 2. 检查现有持仓，处理平仓（使用智能出场检测）
         positions = self._get_open_positions(symbol, account_id)
@@ -3511,22 +3541,22 @@ class StrategyExecutorV2:
                         traceback.print_exc()
 
             # 3.1 检查金叉/死叉信号（非反转情况）
-            # 金叉/死叉是趋势反转的强信号，不受RSI等过滤器限制
+            # 双周期确认：15M金叉/死叉 + 1H方向确认
             if not open_result or not open_result.get('success'):
-                signal, signal_desc = self.check_golden_death_cross(ema_data, strategy)
+                signal, signal_desc = self.check_golden_death_cross(symbol, ema_data_15m, ema_data_1h, strategy)
                 debug_info.append(f"金叉/死叉: {signal_desc}")
 
                 if signal and signal in buy_directions:
-                    # 正常流程：检查EMA+MA一致性
-                    consistent, reason = self.check_ema_ma_consistency(ema_data, signal)
+                    # 正常流程：检查EMA+MA一致性（使用15M数据）
+                    consistent, reason = self.check_ema_ma_consistency(ema_data_15m, signal)
                     debug_info.append(f"EMA+MA一致性: {reason}")
 
                     if consistent:
                         # 金叉/死叉信号跳过RSI过滤器和开仓冷却，但使用限价单等待回调
-                        debug_info.append("✅ 金叉/死叉信号跳过RSI过滤器和开仓冷却，使用限价单等待回调")
+                        debug_info.append("✅ 双周期确认通过，使用限价单等待回调")
 
                         # 构建开仓原因
-                        entry_reason = f"crossover: {reason}, EMA_diff:{ema_data['ema_diff_pct']:.3f}%"
+                        entry_reason = f"crossover: {signal_desc}, 15M_diff:{ema_data_15m['ema_diff_pct']:.3f}%"
                         open_result = await self.execute_open_position(
                             symbol, signal, 'golden_cross' if signal == 'long' else 'death_cross',
                             strategy, account_id, signal_reason=entry_reason,
