@@ -981,6 +981,29 @@ class FuturesTradingEngine:
                 # 空头盈亏 = (开仓价 - 平仓价) * 数量
                 pnl = (entry_price - current_price) * close_quantity
 
+            # 止盈类平仓的亏损保护：如果是止盈原因触发的平仓，但实际执行时是亏损，则取消平仓
+            # 止盈类型包括：EMA差值收窄止盈、EMA方向反转止盈、移动止盈、最大止盈
+            take_profit_reasons = ['ema_diff_narrowing_tp', 'ema_direction_reversal_tp',
+                                  'trailing_take_profit', 'max_take_profit',
+                                  'trend_weakening']
+            is_take_profit = any(reason.startswith(tp_reason) for tp_reason in take_profit_reasons)
+
+            if is_take_profit and pnl < 0:
+                # 计算盈亏百分比
+                pnl_pct_check = (pnl / open_value) * 100 if open_value > 0 else 0
+                logger.warning(
+                    f"⚠️ {symbol} 止盈平仓取消: 触发时盈利但执行时亏损 {float(pnl_pct_check):.2f}%\n"
+                    f"   原因: {reason}\n"
+                    f"   入场价: {float(entry_price):.8f}, 当前价: {float(current_price):.8f}\n"
+                    f"   价格波动导致止盈失效，保留持仓等待盈利"
+                )
+                return {
+                    'success': False,
+                    'message': f'止盈取消：执行时亏损 {float(pnl_pct_check):.2f}%',
+                    'position_id': position_id,
+                    'reason': 'take_profit_canceled_due_to_loss'
+                }
+
             # 4. 计算手续费
             fee_rate = Decimal('0.0004')
             fee = close_value * fee_rate
