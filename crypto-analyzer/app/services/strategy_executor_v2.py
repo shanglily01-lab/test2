@@ -82,6 +82,11 @@ class StrategyExecutorV2:
         # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
         self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
 
+        # 初始化熔断器（硬止损触发时检查）
+        from app.services.circuit_breaker import CircuitBreaker
+        self.circuit_breaker = CircuitBreaker(db_config)
+        logger.info("✅ V2: 熔断机制已初始化")
+
     def _load_margin_config(self):
         """加载保证金配置"""
         try:
@@ -3287,6 +3292,9 @@ class StrategyExecutorV2:
                     # 无需再次调用 _sync_live_close，避免重复平仓
                     # 平仓冷却检查会直接从数据库 futures_positions 表查询最近平仓时间
 
+                    # 检查是否触发熔断（异步执行，不阻塞当前平仓）
+                    asyncio.create_task(self._check_circuit_breaker(position.get('account_id', 2)))
+
                     return {
                         'success': True,
                         'position_id': position_id,
@@ -3335,6 +3343,21 @@ class StrategyExecutorV2:
 
         except Exception as e:
             logger.error(f"实盘同步平仓异常: {e}")
+
+    async def _check_circuit_breaker(self, account_id: int = 2):
+        """
+        检查是否触发熔断机制
+        当最近3笔交易中有2笔硬止损时触发
+        """
+        try:
+            should_trigger, reason = self.circuit_breaker.check_should_trigger(account_id)
+
+            if should_trigger:
+                logger.critical(f"🔴 检测到熔断条件: {reason}")
+                await self.circuit_breaker.activate(reason, account_id)
+
+        except Exception as e:
+            logger.error(f"熔断检查失败: {e}", exc_info=True)
 
     # ==================== 主执行逻辑 ====================
 
