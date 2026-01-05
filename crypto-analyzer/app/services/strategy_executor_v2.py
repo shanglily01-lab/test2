@@ -1798,6 +1798,8 @@ class StrategyExecutorV2:
         """
         持续趋势中开仓检查（错过金叉/死叉后仍可在趋势中开仓）
 
+        双周期确认：15M趋势 + 1H方向确认
+
         Args:
             symbol: 交易对
             direction: 'long' 或 'short'
@@ -1810,35 +1812,51 @@ class StrategyExecutorV2:
         if not sustained_config.get('enabled', False):
             return False, "持续趋势开仓未启用"
 
-        ema_data = self.get_ema_data(symbol, '15m', 50)
-        if not ema_data:
+        # 获取15M和1H的EMA数据
+        ema_data_15m = self.get_ema_data(symbol, '15m', 50)
+        ema_data_1h = self.get_ema_data(symbol, '1h', 50)
+
+        if not ema_data_15m or not ema_data_1h:
             return False, "EMA数据不足"
 
-        ema_diff_pct = ema_data['ema_diff_pct']
-        ema_diff = ema_data['ema_diff']
+        # 15M: 用于计算趋势强度
+        ema_diff_pct_15m = ema_data_15m['ema_diff_pct']
+        ema_diff_15m = ema_data_15m['ema_diff']
+
+        # 1H: 用于确认趋势方向
+        ema9_1h = ema_data_1h['ema9']
+        ema26_1h = ema_data_1h['ema26']
+        is_bullish_1h = ema9_1h > ema26_1h
+        is_bearish_1h = ema9_1h < ema26_1h
 
         min_strength = sustained_config.get('minStrength', 0.15)
         max_strength = sustained_config.get('maxStrength', 1.0)
         require_ma10_confirm = sustained_config.get('requireMA10Confirm', True)
         require_price_confirm = sustained_config.get('requirePriceConfirm', True)
 
-        # 检查趋势方向是否匹配
-        is_uptrend = ema_diff > 0
-        if direction == 'long' and not is_uptrend:
-            return False, "持续趋势: 方向不匹配，非上升趋势"
-        if direction == 'short' and is_uptrend:
-            return False, "持续趋势: 方向不匹配，非下降趋势"
+        # 检查15M趋势方向是否匹配
+        is_uptrend_15m = ema_diff_15m > 0
+        if direction == 'long' and not is_uptrend_15m:
+            return False, "持续趋势: 15M方向不匹配，非上升趋势"
+        if direction == 'short' and is_uptrend_15m:
+            return False, "持续趋势: 15M方向不匹配，非下降趋势"
 
-        # 检查趋势强度范围
-        if ema_diff_pct < min_strength:
-            return False, f"持续趋势: 强度不足 {ema_diff_pct:.3f}% < {min_strength}%"
-        if ema_diff_pct > max_strength:
-            return False, f"持续趋势: 强度过大 {ema_diff_pct:.3f}% > {max_strength}%（可能反转）"
+        # 双周期确认：1H方向必须与开仓方向一致
+        if direction == 'long' and not is_bullish_1h:
+            return False, f"持续趋势: 1H空头，方向冲突跳过（1H EMA9={ema9_1h:.8f} < EMA26={ema26_1h:.8f}）"
+        if direction == 'short' and not is_bearish_1h:
+            return False, f"持续趋势: 1H多头，方向冲突跳过（1H EMA9={ema9_1h:.8f} > EMA26={ema26_1h:.8f}）"
 
-        # MA10确认
+        # 检查趋势强度范围（使用15M数据）
+        if ema_diff_pct_15m < min_strength:
+            return False, f"持续趋势: 强度不足 {ema_diff_pct_15m:.3f}% < {min_strength}%"
+        if ema_diff_pct_15m > max_strength:
+            return False, f"持续趋势: 强度过大 {ema_diff_pct_15m:.3f}% > {max_strength}%（可能反转）"
+
+        # MA10确认（使用15M数据）
         if require_ma10_confirm:
-            ma10 = ema_data['ma10']
-            ema10 = self.calculate_ema([float(k['close_price']) for k in ema_data['klines']], 10)
+            ma10 = ema_data_15m['ma10']
+            ema10 = self.calculate_ema([float(k['close_price']) for k in ema_data_15m['klines']], 10)
             if ema10:
                 current_ema10 = ema10[-1]
                 if direction == 'long' and current_ema10 < ma10:
@@ -1846,10 +1864,10 @@ class StrategyExecutorV2:
                 if direction == 'short' and current_ema10 > ma10:
                     return False, f"持续趋势: MA10/EMA10不确认下降趋势"
 
-        # 价格确认
+        # 价格确认（使用15M数据）
         if require_price_confirm:
-            current_price = ema_data['current_price']
-            ema9 = ema_data['ema9']
+            current_price = ema_data_15m['current_price']
+            ema9 = ema_data_15m['ema9']
             if direction == 'long' and current_price < ema9:
                 return False, f"持续趋势: 价格未确认上升趋势（价格{current_price:.4f} < EMA9 {ema9:.4f}）"
             if direction == 'short' and current_price > ema9:
@@ -1865,7 +1883,11 @@ class StrategyExecutorV2:
             if elapsed < cooldown_minutes:
                 return False, f"持续趋势: 冷却中，还需等待 {cooldown_minutes - elapsed:.0f} 分钟"
 
-        return True, f"持续趋势开仓通过: 强度{ema_diff_pct:.3f}%在{min_strength}%~{max_strength}%范围内"
+        # 1H方向确认信息
+        ema_diff_pct_1h = abs(ema9_1h - ema26_1h) / ema26_1h * 100
+        direction_1h = "多头" if is_bullish_1h else "空头"
+
+        return True, f"持续趋势开仓通过: 15M强度{ema_diff_pct_15m:.3f}%在{min_strength}%~{max_strength}%范围内, 1H{direction_1h}确认(强度{ema_diff_pct_1h:.3f}%)"
 
     def check_entry_cooldown(self, symbol: str, direction: str, strategy: Dict, strategy_id: int) -> Tuple[bool, str]:
         """
