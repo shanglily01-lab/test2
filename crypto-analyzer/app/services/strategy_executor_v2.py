@@ -1088,13 +1088,6 @@ class StrategyExecutorV2:
                 if not is_bearish_1h:
                     return None, f"震荡反转: 15M连续阳线做空但1H多头，方向冲突跳过（1H EMA9={ema9_1h:.8f} > EMA26={ema26_1h:.8f}）"
 
-                # 检查EMA+MA方向一致性
-                ema_data = self.get_ema_data(symbol, '15m', 50)
-                if ema_data:
-                    consistent, reason = self.check_ema_ma_consistency(ema_data, 'short')
-                    if not consistent:
-                        return None, reason
-
                 ema_diff_pct_1h = abs(ema9_1h - ema26_1h) / ema26_1h * 100
                 return 'short', f"震荡反向做空(连续{self.OSCILLATION_BARS}阳线+缩量{volume_ratio:.2f}, 1H空头确认{ema_diff_pct_1h:.3f}%)"
 
@@ -1106,13 +1099,6 @@ class StrategyExecutorV2:
                 # 1H方向确认（震荡反转做多需要1H也是多头）
                 if not is_bullish_1h:
                     return None, f"震荡反转: 15M连续阴线做多但1H空头，方向冲突跳过（1H EMA9={ema9_1h:.8f} < EMA26={ema26_1h:.8f}）"
-
-                # 检查EMA+MA方向一致性
-                ema_data = self.get_ema_data(symbol, '15m', 50)
-                if ema_data:
-                    consistent, reason = self.check_ema_ma_consistency(ema_data, 'long')
-                    if not consistent:
-                        return None, reason
 
                 ema_diff_pct_1h = abs(ema9_1h - ema26_1h) / ema26_1h * 100
                 return 'long', f"震荡反向做多(连续{self.OSCILLATION_BARS}阴线+放量{volume_ratio:.2f}, 1H多头确认{ema_diff_pct_1h:.3f}%)"
