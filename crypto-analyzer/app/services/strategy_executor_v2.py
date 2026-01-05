@@ -2136,43 +2136,46 @@ class StrategyExecutorV2:
         prev_ema9 = ema_data['prev_ema9']
         prev_ema26 = ema_data['prev_ema26']
 
-        # 平仓策略：只有在盈利或盈亏平衡时才执行金叉/死叉平仓
-        # 亏损时给仓位翻盘的机会，避免过早止损
+        # 最小盈利要求（与趋势减弱平仓保持一致，默认1.0%）
+        MIN_PROFIT_FOR_REVERSAL = 1.0
+
+        # 平仓策略：只有在盈利达标时才执行金叉/死叉平仓
+        # 避免小盈利或亏损时被平仓
 
         if position_side == 'LONG':
-            # 持多仓 + 死叉 → 检查是否盈利
+            # 持多仓 + 死叉 → 检查盈利是否达标
             is_death_cross = prev_ema9 >= prev_ema26 and ema9 < ema26
             if is_death_cross:
-                if current_pnl_pct >= 0:
-                    return True, "death_cross_reversal"
+                if current_pnl_pct >= MIN_PROFIT_FOR_REVERSAL:
+                    return True, f"death_cross_reversal|pnl:{current_pnl_pct:.2f}%"
                 else:
-                    logger.info(f"{symbol} 死叉信号出现但持仓亏损{current_pnl_pct:.2f}%，不平仓，给予翻盘机会")
+                    logger.info(f"{symbol} 死叉信号但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
                     return False, ""
 
-            # 趋势反转：EMA9 < EMA26（已收盘确认）→ 检查是否盈利
+            # 趋势反转：EMA9 < EMA26（已收盘确认）→ 检查盈利是否达标
             if ema9 < ema26:
-                if current_pnl_pct >= 0:
-                    return True, "trend_reversal_bearish"
+                if current_pnl_pct >= MIN_PROFIT_FOR_REVERSAL:
+                    return True, f"trend_reversal_bearish|pnl:{current_pnl_pct:.2f}%"
                 else:
-                    logger.debug(f"{symbol} 趋势转跌但持仓亏损{current_pnl_pct:.2f}%，不平仓")
+                    logger.debug(f"{symbol} 趋势转跌但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
                     return False, ""
 
         else:  # SHORT
-            # 持空仓 + 金叉 → 检查是否盈利
+            # 持空仓 + 金叉 → 检查盈利是否达标
             is_golden_cross = prev_ema9 <= prev_ema26 and ema9 > ema26
             if is_golden_cross:
-                if current_pnl_pct >= 0:
-                    return True, "golden_cross_reversal"
+                if current_pnl_pct >= MIN_PROFIT_FOR_REVERSAL:
+                    return True, f"golden_cross_reversal|pnl:{current_pnl_pct:.2f}%"
                 else:
-                    logger.info(f"{symbol} 金叉信号出现但持仓亏损{current_pnl_pct:.2f}%，不平仓，给予翻盘机会")
+                    logger.info(f"{symbol} 金叉信号但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
                     return False, ""
 
-            # 趋势反转：EMA9 > EMA26（已收盘确认）→ 检查是否盈利
+            # 趋势反转：EMA9 > EMA26（已收盘确认）→ 检查盈利是否达标
             if ema9 > ema26:
-                if current_pnl_pct >= 0:
-                    return True, "trend_reversal_bullish"
+                if current_pnl_pct >= MIN_PROFIT_FOR_REVERSAL:
+                    return True, f"trend_reversal_bullish|pnl:{current_pnl_pct:.2f}%"
                 else:
-                    logger.debug(f"{symbol} 趋势转涨但持仓亏损{current_pnl_pct:.2f}%，不平仓")
+                    logger.debug(f"{symbol} 趋势转涨但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
                     return False, ""
 
         return False, ""
