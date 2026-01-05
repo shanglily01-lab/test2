@@ -79,6 +79,10 @@ class StrategyExecutorV2:
         # 反转预警冷却记录 {symbol: {'cooldown_until': datetime, 'direction': 'long'/'short', 'reason': str}}
         self._reversal_cooldowns = {}
 
+        # 反转日志冷却记录 {(symbol, position_side, reversal_type): datetime}
+        self._reversal_log_cooldown = {}
+        self.REVERSAL_LOG_COOLDOWN_MINUTES = 5  # 相同反转日志冷却时间（分钟）
+
         # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
         self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
 
@@ -2094,6 +2098,32 @@ class StrategyExecutorV2:
 
     # ==================== 平仓信号检测 ====================
 
+    def _should_log_reversal(self, symbol: str, position_side: str, reversal_type: str) -> bool:
+        """
+        检查是否应该记录反转日志（避免重复刷屏）
+
+        Args:
+            symbol: 交易对
+            position_side: 持仓方向 LONG/SHORT
+            reversal_type: 反转类型 golden_cross/death_cross/trend_reversal
+
+        Returns:
+            bool: 是否应该记录日志
+        """
+        now = datetime.now()
+        key = (symbol, position_side, reversal_type)
+
+        # 检查上次记录时间
+        last_log_time = self._reversal_log_cooldown.get(key)
+        if last_log_time:
+            time_diff = (now - last_log_time).total_seconds() / 60  # 转换为分钟
+            if time_diff < self.REVERSAL_LOG_COOLDOWN_MINUTES:
+                return False  # 还在冷却期内，不记录
+
+        # 更新记录时间
+        self._reversal_log_cooldown[key] = now
+        return True
+
     def check_cross_reversal(self, position: Dict, ema_data: Dict) -> Tuple[bool, str]:
         """
         检测金叉/死叉反转信号（使用已收盘K线判断，避免误判）
@@ -2139,7 +2169,8 @@ class StrategyExecutorV2:
                 if current_pnl_pct >= MIN_PROFIT_FOR_REVERSAL:
                     return True, f"death_cross_reversal|pnl:{current_pnl_pct:.2f}%"
                 else:
-                    logger.info(f"{symbol} 死叉信号但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
+                    if self._should_log_reversal(symbol, position_side, 'death_cross'):
+                        logger.info(f"{symbol} 死叉信号但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
                     return False, ""
 
             # 趋势反转：EMA9 < EMA26（已收盘确认）→ 检查盈利是否达标
@@ -2147,7 +2178,8 @@ class StrategyExecutorV2:
                 if current_pnl_pct >= MIN_PROFIT_FOR_REVERSAL:
                     return True, f"trend_reversal_bearish|pnl:{current_pnl_pct:.2f}%"
                 else:
-                    logger.debug(f"{symbol} 趋势转跌但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
+                    if self._should_log_reversal(symbol, position_side, 'trend_reversal_bearish'):
+                        logger.debug(f"{symbol} 趋势转跌但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
                     return False, ""
 
         else:  # SHORT
@@ -2157,7 +2189,8 @@ class StrategyExecutorV2:
                 if current_pnl_pct >= MIN_PROFIT_FOR_REVERSAL:
                     return True, f"golden_cross_reversal|pnl:{current_pnl_pct:.2f}%"
                 else:
-                    logger.info(f"{symbol} 金叉信号但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
+                    if self._should_log_reversal(symbol, position_side, 'golden_cross'):
+                        logger.info(f"{symbol} 金叉信号但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
                     return False, ""
 
             # 趋势反转：EMA9 > EMA26（已收盘确认）→ 检查盈利是否达标
@@ -2165,7 +2198,8 @@ class StrategyExecutorV2:
                 if current_pnl_pct >= MIN_PROFIT_FOR_REVERSAL:
                     return True, f"trend_reversal_bullish|pnl:{current_pnl_pct:.2f}%"
                 else:
-                    logger.debug(f"{symbol} 趋势转涨但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
+                    if self._should_log_reversal(symbol, position_side, 'trend_reversal_bullish'):
+                        logger.debug(f"{symbol} 趋势转涨但盈利{current_pnl_pct:.2f}% < {MIN_PROFIT_FOR_REVERSAL}%，不平仓")
                     return False, ""
 
         return False, ""
