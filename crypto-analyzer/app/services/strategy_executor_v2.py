@@ -914,7 +914,7 @@ class StrategyExecutorV2:
     def check_sustained_trend(self, symbol: str, strategy: Dict = None) -> Tuple[Optional[str], str]:
         """
         检测连续趋势信号
-        需要15M和5M周期EMA差值同时放大
+        双周期确认：15M和5M周期EMA差值同时放大 + 1H方向确认
 
         Args:
             symbol: 交易对
@@ -923,6 +923,11 @@ class StrategyExecutorV2:
         Returns:
             (信号方向 'long'/'short'/None, 信号描述)
         """
+        # 获取1H数据（用于方向确认）
+        ema_1h = self.get_ema_data(symbol, '1h', 50)
+        if not ema_1h:
+            return None, "1H数据不足"
+
         # 获取15M数据
         ema_15m = self.get_ema_data(symbol, '15m', 50)
         if not ema_15m:
@@ -942,7 +947,19 @@ class StrategyExecutorV2:
 
         # 检查15M趋势方向
         ema_diff_15m = ema_15m['ema_diff']
-        is_uptrend = ema_diff_15m > 0
+        is_uptrend_15m = ema_diff_15m > 0
+
+        # 1H方向确认
+        ema9_1h = ema_1h['ema9']
+        ema26_1h = ema_1h['ema26']
+        is_bullish_1h = ema9_1h > ema26_1h
+        is_bearish_1h = ema9_1h < ema26_1h
+
+        # 双周期确认：15M方向必须与1H方向一致
+        if is_uptrend_15m and not is_bullish_1h:
+            return None, f"连续趋势: 15M多头但1H空头，方向冲突跳过（1H EMA9={ema9_1h:.8f} < EMA26={ema26_1h:.8f}）"
+        if not is_uptrend_15m and not is_bearish_1h:
+            return None, f"连续趋势: 15M空头但1H多头，方向冲突跳过（1H EMA9={ema9_1h:.8f} > EMA26={ema26_1h:.8f}）"
 
         # 检查15M差值是否在合理范围内
         ema_diff_pct_15m = ema_15m['ema_diff_pct']
@@ -973,21 +990,35 @@ class StrategyExecutorV2:
             return None, f"5M差值未连续放大: {[f'{d:.6f}' for d in diff_values]}"
 
         # 检查EMA+MA方向一致性
-        direction = 'long' if is_uptrend else 'short'
+        direction = 'long' if is_uptrend_15m else 'short'
         consistent, reason = self.check_ema_ma_consistency(ema_15m, direction)
         if not consistent:
             return None, reason
 
-        return direction, f"连续趋势信号({direction}, 15M差值{ema_diff_pct_15m:.3f}%, 5M连续放大)"
+        # 1H方向确认信息
+        ema_diff_pct_1h = abs(ema9_1h - ema26_1h) / ema26_1h * 100
+        direction_1h = "多头" if is_bullish_1h else "空头"
+
+        return direction, f"连续趋势信号({direction}, 15M差值{ema_diff_pct_15m:.3f}%, 5M连续放大, 1H{direction_1h}确认)"
 
     def check_oscillation_reversal(self, symbol: str) -> Tuple[Optional[str], str]:
         """
         检测震荡区间反向开仓信号
-        条件：连续4根同向K线 + 幅度<0.5% + 成交量条件
+        双周期确认：连续4根同向K线 + 幅度<0.5% + 成交量条件 + 1H方向确认
 
         Returns:
             (信号方向 'long'/'short'/None, 信号描述)
         """
+        # 获取1H数据（用于方向确认）
+        ema_1h = self.get_ema_data(symbol, '1h', 50)
+        if not ema_1h:
+            return None, "1H数据不足"
+
+        ema9_1h = ema_1h['ema9']
+        ema26_1h = ema_1h['ema26']
+        is_bullish_1h = ema9_1h > ema26_1h
+        is_bearish_1h = ema9_1h < ema26_1h
+
         conn = self.get_db_connection()
         cursor = conn.cursor()
 
@@ -1040,6 +1071,10 @@ class StrategyExecutorV2:
                 if volume_ratio >= self.VOLUME_SHRINK_THRESHOLD:
                     return None, f"成交量未缩量({volume_ratio:.2f} >= {self.VOLUME_SHRINK_THRESHOLD})"
 
+                # 1H方向确认（震荡反转做空需要1H也是空头）
+                if not is_bearish_1h:
+                    return None, f"震荡反转: 15M连续阳线做空但1H多头，方向冲突跳过（1H EMA9={ema9_1h:.8f} > EMA26={ema26_1h:.8f}）"
+
                 # 检查EMA+MA方向一致性
                 ema_data = self.get_ema_data(symbol, '15m', 50)
                 if ema_data:
@@ -1047,12 +1082,17 @@ class StrategyExecutorV2:
                     if not consistent:
                         return None, reason
 
-                return 'short', f"震荡反向做空(连续{self.OSCILLATION_BARS}阳线+缩量{volume_ratio:.2f})"
+                ema_diff_pct_1h = abs(ema9_1h - ema26_1h) / ema26_1h * 100
+                return 'short', f"震荡反向做空(连续{self.OSCILLATION_BARS}阳线+缩量{volume_ratio:.2f}, 1H空头确认{ema_diff_pct_1h:.3f}%)"
 
             else:  # all_bearish
                 # 连续阴线 → 成交量放量 → 做多
                 if volume_ratio <= self.VOLUME_EXPAND_THRESHOLD:
                     return None, f"成交量未放量({volume_ratio:.2f} <= {self.VOLUME_EXPAND_THRESHOLD})"
+
+                # 1H方向确认（震荡反转做多需要1H也是多头）
+                if not is_bullish_1h:
+                    return None, f"震荡反转: 15M连续阴线做多但1H空头，方向冲突跳过（1H EMA9={ema9_1h:.8f} < EMA26={ema26_1h:.8f}）"
 
                 # 检查EMA+MA方向一致性
                 ema_data = self.get_ema_data(symbol, '15m', 50)
@@ -1061,7 +1101,8 @@ class StrategyExecutorV2:
                     if not consistent:
                         return None, reason
 
-                return 'long', f"震荡反向做多(连续{self.OSCILLATION_BARS}阴线+放量{volume_ratio:.2f})"
+                ema_diff_pct_1h = abs(ema9_1h - ema26_1h) / ema26_1h * 100
+                return 'long', f"震荡反向做多(连续{self.OSCILLATION_BARS}阴线+放量{volume_ratio:.2f}, 1H多头确认{ema_diff_pct_1h:.3f}%)"
 
         finally:
             cursor.close()
@@ -1073,11 +1114,12 @@ class StrategyExecutorV2:
                                   strategy_id: int) -> Tuple[Optional[str], str]:
         """
         检测限价单开仓信号
+        双周期确认：15M趋势强度 + 1H方向确认
         条件：EMA趋势强度 > 0.25% 且方向一致 + 无PENDING限价单 + 不在冷却期
 
         Args:
             symbol: 交易对
-            ema_data: EMA数据
+            ema_data: 1H EMA数据（用于方向确认）
             strategy: 策略配置
             strategy_id: 策略ID
 
@@ -1096,13 +1138,24 @@ class StrategyExecutorV2:
         if long_price_type == 'market' and short_price_type == 'market':
             return None, "限价单未配置"
 
-        # 获取EMA数据
-        ema9 = ema_data['ema9']
-        ema26 = ema_data['ema26']
-        ema_diff = ema_data['ema_diff']
-        ema_diff_pct = ema_data['ema_diff_pct']
-        current_price = ema_data['current_price']
-        ma10 = ema_data['ma10']
+        # 获取15M和1H的EMA数据
+        ema_data_15m = self.get_ema_data(symbol, '15m', 50)
+        ema_data_1h = ema_data  # 传入的是1H数据
+
+        if not ema_data_15m or not ema_data_1h:
+            return None, "EMA数据不足"
+
+        # 15M: 用于计算趋势强度
+        ema_diff_15m = ema_data_15m['ema_diff']
+        ema_diff_pct_15m = ema_data_15m['ema_diff_pct']
+
+        # 1H: 用于确认趋势方向
+        ema9_1h = ema_data_1h['ema9']
+        ema26_1h = ema_data_1h['ema26']
+        is_bullish_1h = ema9_1h > ema26_1h
+        is_bearish_1h = ema9_1h < ema26_1h
+
+        current_price = ema_data_1h['current_price']
 
         # 从策略配置获取最小信号强度，默认0.25%（限价单要求更强的趋势）
         min_signal_strength = strategy.get('minSignalStrength', {})
@@ -1111,20 +1164,26 @@ class StrategyExecutorV2:
         else:
             min_strength = 0.25
 
-        if ema_diff_pct < min_strength:
-            return None, f"限价单信号强度不足({ema_diff_pct:.3f}% < {min_strength}%)"
+        if ema_diff_pct_15m < min_strength:
+            return None, f"限价单信号强度不足(15M {ema_diff_pct_15m:.3f}% < {min_strength}%)"
 
-        # 判断方向
-        if ema_diff > 0:  # EMA9 > EMA26, 上升趋势
+        # 判断15M方向
+        if ema_diff_15m > 0:  # 15M上升趋势
             direction = 'long'
             price_type = long_price_type
-        else:  # EMA9 < EMA26, 下降趋势
+        else:  # 15M下降趋势
             direction = 'short'
             price_type = short_price_type
 
         # 如果该方向没有配置限价单，跳过
         if price_type == 'market':
             return None, f"{direction}方向未配置限价单"
+
+        # 双周期确认：1H方向必须与15M方向一致
+        if direction == 'long' and not is_bullish_1h:
+            return None, f"限价单: 15M多头但1H空头，方向冲突跳过（1H EMA9={ema9_1h:.8f} < EMA26={ema26_1h:.8f}）"
+        if direction == 'short' and not is_bearish_1h:
+            return None, f"限价单: 15M空头但1H多头，方向冲突跳过（1H EMA9={ema9_1h:.8f} > EMA26={ema26_1h:.8f}）"
 
         # 注：已移除MA方向检查，因为限价单使用回调入场策略（做多限价低于市价0.6%）
         # 当限价单触发时，价格自然会低于/高于MA10，这是预期行为
@@ -1203,7 +1262,11 @@ class StrategyExecutorV2:
         if in_cooldown:
             return None, f"限价单{cooldown_msg}"
 
-        return direction, f"限价单信号({direction}, 强度{ema_diff_pct:.3f}%)"
+        # 1H方向确认信息
+        ema_diff_pct_1h = abs(ema9_1h - ema26_1h) / ema26_1h * 100
+        direction_1h = "多头" if is_bullish_1h else "空头"
+
+        return direction, f"限价单信号({direction}, 15M强度{ema_diff_pct_15m:.3f}%, 1H{direction_1h}确认)"
 
     async def execute_limit_order(self, symbol: str, direction: str, strategy: Dict,
                                    account_id: int, ema_data: Dict) -> Dict:
@@ -3533,34 +3596,52 @@ class StrategyExecutorV2:
         if close_results:
             logger.info(f"[反转判断] {symbol} positions={len(positions)}, has_open={has_open_position}, reversal={reversal_direction}")
         if not positions or not has_open_position:
-            # ⚡ 优先处理反转平仓后的立即开仓（不受 buyDirection 限制，但需检查信号强度）
+            # ⚡ 优先处理反转平仓后的立即开仓（不受 buyDirection 限制，但需检查信号强度 + 1H方向确认）
             if reversal_direction:
                 logger.info(f"🔄 {symbol} 反转开仓: {reversal_direction}, buy_directions={buy_directions}")
 
-                # 从策略配置获取最小信号强度
-                min_signal_strength = strategy.get('minSignalStrength', {})
-                if isinstance(min_signal_strength, dict):
-                    min_strength = min_signal_strength.get('ema9_26', self.MIN_SIGNAL_STRENGTH)
-                else:
-                    min_strength = self.MIN_SIGNAL_STRENGTH
+                # 1H方向确认（与金叉/死叉、持续趋势一致的双周期确认）
+                ema9_1h = ema_data_1h['ema9']
+                ema26_1h = ema_data_1h['ema26']
+                is_bullish_1h = ema9_1h > ema26_1h
+                is_bearish_1h = ema9_1h < ema26_1h
 
-                # 检查信号强度（使用已收盘K线的EMA差值，和普通金叉/死叉开仓逻辑一致）
-                ema_diff_pct = ema_data.get('confirmed_ema_diff_pct', ema_data['ema_diff_pct'])
-                if ema_diff_pct < min_strength:
-                    logger.info(f"🔄 {symbol} Reversal entry skipped: weak signal ({ema_diff_pct:.3f}% < {min_strength}%)")
-                else:
-                    entry_reason = f"reversal_entry|diff:{ema_diff_pct:.3f}%"
-                    try:
-                        open_result = await self.execute_open_position(
-                            symbol, reversal_direction, 'reversal_cross',
-                            strategy, account_id, signal_reason=entry_reason,
-                            force_market=False  # 改为限价单开仓，等待回调
-                        )
-                        logger.info(f"🔄 {symbol} 反转开仓结果: {open_result}")
-                    except Exception as e:
-                        logger.error(f"❌ {symbol} 反转开仓异常: {e}")
-                        import traceback
-                        traceback.print_exc()
+                # 检查1H方向是否与反转方向一致
+                skip_reversal = False
+                if reversal_direction == 'long' and not is_bullish_1h:
+                    logger.info(f"🔄 {symbol} 反转开仓跳过: 15M金叉但1H空头，方向冲突（1H EMA9={ema9_1h:.8f} < EMA26={ema26_1h:.8f}）")
+                    skip_reversal = True
+                elif reversal_direction == 'short' and not is_bearish_1h:
+                    logger.info(f"🔄 {symbol} 反转开仓跳过: 15M死叉但1H多头，方向冲突（1H EMA9={ema9_1h:.8f} > EMA26={ema26_1h:.8f}）")
+                    skip_reversal = True
+
+                if not skip_reversal:
+                    # 从策略配置获取最小信号强度
+                    min_signal_strength = strategy.get('minSignalStrength', {})
+                    if isinstance(min_signal_strength, dict):
+                        min_strength = min_signal_strength.get('ema9_26', self.MIN_SIGNAL_STRENGTH)
+                    else:
+                        min_strength = self.MIN_SIGNAL_STRENGTH
+
+                    # 检查信号强度（使用15M的EMA差值）
+                    ema_diff_pct_15m = ema_data_15m.get('confirmed_ema_diff_pct', ema_data_15m['ema_diff_pct'])
+                    if ema_diff_pct_15m < min_strength:
+                        logger.info(f"🔄 {symbol} 反转开仓跳过: 信号弱 (15M {ema_diff_pct_15m:.3f}% < {min_strength}%)")
+                    else:
+                        ema_diff_pct_1h = abs(ema9_1h - ema26_1h) / ema26_1h * 100
+                        direction_1h = "多头" if is_bullish_1h else "空头"
+                        entry_reason = f"reversal_entry|15M强度:{ema_diff_pct_15m:.3f}%|1H{direction_1h}确认({ema_diff_pct_1h:.3f}%)"
+                        try:
+                            open_result = await self.execute_open_position(
+                                symbol, reversal_direction, 'reversal_cross',
+                                strategy, account_id, signal_reason=entry_reason,
+                                force_market=False  # 改为限价单开仓，等待回调
+                            )
+                            logger.info(f"🔄 {symbol} 反转开仓结果: {open_result}")
+                        except Exception as e:
+                            logger.error(f"❌ {symbol} 反转开仓异常: {e}")
+                            import traceback
+                            traceback.print_exc()
 
             # 3.1 检查金叉/死叉信号（非反转情况）
             # 双周期确认：15M金叉/死叉 + 1H方向确认
