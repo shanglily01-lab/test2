@@ -2585,17 +2585,34 @@ class StrategyExecutorV2:
                         logger.info(f"移动止损下移: {position.get('symbol')} 做空, 盈利{current_pnl_pct:.2f}%, 止损从{current_stop_loss:.6f}下移到{new_stop_loss:.6f} (移动{move_pct:.2f}%)")
 
         # 1. 检查是否触发止损价（包括移动止损后的价格）
+        # 注意：开仓后15分钟内不检查止损价触发，防止开仓即止损
+        # 但硬止损(-2.5%)不受此限制，作为紧急止损
         updated_stop_loss = updates.get('stop_loss_price', current_stop_loss)
         if updated_stop_loss > 0:
             # 判断是移动止损还是普通止损（通过盈亏判断：盈利时触发的是移动止损）
             is_trailing_stop = current_pnl_pct > 0
             stop_type = "trailing_stop_loss" if is_trailing_stop else "stop_loss"
-            if position_side == 'LONG' and current_price <= updated_stop_loss:
-                return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
-            elif position_side == 'SHORT' and current_price >= updated_stop_loss:
-                return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
+
+            # 冷却期保护：开仓后15分钟内不检查普通止损价触发
+            if in_cooldown and not is_trailing_stop:
+                # 在冷却期内，只有硬止损(-2.5%)可以触发，普通止损价(-1.93%)被跳过
+                satisfied, duration = self.check_min_holding_duration(position, trailing_cooldown_minutes)
+                if not satisfied:
+                    logger.debug(f"{symbol} 止损价触发被跳过: 持仓时长{duration:.1f}分钟 < {trailing_cooldown_minutes}分钟")
+                else:
+                    if position_side == 'LONG' and current_price <= updated_stop_loss:
+                        return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
+                    elif position_side == 'SHORT' and current_price >= updated_stop_loss:
+                        return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
+            else:
+                # 非冷却期，或者是移动止损，正常检查
+                if position_side == 'LONG' and current_price <= updated_stop_loss:
+                    return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
+                elif position_side == 'SHORT' and current_price >= updated_stop_loss:
+                    return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
 
         # 2. 硬止损检查（百分比止损，作为后备）
+        # 硬止损不受冷却期限制，作为紧急止损
         if current_pnl_pct <= -stop_loss_pct:
             return True, f"hard_stop_loss|loss:{abs(current_pnl_pct):.2f}%", updates
 
