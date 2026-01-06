@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 紧急停止机制
-当最近3笔交易中有2笔硬止损时：
+当最近5笔交易中有3笔硬止损时：
 1. 暂停所有交易（模拟盘+实盘）
 2. 平掉所有持仓
 3. 4小时后再恢复
@@ -18,8 +18,8 @@ import asyncio
 class CircuitBreaker:
     """紧急停止机制"""
 
-    CHECK_RECENT_TRADES = 3  # 检查最近3笔
-    HARD_STOP_THRESHOLD = 2  # 2笔硬止损触发
+    CHECK_RECENT_TRADES = 5  # 检查最近5笔
+    HARD_STOP_THRESHOLD = 3  # 3笔硬止损触发
     COOLDOWN_HOURS = 4  # 4小时后恢复
 
     def __init__(self, db_config: dict):
@@ -40,7 +40,7 @@ class CircuitBreaker:
         )
 
     def check_should_trigger(self, account_id: int = 2) -> Tuple[bool, str]:
-        """检查是否触发：最近3笔中2笔硬止损"""
+        """检查是否触发：最近5笔中3笔硬止损"""
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
