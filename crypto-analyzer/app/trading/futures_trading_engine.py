@@ -1096,6 +1096,7 @@ class FuturesTradingEngine:
             # 将原因转换为中文显示
             reason_map = {
                 'stop_loss': '止损',
+                'hard_stop_loss': 'hard_stop_loss',  # 硬止损保持原样，用于紧急停止机制识别
                 'trailing_stop': '移动止损',
                 'take_profit': '止盈',
                 'manual': '手动平仓',

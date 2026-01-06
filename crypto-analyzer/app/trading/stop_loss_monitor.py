@@ -581,6 +581,12 @@ class StopLossMonitor:
             trailing_stop_activated = position.get('trailing_stop_activated', False)
             trailing_stop_price = position.get('trailing_stop_price')
 
+            # 计算当前盈亏
+            if position_side == 'LONG':
+                pnl_pct = (current_price - entry_price) / entry_price * 100 if entry_price > 0 else 0
+            else:
+                pnl_pct = (entry_price - current_price) / entry_price * 100 if entry_price > 0 else 0
+
             if trailing_stop_activated and trailing_stop_price and trailing_stop_price > 0:
                 # 使用移动止损价格
                 actual_stop_price = Decimal(str(trailing_stop_price))
@@ -589,14 +595,14 @@ class StopLossMonitor:
             else:
                 # 使用固定止损价格
                 actual_stop_price = Decimal(str(position.get('stop_loss_price', 0)))
-                stop_type = 'stop_loss'
-                stop_type_cn = '固定止损'
 
-            # 计算当前盈亏
-            if position_side == 'LONG':
-                pnl_pct = (current_price - entry_price) / entry_price * 100 if entry_price > 0 else 0
-            else:
-                pnl_pct = (entry_price - current_price) / entry_price * 100 if entry_price > 0 else 0
+                # 判断是否为硬止损（亏损>=2%）
+                if pnl_pct <= -2.0:
+                    stop_type = 'hard_stop_loss'
+                    stop_type_cn = '硬止损'
+                else:
+                    stop_type = 'stop_loss'
+                    stop_type_cn = '固定止损'
 
             logger.info(f"🛑 {stop_type_cn} triggered for position #{position_id} {symbol} @ {current_price:.8f} (stop_price={actual_stop_price:.8f}, pnl={pnl_pct:.2f}%)")
             result = self.engine.close_position(
