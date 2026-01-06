@@ -159,7 +159,12 @@ class SignalReversalMonitor:
 
             if should_close:
                 # 执行平仓
-                await self.executor.execute_close_position(position, close_reason, strategy)
+                close_result = await self.executor.execute_close_position(position, close_reason, strategy)
+
+                # 检查平仓是否成功
+                if not close_result.get('success'):
+                    logger.warning(f"❌ [信号反转] {symbol} {position_side} 平仓失败: {close_result.get('error')}")
+                    return False
 
                 # 发送通知
                 if self.trade_notifier:
