@@ -301,11 +301,29 @@ class RealtimePositionMonitor:
         # 调用策略执行器平仓
         if self.strategy_executor:
             try:
-                # 获取策略配置
+                # 获取完整的策略配置（需要用于syncLive判断）
                 strategy_id = position.get('strategy_id')
-                strategy = {'id': strategy_id} if strategy_id else {}
+                strategy = {}
 
-                await self.strategy_executor.execute_close_position(position, reason, strategy)
+                if strategy_id:
+                    conn = self.db_connection
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT config FROM trading_strategies WHERE id = %s", (strategy_id,))
+                    result = cursor.fetchone()
+                    cursor.close()
+
+                    if result:
+                        import json
+                        strategy = json.loads(result['config'])
+                        strategy['id'] = strategy_id
+
+                result = await self.strategy_executor.execute_close_position(position, reason, strategy)
+
+                # 平仓成功后，检查紧急停止（硬止损时）
+                if result.get('success') and 'hard_stop_loss' in reason:
+                    account_id = position.get('account_id', 2)
+                    await self.strategy_executor._check_circuit_breaker(account_id)
+
             except Exception as e:
                 logger.error(f"平仓执行失败: {e}")
         else:
