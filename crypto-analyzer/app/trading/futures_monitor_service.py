@@ -54,10 +54,11 @@ class FuturesMonitorService:
             self.monitor = StopLossMonitor(self.db_config, self.binance_config, trade_notifier=self.trade_notifier)
             logger.info("Stop-loss monitor created")
 
-        if not self.signal_monitor:
-            from app.services.signal_reversal_monitor import SignalReversalMonitor
-            self.signal_monitor = SignalReversalMonitor(self.db_config, self.binance_config, trade_notifier=self.trade_notifier)
-            logger.info("Signal reversal monitor created")
+        # 信号反转监控已禁用（用户不需要基于EMA反转来平仓）
+        # if not self.signal_monitor:
+        #     from app.services.signal_reversal_monitor import SignalReversalMonitor
+        #     self.signal_monitor = SignalReversalMonitor(self.db_config, self.binance_config, trade_notifier=self.trade_notifier)
+        #     logger.info("Signal reversal monitor created")
 
     def monitor_positions(self):
         """
@@ -66,7 +67,7 @@ class FuturesMonitorService:
         这个方法会被APScheduler定期调用
         """
         try:
-            if not self.monitor or not self.signal_monitor:
+            if not self.monitor:
                 self.start_monitor()
 
             # 1. 止损止盈监控
@@ -82,12 +83,11 @@ class FuturesMonitorService:
             if results['take_profit'] > 0:
                 logger.info(f"✅ {results['take_profit']} positions hit take-profit")
 
-            # 2. 信号反转监控
-            signal_results = self.signal_monitor.monitor_all_positions()
-
-            if signal_results and signal_results.get('reversal_closed', 0) > 0:
-                logger.info(f"🔄 {signal_results['reversal_closed']} positions closed due to signal reversal")
-                results['reversal_closed'] = signal_results['reversal_closed']
+            # 2. 信号反转监控 - 已禁用
+            # signal_results = self.signal_monitor.monitor_all_positions()
+            # if signal_results and signal_results.get('reversal_closed', 0) > 0:
+            #     logger.info(f"🔄 {signal_results['reversal_closed']} positions closed due to signal reversal")
+            #     results['reversal_closed'] = signal_results['reversal_closed']
 
             return results
 
