@@ -3,7 +3,6 @@ symbols:
 - BTC/USDT
 - ETH/USDT
 - BNB/USDT
-- DOGE/USDT
 - SOL/USDT
 - LTC/USDT
 - HYPE/USDT
@@ -33,7 +32,6 @@ symbols:
 - RLC/USD
 - VIRTUAL/USDT
 - RENDER/USDT
-- JASMY/USDT
 - WIF/USDT
 - TAO/USDT
 - LIT/USDT
@@ -41,8 +39,6 @@ symbols:
 - HBAR/USDT
 - WLD/USDT
 - TON/USDT
-
-
 demo_mode: false
 exchanges:
   binance:
