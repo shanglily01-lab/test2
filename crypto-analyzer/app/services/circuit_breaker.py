@@ -168,42 +168,23 @@ class CircuitBreaker:
 
             # 创建交易引擎
             from app.trading.futures_trading_engine import FuturesTradingEngine
-            from app.services.strategy_executor_v2 import StrategyExecutorV2
-
             futures_engine = FuturesTradingEngine(self.db_config)
-            executor = StrategyExecutorV2(self.db_config, futures_engine=futures_engine)
 
-            closed_count = 0
+            # 批量异步平仓
+            tasks = []
             for position in positions:
-                try:
-                    conn = self.get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT config FROM trading_strategies WHERE id = %s",
-                                 (position['strategy_id'],))
-                    result = cursor.fetchone()
-                    cursor.close()
-                    conn.close()
+                task = futures_engine.close_position(
+                    position_id=position['id'],
+                    close_reason="emergency_stop"
+                )
+                tasks.append(task)
 
-                    if not result:
-                        logger.warning(f"策略不存在，跳过: {position['symbol']} (strategy_id={position['strategy_id']})")
-                        continue
+            # 等待所有平仓完成
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    strategy = json.loads(result['config'])
-                    strategy['id'] = position['strategy_id']  # 添加策略ID
-                    close_reason = "emergency_stop|紧急停止强制平仓"
-
-                    result = await executor.execute_close_position(position, close_reason, strategy)
-
-                    if result.get('success'):
-                        closed_count += 1
-                        logger.info(f"✅ 已平仓: {position['symbol']} {position['position_side']}")
-                    else:
-                        logger.error(f"❌ 平仓失败: {position['symbol']} {position['position_side']} - {result.get('error', '未知错误')}")
-
-                except Exception as e:
-                    logger.error(f"平仓失败 {position['symbol']}: {e}")
-
-            logger.warning(f"平仓完成: {closed_count}/{len(positions)}")
+            # 统计结果
+            success_count = sum(1 for r in results if isinstance(r, dict) and r.get('success'))
+            logger.warning(f"平仓完成: {success_count}/{len(positions)}")
 
         except Exception as e:
             logger.error(f"平仓失败: {e}", exc_info=True)
