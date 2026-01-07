@@ -169,6 +169,10 @@ class CircuitBreaker:
             from app.services.strategy_executor_v2 import StrategyExecutorV2
             executor = StrategyExecutorV2(self.db_config)
 
+            # 初始化交易引擎（模拟盘+实盘）
+            await executor._init_trading_engine()
+            await executor._init_live_engine()
+
             closed_count = 0
             for position in positions:
                 try:
