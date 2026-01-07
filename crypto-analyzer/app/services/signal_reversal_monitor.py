@@ -29,9 +29,17 @@ class SignalReversalMonitor:
         self.binance_config = binance_config
         self.trade_notifier = trade_notifier
 
+        # 初始化交易引擎
+        from app.trading.futures_trading_engine import FuturesTradingEngine
+        futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier)
+
         # 初始化策略执行器（用于调用平仓逻辑）
         from app.services.strategy_executor_v2 import StrategyExecutorV2
-        self.executor = StrategyExecutorV2(db_config)
+        self.executor = StrategyExecutorV2(
+            db_config=db_config,
+            futures_engine=futures_engine,
+            live_engine=None  # 信号反转监控不需要实盘引擎（实盘同步由futures_engine内部处理）
+        )
 
         # 反转检测冷却：防止重复日志，格式 {(symbol, position_side, reason): timestamp}
         self._detected_reversals = {}
