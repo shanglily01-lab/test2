@@ -2423,6 +2423,11 @@ class StrategyExecutorV2:
             'market_minus_1_6': -1.6,
             'market_minus_1_8': -1.8,
             'market_minus_2': -2.0,
+            'market_minus_3': -3.0,
+            'market_minus_4': -4.0,
+            'market_minus_5': -5.0,
+            'market_minus_6': -6.0,
+            'market_minus_8': -8.0,
             'market_plus_0_8': 0.8,
             'market_plus_1': 1.0,
             'market_plus_1_2': 1.2,
@@ -2430,6 +2435,11 @@ class StrategyExecutorV2:
             'market_plus_1_6': 1.6,
             'market_plus_1_8': 1.8,
             'market_plus_2': 2.0,
+            'market_plus_3': 3.0,
+            'market_plus_4': 4.0,
+            'market_plus_5': 5.0,
+            'market_plus_6': 6.0,
+            'market_plus_8': 8.0,
         }
 
         adjustment_pct = price_adjustments.get(price_type)
