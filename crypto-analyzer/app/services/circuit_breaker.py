@@ -166,12 +166,12 @@ class CircuitBreaker:
 
             logger.warning(f"开始平仓 {len(positions)} 个...")
 
+            # 创建交易引擎
+            from app.trading.futures_trading_engine import FuturesTradingEngine
             from app.services.strategy_executor_v2 import StrategyExecutorV2
-            executor = StrategyExecutorV2(self.db_config)
 
-            # 初始化交易引擎（模拟盘+实盘）
-            await executor._init_trading_engine()
-            await executor._init_live_engine()
+            futures_engine = FuturesTradingEngine(self.db_config)
+            executor = StrategyExecutorV2(self.db_config, futures_engine=futures_engine)
 
             closed_count = 0
             for position in positions:
