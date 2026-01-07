@@ -46,7 +46,7 @@ class CircuitBreaker:
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT symbol, position_side, realized_pnl, notes, close_time
+                SELECT symbol, position_side, realized_pnl, unrealized_pnl_pct, notes, close_time
                 FROM futures_positions
                 WHERE status = 'closed' AND account_id = %s
                 ORDER BY close_time DESC
@@ -60,25 +60,29 @@ class CircuitBreaker:
             if len(recent_trades) < self.CHECK_RECENT_TRADES:
                 return False, ""
 
-            # 统计硬止损
+            # 统计硬止损：根据实际盈亏百分比判断（亏损 >= 2%）
             hard_stop_count = 0
             hard_stop_trades = []
 
             for trade in recent_trades:
-                notes = trade.get('notes', '') or ''
-                if 'hard_stop_loss' in notes:
+                # 使用 unrealized_pnl_pct（基于保证金的盈亏百分比）判断
+                # 如果 unrealized_pnl_pct <= -10%（对应价格亏损约2%，5倍杠杆），则认为是硬止损
+                pnl_pct = float(trade.get('unrealized_pnl_pct') or 0)
+
+                if pnl_pct <= -10.0:  # 保证金亏损 >= 10%（约等于2%价格亏损 * 5倍杠杆）
                     hard_stop_count += 1
                     hard_stop_trades.append({
                         'symbol': trade['symbol'],
                         'side': trade['position_side'],
                         'pnl': float(trade['realized_pnl']),
+                        'pnl_pct': pnl_pct,
                         'time': trade['close_time']
                     })
 
             if hard_stop_count >= self.HARD_STOP_THRESHOLD:
                 reason = f"[紧急停止] 最近{self.CHECK_RECENT_TRADES}笔中{hard_stop_count}笔硬止损\n"
                 for t in hard_stop_trades:
-                    reason += f"  - {t['symbol']} {t['side']}: ${t['pnl']:.2f} at {t['time']}\n"
+                    reason += f"  - {t['symbol']} {t['side']}: ${t['pnl']:.2f} ({t['pnl_pct']:.2f}%) at {t['time']}\n"
                 return True, reason
 
             return False, ""
