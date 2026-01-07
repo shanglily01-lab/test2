@@ -181,14 +181,20 @@ class CircuitBreaker:
                     conn.close()
 
                     if not result:
+                        logger.warning(f"策略不存在，跳过: {position['symbol']} (strategy_id={position['strategy_id']})")
                         continue
 
                     strategy = json.loads(result['config'])
+                    strategy['id'] = position['strategy_id']  # 添加策略ID
                     close_reason = "emergency_stop|紧急停止强制平仓"
-                    await executor.execute_close_position(position, close_reason, strategy)
 
-                    closed_count += 1
-                    logger.info(f"已平仓: {position['symbol']} {position['position_side']}")
+                    result = await executor.execute_close_position(position, close_reason, strategy)
+
+                    if result.get('success'):
+                        closed_count += 1
+                        logger.info(f"✅ 已平仓: {position['symbol']} {position['position_side']}")
+                    else:
+                        logger.error(f"❌ 平仓失败: {position['symbol']} {position['position_side']} - {result.get('error', '未知错误')}")
 
                 except Exception as e:
                     logger.error(f"平仓失败 {position['symbol']}: {e}")
