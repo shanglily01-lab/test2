@@ -170,21 +170,32 @@ class CircuitBreaker:
             from app.trading.futures_trading_engine import FuturesTradingEngine
             futures_engine = FuturesTradingEngine(self.db_config)
 
-            # 批量异步平仓
-            tasks = []
+            # 同步平仓（close_position是同步函数）
+            success_count = 0
+            failed_positions = []
+
             for position in positions:
-                task = futures_engine.close_position(
-                    position_id=position['id'],
-                    close_reason="emergency_stop"
-                )
-                tasks.append(task)
+                try:
+                    result = futures_engine.close_position(
+                        position_id=position['id'],
+                        close_reason="emergency_stop"
+                    )
+                    if result and result.get('success'):
+                        success_count += 1
+                        logger.info(f"✓ 平仓成功: {position['symbol']} {position['position_side']}")
+                    else:
+                        failed_positions.append(position)
+                        logger.error(f"✗ 平仓失败: {position['symbol']} {position['position_side']}")
+                except Exception as e:
+                    failed_positions.append(position)
+                    logger.error(f"✗ 平仓异常: {position['symbol']} {position['position_side']}: {e}")
 
-            # 等待所有平仓完成
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # 统计结果
-            success_count = sum(1 for r in results if isinstance(r, dict) and r.get('success'))
             logger.warning(f"平仓完成: {success_count}/{len(positions)}")
+
+            if failed_positions:
+                logger.critical(f"⚠️ {len(failed_positions)}个持仓平仓失败:")
+                for p in failed_positions:
+                    logger.critical(f"  - {p['symbol']} {p['position_side']} (ID: {p['id']})")
 
         except Exception as e:
             logger.error(f"平仓失败: {e}", exc_info=True)
