@@ -209,8 +209,8 @@ class RealtimePositionMonitor:
 
         # 1. 检查硬止损（不受冷却时间限制）
         if current_pnl_pct <= -stop_loss_pct:
-            close_reason = f"硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)"
-            logger.info(f"🚨 [实时监控] {symbol} {close_reason}")
+            close_reason = f"hard_stop_loss|loss:{abs(current_pnl_pct):.2f}%"
+            logger.info(f"🚨 [实时监控] {symbol} 硬止损平仓(亏损{abs(current_pnl_pct):.2f}% >= {stop_loss_pct}%)")
             await self._close_position(position, close_reason)
             return
 
