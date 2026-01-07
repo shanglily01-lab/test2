@@ -66,10 +66,10 @@ class CircuitBreaker:
 
             for trade in recent_trades:
                 # 使用 unrealized_pnl_pct（基于保证金的盈亏百分比）判断
-                # 如果 unrealized_pnl_pct <= -10%（对应价格亏损约2%，5倍杠杆），则认为是硬止损
+                # 如果 unrealized_pnl_pct <= -12.5%（对应价格亏损约2.5%，5倍杠杆），则认为是硬止损
                 pnl_pct = float(trade.get('unrealized_pnl_pct') or 0)
 
-                if pnl_pct <= -10.0:  # 保证金亏损 >= 10%（约等于2%价格亏损 * 5倍杠杆）
+                if pnl_pct <= -12.5:  # 保证金亏损 >= 12.5%（约等于2.5%价格亏损 * 5倍杠杆）
                     hard_stop_count += 1
                     hard_stop_trades.append({
                         'symbol': trade['symbol'],
