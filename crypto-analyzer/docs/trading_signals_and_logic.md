@@ -1,6 +1,6 @@
 # 交易信号和平仓逻辑说明
 
-> 更新日期: 2026-01-05
+> 更新日期: 2026-01-07
 
 ---
 
@@ -227,19 +227,222 @@
 
 ---
 
-## 四、紧急停止机制
+## 四、紧急停止机制 (Circuit Breaker)
 
-当连续硬止损时自动暂停交易。
+当短时间内发生多次硬止损时，自动暂停所有交易并平掉所有持仓，防止系统性风险导致重大亏损。
 
-**触发条件**：
-- 最近3笔交易中有2笔是硬止损
+### 1. 触发条件
 
-**执行动作**：
-1. 暂停所有策略（enabled = 0）
-2. 平掉所有持仓
-3. 等待4小时后可恢复
+系统每次平仓后都会自动检查是否触发紧急停止：
 
-**实现位置**：`app/services/circuit_breaker.py`
+**检查范围**：最近5笔平仓记录
+
+**硬止损判断标准**：
+- `unrealized_pnl_pct <= -10%`（保证金亏损达到10%或更多）
+- 对应约2%的价格亏损（使用5倍杠杆时）
+
+**触发阈值**：
+- 最近5笔中有 **3笔或更多** 是硬止损 → 触发紧急停止
+
+**实现位置**：[circuit_breaker.py](app/services/circuit_breaker.py)
+
+---
+
+### 2. 执行动作
+
+紧急停止触发后，系统会立即执行以下操作：
+
+#### 2.1 暂停所有策略
+```sql
+UPDATE trading_strategies SET enabled = 0 WHERE enabled = 1
+```
+- 包括模拟盘和实盘策略
+- 所有自动开仓信号将被忽略
+
+#### 2.2 平掉所有持仓
+
+**平仓方式**：同步顺序执行（非并发）
+- 遍历所有未平仓持仓
+- 每个持仓单独try-except处理
+- 使用市价单立即平仓
+- 平仓原因记录为：`emergency_stop`
+
+**关键实现细节**：
+```python
+for position in positions:
+    try:
+        result = futures_engine.close_position(
+            position_id=position['id'],
+            close_reason="emergency_stop"
+        )
+        if result and result.get('success'):
+            success_count += 1
+        else:
+            failed_positions.append(position)
+    except Exception as e:
+        failed_positions.append(position)
+        logger.error(f"平仓异常: {position['symbol']}")
+```
+
+**失败处理**：
+- 失败的持仓会记录到`failed_positions`列表
+- 使用`logger.critical`级别记录失败详情
+- 不会因为单个持仓失败而中断整个流程
+
+#### 2.3 冷却期设置
+
+**冷却时长**：4小时
+
+**冷却期间**：
+- 所有策略保持暂停状态（`enabled = 0`）
+- 不接受新的开仓信号
+- 可以手动开仓（但不推荐）
+
+**自动恢复**：
+- 4小时后系统会自动恢复所有策略（`enabled = 1`）
+
+---
+
+### 3. 检测逻辑演变
+
+#### 早期版本（已废弃）
+```python
+# 通过notes字段文本匹配 - 已弃用
+if 'hard_stop_loss' in notes:
+    hard_stop_count += 1
+```
+
+**问题**：
+- notes字段格式不统一（有英文`'hard_stop_loss'`也有中文`'硬止损平仓(亏损3.02% >= 3%)'`）
+- 导致中文格式的硬止损未被识别
+- **实际案例**：2026-01-06晚，第3笔硬止损时未触发紧急停止，最终18笔硬止损才停止，亏损-1011 USDT
+
+#### 当前版本（基于百分比）
+```python
+# 基于实际盈亏百分比判断 - 当前使用
+pnl_pct = float(trade.get('unrealized_pnl_pct') or 0)
+if pnl_pct <= -10.0:  # 保证金亏损 >= 10%
+    hard_stop_count += 1
+```
+
+**优点**：
+- 不依赖文本格式，完全基于数值判断
+- 准确识别所有硬止损（无论notes如何记录）
+- 阈值从-12.5%调整为-10%，提高灵敏度
+
+---
+
+### 4. 日志输出
+
+#### 触发时的日志
+```
+================================================================================
+[紧急停止]
+================================================================================
+[紧急停止] 最近5笔中3笔硬止损
+  - DOGE/USDT LONG: $-45.23 (-13.42%) at 2026-01-07 00:07:57
+  - SUI/USDT SHORT: $-38.91 (-11.28%) at 2026-01-07 00:25:26
+  - ADA/USDT LONG: $-52.18 (-15.03%) at 2026-01-07 00:25:32
+
+已暂停 5 个策略:
+  - [futures] BNB DOGEETH SOL LTC
+  - [futures] 主流币策略
+  ...
+
+开始平仓 8 个...
+✓ 平仓成功: BTC/USDT LONG
+✓ 平仓成功: ETH/USDT SHORT
+...
+平仓完成: 8/8
+
+[紧急停止] 完成
+   - 策略已暂停
+   - 持仓已平仓
+   - 4小时后恢复: 2026-01-07 05:25:32
+================================================================================
+```
+
+#### 失败情况的日志
+```
+平仓完成: 6/8
+
+⚠️ 2个持仓平仓失败:
+  - BNB/USDT LONG (ID: 12345)
+  - SOL/USDT SHORT (ID: 12346)
+```
+
+---
+
+### 5. 状态查询
+
+可以通过`get_status()`方法查询紧急停止状态：
+
+```python
+breaker.get_status()
+```
+
+**返回示例（未激活）**：
+```json
+{
+  "active": false,
+  "message": "未停止"
+}
+```
+
+**返回示例（已激活）**：
+```json
+{
+  "active": true,
+  "activated_at": "2026-01-07T01:25:32",
+  "cooldown_hours": 4,
+  "should_resume": false,
+  "status_message": "剩余2.3小时"
+}
+```
+
+---
+
+### 6. 手动控制
+
+虽然紧急停止主要是自动触发，但也支持手动控制：
+
+#### 手动激活
+```python
+await breaker.activate(
+    reason="手动触发紧急停止",
+    account_id=2
+)
+```
+
+#### 手动恢复（4小时后）
+```python
+await breaker.resume()
+```
+
+**注意**：手动恢复必须满足冷却期要求（4小时）
+
+---
+
+### 7. 关键参数
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `CHECK_RECENT_TRADES` | 5 | 检查最近N笔交易 |
+| `HARD_STOP_THRESHOLD` | 3 | N笔硬止损触发 |
+| `COOLDOWN_HOURS` | 4 | 冷却时长（小时） |
+| 硬止损判断阈值 | -10% | `unrealized_pnl_pct <= -10.0` |
+
+**位置**：[circuit_breaker.py:21-23](app/services/circuit_breaker.py#L21-L23)
+
+---
+
+### 8. 重要注意事项
+
+1. **平仓是同步执行**：`close_position()`是同步函数，不能用`asyncio.gather()`并发执行
+2. **硬止损永远优先**：即使在冷却期内，硬止损（-2.5%）也会立即触发平仓
+3. **百分比基于保证金**：`unrealized_pnl_pct`是基于保证金的盈亏，不是价格涨跌幅
+4. **实盘同步**：如果策略配置了`syncLive=1`，紧急停止会同时平掉实盘持仓
+5. **失败容错**：单个持仓平仓失败不会中断整个流程，会继续处理其他持仓
 
 ---
 
