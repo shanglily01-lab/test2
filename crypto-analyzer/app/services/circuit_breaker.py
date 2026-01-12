@@ -178,7 +178,7 @@ class CircuitBreaker:
                 try:
                     result = futures_engine.close_position(
                         position_id=position['id'],
-                        close_reason="emergency_stop"
+                        reason="emergency_stop"
                     )
                     if result and result.get('success'):
                         success_count += 1
