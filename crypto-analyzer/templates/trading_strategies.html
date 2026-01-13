@@ -1198,7 +1198,13 @@
                                         <input type="number" class="form-input" id="stopLoss" placeholder="例如：3" min="0" max="50" step="0.1">
                                         <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">亏损达到此百分比时自动平仓（建议3-5%）</small>
                                     </div>
-                                    
+
+                                    <div class="form-group">
+                                        <label class="form-label">最大持仓时长（小时）</label>
+                                        <input type="number" class="form-input" id="maxHoldingHours" placeholder="例如：8" min="0" max="72" step="1">
+                                        <small style="color: var(--text-secondary); font-size: 12px; margin-top: 4px; display: block;">持仓超过此时长自动平仓（0=不限制，建议8-24小时）</small>
+                                    </div>
+
                                     <div class="form-group">
                                         <label class="form-label">止盈（%）</label>
                                         <input type="number" class="form-input" id="takeProfit" placeholder="例如：5" min="0" max="100" step="0.1">
@@ -2488,6 +2494,7 @@
                 limitOrderMaxDeviation: document.getElementById('limitOrderMaxDeviation') && document.getElementById('limitOrderMaxDeviation').value ? parseFloat(document.getElementById('limitOrderMaxDeviation').value) : 1.5,
                 crossSignalForceMarket: document.getElementById('crossSignalForceMarket') ? document.getElementById('crossSignalForceMarket').checked : true,
                 stopLoss: document.getElementById('stopLoss').value ? parseFloat(document.getElementById('stopLoss').value) : null,
+                maxHoldingHours: document.getElementById('maxHoldingHours').value ? parseInt(document.getElementById('maxHoldingHours').value) : 0,
                 takeProfit: document.getElementById('takeProfit').value ? parseFloat(document.getElementById('takeProfit').value) : null,
                 trailingActivate: document.getElementById('trailingActivate').value ? parseFloat(document.getElementById('trailingActivate').value) : 1.5,
                 trailingCallback: document.getElementById('trailingCallback').value ? parseFloat(document.getElementById('trailingCallback').value) : 0.5,
@@ -3124,6 +3131,7 @@
             
             // 止损止盈
             document.getElementById('stopLoss').value = strategy.stopLoss || '';
+            document.getElementById('maxHoldingHours').value = strategy.maxHoldingHours || '';
             document.getElementById('takeProfit').value = strategy.takeProfit || '';
 
             // 移动止盈

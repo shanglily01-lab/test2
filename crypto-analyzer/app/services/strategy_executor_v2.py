@@ -2837,6 +2837,18 @@ class StrategyExecutorV2:
         if current_pnl_pct <= -stop_loss_pct:
             return True, f"hard_stop_loss|loss:{abs(current_pnl_pct):.2f}%", updates
 
+        # 2.3 最大持仓时长检查
+        # 从策略配置中读取最大持仓时长（单位：小时）
+        max_holding_hours = strategy.get('maxHoldingHours', 0)  # 默认0表示不限制
+        if max_holding_hours > 0 and open_time:
+            from datetime import datetime, timedelta, timezone
+            local_tz = timezone(timedelta(hours=8))
+            now = datetime.now(local_tz).replace(tzinfo=None)
+            if isinstance(open_time, datetime):
+                holding_hours = (now - open_time).total_seconds() / 3600
+                if holding_hours >= max_holding_hours:
+                    return True, f"max_holding_time|hours:{holding_hours:.1f}|max:{max_holding_hours}|pnl:{current_pnl_pct:+.2f}%", updates
+
         # 2.5 5M信号智能止损（亏损时检测5M反向交叉）
         # 注意：冷却期内不检查5M信号止损
         if not in_cooldown:
