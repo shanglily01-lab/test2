@@ -1271,6 +1271,195 @@ class StrategyExecutorV2:
 
         return direction, f"限价单信号({direction}, 15M强度{ema_diff_pct_15m:.3f}%, 1H{direction_1h}确认)"
 
+    # ==================== V3持续趋势策略 ====================
+
+    def check_v3_sustained_trend(self, symbol: str, ema_data: Dict, strategy: Dict,
+                                  strategy_id: int) -> Tuple[Optional[str], str]:
+        """
+        V3持续趋势检测（追单策略）
+        核心逻辑：检测15M连续3根K线EMA9同向移动（每根≥0.3%）+ 总信号强度≥1.0% + 1H方向确认
+
+        Args:
+            symbol: 交易对
+            ema_data: 1H EMA数据（用于方向确认）
+            strategy: 策略配置
+            strategy_id: 策略ID
+
+        Returns:
+            (信号方向 'long'/'short'/None, 信号描述)
+        """
+        # 检查是否启用V3策略
+        strategy_type = strategy.get('strategyType', 'v2')
+        if strategy_type != 'v3':
+            return None, "非V3策略"
+
+        # 检查是否启用限价单
+        enable_limit_order = strategy.get('enableLimitOrder', True)
+        if not enable_limit_order:
+            return None, "V3限价单已禁用"
+
+        # 检查限价单配置
+        long_price_type = strategy.get('longPrice', 'market')
+        short_price_type = strategy.get('shortPrice', 'market')
+
+        # V3强制要求固定1%限价单
+        if long_price_type != 'market_minus_1' or short_price_type != 'market_plus_1':
+            return None, f"V3策略限价单配置错误(需要market_minus_1/market_plus_1, 当前{long_price_type}/{short_price_type})"
+
+        try:
+            # 1. 获取15M最近4根K线的EMA9数据（需要4根来计算3次变化）
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT close_time, ema9
+                FROM klines_1h
+                WHERE symbol = %s AND interval = '15m'
+                ORDER BY close_time DESC
+                LIMIT 4
+            """, (symbol,))
+
+            klines = cursor.fetchall()
+
+            if len(klines) < 4:
+                cursor.close()
+                conn.close()
+                return None, f"15M K线数据不足(需要4根, 实际{len(klines)}根)"
+
+            # 按时间升序排列（从旧到新）
+            klines.reverse()
+
+            # 2. 计算连续3次EMA9变化百分比
+            ema9_changes = []
+            for i in range(1, 4):
+                prev_ema9 = float(klines[i-1]['ema9'])
+                curr_ema9 = float(klines[i]['ema9'])
+                change_pct = (curr_ema9 - prev_ema9) / prev_ema9 * 100
+                ema9_changes.append(change_pct)
+
+            # 3. 检查是否连续3次同向移动且每次≥0.3%
+            MIN_SINGLE_MOVE = 0.3  # 每根K线最小变化0.3%
+
+            # 检查做多：连续3次上升
+            if all(change >= MIN_SINGLE_MOVE for change in ema9_changes):
+                direction = 'long'
+            # 检查做空：连续3次下降
+            elif all(change <= -MIN_SINGLE_MOVE for change in ema9_changes):
+                direction = 'short'
+            else:
+                cursor.close()
+                conn.close()
+                change_str = ' -> '.join([f"{c:+.2f}%" for c in ema9_changes])
+                return None, f"15M EMA9未连续3次同向移动(需每次≥0.3%, 实际: {change_str})"
+
+            cursor.close()
+            conn.close()
+
+        except Exception as e:
+            logger.error(f"V3检测15M持续趋势失败: {e}")
+            return None, f"检测15M趋势失败: {e}"
+
+        # 4. 检查15M当前信号强度是否≥1.0%
+        ema_data_15m = self.get_ema_data(symbol, '15m', 50)
+        if not ema_data_15m:
+            return None, "15M EMA数据不足"
+
+        ema_diff_pct_15m = ema_data_15m['ema_diff_pct']
+        MIN_SIGNAL_STRENGTH = 1.0  # V3固定要求1.0%信号强度
+
+        if abs(ema_diff_pct_15m) < MIN_SIGNAL_STRENGTH:
+            return None, f"15M信号强度不足(需≥1.0%, 实际{abs(ema_diff_pct_15m):.3f}%)"
+
+        # 5. 检查15M方向是否与持续趋势一致
+        ema_diff_15m = ema_data_15m['ema_diff']
+        if direction == 'long' and ema_diff_15m <= 0:
+            return None, f"15M方向冲突(持续上升但EMA9<EMA26)"
+        if direction == 'short' and ema_diff_15m >= 0:
+            return None, f"15M方向冲突(持续下降但EMA9>EMA26)"
+
+        # 6. 1H方向确认
+        ema_data_1h = ema_data  # 传入的是1H数据
+        if not ema_data_1h:
+            return None, "1H EMA数据不足"
+
+        ema9_1h = ema_data_1h['ema9']
+        ema26_1h = ema_data_1h['ema26']
+        is_bullish_1h = ema9_1h > ema26_1h
+        is_bearish_1h = ema9_1h < ema26_1h
+
+        if direction == 'long' and not is_bullish_1h:
+            return None, f"1H方向冲突(15M持续上升但1H空头, 1H EMA9={ema9_1h:.8f} < EMA26={ema26_1h:.8f})"
+        if direction == 'short' and not is_bearish_1h:
+            return None, f"1H方向冲突(15M持续下降但1H多头, 1H EMA9={ema9_1h:.8f} > EMA26={ema26_1h:.8f})"
+
+        # 7. 检查是否已有同方向持仓（V3不与V2冲突，但同symbol同direction不重复开）
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            position_side = 'LONG' if direction == 'long' else 'SHORT'
+
+            cursor.execute("""
+                SELECT id, strategy_id FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND status = 'open'
+                LIMIT 1
+            """, (symbol, position_side))
+
+            existing_pos = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if existing_pos:
+                return None, f"已有{position_side}持仓(ID:{existing_pos['id']}, 策略:{existing_pos['strategy_id']}), V3不重复开仓"
+
+        except Exception as e:
+            logger.warning(f"{symbol} V3检查已有持仓失败: {e}")
+
+        # 8. 检查是否已有PENDING限价单
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            position_side = 'LONG' if direction == 'long' else 'SHORT'
+            order_side = f'OPEN_{position_side}'
+
+            cursor.execute("""
+                SELECT id FROM futures_orders
+                WHERE symbol = %s AND strategy_id = %s
+                AND side = %s AND status = 'PENDING'
+                LIMIT 1
+            """, (symbol, strategy_id, order_side))
+
+            pending_order = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if pending_order:
+                return None, f"V3已有PENDING限价单(ID:{pending_order['id']})"
+
+        except Exception as e:
+            logger.warning(f"{symbol} V3检查限价单状态失败: {e}")
+            return None, f"检查限价单状态失败: {e}"
+
+        # 9. 检查冷却期
+        in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, direction, strategy, strategy_id)
+        if in_cooldown:
+            return None, f"V3{cooldown_msg}"
+
+        # 10. 构造信号描述
+        change_str = ' -> '.join([f"{c:+.2f}%" for c in ema9_changes])
+        ema_diff_pct_1h = abs(ema9_1h - ema26_1h) / ema26_1h * 100
+        direction_1h = "多头" if is_bullish_1h else "空头"
+
+        signal_desc = (
+            f"V3持续趋势({direction}, "
+            f"15M连续3涨{change_str}, "
+            f"信号强度{ema_diff_pct_15m:.3f}%, "
+            f"1H{direction_1h}确认{ema_diff_pct_1h:.3f}%)"
+        )
+
+        return direction, signal_desc
+
     async def execute_limit_order(self, symbol: str, direction: str, strategy: Dict,
                                    account_id: int, ema_data: Dict) -> Dict:
         """
@@ -3843,10 +4032,23 @@ class StrategyExecutorV2:
                     else:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
-            # 3.5 检查限价单信号（无需自检，直接挂单）
+            # 3.5 检查V3持续趋势信号（追单策略）
+            if not open_result or not open_result.get('success'):
+                v3_signal, v3_desc = self.check_v3_sustained_trend(symbol, ema_data, strategy, strategy_id)
+                debug_info.append(f"V3持续趋势: {v3_desc}")
+
+                if v3_signal and v3_signal in buy_directions:
+                    # V3策略直接挂限价单，不需要应用技术指标过滤器
+                    open_result = await self.execute_limit_order(
+                        symbol, v3_signal, strategy, account_id, ema_data
+                    )
+                    if open_result and open_result.get('success'):
+                        debug_info.append(f"✅ V3限价单已挂出: {v3_signal} @ {open_result.get('limit_price', 0):.4f}")
+
+            # 3.6 检查限价单信号（V2策略，无需自检，直接挂单）
             if not open_result or not open_result.get('success'):
                 limit_signal, limit_desc = self.check_limit_entry_signal(symbol, ema_data, strategy, strategy_id)
-                debug_info.append(f"限价单信号: {limit_desc}")
+                debug_info.append(f"限价单信号(V2): {limit_desc}")
 
                 if limit_signal and limit_signal in buy_directions:
                     # 限价单不需要应用技术指标过滤器，直接执行

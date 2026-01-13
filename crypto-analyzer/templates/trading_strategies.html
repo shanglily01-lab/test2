@@ -602,15 +602,50 @@
                                 <input type="text" class="form-input" id="strategyName" placeholder="例如：EMA多空策略" required>
                             </div>
 
-                            <!-- V2策略说明（始终使用V2简化策略） -->
+                            <!-- 策略版本选择 -->
+                            <div class="form-group">
+                                <label class="form-label">策略版本<span class="required">*</span></label>
+                                <div class="radio-group" style="flex-direction: row; gap: 16px;">
+                                    <div class="radio-option">
+                                        <input type="radio" id="strategyTypeV2" name="strategyType" value="v2" checked onchange="updateStrategyTypeDescription()">
+                                        <label for="strategyTypeV2" class="radio-label">
+                                            <i class="bi bi-graph-up-arrow"></i>
+                                            V2 (金叉/死叉)
+                                        </label>
+                                    </div>
+                                    <div class="radio-option">
+                                        <input type="radio" id="strategyTypeV3" name="strategyType" value="v3" onchange="updateStrategyTypeDescription()">
+                                        <label for="strategyTypeV3" class="radio-label">
+                                            <i class="bi bi-arrows-move"></i>
+                                            V3 (持续趋势追单)
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- V2策略说明 -->
                             <input type="hidden" id="useV2Strategy" value="true">
-                            <div class="form-group" style="margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(43, 111, 237, 0.1)); border-radius: var(--radius-lg); border-left: 4px solid var(--success-green);">
+                            <div id="v2Description" class="form-group" style="margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(43, 111, 237, 0.1)); border-radius: var(--radius-lg); border-left: 4px solid var(--success-green);">
                                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                                     <i class="bi bi-lightning-charge-fill" style="color: var(--success-green); font-size: 18px;"></i>
-                                    <span style="font-weight: 700; font-size: 14px; color: var(--success-green);">简化策略模式</span>
+                                    <span style="font-weight: 700; font-size: 14px; color: var(--success-green);">V2 金叉/死叉策略</span>
                                 </div>
                                 <small style="color: var(--text-secondary); font-size: 12px; line-height: 1.6;">
-                                    使用优化后的固定参数：EMA(9,26) 15分钟金叉/死叉信号 + MA10/EMA10方向过滤 | 止损 2.5% | 移动止盈 1.5%→1%回调 (最大8%)
+                                    捕捉趋势初期信号：15M EMA(9,26)金叉/死叉 + 1H方向确认 + 限价单等回调入场<br>
+                                    信号强度：1.2%-2.5% | 硬止损：2.5% | 移动止盈：3.4%激活→0.3%回调
+                                </small>
+                            </div>
+
+                            <!-- V3策略说明 -->
+                            <div id="v3Description" class="form-group" style="margin-bottom: 20px; padding: 16px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(236, 72, 153, 0.1)); border-radius: var(--radius-lg); border-left: 4px solid var(--primary-purple); display: none;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                    <i class="bi bi-arrows-move" style="color: var(--primary-purple); font-size: 18px;"></i>
+                                    <span style="font-weight: 700; font-size: 14px; color: var(--primary-purple);">V3 持续趋势追单策略</span>
+                                </div>
+                                <small style="color: var(--text-secondary); font-size: 12px; line-height: 1.6;">
+                                    捕捉强趋势延续机会：15M连续3根K线EMA9同向移动(每根≥0.3%) + 总信号强度≥1.0% + 1H方向确认<br>
+                                    固定限价单：做多market_minus_1%, 做空market_plus_1% | 硬止损：2.5% | 移动止盈：3.4%激活→0.3%回调<br>
+                                    <span style="color: var(--warning-yellow); font-weight: 600;">⚠️ V3要求市场已经形成明显趋势，更适合趋势延续阶段</span>
                                 </small>
                             </div>
 
@@ -2015,6 +2050,35 @@
             }
         }
         
+        // 更新策略版本描述显示
+        function updateStrategyTypeDescription() {
+            const strategyTypeV2 = document.getElementById('strategyTypeV2');
+            const strategyTypeV3 = document.getElementById('strategyTypeV3');
+            const v2Description = document.getElementById('v2Description');
+            const v3Description = document.getElementById('v3Description');
+
+            if (strategyTypeV3 && strategyTypeV3.checked) {
+                // V3策略
+                if (v2Description) v2Description.style.display = 'none';
+                if (v3Description) v3Description.style.display = 'block';
+
+                // V3强制设置固定1%限价单
+                const longPriceMarketMinus1 = document.getElementById('longPriceMarketMinus1');
+                const shortPricemarketPlus1 = document.getElementById('shortPricemarketPlus1');
+                if (longPriceMarketMinus1) longPriceMarketMinus1.checked = true;
+                if (shortPricemarketPlus1) shortPricemarketPlus1.checked = true;
+
+                // V3使用2.5%硬止损
+                const stopLoss = document.getElementById('stopLoss');
+                if (stopLoss) stopLoss.value = '2.5';
+
+            } else {
+                // V2策略
+                if (v2Description) v2Description.style.display = 'block';
+                if (v3Description) v3Description.style.display = 'none';
+            }
+        }
+
         // V2策略默认设置（已简化，V2始终启用）
         function toggleV2Mode() {
             // V2策略始终启用，设置默认值
@@ -2399,9 +2463,13 @@
             const buyDirections = Array.from(document.querySelectorAll('input[name="buyDirection"]:checked')).map(cb => cb.value);
             const leverageRadio = document.querySelector('input[name="leverage"]:checked');
 
+            const strategyTypeRadio = document.querySelector('input[name="strategyType"]:checked');
+            const strategyType = strategyTypeRadio ? strategyTypeRadio.value : 'v2';
+
             const formData = {
                 name: document.getElementById('strategyName').value,
-                useV2Strategy: true, // V2策略始终启用
+                strategyType: strategyType, // V2 或 V3 策略
+                useV2Strategy: true, // V2策略始终启用（向后兼容）
                 buyDirection: buyDirections, // 改为数组，支持多选
                 leverage: leverageRadio ? parseInt(leverageRadio.value) : 5, // 交易倍数，默认5
                 buySignals: 'ema_15m', // V2策略固定使用 EMA 15分钟信号
@@ -2668,6 +2736,9 @@
                         <div class="strategy-item-header">
                             <div class="strategy-item-title">
                                 ${strategy.name}
+                                ${strategy.strategyType === 'v3'
+                                    ? '<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; background: linear-gradient(135deg, #8B5CF6, #EC4899); color: white; font-size: 11px; font-weight: 600; border-radius: 4px;">V3</span>'
+                                    : '<span style="display: inline-block; margin-left: 8px; padding: 2px 8px; background: var(--success-green); color: white; font-size: 11px; font-weight: 600; border-radius: 4px;">V2</span>'}
                             </div>
                             <div class="strategy-item-actions">
                                 <button class="btn btn-sm btn-info" onclick="testStrategy(${strategy.id})" title="测试24小时交易">
@@ -3004,6 +3075,14 @@
 
             // 填充表单
             document.getElementById('strategyName').value = strategy.name;
+
+            // 策略版本
+            const strategyType = strategy.strategyType || 'v2';
+            const strategyTypeRadio = document.querySelector(`input[name="strategyType"][value="${strategyType}"]`);
+            if (strategyTypeRadio) {
+                strategyTypeRadio.checked = true;
+                updateStrategyTypeDescription();
+            }
 
             // V2策略始终启用
             toggleV2Mode();
