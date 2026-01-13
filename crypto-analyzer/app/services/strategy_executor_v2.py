@@ -1306,34 +1306,24 @@ class StrategyExecutorV2:
         if long_price_type != 'market_minus_1' or short_price_type != 'market_plus_1':
             return None, f"V3策略限价单配置错误(需要market_minus_1/market_plus_1, 当前{long_price_type}/{short_price_type})"
 
+        # 1. 获取15M EMA数据（包含历史EMA9值）
+        ema_data_15m = self.get_ema_data(symbol, '15m', 100)
+        if not ema_data_15m or 'ema9_values' not in ema_data_15m:
+            return None, "15M EMA数据不足"
+
+        ema9_values = ema_data_15m['ema9_values']
+
+        # 需要至少4个EMA9值来计算3次变化
+        if len(ema9_values) < 4:
+            return None, f"15M EMA9数据点不足(需要4个, 实际{len(ema9_values)}个)"
+
         try:
-            # 1. 获取15M最近4根K线的EMA9数据（需要4根来计算3次变化）
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                SELECT close_time, ema9
-                FROM klines_1h
-                WHERE symbol = %s AND interval = '15m'
-                ORDER BY close_time DESC
-                LIMIT 4
-            """, (symbol,))
-
-            klines = cursor.fetchall()
-
-            if len(klines) < 4:
-                cursor.close()
-                conn.close()
-                return None, f"15M K线数据不足(需要4根, 实际{len(klines)}根)"
-
-            # 按时间升序排列（从旧到新）
-            klines.reverse()
-
-            # 2. 计算连续3次EMA9变化百分比
+            # 2. 计算最近3次EMA9变化百分比（使用已确认的K线）
+            # 使用 [-5], [-4], [-3], [-2] 来计算3次变化（跳过[-1]未确认K线）
             ema9_changes = []
-            for i in range(1, 4):
-                prev_ema9 = float(klines[i-1]['ema9'])
-                curr_ema9 = float(klines[i]['ema9'])
+            for i in range(-4, -1):  # -4到-2，计算3次变化
+                prev_ema9 = ema9_values[i-1]
+                curr_ema9 = ema9_values[i]
                 change_pct = (curr_ema9 - prev_ema9) / prev_ema9 * 100
                 ema9_changes.append(change_pct)
 
@@ -1347,23 +1337,14 @@ class StrategyExecutorV2:
             elif all(change <= -MIN_SINGLE_MOVE for change in ema9_changes):
                 direction = 'short'
             else:
-                cursor.close()
-                conn.close()
                 change_str = ' -> '.join([f"{c:+.2f}%" for c in ema9_changes])
                 return None, f"15M EMA9未连续3次同向移动(需每次≥0.3%, 实际: {change_str})"
-
-            cursor.close()
-            conn.close()
 
         except Exception as e:
             logger.error(f"V3检测15M持续趋势失败: {e}")
             return None, f"检测15M趋势失败: {e}"
 
         # 4. 检查15M当前信号强度是否≥1.0%
-        ema_data_15m = self.get_ema_data(symbol, '15m', 50)
-        if not ema_data_15m:
-            return None, "15M EMA数据不足"
-
         ema_diff_pct_15m = ema_data_15m['ema_diff_pct']
         MIN_SIGNAL_STRENGTH = 1.0  # V3固定要求1.0%信号强度
 
