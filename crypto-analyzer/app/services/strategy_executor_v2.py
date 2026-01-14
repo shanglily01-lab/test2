@@ -33,7 +33,7 @@ class StrategyExecutorV2:
     STRENGTH_WEAKEN_COUNT = 3  # 强度减弱连续次数
 
     # 止损止盈参数
-    HARD_STOP_LOSS = 2.5  # 硬止损 (%)
+    HARD_STOP_LOSS = 3.5  # 硬止损 (%) - 价格变化3.5% = 保证金亏损35%(10x杠杆)
     TRAILING_ACTIVATE = 1.5  # 移动止盈启动阈值 (%)
     TRAILING_CALLBACK = 0.5  # 移动止盈回撤 (%)
     MAX_TAKE_PROFIT = 8.0  # 最大止盈 (%)
@@ -2703,7 +2703,7 @@ class StrategyExecutorV2:
         智能出场检测（整合所有出场逻辑）
 
         检测顺序（按优先级）：
-        1. 硬止损 (-2.5%)
+        1. 硬止损 (-3.5%)
         2. 最大止盈 (+8%)
         3. 金叉/死叉反转
         4. 趋势减弱
@@ -2803,7 +2803,7 @@ class StrategyExecutorV2:
 
         # 1. 检查是否触发止损价（包括移动止损后的价格）
         # 注意：开仓后15分钟内不检查止损价触发，防止开仓即止损
-        # 但硬止损(-2.5%)不受此限制，作为紧急止损
+        # 但硬止损(-3.5%)不受此限制，作为紧急止损
         updated_stop_loss = updates.get('stop_loss_price', current_stop_loss)
         if updated_stop_loss > 0:
             # 判断是移动止损还是普通止损（通过盈亏判断：盈利时触发的是移动止损）
@@ -2812,7 +2812,7 @@ class StrategyExecutorV2:
 
             # 冷却期保护：开仓后15分钟内不检查普通止损价触发
             if in_cooldown and not is_trailing_stop:
-                # 在冷却期内，只有硬止损(-2.5%)可以触发，普通止损价(-1.93%)被跳过
+                # 在冷却期内，只有硬止损(-3.5%)可以触发，普通止损价被跳过
                 satisfied, duration = self.check_min_holding_duration(position, trailing_cooldown_minutes)
                 if not satisfied:
                     logger.debug(f"{symbol} 止损价触发被跳过: 持仓时长{duration:.1f}分钟 < {trailing_cooldown_minutes}分钟")
