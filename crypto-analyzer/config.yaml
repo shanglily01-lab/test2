@@ -36,8 +36,17 @@ symbols:
 - TAO/USDT
 - NIGHT/USDT
 - HBAR/USDT
-- WLD/USDT
 - TON/USDT
+- IP/USDT
+- ICP/USDT
+- PENGU/USDT
+- ORDI/USDT
+- OKB/USDT
+- POL/USDT
+- OP/USDT
+- MNT/USDT
+- FET/USDT
+- INJ/USDT
 demo_mode: false
 exchanges:
   binance:
