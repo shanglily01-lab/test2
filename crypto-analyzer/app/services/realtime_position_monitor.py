@@ -319,11 +319,6 @@ class RealtimePositionMonitor:
 
                 result = await self.strategy_executor.execute_close_position(position, reason, strategy)
 
-                # 平仓成功后，检查紧急停止（硬止损时）
-                if result.get('success') and 'hard_stop_loss' in reason:
-                    account_id = position.get('account_id', 2)
-                    await self.strategy_executor._check_circuit_breaker(account_id)
-
             except Exception as e:
                 logger.error(f"平仓执行失败: {e}")
         else:
@@ -450,15 +445,11 @@ class RealtimePositionMonitor:
         logger.info(f"✅ 实时监控服务已启动，监控 {len(positions)} 个持仓，{len(symbols)} 个交易对")
         logger.info(f"🔄 自动降级保护已启用（{self.ws_service._stale_threshold}秒无数据将自动切换轮询模式）")
 
-        # 定期刷新持仓列表（处理新开仓和外部平仓）+ 检查紧急停止
+        # 定期刷新持仓列表（处理新开仓和外部平仓）
         while self.running:
             await asyncio.sleep(10)  # 每10秒刷新一次持仓列表
             try:
                 await self._refresh_positions(account_id)
-
-                # 定期检查紧急停止机制
-                await self.strategy_executor._check_circuit_breaker(account_id)
-
             except Exception as e:
                 logger.error(f"刷新持仓列表异常: {e}")
 

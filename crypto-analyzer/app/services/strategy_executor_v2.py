@@ -3499,9 +3499,6 @@ class StrategyExecutorV2:
                     # 无需再次调用 _sync_live_close，避免重复平仓
                     # 平仓冷却检查会直接从数据库 futures_positions 表查询最近平仓时间
 
-                    # 检查紧急停止（异步执行）
-                    asyncio.create_task(self._check_circuit_breaker(position.get('account_id', 2)))
-
                     return {
                         'success': True,
                         'position_id': position_id,
