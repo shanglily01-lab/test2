@@ -86,10 +86,6 @@ class StrategyExecutorV2:
         # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
         self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
 
-        # 初始化紧急停止机制（最近3笔中2笔硬止损时触发）
-        from app.services.circuit_breaker import CircuitBreaker
-        self.circuit_breaker = CircuitBreaker(db_config)
-
     def _load_margin_config(self):
         """加载保证金配置"""
         try:
@@ -3555,15 +3551,6 @@ class StrategyExecutorV2:
         except Exception as e:
             logger.error(f"实盘同步平仓异常: {e}")
 
-    async def _check_circuit_breaker(self, account_id: int = 2):
-        """检查紧急停止：最近3笔中2笔硬止损"""
-        try:
-            should_trigger, reason = self.circuit_breaker.check_should_trigger(account_id)
-            if should_trigger:
-                logger.critical(f"[紧急停止] 触发: {reason}")
-                await self.circuit_breaker.activate(reason, account_id)
-        except Exception as e:
-            logger.error(f"检查失败: {e}", exc_info=True)
 
     # ==================== 主执行逻辑 ====================
 
