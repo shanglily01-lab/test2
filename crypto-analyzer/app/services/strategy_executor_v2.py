@@ -2052,6 +2052,134 @@ class StrategyExecutorV2:
         except Exception as e:
             logger.error(f"检查超时限价单失败: {e}")
 
+    async def check_and_cancel_trend_reversal_orders(self, strategy: Dict, account_id: int = 2):
+        """
+        检查趋势反转，取消不再符合趋势方向的限价单
+
+        检测逻辑:
+        - 做多PENDING订单: 如果15M EMA9 < EMA26（趋势反转为空头）→ 取消
+        - 做空PENDING订单: 如果15M EMA9 > EMA26（趋势反转为多头）→ 取消
+
+        Args:
+            strategy: 策略配置
+            account_id: 账户ID
+        """
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            # 查找当前策略的所有PENDING限价单
+            cursor.execute("""
+                SELECT fo.id, fo.symbol, fo.side, fo.price, fo.created_at, fp.id as position_id
+                FROM futures_orders fo
+                LEFT JOIN futures_positions fp ON fo.position_id = fp.id
+                WHERE fo.strategy_id = %s AND fo.status = 'PENDING'
+                AND fo.order_type = 'LIMIT'
+            """, (strategy.get('id'),))
+
+            pending_orders = cursor.fetchall()
+
+            if not pending_orders:
+                cursor.close()
+                conn.close()
+                return
+
+            # 按symbol分组检查
+            symbols_to_check = {}
+            for order in pending_orders:
+                symbol = order['symbol']
+                if symbol not in symbols_to_check:
+                    symbols_to_check[symbol] = []
+                symbols_to_check[symbol].append(order)
+
+            cancelled_count = 0
+
+            for symbol, orders in symbols_to_check.items():
+                # 获取15M EMA数据判断当前趋势
+                ema_data_15m = self.get_ema_data(symbol, '15m', 50)
+                if not ema_data_15m:
+                    continue
+
+                ema9_15m = ema_data_15m['ema9']
+                ema26_15m = ema_data_15m['ema26']
+                rsi = ema_data_15m.get('rsi', 50.0)
+
+                # 判断当前趋势方向
+                is_bullish = ema9_15m > ema26_15m  # 多头趋势
+                is_bearish = ema9_15m < ema26_15m  # 空头趋势
+
+                for order in orders:
+                    order_side = order['side']
+                    order_id = order['id']
+                    position_id = order.get('position_id')
+                    should_cancel = False
+                    cancel_reason = ""
+
+                    # 检查是否趋势反转
+                    if order_side == 'OPEN_LONG':
+                        # 做多订单：如果趋势反转为空头，取消
+                        if is_bearish:
+                            should_cancel = True
+                            cancel_reason = f"趋势反转(空头): EMA9={ema9_15m:.4f} < EMA26={ema26_15m:.4f}"
+                        # 做多订单：如果RSI超买(>80)，取消
+                        elif rsi > 80:
+                            should_cancel = True
+                            cancel_reason = f"RSI超买警告: RSI={rsi:.1f} > 80"
+                    elif order_side == 'OPEN_SHORT':
+                        # 做空订单：如果趋势反转为多头，取消
+                        if is_bullish:
+                            should_cancel = True
+                            cancel_reason = f"趋势反转(多头): EMA9={ema9_15m:.4f} > EMA26={ema26_15m:.4f}"
+                        # 做空订单：如果RSI超卖(<20)，取消
+                        elif rsi < 20:
+                            should_cancel = True
+                            cancel_reason = f"RSI超卖警告: RSI={rsi:.1f} < 20"
+
+                    if should_cancel:
+                        logger.warning(f"🔄 [{symbol}] 取消限价单 - {cancel_reason}")
+
+                        # 更新订单状态为CANCELLED
+                        cursor.execute("""
+                            UPDATE futures_orders
+                            SET status = 'CANCELLED',
+                                cancellation_reason = %s,
+                                updated_at = NOW()
+                            WHERE id = %s
+                        """, (cancel_reason, order_id))
+
+                        # 如果有关联的持仓，也标记为取消
+                        if position_id:
+                            cursor.execute("""
+                                UPDATE futures_positions
+                                SET status = 'cancelled',
+                                    notes = CONCAT(IFNULL(notes, ''), ' | ', %s),
+                                    updated_at = NOW()
+                                WHERE id = %s AND status = 'pending'
+                            """, (cancel_reason, position_id))
+
+                        conn.commit()
+                        cancelled_count += 1
+
+                        # 同步取消实盘限价单
+                        if strategy.get('syncLive') and self.live_engine:
+                            try:
+                                success, message = self.live_engine.cancel_pending_order(symbol)
+                                if "没有" not in message:
+                                    logger.info(f"✅ [{symbol}] 实盘限价单已取消: {message}")
+                                else:
+                                    logger.debug(f"[{symbol}] {message}")
+                            except Exception as e:
+                                logger.warning(f"⚠️ [{symbol}] 取消实盘限价单失败: {e}")
+
+            cursor.close()
+            conn.close()
+
+            if cancelled_count > 0:
+                logger.info(f"🔄 趋势反转检测: 已取消 {cancelled_count} 个不符合趋势的限价单")
+
+        except Exception as e:
+            logger.error(f"检查趋势反转限价单失败: {e}")
+
     # ==================== 技术指标过滤器 ====================
 
     def check_rsi_filter(self, symbol: str, direction: str, strategy: Dict) -> Tuple[bool, str]:
@@ -4318,6 +4446,9 @@ class StrategyExecutorV2:
         """
         # 首先检查并取消超时的限价单
         await self.check_and_cancel_timeout_orders(strategy, account_id)
+
+        # 检查趋势反转，取消不符合趋势的限价单
+        await self.check_and_cancel_trend_reversal_orders(strategy, account_id)
 
         results = []
         symbols = strategy.get('symbols', [])
