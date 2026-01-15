@@ -33,7 +33,7 @@ class StrategyExecutorV2:
     STRENGTH_WEAKEN_COUNT = 3  # 强度减弱连续次数
 
     # 止损止盈参数
-    HARD_STOP_LOSS = 3.5  # 硬止损 (%) - 价格变化3.5% = 保证金亏损35%(10x杠杆)
+    HARD_STOP_LOSS = 5.0  # 硬止损 (%) - 价格变化5.0% = 保证金亏损50%(10x杠杆)
     TRAILING_ACTIVATE = 1.5  # 移动止盈启动阈值 (%)
     TRAILING_CALLBACK = 0.5  # 移动止盈回撤 (%)
     MAX_TAKE_PROFIT = 8.0  # 最大止盈 (%)
