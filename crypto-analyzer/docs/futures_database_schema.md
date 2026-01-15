@@ -1,7 +1,12 @@
 # 模拟合约交易数据库表结构
 
 > 数据库: binance-data
-> 更新日期: 2026-01-05
+> 更新日期: 2026-01-15
+>
+> **重要更新**:
+> - 2026-01-15: 新增V3趋势质量平仓原因代码
+> - 2026-01-15: 新增RSI相关字段说明
+> - 2026-01-15: 更新平仓原因代码列表
 
 --服务端的数据库
 database: binance-data
@@ -286,19 +291,67 @@ WHERE account_id = 2 AND status = 'PENDING';
 
 ## 平仓原因代码 (notes字段)
 
-| 代码 | 中文说明 |
-|------|----------|
-| hard_stop_loss | 硬止损 |
-| trailing_stop_loss | 移动止损 |
-| max_take_profit | 最大止盈 |
-| trailing_take_profit | 移动止盈 |
-| ema_diff_narrowing_tp | EMA差值收窄止盈 |
-| death_cross_reversal | 死叉反转平仓 |
-| golden_cross_reversal | 金叉反转平仓 |
-| 5m_death_cross_sl | 5分钟死叉止损 |
-| 5m_golden_cross_sl | 5分钟金叉止损 |
-| manual | 手动平仓 |
-| liquidation | 强制平仓 |
+### 标准平仓原因
 
-格式: `reason_code|param1:value|param2:value`
-示例: `trailing_take_profit|max:3.5%|cb:1.2%`
+| 代码 | 中文说明 | 触发条件 |
+|------|----------|---------|
+| hard_stop_loss | 硬止损 | 价格变化≥5.0%（保证金亏损50%） |
+| trailing_stop_loss | 移动止损 | 触及动态调整的止损价 |
+| max_take_profit | 最大止盈 | 盈利≥8.0%（已废弃） |
+| trailing_take_profit | 移动止盈 | 盈利≥3.4%激活，回撤≥0.3%触发 |
+| ema_diff_narrowing_tp | EMA差值收窄止盈 | EMA差值<0.5%且盈利≥1.5% |
+| death_cross_reversal | 死叉反转平仓 | 持多仓时15M EMA死叉 |
+| golden_cross_reversal | 金叉反转平仓 | 持空仓时15M EMA金叉 |
+| 5m_death_cross_sl | 5分钟死叉止损 | 做多亏损+5M EMA死叉 |
+| 5m_golden_cross_sl | 5分钟金叉止损 | 做空亏损+5M EMA金叉 |
+| trend_weakening | 趋势减弱平仓 | EMA差值连续减弱 |
+| manual | 手动平仓 | 用户手动操作 |
+| liquidation | 强制平仓 | 触及强平价 |
+| emergency_stop | 紧急停止 | 短时间多次硬止损触发 |
+
+### V3策略专属平仓原因 ⚡ 新增
+
+| 代码 | 中文说明 | 触发条件 |
+|------|----------|---------|
+| v3_trend_collapse | V3趋势崩溃 | 趋势质量分数<30，立即平仓 |
+| v3_trend_critical | V3趋势危险 | 趋势质量分数30-40且盈利<0.5% |
+| v3_trend_weak | V3趋势减弱 | 趋势质量分数40-60且盈利<1.0% |
+
+### 取消订单原因 (futures_orders.cancellation_reason)
+
+| 代码 | 中文说明 | 触发场景 |
+|------|----------|---------|
+| validation_failed | 自检未通过 | pendingValidation检查失败 |
+| trend_reversal | 趋势转向 | 检测到反向EMA交叉 |
+| rsi_filter | RSI过滤 ⚡ 新增 | RSI超买(>80)或超卖(<20) |
+| reversal_warning | 反转预警 | EMA9斜率突变 |
+| timeout | 超时取消 | 超过2小时未成交 |
+| position_exists | 持仓已存在 | 同方向已有持仓 |
+| ema_diff_small | EMA差值过小 | 成交时EMA差值不足 |
+| execution_failed | 执行失败 | 开仓时发生错误 |
+
+### 数据格式
+
+**英文格式** (推荐):
+```
+reason_code|param1:value|param2:value
+```
+
+**示例**:
+```
+trailing_take_profit|max:3.5%|cb:1.2%
+hard_stop_loss|pnl:-5.02%
+v3_trend_collapse|score:25|ema_diff:0.35%|ratio:0.16
+```
+
+**中文格式** (兼容):
+```
+手动平仓
+移动止损
+硬止损平仓(亏损5.02% >= 5%)
+```
+
+**混合格式**:
+```
+close_reason: hard_stop_loss|pnl:-5.02%
+```
