@@ -264,10 +264,11 @@ class StrategyExecutorV2:
 
             close_prices = [float(k['close_price']) for k in klines]
 
-            # 计算EMA9, EMA26, MA10
+            # 计算EMA9, EMA26, MA10, RSI
             ema9_values = self.calculate_ema(close_prices, 9)
             ema26_values = self.calculate_ema(close_prices, 26)
             ma10_values = self.calculate_ma(close_prices, 10)
+            rsi_values = self.calculate_rsi(close_prices, 14)
 
             if not ema9_values or not ema26_values or not ma10_values:
                 return None
@@ -276,6 +277,7 @@ class StrategyExecutorV2:
             ema26 = ema26_values[-1]
             ma10 = ma10_values[-1]
             current_price = close_prices[-1]
+            rsi = rsi_values[-1] if rsi_values else 50.0  # 默认50（中性）
 
             # 金叉/死叉判断应使用已收盘的K线数据：
             # - klines[-1] 是当前未收盘K线（数据会变化）
@@ -311,7 +313,10 @@ class StrategyExecutorV2:
                 'confirmed_ema_diff_pct': confirmed_ema_diff_pct,
                 'klines': klines,
                 'ema9_values': ema9_values,
-                'ema26_values': ema26_values
+                'ema26_values': ema26_values,
+                # RSI指标
+                'rsi': rsi,
+                'rsi_values': rsi_values
             }
 
         finally:
@@ -1409,6 +1414,47 @@ class StrategyExecutorV2:
         offset_pct = max(0.5, min(2.5, offset_pct))
 
         return offset_pct
+
+    def check_rsi_extremes(self, symbol: str, ema_data_15m: Dict, ema_data_1h: Dict) -> Tuple[Optional[str], str]:
+        """
+        检测RSI超买超卖信号
+
+        入场条件:
+        - RSI > 80: 超买区，做空信号 (需要1H趋势确认为空头)
+        - RSI < 20: 超卖区，做多信号 (需要1H趋势确认为多头)
+
+        Args:
+            symbol: 交易对
+            ema_data_15m: 15M EMA数据（包含RSI）
+            ema_data_1h: 1H EMA数据（用于趋势确认）
+
+        Returns:
+            (direction, reason)
+            direction: 'long'/'short'/None
+            reason: 触发原因或未触发说明
+        """
+        rsi = ema_data_15m.get('rsi', 50.0)
+
+        ema9_1h = ema_data_1h.get('ema9', 0)
+        ema26_1h = ema_data_1h.get('ema26', 0)
+
+        # 1. 检查RSI超卖 (做多信号)
+        if rsi < 20:
+            # 需要1H趋势为多头
+            if ema9_1h > ema26_1h:
+                return 'long', f"RSI超卖做多信号: RSI={rsi:.1f} < 20, 1H多头趋势确认"
+            else:
+                return None, f"RSI超卖但1H趋势不支持: RSI={rsi:.1f}, 1H EMA9={ema9_1h:.2f} < EMA26={ema26_1h:.2f}"
+
+        # 2. 检查RSI超买 (做空信号)
+        if rsi > 80:
+            # 需要1H趋势为空头
+            if ema9_1h < ema26_1h:
+                return 'short', f"RSI超买做空信号: RSI={rsi:.1f} > 80, 1H空头趋势确认"
+            else:
+                return None, f"RSI超买但1H趋势不支持: RSI={rsi:.1f}, 1H EMA9={ema9_1h:.2f} > EMA26={ema26_1h:.2f}"
+
+        return None, f"RSI处于正常区间: {rsi:.1f} (20-80之间)"
 
     def check_v3_sustained_trend(self, symbol: str, ema_data: Dict, strategy: Dict,
                                   strategy_id: int) -> Tuple[Optional[str], str]:
@@ -2867,15 +2913,16 @@ class StrategyExecutorV2:
         """
         V3策略专用：计算持仓期间的趋势质量分数 (0-100)
 
-        综合评估4个维度：
-        1. 15M EMA方向是否支持持仓 (25分)
-        2. 15M EMA差值强度 (25分)
-        3. EMA差值变化趋势（加速/维持/减弱） (25分)
-        4. 1H周期是否仍然支持 (25分)
+        综合评估5个维度：
+        1. 15M EMA方向是否支持持仓 (20分)
+        2. 15M EMA差值强度 (20分)
+        3. EMA差值变化趋势（加速/维持/减弱） (20分)
+        4. 1H周期是否仍然支持 (20分)
+        5. RSI状态（超买超卖预警） (20分)
 
         Args:
             position: 持仓信息
-            ema_data_15m: 15M EMA数据
+            ema_data_15m: 15M EMA数据（包含RSI）
             ema_data_1h: 1H EMA数据
 
         Returns:
@@ -2887,62 +2934,62 @@ class StrategyExecutorV2:
         score = 0
         details = {}
 
-        # ========== 1. 15M EMA方向检查 (25分) ==========
+        # ========== 1. 15M EMA方向检查 (20分) ==========
         ema9_15m = ema_data_15m['ema9']
         ema26_15m = ema_data_15m['ema26']
 
         if position_side == 'LONG':
             if ema9_15m > ema26_15m:
-                score += 25
+                score += 20
                 details['ema_direction'] = 'support'  # 支持持仓
             else:
                 score += 0
                 details['ema_direction'] = 'reverse'  # 反转
         else:  # SHORT
             if ema9_15m < ema26_15m:
-                score += 25
+                score += 20
                 details['ema_direction'] = 'support'
             else:
                 score += 0
                 details['ema_direction'] = 'reverse'
 
-        # ========== 2. 15M EMA差值强度 (25分) ==========
+        # ========== 2. 15M EMA差值强度 (20分) ==========
         current_ema_diff_pct = abs(ema9_15m - ema26_15m) / ema26_15m * 100
         details['current_ema_diff'] = current_ema_diff_pct
 
         # 强度分级（针对V3优化后的2.0%门槛）
         if current_ema_diff_pct >= 2.5:
-            score += 25  # 强趋势（超过入场门槛）
+            score += 20  # 强趋势（超过入场门槛）
         elif current_ema_diff_pct >= 2.0:
-            score += 20  # 达到入场门槛
+            score += 16  # 达到入场门槛
         elif current_ema_diff_pct >= 1.5:
-            score += 15  # 接近入场门槛
+            score += 12  # 接近入场门槛
         elif current_ema_diff_pct >= 1.0:
-            score += 10  # 明显低于入场门槛
+            score += 8   # 明显低于入场门槛
         elif current_ema_diff_pct >= 0.5:
-            score += 5   # 弱趋势
+            score += 4   # 弱趋势
         else:
             score += 0   # 极弱趋势
 
-        # ========== 3. EMA差值变化趋势 (25分) ==========
+        # ========== 3. EMA差值变化趋势 (20分) ==========
         if entry_ema_diff > 0:
             ema_diff_ratio = current_ema_diff_pct / entry_ema_diff
             details['ema_diff_ratio'] = ema_diff_ratio
 
             if ema_diff_ratio >= 1.3:
-                score += 25  # 趋势显著加速 (+30%以上)
+                score += 20  # 趋势显著加速 (+30%以上)
                 details['ema_trend'] = 'strong_acceleration'
             elif ema_diff_ratio >= 1.1:
-                score += 20  # 趋势加速 (+10%以上)
+                score += 16  # 趋势加速 (+10%以上)
                 details['ema_trend'] = 'acceleration'
             elif ema_diff_ratio >= 0.9:
-                score += 15  # 趋势维持 (±10%以内)
+                score += 12  # 趋势维持 (±10%以内)
                 details['ema_trend'] = 'maintaining'
             elif ema_diff_ratio >= 0.7:
-                score += 8   # 趋势减弱 (-30%以内)
+                score += 6   # 趋势减弱 (-30%以内)
                 details['ema_trend'] = 'weakening'
             elif ema_diff_ratio >= 0.5:
-                score += 3   # 趋势严重减弱 (-50%以内)
+                score += 2   # 趋势严重减弱 (-50%以内)
                 details['ema_trend'] = 'severe_weakening'
             else:
                 score += 0   # 趋势崩溃 (-50%以上)
@@ -2951,27 +2998,78 @@ class StrategyExecutorV2:
             details['ema_diff_ratio'] = None
             details['ema_trend'] = 'no_entry_data'
 
-        # ========== 4. 1H多周期一致性 (25分) ==========
+        # ========== 4. 1H多周期一致性 (20分) ==========
         ema9_1h = ema_data_1h.get('ema9', 0)
         ema26_1h = ema_data_1h.get('ema26', 0)
 
         if ema26_1h > 0:
             if position_side == 'LONG':
                 if ema9_1h > ema26_1h:
-                    score += 25  # 1H仍然支持
+                    score += 20  # 1H仍然支持
                     details['1h_support'] = True
                 else:
                     score += 0   # 1H已反转
                     details['1h_support'] = False
             else:  # SHORT
                 if ema9_1h < ema26_1h:
-                    score += 25
+                    score += 20
                     details['1h_support'] = True
                 else:
                     score += 0
                     details['1h_support'] = False
         else:
             details['1h_support'] = None
+
+        # ========== 5. RSI状态 (20分) ==========
+        rsi = ema_data_15m.get('rsi', 50.0)
+        details['rsi'] = rsi
+
+        # RSI评分逻辑：
+        # - 做多持仓：RSI过高(>80)警告，RSI正常(30-70)最佳，RSI过低(<20)极佳
+        # - 做空持仓：RSI过低(<20)警告，RSI正常(30-70)最佳，RSI过高(>80)极佳
+
+        if position_side == 'LONG':
+            if rsi > 80:
+                # RSI超买，做多持仓危险（可能回调）
+                score += 0
+                details['rsi_state'] = 'overbought_warning'
+            elif rsi > 70:
+                # RSI偏高，小心回调
+                score += 8
+                details['rsi_state'] = 'high'
+            elif rsi >= 30:
+                # RSI正常区间，最佳
+                score += 20
+                details['rsi_state'] = 'normal'
+            elif rsi >= 20:
+                # RSI偏低，做多空间大
+                score += 20
+                details['rsi_state'] = 'low_good'
+            else:
+                # RSI超卖，做多极佳（超跌反弹）
+                score += 20
+                details['rsi_state'] = 'oversold_excellent'
+        else:  # SHORT
+            if rsi < 20:
+                # RSI超卖，做空持仓危险（可能反弹）
+                score += 0
+                details['rsi_state'] = 'oversold_warning'
+            elif rsi < 30:
+                # RSI偏低，小心反弹
+                score += 8
+                details['rsi_state'] = 'low'
+            elif rsi <= 70:
+                # RSI正常区间，最佳
+                score += 20
+                details['rsi_state'] = 'normal'
+            elif rsi <= 80:
+                # RSI偏高，做空空间大
+                score += 20
+                details['rsi_state'] = 'high_good'
+            else:
+                # RSI超买，做空极佳（超涨回落）
+                score += 20
+                details['rsi_state'] = 'overbought_excellent'
 
         return score, details
 
@@ -3018,6 +3116,7 @@ class StrategyExecutorV2:
             f"(入场{entry_ema_diff:.2f}% 比例{ema_diff_ratio:.2f if ema_diff_ratio else 0:.2f}) "
             f"变化={details.get('ema_trend')} "
             f"1H={'✓' if details.get('1h_support') else '✗'} "
+            f"RSI={details.get('rsi', 50):.1f}({details.get('rsi_state', 'unknown')}) "
             f"盈亏={current_pnl_pct:+.2f}%"
         )
 
