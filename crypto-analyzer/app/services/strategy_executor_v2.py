@@ -1269,6 +1269,147 @@ class StrategyExecutorV2:
 
     # ==================== V3持续趋势策略 ====================
 
+    def calculate_atr_percentage(self, symbol: str, timeframe='15m', period=14) -> float:
+        """
+        计算ATR占价格的百分比
+
+        ATR = Average True Range (平均真实波幅)
+        反映市场波动程度
+
+        Args:
+            symbol: 交易对
+            timeframe: 时间周期
+            period: ATR周期
+
+        Returns:
+            ATR百分比 (0.5-2.0%)
+        """
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            # 获取最近period+1根K线
+            cursor.execute("""
+                SELECT high_price, low_price, close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (symbol, timeframe, period + 1))
+
+            klines = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            if len(klines) < period + 1:
+                logger.warning(f"{symbol} ATR计算K线不足: {len(klines)}/{period+1}")
+                return 1.0  # 默认返回1.0%
+
+            # 反转顺序（从旧到新）
+            klines = list(reversed(klines))
+
+            # 计算True Range
+            true_ranges = []
+            for i in range(1, len(klines)):
+                high = float(klines[i]['high_price'])
+                low = float(klines[i]['low_price'])
+                prev_close = float(klines[i-1]['close_price'])
+
+                tr = max(
+                    high - low,
+                    abs(high - prev_close),
+                    abs(low - prev_close)
+                )
+                true_ranges.append(tr)
+
+            # 计算ATR
+            atr = sum(true_ranges) / len(true_ranges)
+            current_price = float(klines[-1]['close_price'])
+            atr_pct = (atr / current_price) * 100
+
+            return atr_pct
+
+        except Exception as e:
+            logger.error(f"计算ATR失败 {symbol}: {e}")
+            return 1.0  # 默认返回1.0%
+
+    def get_trend_stage(self, ema_data_15m: Dict) -> str:
+        """
+        判断趋势处于哪个阶段
+
+        通过EMA9与EMA26的距离判断：
+        - early: 刚金叉/死叉，距离 < 0.5%
+        - mid: 距离 0.5% - 1.5%
+        - mature: 距离 > 1.5%
+
+        Args:
+            ema_data_15m: 15M EMA数据
+
+        Returns:
+            'early', 'mid', 或 'mature'
+        """
+        try:
+            ema9 = ema_data_15m.get('ema9', 0)
+            ema26 = ema_data_15m.get('ema26', 0)
+
+            if ema26 == 0:
+                return 'mid'
+
+            ema_diff_pct = abs(ema9 - ema26) / ema26 * 100
+
+            if ema_diff_pct < 0.5:
+                return 'early'
+            elif ema_diff_pct < 1.5:
+                return 'mid'
+            else:
+                return 'mature'
+
+        except Exception as e:
+            logger.error(f"判断趋势阶段失败: {e}")
+            return 'mid'
+
+    def calculate_dynamic_limit_offset(self, signal_strength: float, atr_pct: float,
+                                       trend_stage: str) -> float:
+        """
+        计算动态限价单偏移百分比
+
+        Args:
+            signal_strength: V3信号强度 (1.5-3.0+)
+            atr_pct: 15M周期ATR占价格百分比 (0.5-2.0%)
+            trend_stage: 趋势阶段 ('early', 'mid', 'mature')
+
+        Returns:
+            offset_pct: 限价单偏移百分比 (0.5-2.5%)
+        """
+        # 基础偏移：根据信号强度反比
+        # 强度越高，偏移越小（因为趋势更可靠）
+        if signal_strength >= 2.5:
+            base_offset = 0.8
+        elif signal_strength >= 2.0:
+            base_offset = 1.0
+        elif signal_strength >= 1.5:
+            base_offset = 1.3
+        else:
+            base_offset = 1.5
+
+        # ATR调整系数：波动大时增加偏移
+        atr_multiplier = min(atr_pct / 1.0, 1.5)  # 限制最大1.5倍
+
+        # 趋势阶段调整
+        stage_multiplier = {
+            'early': 1.2,    # 早期趋势：宽松一点（1.2倍）
+            'mid': 1.0,      # 中期趋势：标准
+            'mature': 0.8    # 成熟趋势：紧凑一点（0.8倍）
+        }
+
+        # 最终偏移
+        offset_pct = base_offset * atr_multiplier * stage_multiplier.get(trend_stage, 1.0)
+
+        # 限制范围：0.5% - 2.5%
+        offset_pct = max(0.5, min(2.5, offset_pct))
+
+        return offset_pct
+
     def check_v3_sustained_trend(self, symbol: str, ema_data: Dict, strategy: Dict,
                                   strategy_id: int) -> Tuple[Optional[str], str]:
         """
@@ -1326,8 +1467,8 @@ class StrategyExecutorV2:
                 change_pct = (curr_ema9 - prev_ema9) / prev_ema9 * 100
                 ema9_changes.append(change_pct)
 
-            # 3. 检查是否连续3次同向移动且每次≥0.3%
-            MIN_SINGLE_MOVE = 0.3  # 每根K线最小变化0.3%
+            # 3. 检查是否连续3次同向移动且每次≥0.5%
+            MIN_SINGLE_MOVE = 0.5  # 每根K线最小变化0.5% (优化: 从0.3%提高到0.5%)
 
             # 检查做多：连续3次上升
             if all(change >= MIN_SINGLE_MOVE for change in ema9_changes):
@@ -1337,18 +1478,21 @@ class StrategyExecutorV2:
                 direction = 'short'
             else:
                 change_str = ' -> '.join([f"{c:+.2f}%" for c in ema9_changes])
-                return None, f"15M EMA9未连续3次同向移动(需每次≥0.3%, 实际: {change_str})"
+                return None, f"15M EMA9未连续3次同向移动(需每次≥0.5%, 实际: {change_str})"
+
+            # 计算总信号强度（3次变化之和）
+            total_signal_strength = sum(abs(c) for c in ema9_changes)
 
         except Exception as e:
             logger.error(f"V3检测15M持续趋势失败: {e}")
             return None, f"检测15M趋势失败: {e}"
 
-        # 4. 检查15M当前信号强度是否≥1.0%
+        # 4. 检查15M当前信号强度是否≥2.0%
         ema_diff_pct_15m = ema_data_15m['ema_diff_pct']
-        MIN_SIGNAL_STRENGTH = 1.0  # V3固定要求1.0%信号强度
+        MIN_SIGNAL_STRENGTH = 2.0  # V3要求2.0%信号强度 (优化: 从1.0%提高到2.0%)
 
         if abs(ema_diff_pct_15m) < MIN_SIGNAL_STRENGTH:
-            return None, f"15M信号强度不足(需≥1.0%, 实际{abs(ema_diff_pct_15m):.3f}%)"
+            return None, f"15M信号强度不足(需≥2.0%, 实际{abs(ema_diff_pct_15m):.3f}%)"
 
         # 4.5 检查是否已从高点回调（防止买在高位）
         # 获取15M周期最近20根K线的最高/最低价
@@ -1392,6 +1536,58 @@ class StrategyExecutorV2:
         except Exception as e:
             logger.warning(f"V3高位过滤检查失败: {e}")
             # 失败不影响主逻辑，继续执行
+
+        # 4.6 计算动态限价单偏移（新增）
+        try:
+            # 计算ATR百分比
+            atr_pct = self.calculate_atr_percentage(symbol, '15m', 14)
+
+            # 判断趋势阶段
+            trend_stage = self.get_trend_stage(ema_data_15m)
+
+            # 计算建议的动态偏移
+            recommended_offset = self.calculate_dynamic_limit_offset(
+                signal_strength=total_signal_strength,
+                atr_pct=atr_pct,
+                trend_stage=trend_stage
+            )
+
+            # 从策略配置中提取实际偏移
+            if direction == 'long':
+                price_type_str = long_price_type
+            else:
+                price_type_str = short_price_type
+
+            # 提取配置的偏移百分比
+            if 'minus_1' in price_type_str or 'plus_1' in price_type_str:
+                configured_offset = 1.0
+            elif 'minus_2' in price_type_str or 'plus_2' in price_type_str:
+                configured_offset = 2.0
+            else:
+                configured_offset = 1.0
+
+            # 记录动态限价单信息
+            logger.info(
+                f"V3动态限价单 {symbol}: "
+                f"信号强度={total_signal_strength:.2f}%, "
+                f"ATR={atr_pct:.2f}%, "
+                f"趋势阶段={trend_stage}, "
+                f"建议偏移={recommended_offset:.2f}%, "
+                f"配置偏移={configured_offset:.1f}%"
+            )
+
+            # 如果配置偏移与建议偏移差距>0.5%，给出警告
+            if abs(configured_offset - recommended_offset) > 0.5:
+                logger.warning(
+                    f"V3 {symbol} 限价单偏移建议调整: "
+                    f"当前配置{configured_offset:.1f}%, "
+                    f"建议{recommended_offset:.2f}% "
+                    f"(信号{total_signal_strength:.1f}%, ATR{atr_pct:.1f}%, {trend_stage})"
+                )
+
+        except Exception as e:
+            logger.error(f"V3动态限价单计算失败 {symbol}: {e}")
+            # 计算失败不影响主流程
 
         # 5. 检查15M方向是否与持续趋势一致
         ema_diff_15m = ema_data_15m['ema_diff']
@@ -1476,9 +1672,10 @@ class StrategyExecutorV2:
 
         signal_desc = (
             f"V3持续趋势({direction}, "
-            f"15M连续3涨{change_str}, "
-            f"信号强度{ema_diff_pct_15m:.3f}%, "
-            f"1H{direction_1h}确认{ema_diff_pct_1h:.3f}%)"
+            f"15M连续3变{change_str}, "
+            f"总强度{total_signal_strength:.2f}%, "
+            f"当前{ema_diff_pct_15m:.2f}%, "
+            f"1H{direction_1h}{ema_diff_pct_1h:.2f}%)"
         )
 
         return direction, signal_desc
