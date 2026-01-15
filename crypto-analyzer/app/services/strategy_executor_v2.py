@@ -1298,9 +1298,12 @@ class StrategyExecutorV2:
         long_price_type = strategy.get('longPrice', 'market')
         short_price_type = strategy.get('shortPrice', 'market')
 
-        # V3强制要求固定1%限价单
-        if long_price_type != 'market_minus_1' or short_price_type != 'market_plus_1':
-            return None, f"V3策略限价单配置错误(需要market_minus_1/market_plus_1, 当前{long_price_type}/{short_price_type})"
+        # V3支持1%或2%限价单
+        allowed_long_types = ['market_minus_1', 'market_minus_2']
+        allowed_short_types = ['market_plus_1', 'market_plus_2']
+
+        if long_price_type not in allowed_long_types or short_price_type not in allowed_short_types:
+            return None, f"V3策略限价单配置错误(需要market_minus_1/2或market_plus_1/2, 当前{long_price_type}/{short_price_type})"
 
         # 1. 获取15M EMA数据（包含历史EMA9值）
         ema_data_15m = self.get_ema_data(symbol, '15m', 100)
@@ -1346,6 +1349,49 @@ class StrategyExecutorV2:
 
         if abs(ema_diff_pct_15m) < MIN_SIGNAL_STRENGTH:
             return None, f"15M信号强度不足(需≥1.0%, 实际{abs(ema_diff_pct_15m):.3f}%)"
+
+        # 4.5 检查是否已从高点回调（防止买在高位）
+        # 获取15M周期最近20根K线的最高/最低价
+        try:
+            current_price = ema_data_15m.get('current_price', 0)
+            if current_price > 0:
+                conn = self.get_db_connection()
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    SELECT high_price, low_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = '15m' AND exchange = 'binance_futures'
+                    ORDER BY timestamp DESC
+                    LIMIT 20
+                """, (symbol,))
+
+                klines = cursor.fetchall()
+                cursor.close()
+                conn.close()
+
+                if klines:
+                    if direction == 'long':
+                        # 做多：检查当前价格距离近期最高点的回调幅度
+                        recent_high = max(float(k['high_price']) for k in klines)
+                        pullback_from_high = (recent_high - current_price) / recent_high * 100
+
+                        # 要求至少回调1.5%才开仓（避免高位追单）
+                        if pullback_from_high < 1.5:
+                            return None, f"V3高位过滤：距离近期高点仅回调{pullback_from_high:.2f}%，需≥1.5%"
+
+                    else:  # short
+                        # 做空：检查当前价格距离近期最低点的反弹幅度
+                        recent_low = min(float(k['low_price']) for k in klines)
+                        bounce_from_low = (current_price - recent_low) / recent_low * 100
+
+                        # 要求至少反弹1.5%才开仓（避免低位追空）
+                        if bounce_from_low < 1.5:
+                            return None, f"V3低位过滤：距离近期低点仅反弹{bounce_from_low:.2f}%，需≥1.5%"
+
+        except Exception as e:
+            logger.warning(f"V3高位过滤检查失败: {e}")
+            # 失败不影响主逻辑，继续执行
 
         # 5. 检查15M方向是否与持续趋势一致
         ema_diff_15m = ema_data_15m['ema_diff']
