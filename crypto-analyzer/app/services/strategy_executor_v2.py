@@ -2860,6 +2860,235 @@ class StrategyExecutorV2:
         limit_price = current_price * (1 + adjustment_pct / 100)
         return limit_price
 
+    # ==================== V3动态趋势质量监控 ====================
+
+    def calculate_v3_trend_quality_score(self, position: Dict, ema_data_15m: Dict,
+                                         ema_data_1h: Dict) -> Tuple[int, Dict]:
+        """
+        V3策略专用：计算持仓期间的趋势质量分数 (0-100)
+
+        综合评估4个维度：
+        1. 15M EMA方向是否支持持仓 (25分)
+        2. 15M EMA差值强度 (25分)
+        3. EMA差值变化趋势（加速/维持/减弱） (25分)
+        4. 1H周期是否仍然支持 (25分)
+
+        Args:
+            position: 持仓信息
+            ema_data_15m: 15M EMA数据
+            ema_data_1h: 1H EMA数据
+
+        Returns:
+            (分数 0-100, 详细信息Dict)
+        """
+        position_side = position.get('position_side', 'LONG')
+        entry_ema_diff = float(position.get('entry_ema_diff') or 0)
+
+        score = 0
+        details = {}
+
+        # ========== 1. 15M EMA方向检查 (25分) ==========
+        ema9_15m = ema_data_15m['ema9']
+        ema26_15m = ema_data_15m['ema26']
+
+        if position_side == 'LONG':
+            if ema9_15m > ema26_15m:
+                score += 25
+                details['ema_direction'] = 'support'  # 支持持仓
+            else:
+                score += 0
+                details['ema_direction'] = 'reverse'  # 反转
+        else:  # SHORT
+            if ema9_15m < ema26_15m:
+                score += 25
+                details['ema_direction'] = 'support'
+            else:
+                score += 0
+                details['ema_direction'] = 'reverse'
+
+        # ========== 2. 15M EMA差值强度 (25分) ==========
+        current_ema_diff_pct = abs(ema9_15m - ema26_15m) / ema26_15m * 100
+        details['current_ema_diff'] = current_ema_diff_pct
+
+        # 强度分级（针对V3优化后的2.0%门槛）
+        if current_ema_diff_pct >= 2.5:
+            score += 25  # 强趋势（超过入场门槛）
+        elif current_ema_diff_pct >= 2.0:
+            score += 20  # 达到入场门槛
+        elif current_ema_diff_pct >= 1.5:
+            score += 15  # 接近入场门槛
+        elif current_ema_diff_pct >= 1.0:
+            score += 10  # 明显低于入场门槛
+        elif current_ema_diff_pct >= 0.5:
+            score += 5   # 弱趋势
+        else:
+            score += 0   # 极弱趋势
+
+        # ========== 3. EMA差值变化趋势 (25分) ==========
+        if entry_ema_diff > 0:
+            ema_diff_ratio = current_ema_diff_pct / entry_ema_diff
+            details['ema_diff_ratio'] = ema_diff_ratio
+
+            if ema_diff_ratio >= 1.3:
+                score += 25  # 趋势显著加速 (+30%以上)
+                details['ema_trend'] = 'strong_acceleration'
+            elif ema_diff_ratio >= 1.1:
+                score += 20  # 趋势加速 (+10%以上)
+                details['ema_trend'] = 'acceleration'
+            elif ema_diff_ratio >= 0.9:
+                score += 15  # 趋势维持 (±10%以内)
+                details['ema_trend'] = 'maintaining'
+            elif ema_diff_ratio >= 0.7:
+                score += 8   # 趋势减弱 (-30%以内)
+                details['ema_trend'] = 'weakening'
+            elif ema_diff_ratio >= 0.5:
+                score += 3   # 趋势严重减弱 (-50%以内)
+                details['ema_trend'] = 'severe_weakening'
+            else:
+                score += 0   # 趋势崩溃 (-50%以上)
+                details['ema_trend'] = 'collapsing'
+        else:
+            details['ema_diff_ratio'] = None
+            details['ema_trend'] = 'no_entry_data'
+
+        # ========== 4. 1H多周期一致性 (25分) ==========
+        ema9_1h = ema_data_1h.get('ema9', 0)
+        ema26_1h = ema_data_1h.get('ema26', 0)
+
+        if ema26_1h > 0:
+            if position_side == 'LONG':
+                if ema9_1h > ema26_1h:
+                    score += 25  # 1H仍然支持
+                    details['1h_support'] = True
+                else:
+                    score += 0   # 1H已反转
+                    details['1h_support'] = False
+            else:  # SHORT
+                if ema9_1h < ema26_1h:
+                    score += 25
+                    details['1h_support'] = True
+                else:
+                    score += 0
+                    details['1h_support'] = False
+        else:
+            details['1h_support'] = None
+
+        return score, details
+
+    def check_v3_trend_quality_exit(self, position: Dict, ema_data_15m: Dict,
+                                    ema_data_1h: Dict, current_pnl_pct: float) -> Tuple[bool, str]:
+        """
+        V3策略专用：基于趋势质量分数的动态平仓逻辑
+
+        平仓规则：
+        - score < 30: 立即平仓（趋势崩溃）
+        - score 30-40: 亏损或微利(<0.5%)时平仓（趋势危险）
+        - score 40-60: 亏损或小利(<1.0%)时平仓（趋势减弱）
+        - score 60-80: 趋势正常，保持持仓
+        - score >= 80: 趋势强劲，让利润奔跑
+
+        Args:
+            position: 持仓信息
+            ema_data_15m: 15M EMA数据
+            ema_data_1h: 1H EMA数据
+            current_pnl_pct: 当前盈亏百分比
+
+        Returns:
+            (是否平仓, 原因)
+        """
+        # 仅对V3持仓应用此逻辑
+        entry_signal_type = position.get('entry_signal_type', '')
+        if 'sustained_trend' not in entry_signal_type:
+            return False, ""
+
+        # 计算趋势质量分数
+        score, details = self.calculate_v3_trend_quality_score(position, ema_data_15m, ema_data_1h)
+
+        symbol = position.get('symbol', '')
+
+        # 记录详细的趋势质量分数日志
+        ema_diff_ratio = details.get('ema_diff_ratio')
+        entry_ema_diff = float(position.get('entry_ema_diff') or 0)
+
+        logger.info(
+            f"[V3趋势监控] {symbol} "
+            f"评分={score}/100 "
+            f"方向={details.get('ema_direction')} "
+            f"强度={details.get('current_ema_diff', 0):.2f}% "
+            f"(入场{entry_ema_diff:.2f}% 比例{ema_diff_ratio:.2f if ema_diff_ratio else 0:.2f}) "
+            f"变化={details.get('ema_trend')} "
+            f"1H={'✓' if details.get('1h_support') else '✗'} "
+            f"盈亏={current_pnl_pct:+.2f}%"
+        )
+
+        # 根据分数段给出不同级别的警告
+        if score < 30:
+            logger.critical(f"[V3趋势监控] {symbol} 🔴 趋势崩溃! score={score}")
+        elif score < 40:
+            logger.warning(f"[V3趋势监控] {symbol} 🟠 趋势危险! score={score}")
+        elif score < 60:
+            logger.warning(f"[V3趋势监控] {symbol} 🟡 趋势减弱 score={score}")
+        elif score < 80:
+            logger.debug(f"[V3趋势监控] {symbol} 🟢 趋势正常 score={score}")
+        else:
+            logger.debug(f"[V3趋势监控] {symbol} 🔵 趋势强劲 score={score}")
+
+        # ========== 平仓规则 ==========
+
+        # 规则1: 分数 < 30，立即平仓（趋势崩溃）
+        if score < 30:
+            logger.critical(
+                f"[V3趋势监控] {symbol} 🔴 触发平仓! 趋势崩溃 "
+                f"score={score}, 方向={details.get('ema_direction')}, "
+                f"变化={details.get('ema_trend')}, 盈亏={current_pnl_pct:+.2f}%"
+            )
+            return True, (
+                f"v3_trend_collapse|score:{score}|"
+                f"dir:{details.get('ema_direction')}|"
+                f"trend:{details.get('ema_trend')}|"
+                f"pnl:{current_pnl_pct:+.2f}%"
+            )
+
+        # 规则2: 分数 30-40 且盈利 < 0.5%，尽快平仓（趋势危险）
+        if 30 <= score < 40 and current_pnl_pct < 0.5:
+            logger.warning(
+                f"[V3趋势监控] {symbol} 🟠 触发平仓! 趋势危险 "
+                f"score={score}, 强度={details.get('current_ema_diff', 0):.2f}%, "
+                f"盈亏={current_pnl_pct:+.2f}%"
+            )
+            return True, (
+                f"v3_trend_critical|score:{score}|"
+                f"diff:{details.get('current_ema_diff', 0):.2f}%|"
+                f"pnl:{current_pnl_pct:+.2f}%"
+            )
+
+        # 规则3: 分数 40-60 且盈利 < 1.0%，保护利润平仓（趋势减弱）
+        if 40 <= score < 60 and current_pnl_pct < 1.0:
+            logger.warning(
+                f"[V3趋势监控] {symbol} 🟡 触发平仓! 趋势减弱 "
+                f"score={score}, 比例={details.get('ema_diff_ratio', 0):.2f}, "
+                f"盈亏={current_pnl_pct:+.2f}%"
+            )
+            return True, (
+                f"v3_trend_weak|score:{score}|"
+                f"ratio:{details.get('ema_diff_ratio', 0):.2f}|"
+                f"pnl:{current_pnl_pct:+.2f}%"
+            )
+
+        # 规则4: 分数 60-80，趋势正常，保持持仓（但会收紧移动止盈）
+        if 60 <= score < 80:
+            logger.debug(f"{symbol} V3趋势质量中等(score={score})，保持持仓")
+            return False, ""
+
+        # 规则5: 分数 >= 80，趋势强劲，让利润奔跑
+        if score >= 80:
+            logger.debug(f"{symbol} V3趋势质量优秀(score={score})，持续持仓")
+            return False, ""
+
+        return False, ""
+
+    # ==================== 原有趋势减弱检测 ====================
+
     def check_trend_weakening(self, position: Dict, ema_data: Dict, current_price: float = None, strategy: Dict = None) -> Tuple[bool, str]:
         """
         检测趋势减弱（开仓后30分钟开始监控，且仅在盈利时触发）
@@ -3075,6 +3304,23 @@ class StrategyExecutorV2:
         # 硬止损不受冷却期限制，作为紧急止损
         if current_pnl_pct <= -stop_loss_pct:
             return True, f"hard_stop_loss|loss:{abs(current_pnl_pct):.2f}%", updates
+
+        # 2.2 ⭐ V3趋势质量动态监控（新增）
+        # 仅对V3持仓应用，持续评估趋势是否还在延续
+        entry_signal_type = position.get('entry_signal_type', '')
+        if 'sustained_trend' in entry_signal_type:
+            try:
+                # 获取1H EMA数据用于多周期确认
+                ema_data_1h = self.get_ema_data(symbol, '1h', 100)
+                if ema_data_1h:
+                    should_exit, reason = self.check_v3_trend_quality_exit(
+                        position, ema_data, ema_data_1h, current_pnl_pct
+                    )
+                    if should_exit:
+                        logger.warning(f"[V3趋势质量] {symbol} 触发平仓: {reason}")
+                        return True, reason, updates
+            except Exception as e:
+                logger.error(f"V3趋势质量检查失败 {symbol}: {e}")
 
         # 2.3 最大持仓时长检查（已禁用 - 让利润充分奔跑）
         # 从策略配置中读取最大持仓时长（单位：小时）
