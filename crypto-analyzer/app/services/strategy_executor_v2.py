@@ -3499,8 +3499,8 @@ class StrategyExecutorV2:
             logger.error(f"智能渐进止损检查失败 {position.get('symbol')}: {e}")
             return False, f"progressive_sl_error:{str(e)}"
 
-    async def check_profit_protection(self, position: Dict, ema_data: Dict,
-                                      current_pnl_pct: float, strategy: Dict) -> Tuple[bool, str]:
+    def check_profit_protection(self, position: Dict, ema_data: Dict,
+                                current_pnl_pct: float, strategy: Dict) -> Tuple[bool, str]:
         """
         盈利保护监控（通用版本，适用于所有策略）
 
@@ -3751,7 +3751,7 @@ class StrategyExecutorV2:
         # 在盈利时检测趋势质量，及时锁定利润
         # 避免盈利 → 趋势转弱 → 利润消失 → 转为亏损
         if current_pnl_pct > 0:  # 仅在盈利时检查
-            should_exit, reason = await self.check_profit_protection(
+            should_exit, reason = self.check_profit_protection(
                 position, ema_data, current_pnl_pct, strategy
             )
             if should_exit:
