@@ -3294,14 +3294,18 @@ class StrategyExecutorV2:
 
         # 规则3: 分数 40-60 且盈利 < 1.0%，保护利润平仓（趋势减弱）
         if 40 <= score < 60 and current_pnl_pct < 1.0:
+            # 安全处理ema_diff_ratio，防止None值
+            ratio = details.get('ema_diff_ratio')
+            ratio_str = f"{ratio:.2f}" if ratio is not None else "0.00"
+
             logger.warning(
                 f"[V3趋势监控] {symbol} 🟡 触发平仓! 趋势减弱 "
-                f"score={score}, 比例={details.get('ema_diff_ratio', 0):.2f}, "
+                f"score={score}, 比例={ratio_str}, "
                 f"盈亏={current_pnl_pct:+.2f}%"
             )
             return True, (
                 f"v3_trend_weak|score:{score}|"
-                f"ratio:{details.get('ema_diff_ratio', 0):.2f}|"
+                f"ratio:{ratio_str}|"
                 f"pnl:{current_pnl_pct:+.2f}%"
             )
 
