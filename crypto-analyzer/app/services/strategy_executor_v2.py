@@ -1513,8 +1513,8 @@ class StrategyExecutorV2:
                 change_pct = (curr_ema9 - prev_ema9) / prev_ema9 * 100
                 ema9_changes.append(change_pct)
 
-            # 3. 检查是否连续3次同向移动且每次≥0.5%
-            MIN_SINGLE_MOVE = 0.5  # 每根K线最小变化0.5% (优化: 从0.3%提高到0.5%)
+            # 3. 检查是否连续3次同向移动且每次≥0.8%
+            MIN_SINGLE_MOVE = 0.8  # 每根K线最小变化0.8% (优化: 0.3%→0.5%→0.8%)
 
             # 检查做多：连续3次上升
             if all(change >= MIN_SINGLE_MOVE for change in ema9_changes):
@@ -1524,7 +1524,7 @@ class StrategyExecutorV2:
                 direction = 'short'
             else:
                 change_str = ' -> '.join([f"{c:+.2f}%" for c in ema9_changes])
-                return None, f"15M EMA9未连续3次同向移动(需每次≥0.5%, 实际: {change_str})"
+                return None, f"15M EMA9未连续3次同向移动(需每次≥0.8%, 实际: {change_str})"
 
             # 计算总信号强度（3次变化之和）
             total_signal_strength = sum(abs(c) for c in ema9_changes)
@@ -1533,12 +1533,12 @@ class StrategyExecutorV2:
             logger.error(f"V3检测15M持续趋势失败: {e}")
             return None, f"检测15M趋势失败: {e}"
 
-        # 4. 检查15M当前信号强度是否≥2.0%
+        # 4. 检查15M当前信号强度是否≥2.5%
         ema_diff_pct_15m = ema_data_15m['ema_diff_pct']
-        MIN_SIGNAL_STRENGTH = 2.0  # V3要求2.0%信号强度 (优化: 从1.0%提高到2.0%)
+        MIN_SIGNAL_STRENGTH = 2.5  # V3要求2.5%信号强度 (优化: 1.0%→2.0%→2.5%)
 
         if abs(ema_diff_pct_15m) < MIN_SIGNAL_STRENGTH:
-            return None, f"15M信号强度不足(需≥2.0%, 实际{abs(ema_diff_pct_15m):.3f}%)"
+            return None, f"15M信号强度不足(需≥2.5%, 实际{abs(ema_diff_pct_15m):.3f}%)"
 
         # 4.5 检查是否已从高点回调（防止买在高位）
         # 获取15M周期最近20根K线的最高/最低价
@@ -1566,18 +1566,18 @@ class StrategyExecutorV2:
                         recent_high = max(float(k['high_price']) for k in klines)
                         pullback_from_high = (recent_high - current_price) / recent_high * 100
 
-                        # 要求至少回调1.5%才开仓（避免高位追单）
-                        if pullback_from_high < 1.5:
-                            return None, f"V3高位过滤：距离近期高点仅回调{pullback_from_high:.2f}%，需≥1.5%"
+                        # 要求至少回调2.0%才开仓（避免高位追单）(优化: 1.5%→2.0%)
+                        if pullback_from_high < 2.0:
+                            return None, f"V3高位过滤：距离近期高点仅回调{pullback_from_high:.2f}%，需≥2.0%"
 
                     else:  # short
                         # 做空：检查当前价格距离近期最低点的反弹幅度
                         recent_low = min(float(k['low_price']) for k in klines)
                         bounce_from_low = (current_price - recent_low) / recent_low * 100
 
-                        # 要求至少反弹1.5%才开仓（避免低位追空）
-                        if bounce_from_low < 1.5:
-                            return None, f"V3低位过滤：距离近期低点仅反弹{bounce_from_low:.2f}%，需≥1.5%"
+                        # 要求至少反弹2.0%才开仓（避免低位追空）(优化: 1.5%→2.0%)
+                        if bounce_from_low < 2.0:
+                            return None, f"V3低位过滤：距离近期低点仅反弹{bounce_from_low:.2f}%，需≥2.0%"
 
         except Exception as e:
             logger.warning(f"V3高位过滤检查失败: {e}")
@@ -3904,7 +3904,18 @@ class StrategyExecutorV2:
             position_size_pct = strategy.get('positionSizePct', 1)  # 账户资金的1%
             sync_live = strategy.get('syncLive', False)
 
-            ema_diff_pct = ema_data['ema_diff_pct']
+            # 🔧 BUG FIX: V3策略应保存15M的EMA差值，其他策略保存传入的ema_data差值
+            if signal_type == 'sustained_trend_entry':
+                # V3策略：使用15M EMA差值（这才是V3检测时使用的差值）
+                ema_data_15m = self.get_ema_data(symbol, '15m', 50)
+                if ema_data_15m:
+                    ema_diff_pct = ema_data_15m['ema_diff_pct']
+                else:
+                    logger.warning(f"{symbol} V3策略无法获取15M EMA数据，使用传入的1H数据")
+                    ema_diff_pct = ema_data['ema_diff_pct']
+            else:
+                # 其他策略（V2/金叉死叉等）：使用传入的ema_data（通常是1H）
+                ema_diff_pct = ema_data['ema_diff_pct']
 
             # 计算开仓数量
             conn = self.get_db_connection()
