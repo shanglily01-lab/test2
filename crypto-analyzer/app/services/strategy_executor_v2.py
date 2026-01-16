@@ -3236,12 +3236,15 @@ class StrategyExecutorV2:
         ema_diff_ratio = details.get('ema_diff_ratio')
         entry_ema_diff = float(position.get('entry_ema_diff') or 0)
 
+        # 安全处理ema_diff_ratio，避免None值
+        ratio_display = f"{ema_diff_ratio:.2f}" if ema_diff_ratio is not None else "0.00"
+
         logger.info(
             f"[V3趋势监控] {symbol} "
             f"评分={score}/100 "
             f"方向={details.get('ema_direction')} "
             f"强度={details.get('current_ema_diff', 0):.2f}% "
-            f"(入场{entry_ema_diff:.2f}% 比例{ema_diff_ratio:.2f if ema_diff_ratio else 0:.2f}) "
+            f"(入场{entry_ema_diff:.2f}% 比例{ratio_display}) "
             f"变化={details.get('ema_trend')} "
             f"1H={'✓' if details.get('1h_support') else '✗'} "
             f"RSI={details.get('rsi', 50):.1f}({details.get('rsi_state', 'unknown')}) "
