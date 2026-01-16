@@ -4912,36 +4912,39 @@ class StrategyExecutorV2:
                         debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
             # 3.3 检查持续趋势开仓（错过金叉/死叉后仍可在趋势中开仓）
-            if not open_result or not open_result.get('success'):
-                for direction in buy_directions:
-                    can_entry, sustained_reason = self.check_sustained_trend_entry(symbol, direction, strategy)
-
-                    if can_entry:
-                        # 应用所有技术指标过滤器
-                        filters_passed, filter_results = self.apply_all_filters(
-                            symbol, direction, current_price, ema_data, strategy
-                        )
-                        debug_info.extend(filter_results)
-
-                        if filters_passed:
-                            # 检查开仓冷却
-                            in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, direction, strategy, strategy_id)
-                            if in_cooldown:
-                                debug_info.append(f"⏳ {cooldown_msg}")
-                            else:
-                                # 构建开仓原因
-                                entry_reason = f"sustained_entry({direction}): {sustained_reason}"
-                                open_result = await self.execute_open_position(
-                                    symbol, direction, 'sustained_trend_entry', strategy, account_id,
-                                    signal_reason=entry_reason
-                                )
-                                if open_result and open_result.get('success'):
-                                    # 记录持续趋势开仓时间（用于冷却）
-                                    cooldown_key = f"{symbol}_{direction}_sustained"
-                                    self.last_entry_time[cooldown_key] = self.get_local_time()
-                                    break
-                        else:
-                            debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
+            # ⚠️ V2持续趋势策略已禁用 (2026-01-16)
+            # 原因：V2使用弱信号强度0.15%-1.0%，容易在假突破时入场
+            # 解决方案：只保留V3策略（≥2.5%信号强度 + 严格回调过滤）
+            # if not open_result or not open_result.get('success'):
+            #     for direction in buy_directions:
+            #         can_entry, sustained_reason = self.check_sustained_trend_entry(symbol, direction, strategy)
+            #
+            #         if can_entry:
+            #             # 应用所有技术指标过滤器
+            #             filters_passed, filter_results = self.apply_all_filters(
+            #                 symbol, direction, current_price, ema_data, strategy
+            #             )
+            #             debug_info.extend(filter_results)
+            #
+            #             if filters_passed:
+            #                 # 检查开仓冷却
+            #                 in_cooldown, cooldown_msg = self.check_entry_cooldown(symbol, direction, strategy, strategy_id)
+            #                 if in_cooldown:
+            #                     debug_info.append(f"⏳ {cooldown_msg}")
+            #                 else:
+            #                     # 构建开仓原因
+            #                     entry_reason = f"sustained_entry({direction}): {sustained_reason}"
+            #                     open_result = await self.execute_open_position(
+            #                         symbol, direction, 'sustained_trend_entry', strategy, account_id,
+            #                         signal_reason=entry_reason
+            #                     )
+            #                     if open_result and open_result.get('success'):
+            #                         # 记录持续趋势开仓时间（用于冷却）
+            #                         cooldown_key = f"{symbol}_{direction}_sustained"
+            #                         self.last_entry_time[cooldown_key] = self.get_local_time()
+            #                         break
+            #             else:
+            #                 debug_info.append("⚠️ 技术指标过滤器未通过，跳过开仓")
 
             # 3.4 检查震荡反向信号
             if not open_result or not open_result.get('success'):
