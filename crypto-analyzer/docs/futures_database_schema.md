@@ -1,9 +1,10 @@
 # 模拟合约交易数据库表结构
 
 > 数据库: binance-data
-> 更新日期: 2026-01-15
+> 更新日期: 2026-01-16
 >
 > **重要更新**:
+> - 2026-01-16: 新增智能渐进止损平仓原因代码
 > - 2026-01-15: 新增V3趋势质量平仓原因代码
 > - 2026-01-15: 新增RSI相关字段说明
 > - 2026-01-15: 更新平仓原因代码列表
@@ -309,6 +310,15 @@ WHERE account_id = 2 AND status = 'PENDING';
 | liquidation | 强制平仓 | 触及强平价 |
 | emergency_stop | 紧急停止 | 短时间多次硬止损触发 |
 
+### 智能渐进止损平仓原因 ⚡ 新增 (2026-01-16)
+
+| 代码 | 中文说明 | 触发条件 |
+|------|----------|---------|
+| progressive_sl_0.5pct | 渐进止损-层级1 | 亏损-0.5%到-1.0% + 5M+15M都反转 |
+| progressive_sl_1pct | 渐进止损-层级2 | 亏损-1.0%到-2.0% + 15M+1H都反转 |
+| progressive_sl_2pct | 渐进止损-层级3 | 亏损-2.0%到-3.0% + 15M反转或趋势减弱 |
+| progressive_sl_3pct | 渐进止损-层级4 | 亏损>-3.0%，立即止损 |
+
 ### V3策略专属平仓原因 ⚡ 新增
 
 | 代码 | 中文说明 | 触发条件 |
@@ -342,6 +352,9 @@ reason_code|param1:value|param2:value
 trailing_take_profit|max:3.5%|cb:1.2%
 hard_stop_loss|pnl:-5.02%
 v3_trend_collapse|score:25|ema_diff:0.35%|ratio:0.16
+progressive_sl_1pct|loss:1.25%|reason:multi_timeframe_reversed
+progressive_sl_2pct|loss:2.45%|reason:15m_reversed
+progressive_sl_3pct|loss:3.15%|reason:severe_loss
 ```
 
 **中文格式** (兼容):

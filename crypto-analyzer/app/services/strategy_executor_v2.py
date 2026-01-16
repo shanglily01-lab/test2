@@ -3396,6 +3396,106 @@ class StrategyExecutorV2:
 
         return False, f"trend_normal|curr:{confirmed_ema_diff_pct:.3f}%|entry:{entry_ema_diff:.3f}%|threshold:{trend_exit_ema_threshold*100}%"
 
+    def check_smart_progressive_stop_loss(self, position: Dict, ema_data: Dict, 
+                                          current_pnl_pct: float, strategy: Dict) -> Tuple[bool, str]:
+        """
+        智能渐进止损检查
+        
+        在亏损情况下，根据亏损幅度和趋势质量动态决定是否提前止损
+        避免眼睁睁看着亏损从-1% → -2% → -3% → -5%
+        
+        渐进止损规则：
+        1. 亏损-0.5%到-1.0%: 检查5M和15M EMA是否反转
+        2. 亏损-1.0%到-2.0%: 检查1H趋势是否仍支持
+        3. 亏损-2.0%到-3.0%: 更严格检查，15M EMA反转立即止损
+        4. 亏损>-3.0%: 立即止损（不等硬止损-5%）
+        
+        Args:
+            position: 持仓信息
+            ema_data: 15M EMA数据
+            current_pnl_pct: 当前盈亏百分比（负数表示亏损）
+            strategy: 策略配置
+            
+        Returns:
+            (是否需要止损, 止损原因)
+        """
+        try:
+            symbol = position.get('symbol')
+            position_side = position.get('position_side', 'LONG')
+            
+            # 获取入场时的EMA差值，用于判断趋势变化
+            entry_ema_diff = abs(float(position.get('entry_ema_diff', 0)))
+            
+            # 获取当前15M EMA数据
+            ema9 = ema_data.get('ema9')
+            ema26 = ema_data.get('ema26')
+            if not ema9 or not ema26:
+                return False, "no_ema_data"
+            
+            current_ema_diff_pct = abs((ema9 - ema26) / ema26 * 100)
+            
+            # 判断15M趋势是否反转
+            is_15m_reversed = False
+            if position_side == 'LONG' and ema9 < ema26:
+                is_15m_reversed = True
+            elif position_side == 'SHORT' and ema9 > ema26:
+                is_15m_reversed = True
+            
+            # 4. 亏损 > -3.0%: 立即止损（不等-5%硬止损）
+            if current_pnl_pct <= -3.0:
+                return True, f"progressive_sl_3pct|loss:{abs(current_pnl_pct):.2f}%|reason:severe_loss"
+            
+            # 3. 亏损 -2.0%到-3.0%: 15M趋势反转立即止损
+            if -3.0 < current_pnl_pct <= -2.0:
+                if is_15m_reversed:
+                    return True, f"progressive_sl_2pct|loss:{abs(current_pnl_pct):.2f}%|reason:15m_reversed"
+                # 检查趋势是否显著减弱（当前EMA差值 < 入场时的30%）
+                if entry_ema_diff > 0 and current_ema_diff_pct < entry_ema_diff * 0.3:
+                    return True, f"progressive_sl_2pct|loss:{abs(current_pnl_pct):.2f}%|reason:trend_weak"
+            
+            # 2. 亏损 -1.0%到-2.0%: 检查1H趋势是否仍支持
+            if -2.0 < current_pnl_pct <= -1.0:
+                # 15M反转 + 趋势减弱 → 止损
+                if is_15m_reversed:
+                    # 检查1H趋势
+                    ema_data_1h = self.get_ema_data(symbol, '1h', 50)
+                    if ema_data_1h:
+                        ema9_1h = ema_data_1h.get('ema9')
+                        ema26_1h = ema_data_1h.get('ema26')
+                        is_1h_reversed = False
+                        if position_side == 'LONG' and ema9_1h < ema26_1h:
+                            is_1h_reversed = True
+                        elif position_side == 'SHORT' and ema9_1h > ema26_1h:
+                            is_1h_reversed = True
+                        
+                        # 15M和1H都反转 → 止损
+                        if is_1h_reversed:
+                            return True, f"progressive_sl_1pct|loss:{abs(current_pnl_pct):.2f}%|reason:multi_timeframe_reversed"
+            
+            # 1. 亏损 -0.5%到-1.0%: 检查5M和15M EMA是否都反转
+            if -1.0 < current_pnl_pct <= -0.5:
+                if is_15m_reversed:
+                    # 检查5M EMA
+                    ema_data_5m = self.get_ema_data(symbol, '5m', 50)
+                    if ema_data_5m:
+                        ema9_5m = ema_data_5m.get('ema9')
+                        ema26_5m = ema_data_5m.get('ema26')
+                        is_5m_reversed = False
+                        if position_side == 'LONG' and ema9_5m < ema26_5m:
+                            is_5m_reversed = True
+                        elif position_side == 'SHORT' and ema9_5m > ema26_5m:
+                            is_5m_reversed = True
+                        
+                        # 5M和15M都反转 → 止损
+                        if is_5m_reversed:
+                            return True, f"progressive_sl_0.5pct|loss:{abs(current_pnl_pct):.2f}%|reason:5m_15m_reversed"
+            
+            return False, "progressive_sl_not_triggered"
+            
+        except Exception as e:
+            logger.error(f"智能渐进止损检查失败 {position.get('symbol')}: {e}")
+            return False, f"progressive_sl_error:{str(e)}"
+
     def check_smart_exit(self, position: Dict, current_price: float, ema_data: Dict,
                           strategy: Dict) -> Tuple[bool, str, Dict]:
         """
@@ -3526,6 +3626,17 @@ class StrategyExecutorV2:
                     return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
                 elif position_side == 'SHORT' and current_price >= updated_stop_loss:
                     return True, f"{stop_type}|price:{current_price:.4f}|sl:{updated_stop_loss:.4f}", updates
+
+        # 1.5 ⭐ 智能渐进止损检查（新增）
+        # 在硬止损之前介入，根据趋势质量和亏损幅度决定是否提前止损
+        # 避免眼睁睁看着亏损从-1% → -2% → -3% → -5%
+        if current_pnl_pct < 0:  # 仅在亏损时检查
+            should_exit, reason = self.check_smart_progressive_stop_loss(
+                position, ema_data, current_pnl_pct, strategy
+            )
+            if should_exit:
+                logger.warning(f"[智能渐进止损] {symbol} 触发: {reason}")
+                return True, reason, updates
 
         # 2. 硬止损检查（百分比止损，作为后备）
         # 硬止损不受冷却期限制，作为紧急止损
