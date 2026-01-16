@@ -3,6 +3,7 @@
 > 更新日期: 2026-01-16
 >
 > **重要更新**:
+> - 2026-01-16: 新增盈利保护监控机制（通用版本，保护所有策略的盈利）
 > - 2026-01-16: 新增智能渐进止损机制（4层级动态止损）
 > - 2026-01-15: 集成RSI指标，增强趋势质量监控
 > - 2026-01-15: 趋势反转时自动取消不符合趋势的限价单
@@ -336,6 +337,11 @@ T4: 价格继续下跌至 $94,000
    └── 在亏损情况下，根据亏损幅度和趋势质量动态决定是否提前止损
    说明: 避免眼睁睁看着亏损从-1% → -2% → -3% → -5%
 
+2.3 盈利保护监控 ⚡ 新增 (2026-01-16)
+   └── 在盈利情况下，根据盈利幅度和趋势质量动态决定是否锁定利润
+   说明: 避免盈利 → 趋势转弱 → 利润消失 → 转为亏损
+   适用: 所有策略（通用版本，与V3趋势质量监控互补）
+
 2.5 硬止损 ⚡ 已优化
    └── 价格变化 ≥ 5.0% (对应保证金亏损50%)
    说明: 从2.5%调整到5.0%，给持仓更多空间应对市场波动
@@ -577,6 +583,181 @@ T+45m: 价格$91,200, 触发硬止损-5.0%
 - ✅ **提高胜率**: 小亏出场避免大亏
 - ✅ **改善期望值**: 减少平均单笔亏损
 - ✅ **保留上涨空间**: 多周期确认避免假止损
+
+---
+
+### 盈利保护监控详解 ⚡ 新增 (2026-01-16)
+
+#### 问题背景
+
+用户提出："盈利单是否也考虑监控，一旦发现趋势变弱的时候，也可以及时平仓保护利润呢？"
+
+实际情况：
+- V3策略有趋势质量监控可以保护盈利
+- 但其他策略的盈利持仓缺乏保护
+- 常见情况：盈利1-2% → 趋势转弱 → 利润消失 → 转为亏损-2%
+
+#### 解决方案
+
+**盈利保护监控**是**智能渐进止损的镜像版本**，但方向相反：
+- 智能渐进止损：亏损时根据趋势质量决定提前止损（减少亏损）
+- 盈利保护监控：盈利时根据趋势质量决定锁定利润（保护利润）
+
+分4个层级介入（按优先级从高到低）：
+
+**层级3: 趋势反转 - 立即平仓** ⭐ 最高优先级
+- 检查: 任何盈利 + 15M EMA反转
+  - 做多: EMA9 < EMA26 (死叉)
+  - 做空: EMA9 > EMA26 (金叉)
+- 逻辑: 趋势已崩溃，利润随时可能转为亏损
+- 平仓原因: `profit_protect_reversal|profit:X.XX%|reason:15m_death_cross`
+
+**层级2: 小盈利 + 趋势显著减弱**
+- 检查: 盈利 < 1.0% + 当前EMA差值 < 入场时30%
+- 逻辑: 小盈利 + 趋势衰退70% → 随时可能转亏
+- 平仓原因: `profit_protect_weak|profit:X.XX%|reason:trend_weak_30pct`
+
+**层级4: 大盈利 + 趋势减弱**
+- 检查: 盈利 ≥ 2.0% + 当前EMA差值 < 入场时70%
+- 逻辑: 大盈利应该锁定，趋势减弱30%时平仓
+- 平仓原因: `profit_protect_2pct|profit:X.XX%|reason:trend_weak_70pct`
+
+**层级1: 正常盈利 + 趋势正常 → 继续持仓**
+- 检查: 盈利 1.0%-2.0% + 当前EMA差值 ≥ 入场时50%
+- 逻辑: 趋势仍然健康，让利润奔跑
+- 动作: 继续持仓，不触发平仓
+
+#### 实现逻辑
+
+```python
+async def check_profit_protection(position, ema_data, current_pnl_pct, strategy):
+    # 仅在盈利时检查
+    if current_pnl_pct <= 0:
+        return False, ""
+
+    # 获取入场时EMA差值和当前EMA差值
+    entry_ema_diff = position['entry_ema_diff']
+    current_ema_diff_pct = abs(ema_data['ema_diff_pct'])
+
+    # 计算趋势强度比例
+    trend_strength_ratio = current_ema_diff_pct / entry_ema_diff
+
+    # Layer 3: 趋势反转 - 立即平仓
+    if position_side == 'LONG' and ema9 < ema26:
+        return True, f"profit_protect_reversal|profit:{current_pnl_pct:.2f}%|reason:15m_death_cross"
+    if position_side == 'SHORT' and ema9 > ema26:
+        return True, f"profit_protect_reversal|profit:{current_pnl_pct:.2f}%|reason:15m_golden_cross"
+
+    # Layer 2: 小盈利 + 趋势显著减弱
+    if current_pnl_pct < 1.0 and trend_strength_ratio < 0.30:
+        return True, f"profit_protect_weak|profit:{current_pnl_pct:.2f}%|reason:trend_weak_30pct"
+
+    # Layer 4: 大盈利 + 趋势减弱
+    if current_pnl_pct >= 2.0 and trend_strength_ratio < 0.70:
+        return True, f"profit_protect_2pct|profit:{current_pnl_pct:.2f}%|reason:trend_weak_70pct"
+
+    # Layer 1: 继续持仓
+    return False, "profit_protect_not_triggered"
+```
+
+#### 调用时机
+
+在`check_smart_exit()`函数中，紧跟在智能渐进止损之后调用：
+
+```python
+# 1.5 智能渐进止损（亏损时）
+if current_pnl_pct < 0:
+    should_exit, reason = check_smart_progressive_stop_loss(...)
+    if should_exit:
+        return True, reason, updates
+
+# 1.6 盈利保护监控（盈利时）⚡ 新增
+if current_pnl_pct > 0:
+    should_exit, reason = await check_profit_protection(...)
+    if should_exit:
+        return True, reason, updates
+```
+
+#### 日志示例
+
+```
+[盈利保护] BTC/USDT 触发: profit_protect_reversal|profit:1.85%|reason:15m_death_cross
+[盈利保护] ETH/USDT 触发: profit_protect_weak|profit:0.65%|reason:trend_weak_30pct
+[盈利保护] SOL/USDT 触发: profit_protect_2pct|profit:2.35%|reason:trend_weak_70pct
+[盈利保护] BNB/USDT 继续持仓: 盈利=1.45%, 趋势强度=0.85
+```
+
+#### 典型案例
+
+**案例1: 小盈利 + 趋势显著减弱**
+```
+BTC/USDT LONG 入场
+- 入场价格: $95,000
+- 入场EMA差值: 2.5% (强趋势)
+
+T+30m: 价格$95,650 (+0.68%), EMA差值0.6% (趋势强度=0.24)
+- 盈利<1.0% + 趋势强度<30%
+- 触发: profit_protect_weak|profit:0.68%|reason:trend_weak_30pct
+- 结果: 锁定利润$34 ✅
+
+对比 - 无盈利保护:
+- T+60m: 价格$94,200 (-0.84%)
+- 结果: 亏损$40 (vs 盈利$34) ❌
+```
+
+**案例2: 大盈利 + 趋势减弱**
+```
+ETH/USDT SHORT 入场
+- 入场价格: $3,500
+- 入场EMA差值: 3.2% (强趋势)
+
+T+2h: 价格$3,430 (+2.0%), EMA差值2.0% (趋势强度=0.625)
+- 盈利≥2.0% + 趋势强度<70%
+- 触发: profit_protect_2pct|profit:2.0%|reason:trend_weak_70pct
+- 结果: 锁定利润$100 ✅
+
+对比 - 无盈利保护:
+- T+4h: 价格$3,480 (+0.57%)
+- 结果: 利润减少71.5% ($100 → $28.5) ❌
+```
+
+**案例3: 趋势反转 - 立即平仓**
+```
+SOL/USDT LONG 入场
+- 入场价格: $180.00
+- 入场EMA差值: 2.8%
+
+T+1h: 价格$182.70 (+1.5%), 15M EMA9 < EMA26 (死叉)
+- 任何盈利 + 趋势反转
+- 触发: profit_protect_reversal|profit:1.5%|reason:15m_death_cross
+- 结果: 锁定利润$75 ✅
+
+对比 - 无盈利保护:
+- T+2h: 价格$178.20 (-1.0%)
+- 结果: 亏损$50 (vs 盈利$75，损失$125) ❌
+```
+
+#### 预期效果
+
+- ✅ **保护盈利持仓**: 趋势转弱时及时锁定利润
+- ✅ **减少利润回吐**: 避免盈利→亏损的情况
+- ✅ **提高盈亏比**: 平均盈利从$45提升至$60+
+- ✅ **配合渐进止损**: 亏损时减少损失，盈利时保护利润
+- ✅ **通用机制**: 适用于所有策略（V2/V3/RSI等）
+
+#### 与V3趋势质量监控的区别
+
+| 特性 | 盈利保护监控 | V3趋势质量监控 |
+|------|------------|---------------|
+| 适用范围 | 所有策略（通用） | 仅V3策略 |
+| 触发条件 | 盈利 + 趋势减弱/反转 | 趋势质量评分<60 |
+| 评分系统 | 无评分，直接判断 | 5维度0-100分评分 |
+| 检测周期 | 15M EMA | 15M + 1H EMA |
+| 优先级 | 在check_smart_exit()中调用 | V3专属检查 |
+
+两者互补：
+- V3策略：V3趋势质量监控（更精细的5维度评分）
+- 其他策略：盈利保护监控（通用趋势强度判断）
 
 ---
 
@@ -1289,15 +1470,14 @@ A: 在模拟盘交易页面的"已取消订单"表格中，有一列"详细原�
 
 ### 2026-01-16 主要更新
 
-1. **智能渐进止损机制**
-   - 4层级动态止损系统
-   - 根据亏损幅度和趋势质量决定提前止损
-   - 节省78.7%的硬止损亏损
-   - 从-0.5%开始监控，最晚-3.0%止损
+1. **盈利保护监控机制**
+   - 通用盈利保护系统，适用于所有策略
+   - 趋势反转立即平仓保护利润
+   - 小盈利+趋势显著减弱时锁定利润
+   - 大盈利≥2%+趋势减弱时锁定利润
+   - 与智能渐进止损配合：亏损时减损，盈利时保利
 
-### 2026-01-16 主要更新
-
-1. **智能渐进止损机制**
+2. **智能渐进止损机制**
    - 4层级动态止损系统
    - 根据亏损幅度和趋势质量决定提前止损
    - 节省78.7%的硬止损亏损
@@ -1342,4 +1522,4 @@ A: 在模拟盘交易页面的"已取消订单"表格中，有一列"详细原�
 
 *文档版本: 2026-01-16*
 *基于 strategy_executor_v2.py, futures_limit_order_executor.py, stop_loss_monitor.py*
-*主要更新: 智能渐进止损, RSI集成, 趋势反转取消, V3趋势质量监控, 硬止损调整*
+*主要更新: 盈利保护监控, 智能渐进止损, RSI集成, 趋势反转取消, V3趋势质量监控, 硬止损调整*

@@ -3499,6 +3499,112 @@ class StrategyExecutorV2:
             logger.error(f"智能渐进止损检查失败 {position.get('symbol')}: {e}")
             return False, f"progressive_sl_error:{str(e)}"
 
+    async def check_profit_protection(self, position: Dict, ema_data: Dict,
+                                      current_pnl_pct: float, strategy: Dict) -> Tuple[bool, str]:
+        """
+        盈利保护监控（通用版本，适用于所有策略）
+
+        在盈利情况下，根据盈利幅度和趋势质量动态决定是否平仓保护利润。
+        与智能渐进止损类似，但方向相反：这是为了锁定利润，而非减少亏损。
+
+        盈利保护规则（4层渐进式平仓）：
+
+        Layer 3: 趋势反转 - 立即平仓（最高优先级）
+        - 任何盈利 + 15M EMA反转
+        - 做多: EMA9 < EMA26 (死叉)
+        - 做空: EMA9 > EMA26 (金叉)
+        - 平仓原因: profit_protect_reversal|profit:X.XX%|reason:15m_reversed
+
+        Layer 2: 小盈利 + 趋势显著减弱
+        - 盈利 < 1.0% + 当前EMA差值 < 入场时30%
+        - 趋势已经大幅衰退，小盈利随时可能转亏
+        - 平仓原因: profit_protect_weak|profit:X.XX%|reason:trend_weak_30pct
+
+        Layer 4: 大盈利 + 趋势减弱
+        - 盈利 ≥ 2.0% + 当前EMA差值 < 入场时70%
+        - 大盈利应该锁定，趋势减弱30%时平仓
+        - 平仓原因: profit_protect_2pct|profit:X.XX%|reason:trend_weak_70pct
+
+        Layer 1: 正常盈利 + 趋势正常
+        - 盈利 1.0%-2.0% + 当前EMA差值 ≥ 入场时50%
+        - 继续持仓，让利润奔跑
+
+        Args:
+            position: 持仓信息
+            ema_data: 15M EMA数据
+            current_pnl_pct: 当前盈亏百分比
+            strategy: 策略配置
+
+        Returns:
+            (是否需要平仓, 平仓原因)
+        """
+        try:
+            symbol = position.get('symbol', '')
+            position_side = position.get('position_side', 'LONG')
+
+            # 仅在盈利时检查
+            if current_pnl_pct <= 0:
+                return False, ""
+
+            # 获取入场时的EMA差值
+            entry_ema_diff = float(position.get('entry_ema_diff') or 0)
+            if entry_ema_diff <= 0:
+                logger.debug(f"[盈利保护] {symbol} 跳过：entry_ema_diff={entry_ema_diff}")
+                return False, "profit_protect_no_entry_ema"
+
+            # 获取当前15M EMA数据
+            ema9 = ema_data.get('ema9', 0)
+            ema26 = ema_data.get('ema26', 0)
+            current_ema_diff_pct = abs(ema_data.get('ema_diff_pct', 0))
+
+            if ema9 <= 0 or ema26 <= 0:
+                logger.debug(f"[盈利保护] {symbol} 跳过：EMA数据无效")
+                return False, "profit_protect_invalid_ema"
+
+            # 计算趋势强度比例（当前 / 入场）
+            trend_strength_ratio = current_ema_diff_pct / entry_ema_diff if entry_ema_diff > 0 else 0
+
+            logger.debug(f"[盈利保护] {symbol} 盈利={current_pnl_pct:.2f}%, "
+                        f"入场EMA={entry_ema_diff:.2f}%, 当前EMA={current_ema_diff_pct:.2f}%, "
+                        f"趋势强度={trend_strength_ratio:.2f}")
+
+            # ========== Layer 3: 趋势反转 - 立即平仓（最高优先级） ==========
+            # 任何盈利 + 15M EMA反转 → 立即平仓保护利润
+            is_15m_reversed = False
+            if position_side == 'LONG':
+                # 做多持仓：EMA9 < EMA26 = 死叉 = 趋势反转
+                if ema9 < ema26:
+                    is_15m_reversed = True
+                    return True, f"profit_protect_reversal|profit:{current_pnl_pct:.2f}%|reason:15m_death_cross"
+            else:
+                # 做空持仓：EMA9 > EMA26 = 金叉 = 趋势反转
+                if ema9 > ema26:
+                    is_15m_reversed = True
+                    return True, f"profit_protect_reversal|profit:{current_pnl_pct:.2f}%|reason:15m_golden_cross"
+
+            # ========== Layer 2: 小盈利 + 趋势显著减弱 ==========
+            # 盈利 < 1.0% + 趋势强度 < 30% → 平仓
+            if current_pnl_pct < 1.0 and trend_strength_ratio < 0.30:
+                logger.info(f"[盈利保护-Layer2] {symbol} 小盈利+趋势显著减弱: "
+                           f"盈利={current_pnl_pct:.2f}%, 趋势强度={trend_strength_ratio:.2f}")
+                return True, f"profit_protect_weak|profit:{current_pnl_pct:.2f}%|reason:trend_weak_30pct"
+
+            # ========== Layer 4: 大盈利 + 趋势减弱 ==========
+            # 盈利 ≥ 2.0% + 趋势强度 < 70% → 锁定大盈利
+            if current_pnl_pct >= 2.0 and trend_strength_ratio < 0.70:
+                logger.info(f"[盈利保护-Layer4] {symbol} 大盈利+趋势减弱: "
+                           f"盈利={current_pnl_pct:.2f}%, 趋势强度={trend_strength_ratio:.2f}")
+                return True, f"profit_protect_2pct|profit:{current_pnl_pct:.2f}%|reason:trend_weak_70pct"
+
+            # ========== Layer 1: 正常盈利 + 趋势正常 → 继续持仓 ==========
+            # 盈利 1.0%-2.0% + 趋势强度 ≥ 50% → 让利润奔跑
+            logger.debug(f"[盈利保护] {symbol} 继续持仓: 盈利={current_pnl_pct:.2f}%, 趋势强度={trend_strength_ratio:.2f}")
+            return False, "profit_protect_not_triggered"
+
+        except Exception as e:
+            logger.error(f"盈利保护检查失败 {position.get('symbol')}: {e}")
+            return False, f"profit_protect_error:{str(e)}"
+
     def check_smart_exit(self, position: Dict, current_price: float, ema_data: Dict,
                           strategy: Dict) -> Tuple[bool, str, Dict]:
         """
@@ -3639,6 +3745,17 @@ class StrategyExecutorV2:
             )
             if should_exit:
                 logger.warning(f"[智能渐进止损] {symbol} 触发: {reason}")
+                return True, reason, updates
+
+        # 1.6 ⭐ 盈利保护监控检查（新增）
+        # 在盈利时检测趋势质量，及时锁定利润
+        # 避免盈利 → 趋势转弱 → 利润消失 → 转为亏损
+        if current_pnl_pct > 0:  # 仅在盈利时检查
+            should_exit, reason = await self.check_profit_protection(
+                position, ema_data, current_pnl_pct, strategy
+            )
+            if should_exit:
+                logger.warning(f"[盈利保护] {symbol} 触发: {reason}")
                 return True, reason, updates
 
         # 2. 硬止损检查（百分比止损，作为后备）

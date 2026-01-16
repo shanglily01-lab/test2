@@ -4,6 +4,7 @@
 > 更新日期: 2026-01-16
 >
 > **重要更新**:
+> - 2026-01-16: 新增盈利保护平仓原因代码（profit_protect_*）
 > - 2026-01-16: 新增智能渐进止损平仓原因代码
 > - 2026-01-15: 新增V3趋势质量平仓原因代码
 > - 2026-01-15: 新增RSI相关字段说明
@@ -319,6 +320,16 @@ WHERE account_id = 2 AND status = 'PENDING';
 | progressive_sl_2pct | 渐进止损-层级3 | 亏损-2.0%到-3.0% + 15M反转或趋势减弱 |
 | progressive_sl_3pct | 渐进止损-层级4 | 亏损>-3.0%，立即止损 |
 
+### 盈利保护平仓原因 ⚡ 新增 2026-01-16
+
+通用盈利保护机制，适用于所有策略。根据盈利幅度和趋势质量动态锁定利润。
+
+| 代码 | 中文说明 | 触发条件 |
+|------|----------|---------|
+| profit_protect_reversal | 盈利保护-趋势反转 | 任何盈利 + 15M EMA反转（死叉/金叉） |
+| profit_protect_weak | 盈利保护-趋势显著减弱 | 盈利<1.0% + 趋势强度<入场时30% |
+| profit_protect_2pct | 盈利保护-大盈利锁定 | 盈利≥2.0% + 趋势强度<入场时70% |
+
 ### V3策略专属平仓原因 ⚡ 新增
 
 | 代码 | 中文说明 | 触发条件 |
@@ -355,6 +366,9 @@ v3_trend_collapse|score:25|ema_diff:0.35%|ratio:0.16
 progressive_sl_1pct|loss:1.25%|reason:multi_timeframe_reversed
 progressive_sl_2pct|loss:2.45%|reason:15m_reversed
 progressive_sl_3pct|loss:3.15%|reason:severe_loss
+profit_protect_reversal|profit:1.85%|reason:15m_death_cross
+profit_protect_weak|profit:0.65%|reason:trend_weak_30pct
+profit_protect_2pct|profit:2.35%|reason:trend_weak_70pct
 ```
 
 **中文格式** (兼容):
