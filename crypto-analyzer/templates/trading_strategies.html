@@ -412,6 +412,24 @@
         function showAlert(message, type = 'info') {
             showToast(message, type, 4000);
         }
+
+        // 切换反向操作配置面板
+        function toggleContrarianConfig() {
+            const enabled = document.getElementById('contrarianEnabled').checked;
+            const panel = document.getElementById('contrarianConfigPanel');
+            if (panel) {
+                panel.style.display = enabled ? 'block' : 'none';
+            }
+        }
+
+        // 切换市场检测配置
+        function toggleMarketDetectionConfig() {
+            const autoMode = document.getElementById('marketRegimeAuto').checked;
+            const panel = document.getElementById('marketDetectionPanel');
+            if (panel) {
+                panel.style.display = autoMode ? 'block' : 'none';
+            }
+        }
     </script>
     <div class="container">
         <!-- Header -->
@@ -2230,13 +2248,6 @@
             }
 
         // 切换反向操作配置面板
-        function toggleContrarianConfig() {
-            const enabled = document.getElementById('contrarianEnabled').checked;
-            const panel = document.getElementById('contrarianConfigPanel');
-            if (panel) {
-                panel.style.display = enabled ? 'block' : 'none';
-            }
-        }
 
         // 切换市场检测配置
             const enabled = document.getElementById('contrarianEnabled').checked;
@@ -2247,13 +2258,6 @@
         }
 
         // 切换市场检测配置
-        function toggleMarketDetectionConfig() {
-            const autoMode = document.getElementById('marketRegimeAuto').checked;
-            const panel = document.getElementById('marketDetectionPanel');
-            if (panel) {
-                panel.style.display = autoMode ? 'block' : 'none';
-            }
-        }
 
         // V2策略默认设置（已简化，V2始终启用）
         function toggleV2Mode() {
