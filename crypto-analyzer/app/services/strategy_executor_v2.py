@@ -86,6 +86,14 @@ class StrategyExecutorV2:
         # 初始化开仓前检查器（并设置 strategy_executor 用于待开仓自检后的开仓）
         self.position_validator = PositionValidator(db_config, futures_engine, strategy_executor=self)
 
+        # 初始化反向操作策略
+        from app.services.contrarian_strategy import ContrarianStrategy
+        self.contrarian_strategy = ContrarianStrategy(db_config)
+
+        # 初始化反向操作策略
+        from app.services.contrarian_strategy import ContrarianStrategy
+        self.contrarian_strategy = ContrarianStrategy(db_config)
+
     def _load_margin_config(self):
         """加载保证金配置"""
         try:
@@ -4983,12 +4991,51 @@ class StrategyExecutorV2:
                 debug_info.append(f"V3持续趋势: {v3_desc}")
 
                 if v3_signal and v3_signal in buy_directions:
-                    # V3策略直接挂限价单，不需要应用技术指标过滤器
-                    open_result = await self.execute_limit_order(
-                        symbol, v3_signal, strategy, account_id, ema_data
-                    )
-                    if open_result and open_result.get('success'):
-                        debug_info.append(f"✅ V3限价单已挂出: {v3_signal} @ {open_result.get('limit_price', 0):.4f}")
+                    # 检查是否使用反向操作策略
+                    use_contrarian = self.contrarian_strategy.should_use_contrarian(strategy)
+                    
+                    if use_contrarian:
+                        # 反向操作：反转信号方向
+                        original_signal = v3_signal
+                        v3_signal = self.contrarian_strategy.reverse_signal(v3_signal)
+                        
+                        # 获取反向操作参数
+                        contrarian_params = self.contrarian_strategy.get_contrarian_params(
+                            strategy, original_signal
+                        )
+                        
+                        # 记录反向操作
+                        signal_strength = abs(ema_data_15m.get('ema_diff_pct', 0))
+                        market_regime = 'oscillating' if use_contrarian else 'trending'
+                        entry_reason = self.contrarian_strategy.format_contrarian_reason(
+                            'V3', original_signal, signal_strength, market_regime
+                        )
+                        
+                        logger.info(
+                            f"🔄 [反向操作] {symbol}: {original_signal.upper()} → {v3_signal.upper()}, "
+                            f"市场环境={market_regime}, 信号强度={signal_strength:.2f}%"
+                        )
+                        
+                        # 使用反向信号挂限价单
+                        open_result = await self.execute_limit_order(
+                            symbol, v3_signal, strategy, account_id, ema_data,
+                            contrarian_mode=True,
+                            contrarian_params=contrarian_params,
+                            entry_reason=entry_reason
+                        )
+                        
+                        if open_result and open_result.get('success'):
+                            debug_info.append(
+                                f"🔄 反向操作限价单已挂出: {v3_signal} @ {open_result.get('limit_price', 0):.4f} "
+                                f"(原信号{original_signal})"
+                            )
+                    else:
+                        # 正常趋势跟随策略
+                        open_result = await self.execute_limit_order(
+                            symbol, v3_signal, strategy, account_id, ema_data
+                        )
+                        if open_result and open_result.get('success'):
+                            debug_info.append(f"✅ V3限价单已挂出: {v3_signal} @ {open_result.get('limit_price', 0):.4f}")
 
             # 3.6 检查限价单信号（V2策略，无需自检，直接挂单）
             if not open_result or not open_result.get('success'):
