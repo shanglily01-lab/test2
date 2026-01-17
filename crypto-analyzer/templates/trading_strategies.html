@@ -2239,15 +2239,6 @@
         }
 
         // 切换市场检测配置
-        function toggleMarketDetectionConfig() {
-            const autoMode = document.getElementById('marketRegimeAuto').checked;
-            const panel = document.getElementById('marketDetectionPanel');
-            if (panel) {
-                panel.style.display = autoMode ? 'block' : 'none';
-            }
-
-        // 切换反向操作配置面板
-        function toggleContrarianConfig() {
             const enabled = document.getElementById('contrarianEnabled').checked;
             const panel = document.getElementById('contrarianConfigPanel');
             if (panel) {
