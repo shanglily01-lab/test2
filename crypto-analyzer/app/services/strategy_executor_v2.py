@@ -1735,7 +1735,10 @@ class StrategyExecutorV2:
         return direction, signal_desc
 
     async def execute_limit_order(self, symbol: str, direction: str, strategy: Dict,
-                                   account_id: int, ema_data: Dict) -> Dict:
+                                   account_id: int, ema_data: Dict,
+                                   contrarian_mode: bool = False,
+                                   contrarian_params: Dict = None,
+                                   entry_reason: str = None) -> Dict:
         """
         执行限价单开仓（不需要自检，直接挂单）
         一次性批量创建多个限价单直到达到上限
@@ -1746,11 +1749,50 @@ class StrategyExecutorV2:
             strategy: 策略配置
             account_id: 账户ID
             ema_data: EMA数据
+            contrarian_mode: 是否是反向操作模式（从V3信号传入）
+            contrarian_params: 反向操作参数（从V3信号传入）
+            entry_reason: 入场原因（从V3信号传入）
 
         Returns:
             执行结果
         """
         try:
+            # ========== 🔄 反向操作检查（适用于所有EMA信号）==========
+            original_direction = direction
+            is_contrarian_trade = False
+
+            # 如果不是从V3传入的contrarian_mode，则检查是否应该对此limit_order应用反向操作
+            if not contrarian_mode and self.contrarian_strategy:
+                use_contrarian = self.contrarian_strategy.should_use_contrarian(strategy)
+
+                if use_contrarian:
+                    # 反转信号方向
+                    direction = self.contrarian_strategy.reverse_signal(direction)
+                    is_contrarian_trade = True
+
+                    # 获取反向操作参数（如果没有从V3传入）
+                    if not contrarian_params:
+                        contrarian_params = self.contrarian_strategy.get_contrarian_params(
+                            strategy, original_direction
+                        )
+
+                    # 生成入场原因
+                    if not entry_reason:
+                        ema_diff_pct = abs(ema_data.get('ema_diff_pct', 0))
+                        market_regime = 'oscillating'
+                        entry_reason = self.contrarian_strategy.format_contrarian_reason(
+                            'EMA', original_direction, ema_diff_pct, market_regime
+                        )
+
+                    logger.info(
+                        f"🔄 [反向操作-限价单] {symbol}: {original_direction.upper()} → {direction.upper()}, "
+                        f"市场环境=oscillating"
+                    )
+            elif contrarian_mode:
+                # 从V3传入的contrarian_mode
+                is_contrarian_trade = True
+            # ========== 反向操作检查结束 ==========
+
             current_price = ema_data['current_price']
             leverage = strategy.get('leverage', 10)
             sync_live = strategy.get('syncLive', False)
@@ -1779,9 +1821,14 @@ class StrategyExecutorV2:
             notional = margin * leverage
             quantity = notional / limit_price
 
-            # 止损止盈
-            stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
-            take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
+            # 止损止盈（如果是反向操作，使用反向操作参数）
+            if is_contrarian_trade and contrarian_params:
+                stop_loss_pct = contrarian_params.get('stop_loss', 1.5)
+                take_profit_pct = contrarian_params.get('take_profit', 1.0)
+                logger.debug(f"🔄 使用反向操作参数: 止损{stop_loss_pct}%, 止盈{take_profit_pct}%")
+            else:
+                stop_loss_pct = strategy.get('stopLossPercent') or strategy.get('stopLoss') or self.HARD_STOP_LOSS
+                take_profit_pct = strategy.get('takeProfitPercent') or strategy.get('takeProfit') or self.MAX_TAKE_PROFIT
 
             # 执行模拟挂单
             if self.futures_engine:
@@ -1825,7 +1872,10 @@ class StrategyExecutorV2:
                 # 限价单信号类型
                 entry_signal_type = 'limit_order_trend'  # 限价单趋势跟踪
                 ema_diff_pct = ema_data.get('ema_diff_pct', 0)
-                entry_reason = f"限价单({direction}, EMA强度{ema_diff_pct:.3f}%, 回调入场)"
+
+                # 如果不是反向操作（或没有传入entry_reason），生成默认入场原因
+                if not entry_reason:
+                    entry_reason = f"限价单({direction}, EMA强度{ema_diff_pct:.3f}%, 回调入场)"
 
                 for i in range(orders_to_create):
                     result = self.futures_engine.open_position(
