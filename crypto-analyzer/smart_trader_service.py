@@ -105,7 +105,7 @@ class SmartDecisionBrain:
         return klines
 
     def analyze(self, symbol: str):
-        """分析并决策 - 支持做多和做空"""
+        """分析并决策 - 支持做多和做空 (主要使用1小时K线)"""
         if symbol not in self.whitelist:
             return None
 
@@ -113,23 +113,25 @@ class SmartDecisionBrain:
             klines_1d = self.load_klines(symbol, '1d', 50)
             klines_1h = self.load_klines(symbol, '1h', 100)
 
-            if len(klines_1d) < 30 or len(klines_1h) < 50:
+            if len(klines_1d) < 30 or len(klines_1h) < 72:  # 至少需要72小时(3天)数据
                 return None
 
-            current = klines_1d[-1]['close']
+            current = klines_1h[-1]['close']
 
             # 分别计算做多和做空得分
             long_score = 0
             short_score = 0
 
-            # 1. 位置评分
-            high_30d = max(k['high'] for k in klines_1d[-30:])
-            low_30d = min(k['low'] for k in klines_1d[-30:])
+            # ========== 1小时K线分析 (主要) ==========
 
-            if high_30d == low_30d:
+            # 1. 位置评分 - 使用72小时(3天)高低点
+            high_72h = max(k['high'] for k in klines_1h[-72:])
+            low_72h = min(k['low'] for k in klines_1h[-72:])
+
+            if high_72h == low_72h:
                 position_pct = 50
             else:
-                position_pct = (current - low_30d) / (high_30d - low_30d) * 100
+                position_pct = (current - low_72h) / (high_72h - low_72h) * 100
 
             # 低位做多，高位做空
             if position_pct < 30:
@@ -140,22 +142,43 @@ class SmartDecisionBrain:
                 long_score += 5
                 short_score += 5
 
-            # 7日涨幅
-            if len(klines_1d) >= 7:
-                gain_7d = (current - klines_1d[-7]['close']) / klines_1d[-7]['close'] * 100
-                if gain_7d < 10:
+            # 2. 短期动量 - 最近24小时涨幅
+            gain_24h = (current - klines_1h[-24]['close']) / klines_1h[-24]['close'] * 100
+            if gain_24h < -3:  # 24小时跌超过3%
+                long_score += 15
+            elif gain_24h > 3:  # 24小时涨超过3%
+                short_score += 15
+
+            # 3. 1小时趋势评分 - 最近48根K线(2天)
+            bullish_1h = sum(1 for k in klines_1h[-48:] if k['close'] > k['open'])
+            bearish_1h = 48 - bullish_1h
+
+            if bullish_1h > 30:  # 超过62.5%是阳线
+                long_score += 20
+            elif bearish_1h > 30:  # 超过62.5%是阴线
+                short_score += 20
+
+            # 4. 波动率评分 - 最近24小时
+            recent_24h = klines_1h[-24:]
+            volatility = (max(k['high'] for k in recent_24h) - min(k['low'] for k in recent_24h)) / current * 100
+
+            # 高波动率更适合交易
+            if volatility > 5:  # 波动超过5%
+                if long_score > short_score:
                     long_score += 10
-                elif gain_7d > 20:
+                else:
                     short_score += 10
 
-            # 2. 趋势评分
+            # ========== 1天K线确认 (辅助) ==========
+
+            # 大趋势确认: 如果30天趋势与1小时趋势一致，加分
             bullish_1d = sum(1 for k in klines_1d[-30:] if k['close'] > k['open'])
             bearish_1d = 30 - bullish_1d
 
-            if bullish_1d > 18:
-                long_score += 20
-            if bearish_1d > 18:
-                short_score += 20
+            if bullish_1d > 18 and long_score > short_score:  # 大趋势上涨且1小时也看多
+                long_score += 10  # 趋势一致，加分
+            elif bearish_1d > 18 and short_score > long_score:  # 大趋势下跌且1小时也看空
+                short_score += 10
 
             # 选择得分更高的方向 (只要达到阈值就可以)
             if long_score >= self.threshold or short_score >= self.threshold:
