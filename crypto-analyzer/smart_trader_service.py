@@ -330,24 +330,25 @@ class SmartTraderService:
             return False
 
     def check_trend_reversal(self, symbol: str, position_side: str):
-        """检查趋势反转 - 超级大脑动态监控"""
+        """检查趋势反转 - 超级大脑动态监控 (使用15分钟K线)"""
         try:
-            klines_1h = self.brain.load_klines(symbol, '1h', 20)
-            if len(klines_1h) < 20:
+            # 使用15分钟K线，检查最近10根 = 2.5小时的趋势
+            klines_15m = self.brain.load_klines(symbol, '15m', 20)
+            if len(klines_15m) < 20:
                 return False, None
 
-            # 计算最近10根K线的趋势
-            recent_bullish = sum(1 for k in klines_1h[-10:] if k['close'] > k['open'])
+            # 计算最近10根15分钟K线的趋势
+            recent_bullish = sum(1 for k in klines_15m[-10:] if k['close'] > k['open'])
             recent_bearish = 10 - recent_bullish
 
             if position_side == 'LONG':
                 # 多单: 如果最近10根K线有7根以上是阴线 → 趋势转空
                 if recent_bearish >= 7:
-                    return True, f"TREND_REVERSE_SHORT({recent_bearish}/10阴线)"
+                    return True, f"TREND_REVERSE_SHORT({recent_bearish}/10阴线15m)"
             elif position_side == 'SHORT':
                 # 空单: 如果最近10根K线有7根以上是阳线 → 趋势转多
                 if recent_bullish >= 7:
-                    return True, f"TREND_REVERSE_LONG({recent_bullish}/10阳线)"
+                    return True, f"TREND_REVERSE_LONG({recent_bullish}/10阳线15m)"
 
             return False, None
 
@@ -429,7 +430,7 @@ class SmartTraderService:
             logger.error(f"[ERROR] 检查止盈止损失败: {e}")
 
     def close_old_positions(self):
-        """关闭超时持仓"""
+        """关闭超时持仓 (3小时后强制平仓)"""
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -437,7 +438,7 @@ class SmartTraderService:
             cursor.execute("""
                 SELECT id, symbol FROM futures_positions
                 WHERE status = 'open' AND account_id = %s
-                AND created_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+                AND created_at < DATE_SUB(NOW(), INTERVAL 3 HOUR)
             """, (self.account_id,))
 
             old_positions = cursor.fetchall()
