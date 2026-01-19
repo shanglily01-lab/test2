@@ -7,10 +7,15 @@
 
 import time
 import sys
+import os
 from datetime import datetime
 from decimal import Decimal
 from loguru import logger
 import pymysql
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 # 配置日志
 logger.remove()
@@ -192,11 +197,11 @@ class SmartTraderService:
 
     def __init__(self):
         self.db_config = {
-            'host': '13.212.252.171',
-            'port': 3306,
-            'user': 'admin',
-            'password': 'Tonny@1000',
-            'database': 'binance-data'
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': int(os.getenv('DB_PORT', '3306')),
+            'user': os.getenv('DB_USER', 'root'),
+            'password': os.getenv('DB_PASSWORD', ''),
+            'database': os.getenv('DB_NAME', 'binance-data')
         }
 
         self.account_id = 2
