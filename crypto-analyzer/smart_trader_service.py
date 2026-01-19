@@ -189,9 +189,9 @@ class SmartTraderService:
         }
 
         self.account_id = 1
-        self.position_size_usdt = 100
+        self.position_size_usdt = 400
         self.max_positions = 5
-        self.leverage = 3
+        self.leverage = 5
         self.scan_interval = 300
 
         self.brain = SmartDecisionBrain(self.db_config)
