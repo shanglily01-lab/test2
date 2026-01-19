@@ -329,8 +329,34 @@ class SmartTraderService:
             logger.error(f"[ERROR] {symbol} 开仓失败: {e}")
             return False
 
+    def check_trend_reversal(self, symbol: str, position_side: str):
+        """检查趋势反转 - 超级大脑动态监控"""
+        try:
+            klines_1h = self.brain.load_klines(symbol, '1h', 20)
+            if len(klines_1h) < 20:
+                return False, None
+
+            # 计算最近10根K线的趋势
+            recent_bullish = sum(1 for k in klines_1h[-10:] if k['close'] > k['open'])
+            recent_bearish = 10 - recent_bullish
+
+            if position_side == 'LONG':
+                # 多单: 如果最近10根K线有7根以上是阴线 → 趋势转空
+                if recent_bearish >= 7:
+                    return True, f"TREND_REVERSE_SHORT({recent_bearish}/10阴线)"
+            elif position_side == 'SHORT':
+                # 空单: 如果最近10根K线有7根以上是阳线 → 趋势转多
+                if recent_bullish >= 7:
+                    return True, f"TREND_REVERSE_LONG({recent_bullish}/10阳线)"
+
+            return False, None
+
+        except Exception as e:
+            logger.error(f"[ERROR] {symbol} 趋势反转检查失败: {e}")
+            return False, None
+
     def check_stop_loss_take_profit(self):
-        """检查止盈止损"""
+        """检查止盈止损 + 智能趋势监控"""
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -354,6 +380,7 @@ class SmartTraderService:
                 should_close = False
                 close_reason = None
 
+                # 1. 固定止盈止损检查
                 if position_side == 'LONG':
                     # LONG: 价格<=止损 或 价格>=止盈
                     if stop_loss and current_price <= float(stop_loss):
@@ -370,6 +397,13 @@ class SmartTraderService:
                     elif take_profit and current_price <= float(take_profit):
                         should_close = True
                         close_reason = 'TAKE_PROFIT'
+
+                # 2. 趋势反转检查 (只在没有触发止盈止损时检查)
+                if not should_close:
+                    is_reversed, reverse_reason = self.check_trend_reversal(symbol, position_side)
+                    if is_reversed:
+                        should_close = True
+                        close_reason = reverse_reason
 
                 if should_close:
                     pnl_pct = (current_price - float(entry_price)) / float(entry_price) * 100
