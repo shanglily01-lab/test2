@@ -269,20 +269,39 @@ class SmartTraderService:
         return self.connection
 
     def get_current_price(self, symbol: str):
-        """获取当前价格"""
+        """获取当前价格 - 带数据新鲜度检查"""
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT close_price
+                SELECT close_price, open_time
                 FROM kline_data
                 WHERE symbol = %s AND timeframe = '1m'
                 ORDER BY open_time DESC LIMIT 1
             """, (symbol,))
             result = cursor.fetchone()
             cursor.close()
-            return float(result[0]) if result else None
-        except:
+
+            if not result:
+                return None
+
+            close_price, open_time = result
+
+            # 检查数据新鲜度: K线时间不能超过5分钟前
+            import time
+            current_timestamp_ms = int(time.time() * 1000)
+            data_age_minutes = (current_timestamp_ms - open_time) / 1000 / 60
+
+            if data_age_minutes > 5:
+                logger.warning(
+                    f"[DATA_STALE] {symbol} K线数据过时! "
+                    f"最新K线时间: {data_age_minutes:.1f}分钟前, 拒绝使用"
+                )
+                return None
+
+            return float(close_price)
+        except Exception as e:
+            logger.error(f"[ERROR] 获取{symbol}价格失败: {e}")
             return None
 
     def get_open_positions_count(self):
@@ -690,6 +709,30 @@ class SmartTraderService:
         except:
             return 0
 
+    def check_recent_close(self, symbol: str, side: str, cooldown_minutes: int = 10):
+        """
+        检查指定交易对和方向是否在冷却期内(刚刚平仓)
+        返回True表示在冷却期,不应该开仓
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT COUNT(*) FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND status = 'closed'
+                  AND account_id = %s
+                  AND close_time >= DATE_SUB(NOW(), INTERVAL %s MINUTE)
+            """, (symbol, side, self.account_id, cooldown_minutes))
+
+            result = cursor.fetchone()
+            cursor.close()
+
+            # 如果最近X分钟内有平仓记录,返回True(冷却中)
+            return result[0] > 0 if result else False
+        except:
+            return False
+
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
         """关闭指定交易对和方向的持仓"""
         try:
@@ -781,6 +824,11 @@ class SmartTraderService:
                     # 检查同方向是否已有持仓
                     if self.has_position(symbol, new_side):
                         logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
+                        continue
+
+                    # 检查是否刚刚平仓(10分钟冷却期)
+                    if self.check_recent_close(symbol, new_side, cooldown_minutes=10):
+                        logger.info(f"[SKIP] {symbol} {new_side}方向10分钟内刚平仓,冷却中")
                         continue
 
                     # 检查是否有反向持仓
