@@ -188,7 +188,7 @@ class SmartTraderService:
             'database': 'binance-data'
         }
 
-        self.account_id = 1
+        self.account_id = 2
         self.position_size_usdt = 400
         self.max_positions = 5
         self.leverage = 5
