@@ -358,10 +358,10 @@ class SmartTraderService:
 
                     cursor.execute("""
                         UPDATE futures_positions
-                        SET status = 'closed', close_price = %s,
-                            close_reason = %s, closed_at = NOW(), updated_at = NOW()
+                        SET status = 'closed', mark_price = %s,
+                            close_time = NOW(), updated_at = NOW()
                         WHERE id = %s
-                    """, (current_price, close_reason, pos_id))
+                    """, (current_price, pos_id))
 
             cursor.close()
 
@@ -392,8 +392,8 @@ class SmartTraderService:
 
                 cursor.execute("""
                     UPDATE futures_positions
-                    SET status = 'closed', close_price = %s,
-                        close_reason = 'MAX_HOLD_TIME', closed_at = NOW(), updated_at = NOW()
+                    SET status = 'closed', mark_price = %s,
+                        close_time = NOW(), updated_at = NOW()
                     WHERE id = %s
                 """, (current_price, pos_id))
 
