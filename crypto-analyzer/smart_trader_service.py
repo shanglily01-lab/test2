@@ -668,7 +668,7 @@ class SmartTraderService:
         """获取持仓的开仓得分"""
         try:
             conn = self._get_connection()
-            cursor = conn.cursor()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
 
             cursor.execute("""
                 SELECT entry_signal_type FROM futures_positions
@@ -698,7 +698,7 @@ class SmartTraderService:
                 return False
 
             conn = self._get_connection()
-            cursor = conn.cursor()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
 
             # 获取持仓信息用于日志
             cursor.execute("""
