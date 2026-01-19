@@ -100,7 +100,7 @@ news:
     enabled: true
     client_id: ${REDDIT_CLIENT_ID:}
     client_secret: ${REDDIT_CLIENT_SECRET:}
-    proxy: ${HTTP_PROXY:http://127.0.0.1:7897}
+    proxy: ${HTTP_PROXY:}
     subreddits:
     - CryptoCurrency
     - Bitcoin
@@ -117,7 +117,7 @@ news:
     bearer_token: ${TWITTER_BEARER_TOKEN:}
     api_key: ${TWITTER_API_KEY:}
     api_secret: ${TWITTER_API_SECRET:}
-    proxy: ${HTTP_PROXY:http://127.0.0.1:7897}
+    proxy: ${HTTP_PROXY:}
     vip_accounts:
     - username: elonmusk
       name: Elon Musk
@@ -140,7 +140,7 @@ news:
   coingecko:
     enabled: true
     api_key: ''
-    proxy: http://127.0.0.1:7897
+    proxy: ''
   telegram:
     enabled: false
     api_id: ''
@@ -277,7 +277,7 @@ smart_money:
   enabled: true
   etherscan_api_key: ${ETHERSCAN_API_KEY:}
   bscscan_api_key: ${BSCSCAN_API_KEY:}
-  proxy: ${HTTP_PROXY:http://127.0.0.1:7897}
+  proxy: ${HTTP_PROXY:}
   min_transaction_usd: 100000
   addresses:
   - address: '0x28C6c06298d514Db089934071355E5743bf21d60'
