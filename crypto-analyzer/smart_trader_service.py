@@ -130,31 +130,16 @@ class SmartDecisionBrain:
             if bullish_1d > 18:
                 score += 20
 
-            # 3. 支撑阻力
-            recent = klines_1h[-100:] if len(klines_1h) >= 100 else klines_1h
-            highs = [k['high'] for k in recent]
-            lows = [k['low'] for k in recent]
+            # 3. 支撑阻力 - 基于固定百分比
+            # 止盈: 当前价 + 2%
+            resistance = current * 1.02
+            # 止损: 当前价 - 3%
+            support = current * 0.97
 
-            # 计算阻力位和支撑位,如果当前价格已经是极值,则设置默认的止盈止损
-            highs_above = [h for h in highs if h > current * 1.001]  # 至少高于当前价0.1%
-            lows_below = [l for l in lows if l < current * 0.999]   # 至少低于当前价0.1%
+            upside = 2.0  # 固定2%上涨空间
+            downside = 3.0  # 固定3%下跌空间
 
-            if highs_above:
-                resistance = min(highs_above)
-            else:
-                # 如果没有更高的价格,设置止盈为+2%
-                resistance = current * 1.02
-
-            if lows_below:
-                support = max(lows_below)
-            else:
-                # 如果没有更低的价格,设置止损为-3%
-                support = current * 0.97
-
-            upside = (resistance - current) / current * 100
-            downside = (current - support) / current * 100
-
-            rr = upside / downside if downside > 0 else 0
+            rr = upside / downside  # 约0.67
 
             if rr >= 2:
                 score += 30
