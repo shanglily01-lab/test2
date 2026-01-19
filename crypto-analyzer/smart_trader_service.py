@@ -561,7 +561,7 @@ class SmartTraderService:
         """检查并处理对冲持仓 - 平掉亏损方向"""
         try:
             conn = self._get_connection()
-            cursor = conn.cursor()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
 
             # 1. 找出所有存在对冲的交易对
             cursor.execute("""
