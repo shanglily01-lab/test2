@@ -273,6 +273,7 @@ class SmartTraderService:
             quantity = self.position_size_usdt * self.leverage / current_price
             notional_value = quantity * current_price
             margin = self.position_size_usdt
+            open_time = int(time.time() * 1000)
 
             logger.info(f"[OPEN] {symbol} LONG | 价格: ${current_price:.4f} | 数量: {quantity:.2f}")
 
@@ -283,12 +284,12 @@ class SmartTraderService:
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price,
-                 leverage, notional_value, margin, stop_loss_price, take_profit_price,
+                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
                  entry_signal_type, source, status, created_at, updated_at)
-                VALUES (%s, %s, 'LONG', %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+                VALUES (%s, %s, 'LONG', %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, quantity, current_price, self.leverage,
-                notional_value, margin, opp['support'], opp['resistance'],
+                notional_value, margin, open_time, opp['support'], opp['resistance'],
                 f"SMART_BRAIN_{opp['score']}"
             ))
 
