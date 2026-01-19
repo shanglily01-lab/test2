@@ -105,7 +105,7 @@ class SmartDecisionBrain:
         return klines
 
     def analyze(self, symbol: str):
-        """分析并决策"""
+        """分析并决策 - 支持做多和做空"""
         if symbol not in self.whitelist:
             return None
 
@@ -116,63 +116,60 @@ class SmartDecisionBrain:
             if len(klines_1d) < 30 or len(klines_1h) < 50:
                 return None
 
-            score = 0
+            current = klines_1d[-1]['close']
+
+            # 分别计算做多和做空得分
+            long_score = 0
+            short_score = 0
 
             # 1. 位置评分
             high_30d = max(k['high'] for k in klines_1d[-30:])
             low_30d = min(k['low'] for k in klines_1d[-30:])
-            current = klines_1d[-1]['close']
 
             if high_30d == low_30d:
                 position_pct = 50
             else:
                 position_pct = (current - low_30d) / (high_30d - low_30d) * 100
 
+            # 低位做多，高位做空
             if position_pct < 30:
-                score += 20
+                long_score += 20
             elif position_pct > 70:
-                score -= 20
+                short_score += 20
             else:
-                score += 5
+                long_score += 5
+                short_score += 5
 
             # 7日涨幅
             if len(klines_1d) >= 7:
                 gain_7d = (current - klines_1d[-7]['close']) / klines_1d[-7]['close'] * 100
                 if gain_7d < 10:
-                    score += 10
+                    long_score += 10
                 elif gain_7d > 20:
-                    score -= 10
+                    short_score += 10
 
             # 2. 趋势评分
             bullish_1d = sum(1 for k in klines_1d[-30:] if k['close'] > k['open'])
+            bearish_1d = 30 - bullish_1d
+
             if bullish_1d > 18:
-                score += 20
+                long_score += 20
+            if bearish_1d > 18:
+                short_score += 20
 
-            # 3. 支撑阻力 - 基于固定百分比
-            # 止盈: 当前价 + 2%
-            resistance = current * 1.02
-            # 止损: 当前价 - 3%
-            support = current * 0.97
-
-            upside = 2.0  # 固定2%上涨空间
-            downside = 3.0  # 固定3%下跌空间
-
-            rr = upside / downside  # 约0.67
-
-            if rr >= 2:
-                score += 30
-            elif rr >= 1.5:
-                score += 15
-            else:
-                score -= 10
-
-            if score >= self.threshold:
+            # 选择得分更高的方向
+            if long_score >= self.threshold and long_score > short_score:
                 return {
                     'symbol': symbol,
-                    'score': score,
-                    'support': support,
-                    'resistance': resistance,
-                    'risk_reward': rr,
+                    'side': 'LONG',
+                    'score': long_score,
+                    'current_price': current
+                }
+            elif short_score >= self.threshold and short_score > long_score:
+                return {
+                    'symbol': symbol,
+                    'side': 'SHORT',
+                    'score': short_score,
                     'current_price': current
                 }
 
@@ -277,8 +274,9 @@ class SmartTraderService:
             return False
 
     def open_position(self, opp: dict):
-        """开仓"""
+        """开仓 - 支持做多和做空"""
         symbol = opp['symbol']
+        side = opp['side']  # 'LONG' 或 'SHORT'
 
         try:
             current_price = self.get_current_price(symbol)
@@ -290,11 +288,15 @@ class SmartTraderService:
             notional_value = quantity * current_price
             margin = self.position_size_usdt
 
-            # 基于实际开仓价格重新计算止盈止损
-            stop_loss = current_price * 0.97   # 止损: 开仓价 -3%
-            take_profit = current_price * 1.02  # 止盈: 开仓价 +2%
+            # 基于实际开仓价格和方向计算止盈止损
+            if side == 'LONG':
+                stop_loss = current_price * 0.97   # 止损: 开仓价 -3%
+                take_profit = current_price * 1.02  # 止盈: 开仓价 +2%
+            else:  # SHORT
+                stop_loss = current_price * 1.03   # 止损: 开仓价 +3%
+                take_profit = current_price * 0.98  # 止盈: 开仓价 -2%
 
-            logger.info(f"[OPEN] {symbol} LONG | 价格: ${current_price:.4f} | 数量: {quantity:.2f}")
+            logger.info(f"[OPEN] {symbol} {side} | 价格: ${current_price:.4f} | 数量: {quantity:.2f}")
 
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -305,18 +307,20 @@ class SmartTraderService:
                 (account_id, symbol, position_side, quantity, entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
                  entry_signal_type, source, status, created_at, updated_at)
-                VALUES (%s, %s, 'LONG', %s, %s, %s, %s, %s, NOW(), %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
             """, (
-                self.account_id, symbol, quantity, current_price, self.leverage,
+                self.account_id, symbol, side, quantity, current_price, self.leverage,
                 notional_value, margin, stop_loss, take_profit,
                 f"SMART_BRAIN_{opp['score']}"
             ))
 
             cursor.close()
 
+            sl_pct = "-3%" if side == 'LONG' else "+3%"
+            tp_pct = "+2%" if side == 'LONG' else "-2%"
             logger.info(
-                f"[SUCCESS] {symbol} 开仓成功 | "
-                f"止损: ${stop_loss:.4f} (-3%) | 止盈: ${take_profit:.4f} (+2%)"
+                f"[SUCCESS] {symbol} {side}开仓成功 | "
+                f"止损: ${stop_loss:.4f} ({sl_pct}) | 止盈: ${take_profit:.4f} ({tp_pct})"
             )
             return True
 
