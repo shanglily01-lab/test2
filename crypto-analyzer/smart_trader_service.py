@@ -157,21 +157,22 @@ class SmartDecisionBrain:
             if bearish_1d > 18:
                 short_score += 20
 
-            # 选择得分更高的方向
-            if long_score >= self.threshold and long_score > short_score:
-                return {
-                    'symbol': symbol,
-                    'side': 'LONG',
-                    'score': long_score,
-                    'current_price': current
-                }
-            elif short_score >= self.threshold and short_score > long_score:
-                return {
-                    'symbol': symbol,
-                    'side': 'SHORT',
-                    'score': short_score,
-                    'current_price': current
-                }
+            # 选择得分更高的方向 (只要达到阈值就可以)
+            if long_score >= self.threshold or short_score >= self.threshold:
+                if long_score >= short_score:
+                    return {
+                        'symbol': symbol,
+                        'side': 'LONG',
+                        'score': long_score,
+                        'current_price': current
+                    }
+                else:
+                    return {
+                        'symbol': symbol,
+                        'side': 'SHORT',
+                        'score': short_score,
+                        'current_price': current
+                    }
 
             return None
 
