@@ -290,6 +290,10 @@ class SmartTraderService:
             notional_value = quantity * current_price
             margin = self.position_size_usdt
 
+            # 基于实际开仓价格重新计算止盈止损
+            stop_loss = current_price * 0.97   # 止损: 开仓价 -3%
+            take_profit = current_price * 1.02  # 止盈: 开仓价 +2%
+
             logger.info(f"[OPEN] {symbol} LONG | 价格: ${current_price:.4f} | 数量: {quantity:.2f}")
 
             conn = self._get_connection()
@@ -304,7 +308,7 @@ class SmartTraderService:
                 VALUES (%s, %s, 'LONG', %s, %s, %s, %s, %s, NOW(), %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, quantity, current_price, self.leverage,
-                notional_value, margin, opp['support'], opp['resistance'],
+                notional_value, margin, stop_loss, take_profit,
                 f"SMART_BRAIN_{opp['score']}"
             ))
 
@@ -312,8 +316,7 @@ class SmartTraderService:
 
             logger.info(
                 f"[SUCCESS] {symbol} 开仓成功 | "
-                f"止损: ${opp['support']:.4f} | 止盈: ${opp['resistance']:.4f} | "
-                f"盈亏比: {opp['risk_reward']:.2f}:1"
+                f"止损: ${stop_loss:.4f} (-3%) | 止盈: ${take_profit:.4f} (+2%)"
             )
             return True
 
