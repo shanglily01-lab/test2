@@ -470,7 +470,7 @@ class SmartTraderService:
             logger.error(f"[ERROR] 检查止盈止损失败: {e}")
 
     def close_old_positions(self):
-        """关闭超时持仓 (3小时后强制平仓)"""
+        """关闭超时持仓 (6小时后强制平仓)"""
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -478,7 +478,7 @@ class SmartTraderService:
             cursor.execute("""
                 SELECT id, symbol FROM futures_positions
                 WHERE status = 'open' AND account_id = %s
-                AND created_at < DATE_SUB(NOW(), INTERVAL 3 HOUR)
+                AND created_at < DATE_SUB(NOW(), INTERVAL 6 HOUR)
             """, (self.account_id,))
 
             old_positions = cursor.fetchall()
