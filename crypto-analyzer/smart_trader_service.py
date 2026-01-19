@@ -299,14 +299,29 @@ class SmartTraderService:
         except:
             return 0
 
-    def has_position(self, symbol: str):
+    def has_position(self, symbol: str, side: str = None):
+        """
+        检查是否有持仓
+        symbol: 交易对
+        side: 方向(LONG/SHORT), None表示检查任意方向
+        """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT COUNT(*) FROM futures_positions
-                WHERE symbol = %s AND status = 'open' AND account_id = %s
-            """, (symbol, self.account_id))
+
+            if side:
+                # 检查特定方向的持仓
+                cursor.execute("""
+                    SELECT COUNT(*) FROM futures_positions
+                    WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
+                """, (symbol, side, self.account_id))
+            else:
+                # 检查任意方向的持仓
+                cursor.execute("""
+                    SELECT COUNT(*) FROM futures_positions
+                    WHERE symbol = %s AND status = 'open' AND account_id = %s
+                """, (symbol, self.account_id))
+
             result = cursor.fetchone()
             cursor.close()
             return result[0] > 0 if result else False
@@ -577,9 +592,15 @@ class SmartTraderService:
                     if self.get_open_positions_count() >= self.max_positions:
                         break
 
-                    if self.has_position(opp['symbol']):
-                        logger.info(f"[SKIP] {opp['symbol']} 已有持仓")
+                    # 检查同方向是否已有持仓
+                    if self.has_position(opp['symbol'], opp['side']):
+                        logger.info(f"[SKIP] {opp['symbol']} {opp['side']}方向已有持仓")
                         continue
+
+                    # 检查是否有反向持仓(允许对冲)
+                    opposite_side = 'SHORT' if opp['side'] == 'LONG' else 'LONG'
+                    if self.has_position(opp['symbol'], opposite_side):
+                        logger.info(f"[HEDGE] {opp['symbol']} 已有{opposite_side}持仓,允许开{opp['side']}对冲")
 
                     self.open_position(opp)
                     time.sleep(2)
