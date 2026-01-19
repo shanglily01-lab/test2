@@ -169,6 +169,22 @@ class SmartDecisionBrain:
                 else:
                     short_score += 10
 
+            # 5. 连续趋势强化信号 - 最近10根1小时K线
+            recent_10h = klines_1h[-10:]
+            bullish_10h = sum(1 for k in recent_10h if k['close'] > k['open'])
+            bearish_10h = 10 - bullish_10h
+
+            # 计算最近10小时涨跌幅
+            gain_10h = (current - recent_10h[0]['close']) / recent_10h[0]['close'] * 100
+
+            # 连续阳线且上涨幅度适中(不在顶部) - 强做多信号
+            if bullish_10h >= 7 and gain_10h < 5 and position_pct < 70:
+                long_score += 15
+
+            # 连续阴线且下跌幅度适中(不在底部) - 强做空信号
+            elif bearish_10h >= 7 and gain_10h > -5 and position_pct > 30:
+                short_score += 15
+
             # ========== 1天K线确认 (辅助) ==========
 
             # 大趋势确认: 如果30天趋势与1小时趋势一致，加分
