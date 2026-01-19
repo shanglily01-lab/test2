@@ -40,24 +40,16 @@ class SmartDecisionBrain:
         self.threshold = 30
 
     def _get_all_symbols(self):
-        """从数据库获取所有USDT交易对"""
+        """从config.yaml读取交易对列表"""
         try:
-            conn = pymysql.connect(**self.db_config, charset='utf8mb4')
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT DISTINCT symbol
-                FROM kline_data
-                WHERE symbol LIKE '%/USDT'
-                AND timeframe = '1d'
-                ORDER BY symbol
-            """)
-            symbols = [row[0] for row in cursor.fetchall()]
-            cursor.close()
-            conn.close()
-            logger.info(f"加载了 {len(symbols)} 个USDT交易对")
-            return symbols
+            import yaml
+            with open('config.yaml', 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                symbols = config.get('symbols', [])
+                logger.info(f"从config.yaml加载了 {len(symbols)} 个交易对")
+                return symbols
         except Exception as e:
-            logger.error(f"获取交易对失败: {e}, 使用默认白名单")
+            logger.error(f"读取config.yaml失败: {e}, 使用默认白名单")
             return [
                 'BCH/USDT', 'LDO/USDT', 'ENA/USDT', 'WIF/USDT', 'TAO/USDT',
                 'DASH/USDT', 'ETC/USDT', 'VIRTUAL/USDT', 'NEAR/USDT',
