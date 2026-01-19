@@ -329,31 +329,68 @@ class SmartTraderService:
             logger.error(f"[ERROR] {symbol} 开仓失败: {e}")
             return False
 
-    def check_trend_reversal(self, symbol: str, position_side: str):
-        """检查趋势反转 - 超级大脑动态监控 (使用15分钟K线)"""
+    def check_top_bottom(self, symbol: str, position_side: str, entry_price: float):
+        """智能识别顶部和底部 - 超级大脑动态监控"""
         try:
-            # 使用15分钟K线，检查最近10根 = 2.5小时的趋势
-            klines_15m = self.brain.load_klines(symbol, '15m', 20)
-            if len(klines_15m) < 20:
+            # 使用15分钟K线分析
+            klines_15m = self.brain.load_klines(symbol, '15m', 30)
+            if len(klines_15m) < 30:
                 return False, None
 
-            # 计算最近10根15分钟K线的趋势
-            recent_bullish = sum(1 for k in klines_15m[-10:] if k['close'] > k['open'])
-            recent_bearish = 10 - recent_bullish
+            current = klines_15m[-1]
+            recent_10 = klines_15m[-10:]
+            recent_5 = klines_15m[-5:]
 
             if position_side == 'LONG':
-                # 多单: 如果最近10根K线有7根以上是阴线 → 趋势转空
-                if recent_bearish >= 7:
-                    return True, f"TREND_REVERSE_SHORT({recent_bearish}/10阴线15m)"
+                # 做多持仓 - 寻找顶部信号
+
+                # 1. 价格创新高后回落 (最高点在5-10根K线前)
+                max_high = max(k['high'] for k in recent_10)
+                max_high_idx = len(recent_10) - 1 - [k['high'] for k in reversed(recent_10)].index(max_high)
+                is_peak = max_high_idx < 8  # 高点在前面,现在回落
+
+                # 2. 当前价格已经从高点回落
+                current_price = current['close']
+                pullback_pct = (max_high - current_price) / max_high * 100
+
+                # 3. 最近3根K线连续收阴或连续长上影线
+                recent_3 = klines_15m[-3:]
+                bearish_count = sum(1 for k in recent_3 if k['close'] < k['open'])
+                long_upper_shadow = sum(1 for k in recent_3 if (k['high'] - max(k['open'], k['close'])) > (k['close'] - k['open']) * 2)
+
+                # 见顶判断条件
+                if is_peak and pullback_pct >= 1.0 and (bearish_count >= 2 or long_upper_shadow >= 2):
+                    # 计算当前盈利
+                    profit_pct = (current_price - entry_price) / entry_price * 100
+                    return True, f"TOP_DETECTED(高点回落{pullback_pct:.1f}%,盈利{profit_pct:+.1f}%)"
+
             elif position_side == 'SHORT':
-                # 空单: 如果最近10根K线有7根以上是阳线 → 趋势转多
-                if recent_bullish >= 7:
-                    return True, f"TREND_REVERSE_LONG({recent_bullish}/10阳线15m)"
+                # 做空持仓 - 寻找底部信号
+
+                # 1. 价格创新低后反弹 (最低点在5-10根K线前)
+                min_low = min(k['low'] for k in recent_10)
+                min_low_idx = len(recent_10) - 1 - [k['low'] for k in reversed(recent_10)].index(min_low)
+                is_bottom = min_low_idx < 8  # 低点在前面,现在反弹
+
+                # 2. 当前价格已经从低点反弹
+                current_price = current['close']
+                bounce_pct = (current_price - min_low) / min_low * 100
+
+                # 3. 最近3根K线连续收阳或连续长下影线
+                recent_3 = klines_15m[-3:]
+                bullish_count = sum(1 for k in recent_3 if k['close'] > k['open'])
+                long_lower_shadow = sum(1 for k in recent_3 if (min(k['open'], k['close']) - k['low']) > (k['close'] - k['open']) * 2)
+
+                # 见底判断条件
+                if is_bottom and bounce_pct >= 1.0 and (bullish_count >= 2 or long_lower_shadow >= 2):
+                    # 计算当前盈利
+                    profit_pct = (entry_price - current_price) / entry_price * 100
+                    return True, f"BOTTOM_DETECTED(低点反弹{bounce_pct:.1f}%,盈利{profit_pct:+.1f}%)"
 
             return False, None
 
         except Exception as e:
-            logger.error(f"[ERROR] {symbol} 趋势反转检查失败: {e}")
+            logger.error(f"[ERROR] {symbol} 顶底识别失败: {e}")
             return False, None
 
     def check_stop_loss_take_profit(self):
@@ -381,30 +418,33 @@ class SmartTraderService:
                 should_close = False
                 close_reason = None
 
-                # 1. 固定止盈止损检查
+                # 1. 固定止损检查 (保底风控)
                 if position_side == 'LONG':
-                    # LONG: 价格<=止损 或 价格>=止盈
                     if stop_loss and current_price <= float(stop_loss):
                         should_close = True
                         close_reason = 'STOP_LOSS'
-                    elif take_profit and current_price >= float(take_profit):
-                        should_close = True
-                        close_reason = 'TAKE_PROFIT'
                 elif position_side == 'SHORT':
-                    # SHORT: 价格>=止损 或 价格<=止盈
                     if stop_loss and current_price >= float(stop_loss):
                         should_close = True
                         close_reason = 'STOP_LOSS'
-                    elif take_profit and current_price <= float(take_profit):
-                        should_close = True
-                        close_reason = 'TAKE_PROFIT'
 
-                # 2. 趋势反转检查 (只在没有触发止盈止损时检查)
+                # 2. 智能顶底识别 (优先于固定止盈)
                 if not should_close:
-                    is_reversed, reverse_reason = self.check_trend_reversal(symbol, position_side)
-                    if is_reversed:
+                    is_top_bottom, tb_reason = self.check_top_bottom(symbol, position_side, float(entry_price))
+                    if is_top_bottom:
                         should_close = True
-                        close_reason = reverse_reason
+                        close_reason = tb_reason
+
+                # 3. 固定止盈作为兜底 (如果顶底识别没触发)
+                if not should_close:
+                    if position_side == 'LONG':
+                        if take_profit and current_price >= float(take_profit):
+                            should_close = True
+                            close_reason = 'TAKE_PROFIT'
+                    elif position_side == 'SHORT':
+                        if take_profit and current_price <= float(take_profit):
+                            should_close = True
+                            close_reason = 'TAKE_PROFIT'
 
                 if should_close:
                     pnl_pct = (current_price - float(entry_price)) / float(entry_price) * 100
