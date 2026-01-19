@@ -35,13 +35,34 @@ class SmartDecisionBrain:
         self.db_config = db_config
         self.connection = None
 
-        # 白名单 - 只做LONG
-        self.whitelist = [
-            'BCH/USDT', 'LDO/USDT', 'ENA/USDT', 'WIF/USDT', 'TAO/USDT',
-            'DASH/USDT', 'ETC/USDT', 'VIRTUAL/USDT', 'NEAR/USDT',
-            'AAVE/USDT', 'SUI/USDT', 'UNI/USDT', 'ADA/USDT', 'SOL/USDT'
-        ]
+        # 获取所有USDT交易对
+        self.whitelist = self._get_all_symbols()
         self.threshold = 30
+
+    def _get_all_symbols(self):
+        """从数据库获取所有USDT交易对"""
+        try:
+            conn = pymysql.connect(**self.db_config, charset='utf8mb4')
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT DISTINCT symbol
+                FROM kline_data
+                WHERE symbol LIKE '%/USDT'
+                AND timeframe = '1d'
+                ORDER BY symbol
+            """)
+            symbols = [row[0] for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+            logger.info(f"加载了 {len(symbols)} 个USDT交易对")
+            return symbols
+        except Exception as e:
+            logger.error(f"获取交易对失败: {e}, 使用默认白名单")
+            return [
+                'BCH/USDT', 'LDO/USDT', 'ENA/USDT', 'WIF/USDT', 'TAO/USDT',
+                'DASH/USDT', 'ETC/USDT', 'VIRTUAL/USDT', 'NEAR/USDT',
+                'AAVE/USDT', 'SUI/USDT', 'UNI/USDT', 'ADA/USDT', 'SOL/USDT'
+            ]
 
     def _get_connection(self):
         if self.connection is None or not self.connection.open:
@@ -188,7 +209,7 @@ class SmartTraderService:
 
         self.account_id = 2
         self.position_size_usdt = 400
-        self.max_positions = 5
+        self.max_positions = 999  # 不限制持仓数量
         self.leverage = 5
         self.scan_interval = 300
 
