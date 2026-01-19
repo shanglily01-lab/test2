@@ -207,9 +207,9 @@ class TwitterVIPCollector:
         self.bearer_token = self.config.get('twitter', {}).get('bearer_token', '')
         self.api_key = self.config.get('twitter', {}).get('api_key', '')
         self.api_secret = self.config.get('twitter', {}).get('api_secret', '')
-        # 代理配置（从 smart_money 或 twitter 配置中读取）
-        self.proxy = self.config.get('smart_money', {}).get('proxy', '') or \
-                     self.config.get('twitter', {}).get('proxy', '')
+        # 代理配置（从 twitter 配置中读取优先，否则从 smart_money 读取）
+        self.proxy = self.config.get('twitter', {}).get('proxy') or \
+                     self.config.get('smart_money', {}).get('proxy') or None
 
     async def collect(self, symbols: List[str] = None) -> List[Dict]:
         """
@@ -398,9 +398,9 @@ class CoinGeckoNewsCollector:
     def __init__(self, config: dict = None):
         self.config = config or {}
         self.api_key = self.config.get('coingecko', {}).get('api_key', '')
-        # 从 smart_money 配置中读取代理（如果有）
-        self.proxy = self.config.get('smart_money', {}).get('proxy', '') or \
-                     self.config.get('coingecko', {}).get('proxy', '')
+        # 从 coingecko 配置中读取代理（优先），否则从 smart_money 读取
+        self.proxy = self.config.get('coingecko', {}).get('proxy') or \
+                     self.config.get('smart_money', {}).get('proxy') or None
 
     async def collect(self, symbols: List[str] = None) -> List[Dict]:
         """
