@@ -557,6 +557,184 @@ class SmartTraderService:
         except Exception as e:
             logger.error(f"[ERROR] 关闭超时持仓失败: {e}")
 
+    def check_hedge_positions(self):
+        """检查并处理对冲持仓 - 平掉亏损方向"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 1. 找出所有存在对冲的交易对
+            cursor.execute("""
+                SELECT
+                    symbol,
+                    SUM(CASE WHEN position_side = 'LONG' THEN 1 ELSE 0 END) as long_count,
+                    SUM(CASE WHEN position_side = 'SHORT' THEN 1 ELSE 0 END) as short_count
+                FROM futures_positions
+                WHERE status = 'open' AND account_id = %s
+                GROUP BY symbol
+                HAVING long_count > 0 AND short_count > 0
+            """, (self.account_id,))
+
+            hedge_pairs = cursor.fetchall()
+
+            if not hedge_pairs:
+                return
+
+            logger.info(f"[HEDGE] 发现 {len(hedge_pairs)} 个对冲交易对")
+
+            # 2. 处理每个对冲交易对
+            for pair in hedge_pairs:
+                symbol = pair['symbol']
+
+                # 获取该交易对的所有持仓
+                cursor.execute("""
+                    SELECT id, position_side, entry_price, open_time
+                    FROM futures_positions
+                    WHERE symbol = %s AND status = 'open' AND account_id = %s
+                    ORDER BY position_side, open_time
+                """, (symbol, self.account_id))
+
+                positions = cursor.fetchall()
+
+                if len(positions) < 2:
+                    continue
+
+                # 获取当前价格
+                current_price = self.get_current_price(symbol)
+                if not current_price:
+                    continue
+
+                # 计算每个持仓的盈亏
+                long_positions = []
+                short_positions = []
+
+                for pos in positions:
+                    entry_price = float(pos['entry_price'])
+
+                    if pos['position_side'] == 'LONG':
+                        pnl_pct = (current_price - entry_price) / entry_price * 100
+                        long_positions.append({
+                            'id': pos['id'],
+                            'entry_price': entry_price,
+                            'pnl_pct': pnl_pct,
+                            'open_time': pos['open_time']
+                        })
+                    else:  # SHORT
+                        pnl_pct = (entry_price - current_price) / entry_price * 100
+                        short_positions.append({
+                            'id': pos['id'],
+                            'entry_price': entry_price,
+                            'pnl_pct': pnl_pct,
+                            'open_time': pos['open_time']
+                        })
+
+                # 策略1: 如果一方亏损>1%且另一方盈利,平掉亏损方
+                for long_pos in long_positions:
+                    for short_pos in short_positions:
+                        # LONG亏损>1%, SHORT盈利 -> 平掉LONG
+                        if long_pos['pnl_pct'] < -1 and short_pos['pnl_pct'] > 0:
+                            logger.info(
+                                f"[HEDGE_CLOSE] {symbol} LONG亏损{long_pos['pnl_pct']:.2f}%, "
+                                f"SHORT盈利{short_pos['pnl_pct']:.2f}% -> 平掉LONG"
+                            )
+                            cursor.execute("""
+                                UPDATE futures_positions
+                                SET status = 'closed', mark_price = %s,
+                                    close_time = NOW(), updated_at = NOW(),
+                                    notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
+                                WHERE id = %s
+                            """, (current_price, long_pos['id']))
+
+                        # SHORT亏损>1%, LONG盈利 -> 平掉SHORT
+                        elif short_pos['pnl_pct'] < -1 and long_pos['pnl_pct'] > 0:
+                            logger.info(
+                                f"[HEDGE_CLOSE] {symbol} SHORT亏损{short_pos['pnl_pct']:.2f}%, "
+                                f"LONG盈利{long_pos['pnl_pct']:.2f}% -> 平掉SHORT"
+                            )
+                            cursor.execute("""
+                                UPDATE futures_positions
+                                SET status = 'closed', mark_price = %s,
+                                    close_time = NOW(), updated_at = NOW(),
+                                    notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
+                                WHERE id = %s
+                            """, (current_price, short_pos['id']))
+
+            cursor.close()
+
+        except Exception as e:
+            logger.error(f"[ERROR] 检查对冲持仓失败: {e}")
+
+    def get_position_score(self, symbol: str, side: str):
+        """获取持仓的开仓得分"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT entry_signal_type FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
+                LIMIT 1
+            """, (symbol, side, self.account_id))
+
+            result = cursor.fetchone()
+            cursor.close()
+
+            if result and result['entry_signal_type']:
+                # entry_signal_type 格式: SMART_BRAIN_30
+                signal_type = result['entry_signal_type']
+                if 'SMART_BRAIN_' in signal_type:
+                    score = int(signal_type.split('_')[-1])
+                    return score
+
+            return 0
+        except:
+            return 0
+
+    def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
+        """关闭指定交易对和方向的持仓"""
+        try:
+            current_price = self.get_current_price(symbol)
+            if not current_price:
+                return False
+
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 获取持仓信息用于日志
+            cursor.execute("""
+                SELECT id, entry_price FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
+            """, (symbol, side, self.account_id))
+
+            positions = cursor.fetchall()
+
+            for pos in positions:
+                entry_price = float(pos['entry_price'])
+                pnl_pct = (current_price - entry_price) / entry_price * 100
+                if side == 'SHORT':
+                    pnl_pct = -pnl_pct
+
+                logger.info(
+                    f"[REVERSE_CLOSE] {symbol} {side} | "
+                    f"开仓: ${entry_price:.4f} | 平仓: ${current_price:.4f} | "
+                    f"盈亏: {pnl_pct:+.2f}% | 原因: {reason}"
+                )
+
+                cursor.execute("""
+                    UPDATE futures_positions
+                    SET status = 'closed', mark_price = %s,
+                        close_time = NOW(), updated_at = NOW(),
+                        notes = CONCAT(IFNULL(notes, ''), '|', %s)
+                    WHERE id = %s
+                """, (current_price, reason, pos['id']))
+
+            cursor.close()
+            return True
+
+        except Exception as e:
+            logger.error(f"[ERROR] 关闭{symbol} {side}持仓失败: {e}")
+            return False
+
     def run(self):
         """主循环"""
         while self.running:
@@ -564,10 +742,13 @@ class SmartTraderService:
                 # 1. 检查止盈止损
                 self.check_stop_loss_take_profit()
 
-                # 2. 关闭超时持仓
+                # 2. 检查对冲持仓(平掉亏损方向)
+                self.check_hedge_positions()
+
+                # 3. 关闭超时持仓
                 self.close_old_positions()
 
-                # 3. 检查持仓
+                # 4. 检查持仓
                 current_positions = self.get_open_positions_count()
                 logger.info(f"[STATUS] 持仓: {current_positions}/{self.max_positions}")
 
@@ -576,7 +757,7 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 4. 扫描机会
+                # 5. 扫描机会
                 logger.info(f"[SCAN] 扫描 {len(self.brain.whitelist)} 个币种...")
                 opportunities = self.brain.scan_all()
 
@@ -585,27 +766,58 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5. 执行交易
+                # 6. 执行交易
                 logger.info(f"[EXECUTE] 找到 {len(opportunities)} 个机会")
 
                 for opp in opportunities:
                     if self.get_open_positions_count() >= self.max_positions:
                         break
 
+                    symbol = opp['symbol']
+                    new_side = opp['side']
+                    new_score = opp['score']
+                    opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
+
                     # 检查同方向是否已有持仓
-                    if self.has_position(opp['symbol'], opp['side']):
-                        logger.info(f"[SKIP] {opp['symbol']} {opp['side']}方向已有持仓")
+                    if self.has_position(symbol, new_side):
+                        logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
                         continue
 
-                    # 检查是否有反向持仓(允许对冲)
-                    opposite_side = 'SHORT' if opp['side'] == 'LONG' else 'LONG'
-                    if self.has_position(opp['symbol'], opposite_side):
-                        logger.info(f"[HEDGE] {opp['symbol']} 已有{opposite_side}持仓,允许开{opp['side']}对冲")
+                    # 检查是否有反向持仓
+                    if self.has_position(symbol, opposite_side):
+                        # 获取反向持仓的开仓得分
+                        old_score = self.get_position_score(symbol, opposite_side)
 
+                        # 如果新信号比旧信号强20分以上 -> 主动反向平仓
+                        if new_score > old_score + 20:
+                            logger.info(
+                                f"[REVERSE] {symbol} 检测到强反向信号! "
+                                f"原{opposite_side}得分{old_score}, 新{new_side}得分{new_score} (差距{new_score-old_score}分)"
+                            )
+
+                            # 平掉反向持仓
+                            self.close_position_by_side(
+                                symbol,
+                                opposite_side,
+                                reason=f"reverse_signal|new_{new_side}_score:{new_score}|old_score:{old_score}"
+                            )
+
+                            # 开新方向
+                            self.open_position(opp)
+                            time.sleep(2)
+                            continue
+
+                        # 反向信号不够强,允许对冲
+                        logger.info(
+                            f"[HEDGE] {symbol} 已有{opposite_side}(得分{old_score})持仓, "
+                            f"新{new_side}得分{new_score}未达反转阈值(需>{old_score+20}), 允许对冲"
+                        )
+
+                    # 正常开仓
                     self.open_position(opp)
                     time.sleep(2)
 
-                # 6. 等待
+                # 7. 等待
                 logger.info(f"[WAIT] {self.scan_interval}秒后下一轮...")
                 time.sleep(self.scan_interval)
 
