@@ -8,11 +8,16 @@
 import time
 import sys
 import os
+import asyncio
 from datetime import datetime
 from decimal import Decimal
 from loguru import logger
 import pymysql
 from dotenv import load_dotenv
+
+# 导入 WebSocket 价格服务
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from app.services.binance_ws_price import get_ws_price_service, BinanceWSPriceService
 
 # 加载环境变量
 load_dotenv()
@@ -251,6 +256,9 @@ class SmartTraderService:
         self.connection = None
         self.running = True
 
+        # WebSocket 价格服务
+        self.ws_service: BinanceWSPriceService = get_ws_price_service()
+
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
         logger.info(f"账户ID: {self.account_id}")
@@ -348,15 +356,24 @@ class SmartTraderService:
             return False
 
     def open_position(self, opp: dict):
-        """开仓 - 支持做多和做空"""
+        """开仓 - 支持做多和做空，使用 WebSocket 实时价格"""
         symbol = opp['symbol']
         side = opp['side']  # 'LONG' 或 'SHORT'
 
         try:
-            current_price = self.get_current_price(symbol)
-            if not current_price:
-                logger.error(f"{symbol} 无法获取价格")
-                return False
+            # 优先从 WebSocket 获取实时价格
+            current_price = self.ws_service.get_price(symbol)
+
+            # 如果 WebSocket 价格不可用，回退到数据库价格
+            if not current_price or current_price <= 0:
+                logger.warning(f"[WS_FALLBACK] {symbol} WebSocket价格不可用，回退到数据库价格")
+                current_price = self.get_current_price(symbol)
+                if not current_price:
+                    logger.error(f"{symbol} 无法获取价格")
+                    return False
+                price_source = "DB"
+            else:
+                price_source = "WS"
 
             quantity = self.position_size_usdt * self.leverage / current_price
             notional_value = quantity * current_price
@@ -370,7 +387,7 @@ class SmartTraderService:
                 stop_loss = current_price * 1.03   # 止损: 开仓价 +3%
                 take_profit = current_price * 0.98  # 止盈: 开仓价 -2%
 
-            logger.info(f"[OPEN] {symbol} {side} | 价格: ${current_price:.4f} | 数量: {quantity:.2f}")
+            logger.info(f"[OPEN] {symbol} {side} | 价格: ${current_price:.4f} ({price_source}) | 数量: {quantity:.2f}")
 
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -778,6 +795,23 @@ class SmartTraderService:
             logger.error(f"[ERROR] 关闭{symbol} {side}持仓失败: {e}")
             return False
 
+    async def init_ws_service(self):
+        """初始化 WebSocket 价格服务"""
+        try:
+            # 启动 WebSocket 服务并订阅所有白名单币种
+            if not self.ws_service.is_running():
+                logger.info(f"🚀 初始化 WebSocket 价格服务，订阅 {len(self.brain.whitelist)} 个币种")
+                asyncio.create_task(self.ws_service.start(self.brain.whitelist))
+                await asyncio.sleep(3)  # 等待连接建立
+
+                # 检查连接状态
+                if self.ws_service.is_running():
+                    logger.info("✅ WebSocket 价格服务已启动")
+                else:
+                    logger.warning("⚠️ WebSocket 价格服务启动失败，将使用数据库价格")
+        except Exception as e:
+            logger.error(f"WebSocket 服务初始化失败: {e}，将使用数据库价格")
+
     def run(self):
         """主循环"""
         while self.running:
@@ -880,6 +914,21 @@ class SmartTraderService:
         logger.info("[STOP] 服务已停止")
 
 
-if __name__ == '__main__':
+async def async_main():
+    """异步主函数"""
     service = SmartTraderService()
-    service.run()
+
+    # 初始化 WebSocket 服务
+    await service.init_ws_service()
+
+    # 在事件循环中运行同步的主循环
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, service.run)
+
+
+if __name__ == '__main__':
+    try:
+        # 运行异步主函数
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        logger.info("服务已停止")
