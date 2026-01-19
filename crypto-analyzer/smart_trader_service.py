@@ -37,7 +37,7 @@ class SmartDecisionBrain:
 
         # 获取所有USDT交易对
         self.whitelist = self._get_all_symbols()
-        self.threshold = 30
+        self.threshold = 10  # 降低阈值,更容易找到交易机会
 
     def _get_all_symbols(self):
         """从config.yaml读取交易对列表"""
@@ -76,7 +76,7 @@ class SmartDecisionBrain:
 
     def load_klines(self, symbol: str, timeframe: str, limit: int = 100):
         conn = self._get_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
 
         query = """
             SELECT open_price as open, high_price as high,
@@ -87,7 +87,7 @@ class SmartDecisionBrain:
             ORDER BY open_time DESC LIMIT %s
         """
         cursor.execute(query, (symbol, timeframe, limit))
-        klines = cursor.fetchall()
+        klines = list(cursor.fetchall())
         cursor.close()
 
         klines.reverse()
