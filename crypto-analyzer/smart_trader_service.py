@@ -135,8 +135,21 @@ class SmartDecisionBrain:
             highs = [k['high'] for k in recent]
             lows = [k['low'] for k in recent]
 
-            resistance = min([h for h in highs if h > current] or [max(highs)])
-            support = max([l for l in lows if l < current] or [min(lows)])
+            # 计算阻力位和支撑位,如果当前价格已经是极值,则设置默认的止盈止损
+            highs_above = [h for h in highs if h > current * 1.001]  # 至少高于当前价0.1%
+            lows_below = [l for l in lows if l < current * 0.999]   # 至少低于当前价0.1%
+
+            if highs_above:
+                resistance = min(highs_above)
+            else:
+                # 如果没有更高的价格,设置止盈为+2%
+                resistance = current * 1.02
+
+            if lows_below:
+                support = max(lows_below)
+            else:
+                # 如果没有更低的价格,设置止损为-3%
+                support = current * 0.97
 
             upside = (resistance - current) / current * 100
             downside = (current - support) / current * 100
