@@ -188,6 +188,20 @@ signals:
     stop_loss_pct: 0.02
     take_profit_pct: 0.06
     live_max_position_usdt: 400  # 实盘单笔最大仓位(USDT)
+  # 自适应参数 - 由优化器动态调整
+  adaptive:
+    # 做多(LONG)专用参数
+    long:
+      stop_loss_pct: 0.03          # 做多止损 (默认3%, 优化器可能调整到4%)
+      take_profit_pct: 0.02        # 做多止盈 (默认2%)
+      min_holding_minutes: 60      # 做多最小持仓时间 (默认60分钟, 优化器可能调整到120)
+      position_size_multiplier: 1.0 # 做多仓位倍数 (1.0=正常, 0.5=减半)
+    # 做空(SHORT)专用参数
+    short:
+      stop_loss_pct: 0.03          # 做空止损 (默认3%)
+      take_profit_pct: 0.02        # 做空止盈 (默认2%)
+      min_holding_minutes: 60      # 做空最小持仓时间 (默认60分钟)
+      position_size_multiplier: 1.0 # 做空仓位倍数 (1.0=正常, 1.5=增加)
   # 交易黑名单 - 表现较差不再交易的交易对
   blacklist:
     - IP/USDT        # 亏损 $79.34 (2笔订单, 0%胜率)

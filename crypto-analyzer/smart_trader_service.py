@@ -46,26 +46,69 @@ class SmartDecisionBrain:
         self.db_config = db_config
         self.connection = None
 
-        # 获取所有USDT交易对
-        self.whitelist = self._get_all_symbols()
+        # 从config.yaml加载配置
+        self._load_config()
+
         self.threshold = 10  # 降低阈值,更容易找到交易机会
 
-    def _get_all_symbols(self):
-        """从config.yaml读取交易对列表"""
+    def _load_config(self):
+        """从config.yaml加载所有配置"""
         try:
             import yaml
             with open('config.yaml', 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
-                symbols = config.get('symbols', [])
-                logger.info(f"从config.yaml加载了 {len(symbols)} 个交易对")
-                return symbols
+
+                # 加载交易对列表
+                all_symbols = config.get('symbols', [])
+
+                # 加载黑名单
+                self.blacklist = config.get('signals', {}).get('blacklist', [])
+
+                # 过滤掉黑名单中的交易对
+                self.whitelist = [s for s in all_symbols if s not in self.blacklist]
+
+                # 加载自适应参数
+                adaptive = config.get('signals', {}).get('adaptive', {})
+                self.adaptive_long = adaptive.get('long', {
+                    'stop_loss_pct': 0.03,
+                    'take_profit_pct': 0.02,
+                    'min_holding_minutes': 60,
+                    'position_size_multiplier': 1.0
+                })
+                self.adaptive_short = adaptive.get('short', {
+                    'stop_loss_pct': 0.03,
+                    'take_profit_pct': 0.02,
+                    'min_holding_minutes': 60,
+                    'position_size_multiplier': 1.0
+                })
+
+                logger.info(f"✅ 从config.yaml加载配置:")
+                logger.info(f"   总交易对: {len(all_symbols)}")
+                logger.info(f"   黑名单: {len(self.blacklist)} 个")
+                logger.info(f"   可交易: {len(self.whitelist)} 个")
+                logger.info(f"   📊 自适应参数:")
+                logger.info(f"      LONG止损: {self.adaptive_long['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_long['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_long['min_holding_minutes']}分钟")
+                logger.info(f"      SHORT止损: {self.adaptive_short['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_short['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_short['min_holding_minutes']}分钟")
+
+                if self.blacklist:
+                    logger.info(f"   🚫 黑名单交易对: {', '.join(self.blacklist)}")
+
         except Exception as e:
-            logger.error(f"读取config.yaml失败: {e}, 使用默认白名单")
-            return [
+            logger.error(f"读取config.yaml失败: {e}, 使用默认配置")
+            self.whitelist = [
                 'BCH/USDT', 'LDO/USDT', 'ENA/USDT', 'WIF/USDT', 'TAO/USDT',
                 'DASH/USDT', 'ETC/USDT', 'VIRTUAL/USDT', 'NEAR/USDT',
                 'AAVE/USDT', 'SUI/USDT', 'UNI/USDT', 'ADA/USDT', 'SOL/USDT'
             ]
+            self.blacklist = []
+            self.adaptive_long = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
+            self.adaptive_short = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
+
+    def reload_config(self):
+        """重新加载配置 - 供外部调用"""
+        logger.info("🔄 重新加载配置文件...")
+        self._load_config()
+        return len(self.whitelist)
 
     def _get_connection(self):
         if self.connection is None or not self.connection.open:
@@ -381,17 +424,31 @@ class SmartTraderService:
             else:
                 price_source = "WS"
 
-            quantity = self.position_size_usdt * self.leverage / current_price
-            notional_value = quantity * current_price
-            margin = self.position_size_usdt
-
-            # 基于实际开仓价格和方向计算止盈止损
+            # 使用自适应参数调整仓位大小
             if side == 'LONG':
-                stop_loss = current_price * 0.97   # 止损: 开仓价 -3%
-                take_profit = current_price * 1.02  # 止盈: 开仓价 +2%
+                position_multiplier = self.brain.adaptive_long.get('position_size_multiplier', 1.0)
+                adaptive_params = self.brain.adaptive_long
             else:  # SHORT
-                stop_loss = current_price * 1.03   # 止损: 开仓价 +3%
-                take_profit = current_price * 0.98  # 止盈: 开仓价 -2%
+                position_multiplier = self.brain.adaptive_short.get('position_size_multiplier', 1.0)
+                adaptive_params = self.brain.adaptive_short
+
+            # 应用仓位倍数
+            adjusted_position_size = self.position_size_usdt * position_multiplier
+
+            quantity = adjusted_position_size * self.leverage / current_price
+            notional_value = quantity * current_price
+            margin = adjusted_position_size
+
+            # 使用自适应参数计算止盈止损
+            stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
+            take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+
+            if side == 'LONG':
+                stop_loss = current_price * (1 - stop_loss_pct)    # 止损
+                take_profit = current_price * (1 + take_profit_pct) # 止盈
+            else:  # SHORT
+                stop_loss = current_price * (1 + stop_loss_pct)    # 止损
+                take_profit = current_price * (1 - take_profit_pct) # 止盈
 
             logger.info(f"[OPEN] {symbol} {side} | 价格: ${current_price:.4f} ({price_source}) | 数量: {quantity:.2f}")
 
@@ -413,11 +470,13 @@ class SmartTraderService:
 
             cursor.close()
 
-            sl_pct = "-3%" if side == 'LONG' else "+3%"
-            tp_pct = "+2%" if side == 'LONG' else "-2%"
+            # 显示实际使用的止损止盈百分比
+            sl_pct = f"-{stop_loss_pct*100:.1f}%" if side == 'LONG' else f"+{stop_loss_pct*100:.1f}%"
+            tp_pct = f"+{take_profit_pct*100:.1f}%" if side == 'LONG' else f"-{take_profit_pct*100:.1f}%"
             logger.info(
                 f"[SUCCESS] {symbol} {side}开仓成功 | "
-                f"止损: ${stop_loss:.4f} ({sl_pct}) | 止盈: ${take_profit:.4f} ({tp_pct})"
+                f"止损: ${stop_loss:.4f} ({sl_pct}) | 止盈: ${take_profit:.4f} ({tp_pct}) | "
+                f"仓位: ${margin:.0f} (x{position_multiplier:.1f})"
             )
             return True
 
@@ -498,7 +557,7 @@ class SmartTraderService:
             # 获取所有持仓
             cursor.execute("""
                 SELECT id, symbol, position_side, quantity, entry_price,
-                       stop_loss_price, take_profit_price
+                       stop_loss_price, take_profit_price, open_time
                 FROM futures_positions
                 WHERE status = 'open' AND account_id = %s
             """, (self.account_id,))
@@ -506,7 +565,7 @@ class SmartTraderService:
             positions = cursor.fetchall()
 
             for pos in positions:
-                pos_id, symbol, position_side, quantity, entry_price, stop_loss, take_profit = pos
+                pos_id, symbol, position_side, quantity, entry_price, stop_loss, take_profit, open_time = pos
                 current_price = self.get_current_price(symbol)
                 if not current_price:
                     continue
@@ -514,15 +573,30 @@ class SmartTraderService:
                 should_close = False
                 close_reason = None
 
-                # 1. 固定止损检查 (保底风控)
+                # 0. 检查最小持仓时间 (自适应参数)
+                from datetime import datetime
+                now = datetime.now()
+                holding_minutes = (now - open_time).total_seconds() / 60
+
+                # 获取该方向的最小持仓时间
                 if position_side == 'LONG':
-                    if stop_loss and current_price <= float(stop_loss):
-                        should_close = True
-                        close_reason = 'STOP_LOSS'
-                elif position_side == 'SHORT':
-                    if stop_loss and current_price >= float(stop_loss):
-                        should_close = True
-                        close_reason = 'STOP_LOSS'
+                    min_holding_minutes = self.brain.adaptive_long.get('min_holding_minutes', 60)
+                else:  # SHORT
+                    min_holding_minutes = self.brain.adaptive_short.get('min_holding_minutes', 60)
+
+                # 如果未达到最小持仓时间，跳过止损检查（但仍允许止盈）
+                below_min_holding = holding_minutes < min_holding_minutes
+
+                # 1. 固定止损检查 (保底风控) - 但要考虑最小持仓时间
+                if not below_min_holding:  # 只有达到最小持仓时间才允许止损
+                    if position_side == 'LONG':
+                        if stop_loss and current_price <= float(stop_loss):
+                            should_close = True
+                            close_reason = 'STOP_LOSS'
+                    elif position_side == 'SHORT':
+                        if stop_loss and current_price >= float(stop_loss):
+                            should_close = True
+                            close_reason = 'STOP_LOSS'
 
                 # 2. 智能顶底识别 (优先于固定止盈)
                 if not should_close:
@@ -854,19 +928,31 @@ class SmartTraderService:
                 logger.warning(f"🔴 发现 {high_severity_count} 个高严重性问题!")
                 # TODO: 发送Telegram通知 (需要集成telegram bot)
 
-            # 自动应用黑名单优化
-            if report['blacklist_candidates']:
-                logger.info(f"📝 准备应用优化: {len(report['blacklist_candidates'])} 个黑名单候选")
-                results = self.optimizer.apply_optimizations(report, auto_apply=True)
+            # 自动应用优化 (黑名单 + 参数调整)
+            if report['blacklist_candidates'] or report['problematic_signals']:
+                logger.info(f"📝 准备应用优化:")
+                if report['blacklist_candidates']:
+                    logger.info(f"   🚫 黑名单候选: {len(report['blacklist_candidates'])} 个")
+                if report['problematic_signals']:
+                    logger.info(f"   ⚙️  问题信号: {len(report['problematic_signals'])} 个")
+
+                # 自动应用优化 (包括参数调整)
+                results = self.optimizer.apply_optimizations(report, auto_apply=True, apply_params=True)
 
                 if results['blacklist_added']:
                     logger.info(f"✅ 自动添加 {len(results['blacklist_added'])} 个交易对到黑名单")
                     for item in results['blacklist_added']:
                         logger.info(f"   ➕ {item['symbol']} - {item['reason']}")
 
-                    # 重新加载白名单以应用新黑名单
-                    self.brain.whitelist = self.brain._get_all_symbols()
-                    logger.info(f"🔄 已重新加载配置，当前白名单: {len(self.brain.whitelist)} 个币种")
+                if results['params_updated']:
+                    logger.info(f"✅ 自动调整 {len(results['params_updated'])} 个参数")
+                    for update in results['params_updated']:
+                        logger.info(f"   📊 {update}")
+
+                # 重新加载配置以应用所有更新
+                if results['blacklist_added'] or results['params_updated']:
+                    whitelist_count = self.brain.reload_config()
+                    logger.info(f"🔄 配置已重新加载，当前可交易: {whitelist_count} 个币种")
 
                 if results['warnings']:
                     logger.warning("⚠️ 优化警告:")
