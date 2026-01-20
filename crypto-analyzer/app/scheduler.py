@@ -298,8 +298,10 @@ class UnifiedDataScheduler:
             return
 
         task_name = 'binance_futures_1m'
+        start_time = datetime.now()
+
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始采集币安合约数据...")
+            logger.info(f"[{start_time.strftime('%H:%M:%S')}] 开始采集币安合约数据...")
 
             collected_count = 0
             error_count = 0
@@ -425,8 +427,8 @@ class UnifiedDataScheduler:
 
                     collected_count += 1
 
-                    # 延迟避免API限流和网络错误
-                    await asyncio.sleep(0.5)
+                    # 延迟避免API限流 (优化: 从0.5秒减少到0.1秒以提升采集速度)
+                    await asyncio.sleep(0.1)
 
                 except Exception as e:
                     logger.error(f"  ✗ {symbol}: {e}")
@@ -436,11 +438,16 @@ class UnifiedDataScheduler:
             self.task_stats[task_name]['count'] += 1
             self.task_stats[task_name]['last_run'] = datetime.now()
 
-            elapsed_time = (datetime.now() - self.task_stats[task_name]['last_run']).total_seconds() if self.task_stats[task_name]['last_run'] else 0
+            # 计算执行时间
+            elapsed_time = (datetime.now() - start_time).total_seconds()
             logger.info(
                 f"  ✓ 合约数据采集完成: 成功 {collected_count}/{len(self.symbols)}, "
-                f"失败 {error_count}"
+                f"失败 {error_count}, 耗时 {elapsed_time:.1f}秒"
             )
+
+            # 如果耗时超过预期,发出警告
+            if elapsed_time > 8:
+                logger.warning(f"  ⚠️  合约数据采集耗时过长: {elapsed_time:.1f}秒 (预期 <8秒)")
 
         except Exception as e:
             logger.error(f"合约数据采集任务失败: {e}")
@@ -966,10 +973,10 @@ class UnifiedDataScheduler:
 
         # 1.5 币安合约数据
         if self.futures_collector:
-            schedule.every(5).seconds.do(
+            schedule.every(10).seconds.do(
                 lambda: asyncio.run(self.collect_binance_futures_data())
             )
-            logger.info("  ✓ 币安合约数据 (价格+1m K线+资金费率+持仓量+多空比) - 每 5 秒")
+            logger.info("  ✓ 币安合约数据 (价格+1m K线+资金费率+持仓量+多空比) - 每 10 秒")
 
             # 合约 5m K线
             schedule.every(5).minutes.do(
