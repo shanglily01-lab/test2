@@ -389,7 +389,7 @@ class UnifiedDataScheduler:
                             'symbol': symbol,
                             'exchange': 'binance_futures',
                             'period': '5m',
-                            'timestamp': datetime.now()
+                            'timestamp': datetime.utcnow()
                         }
 
                         # 账户数比数据
