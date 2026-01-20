@@ -25,28 +25,37 @@ class SmartDecisionBrain:
         self.db_config = db_config
         self.connection = None
 
-        # 白名单 - 只做LONG方向(基于回测数据)
+        # 黑名单 - 表现较差不再交易的交易对 (2026-01-20更新)
+        self.blacklist = [
+            'IP/USDT',        # 亏损 $79.34 (2笔订单, 0%胜率)
+            'VIRTUAL/USDT',   # 亏损 $35.65 (4笔订单, 0%胜率) - 从白名单移除
+            'LDO/USDT',       # 亏损 $35.88 (5笔订单, 0%胜率) - 从白名单移除
+            'ATOM/USDT',      # 亏损 $27.56 (5笔订单, 20%胜率)
+            'ADA/USDT',       # 亏损 $22.87 (6笔订单, 0%胜率) - 从白名单移除
+        ]
+
+        # 白名单 - 只做LONG方向(基于回测数据,已移除黑名单币种)
         self.whitelist_long = [
             'BCH/USDT',    # 4笔 +1.28%, 100%胜率
-            'LDO/USDT',    # 3笔 +1.68%, 100%胜率
+            # 'LDO/USDT',  # 已加入黑名单 (实盘表现差)
             'ENA/USDT',    # 3笔 +1.26%, 100%胜率
             'WIF/USDT',    # 3笔 +0.84%, 100%胜率
             'TAO/USDT',    # 3笔 +0.80%, 100%胜率
             'DASH/USDT',   # 1笔 +2.10%
             'ETC/USDT',    # 2笔 +1.36%, 100%胜率
-            'VIRTUAL/USDT',# 2笔 +1.24%, 100%胜率
+            # 'VIRTUAL/USDT', # 已加入黑名单 (实盘表现差)
             'NEAR/USDT',   # 1笔 +1.04%
             'AAVE/USDT',   # 1笔 +0.92%
             'SUI/USDT',    # 1笔 +0.88%
             'UNI/USDT',    # 3笔 +0.88%
-            'ADA/USDT',    # 3笔 +1.20%
+            # 'ADA/USDT',  # 已加入黑名单 (实盘表现差)
             'SOL/USDT',    # 2笔 +0.47%
         ]
 
         # 决策阈值
         self.threshold = 30  # 最低30分才开仓
 
-        logger.info(f"✅ 智能决策大脑已初始化 | 白名单币种: {len(self.whitelist_long)}个 | 阈值: {self.threshold}分")
+        logger.info(f"✅ 智能决策大脑已初始化 | 白名单币种: {len(self.whitelist_long)}个 | 黑名单币种: {len(self.blacklist)}个 | 阈值: {self.threshold}分")
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -283,6 +292,16 @@ class SmartDecisionBrain:
         Returns:
             决策结果字典
         """
+        # 黑名单检查 (优先级最高)
+        if symbol in self.blacklist:
+            return {
+                'decision': False,
+                'direction': None,
+                'score': 0,
+                'reasons': [f'🚫 {symbol} 在黑名单中 (实盘表现较差)'],
+                'trade_params': {}
+            }
+
         # 白名单检查
         if symbol not in self.whitelist_long:
             return {

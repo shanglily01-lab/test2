@@ -188,6 +188,13 @@ signals:
     stop_loss_pct: 0.02
     take_profit_pct: 0.06
     live_max_position_usdt: 400  # 实盘单笔最大仓位(USDT)
+  # 交易黑名单 - 表现较差不再交易的交易对
+  blacklist:
+    - IP/USDT        # 亏损 $79.34 (2笔订单, 0%胜率)
+    - VIRTUAL/USDT   # 亏损 $35.65 (4笔订单, 0%胜率)
+    - LDO/USDT       # 亏损 $35.88 (5笔订单, 0%胜率)
+    - ATOM/USDT      # 亏损 $27.56 (5笔订单, 20%胜率)
+    - ADA/USDT       # 亏损 $22.87 (6笔订单, 0%胜率)
   # 保证金配置
   margin:
     # 模拟盘保证金配置
