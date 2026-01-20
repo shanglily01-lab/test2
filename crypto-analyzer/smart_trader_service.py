@@ -9,7 +9,7 @@ import time
 import sys
 import os
 import asyncio
-from datetime import datetime
+from datetime import datetime, time as dt_time
 from decimal import Decimal
 from loguru import logger
 import pymysql
@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 # 导入 WebSocket 价格服务
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.services.binance_ws_price import get_ws_price_service, BinanceWSPriceService
+from app.services.adaptive_optimizer import AdaptiveOptimizer
 
 # 加载环境变量
 load_dotenv()
@@ -259,11 +260,16 @@ class SmartTraderService:
         # WebSocket 价格服务
         self.ws_service: BinanceWSPriceService = get_ws_price_service()
 
+        # 自适应优化器
+        self.optimizer = AdaptiveOptimizer(self.db_config)
+        self.last_optimization_date = None  # 记录上次优化日期
+
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
         logger.info(f"账户ID: {self.account_id}")
         logger.info(f"仓位: ${self.position_size_usdt} | 杠杆: {self.leverage}x | 最大持仓: {self.max_positions}")
         logger.info(f"白名单: {len(self.brain.whitelist)}个币种 | 扫描间隔: {self.scan_interval}秒")
+        logger.info("🧠 自适应优化器已启用 (每日凌晨2点自动运行)")
         logger.info("=" * 60)
 
     def _get_connection(self):
@@ -828,6 +834,71 @@ class SmartTraderService:
             logger.error(f"[ERROR] 关闭{symbol} {side}持仓失败: {e}")
             return False
 
+    def run_adaptive_optimization(self):
+        """运行自适应优化 - 每日定时任务"""
+        try:
+            logger.info("=" * 80)
+            logger.info("🧠 开始运行自适应优化...")
+            logger.info("=" * 80)
+
+            # 生成24小时优化报告
+            report = self.optimizer.generate_optimization_report(hours=24)
+
+            # 打印报告
+            self.optimizer.print_report(report)
+
+            # 检查是否有高严重性问题
+            high_severity_count = report['summary']['high_severity_issues']
+
+            if high_severity_count > 0:
+                logger.warning(f"🔴 发现 {high_severity_count} 个高严重性问题!")
+                # TODO: 发送Telegram通知 (需要集成telegram bot)
+
+            # 自动应用黑名单优化
+            if report['blacklist_candidates']:
+                logger.info(f"📝 准备应用优化: {len(report['blacklist_candidates'])} 个黑名单候选")
+                results = self.optimizer.apply_optimizations(report, auto_apply=True)
+
+                if results['blacklist_added']:
+                    logger.info(f"✅ 自动添加 {len(results['blacklist_added'])} 个交易对到黑名单")
+                    for item in results['blacklist_added']:
+                        logger.info(f"   ➕ {item['symbol']} - {item['reason']}")
+
+                    # 重新加载白名单以应用新黑名单
+                    self.brain.whitelist = self.brain._get_all_symbols()
+                    logger.info(f"🔄 已重新加载配置，当前白名单: {len(self.brain.whitelist)} 个币种")
+
+                if results['warnings']:
+                    logger.warning("⚠️ 优化警告:")
+                    for warning in results['warnings']:
+                        logger.warning(f"   {warning}")
+            else:
+                logger.info("✅ 无需加入黑名单的交易对")
+
+            logger.info("=" * 80)
+            logger.info("🧠 自适应优化完成")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"❌ 自适应优化失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    def check_and_run_daily_optimization(self):
+        """检查是否需要运行每日优化 (凌晨2点)"""
+        try:
+            now = datetime.now()
+            current_date = now.date()
+
+            # 检查是否是凌晨2点且今天还没运行过
+            if now.hour == 2 and self.last_optimization_date != current_date:
+                logger.info(f"⏰ 触发每日自适应优化 (时间: {now.strftime('%Y-%m-%d %H:%M:%S')})")
+                self.run_adaptive_optimization()
+                self.last_optimization_date = current_date
+
+        except Exception as e:
+            logger.error(f"检查每日优化失败: {e}")
+
     async def init_ws_service(self):
         """初始化 WebSocket 价格服务"""
         try:
@@ -849,6 +920,9 @@ class SmartTraderService:
         """主循环"""
         while self.running:
             try:
+                # 0. 检查是否需要运行每日自适应优化 (凌晨2点)
+                self.check_and_run_daily_optimization()
+
                 # 1. 检查止盈止损
                 self.check_stop_loss_take_profit()
 
