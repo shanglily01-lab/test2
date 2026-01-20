@@ -537,22 +537,30 @@ class SmartTraderService:
                             close_reason = 'TAKE_PROFIT'
 
                 if should_close:
+                    # Calculate PnL percentage
                     pnl_pct = (current_price - float(entry_price)) / float(entry_price) * 100
                     if position_side == 'SHORT':
                         pnl_pct = -pnl_pct
 
+                    # Calculate realized PnL in USDT
+                    if position_side == 'LONG':
+                        realized_pnl = (current_price - float(entry_price)) * float(quantity)
+                    else:  # SHORT
+                        realized_pnl = (float(entry_price) - current_price) * float(quantity)
+
                     logger.info(
                         f"[{close_reason}] {symbol} {position_side} | "
                         f"开仓: ${entry_price:.4f} | 平仓: ${current_price:.4f} | "
-                        f"盈亏: {pnl_pct:+.2f}%"
+                        f"盈亏: {pnl_pct:+.2f}% ({realized_pnl:+.2f} USDT)"
                     )
 
                     cursor.execute("""
                         UPDATE futures_positions
                         SET status = 'closed', mark_price = %s,
+                            realized_pnl = %s,
                             close_time = NOW(), updated_at = NOW()
                         WHERE id = %s
-                    """, (current_price, pos_id))
+                    """, (current_price, realized_pnl, pos_id))
 
             cursor.close()
 
@@ -566,7 +574,8 @@ class SmartTraderService:
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT id, symbol FROM futures_positions
+                SELECT id, symbol, position_side, quantity, entry_price
+                FROM futures_positions
                 WHERE status = 'open' AND account_id = %s
                 AND created_at < DATE_SUB(NOW(), INTERVAL 6 HOUR)
             """, (self.account_id,))
@@ -574,19 +583,26 @@ class SmartTraderService:
             old_positions = cursor.fetchall()
 
             for pos in old_positions:
-                pos_id, symbol = pos
+                pos_id, symbol, position_side, quantity, entry_price = pos
                 current_price = self.get_current_price(symbol)
                 if not current_price:
                     continue
 
-                logger.info(f"[CLOSE_TIMEOUT] {symbol} 超时平仓 | 价格: ${current_price:.4f}")
+                # Calculate realized PnL
+                if position_side == 'LONG':
+                    realized_pnl = (current_price - float(entry_price)) * float(quantity)
+                else:  # SHORT
+                    realized_pnl = (float(entry_price) - current_price) * float(quantity)
+
+                logger.info(f"[CLOSE_TIMEOUT] {symbol} 超时平仓 | 价格: ${current_price:.4f} | 盈亏: {realized_pnl:+.2f} USDT")
 
                 cursor.execute("""
                     UPDATE futures_positions
                     SET status = 'closed', mark_price = %s,
+                        realized_pnl = %s,
                         close_time = NOW(), updated_at = NOW()
                     WHERE id = %s
-                """, (current_price, pos_id))
+                """, (current_price, realized_pnl, pos_id))
 
             cursor.close()
 
@@ -624,7 +640,7 @@ class SmartTraderService:
 
                 # 获取该交易对的所有持仓
                 cursor.execute("""
-                    SELECT id, position_side, entry_price, open_time
+                    SELECT id, position_side, entry_price, quantity, open_time
                     FROM futures_positions
                     WHERE symbol = %s AND status = 'open' AND account_id = %s
                     ORDER BY position_side, open_time
@@ -646,21 +662,28 @@ class SmartTraderService:
 
                 for pos in positions:
                     entry_price = float(pos['entry_price'])
+                    quantity = float(pos['quantity'])
 
                     if pos['position_side'] == 'LONG':
                         pnl_pct = (current_price - entry_price) / entry_price * 100
+                        realized_pnl = (current_price - entry_price) * quantity
                         long_positions.append({
                             'id': pos['id'],
                             'entry_price': entry_price,
+                            'quantity': quantity,
                             'pnl_pct': pnl_pct,
+                            'realized_pnl': realized_pnl,
                             'open_time': pos['open_time']
                         })
                     else:  # SHORT
                         pnl_pct = (entry_price - current_price) / entry_price * 100
+                        realized_pnl = (entry_price - current_price) * quantity
                         short_positions.append({
                             'id': pos['id'],
                             'entry_price': entry_price,
+                            'quantity': quantity,
                             'pnl_pct': pnl_pct,
+                            'realized_pnl': realized_pnl,
                             'open_time': pos['open_time']
                         })
 
@@ -670,30 +693,32 @@ class SmartTraderService:
                         # LONG亏损>1%, SHORT盈利 -> 平掉LONG
                         if long_pos['pnl_pct'] < -1 and short_pos['pnl_pct'] > 0:
                             logger.info(
-                                f"[HEDGE_CLOSE] {symbol} LONG亏损{long_pos['pnl_pct']:.2f}%, "
+                                f"[HEDGE_CLOSE] {symbol} LONG亏损{long_pos['pnl_pct']:.2f}% ({long_pos['realized_pnl']:+.2f} USDT), "
                                 f"SHORT盈利{short_pos['pnl_pct']:.2f}% -> 平掉LONG"
                             )
                             cursor.execute("""
                                 UPDATE futures_positions
                                 SET status = 'closed', mark_price = %s,
+                                    realized_pnl = %s,
                                     close_time = NOW(), updated_at = NOW(),
                                     notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
                                 WHERE id = %s
-                            """, (current_price, long_pos['id']))
+                            """, (current_price, long_pos['realized_pnl'], long_pos['id']))
 
                         # SHORT亏损>1%, LONG盈利 -> 平掉SHORT
                         elif short_pos['pnl_pct'] < -1 and long_pos['pnl_pct'] > 0:
                             logger.info(
-                                f"[HEDGE_CLOSE] {symbol} SHORT亏损{short_pos['pnl_pct']:.2f}%, "
+                                f"[HEDGE_CLOSE] {symbol} SHORT亏损{short_pos['pnl_pct']:.2f}% ({short_pos['realized_pnl']:+.2f} USDT), "
                                 f"LONG盈利{long_pos['pnl_pct']:.2f}% -> 平掉SHORT"
                             )
                             cursor.execute("""
                                 UPDATE futures_positions
                                 SET status = 'closed', mark_price = %s,
+                                    realized_pnl = %s,
                                     close_time = NOW(), updated_at = NOW(),
                                     notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
                                 WHERE id = %s
-                            """, (current_price, short_pos['id']))
+                            """, (current_price, short_pos['realized_pnl'], short_pos['id']))
 
             cursor.close()
 
@@ -760,9 +785,9 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
 
-            # 获取持仓信息用于日志
+            # 获取持仓信息用于日志和计算盈亏
             cursor.execute("""
-                SELECT id, entry_price FROM futures_positions
+                SELECT id, entry_price, quantity FROM futures_positions
                 WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
             """, (symbol, side, self.account_id))
 
@@ -770,23 +795,31 @@ class SmartTraderService:
 
             for pos in positions:
                 entry_price = float(pos['entry_price'])
+                quantity = float(pos['quantity'])
                 pnl_pct = (current_price - entry_price) / entry_price * 100
-                if side == 'SHORT':
-                    pnl_pct = -pnl_pct
+
+                # Calculate realized PnL
+                if side == 'LONG':
+                    realized_pnl = (current_price - entry_price) * quantity
+                    pnl_pct = (current_price - entry_price) / entry_price * 100
+                else:  # SHORT
+                    realized_pnl = (entry_price - current_price) * quantity
+                    pnl_pct = (entry_price - current_price) / entry_price * 100
 
                 logger.info(
                     f"[REVERSE_CLOSE] {symbol} {side} | "
                     f"开仓: ${entry_price:.4f} | 平仓: ${current_price:.4f} | "
-                    f"盈亏: {pnl_pct:+.2f}% | 原因: {reason}"
+                    f"盈亏: {pnl_pct:+.2f}% ({realized_pnl:+.2f} USDT) | 原因: {reason}"
                 )
 
                 cursor.execute("""
                     UPDATE futures_positions
                     SET status = 'closed', mark_price = %s,
+                        realized_pnl = %s,
                         close_time = NOW(), updated_at = NOW(),
                         notes = CONCAT(IFNULL(notes, ''), '|', %s)
                     WHERE id = %s
-                """, (current_price, reason, pos['id']))
+                """, (current_price, realized_pnl, reason, pos['id']))
 
             cursor.close()
             return True
