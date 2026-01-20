@@ -255,6 +255,9 @@ class SmartDecisionBrain:
             long_score = 0
             short_score = 0
 
+            # 记录信号组成 (用于后续性能分析)
+            signal_components = {}
+
             # ========== 1小时K线分析 (主要) ==========
 
             # 1. 位置评分 - 使用72小时(3天)高低点
@@ -268,28 +271,49 @@ class SmartDecisionBrain:
 
             # 低位做多，高位做空
             if position_pct < 30:
-                long_score += 20
+                weight = self.scoring_weights.get('position_low', {'long': 20, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['position_low'] = weight['long']
             elif position_pct > 70:
-                short_score += 20
+                weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['position_high'] = weight['short']
             else:
-                long_score += 5
-                short_score += 5
+                weight = self.scoring_weights.get('position_mid', {'long': 5, 'short': 5})
+                long_score += weight['long']
+                short_score += weight['short']
+                if weight['long'] > 0:
+                    signal_components['position_mid'] = weight['long']
 
             # 2. 短期动量 - 最近24小时涨幅
             gain_24h = (current - klines_1h[-24]['close']) / klines_1h[-24]['close'] * 100
             if gain_24h < -3:  # 24小时跌超过3%
-                long_score += 15
+                weight = self.scoring_weights.get('momentum_down_3pct', {'long': 15, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['momentum_down_3pct'] = weight['long']
             elif gain_24h > 3:  # 24小时涨超过3%
-                short_score += 15
+                weight = self.scoring_weights.get('momentum_up_3pct', {'long': 0, 'short': 15})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['momentum_up_3pct'] = weight['short']
 
             # 3. 1小时趋势评分 - 最近48根K线(2天)
             bullish_1h = sum(1 for k in klines_1h[-48:] if k['close'] > k['open'])
             bearish_1h = 48 - bullish_1h
 
             if bullish_1h > 30:  # 超过62.5%是阳线
-                long_score += 20
+                weight = self.scoring_weights.get('trend_1h_bull', {'long': 20, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['trend_1h_bull'] = weight['long']
             elif bearish_1h > 30:  # 超过62.5%是阴线
-                short_score += 20
+                weight = self.scoring_weights.get('trend_1h_bear', {'long': 0, 'short': 20})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['trend_1h_bear'] = weight['short']
 
             # 4. 波动率评分 - 最近24小时
             recent_24h = klines_1h[-24:]
@@ -297,10 +321,15 @@ class SmartDecisionBrain:
 
             # 高波动率更适合交易
             if volatility > 5:  # 波动超过5%
+                weight = self.scoring_weights.get('volatility_high', {'long': 10, 'short': 10})
                 if long_score > short_score:
-                    long_score += 10
+                    long_score += weight['long']
+                    if weight['long'] > 0:
+                        signal_components['volatility_high'] = weight['long']
                 else:
-                    short_score += 10
+                    short_score += weight['short']
+                    if weight['short'] > 0:
+                        signal_components['volatility_high'] = weight['short']
 
             # 5. 连续趋势强化信号 - 最近10根1小时K线
             recent_10h = klines_1h[-10:]
@@ -312,11 +341,17 @@ class SmartDecisionBrain:
 
             # 连续阳线且上涨幅度适中(不在顶部) - 强做多信号
             if bullish_10h >= 7 and gain_10h < 5 and position_pct < 70:
-                long_score += 15
+                weight = self.scoring_weights.get('consecutive_bull', {'long': 15, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['consecutive_bull'] = weight['long']
 
             # 连续阴线且下跌幅度适中(不在底部) - 强做空信号
             elif bearish_10h >= 7 and gain_10h > -5 and position_pct > 30:
-                short_score += 15
+                weight = self.scoring_weights.get('consecutive_bear', {'long': 0, 'short': 15})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['consecutive_bear'] = weight['short']
 
             # ========== 1天K线确认 (辅助) ==========
 
@@ -325,9 +360,15 @@ class SmartDecisionBrain:
             bearish_1d = 30 - bullish_1d
 
             if bullish_1d > 18 and long_score > short_score:  # 大趋势上涨且1小时也看多
-                long_score += 10  # 趋势一致，加分
+                weight = self.scoring_weights.get('trend_1d_bull', {'long': 10, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['trend_1d_bull'] = weight['long']
             elif bearish_1d > 18 and short_score > long_score:  # 大趋势下跌且1小时也看空
-                short_score += 10
+                weight = self.scoring_weights.get('trend_1d_bear', {'long': 0, 'short': 10})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['trend_1d_bear'] = weight['short']
 
             # 选择得分更高的方向 (只要达到阈值就可以)
             if long_score >= self.threshold or short_score >= self.threshold:
@@ -348,7 +389,8 @@ class SmartDecisionBrain:
                     'symbol': symbol,
                     'side': side,
                     'score': score,
-                    'current_price': current
+                    'current_price': current,
+                    'signal_components': signal_components  # 添加信号组成
                 }
 
             return None
@@ -544,17 +586,22 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # 准备信号组成数据
+            import json
+            signal_components_json = json.dumps(opp.get('signal_components', {})) if 'signal_components' in opp else None
+            entry_score = opp.get('score', 0)
+
             # 插入持仓记录
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 entry_signal_type, source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+                 entry_signal_type, entry_score, signal_components, source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, side, quantity, current_price, self.leverage,
                 notional_value, margin, stop_loss, take_profit,
-                f"SMART_BRAIN_{opp['score']}"
+                f"SMART_BRAIN_{opp['score']}", entry_score, signal_components_json
             ))
 
             cursor.close()
@@ -1025,8 +1072,8 @@ class SmartTraderService:
                 if report['problematic_signals']:
                     logger.info(f"   ⚙️  问题信号: {len(report['problematic_signals'])} 个")
 
-                # 自动应用优化 (包括参数调整)
-                results = self.optimizer.apply_optimizations(report, auto_apply=True, apply_params=True)
+                # 自动应用优化 (包括参数调整和权重调整)
+                results = self.optimizer.apply_optimizations(report, auto_apply=True, apply_params=True, apply_weights=True)
 
                 if results['blacklist_added']:
                     logger.info(f"✅ 自动添加 {len(results['blacklist_added'])} 个交易对到黑名单")
@@ -1038,8 +1085,11 @@ class SmartTraderService:
                     for update in results['params_updated']:
                         logger.info(f"   📊 {update}")
 
+                if results.get('weights_adjusted'):
+                    logger.info(f"✅ 自动调整 {len(results['weights_adjusted'])} 个评分权重")
+
                 # 重新加载配置以应用所有更新
-                if results['blacklist_added'] or results['params_updated']:
+                if results['blacklist_added'] or results['params_updated'] or results.get('weights_adjusted'):
                     whitelist_count = self.brain.reload_config()
                     logger.info(f"🔄 配置已重新加载，当前可交易: {whitelist_count} 个币种")
 

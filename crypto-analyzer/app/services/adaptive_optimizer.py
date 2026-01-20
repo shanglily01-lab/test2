@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 import pymysql
 import yaml
+from .scoring_weight_optimizer import ScoringWeightOptimizer
 
 
 class AdaptiveOptimizer:
@@ -37,7 +38,10 @@ class AdaptiveOptimizer:
             'min_holding_time_long': 120,        # 做多最小持仓时间(分钟)
         }
 
-        logger.info("✅ 自适应优化器已初始化")
+        # 初始化评分权重优化器
+        self.weight_optimizer = ScoringWeightOptimizer(db_config)
+
+        logger.info("✅ 自适应优化器已初始化 (包含评分权重优化器)")
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -273,7 +277,7 @@ class AdaptiveOptimizer:
 
         return report
 
-    def apply_optimizations(self, report: Dict, auto_apply: bool = False, apply_params: bool = True) -> Dict:
+    def apply_optimizations(self, report: Dict, auto_apply: bool = False, apply_params: bool = True, apply_weights: bool = True) -> Dict:
         """
         应用优化建议 - 更新数据库而不是config.yaml
 
@@ -281,6 +285,7 @@ class AdaptiveOptimizer:
             report: 优化报告
             auto_apply: 是否自动应用优化
             apply_params: 是否自动应用参数调整 (止损、持仓时间等)
+            apply_weights: 是否自动应用评分权重调整
 
         Returns:
             应用结果
@@ -288,6 +293,7 @@ class AdaptiveOptimizer:
         results = {
             'blacklist_added': [],
             'params_updated': [],
+            'weights_adjusted': [],
             'warnings': []
         }
 
@@ -430,6 +436,25 @@ class AdaptiveOptimizer:
                         f"⚠️ 高严重性: {signal['signal_type']} {signal['direction']} "
                         f"亏损${signal['total_pnl']:.2f} - {signal['recommendation']}"
                     )
+
+        # 4. 调整评分权重 (根据最近7天的表现)
+        if apply_weights:
+            try:
+                logger.info("🔧 开始调整信号评分权重...")
+                weight_results = self.weight_optimizer.adjust_weights(dry_run=False)
+
+                if weight_results.get('adjusted'):
+                    results['weights_adjusted'] = weight_results['adjusted']
+                    logger.info(f"✅ 评分权重已调整，共 {len(weight_results['adjusted'])} 个")
+
+                    # 打印调整详情
+                    self.weight_optimizer.print_adjustment_report(weight_results)
+                else:
+                    logger.info("📊 评分权重无需调整")
+
+            except Exception as e:
+                logger.error(f"❌ 调整评分权重失败: {e}")
+                results['warnings'].append(f"调整评分权重失败: {e}")
 
         return results
 
