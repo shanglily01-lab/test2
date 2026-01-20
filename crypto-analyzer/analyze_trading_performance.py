@@ -276,11 +276,11 @@ def analyze_current_positions(cursor):
             quantity,
             entry_price,
             unrealized_pnl,
-            entry_time,
-            TIMESTAMPDIFF(MINUTE, entry_time, NOW()) as hold_minutes
+            open_time,
+            TIMESTAMPDIFF(MINUTE, open_time, NOW()) as hold_minutes
         FROM futures_positions
         WHERE status = 'open'
-        ORDER BY entry_time DESC
+        ORDER BY open_time DESC
     """)
 
     open_positions = cursor.fetchall()
@@ -302,7 +302,7 @@ def analyze_current_positions(cursor):
             entry_price = pos['entry_price']
             unrealized_pnl = pos['unrealized_pnl'] or 0
             hold_minutes = pos['hold_minutes']
-            entry_time = pos['entry_time'].strftime('%Y-%m-%d %H:%M:%S')
+            entry_time = pos['open_time'].strftime('%Y-%m-%d %H:%M:%S')
 
             pnl_str = f"+${unrealized_pnl:.2f}" if unrealized_pnl > 0 else f"${unrealized_pnl:.2f}"
             hold_str = f"{hold_minutes}分钟" if hold_minutes < 60 else f"{hold_minutes/60:.1f}小时"
@@ -326,9 +326,9 @@ def analyze_recent_orders(cursor, start_time, limit=20):
             mark_price,
             realized_pnl,
             entry_signal_type,
-            entry_time,
+            open_time,
             close_time,
-            TIMESTAMPDIFF(MINUTE, entry_time, close_time) as hold_minutes
+            TIMESTAMPDIFF(MINUTE, open_time, close_time) as hold_minutes
         FROM futures_positions
         WHERE status = 'closed'
         AND close_time >= %s
