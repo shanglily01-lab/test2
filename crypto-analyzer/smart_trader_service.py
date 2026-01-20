@@ -140,6 +140,43 @@ class SmartDecisionBrain:
             if self.signal_blacklist:
                 logger.info(f"   🚫 禁用信号: {len(self.signal_blacklist)} 个")
 
+            # 7. 从数据库加载评分权重
+            self.scoring_weights = {}
+            try:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT signal_component, weight_long, weight_short
+                    FROM signal_scoring_weights
+                    WHERE is_active = TRUE
+                """)
+                weight_rows = cursor.fetchall()
+                for row in weight_rows:
+                    self.scoring_weights[row['signal_component']] = {
+                        'long': float(row['weight_long']),
+                        'short': float(row['weight_short'])
+                    }
+                cursor.close()
+
+                if self.scoring_weights:
+                    logger.info(f"   📊 评分权重: 从数据库加载 {len(self.scoring_weights)} 个组件")
+            except:
+                # 如果表不存在，使用默认权重（硬编码）
+                self.scoring_weights = {
+                    'position_low': {'long': 20, 'short': 0},
+                    'position_mid': {'long': 5, 'short': 5},
+                    'position_high': {'long': 0, 'short': 20},
+                    'momentum_down_3pct': {'long': 15, 'short': 0},
+                    'momentum_up_3pct': {'long': 0, 'short': 15},
+                    'trend_1h_bull': {'long': 20, 'short': 0},
+                    'trend_1h_bear': {'long': 0, 'short': 20},
+                    'volatility_high': {'long': 10, 'short': 10},
+                    'consecutive_bull': {'long': 15, 'short': 0},
+                    'consecutive_bear': {'long': 0, 'short': 15},
+                    'trend_1d_bull': {'long': 10, 'short': 0},
+                    'trend_1d_bear': {'long': 0, 'short': 10}
+                }
+                logger.info(f"   📊 评分权重: 使用默认权重")
+
         except Exception as e:
             logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
             self.whitelist = [
