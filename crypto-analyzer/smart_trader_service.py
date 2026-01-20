@@ -52,49 +52,75 @@ class SmartDecisionBrain:
         self.threshold = 10  # 降低阈值,更容易找到交易机会
 
     def _load_config(self):
-        """从config.yaml加载所有配置"""
+        """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
         try:
             import yaml
+
+            # 1. 从config.yaml加载交易对列表
             with open('config.yaml', 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
-
-                # 加载交易对列表
                 all_symbols = config.get('symbols', [])
 
-                # 加载黑名单
-                self.blacklist = config.get('signals', {}).get('blacklist', [])
+            # 2. 从数据库加载黑名单
+            conn = self._get_connection()
+            cursor = conn.cursor()
 
-                # 过滤掉黑名单中的交易对
-                self.whitelist = [s for s in all_symbols if s not in self.blacklist]
+            cursor.execute("""
+                SELECT symbol FROM trading_blacklist
+                WHERE is_active = TRUE
+                ORDER BY created_at DESC
+            """)
+            blacklist_rows = cursor.fetchall()
+            self.blacklist = [row['symbol'] for row in blacklist_rows] if blacklist_rows else []
 
-                # 加载自适应参数
-                adaptive = config.get('signals', {}).get('adaptive', {})
-                self.adaptive_long = adaptive.get('long', {
-                    'stop_loss_pct': 0.03,
-                    'take_profit_pct': 0.02,
-                    'min_holding_minutes': 60,
-                    'position_size_multiplier': 1.0
-                })
-                self.adaptive_short = adaptive.get('short', {
-                    'stop_loss_pct': 0.03,
-                    'take_profit_pct': 0.02,
-                    'min_holding_minutes': 60,
-                    'position_size_multiplier': 1.0
-                })
+            # 3. 从数据库加载自适应参数
+            cursor.execute("""
+                SELECT param_key, param_value
+                FROM adaptive_params
+                WHERE param_type = 'long'
+            """)
+            long_params = {row['param_key']: float(row['param_value']) for row in cursor.fetchall()}
 
-                logger.info(f"✅ 从config.yaml加载配置:")
-                logger.info(f"   总交易对: {len(all_symbols)}")
-                logger.info(f"   黑名单: {len(self.blacklist)} 个")
-                logger.info(f"   可交易: {len(self.whitelist)} 个")
-                logger.info(f"   📊 自适应参数:")
-                logger.info(f"      LONG止损: {self.adaptive_long['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_long['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_long['min_holding_minutes']}分钟")
-                logger.info(f"      SHORT止损: {self.adaptive_short['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_short['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_short['min_holding_minutes']}分钟")
+            cursor.execute("""
+                SELECT param_key, param_value
+                FROM adaptive_params
+                WHERE param_type = 'short'
+            """)
+            short_params = {row['param_key']: float(row['param_value']) for row in cursor.fetchall()}
 
-                if self.blacklist:
-                    logger.info(f"   🚫 黑名单交易对: {', '.join(self.blacklist)}")
+            cursor.close()
+
+            # 4. 构建自适应参数字典
+            self.adaptive_long = {
+                'stop_loss_pct': long_params.get('long_stop_loss_pct', 0.03),
+                'take_profit_pct': long_params.get('long_take_profit_pct', 0.02),
+                'min_holding_minutes': long_params.get('long_min_holding_minutes', 60),
+                'position_size_multiplier': long_params.get('long_position_size_multiplier', 1.0)
+            }
+
+            self.adaptive_short = {
+                'stop_loss_pct': short_params.get('short_stop_loss_pct', 0.03),
+                'take_profit_pct': short_params.get('short_take_profit_pct', 0.02),
+                'min_holding_minutes': short_params.get('short_min_holding_minutes', 60),
+                'position_size_multiplier': short_params.get('short_position_size_multiplier', 1.0)
+            }
+
+            # 5. 过滤掉黑名单中的交易对
+            self.whitelist = [s for s in all_symbols if s not in self.blacklist]
+
+            logger.info(f"✅ 从数据库加载配置:")
+            logger.info(f"   总交易对: {len(all_symbols)}")
+            logger.info(f"   数据库黑名单: {len(self.blacklist)} 个")
+            logger.info(f"   可交易: {len(self.whitelist)} 个")
+            logger.info(f"   📊 自适应参数 (从数据库):")
+            logger.info(f"      LONG止损: {self.adaptive_long['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_long['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_long['min_holding_minutes']:.0f}分钟, 仓位倍数: {self.adaptive_long['position_size_multiplier']:.1f}")
+            logger.info(f"      SHORT止损: {self.adaptive_short['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_short['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_short['min_holding_minutes']:.0f}分钟, 仓位倍数: {self.adaptive_short['position_size_multiplier']:.1f}")
+
+            if self.blacklist:
+                logger.info(f"   🚫 黑名单交易对: {', '.join(self.blacklist)}")
 
         except Exception as e:
-            logger.error(f"读取config.yaml失败: {e}, 使用默认配置")
+            logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
             self.whitelist = [
                 'BCH/USDT', 'LDO/USDT', 'ENA/USDT', 'WIF/USDT', 'TAO/USDT',
                 'DASH/USDT', 'ETC/USDT', 'VIRTUAL/USDT', 'NEAR/USDT',

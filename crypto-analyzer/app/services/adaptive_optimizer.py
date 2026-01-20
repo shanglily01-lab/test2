@@ -275,7 +275,7 @@ class AdaptiveOptimizer:
 
     def apply_optimizations(self, report: Dict, auto_apply: bool = False, apply_params: bool = True) -> Dict:
         """
-        应用优化建议
+        应用优化建议 - 更新数据库而不是config.yaml
 
         Args:
             report: 优化报告
@@ -295,53 +295,53 @@ class AdaptiveOptimizer:
             logger.warning("⚠️ 自动应用已禁用，仅生成建议")
             return results
 
-        # 1. 更新黑名单
+        # 1. 更新黑名单到数据库
         if report['blacklist_candidates']:
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f)
-
-                current_blacklist = config.get('signals', {}).get('blacklist', [])
+                conn = self._get_connection()
+                cursor = conn.cursor()
 
                 for candidate in report['blacklist_candidates']:
                     symbol = candidate['symbol']
-                    if symbol not in current_blacklist:
-                        current_blacklist.append(symbol)
+                    reason = candidate['reason']
+                    total_pnl = candidate['total_pnl']
+                    win_rate = candidate['win_rate']
+                    order_count = candidate['order_count']
+
+                    # 检查是否已存在
+                    cursor.execute("""
+                        SELECT id FROM trading_blacklist
+                        WHERE symbol = %s AND is_active = TRUE
+                    """, (symbol,))
+
+                    if not cursor.fetchone():
+                        # 插入新黑名单
+                        cursor.execute("""
+                            INSERT INTO trading_blacklist
+                            (symbol, reason, total_loss, win_rate, order_count, is_active)
+                            VALUES (%s, %s, %s, %s, %s, TRUE)
+                        """, (symbol, reason, abs(total_pnl), win_rate, order_count))
+
                         results['blacklist_added'].append({
                             'symbol': symbol,
-                            'reason': candidate['reason']
+                            'reason': reason
                         })
-                        logger.info(f"➕ 添加到黑名单: {symbol} - {candidate['reason']}")
+                        logger.info(f"➕ 添加到数据库黑名单: {symbol} - {reason}")
 
-                # 更新配置
-                if 'signals' not in config:
-                    config['signals'] = {}
-                config['signals']['blacklist'] = current_blacklist
+                conn.commit()
+                cursor.close()
 
-                # 写回配置文件
-                with open(self.config_path, 'w', encoding='utf-8') as f:
-                    yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
-
-                logger.info(f"✅ 黑名单已更新，新增{len(results['blacklist_added'])}个交易对")
+                logger.info(f"✅ 数据库黑名单已更新，新增{len(results['blacklist_added'])}个交易对")
 
             except Exception as e:
-                logger.error(f"❌ 更新黑名单失败: {e}")
+                logger.error(f"❌ 更新数据库黑名单失败: {e}")
                 results['warnings'].append(f"更新黑名单失败: {e}")
 
-        # 2. 自动调整参数 (LONG/SHORT止损、持仓时间等)
+        # 2. 自动调整参数到数据库 (LONG/SHORT止损、持仓时间等)
         if apply_params and report['problematic_signals']:
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f)
-
-                # 确保adaptive结构存在
-                if 'signals' not in config:
-                    config['signals'] = {}
-                if 'adaptive' not in config['signals']:
-                    config['signals']['adaptive'] = {
-                        'long': {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0},
-                        'short': {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
-                    }
+                conn = self._get_connection()
+                cursor = conn.cursor()
 
                 # 分析问题信号并调整参数
                 for signal in report['problematic_signals']:
@@ -354,23 +354,54 @@ class AdaptiveOptimizer:
                     if signal['severity'] == 'high':
                         if direction == 'LONG':
                             # LONG信号亏损严重，自动调整参数
+
+                            # 1. 增加最小持仓时间到120分钟
                             if avg_hold_minutes < 90:
-                                # 增加最小持仓时间到120分钟
-                                old_min_holding = config['signals']['adaptive']['long']['min_holding_minutes']
-                                config['signals']['adaptive']['long']['min_holding_minutes'] = 120
-                                results['params_updated'].append(f"LONG最小持仓时间: {old_min_holding}分钟 → 120分钟")
+                                cursor.execute("""
+                                    SELECT param_value FROM adaptive_params
+                                    WHERE param_key = 'long_min_holding_minutes'
+                                """)
+                                old_value = cursor.fetchone()
+                                old_min_holding = old_value[0] if old_value else 60
 
+                                cursor.execute("""
+                                    UPDATE adaptive_params
+                                    SET param_value = 120, updated_by = 'adaptive_optimizer'
+                                    WHERE param_key = 'long_min_holding_minutes'
+                                """)
+                                results['params_updated'].append(f"LONG最小持仓时间: {old_min_holding:.0f}分钟 → 120分钟")
+
+                            # 2. 放宽止损到4%
                             if win_rate < 0.15:
-                                # 放宽止损到4%
-                                old_stop_loss = config['signals']['adaptive']['long']['stop_loss_pct']
-                                config['signals']['adaptive']['long']['stop_loss_pct'] = 0.04
-                                results['params_updated'].append(f"LONG止损: {old_stop_loss*100:.1f}% → 4.0%")
+                                cursor.execute("""
+                                    SELECT param_value FROM adaptive_params
+                                    WHERE param_key = 'long_stop_loss_pct'
+                                """)
+                                old_value = cursor.fetchone()
+                                old_stop_loss = old_value[0] if old_value else 0.03
 
+                                cursor.execute("""
+                                    UPDATE adaptive_params
+                                    SET param_value = 0.04, updated_by = 'adaptive_optimizer'
+                                    WHERE param_key = 'long_stop_loss_pct'
+                                """)
+                                results['params_updated'].append(f"LONG止损: {float(old_stop_loss)*100:.1f}% → 4.0%")
+
+                            # 3. 降低仓位到50%
                             if total_pnl < -500:
-                                # 降低仓位到50%
-                                old_multiplier = config['signals']['adaptive']['long']['position_size_multiplier']
-                                config['signals']['adaptive']['long']['position_size_multiplier'] = 0.5
-                                results['params_updated'].append(f"LONG仓位倍数: {old_multiplier:.1f} → 0.5")
+                                cursor.execute("""
+                                    SELECT param_value FROM adaptive_params
+                                    WHERE param_key = 'long_position_size_multiplier'
+                                """)
+                                old_value = cursor.fetchone()
+                                old_multiplier = old_value[0] if old_value else 1.0
+
+                                cursor.execute("""
+                                    UPDATE adaptive_params
+                                    SET param_value = 0.5, updated_by = 'adaptive_optimizer'
+                                    WHERE param_key = 'long_position_size_multiplier'
+                                """)
+                                results['params_updated'].append(f"LONG仓位倍数: {float(old_multiplier):.1f} → 0.5")
 
                         # 记录警告
                         results['warnings'].append(
@@ -378,17 +409,17 @@ class AdaptiveOptimizer:
                             f"亏损${signal['total_pnl']:.2f} - {signal['recommendation']}"
                         )
 
-                # 如果有参数更新，写回配置文件
+                # 提交所有参数更新
                 if results['params_updated']:
-                    with open(self.config_path, 'w', encoding='utf-8') as f:
-                        yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
-
-                    logger.info(f"✅ 自适应参数已更新，共{len(results['params_updated'])}项")
+                    conn.commit()
+                    logger.info(f"✅ 数据库参数已更新，共{len(results['params_updated'])}项")
                     for update in results['params_updated']:
                         logger.info(f"   📊 {update}")
 
+                cursor.close()
+
             except Exception as e:
-                logger.error(f"❌ 更新自适应参数失败: {e}")
+                logger.error(f"❌ 更新数据库参数失败: {e}")
                 results['warnings'].append(f"更新自适应参数失败: {e}")
 
         # 3. 生成警告（未自动调整的问题）
