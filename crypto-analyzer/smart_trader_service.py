@@ -105,7 +105,25 @@ class SmartDecisionBrain:
                 'position_size_multiplier': short_params.get('short_position_size_multiplier', 1.0)
             }
 
-            # 5. 过滤掉黑名单中的交易对
+            # 5. 从数据库加载信号黑名单
+            self.signal_blacklist = {}
+            try:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT signal_type, position_side
+                    FROM signal_blacklist
+                    WHERE is_active = TRUE
+                """)
+                signal_blacklist_rows = cursor.fetchall()
+                for row in signal_blacklist_rows:
+                    key = f"{row['signal_type']}_{row['position_side']}"
+                    self.signal_blacklist[key] = True
+                cursor.close()
+            except:
+                # 如果表不存在，使用空字典
+                self.signal_blacklist = {}
+
+            # 6. 过滤掉黑名单中的交易对
             self.whitelist = [s for s in all_symbols if s not in self.blacklist]
 
             logger.info(f"✅ 从数据库加载配置:")
@@ -118,6 +136,9 @@ class SmartDecisionBrain:
 
             if self.blacklist:
                 logger.info(f"   🚫 黑名单交易对: {', '.join(self.blacklist)}")
+
+            if self.signal_blacklist:
+                logger.info(f"   🚫 禁用信号: {len(self.signal_blacklist)} 个")
 
         except Exception as e:
             logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
@@ -274,19 +295,24 @@ class SmartDecisionBrain:
             # 选择得分更高的方向 (只要达到阈值就可以)
             if long_score >= self.threshold or short_score >= self.threshold:
                 if long_score >= short_score:
-                    return {
-                        'symbol': symbol,
-                        'side': 'LONG',
-                        'score': long_score,
-                        'current_price': current
-                    }
+                    side = 'LONG'
+                    score = long_score
                 else:
-                    return {
-                        'symbol': symbol,
-                        'side': 'SHORT',
-                        'score': short_score,
-                        'current_price': current
-                    }
+                    side = 'SHORT'
+                    score = short_score
+
+                # 检查信号黑名单
+                signal_key = f"SMART_BRAIN_{score}_{side}"
+                if signal_key in self.signal_blacklist:
+                    logger.debug(f"{symbol} 信号 {signal_key} 在黑名单中，跳过")
+                    return None
+
+                return {
+                    'symbol': symbol,
+                    'side': side,
+                    'score': score,
+                    'current_price': current
+                }
 
             return None
 
