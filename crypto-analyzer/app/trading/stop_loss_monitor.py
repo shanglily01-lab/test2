@@ -607,8 +607,8 @@ class StopLossMonitor:
             logger.info(f"🛑 {stop_type_cn} triggered for position #{position_id} {symbol} @ {current_price:.8f} (stop_price={actual_stop_price:.8f}, pnl={pnl_pct:.2f}%)")
             result = self.engine.close_position(
                 position_id=position_id,
-                reason=stop_type,
-                close_price=actual_stop_price  # 使用实际触发的止损价格平仓
+                reason=stop_type
+                # 不传入 close_price,使用实时市场价格平仓,避免损失额外盈利
             )
             # 同步平掉实盘仓位
             self._sync_close_live_position(position, stop_type)
@@ -627,8 +627,8 @@ class StopLossMonitor:
             logger.info(f"✅ Take-profit triggered for position #{position_id} {symbol} @ {current_price:.8f} (take_profit={take_profit_price:.8f})")
             result = self.engine.close_position(
                 position_id=position_id,
-                reason='take_profit',
-                close_price=take_profit_price  # 使用止盈价格平仓
+                reason='take_profit'
+                # 不传入 close_price,使用实时市场价格平仓,获取最大盈利
             )
             # 同步平掉实盘仓位
             self._sync_close_live_position(position, 'take_profit')
