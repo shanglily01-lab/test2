@@ -146,6 +146,72 @@
 
 ---
 
+
+## 补充表结构
+
+### symbol_risk_params
+
+| 字段名 | 类型 | 允许NULL | 键 | 默认值 | 额外 |
+|--------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI |  | auto_increment |
+| symbol | varchar(20) | NO | UNI |  |  |
+| long_take_profit_pct | decimal(6,4) | YES |  | 0.0500 |  |
+| long_stop_loss_pct | decimal(6,4) | YES |  | 0.0200 |  |
+| short_take_profit_pct | decimal(6,4) | YES |  | 0.0500 |  |
+| short_stop_loss_pct | decimal(6,4) | YES |  | 0.0200 |  |
+| position_multiplier | decimal(5,2) | YES |  | 1.00 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| win_rate | decimal(5,4) | YES | MUL | 0.0000 |  |
+| avg_pnl | decimal(10,2) | YES |  | 0.00 |  |
+| total_pnl | decimal(15,2) | YES |  | 0.00 |  |
+| sharpe_ratio | decimal(6,3) | YES |  | 0.000 |  |
+| avg_volatility | decimal(6,4) | YES |  | 0.0000 |  |
+| max_drawdown | decimal(6,4) | YES |  | 0.0000 |  |
+| last_optimized | timestamp | YES | MUL |  |  |
+| optimization_count | int(11) | YES |  | 0 |  |
+| is_active | tinyint(1) | YES |  | 1 |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+
+### signal_position_multipliers
+
+| 字段名 | 类型 | 允许NULL | 键 | 默认值 | 额外 |
+|--------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI |  | auto_increment |
+| component_name | varchar(50) | NO | MUL |  |  |
+| position_side | varchar(10) | NO |  |  |  |
+| position_multiplier | decimal(5,2) | YES |  | 1.00 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| win_rate | decimal(5,4) | YES | MUL | 0.0000 |  |
+| avg_pnl | decimal(10,2) | YES |  | 0.00 |  |
+| total_pnl | decimal(15,2) | YES |  | 0.00 |  |
+| last_analyzed | timestamp | YES |  |  |  |
+| adjustment_count | int(11) | YES |  | 0 |  |
+| is_active | tinyint(1) | YES |  | 1 |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+
+### market_observations
+
+| 字段名 | 类型 | 允许NULL | 键 | 默认值 | 额外 |
+|--------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI |  | auto_increment |
+| timestamp | timestamp | NO | MUL | current_timestamp() | on update current_timestamp() |
+| overall_trend | varchar(20) | YES |  |  |  |
+| market_strength | decimal(5,2) | YES |  |  |  |
+| bullish_count | int(11) | YES |  |  |  |
+| bearish_count | int(11) | YES |  |  |  |
+| neutral_count | int(11) | YES |  |  |  |
+| btc_price | decimal(12,2) | YES |  |  |  |
+| btc_trend | varchar(20) | YES |  |  |  |
+| eth_price | decimal(12,2) | YES |  |  |  |
+| eth_trend | varchar(20) | YES |  |  |  |
+| warnings | text | YES |  |  |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+
+
+---
+
 ## 📊 所有表列表
 
 1. `adaptive_params`
