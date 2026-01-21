@@ -58,7 +58,14 @@ ENTRY_REASON_MAP = {
     'sustained_trend_entry': '趋势入场',
     'ema_trend': 'EMA趋势',
     'limit_order': '限价单',
+    'limit_order_trend': '趋势限价单',
     'manual': '手动开仓',
+    # 超级大脑决策信号
+    'SMART_BRAIN_20': '超级大脑(20分)',
+    'SMART_BRAIN_35': '超级大脑(35分)',
+    'SMART_BRAIN_40': '超级大脑(40分)',
+    'SMART_BRAIN_45': '超级大脑(45分)',
+    'SMART_BRAIN_60': '超级大脑(60分)',
 }
 
 # 取消原因中英文映射
@@ -109,7 +116,7 @@ def parse_close_reason(notes: str) -> tuple:
     if 'manual_close_all' in notes:
         return 'manual_close_all', '一键平仓'
 
-    # 中文关键字匹配
+    # 中文关键字匹配 (按优先级从高到低)
     if '死叉反转' in notes:
         return 'death_cross_reversal', '死叉反转平仓'
     if '金叉反转' in notes:
@@ -122,6 +129,11 @@ def parse_close_reason(notes: str) -> tuple:
         return 'trailing_take_profit', '移动止盈'
     if '最大止盈' in notes or '达到最大' in notes:
         return 'max_take_profit', '最大止盈'
+    # 简单的止盈止损 (必须放在具体类型之后匹配)
+    if notes == '止盈' or '止盈' in notes:
+        return 'take_profit', '止盈'
+    if notes == '止损' or '止损' in notes:
+        return 'stop_loss', '止损'
     if '5M' in notes and ('死叉' in notes or '金叉' in notes):
         if '死叉' in notes:
             return '5m_death_cross_sl', '5分钟死叉止损'
