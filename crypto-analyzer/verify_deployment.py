@@ -133,7 +133,8 @@ def verify_risk_params(cursor) -> Dict:
                 position_multiplier,
                 win_rate,
                 total_trades,
-                last_updated
+                total_pnl,
+                last_optimized
             FROM symbol_risk_params
             ORDER BY total_pnl DESC
             LIMIT 10
