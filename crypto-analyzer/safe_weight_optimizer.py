@@ -10,6 +10,10 @@ import os
 import traceback
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
+
+# 加载.env文件
+load_dotenv()
 
 # 避免编码问题
 if sys.platform == 'win32':
@@ -20,13 +24,13 @@ if sys.platform == 'win32':
 sys.path.insert(0, 'app/services')
 from scoring_weight_optimizer import ScoringWeightOptimizer
 
-# 数据库配置
+# 数据库配置 - 从.env读取
 db_config = {
-    'host': '13.212.252.171',
-    'port': 3306,
-    'user': 'admin',
-    'password': 'Tonny@1000',
-    'database': 'binance-data'
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'port': int(os.getenv('DB_PORT', 3306)),
+    'user': os.getenv('DB_USER', 'root'),
+    'password': os.getenv('DB_PASSWORD', ''),
+    'database': os.getenv('DB_NAME', 'binance-data')
 }
 
 # 日志文件路径
