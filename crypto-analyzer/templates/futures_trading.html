@@ -396,14 +396,6 @@
                     </div>
                 </div>
                 <div class="header-actions">
-                    <div class="btn-group" role="group" style="margin-right: 12px;">
-                        <button type="button" class="btn btn-sm btn-primary" id="paperTradingBtn" onclick="switchTradingMode('paper')">
-                            <i class="bi bi-journals"></i> 模拟交易
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="liveTradingBtn" onclick="switchTradingMode('live')">
-                            <i class="bi bi-currency-exchange"></i> 实盘交易
-                        </button>
-                    </div>
                     <button class="btn btn-secondary" onclick="refreshData()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -454,7 +446,17 @@
                     <i class="bi bi-wallet2"></i>
                     <span id="account-title">账户总览</span>
                 </h2>
-                <div class="last-update" id="account-update">-</div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-primary" id="paperTradingBtn" onclick="switchTradingMode('paper')" style="font-size: 13px; padding: 6px 14px;">
+                            <i class="bi bi-journals"></i> 模拟交易
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="liveTradingBtn" onclick="switchTradingMode('live')" style="font-size: 13px; padding: 6px 14px;">
+                            <i class="bi bi-currency-exchange"></i> 实盘交易
+                        </button>
+                    </div>
+                    <div class="last-update" id="account-update">-</div>
+                </div>
             </div>
             <div class="card-body">
                 <div id="accountLoading" class="loading-overlay">
