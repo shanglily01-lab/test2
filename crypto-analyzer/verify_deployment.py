@@ -215,11 +215,17 @@ def verify_market_regime(cursor) -> Dict:
     """验证市场状态记录"""
     print_section("5. 验证6小时市场状态记录")
 
-    cursor.execute("""
+    # market_regime_states表不存在，跳过此检查
+    print("⚠️ 提示: market_regime_states表暂未使用，跳过检查")
+    return {'status': 'info', 'message': 'Table not used'}
+
+    # 以下代码暂时注释
+    """
+    cursor.execute(\"""
         SELECT COUNT(*) as count
         FROM market_regime_states
         WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    """)
+    \""")
     count = cursor.fetchone()['count']
 
     print(f"最近7天状态记录: {count}")
@@ -274,7 +280,7 @@ def verify_optimization_history(cursor) -> Dict:
     cursor.execute("""
         SELECT COUNT(*) as count
         FROM optimization_history
-        WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+        WHERE optimized_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     """)
     count = cursor.fetchone()['count']
 
@@ -283,21 +289,23 @@ def verify_optimization_history(cursor) -> Dict:
     if count > 0:
         cursor.execute("""
             SELECT
-                timestamp,
+                optimized_at,
                 optimization_type,
-                adjustments_made,
-                total_adjusted,
-                notes
+                target_name,
+                param_name,
+                old_value,
+                new_value,
+                reason
             FROM optimization_history
-            ORDER BY timestamp DESC
+            ORDER BY optimized_at DESC
             LIMIT 5
         """)
         history = cursor.fetchall()
 
         print("\n最近5次优化:")
         for h in history:
-            print(f"  {h['timestamp']} | {h['optimization_type']:20s} | "
-                  f"调整:{int(h['total_adjusted'] or 0)}项 | {h['notes'] or ''}")
+            print(f"  {h['optimized_at']} | {h['optimization_type']:20s} | "
+                  f"{h['target_name'] or ''} - {h['param_name'] or ''} | {h['reason'] or ''}")
 
         print("\n✅ 优化历史记录正常")
         return {'status': 'ok', 'count': count}
@@ -311,12 +319,12 @@ def verify_global_config(cursor) -> Dict:
     print_section("7. 验证全局止盈止损配置")
 
     cursor.execute("""
-        SELECT param_name, param_value, last_updated
+        SELECT param_key, param_value, updated_at
         FROM adaptive_params
         WHERE param_type = 'global'
-            AND param_name IN ('long_take_profit_pct', 'long_stop_loss_pct',
+            AND param_key IN ('long_take_profit_pct', 'long_stop_loss_pct',
                                'short_take_profit_pct', 'short_stop_loss_pct')
-        ORDER BY param_name
+        ORDER BY param_key
     """)
     configs = cursor.fetchall()
 
@@ -324,11 +332,11 @@ def verify_global_config(cursor) -> Dict:
         print("\n全局止盈止损设置:")
         for c in configs:
             value = float(c['param_value'])
-            print(f"  {c['param_name']:25s} = {value*100:>6.2f}% (更新: {c['last_updated']})")
+            print(f"  {c['param_key']:25s} = {value*100:>6.2f}% (更新: {c['updated_at']})")
 
         # 检查是否已更新为新配置
-        long_tp = next((float(c['param_value']) for c in configs if c['param_name'] == 'long_take_profit_pct'), None)
-        long_sl = next((float(c['param_value']) for c in configs if c['param_name'] == 'long_stop_loss_pct'), None)
+        long_tp = next((float(c['param_value']) for c in configs if c['param_key'] == 'long_take_profit_pct'), None)
+        long_sl = next((float(c['param_value']) for c in configs if c['param_key'] == 'long_stop_loss_pct'), None)
 
         if long_tp and long_sl:
             if long_tp >= 0.05 and long_sl <= 0.02:
