@@ -2387,52 +2387,58 @@ async def get_technical_signals():
         
         try:
             timeframes = ['15m', '1h', '1d']
+
+            # 🚀 优化: 使用单次批量查询替代嵌套循环
+            # 使用子查询获取每个(symbol, timeframe)组合的最新记录
+            cursor.execute("""
+                SELECT t1.*
+                FROM technical_indicators_cache t1
+                INNER JOIN (
+                    SELECT symbol, timeframe, MAX(updated_at) as max_updated
+                    FROM technical_indicators_cache
+                    WHERE timeframe IN ('15m', '1h', '1d')
+                    GROUP BY symbol, timeframe
+                ) t2 ON t1.symbol = t2.symbol
+                    AND t1.timeframe = t2.timeframe
+                    AND t1.updated_at = t2.max_updated
+                ORDER BY t1.symbol, t1.timeframe
+            """)
+
+            all_results = cursor.fetchall()
+
+            # 组织数据结构
             symbols_data = {}
-            
-            # 获取所有交易对（至少有一个时间周期有数据即可）
-            cursor.execute("SELECT DISTINCT symbol FROM technical_indicators_cache WHERE timeframe IN ('15m', '1h', '1d')")
-            symbols = [row['symbol'] for row in cursor.fetchall()]
-            
-            for symbol in symbols:
-                symbols_data[symbol] = {}
-                
-                for timeframe in timeframes:
-                    # 获取该交易对在该时间周期的最新技术指标数据
-                    cursor.execute(
-                        """SELECT * FROM technical_indicators_cache 
-                        WHERE symbol = %s AND timeframe = %s
-                        ORDER BY updated_at DESC LIMIT 1""",
-                        (symbol, timeframe)
-                    )
-                    result = cursor.fetchone()
-                    
-                    if result:
-                        symbols_data[symbol][timeframe] = {
-                            'rsi_value': float(result['rsi_value']) if result.get('rsi_value') else None,
-                            'rsi_signal': result.get('rsi_signal'),
-                            'macd_value': float(result['macd_value']) if result.get('macd_value') else None,
-                            'macd_signal_line': float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
-                            'macd_histogram': float(result['macd_histogram']) if result.get('macd_histogram') else None,
-                            'macd_trend': result.get('macd_trend'),
-                            'ema_short': float(result['ema_short']) if result.get('ema_short') else None,
-                            'ema_long': float(result['ema_long']) if result.get('ema_long') else None,
-                            'ema_trend': result.get('ema_trend'),
-                            'bb_upper': float(result['bb_upper']) if result.get('bb_upper') else None,
-                            'bb_middle': float(result['bb_middle']) if result.get('bb_middle') else None,
-                            'bb_lower': float(result['bb_lower']) if result.get('bb_lower') else None,
-                            'bb_position': result.get('bb_position'),
-                            'bb_width': float(result['bb_width']) if result.get('bb_width') else None,
-                            'kdj_k': float(result['kdj_k']) if result.get('kdj_k') else None,
-                            'kdj_d': float(result['kdj_d']) if result.get('kdj_d') else None,
-                            'kdj_j': float(result['kdj_j']) if result.get('kdj_j') else None,
-                            'kdj_signal': result.get('kdj_signal'),
-                            'technical_score': float(result['technical_score']) if result.get('technical_score') else None,
-                            'technical_signal': result.get('technical_signal'),
-                            'volume_ratio': float(result['volume_ratio']) if result.get('volume_ratio') else None,
-                            'updated_at': result['updated_at'].isoformat() if result.get('updated_at') else None
-                        }
-                    else:
-                        symbols_data[symbol][timeframe] = None
+            for result in all_results:
+                symbol = result['symbol']
+                timeframe = result['timeframe']
+
+                if symbol not in symbols_data:
+                    symbols_data[symbol] = {}
+
+                symbols_data[symbol][timeframe] = {
+                    'rsi_value': float(result['rsi_value']) if result.get('rsi_value') else None,
+                    'rsi_signal': result.get('rsi_signal'),
+                    'macd_value': float(result['macd_value']) if result.get('macd_value') else None,
+                    'macd_signal_line': float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
+                    'macd_histogram': float(result['macd_histogram']) if result.get('macd_histogram') else None,
+                    'macd_trend': result.get('macd_trend'),
+                    'ema_short': float(result['ema_short']) if result.get('ema_short') else None,
+                    'ema_long': float(result['ema_long']) if result.get('ema_long') else None,
+                    'ema_trend': result.get('ema_trend'),
+                    'bb_upper': float(result['bb_upper']) if result.get('bb_upper') else None,
+                    'bb_middle': float(result['bb_middle']) if result.get('bb_middle') else None,
+                    'bb_lower': float(result['bb_lower']) if result.get('bb_lower') else None,
+                    'bb_position': result.get('bb_position'),
+                    'bb_width': float(result['bb_width']) if result.get('bb_width') else None,
+                    'kdj_k': float(result['kdj_k']) if result.get('kdj_k') else None,
+                    'kdj_d': float(result['kdj_d']) if result.get('kdj_d') else None,
+                    'kdj_j': float(result['kdj_j']) if result.get('kdj_j') else None,
+                    'kdj_signal': result.get('kdj_signal'),
+                    'technical_score': float(result['technical_score']) if result.get('technical_score') else None,
+                    'technical_signal': result.get('technical_signal'),
+                    'volume_ratio': float(result['volume_ratio']) if result.get('volume_ratio') else None,
+                    'updated_at': result['updated_at'].isoformat() if result.get('updated_at') else None
+                }
             
             # 转换为列表格式，便于前端显示
             # 只返回至少有一个时间周期有数据的交易对
