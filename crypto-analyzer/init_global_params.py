@@ -33,23 +33,26 @@ cursor = conn.cursor(pymysql.cursors.DictCursor)
 print("\nInitializing global parameters...")
 
 for param_key, param_value, param_type, description in GLOBAL_PARAMS:
-    # 检查是否已存在
+    # 检查是否已存在 (只检查param_key,因为它是唯一键)
     cursor.execute("""
         SELECT id FROM adaptive_params
-        WHERE param_key = %s AND param_type = %s
-    """, (param_key, param_type))
+        WHERE param_key = %s
+    """, (param_key,))
 
     existing = cursor.fetchone()
 
     if existing:
         print(f"  [SKIP] {param_key} already exists")
     else:
-        cursor.execute("""
-            INSERT INTO adaptive_params
-            (param_key, param_value, param_type, description, updated_by)
-            VALUES (%s, %s, %s, %s, 'init_script')
-        """, (param_key, param_value, param_type, description))
-        print(f"  [OK] Created {param_key} = {param_value} ({description})")
+        try:
+            cursor.execute("""
+                INSERT INTO adaptive_params
+                (param_key, param_value, param_type, description, updated_by)
+                VALUES (%s, %s, %s, %s, 'init_script')
+            """, (param_key, param_value, param_type, description))
+            print(f"  [OK] Created {param_key} = {param_value} ({description})")
+        except Exception as e:
+            print(f"  [ERROR] Failed to create {param_key}: {e}")
 
 conn.commit()
 
