@@ -783,6 +783,33 @@
         let currentCancelledPage = 1;
         let cancelledRowsPerPage = 10;
 
+        // 交易模式切换
+        function switchTradingMode(mode) {
+            currentTradingMode = mode;
+
+            // 更新按钮状态
+            const paperBtn = document.getElementById('paperTradingBtn');
+            const liveBtn = document.getElementById('liveTradingBtn');
+
+            if (mode === 'paper') {
+                paperBtn.classList.remove('btn-outline-primary');
+                paperBtn.classList.add('btn-primary');
+                liveBtn.classList.remove('btn-primary');
+                liveBtn.classList.add('btn-outline-primary');
+            } else {
+                liveBtn.classList.remove('btn-outline-primary');
+                liveBtn.classList.add('btn-primary');
+                paperBtn.classList.remove('btn-primary');
+                paperBtn.classList.add('btn-outline-primary');
+            }
+
+            // 重新加载数据
+            loadAccount();
+            loadPositions();
+
+            showNotification(mode === 'paper' ? '已切换到模拟交易模式' : '已切换到实盘交易模式', 'info');
+        }
+
         // 加载交易对列表
         async function loadSymbols() {
             try {
@@ -1410,17 +1437,15 @@
                 loadPositions(),
                 loadTrades()
             ]);
-            // 如果当前显示的是订单标签页，也加载订单
-            const ordersTab = document.getElementById('ordersTab');
-            if (ordersTab && ordersTab.style.display !== 'none') {
-                await }
             updateLastUpdateTime();
         }
 
         // 加载账户信息
         async function loadAccount() {
             try {
-                const response = await fetch(`${API_BASE}/account/2`);
+                // 根据当前模式选择account_id: 模拟=2, 实盘=1
+                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                const response = await fetch(`${API_BASE}/account/${accountId}`);
                 const responseText = await response.text();
                 let data;
                 try {
@@ -3637,32 +3662,6 @@
             // setInterval(loadData, 5000);  // 不再自动刷新持仓列表
             // setInterval(refreshPrice, 2000);  // 不再单独刷新价格，已合并到 updatePositionsPrices
         });
-    
-        // 交易模式切换
-        function switchTradingMode(mode) {
-            currentTradingMode = mode;
-
-            // 更新按钮状态
-            const paperBtn = document.getElementById('paperTradingBtn');
-            const liveBtn = document.getElementById('liveTradingBtn');
-
-            if (mode === 'paper') {
-                paperBtn.classList.remove('btn-outline-primary');
-                paperBtn.classList.add('btn-primary');
-                liveBtn.classList.remove('btn-primary');
-                liveBtn.classList.add('btn-outline-primary');
-            } else {
-                liveBtn.classList.remove('btn-outline-primary');
-                liveBtn.classList.add('btn-primary');
-                paperBtn.classList.remove('btn-primary');
-                paperBtn.classList.add('btn-outline-primary');
-            }
-
-            // 重新加载数据
-            loadPositions();
-
-            showNotification(mode === 'paper' ? '已切换到模拟交易模式' : '已切换到实盘交易模式', 'info');
-        }
 </script>
 </body>
 </html>
