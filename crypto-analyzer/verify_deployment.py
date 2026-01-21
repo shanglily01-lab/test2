@@ -15,13 +15,18 @@ import pymysql
 from datetime import datetime, timedelta
 from typing import Dict, List
 import json
+import os
+from dotenv import load_dotenv
+
+# 加载.env文件
+load_dotenv()
 
 DB_CONFIG = {
-    'host': '13.212.252.171',
-    'port': 3306,
-    'user': 'binance',
-    'password': 'SHbin@110',
-    'database': 'binance-data',
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'port': int(os.getenv('DB_PORT', 3306)),
+    'user': os.getenv('DB_USER', 'root'),
+    'password': os.getenv('DB_PASSWORD', ''),
+    'database': os.getenv('DB_NAME', 'binance-data'),
     'charset': 'utf8mb4'
 }
 
