@@ -241,9 +241,6 @@
                 <button class="tab-btn" onclick="switchTab('symbols')">
                     <i class="bi bi-bar-chart-line"></i> 交易对表现
                 </button>
-                <button class="tab-btn" onclick="switchTab('cancelled')">
-                    <i class="bi bi-x-circle"></i> 取消订单
-                </button>
                 <button class="tab-btn" onclick="switchTab('analysis')">
                     <i class="bi bi-pie-chart"></i> 原因分析
                 </button>
@@ -327,42 +324,6 @@
                 </div>
             </div>
 
-            <!-- Cancelled Tab -->
-            <div id="cancelled-tab" class="tab-content">
-                <div id="cancelledLoading" class="loading-overlay">
-                    <div class="spinner"></div>
-                </div>
-                <div id="cancelledContent" style="display: none;">
-                    <div class="analysis-grid" style="margin-bottom: 24px;">
-                        <div>
-                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">取消原因分布</h3>
-                            <div id="cancel-reason-stats"></div>
-                        </div>
-                        <div>
-                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">统计概览</h3>
-                            <div id="cancel-summary"></div>
-                        </div>
-                    </div>
-                    <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">取消订单列表</h3>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>时间</th>
-                                    <th>交易对</th>
-                                    <th>方向</th>
-                                    <th>价格</th>
-                                    <th>数量</th>
-                                    <th>取消原因</th>
-                                </tr>
-                            </thead>
-                            <tbody id="cancelled-table-body"></tbody>
-                        </table>
-                    </div>
-                    <div id="cancelled-pagination"></div>
-                </div>
-            </div>
-
             <!-- Analysis Tab -->
             <div id="analysis-tab" class="tab-content">
                 <div id="analysisLoading" class="loading-overlay">
@@ -432,7 +393,6 @@
         let currentSort = 'time';
         let hours = 24;
         let tradesPage = 1;
-        let cancelledPage = 1;
         const pageSize = 100;
         let currentTradingMode = 'paper'; // 交易模式: paper=模拟, live=实盘
 
@@ -550,11 +510,6 @@
         function goToTradesPage(page) {
             tradesPage = page;
             loadTrades();
-        }
-
-        function goToCancelledPage(page) {
-            cancelledPage = page;
-            loadCancelled();
         }
 
         // API calls
@@ -708,67 +663,6 @@
             document.getElementById('tradesContent').style.display = 'block';
         }
 
-        async function loadCancelled() {
-            document.getElementById('cancelledLoading').style.display = 'flex';
-            document.getElementById('cancelledContent').style.display = 'none';
-
-            try {
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
-                const response = await fetch(`/api/futures/review/cancelled?hours=${hours}&account_id=${accountId}&page=${cancelledPage}&page_size=${pageSize}`);
-                const result = await response.json();
-
-                if (result.success) {
-                    const data = result.data;
-
-                    // Reason distribution
-                    document.getElementById('cancel-reason-stats').innerHTML = data.reason_distribution.map(r => `
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-default);">
-                            <span>${r.name_cn}</span>
-                            <span class="font-mono">${r.count} <span class="text-secondary">(${r.percentage}%)</span></span>
-                        </div>
-                    `).join('');
-
-                    // Summary
-                    document.getElementById('cancel-summary').innerHTML = `
-                        <div class="stat-card" style="text-align: left; padding: 16px;">
-                            <div style="font-size: 36px; font-weight: 700; color: var(--warning-yellow); margin-bottom: 8px;">${data.total_cancelled}</div>
-                            <div style="color: var(--text-secondary);">取消订单总数</div>
-                        </div>
-                    `;
-
-                    // Table
-                    const tbody = document.getElementById('cancelled-table-body');
-                    if (data.cancelled_orders.length === 0) {
-                        tbody.innerHTML = `<tr><td colspan="6" class="empty-state">暂无取消订单</td></tr>`;
-                        document.getElementById('cancelled-pagination').innerHTML = '';
-                    } else {
-                        tbody.innerHTML = data.cancelled_orders.map(order => `
-                            <tr>
-                                <td>${formatTime(order.canceled_at || order.created_at)}</td>
-                                <td><strong>${order.symbol}</strong></td>
-                                <td>
-                                    <span class="badge ${order.side.includes('LONG') ? 'badge-success' : 'badge-danger'}">
-                                        ${order.side_cn}
-                                    </span>
-                                </td>
-                                <td class="font-mono">${formatNumber(order.price, 4)}</td>
-                                <td class="font-mono">${formatNumber(order.quantity, 6)}</td>
-                                <td><span class="badge badge-warning">${order.cancel_reason_cn}</span></td>
-                            </tr>
-                        `).join('');
-
-                        // Render pagination
-                        renderPagination('cancelled-pagination', data.page, data.total_pages, 'goToCancelledPage');
-                    }
-                }
-            } catch (error) {
-                console.error('加载取消订单失败:', error);
-            }
-
-            document.getElementById('cancelledLoading').style.display = 'none';
-            document.getElementById('cancelledContent').style.display = 'block';
-        }
-
         async function loadAnalysis() {
             document.getElementById('analysisLoading').style.display = 'flex';
             document.getElementById('analysisContent').style.display = 'none';
@@ -872,10 +766,8 @@
             hours = parseInt(document.getElementById('hours-select').value);
             // Reset page numbers when time range changes
             tradesPage = 1;
-            cancelledPage = 1;
             loadSummary();
             loadTrades();
-            loadCancelled();
             loadAnalysis();
             loadSuggestions();
         }
