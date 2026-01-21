@@ -588,7 +588,9 @@ class SmartTraderService:
 
             # 准备信号组成数据
             import json
-            signal_components_json = json.dumps(opp.get('signal_components', {})) if 'signal_components' in opp else None
+            signal_components = opp.get('signal_components', {})
+            logger.info(f"[DEBUG] signal_components: {signal_components}, has key: {'signal_components' in opp}")
+            signal_components_json = json.dumps(signal_components) if signal_components else None
             entry_score = opp.get('score', 0)
 
             # 插入持仓记录
