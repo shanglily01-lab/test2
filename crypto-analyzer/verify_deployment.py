@@ -219,60 +219,6 @@ def verify_market_regime(cursor) -> Dict:
     print("⚠️ 提示: market_regime_states表暂未使用，跳过检查")
     return {'status': 'info', 'message': 'Table not used'}
 
-    # 以下代码暂时注释
-    """
-    cursor.execute(\"""
-        SELECT COUNT(*) as count
-        FROM market_regime_states
-        WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    \""")
-    count = cursor.fetchone()['count']
-
-    print(f"最近7天状态记录: {count}")
-
-    if count > 0:
-        cursor.execute("""
-            SELECT
-                timestamp,
-                regime,
-                strength,
-                bias,
-                btc_6h_change,
-                eth_6h_change,
-                position_adjustment,
-                score_threshold_adjustment
-            FROM market_regime_states
-            ORDER BY timestamp DESC
-            LIMIT 5
-        """)
-        states = cursor.fetchall()
-
-        print("\n最新5次市场状态:")
-        for s in states:
-            print(f"  {s['timestamp']} | {s['regime']:12s} | 强度:{float(s['strength'] or 0):5.1f} | "
-                  f"倾向:{s['bias']:8s} | BTC:{float(s['btc_6h_change'] or 0):+6.2f}% | "
-                  f"ETH:{float(s['eth_6h_change'] or 0):+6.2f}% | "
-                  f"仓位:{float(s['position_adjustment'] or 1.0):.2f}x | "
-                  f"门槛:{int(s['score_threshold_adjustment'] or 0):+d}分")
-
-        # 计算记录频率
-        days = 7
-        expected_per_6h = days * 24 / 6  # 6小时一次
-        coverage = count / expected_per_6h * 100
-
-        print(f"\n记录频率: {count}/{int(expected_per_6h)} = {coverage:.1f}%")
-
-        if coverage > 50:
-            print("✅ 市场状态记录正常")
-            return {'status': 'ok', 'coverage': coverage}
-        else:
-            print("⚠️ 市场状态记录偏少，检查cron任务是否正常运行")
-            return {'status': 'warning', 'coverage': coverage}
-    else:
-        print("\n❌ 警告: 没有市场状态记录")
-        print("   请运行: python3 run_market_regime_analysis.py")
-        return {'status': 'error', 'count': 0}
-
 def verify_optimization_history(cursor) -> Dict:
     """验证优化历史记录"""
     print_section("6. 验证优化历史记录")
