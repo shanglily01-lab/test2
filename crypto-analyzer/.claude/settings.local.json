@@ -142,7 +142,8 @@
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" log --oneline --since=\"2026-01-16\" --grep=\"entry_ema_diff\")",
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" log --oneline --since=\"2026-01-15\")",
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" show 54fec59:app/services/strategy_executor_v2.py)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git restore:*)"
     ],
     "deny": [],
     "ask": []
