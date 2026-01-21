@@ -125,10 +125,10 @@ body: JSON.stringify({
 
 ## 📊 删除的代码统计
 
-- **删除字符数**: 4,338
-- **删除的Tab**: 2个
+- **删除字符数**: 4,338 (初始) + 15,000+ (残留函数清理)
+- **删除的Tab**: 2个 (限价单、已取消订单)
 - **删除的相关CSS**: ~50行
-- **删除的相关JS**: ~100行
+- **删除的相关JS**: ~370行 (包括残留的loadOrders和loadCancelledOrders函数)
 
 ---
 
@@ -313,5 +313,33 @@ python merge_futures_pages.py
 
 ---
 
+## 🐛 Bug修复记录
+
+### 问题1: 函数未定义错误
+**错误**: `futures_trading:401 Uncaught ReferenceError: switchTradingMode is not defined`
+**原因**: switchTradingMode函数定义在第3640行,但onclick在第401行就调用了
+**修复**: 将函数声明移到第786行(脚本开始处)
+**Git Commit**: 之前的修复提交
+
+### 问题2: 意外的token '}'
+**错误**: `futures_trading:1416 Uncaught SyntaxError: Unexpected token '}'`
+**原因**: 删除Tab后残留的代码 `await }`
+**修复**: 清理loadData()函数中的残留代码
+**Git Commit**: 之前的修复提交
+
+### 问题3: 匿名函数语法错误
+**错误**: `futures_trading:1920 Uncaught SyntaxError: Unexpected token '{'`
+**原因**: 残留的loadOrders和loadCancelledOrders函数,函数名缺失变成了 `async function {`
+**修复**: 删除整个残留函数块(第1919-2187行,共269行)
+**Git Commit**: 482030d
+
+### 问题4: showNotification未定义
+**错误**: 调用了不存在的showNotification函数
+**原因**: 正确的函数名应该是showToast
+**修复**: 在switchTradingMode函数中改为showToast
+**Git Commit**: 482030d
+
+---
+
 **最后更新**: 2026-01-21
-**Git Commit**: fa82c70
+**Git Commit**: 482030d (最新修复)
