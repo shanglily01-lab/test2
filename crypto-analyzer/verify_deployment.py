@@ -97,16 +97,17 @@ def verify_weights(cursor) -> Dict:
 
     if count > 0:
         cursor.execute("""
-            SELECT component_name, position_side, weight, last_updated
+            SELECT signal_component, weight_long, weight_short, last_adjusted
             FROM signal_scoring_weights
-            ORDER BY last_updated DESC
+            WHERE is_active = 1
+            ORDER BY last_adjusted DESC
             LIMIT 5
         """)
         weights = cursor.fetchall()
 
         print("\n最近更新的权重:")
         for w in weights:
-            print(f"  {w['component_name']:20s} {w['position_side']:5s} -> {w['weight']:2.0f}分 (更新: {w['last_updated']})")
+            print(f"  {w['signal_component']:20s} LONG:{w['weight_long']:5.1f} SHORT:{w['weight_short']:5.1f} (更新: {w['last_adjusted']})")
 
         print("\n✅ 信号权重配置正常")
         return {'status': 'ok', 'count': count}
