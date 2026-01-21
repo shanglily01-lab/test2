@@ -769,23 +769,30 @@ async def get_reason_analysis(
             pnl = float(pos['realized_pnl'] or 0)
             is_profit = pnl > 0
 
-            # 开仓原因统计（使用新的解析函数）
+            # 开仓原因统计（使用新的解析函数,区分多空方向）
             entry_code, entry_cn = parse_entry_reason(pos['entry_reason'], pos['entry_signal_type'])
-            if entry_code not in entry_stats:
-                entry_stats[entry_code] = {
-                    "code": entry_code,
-                    "name_cn": entry_cn,
+            side = pos['position_side']
+            side_cn = "做多" if side == 'LONG' else "做空"
+
+            # 创建组合键: code_LONG 或 code_SHORT
+            entry_key = f"{entry_code}_{side}"
+            entry_display = f"{entry_cn}({side_cn})"
+
+            if entry_key not in entry_stats:
+                entry_stats[entry_key] = {
+                    "code": entry_key,
+                    "name_cn": entry_display,
                     "count": 0,
                     "wins": 0,
                     "losses": 0,
                     "total_pnl": 0
                 }
-            entry_stats[entry_code]["count"] += 1
-            entry_stats[entry_code]["total_pnl"] += pnl
+            entry_stats[entry_key]["count"] += 1
+            entry_stats[entry_key]["total_pnl"] += pnl
             if is_profit:
-                entry_stats[entry_code]["wins"] += 1
+                entry_stats[entry_key]["wins"] += 1
             else:
-                entry_stats[entry_code]["losses"] += 1
+                entry_stats[entry_key]["losses"] += 1
 
             # 平仓原因统计（使用新的解析函数）
             close_code, close_cn = parse_close_reason(pos['close_reason'])
