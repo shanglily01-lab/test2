@@ -65,7 +65,7 @@ def verify_signal_components(cursor) -> Dict:
 
         # 显示最新一条
         cursor.execute("""
-            SELECT symbol, side, entry_score, signal_components, open_time
+            SELECT symbol, position_side, entry_score, signal_components, open_time
             FROM futures_positions
             WHERE source = 'smart_trader'
                 AND signal_components IS NOT NULL
@@ -76,7 +76,7 @@ def verify_signal_components(cursor) -> Dict:
         if latest:
             print(f"\n最新记录:")
             print(f"  交易对: {latest['symbol']}")
-            print(f"  方向: {latest['side']}")
+            print(f"  方向: {latest['position_side']}")
             print(f"  得分: {latest['entry_score']}")
             print(f"  组件: {latest['signal_components']}")
             print(f"  时间: {latest['open_time']}")
