@@ -148,6 +148,14 @@ def parse_close_reason(notes: str) -> tuple:
     if '同步' in notes:
         return 'sync_close', '同步平仓'
 
+    # 对冲止损平仓 (新增)
+    if '|hedge_loss_cut' in notes or 'hedge_loss_cut' in notes:
+        return 'hedge_loss_cut', '对冲止损平仓'
+
+    # 反向信号平仓 (新增)
+    if '|reverse_signal' in notes or 'reverse_signal' in notes:
+        return 'reverse_signal', '反向信号平仓'
+
     # 无法识别，返回原始值（截取前20字符）
     display = notes[:20] + '...' if len(notes) > 20 else notes
     return 'other', display
@@ -166,6 +174,16 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
         # 直接匹配
         if signal_type in ENTRY_REASON_MAP:
             return signal_type, ENTRY_REASON_MAP[signal_type]
+
+        # 超级大脑信号类型匹配 (支持整数和浮点数格式)
+        if 'SMART_BRAIN_' in signal_type:
+            import re
+            # 提取分数 (支持 SMART_BRAIN_30 和 SMART_BRAIN_30.0 格式)
+            match = re.search(r'SMART_BRAIN[_-]?(\d+(?:\.\d+)?)', signal_type)
+            if match:
+                score = float(match.group(1))
+                score_int = int(score)
+                return f'SMART_BRAIN_{score_int}', f'超级大脑({score_int}分)'
 
         # 包含匹配
         if 'sustained_trend' in signal_type:
