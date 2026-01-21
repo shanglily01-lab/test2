@@ -393,19 +393,17 @@
                                 <span style="margin-left: 16px;">最后更新: <span id="lastUpdate" class="last-update">--</span></span>
                             </p>
                         </div>
-                        <div class="trading-mode-toggle">
-                            <div class="btn-group" role="group">
-                                <button type="button" class="btn btn-sm btn-primary" id="paperTradingBtn" onclick="switchTradingMode('paper')">
-                                    <i class="bi bi-journals"></i> 模拟交易
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-primary" id="liveTradingBtn" onclick="switchTradingMode('live')">
-                                    <i class="bi bi-currency-exchange"></i> 实盘交易
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
                 <div class="header-actions">
+                    <div class="btn-group" role="group" style="margin-right: 12px;">
+                        <button type="button" class="btn btn-sm btn-primary" id="paperTradingBtn" onclick="switchTradingMode('paper')">
+                            <i class="bi bi-journals"></i> 模拟交易
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="liveTradingBtn" onclick="switchTradingMode('live')">
+                            <i class="bi bi-currency-exchange"></i> 实盘交易
+                        </button>
+                    </div>
                     <button class="btn btn-secondary" onclick="refreshData()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -570,18 +568,10 @@
                 <div class="card slide-up positions-card" style="margin-bottom: 0;">
                     <div class="card-header">
                         <div style="display: flex; gap: var(--spacing-md); align-items: center; flex: 1; flex-wrap: wrap;">
-                            <button class="btn btn-primary" id="tabPositionsTitle" onclick="showPositionsTab('positions')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-md);">
+                            <h2 class="card-title">
                                 <i class="bi bi-briefcase"></i>
                                 <span id="positions-title">持仓中</span>
-                            </button>
-                            <button class="btn btn-secondary" id="tabOrdersTitle" onclick="showPositionsTab('orders')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
-                                <i class="bi bi-hourglass-split"></i>
-                                <span id="orders-title">限价单</span>
-                            </button>
-                            <button class="btn btn-secondary" id="tabCancelledTitle" onclick="showPositionsTab('cancelled')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
-                                <i class="bi bi-x-circle"></i>
-                                <span id="cancelled-title">已取消订单</span>
-                            </button>
+                            </h2>
                         </div>
                         <div class="d-flex align-center gap-md">
                             <button class="btn btn-danger btn-sm" id="closeAllPositionsBtn" onclick="closeAllPositions()" style="display: none; font-size: 12px; padding: 6px 12px;">
@@ -630,74 +620,6 @@
                                 <div class="empty-state-icon">📭</div>
                                 <div class="empty-state-text">暂无持仓</div>
                                 <p class="text-sm text-secondary" style="margin-top: 8px;">系统会每30分钟自动检查投资建议并开仓</p>
-                            </div>
-                        </div>
-                        
-                        <!-- 未成交订单标签页 -->
-                        <div id="ordersTab" style="display: none;">
-                            <div id="ordersLoading" class="loading-overlay" style="min-height: 200px;">
-                                <div class="spinner"></div>
-                            </div>
-                            <div id="ordersTable" style="display: none;">
-                                <div class="tab-content-container">
-                                    <table>
-                                        <thead>
-                                            <tr>
-                                                <th>交易对</th>
-                                                <th>方向</th>
-                                                <th>订单类型</th>
-                                                <th>杠杆</th>
-                                                <th>委托价格</th>
-                                                <th>数量</th>
-                                                <th>已成交</th>
-                                                <th>保证金</th>
-                                                <th>止损价</th>
-                                                <th>止盈价</th>
-                                                <th>来源</th>
-                                                <th>状态</th>
-                                                <th>创建时间</th>
-                                                <th>操作</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="ordersBody">
-                                            <!-- 动态加载 -->
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div class="tab-pagination" id="ordersPagination" style="display: none;">
-                                    <div class="tab-pagination-info">
-                                        显示 <span id="ordersPageStart">0</span> - <span id="ordersPageEnd">0</span> / 共 <span id="ordersTotalRows">0</span> 条
-                                    </div>
-                                    <div class="tab-pagination-controls">
-                                        <label style="color: var(--text-secondary); font-size: 13px; margin-right: var(--spacing-sm);">每页显示:</label>
-                                        <select id="ordersRowsPerPage" class="tab-pagination-select" onchange="changeOrdersRowsPerPage()">
-                                            <option value="10" selected>10</option>
-                                            <option value="20">20</option>
-                                            <option value="50">50</option>
-                                        </select>
-                                        <button class="tab-pagination-btn" id="ordersPrevBtn" onclick="changeOrdersPage(-1)">
-                                            <i class="bi bi-chevron-left"></i> 上一页
-                                        </button>
-                                        <span style="color: var(--text-secondary); font-size: 13px; padding: 0 var(--spacing-md);">
-                                            第 <span id="ordersCurrentPage">1</span> / <span id="ordersTotalPages">1</span> 页
-                                        </span>
-                                        <button class="tab-pagination-btn" id="ordersNextBtn" onclick="changeOrdersPage(1)">
-                                            下一页 <i class="bi bi-chevron-right"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div id="ordersEmpty" class="empty-state" style="display: none;">
-                                <div class="empty-state-icon">⏳</div>
-                                <div class="empty-state-text">暂无限价单</div>
-                            </div>
-                        </div>
-
-                        </div>
-                            </div>
-                            <div id="cancelledEmpty" class="empty-state" style="display: none;">
-                                <div class="empty-state-icon">✅</div>
-                                <div class="empty-state-text">暂无已取消订单</div>
                             </div>
                         </div>
                     </div>
@@ -774,14 +696,6 @@
         let allPositions = [];
         let currentPositionsPage = 1;
         let positionsRowsPerPage = 10;
-
-        let allOrders = [];
-        let currentOrdersPage = 1;
-        let ordersRowsPerPage = 10;
-
-        let allCancelledOrders = [];
-        let currentCancelledPage = 1;
-        let cancelledRowsPerPage = 10;
 
         // 交易模式切换
         function switchTradingMode(mode) {
@@ -1381,54 +1295,6 @@
             return `$${num.toFixed(2)}`;
         }
 
-        // 切换持仓面板标签页
-        function showPositionsTab(tab) {
-            const positionsTab = document.getElementById('positionsTab');
-            const ordersTab = document.getElementById('ordersTab');
-            const cancelledTab = document.getElementById('cancelledTab');
-            const positionsTitle = document.getElementById('tabPositionsTitle');
-            const ordersTitle = document.getElementById('tabOrdersTitle');
-            const cancelledTitle = document.getElementById('tabCancelledTitle');
-
-            // 重置所有标签页样式
-            const resetButton = (btn) => {
-                btn.className = 'btn btn-secondary';
-                btn.style.opacity = '0.7';
-                btn.style.boxShadow = 'var(--shadow-sm)';
-            };
-            const activateButton = (btn) => {
-                btn.className = 'btn btn-primary';
-                btn.style.opacity = '1';
-                btn.style.boxShadow = 'var(--shadow-md)';
-            };
-
-            // 隐藏所有标签页和计数器
-            positionsTab.style.display = 'none';
-            ordersTab.style.display = 'none';
-            cancelledTab.style.display = 'none';
-            document.getElementById('positionCount').style.display = 'none';
-            document.getElementById('orderCount').style.display = 'none';
-            document.getElementById('cancelledCount').style.display = 'none';
-
-            resetButton(positionsTitle);
-            resetButton(ordersTitle);
-            resetButton(cancelledTitle);
-
-            // 根据tab参数显示对应标签页
-            if (tab === 'positions') {
-                positionsTab.style.display = 'block';
-                activateButton(positionsTitle);
-                document.getElementById('positionCount').style.display = 'inline-flex';
-            } else if (tab === 'orders') {
-                ordersTab.style.display = 'block';
-                activateButton(ordersTitle);
-                document.getElementById('orderCount').style.display = 'inline-flex';
-                } else if (tab === 'cancelled') {
-                cancelledTab.style.display = 'block';
-                activateButton(cancelledTitle);
-                document.getElementById('cancelledCount').style.display = 'inline-flex';
-                }
-        }
 
         // 加载所有数据
         async function loadData() {
@@ -1562,103 +1428,6 @@
             currentPositionsPage = 1;
             renderPositionsPage();
         }
-
-        // Orders pagination
-        function updateOrdersPagination(start, end, total, current, totalPages) {
-            document.getElementById('ordersPageStart').textContent = start;
-            document.getElementById('ordersPageEnd').textContent = end;
-            document.getElementById('ordersTotalRows').textContent = total;
-            document.getElementById('ordersCurrentPage').textContent = current;
-            document.getElementById('ordersTotalPages').textContent = totalPages;
-
-            document.getElementById('ordersPrevBtn').disabled = current <= 1;
-            document.getElementById('ordersNextBtn').disabled = current >= totalPages;
-
-            const paginationEl = document.getElementById('ordersPagination');
-            if (paginationEl) {
-                paginationEl.style.display = total > ordersRowsPerPage ? 'flex' : 'none';
-            }
-        }
-
-        function renderOrdersPage() {
-            const ordersBody = document.getElementById('ordersBody');
-            const totalRows = allOrders.length;
-            const totalPages = Math.ceil(totalRows / ordersRowsPerPage);
-
-            const startIndex = (currentOrdersPage - 1) * ordersRowsPerPage;
-            const endIndex = Math.min(startIndex + ordersRowsPerPage, totalRows);
-
-            const pageData = allOrders.slice(startIndex, endIndex);
-
-            ordersBody.innerHTML = pageData.map(order => order.html).join('');
-
-            updateOrdersPagination(startIndex + 1, endIndex, totalRows, currentOrdersPage, totalPages);
-        }
-
-        function changeOrdersPage(direction) {
-            const totalPages = Math.ceil(allOrders.length / ordersRowsPerPage);
-            const newPage = currentOrdersPage + direction;
-
-            if (newPage < 1 || newPage > totalPages) return;
-
-            currentOrdersPage = newPage;
-            renderOrdersPage();
-        }
-
-        function changeOrdersRowsPerPage() {
-            ordersRowsPerPage = parseInt(document.getElementById('ordersRowsPerPage').value);
-            currentOrdersPage = 1;
-            renderOrdersPage();
-        }
-
-        // Cancelled orders pagination
-        function updateCancelledPagination(start, end, total, current, totalPages) {
-            document.getElementById('cancelledPageStart').textContent = start;
-            document.getElementById('cancelledPageEnd').textContent = end;
-            document.getElementById('cancelledTotalRows').textContent = total;
-            document.getElementById('cancelledCurrentPage').textContent = current;
-            document.getElementById('cancelledTotalPages').textContent = totalPages;
-
-            document.getElementById('cancelledPrevBtn').disabled = current <= 1;
-            document.getElementById('cancelledNextBtn').disabled = current >= totalPages;
-
-            const paginationEl = document.getElementById('cancelledPagination');
-            if (paginationEl) {
-                paginationEl.style.display = total > cancelledRowsPerPage ? 'flex' : 'none';
-            }
-        }
-
-        function renderCancelledPage() {
-            const cancelledBody = document.getElementById('cancelledBody');
-            const totalRows = allCancelledOrders.length;
-            const totalPages = Math.ceil(totalRows / cancelledRowsPerPage);
-
-            const startIndex = (currentCancelledPage - 1) * cancelledRowsPerPage;
-            const endIndex = Math.min(startIndex + cancelledRowsPerPage, totalRows);
-
-            const pageData = allCancelledOrders.slice(startIndex, endIndex);
-
-            cancelledBody.innerHTML = pageData.map(order => order.html).join('');
-
-            updateCancelledPagination(startIndex + 1, endIndex, totalRows, currentCancelledPage, totalPages);
-        }
-
-        function changeCancelledPage(direction) {
-            const totalPages = Math.ceil(allCancelledOrders.length / cancelledRowsPerPage);
-            const newPage = currentCancelledPage + direction;
-
-            if (newPage < 1 || newPage > totalPages) return;
-
-            currentCancelledPage = newPage;
-            renderCancelledPage();
-        }
-
-        function changeCancelledRowsPerPage() {
-            cancelledRowsPerPage = parseInt(document.getElementById('cancelledRowsPerPage').value);
-            currentCancelledPage = 1;
-            renderCancelledPage();
-        }
-
         // ========== End Pagination Functions ==========
 
         // 加载持仓
