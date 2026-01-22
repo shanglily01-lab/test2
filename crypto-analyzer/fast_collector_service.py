@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 """
 快速数据采集服务
-专门采集超级大脑需要的核心数据：K线、价格
+专门采集超级大脑需要的5m K线数据
 每5分钟运行一次，独立于其他采集器
+
+注意：实时价格由 WebSocket 服务提供，不在此采集
 """
 
 import sys
@@ -56,7 +58,8 @@ class FastCollectorService:
         """持续运行采集服务"""
         logger.info("=" * 60)
         logger.info("快速数据采集服务启动")
-        logger.info("专门采集: K线数据 + 价格数据")
+        logger.info("专门采集: 5m K线数据")
+        logger.info("实时价格: 由 WebSocket 服务提供")
         logger.info("=" * 60)
 
         cycle_count = 0

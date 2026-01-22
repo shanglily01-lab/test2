@@ -1,7 +1,9 @@
 """
 快速合约数据采集器
-专门为超级大脑优化，只采集核心数据：K线、价格
+专门为超级大脑优化，采集5m K线数据
 使用并发请求，减少延迟
+
+注意：实时价格由 WebSocket 服务(binance_ws_price.py)提供，不在此采集
 """
 
 import asyncio
@@ -310,6 +312,7 @@ class FastFuturesCollector:
     async def run_collection_cycle(self):
         """
         执行一次完整的采集周期
+        注意：只采集K线数据，实时价格由 WebSocket 服务提供
         """
         start_time = datetime.now()
         logger.info("=" * 60)
@@ -323,8 +326,8 @@ class FastFuturesCollector:
 
         logger.info(f"目标: {len(symbols)} 个交易对")
 
-        # 1. 采集K线数据
-        logger.info("采集K线数据...")
+        # 采集K线数据（5m周期）
+        logger.info("采集5m K线数据...")
         klines = await self.collect_batch(symbols, 'kline')
         logger.info(f"成功获取 {len(klines)}/{len(symbols)} 条K线")
 
@@ -332,20 +335,13 @@ class FastFuturesCollector:
         if klines:
             self.save_klines(klines)
 
-        # 2. 采集价格数据
-        logger.info("采集价格数据...")
-        prices = await self.collect_batch(symbols, 'price')
-        logger.info(f"成功获取 {len(prices)}/{len(symbols)} 条价格")
-
-        # 保存价格
-        if prices:
-            self.save_prices(prices)
+        # 注意：不再采集价格数据，实时价格由 binance_ws_price.py 的 WebSocket 服务提供
+        # 合约交易需要毫秒级的实时价格推送，而不是每5分钟的轮询
 
         # 统计
         elapsed = (datetime.now() - start_time).total_seconds()
         logger.info(f"✓ 采集周期完成，耗时 {elapsed:.2f} 秒")
         logger.info(f"  K线: {len(klines)}/{len(symbols)}")
-        logger.info(f"  价格: {len(prices)}/{len(symbols)}")
         logger.info("=" * 60)
 
 
