@@ -277,37 +277,46 @@ class FastFuturesCollector:
 
     def get_trading_symbols(self) -> List[str]:
         """
-        从数据库获取需要监控的交易对列表
+        从config.yaml获取需要监控的交易对列表
 
         Returns:
             交易对列表（币安格式，如 ['BTCUSDT', 'ETHUSDT']）
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
         try:
-            # 从 hyperliquid_tokens 获取活跃交易对
-            cursor.execute("""
-                SELECT DISTINCT symbol
-                FROM hyperliquid_tokens
-                WHERE is_active = 1
-                ORDER BY symbol
-            """)
+            import yaml
+            from pathlib import Path
 
-            tokens = cursor.fetchall()
+            # 查找config.yaml文件
+            config_path = Path(__file__).parent.parent.parent / 'config.yaml'
+
+            if not config_path.exists():
+                logger.error(f"配置文件不存在: {config_path}")
+                return []
+
+            # 读取配置文件
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                symbols_list = config.get('symbols', [])
+
+            if not symbols_list:
+                logger.warning("配置文件中没有找到交易对列表")
+                return []
 
             # 转换为币安格式: BTC/USDT -> BTCUSDT
-            symbols = [token['symbol'].replace('/USDT', 'USDT') for token in tokens]
+            symbols = [s.replace('/', '') for s in symbols_list]
 
-            logger.info(f"获取 {len(symbols)} 个活跃交易对")
+            logger.info(f"从配置文件获取 {len(symbols)} 个交易对")
             return symbols
 
         except Exception as e:
             logger.error(f"获取交易对列表失败: {e}")
-            return []
-        finally:
-            cursor.close()
-            conn.close()
+            # 降级：返回默认交易对列表
+            default_symbols = [
+                'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
+                'ADAUSDT', 'DOGEUSDT', 'MATICUSDT', 'DOTUSDT', 'LTCUSDT'
+            ]
+            logger.info(f"使用默认交易对列表: {len(default_symbols)} 个")
+            return default_symbols
 
     async def run_collection_cycle(self):
         """
