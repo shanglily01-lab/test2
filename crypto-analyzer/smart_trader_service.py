@@ -796,13 +796,46 @@ class SmartTraderService:
                         WHERE id = %s
                     """, (current_price, realized_pnl, get_local_time(), get_local_time(), pos_id))
 
-                    # Create futures_trades record for frontend display
+                    # Calculate values for orders and trades
                     import uuid
-                    trade_id = str(uuid.uuid4())
                     close_side = 'CLOSE_LONG' if position_side == 'LONG' else 'CLOSE_SHORT'
                     notional_value = current_price * float(quantity)
                     fee = notional_value * 0.0004  # 0.04% taker fee
+                    order_id = f'CLOSE-{pos_id}'
+                    trade_id = str(uuid.uuid4())
 
+                    # Create futures_orders record for close reason
+                    cursor.execute("""
+                        INSERT INTO futures_orders (
+                            account_id, order_id, position_id, symbol,
+                            side, order_type, leverage,
+                            price, quantity, executed_quantity,
+                            total_value, executed_value,
+                            fee, fee_rate, status,
+                            avg_fill_price, fill_time,
+                            realized_pnl, pnl_pct,
+                            order_source, notes
+                        ) VALUES (
+                            %s, %s, %s, %s,
+                            %s, 'MARKET', %s,
+                            %s, %s, %s,
+                            %s, %s,
+                            %s, %s, 'FILLED',
+                            %s, %s,
+                            %s, %s,
+                            'smart_trader', '止盈止损'
+                        )
+                    """, (
+                        self.account_id, order_id, pos_id, symbol,
+                        close_side, leverage,
+                        current_price, quantity, quantity,
+                        notional_value, notional_value,
+                        fee, 0.0004,
+                        current_price, get_local_time(),
+                        realized_pnl, pnl_pct
+                    ))
+
+                    # Create futures_trades record for frontend display
                     cursor.execute("""
                         INSERT INTO futures_trades (
                             trade_id, position_id, account_id, symbol, side,
@@ -915,12 +948,46 @@ class SmartTraderService:
                     WHERE id = %s
                 """, (current_price, realized_pnl, get_local_time(), get_local_time(), pos_id))
 
-                # Create futures_trades record for frontend display
+                # Calculate values for orders and trades
                 import uuid
-                trade_id = str(uuid.uuid4())
                 close_side = 'CLOSE_LONG' if position_side == 'LONG' else 'CLOSE_SHORT'
                 notional_value = current_price * float(quantity)
                 fee = notional_value * 0.0004  # 0.04% taker fee
+                order_id = f'TIMEOUT-{pos_id}'
+                trade_id = str(uuid.uuid4())
+
+                # Create futures_orders record for close reason
+                cursor.execute("""
+                    INSERT INTO futures_orders (
+                        account_id, order_id, position_id, symbol,
+                        side, order_type, leverage,
+                        price, quantity, executed_quantity,
+                        total_value, executed_value,
+                        fee, fee_rate, status,
+                        avg_fill_price, fill_time,
+                        realized_pnl, pnl_pct,
+                        order_source, notes
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, 'MARKET', %s,
+                        %s, %s, %s,
+                        %s, %s,
+                        %s, %s, 'FILLED',
+                        %s, %s,
+                        %s, %s,
+                        'smart_trader', '超时平仓(4小时)'
+                    )
+                """, (
+                    self.account_id, order_id, pos_id, symbol,
+                    close_side, leverage,
+                    current_price, quantity, quantity,
+                    notional_value, notional_value,
+                    fee, 0.0004,
+                    current_price, get_local_time(),
+                    realized_pnl, pnl_pct
+                ))
+
+                # Create futures_trades record for frontend display
 
                 cursor.execute("""
                     INSERT INTO futures_trades (
@@ -1075,12 +1142,45 @@ class SmartTraderService:
                                 WHERE id = %s
                             """, (current_price, long_pos['realized_pnl'], get_local_time(), get_local_time(), long_pos['id']))
 
-                            # Create futures_trades record for frontend display
+                            # Calculate values for orders and trades
                             import uuid
-                            trade_id = str(uuid.uuid4())
                             notional_value = current_price * long_pos['quantity']
                             fee = notional_value * 0.0004
+                            order_id = f"HEDGE-{long_pos['id']}"
+                            trade_id = str(uuid.uuid4())
 
+                            # Create futures_orders record for close reason
+                            cursor.execute("""
+                                INSERT INTO futures_orders (
+                                    account_id, order_id, position_id, symbol,
+                                    side, order_type, leverage,
+                                    price, quantity, executed_quantity,
+                                    total_value, executed_value,
+                                    fee, fee_rate, status,
+                                    avg_fill_price, fill_time,
+                                    realized_pnl, pnl_pct,
+                                    order_source, notes
+                                ) VALUES (
+                                    %s, %s, %s, %s,
+                                    %s, 'MARKET', %s,
+                                    %s, %s, %s,
+                                    %s, %s,
+                                    %s, %s, 'FILLED',
+                                    %s, %s,
+                                    %s, %s,
+                                    'smart_trader', '对冲平仓(亏损止损)'
+                                )
+                            """, (
+                                self.account_id, order_id, long_pos['id'], symbol,
+                                'CLOSE_LONG', leverage,
+                                current_price, long_pos['quantity'], long_pos['quantity'],
+                                notional_value, notional_value,
+                                fee, 0.0004,
+                                current_price, get_local_time(),
+                                long_pos['realized_pnl'], long_pos['pnl_pct']
+                            ))
+
+                            # Create futures_trades record for frontend display
                             cursor.execute("""
                                 INSERT INTO futures_trades (
                                     trade_id, position_id, account_id, symbol, side,
@@ -1147,12 +1247,45 @@ class SmartTraderService:
                                 WHERE id = %s
                             """, (current_price, short_pos['realized_pnl'], get_local_time(), get_local_time(), short_pos['id']))
 
-                            # Create futures_trades record for frontend display
+                            # Calculate values for orders and trades
                             import uuid
-                            trade_id = str(uuid.uuid4())
                             notional_value = current_price * short_pos['quantity']
                             fee = notional_value * 0.0004
+                            order_id = f"HEDGE-{short_pos['id']}"
+                            trade_id = str(uuid.uuid4())
 
+                            # Create futures_orders record for close reason
+                            cursor.execute("""
+                                INSERT INTO futures_orders (
+                                    account_id, order_id, position_id, symbol,
+                                    side, order_type, leverage,
+                                    price, quantity, executed_quantity,
+                                    total_value, executed_value,
+                                    fee, fee_rate, status,
+                                    avg_fill_price, fill_time,
+                                    realized_pnl, pnl_pct,
+                                    order_source, notes
+                                ) VALUES (
+                                    %s, %s, %s, %s,
+                                    %s, 'MARKET', %s,
+                                    %s, %s, %s,
+                                    %s, %s,
+                                    %s, %s, 'FILLED',
+                                    %s, %s,
+                                    %s, %s,
+                                    'smart_trader', '对冲平仓(亏损止损)'
+                                )
+                            """, (
+                                self.account_id, order_id, short_pos['id'], symbol,
+                                'CLOSE_SHORT', leverage,
+                                current_price, short_pos['quantity'], short_pos['quantity'],
+                                notional_value, notional_value,
+                                fee, 0.0004,
+                                current_price, get_local_time(),
+                                short_pos['realized_pnl'], short_pos['pnl_pct']
+                            ))
+
+                            # Create futures_trades record for frontend display
                             cursor.execute("""
                                 INSERT INTO futures_trades (
                                     trade_id, position_id, account_id, symbol, side,
@@ -1169,7 +1302,7 @@ class SmartTraderService:
                                 trade_id, short_pos['id'], self.account_id, symbol, 'CLOSE_SHORT',
                                 current_price, short_pos['quantity'], notional_value, leverage, margin,
                                 fee, short_pos['realized_pnl'], short_pos['pnl_pct'], roi, short_pos['entry_price'],
-                                f"HEDGE-{short_pos['id']}", get_local_time(), get_local_time()
+                                order_id, get_local_time(), get_local_time()
                             ))
 
                             # Update account balance
@@ -1299,13 +1432,46 @@ class SmartTraderService:
                     WHERE id = %s
                 """, (current_price, realized_pnl, get_local_time(), get_local_time(), reason, pos['id']))
 
-                # Create futures_trades record for frontend display
+                # Calculate values for orders and trades
                 import uuid
-                trade_id = str(uuid.uuid4())
                 close_side = 'CLOSE_LONG' if side == 'LONG' else 'CLOSE_SHORT'
                 notional_value = current_price * quantity
                 fee = notional_value * 0.0004
+                order_id = f"REVERSE-{pos['id']}"
+                trade_id = str(uuid.uuid4())
 
+                # Create futures_orders record for close reason
+                cursor.execute("""
+                    INSERT INTO futures_orders (
+                        account_id, order_id, position_id, symbol,
+                        side, order_type, leverage,
+                        price, quantity, executed_quantity,
+                        total_value, executed_value,
+                        fee, fee_rate, status,
+                        avg_fill_price, fill_time,
+                        realized_pnl, pnl_pct,
+                        order_source, notes
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, 'MARKET', %s,
+                        %s, %s, %s,
+                        %s, %s,
+                        %s, %s, 'FILLED',
+                        %s, %s,
+                        %s, %s,
+                        'smart_trader', '反向信号平仓'
+                    )
+                """, (
+                    self.account_id, order_id, pos['id'], symbol,
+                    close_side, leverage,
+                    current_price, quantity, quantity,
+                    notional_value, notional_value,
+                    fee, 0.0004,
+                    current_price, get_local_time(),
+                    realized_pnl, pnl_pct
+                ))
+
+                # Create futures_trades record for frontend display
                 cursor.execute("""
                     INSERT INTO futures_trades (
                         trade_id, position_id, account_id, symbol, side,
@@ -1322,7 +1488,7 @@ class SmartTraderService:
                     trade_id, pos['id'], self.account_id, symbol, close_side,
                     current_price, quantity, notional_value, leverage, margin,
                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                    f"REVERSE-{pos['id']}", get_local_time(), get_local_time()
+                    order_id, get_local_time(), get_local_time()
                 ))
 
                 # Update account balance
