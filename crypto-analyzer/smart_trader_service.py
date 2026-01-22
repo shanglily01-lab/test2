@@ -856,8 +856,16 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # 先检查有多少开仓持仓
             cursor.execute("""
-                SELECT id, symbol, position_side, quantity, entry_price
+                SELECT COUNT(*) FROM futures_positions
+                WHERE status = 'open' AND account_id = %s
+            """, (self.account_id,))
+            total_open = cursor.fetchone()[0]
+
+            cursor.execute("""
+                SELECT id, symbol, position_side, quantity, entry_price, created_at,
+                       TIMESTAMPDIFF(HOUR, created_at, NOW()) as hours_old
                 FROM futures_positions
                 WHERE status = 'open' AND account_id = %s
                 AND created_at < DATE_SUB(NOW(), INTERVAL 6 HOUR)
@@ -865,7 +873,17 @@ class SmartTraderService:
 
             old_positions = cursor.fetchall()
 
+            if total_open > 0:
+                logger.info(f"[TIMEOUT_CHECK] 总持仓: {total_open}, 超时持仓(>6h): {len(old_positions)}")
+
+            if not old_positions:
+                cursor.close()
+                return
+
             for pos in old_positions:
+                pos_id, symbol, position_side, quantity, entry_price, created_at, hours_old = pos
+
+                logger.info(f"[TIMEOUT_FOUND] {symbol} {position_side} 已持仓 {hours_old} 小时 (创建于 {created_at})")
                 pos_id, symbol, position_side, quantity, entry_price = pos
                 current_price = self.get_current_price(symbol)
                 if not current_price:
