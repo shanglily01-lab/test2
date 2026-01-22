@@ -191,9 +191,9 @@ class UnifiedDataScheduler:
 
             for symbol in self.symbols:
                 try:
-                    # 1. 采集实时价格数据 (1m和5m任务都采集) - 自动从所有交易所采集
-                    if timeframe in ['1m', '5m']:
-                        await self._collect_ticker(symbol)
+                    # 1. 实时价格数据已改用 WebSocket 推送，不再轮询采集
+                    # if timeframe in ['1m', '5m']:
+                    #     await self._collect_ticker(symbol)
 
                     # 2. 采集K线数据 - 目前只从Binance采集
                     await self._collect_klines(symbol, timeframe)

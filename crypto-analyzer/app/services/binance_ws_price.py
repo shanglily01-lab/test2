@@ -1,8 +1,11 @@
 """
 币安 WebSocket 实时价格服务
 
-使用币安合约 WebSocket 获取实时价格推送，用于高频监控移动止盈/止损
-不再依赖轮询，价格变动即时触发回调
+支持现货和合约市场的实时价格推送
+- 合约市场: 使用 markPrice 标记价格（避免操纵）
+- 现货市场: 使用 ticker 价格（实时成交价）
+
+用于高频监控移动止盈/止损，不再依赖轮询
 """
 
 import asyncio
@@ -19,12 +22,20 @@ except ImportError:
 
 
 class BinanceWSPriceService:
-    """币安 WebSocket 实时价格服务"""
+    """币安 WebSocket 实时价格服务 - 支持现货和合约"""
 
-    # 币安合约 WebSocket 地址
-    WS_BASE_URL = "wss://fstream.binance.com/ws"
+    # 币安 WebSocket 地址
+    WS_FUTURES_URL = "wss://fstream.binance.com/ws"  # 合约
+    WS_SPOT_URL = "wss://stream.binance.com:9443/ws"  # 现货
 
-    def __init__(self):
+    def __init__(self, market_type: str = 'futures'):
+        """
+        初始化 WebSocket 服务
+
+        Args:
+            market_type: 市场类型 'futures' 或 'spot'
+        """
+        self.market_type = market_type
         self.prices: Dict[str, float] = {}  # symbol -> price
         self.max_prices: Dict[str, float] = {}  # symbol -> max_price (用于做多)
         self.min_prices: Dict[str, float] = {}  # symbol -> min_price (用于做空)
@@ -119,15 +130,20 @@ class BinanceWSPriceService:
             self.min_prices[symbol] = self.prices[symbol]
 
     def _symbol_to_stream(self, symbol: str) -> str:
-        """转换交易对格式：BTC/USDT -> btcusdt@markPrice"""
+        """转换交易对格式：BTC/USDT -> btcusdt@markPrice 或 btcusdt@ticker"""
         # 移除斜杠并转小写
         stream_symbol = symbol.replace('/', '').lower()
-        # 使用 markPrice 流获取实时标记价格
-        return f"{stream_symbol}@markPrice@1s"  # 每秒更新
+
+        if self.market_type == 'futures':
+            # 合约: 使用 markPrice 流获取实时标记价格（避免操纵）
+            return f"{stream_symbol}@markPrice@1s"  # 每秒更新
+        else:
+            # 现货: 使用 ticker 流获取实时价格
+            return f"{stream_symbol}@ticker"  # 实时推送
 
     def _stream_to_symbol(self, stream: str) -> str:
         """转换流名称回交易对格式：btcusdt -> BTC/USDT"""
-        # 从 btcusdt@markPrice 提取 btcusdt
+        # 从 btcusdt@markPrice 或 btcusdt@ticker 提取 btcusdt
         base = stream.split('@')[0].upper()
         # 假设都是 USDT 交易对
         if base.endswith('USDT'):
@@ -222,12 +238,20 @@ class BinanceWSPriceService:
             if 'result' in data or 'id' in data:
                 return
 
-            # 处理 markPrice 消息
-            if 'e' in data and data['e'] == 'markPriceUpdate':
-                stream_symbol = data['s'].lower()  # BTCUSDT -> btcusdt
-                symbol = self._stream_to_symbol(stream_symbol)
-                price = float(data['p'])  # 标记价格
-                self._on_price_update(symbol, price)
+            if self.market_type == 'futures':
+                # 处理合约 markPrice 消息
+                if 'e' in data and data['e'] == 'markPriceUpdate':
+                    stream_symbol = data['s'].lower()  # BTCUSDT -> btcusdt
+                    symbol = self._stream_to_symbol(stream_symbol)
+                    price = float(data['p'])  # 标记价格
+                    self._on_price_update(symbol, price)
+            else:
+                # 处理现货 ticker 消息
+                if 'e' in data and data['e'] == '24hrTicker':
+                    stream_symbol = data['s'].lower()  # BTCUSDT -> btcusdt
+                    symbol = self._stream_to_symbol(stream_symbol)
+                    price = float(data['c'])  # 最新成交价
+                    self._on_price_update(symbol, price)
 
         except json.JSONDecodeError:
             logger.warning(f"WebSocket 消息解析失败: {message[:100]}")
@@ -242,14 +266,18 @@ class BinanceWSPriceService:
 
         while self.running:
             try:
+                # 选择正确的 WebSocket URL
+                base_url = self.WS_FUTURES_URL if self.market_type == 'futures' else self.WS_SPOT_URL
+
                 # 构建订阅 URL
                 if self.subscribed_symbols:
                     streams = [self._symbol_to_stream(s) for s in self.subscribed_symbols]
-                    url = f"{self.WS_BASE_URL}/{'/'.join(streams)}"
+                    url = f"{base_url}/{'/'.join(streams)}"
                 else:
-                    url = self.WS_BASE_URL
+                    url = base_url
 
-                logger.info(f"WebSocket 连接中: {url[:80]}...")
+                market_label = "合约" if self.market_type == 'futures' else "现货"
+                logger.info(f"WebSocket [{market_label}] 连接中: {url[:80]}...")
 
                 async with websockets.connect(url, ping_interval=20, ping_timeout=10) as ws:
                     self.ws = ws
@@ -342,20 +370,41 @@ class BinanceWSPriceService:
 
 
 # 全局单例
-_ws_price_service: Optional[BinanceWSPriceService] = None
+_ws_price_service_futures: Optional[BinanceWSPriceService] = None
+_ws_price_service_spot: Optional[BinanceWSPriceService] = None
 
 
-def get_ws_price_service() -> BinanceWSPriceService:
-    """获取 WebSocket 价格服务单例"""
-    global _ws_price_service
-    if _ws_price_service is None:
-        _ws_price_service = BinanceWSPriceService()
-    return _ws_price_service
+def get_ws_price_service(market_type: str = 'futures') -> BinanceWSPriceService:
+    """
+    获取 WebSocket 价格服务单例
+
+    Args:
+        market_type: 市场类型 'futures' 或 'spot'
+
+    Returns:
+        对应市场的 WebSocket 服务实例
+    """
+    global _ws_price_service_futures, _ws_price_service_spot
+
+    if market_type == 'futures':
+        if _ws_price_service_futures is None:
+            _ws_price_service_futures = BinanceWSPriceService(market_type='futures')
+        return _ws_price_service_futures
+    else:
+        if _ws_price_service_spot is None:
+            _ws_price_service_spot = BinanceWSPriceService(market_type='spot')
+        return _ws_price_service_spot
 
 
-async def init_ws_price_service(symbols: List[str] = None) -> BinanceWSPriceService:
-    """初始化并启动 WebSocket 价格服务"""
-    service = get_ws_price_service()
+async def init_ws_price_service(symbols: List[str] = None, market_type: str = 'futures') -> BinanceWSPriceService:
+    """
+    初始化并启动 WebSocket 价格服务
+
+    Args:
+        symbols: 要订阅的交易对列表
+        market_type: 市场类型 'futures' 或 'spot'
+    """
+    service = get_ws_price_service(market_type)
     if not service.is_running():
         # 在后台启动
         asyncio.create_task(service.start(symbols))
