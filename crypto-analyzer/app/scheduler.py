@@ -3,15 +3,15 @@
 整合所有数据源的采集任务，按照不同频率定时执行
 
 采集频率：
-- Binance 现货数据: 1m(每5秒), 5m, 1h, 1d
-- Binance 合约数据: 每5秒 (价格、K线、资金费率、持仓量、多空比)
+- Binance 现货数据: 5m, 15m, 1h, 1d (移除了1m高频采集)
+- Binance 合约数据: 由 fast_collector_service.py 单独采集 (5m K线 + 价格)
 - Ethereum 链上数据: 5m, 1h, 1d
 - Hyperliquid 排行榜: 每天一次
 - 资金费率 (Binance): 每5分钟
 - 新闻数据: 每15分钟
 
 缓存更新频率（性能优化）：
-- 价格统计缓存: 每15秒
+- 价格统计缓存: 已移除高频更新
 - 分析缓存 (技术指标、新闻情绪、资金费率、投资建议): 每5分钟
 - Hyperliquid聚合缓存: 每10分钟
 """
@@ -948,10 +948,11 @@ class UnifiedDataScheduler:
         exchanges_str = ' + '.join(enabled_exchanges) if enabled_exchanges else 'Binance'
 
         # 1. 现货数据 (Binance)
-        schedule.every(5).seconds.do(
-            lambda: asyncio.run(self.collect_binance_data('1m'))
-        )
-        logger.info(f"  ✓ 现货({exchanges_str}) 1分钟数据 - 每 5 秒")
+        # 注意: 1m K线数据采集已移除，使用5m作为最小周期
+        # schedule.every(5).seconds.do(
+        #     lambda: asyncio.run(self.collect_binance_data('1m'))
+        # )
+        # logger.info(f"  ✓ 现货({exchanges_str}) 1分钟数据 - 每 5 秒")
 
         schedule.every(5).minutes.do(
             lambda: asyncio.run(self.collect_binance_data('5m'))
@@ -1104,11 +1105,11 @@ class UnifiedDataScheduler:
         # 7. 缓存更新任务
         logger.info("\n  🚀 性能优化: 缓存自动更新")
 
-        # 价格缓存 - 每30秒
-        schedule.every(15).seconds.do(
-            lambda: asyncio.run(self.update_price_cache())
-        )
-        logger.info("  ✓ 价格统计缓存 - 每 15 秒")
+        # 价格缓存 - 移除高频更新，改为与5m数据同步
+        # schedule.every(15).seconds.do(
+        #     lambda: asyncio.run(self.update_price_cache())
+        # )
+        # logger.info("  ✓ 价格统计缓存 - 每 15 秒")
 
         # 分析缓存 - 每5分钟
         schedule.every(5).minutes.do(
@@ -1123,12 +1124,12 @@ class UnifiedDataScheduler:
             )
             logger.info("  ✓ Hyperliquid聚合缓存 - 每 10 分钟")
 
-        # 模拟合约总权益更新 - 每30秒
-        if self.futures_engine:
-            schedule.every(30).seconds.do(
-                self.update_futures_accounts_equity
-            )
-            logger.info("  ✓ 模拟合约总权益更新 - 每 30 秒")
+        # 模拟合约总权益更新 - 移除高频更新
+        # if self.futures_engine:
+        #     schedule.every(30).seconds.do(
+        #         self.update_futures_accounts_equity
+        #     )
+        #     logger.info("  ✓ 模拟合约总权益更新 - 每 30 秒")
 
         logger.info("所有定时任务设置完成")
 
@@ -1138,9 +1139,9 @@ class UnifiedDataScheduler:
         logger.info("首次数据采集开始...")
         logger.info("=" * 80 + "\n")
 
-        # 1. Binance 现货数据 (先采集1分钟数据，获取最新价格)
-        await self.collect_binance_data('1m')
-        await asyncio.sleep(2)
+        # 1. Binance 现货数据 (从5分钟数据开始，不再采集1m)
+        # await self.collect_binance_data('1m')
+        # await asyncio.sleep(2)
 
         await self.collect_binance_data('5m')
         await asyncio.sleep(2)
