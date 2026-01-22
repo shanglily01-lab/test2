@@ -358,7 +358,7 @@ class SmartDecisionBrain:
                     'stop_loss': sr_data['support'],
                     'take_profit': sr_data['resistance'],
                     'risk_reward': sr_data['risk_reward'],
-                    'max_hold_minutes': 360  # 6小时最大持仓
+                    'max_hold_minutes': 240  # 4小时最大持仓
                 }
 
             return result

@@ -1102,7 +1102,7 @@ class FuturesTradingEngine:
                 'manual': '手动平仓',
                 'strategy': '策略平仓',
                 'liquidation': '强制平仓',
-                'MAX_HOLD_TIME': '超时平仓(6小时)'
+                'MAX_HOLD_TIME': '超时平仓(4小时)'
             }
             notes_reason = reason_map.get(reason, reason)
 
