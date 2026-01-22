@@ -222,5 +222,5 @@ cursor.close()
 conn.close()
 
 print()
-print("现在用户应该能在"合约交易页面"看到这些记录了")
+print("现在用户应该能在\"合约交易页面\"看到这些记录了")
 print("=" * 80)
