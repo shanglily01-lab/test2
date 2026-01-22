@@ -457,14 +457,14 @@ class SmartTraderService:
         return self.connection
 
     def get_current_price(self, symbol: str):
-        """获取当前价格 - 带数据新鲜度检查"""
+        """获取当前价格 - 带数据新鲜度检查 (使用5m K线)"""
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT close_price, open_time
                 FROM kline_data
-                WHERE symbol = %s AND timeframe = '1m'
+                WHERE symbol = %s AND timeframe = '5m'
                 ORDER BY open_time DESC LIMIT 1
             """, (symbol,))
             result = cursor.fetchone()
@@ -475,12 +475,12 @@ class SmartTraderService:
 
             close_price, open_time = result
 
-            # 检查数据新鲜度: K线时间不能超过5分钟前
+            # 检查数据新鲜度: 5m K线数据不能超过10分钟前
             import time
             current_timestamp_ms = int(time.time() * 1000)
             data_age_minutes = (current_timestamp_ms - open_time) / 1000 / 60
 
-            if data_age_minutes > 5:
+            if data_age_minutes > 10:
                 logger.warning(
                     f"[DATA_STALE] {symbol} K线数据过时! "
                     f"最新K线时间: {data_age_minutes:.1f}分钟前, 拒绝使用"
