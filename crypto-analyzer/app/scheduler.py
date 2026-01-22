@@ -1149,10 +1149,10 @@ class UnifiedDataScheduler:
         await self.collect_binance_data('15m')
         await asyncio.sleep(2)
 
-        # 1.5 Binance 合约数据
-        if self.futures_collector:
-            await self.collect_binance_futures_data()
-            await asyncio.sleep(2)
+        # 1.5 Binance 合约数据 - 已移至 fast_collector_service.py
+        # if self.futures_collector:
+        #     await self.collect_binance_futures_data()
+        #     await asyncio.sleep(2)
 
         # 2. 资金费率
         await self.collect_funding_rates()
