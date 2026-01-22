@@ -9,7 +9,7 @@ import time
 import sys
 import os
 import asyncio
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timezone, timedelta
 from decimal import Decimal
 from loguru import logger
 import pymysql
@@ -22,6 +22,13 @@ from app.services.adaptive_optimizer import AdaptiveOptimizer
 
 # 加载环境变量
 load_dotenv()
+
+# 定义本地时区（UTC+8）
+LOCAL_TIMEZONE = timezone(timedelta(hours=8))
+
+def get_local_time() -> datetime:
+    """获取本地时间（UTC+8）"""
+    return datetime.now(LOCAL_TIMEZONE).replace(tzinfo=None)
 
 # 配置日志
 logger.remove()
@@ -806,14 +813,37 @@ class SmartTraderService:
                             %s, %s, %s, %s, %s,
                             %s, %s, %s, %s, %s,
                             %s, %s, %s, %s, %s,
-                            %s, NOW(), NOW()
+                            %s, %s, %s
                         )
                     """, (
                         trade_id, pos_id, self.account_id, symbol, close_side,
                         current_price, quantity, notional_value, leverage, margin,
                         fee, realized_pnl, pnl_pct, roi, entry_price,
-                        f'CLOSE-{pos_id}'
+                        f'CLOSE-{pos_id}', get_local_time(), get_local_time()
                     ))
+
+                    # Update account balance
+                    cursor.execute("""
+                        UPDATE paper_trading_accounts
+                        SET current_balance = current_balance + %s + %s,
+                            frozen_balance = frozen_balance - %s,
+                            realized_pnl = realized_pnl + %s,
+                            total_trades = total_trades + 1,
+                            winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                            losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                        WHERE id = %s
+                    """, (
+                        float(margin), float(realized_pnl), float(margin),
+                        float(realized_pnl), float(realized_pnl), float(realized_pnl),
+                        self.account_id
+                    ))
+
+                    # Update win rate
+                    cursor.execute("""
+                        UPDATE paper_trading_accounts
+                        SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                        WHERE id = %s
+                    """, (self.account_id,))
 
             cursor.close()
 
@@ -884,14 +914,37 @@ class SmartTraderService:
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
-                        %s, NOW(), NOW()
+                        %s, %s, %s
                     )
                 """, (
                     trade_id, pos_id, self.account_id, symbol, close_side,
                     current_price, quantity, notional_value, leverage, margin,
                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                    f'TIMEOUT-{pos_id}'
+                    f'TIMEOUT-{pos_id}', get_local_time(), get_local_time()
                 ))
+
+                # Update account balance
+                cursor.execute("""
+                    UPDATE paper_trading_accounts
+                    SET current_balance = current_balance + %s + %s,
+                        frozen_balance = frozen_balance - %s,
+                        realized_pnl = realized_pnl + %s,
+                        total_trades = total_trades + 1,
+                        winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                        losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                    WHERE id = %s
+                """, (
+                    float(margin), float(realized_pnl), float(margin),
+                    float(realized_pnl), float(realized_pnl), float(realized_pnl),
+                    self.account_id
+                ))
+
+                # Update win rate
+                cursor.execute("""
+                    UPDATE paper_trading_accounts
+                    SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                    WHERE id = %s
+                """, (self.account_id,))
 
             cursor.close()
 
@@ -1020,14 +1073,36 @@ class SmartTraderService:
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
-                                    %s, NOW(), NOW()
+                                    %s, %s, %s
                                 )
                             """, (
                                 trade_id, long_pos['id'], self.account_id, symbol, 'CLOSE_LONG',
                                 current_price, long_pos['quantity'], notional_value, leverage, margin,
                                 fee, long_pos['realized_pnl'], long_pos['pnl_pct'], roi, long_pos['entry_price'],
-                                f"HEDGE-{long_pos['id']}"
+                                f"HEDGE-{long_pos['id']}", get_local_time(), get_local_time()
                             ))
+
+                            # Update account balance
+                            cursor.execute("""
+                                UPDATE paper_trading_accounts
+                                SET current_balance = current_balance + %s + %s,
+                                    frozen_balance = frozen_balance - %s,
+                                    realized_pnl = realized_pnl + %s,
+                                    total_trades = total_trades + 1,
+                                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                                WHERE id = %s
+                            """, (
+                                float(margin), float(long_pos['realized_pnl']), float(margin),
+                                float(long_pos['realized_pnl']), float(long_pos['realized_pnl']), float(long_pos['realized_pnl']),
+                                self.account_id
+                            ))
+
+                            cursor.execute("""
+                                UPDATE paper_trading_accounts
+                                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                                WHERE id = %s
+                            """, (self.account_id,))
 
                         # SHORT亏损>1%, LONG盈利 -> 平掉SHORT
                         elif short_pos['pnl_pct'] < -1 and long_pos['pnl_pct'] > 0:
@@ -1070,14 +1145,36 @@ class SmartTraderService:
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
-                                    %s, NOW(), NOW()
+                                    %s, %s, %s
                                 )
                             """, (
                                 trade_id, short_pos['id'], self.account_id, symbol, 'CLOSE_SHORT',
                                 current_price, short_pos['quantity'], notional_value, leverage, margin,
                                 fee, short_pos['realized_pnl'], short_pos['pnl_pct'], roi, short_pos['entry_price'],
-                                f"HEDGE-{short_pos['id']}"
+                                f"HEDGE-{short_pos['id']}", get_local_time(), get_local_time()
                             ))
+
+                            # Update account balance
+                            cursor.execute("""
+                                UPDATE paper_trading_accounts
+                                SET current_balance = current_balance + %s + %s,
+                                    frozen_balance = frozen_balance - %s,
+                                    realized_pnl = realized_pnl + %s,
+                                    total_trades = total_trades + 1,
+                                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                                WHERE id = %s
+                            """, (
+                                float(margin), float(short_pos['realized_pnl']), float(margin),
+                                float(short_pos['realized_pnl']), float(short_pos['realized_pnl']), float(short_pos['realized_pnl']),
+                                self.account_id
+                            ))
+
+                            cursor.execute("""
+                                UPDATE paper_trading_accounts
+                                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                                WHERE id = %s
+                            """, (self.account_id,))
 
             cursor.close()
 
@@ -1201,14 +1298,36 @@ class SmartTraderService:
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
-                        %s, NOW(), NOW()
+                        %s, %s, %s
                     )
                 """, (
                     trade_id, pos['id'], self.account_id, symbol, close_side,
                     current_price, quantity, notional_value, leverage, margin,
                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                    f"REVERSE-{pos['id']}"
+                    f"REVERSE-{pos['id']}", get_local_time(), get_local_time()
                 ))
+
+                # Update account balance
+                cursor.execute("""
+                    UPDATE paper_trading_accounts
+                    SET current_balance = current_balance + %s + %s,
+                        frozen_balance = frozen_balance - %s,
+                        realized_pnl = realized_pnl + %s,
+                        total_trades = total_trades + 1,
+                        winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                        losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                    WHERE id = %s
+                """, (
+                    float(margin), float(realized_pnl), float(margin),
+                    float(realized_pnl), float(realized_pnl), float(realized_pnl),
+                    self.account_id
+                ))
+
+                cursor.execute("""
+                    UPDATE paper_trading_accounts
+                    SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                    WHERE id = %s
+                """, (self.account_id,))
 
             cursor.close()
             return True
