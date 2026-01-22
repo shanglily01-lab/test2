@@ -792,9 +792,9 @@ class SmartTraderService:
                         UPDATE futures_positions
                         SET status = 'closed', mark_price = %s,
                             realized_pnl = %s,
-                            close_time = NOW(), updated_at = NOW()
+                            close_time = %s, updated_at = %s
                         WHERE id = %s
-                    """, (current_price, realized_pnl, pos_id))
+                    """, (current_price, realized_pnl, get_local_time(), get_local_time(), pos_id))
 
                     # Create futures_trades record for frontend display
                     import uuid
@@ -911,9 +911,9 @@ class SmartTraderService:
                     UPDATE futures_positions
                     SET status = 'closed', mark_price = %s,
                         realized_pnl = %s,
-                        close_time = NOW(), updated_at = NOW()
+                        close_time = %s, updated_at = %s
                     WHERE id = %s
-                """, (current_price, realized_pnl, pos_id))
+                """, (current_price, realized_pnl, get_local_time(), get_local_time(), pos_id))
 
                 # Create futures_trades record for frontend display
                 import uuid
@@ -1070,10 +1070,10 @@ class SmartTraderService:
                                 UPDATE futures_positions
                                 SET status = 'closed', mark_price = %s,
                                     realized_pnl = %s,
-                                    close_time = NOW(), updated_at = NOW(),
+                                    close_time = %s, updated_at = %s,
                                     notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
                                 WHERE id = %s
-                            """, (current_price, long_pos['realized_pnl'], long_pos['id']))
+                            """, (current_price, long_pos['realized_pnl'], get_local_time(), get_local_time(), long_pos['id']))
 
                             # Create futures_trades record for frontend display
                             import uuid
@@ -1142,10 +1142,10 @@ class SmartTraderService:
                                 UPDATE futures_positions
                                 SET status = 'closed', mark_price = %s,
                                     realized_pnl = %s,
-                                    close_time = NOW(), updated_at = NOW(),
+                                    close_time = %s, updated_at = %s,
                                     notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
                                 WHERE id = %s
-                            """, (current_price, short_pos['realized_pnl'], short_pos['id']))
+                            """, (current_price, short_pos['realized_pnl'], get_local_time(), get_local_time(), short_pos['id']))
 
                             # Create futures_trades record for frontend display
                             import uuid
@@ -1294,10 +1294,10 @@ class SmartTraderService:
                     UPDATE futures_positions
                     SET status = 'closed', mark_price = %s,
                         realized_pnl = %s,
-                        close_time = NOW(), updated_at = NOW(),
+                        close_time = %s, updated_at = %s,
                         notes = CONCAT(IFNULL(notes, ''), '|', %s)
                     WHERE id = %s
-                """, (current_price, realized_pnl, reason, pos['id']))
+                """, (current_price, realized_pnl, get_local_time(), get_local_time(), reason, pos['id']))
 
                 # Create futures_trades record for frontend display
                 import uuid
