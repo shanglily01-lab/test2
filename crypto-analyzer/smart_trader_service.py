@@ -772,6 +772,15 @@ class SmartTraderService:
                         f"盈亏: {pnl_pct:+.2f}% ({realized_pnl:+.2f} USDT)"
                     )
 
+                    # Get leverage and margin for ROI calculation
+                    cursor.execute("""
+                        SELECT leverage, margin FROM futures_positions WHERE id = %s
+                    """, (pos_id,))
+                    pos_detail = cursor.fetchone()
+                    leverage = pos_detail[0] if pos_detail else 1
+                    margin = float(pos_detail[1]) if pos_detail else 0.0
+                    roi = (realized_pnl / margin) * 100 if margin > 0 else 0
+
                     cursor.execute("""
                         UPDATE futures_positions
                         SET status = 'closed', mark_price = %s,
@@ -779,6 +788,31 @@ class SmartTraderService:
                             close_time = NOW(), updated_at = NOW()
                         WHERE id = %s
                     """, (current_price, realized_pnl, pos_id))
+
+                    # Create futures_trades record for frontend display
+                    import uuid
+                    trade_id = str(uuid.uuid4())
+                    close_side = 'CLOSE_LONG' if position_side == 'LONG' else 'CLOSE_SHORT'
+                    notional_value = current_price * float(quantity)
+                    fee = notional_value * 0.0004  # 0.04% taker fee
+
+                    cursor.execute("""
+                        INSERT INTO futures_trades (
+                            trade_id, position_id, account_id, symbol, side,
+                            price, quantity, notional_value, leverage, margin,
+                            fee, realized_pnl, pnl_pct, roi, entry_price,
+                            trade_time, created_at
+                        ) VALUES (
+                            %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s,
+                            %s, %s, %s, %s, %s,
+                            NOW(), NOW()
+                        )
+                    """, (
+                        trade_id, pos_id, self.account_id, symbol, close_side,
+                        current_price, quantity, notional_value, leverage, margin,
+                        fee, realized_pnl, pnl_pct, roi, entry_price
+                    ))
 
             cursor.close()
 
@@ -814,6 +848,16 @@ class SmartTraderService:
 
                 logger.info(f"[CLOSE_TIMEOUT] {symbol} 超时平仓 | 价格: ${current_price:.4f} | 盈亏: {realized_pnl:+.2f} USDT")
 
+                # Get leverage and margin for ROI calculation
+                cursor.execute("""
+                    SELECT leverage, margin FROM futures_positions WHERE id = %s
+                """, (pos_id,))
+                pos_detail = cursor.fetchone()
+                leverage = pos_detail[0] if pos_detail else 1
+                margin = float(pos_detail[1]) if pos_detail else 0.0
+                pnl_pct = (realized_pnl / (float(entry_price) * float(quantity))) * 100 if float(quantity) > 0 else 0
+                roi = (realized_pnl / margin) * 100 if margin > 0 else 0
+
                 cursor.execute("""
                     UPDATE futures_positions
                     SET status = 'closed', mark_price = %s,
@@ -821,6 +865,31 @@ class SmartTraderService:
                         close_time = NOW(), updated_at = NOW()
                     WHERE id = %s
                 """, (current_price, realized_pnl, pos_id))
+
+                # Create futures_trades record for frontend display
+                import uuid
+                trade_id = str(uuid.uuid4())
+                close_side = 'CLOSE_LONG' if position_side == 'LONG' else 'CLOSE_SHORT'
+                notional_value = current_price * float(quantity)
+                fee = notional_value * 0.0004  # 0.04% taker fee
+
+                cursor.execute("""
+                    INSERT INTO futures_trades (
+                        trade_id, position_id, account_id, symbol, side,
+                        price, quantity, notional_value, leverage, margin,
+                        fee, realized_pnl, pnl_pct, roi, entry_price,
+                        trade_time, created_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        NOW(), NOW()
+                    )
+                """, (
+                    trade_id, pos_id, self.account_id, symbol, close_side,
+                    current_price, quantity, notional_value, leverage, margin,
+                    fee, realized_pnl, pnl_pct, roi, entry_price
+                ))
 
             cursor.close()
 
@@ -914,6 +983,16 @@ class SmartTraderService:
                                 f"[HEDGE_CLOSE] {symbol} LONG亏损{long_pos['pnl_pct']:.2f}% ({long_pos['realized_pnl']:+.2f} USDT), "
                                 f"SHORT盈利{short_pos['pnl_pct']:.2f}% -> 平掉LONG"
                             )
+
+                            # Get leverage and margin
+                            cursor.execute("""
+                                SELECT leverage, margin FROM futures_positions WHERE id = %s
+                            """, (long_pos['id'],))
+                            pos_detail = cursor.fetchone()
+                            leverage = pos_detail['leverage'] if pos_detail else 1
+                            margin = float(pos_detail['margin']) if pos_detail else 0.0
+                            roi = (long_pos['realized_pnl'] / margin) * 100 if margin > 0 else 0
+
                             cursor.execute("""
                                 UPDATE futures_positions
                                 SET status = 'closed', mark_price = %s,
@@ -923,12 +1002,46 @@ class SmartTraderService:
                                 WHERE id = %s
                             """, (current_price, long_pos['realized_pnl'], long_pos['id']))
 
+                            # Create futures_trades record for frontend display
+                            import uuid
+                            trade_id = str(uuid.uuid4())
+                            notional_value = current_price * long_pos['quantity']
+                            fee = notional_value * 0.0004
+
+                            cursor.execute("""
+                                INSERT INTO futures_trades (
+                                    trade_id, position_id, account_id, symbol, side,
+                                    price, quantity, notional_value, leverage, margin,
+                                    fee, realized_pnl, pnl_pct, roi, entry_price,
+                                    trade_time, created_at
+                                ) VALUES (
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s, %s,
+                                    NOW(), NOW()
+                                )
+                            """, (
+                                trade_id, long_pos['id'], self.account_id, symbol, 'CLOSE_LONG',
+                                current_price, long_pos['quantity'], notional_value, leverage, margin,
+                                fee, long_pos['realized_pnl'], long_pos['pnl_pct'], roi, long_pos['entry_price']
+                            ))
+
                         # SHORT亏损>1%, LONG盈利 -> 平掉SHORT
                         elif short_pos['pnl_pct'] < -1 and long_pos['pnl_pct'] > 0:
                             logger.info(
                                 f"[HEDGE_CLOSE] {symbol} SHORT亏损{short_pos['pnl_pct']:.2f}% ({short_pos['realized_pnl']:+.2f} USDT), "
                                 f"LONG盈利{long_pos['pnl_pct']:.2f}% -> 平掉SHORT"
                             )
+
+                            # Get leverage and margin
+                            cursor.execute("""
+                                SELECT leverage, margin FROM futures_positions WHERE id = %s
+                            """, (short_pos['id'],))
+                            pos_detail = cursor.fetchone()
+                            leverage = pos_detail['leverage'] if pos_detail else 1
+                            margin = float(pos_detail['margin']) if pos_detail else 0.0
+                            roi = (short_pos['realized_pnl'] / margin) * 100 if margin > 0 else 0
+
                             cursor.execute("""
                                 UPDATE futures_positions
                                 SET status = 'closed', mark_price = %s,
@@ -937,6 +1050,30 @@ class SmartTraderService:
                                     notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
                                 WHERE id = %s
                             """, (current_price, short_pos['realized_pnl'], short_pos['id']))
+
+                            # Create futures_trades record for frontend display
+                            import uuid
+                            trade_id = str(uuid.uuid4())
+                            notional_value = current_price * short_pos['quantity']
+                            fee = notional_value * 0.0004
+
+                            cursor.execute("""
+                                INSERT INTO futures_trades (
+                                    trade_id, position_id, account_id, symbol, side,
+                                    price, quantity, notional_value, leverage, margin,
+                                    fee, realized_pnl, pnl_pct, roi, entry_price,
+                                    trade_time, created_at
+                                ) VALUES (
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s, %s,
+                                    NOW(), NOW()
+                                )
+                            """, (
+                                trade_id, short_pos['id'], self.account_id, symbol, 'CLOSE_SHORT',
+                                current_price, short_pos['quantity'], notional_value, leverage, margin,
+                                fee, short_pos['realized_pnl'], short_pos['pnl_pct'], roi, short_pos['entry_price']
+                            ))
 
             cursor.close()
 
@@ -1005,7 +1142,7 @@ class SmartTraderService:
 
             # 获取持仓信息用于日志和计算盈亏
             cursor.execute("""
-                SELECT id, entry_price, quantity FROM futures_positions
+                SELECT id, entry_price, quantity, leverage, margin FROM futures_positions
                 WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
             """, (symbol, side, self.account_id))
 
@@ -1014,6 +1151,8 @@ class SmartTraderService:
             for pos in positions:
                 entry_price = float(pos['entry_price'])
                 quantity = float(pos['quantity'])
+                leverage = pos['leverage'] if pos.get('leverage') else 1
+                margin = float(pos['margin']) if pos.get('margin') else 0.0
                 pnl_pct = (current_price - entry_price) / entry_price * 100
 
                 # Calculate realized PnL
@@ -1023,6 +1162,8 @@ class SmartTraderService:
                 else:  # SHORT
                     realized_pnl = (entry_price - current_price) * quantity
                     pnl_pct = (entry_price - current_price) / entry_price * 100
+
+                roi = (realized_pnl / margin) * 100 if margin > 0 else 0
 
                 logger.info(
                     f"[REVERSE_CLOSE] {symbol} {side} | "
@@ -1038,6 +1179,31 @@ class SmartTraderService:
                         notes = CONCAT(IFNULL(notes, ''), '|', %s)
                     WHERE id = %s
                 """, (current_price, realized_pnl, reason, pos['id']))
+
+                # Create futures_trades record for frontend display
+                import uuid
+                trade_id = str(uuid.uuid4())
+                close_side = 'CLOSE_LONG' if side == 'LONG' else 'CLOSE_SHORT'
+                notional_value = current_price * quantity
+                fee = notional_value * 0.0004
+
+                cursor.execute("""
+                    INSERT INTO futures_trades (
+                        trade_id, position_id, account_id, symbol, side,
+                        price, quantity, notional_value, leverage, margin,
+                        fee, realized_pnl, pnl_pct, roi, entry_price,
+                        trade_time, created_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        NOW(), NOW()
+                    )
+                """, (
+                    trade_id, pos['id'], self.account_id, symbol, close_side,
+                    current_price, quantity, notional_value, leverage, margin,
+                    fee, realized_pnl, pnl_pct, roi, entry_price
+                ))
 
             cursor.close()
             return True
