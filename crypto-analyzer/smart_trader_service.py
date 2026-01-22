@@ -801,17 +801,18 @@ class SmartTraderService:
                             trade_id, position_id, account_id, symbol, side,
                             price, quantity, notional_value, leverage, margin,
                             fee, realized_pnl, pnl_pct, roi, entry_price,
-                            trade_time, created_at
+                            order_id, trade_time, created_at
                         ) VALUES (
                             %s, %s, %s, %s, %s,
                             %s, %s, %s, %s, %s,
                             %s, %s, %s, %s, %s,
-                            NOW(), NOW()
+                            %s, NOW(), NOW()
                         )
                     """, (
                         trade_id, pos_id, self.account_id, symbol, close_side,
                         current_price, quantity, notional_value, leverage, margin,
-                        fee, realized_pnl, pnl_pct, roi, entry_price
+                        fee, realized_pnl, pnl_pct, roi, entry_price,
+                        f'CLOSE-{pos_id}'
                     ))
 
             cursor.close()
@@ -878,17 +879,18 @@ class SmartTraderService:
                         trade_id, position_id, account_id, symbol, side,
                         price, quantity, notional_value, leverage, margin,
                         fee, realized_pnl, pnl_pct, roi, entry_price,
-                        trade_time, created_at
+                        order_id, trade_time, created_at
                     ) VALUES (
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
-                        NOW(), NOW()
+                        %s, NOW(), NOW()
                     )
                 """, (
                     trade_id, pos_id, self.account_id, symbol, close_side,
                     current_price, quantity, notional_value, leverage, margin,
-                    fee, realized_pnl, pnl_pct, roi, entry_price
+                    fee, realized_pnl, pnl_pct, roi, entry_price,
+                    f'TIMEOUT-{pos_id}'
                 ))
 
             cursor.close()
@@ -1013,17 +1015,18 @@ class SmartTraderService:
                                     trade_id, position_id, account_id, symbol, side,
                                     price, quantity, notional_value, leverage, margin,
                                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                                    trade_time, created_at
+                                    order_id, trade_time, created_at
                                 ) VALUES (
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
-                                    NOW(), NOW()
+                                    %s, NOW(), NOW()
                                 )
                             """, (
                                 trade_id, long_pos['id'], self.account_id, symbol, 'CLOSE_LONG',
                                 current_price, long_pos['quantity'], notional_value, leverage, margin,
-                                fee, long_pos['realized_pnl'], long_pos['pnl_pct'], roi, long_pos['entry_price']
+                                fee, long_pos['realized_pnl'], long_pos['pnl_pct'], roi, long_pos['entry_price'],
+                                f"HEDGE-{long_pos['id']}"
                             ))
 
                         # SHORT亏损>1%, LONG盈利 -> 平掉SHORT
@@ -1062,17 +1065,18 @@ class SmartTraderService:
                                     trade_id, position_id, account_id, symbol, side,
                                     price, quantity, notional_value, leverage, margin,
                                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                                    trade_time, created_at
+                                    order_id, trade_time, created_at
                                 ) VALUES (
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
-                                    NOW(), NOW()
+                                    %s, NOW(), NOW()
                                 )
                             """, (
                                 trade_id, short_pos['id'], self.account_id, symbol, 'CLOSE_SHORT',
                                 current_price, short_pos['quantity'], notional_value, leverage, margin,
-                                fee, short_pos['realized_pnl'], short_pos['pnl_pct'], roi, short_pos['entry_price']
+                                fee, short_pos['realized_pnl'], short_pos['pnl_pct'], roi, short_pos['entry_price'],
+                                f"HEDGE-{short_pos['id']}"
                             ))
 
             cursor.close()
@@ -1192,17 +1196,18 @@ class SmartTraderService:
                         trade_id, position_id, account_id, symbol, side,
                         price, quantity, notional_value, leverage, margin,
                         fee, realized_pnl, pnl_pct, roi, entry_price,
-                        trade_time, created_at
+                        order_id, trade_time, created_at
                     ) VALUES (
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
-                        NOW(), NOW()
+                        %s, NOW(), NOW()
                     )
                 """, (
                     trade_id, pos['id'], self.account_id, symbol, close_side,
                     current_price, quantity, notional_value, leverage, margin,
-                    fee, realized_pnl, pnl_pct, roi, entry_price
+                    fee, realized_pnl, pnl_pct, roi, entry_price,
+                    f"REVERSE-{pos['id']}"
                 ))
 
             cursor.close()
