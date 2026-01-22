@@ -884,7 +884,7 @@ class SmartTraderService:
                 pos_id, symbol, position_side, quantity, entry_price, created_at, hours_old = pos
 
                 logger.info(f"[TIMEOUT_FOUND] {symbol} {position_side} 已持仓 {hours_old} 小时 (创建于 {created_at})")
-                pos_id, symbol, position_side, quantity, entry_price = pos
+
                 current_price = self.get_current_price(symbol)
                 if not current_price:
                     continue
