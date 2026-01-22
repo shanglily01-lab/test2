@@ -170,18 +170,18 @@ class SmartAutoTrader:
             return False
 
     def check_and_close_old_positions(self):
-        """检查并关闭超时仓位 (超过1小时)"""
+        """检查并关闭超时仓位 (超过6小时)"""
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 查询超过1小时的持仓
+            # 查询超过6小时的持仓
             cursor.execute("""
                 SELECT id, symbol, position_side, quantity, entry_price, leverage
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
-                AND created_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+                AND created_at < DATE_SUB(NOW(), INTERVAL 6 HOUR)
             """, (self.account_id,))
 
             old_positions = cursor.fetchall()
@@ -198,12 +198,12 @@ class SmartAutoTrader:
                             continue
 
                         # 平仓
-                        logger.info(f"⏰ {pos['symbol']} 超时平仓 | 持仓时间 > 1小时")
+                        logger.info(f"⏰ {pos['symbol']} 超时平仓 | 持仓时间 > 6小时")
 
                         self.futures_engine.close_position(
                             position_id=pos['id'],
                             close_price=Decimal(str(current_price)),
-                            close_reason='MAX_HOLD_TIME'
+                            reason='MAX_HOLD_TIME'
                         )
 
                     except Exception as e:

@@ -143,7 +143,9 @@
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" log --oneline --since=\"2026-01-15\")",
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" show 54fec59:app/services/strategy_executor_v2.py)",
       "Bash(dir:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(where:*)",
+      "Bash(D:\\\\python\\\\python.exe:*)"
     ],
     "deny": [],
     "ask": []
