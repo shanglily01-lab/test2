@@ -377,7 +377,8 @@ class FuturesTradingEngine:
         signal_id: Optional[int] = None,
         strategy_id: Optional[int] = None,
         entry_signal_type: Optional[str] = None,
-        entry_reason: Optional[str] = None
+        entry_reason: Optional[str] = None,
+        entry_score: Optional[float] = None
     ) -> Dict:
         """
         开仓
@@ -707,14 +708,14 @@ class FuturesTradingEngine:
                     quantity, notional_value, margin,
                     entry_price, mark_price, liquidation_price,
                     stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct,
-                    entry_ema_diff, entry_signal_type, entry_reason,
+                    entry_ema_diff, entry_signal_type, entry_score, entry_reason,
                     open_time, source, signal_id, strategy_id, status
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, %s, %s,
-                    %s, %s, %s,
+                    %s, %s, %s, %s,
                     %s, %s, %s, %s, 'open'
                 )
             """
@@ -727,7 +728,7 @@ class FuturesTradingEngine:
                 float(take_profit_price) if take_profit_price else None,
                 float(stop_loss_pct) if stop_loss_pct else None,
                 float(take_profit_pct) if take_profit_pct else None,
-                entry_ema_diff, entry_signal_type, entry_reason,
+                entry_ema_diff, entry_signal_type, entry_score, entry_reason,
                 get_local_time(), source, signal_id, strategy_id
             ))
 
@@ -1102,7 +1103,9 @@ class FuturesTradingEngine:
                 'manual': '手动平仓',
                 'strategy': '策略平仓',
                 'liquidation': '强制平仓',
-                'MAX_HOLD_TIME': '超时平仓(4小时)'
+                'MAX_HOLD_TIME': '超时平仓(4小时)',
+                'SCORE_DROPPED': '评分下降平仓',
+                'REVERSE_SIGNAL': '反向信号平仓'
             }
             notes_reason = reason_map.get(reason, reason)
 

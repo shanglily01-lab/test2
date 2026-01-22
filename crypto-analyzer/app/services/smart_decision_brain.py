@@ -353,12 +353,21 @@ class SmartDecisionBrain:
             }
 
             if decision:
+                # 根据评分动态调整持仓时间
+                if score >= 45:
+                    max_hold_minutes = 360  # 6小时 (高置信度，45+分)
+                elif score >= 30:
+                    max_hold_minutes = 240  # 4小时 (中等置信度，30-44分)
+                else:
+                    max_hold_minutes = 120  # 2小时 (低置信度，<30分)
+
                 # 添加交易参数
                 result['trade_params'] = {
                     'stop_loss': sr_data['support'],
                     'take_profit': sr_data['resistance'],
                     'risk_reward': sr_data['risk_reward'],
-                    'max_hold_minutes': 240  # 4小时最大持仓
+                    'max_hold_minutes': max_hold_minutes,
+                    'entry_score': score  # 存储开仓评分用于后续重评分
                 }
 
             return result

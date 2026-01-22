@@ -155,7 +155,8 @@ class SmartAutoTrader:
                 leverage=self.leverage,
                 stop_loss_price=Decimal(str(trade_params['stop_loss'])),
                 take_profit_price=Decimal(str(trade_params['take_profit'])),
-                entry_signal_type=f"SMART_BRAIN_SCORE_{opportunity['score']}"
+                entry_signal_type=f"SMART_BRAIN_SCORE_{opportunity['score']}",
+                entry_score=trade_params.get('entry_score', opportunity['score'])
             )
 
             if result:
@@ -213,6 +214,98 @@ class SmartAutoTrader:
         except Exception as e:
             logger.error(f"❌ 检查超时持仓失败: {e}")
 
+    def check_and_rescore_positions(self):
+        """
+        检查并重新评分持仓
+        - 每1小时检查一次
+        - 如果评分下降超过15分，平仓
+        - 如果方向反转，立即平仓
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # 查询持仓超过1小时的仓位（需要重新评分）
+            cursor.execute("""
+                SELECT
+                    id, symbol, position_side, quantity, entry_price,
+                    leverage, entry_score, entry_signal_type, open_time
+                FROM futures_positions
+                WHERE status = 'open'
+                AND account_id = %s
+                AND entry_score IS NOT NULL
+                AND open_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+            """, (self.account_id,))
+
+            positions_to_check = cursor.fetchall()
+            cursor.close()
+
+            if not positions_to_check:
+                return
+
+            logger.info(f"🔄 检查 {len(positions_to_check)} 个持仓的评分变化")
+
+            for pos in positions_to_check:
+                try:
+                    symbol = pos['symbol']
+                    entry_score = float(pos['entry_score']) if pos['entry_score'] else 0
+                    entry_side = pos['position_side']
+
+                    # 重新评分
+                    result = self.decision_brain.analyze_trading_opportunity(symbol)
+
+                    if not result or not result.get('decision'):
+                        # 没有信号了，说明条件不满足了，关闭仓位
+                        logger.info(f"📉 {symbol} 重评分: 无信号 (原{entry_score}分) -> 平仓")
+
+                        current_price = self.futures_engine.get_current_price(symbol)
+                        if current_price:
+                            self.futures_engine.close_position(
+                                position_id=pos['id'],
+                                close_price=Decimal(str(current_price)),
+                                reason='SCORE_DROPPED'
+                            )
+                        continue
+
+                    current_score = result.get('score', 0)
+                    current_direction = result.get('direction', '')
+
+                    # 检查方向是否反转
+                    if (entry_side == 'LONG' and current_direction == 'SHORT') or \
+                       (entry_side == 'SHORT' and current_direction == 'LONG'):
+                        logger.info(f"🔄 {symbol} 方向反转: {entry_side} -> {current_direction} -> 立即平仓")
+
+                        current_price = self.futures_engine.get_current_price(symbol)
+                        if current_price:
+                            self.futures_engine.close_position(
+                                position_id=pos['id'],
+                                close_price=Decimal(str(current_price)),
+                                reason='REVERSE_SIGNAL'
+                            )
+                        continue
+
+                    # 检查评分是否下降超过15分
+                    score_drop = entry_score - current_score
+                    if score_drop >= 15:
+                        logger.info(f"📉 {symbol} 评分下降: {entry_score:.1f} -> {current_score:.1f} (降{score_drop:.1f}分) -> 平仓")
+
+                        current_price = self.futures_engine.get_current_price(symbol)
+                        if current_price:
+                            self.futures_engine.close_position(
+                                position_id=pos['id'],
+                                close_price=Decimal(str(current_price)),
+                                reason='SCORE_DROPPED'
+                            )
+                    else:
+                        logger.debug(f"✓ {symbol} 评分: {entry_score:.1f} -> {current_score:.1f} (降{score_drop:.1f}分) 继续持有")
+
+                except Exception as e:
+                    logger.error(f"❌ {pos['symbol']} 重评分失败: {e}")
+                    continue
+
+        except Exception as e:
+            logger.error(f"❌ 检查重评分失败: {e}")
+
     async def trading_loop(self):
         """交易主循环"""
         logger.info("🚀 智能自动交易服务已启动")
@@ -222,7 +315,10 @@ class SmartAutoTrader:
                 # 1. 检查并关闭超时持仓
                 self.check_and_close_old_positions()
 
-                # 2. 检查当前持仓数
+                # 2. 检查并重新评分持仓（每1小时检查）
+                self.check_and_rescore_positions()
+
+                # 3. 检查当前持仓数
                 current_positions = self.get_open_positions_count()
                 logger.info(f"📊 当前持仓: {current_positions}/{self.max_positions}")
 
@@ -231,7 +327,7 @@ class SmartAutoTrader:
                     await asyncio.sleep(self.scan_interval)
                     continue
 
-                # 3. 扫描交易机会
+                # 4. 扫描交易机会
                 opportunities = self.decision_brain.scan_all_symbols()
 
                 if not opportunities:
@@ -239,7 +335,7 @@ class SmartAutoTrader:
                     await asyncio.sleep(self.scan_interval)
                     continue
 
-                # 4. 处理交易机会
+                # 5. 处理交易机会
                 logger.info(f"🎯 找到 {len(opportunities)} 个交易机会,开始执行...")
 
                 for opp in opportunities:
