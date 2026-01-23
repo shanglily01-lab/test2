@@ -651,7 +651,7 @@
                                             <th>杠杆</th>
                                             <th>价格</th>
                                             <th>数量</th>
-                                            <th>开仓金额</th>
+                                            <th>保证金</th>
                                             <th>已实现盈亏</th>
                                             <th>ROI</th>
                                             <th>平仓原因</th>
@@ -2053,9 +2053,8 @@
                         const sideText = isLong ? '多' : '空';
                         const sideBadge = isLong ? 'badge-success' : 'badge-danger';
 
-                        // 计算开仓金额（名义价值）= 数量 × 开仓价格
-                        const entryNotional = (trade.quantity && trade.entry_price) ?
-                            (parseFloat(trade.quantity) * parseFloat(trade.entry_price)) : 0;
+                        // 使用保证金而非名义价值
+                        const margin = trade.margin || 0;
 
                         // 格式化时间函数（使用全局的UTC+8转换）
                         function formatTradeTime(timeStr) {
@@ -2072,7 +2071,7 @@
                                 <div class="text-secondary">平: <span class="font-mono">$${formatPrice(trade.price)}</span></div>
                             </td>
                             <td>${trade.quantity || '--'}</td>
-                            <td class="font-mono">$${formatLargeNumber(entryNotional)}</td>
+                            <td class="font-mono">$${formatLargeNumber(margin)}</td>
                             <td class="pnl ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
                                 ${trade.realized_pnl >= 0 ? '+' : ''}${formatLargeNumber(trade.realized_pnl || 0)}
                             </td>
