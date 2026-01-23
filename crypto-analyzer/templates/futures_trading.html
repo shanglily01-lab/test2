@@ -1884,14 +1884,19 @@
                         // 止损相关
                         'hard_stop_loss': '硬止损',
                         'stop_loss': '止损',
+                        'STOP_LOSS': '止损',
                         'trailing_stop_loss': '移动止损',
                         '5m_death_cross_sl': '5分钟死叉止损',
                         '5m_golden_cross_sl': '5分钟金叉止损',
                         // 止盈相关
                         'max_take_profit': '最大止盈',
+                        'TAKE_PROFIT': '固定止盈',
                         'trailing_take_profit': '移动止盈',
                         'ema_diff_narrowing_tp': 'EMA差值收窄止盈',
                         'ema_direction_reversal_tp': 'EMA方向反转止盈',
+                        // 超级大脑智能顶底识别
+                        'TOP_DETECTED': '智能顶部识别',
+                        'BOTTOM_DETECTED': '智能底部识别',
                         // 反转相关
                         'death_cross_reversal': '死叉反转平仓',
                         'golden_cross_reversal': '金叉反转平仓',
@@ -1909,6 +1914,18 @@
                     // 格式化平仓原因（notes字段）
                     function formatNotes(notes) {
                         if (!notes) return '--';
+
+                        // 处理超级大脑智能顶底识别格式：TOP_DETECTED(高点回落1.4%,盈利-0.4%)
+                        if (notes.startsWith('TOP_DETECTED(') || notes.startsWith('BOTTOM_DETECTED(')) {
+                            const match = notes.match(/^(TOP_DETECTED|BOTTOM_DETECTED)\((.*?)\)$/);
+                            if (match) {
+                                const type = match[1];
+                                const params = match[2];
+                                const label = type === 'TOP_DETECTED' ? '智能顶部识别' : '智能底部识别';
+                                return `<span class="badge badge-primary">${label}</span> <span class="text-secondary">${params}</span>`;
+                            }
+                        }
+
                         // 提取第一个关键字（在|之前的部分）
                         const key = notes.split('|')[0].trim();
                         const chineseReason = closeReasonMap[key];
