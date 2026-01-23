@@ -155,7 +155,12 @@
                         <i class="bi bi-journal-check"></i>
                         合约复盘(24H)
                     </h1>
-                    <p class="header-subtitle">合约交易复盘分析 - 发现问题，优化策略</p>
+                    <p class="header-subtitle">
+                        合约交易复盘分析 - 发现问题，优化策略
+                        <span style="margin-left: 12px; color: var(--text-tertiary); font-size: 12px;">
+                            <i class="bi bi-clock-history"></i> 时间显示: UTC+8 (北京时间)
+                        </span>
+                    </p>
                 </div>
                 <div class="header-actions">
                     <div class="btn-group" role="group" style="margin-right: 12px;">
@@ -444,8 +449,39 @@
 
         function formatTime(isoString) {
             if (!isoString) return '-';
-            const date = new Date(isoString);
-            return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+            try {
+                // 后端返回UTC+0时间，前端转换为UTC+8显示
+                let date;
+                if (typeof isoString === 'string') {
+                    // 如果没有时区信息，假设是UTC时间
+                    if (!isoString.includes('Z') && !isoString.includes('+') && !isoString.includes('-', 10)) {
+                        date = new Date(isoString + 'Z');
+                    } else {
+                        date = new Date(isoString);
+                    }
+                } else {
+                    date = new Date(isoString);
+                }
+
+                // 检查日期是否有效
+                if (isNaN(date.getTime())) {
+                    return '-';
+                }
+
+                // 转换为UTC+8（北京时间）
+                const utc8Date = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+
+                const month = String(utc8Date.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(utc8Date.getUTCDate()).padStart(2, '0');
+                const hours = String(utc8Date.getUTCHours()).padStart(2, '0');
+                const minutes = String(utc8Date.getUTCMinutes()).padStart(2, '0');
+
+                return `${month}-${day} ${hours}:${minutes}`;
+            } catch (e) {
+                console.error('时间格式化失败:', e, isoString);
+                return '-';
+            }
         }
 
         function formatHoldingTime(minutes) {
