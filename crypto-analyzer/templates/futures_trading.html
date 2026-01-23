@@ -2076,8 +2076,8 @@
                             <td class="pnl ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
                                 ${trade.realized_pnl >= 0 ? '+' : ''}${formatLargeNumber(trade.realized_pnl || 0)}
                             </td>
-                            <td class="pnl ${trade.pnl_pct >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                                ${trade.pnl_pct >= 0 ? '+' : ''}${(trade.pnl_pct || 0).toFixed(2)}%
+                            <td class="pnl ${trade.roi >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                                ${trade.roi >= 0 ? '+' : ''}${(trade.roi || 0).toFixed(2)}%
                             </td>
                             <td class="text-sm" title="${trade.close_reason || ''}">${formatNotes(trade.close_reason) || formatCloseReason(trade.order_source)}</td>
                             <td class="text-sm">${formatStopLossTakeProfit(trade.stop_loss_price, trade.take_profit_price)}</td>
@@ -2311,13 +2311,7 @@
                                             </div>
                                             <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">USDT</div>
                                         </div>
-                                        <div style="text-align: center; border-left: 1px solid var(--border-default); border-right: 1px solid var(--border-default); padding: 0 12px;">
-                                            <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">收益率</div>
-                                            <div style="font-size: 18px; font-weight: 700; color: ${pnlColor}; font-family: var(--font-mono);">
-                                                ${pnlSign}${pnlPct.toFixed(2)}%
-                                            </div>
-                                        </div>
-                                        <div style="text-align: center;">
+                                        <div style="text-align: center; border-left: 1px solid var(--border-default); padding: 0 12px;">
                                             <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">ROI</div>
                                             <div style="font-size: 18px; font-weight: 700; color: ${pnlColor}; font-family: var(--font-mono);">
                                                 ${pnlSign}${roi.toFixed(2)}%
