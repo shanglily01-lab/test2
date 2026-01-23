@@ -169,3 +169,31 @@ nohup python smart_trader_service.py > logs/smart_trader.log 2>&1 &
 - `f1e0074` - 合约交易页面前端解析
 - `8975b29` - 复盘24H页面API解析
 - `002c956` - 超级大脑服务数据写入修复
+- `2e4e686` - 超级大脑服务 futures_orders.notes 写入修复
+
+## 补充说明 (2026-01-23 更新)
+
+### 数据流向
+
+1. **复盘24H页面** (`/futures-review`)
+   - 查询表: `futures_positions.notes`
+   - SQL: `SELECT ... notes as close_reason FROM futures_positions WHERE ...`
+   - 修复: commit `002c956` (UPDATE语句添加notes字段)
+
+2. **合约交易页面历史记录** (`/futures`)
+   - 查询表: `futures_orders.notes` (通过LEFT JOIN)
+   - SQL: `SELECT ... o.notes as close_reason FROM futures_trades t LEFT JOIN futures_orders o ...`
+   - 修复: commit `2e4e686` (INSERT语句使用变量替代硬编码)
+
+3. **futures_trades表**
+   - 不包含平仓原因字段
+   - 只记录交易执行细节(价格、数量、手续费)
+   - 无需修复
+
+### 修复对比
+
+| 位置 | 修复前 | 修复后 |
+|------|--------|--------|
+| futures_positions.notes | NULL | `TOP_DETECTED(高点回落1.4%,盈利-0.4%)` |
+| futures_orders.notes | `'止盈止损'` (硬编码) | `close_reason` (动态变量) |
+
