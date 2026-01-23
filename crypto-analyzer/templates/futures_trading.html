@@ -2071,7 +2071,7 @@
                                 <div class="text-secondary">平: <span class="font-mono">$${formatPrice(trade.price)}</span></div>
                             </td>
                             <td>${trade.quantity || '--'}</td>
-                            <td class="font-mono">$${formatLargeNumber(margin)}</td>
+                            <td class="font-mono">${formatLargeNumber(margin)}</td>
                             <td class="pnl ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
                                 ${trade.realized_pnl >= 0 ? '+' : ''}${formatLargeNumber(trade.realized_pnl || 0)}
                             </td>
