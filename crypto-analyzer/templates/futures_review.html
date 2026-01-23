@@ -454,8 +454,14 @@
                 // 后端返回UTC+0时间，前端转换为UTC+8显示
                 let date;
                 if (typeof isoString === 'string') {
-                    // 如果没有时区信息，假设是UTC时间
-                    if (!isoString.includes('Z') && !isoString.includes('+') && !isoString.includes('-', 10)) {
+                    // 检查是否有时区标识（Z或±HH:MM）
+                    // 注意：不能用 includes('-') 判断，因为日期格式本身包含 '-'
+                    const hasTimezone = isoString.endsWith('Z') ||
+                                       /[+-]\d{2}:\d{2}$/.test(isoString) ||
+                                       /[+-]\d{4}$/.test(isoString);
+
+                    if (!hasTimezone) {
+                        // 没有时区信息，假设是UTC时间，添加Z后缀
                         date = new Date(isoString + 'Z');
                     } else {
                         date = new Date(isoString);

@@ -23,8 +23,14 @@ function formatTimeUTC8(utcTime, format = 'datetime', showTimezone = true) {
         if (utcTime instanceof Date) {
             date = utcTime;
         } else if (typeof utcTime === 'string') {
-            // 如果字符串没有时区信息，假设是UTC时间
-            if (!utcTime.includes('Z') && !utcTime.includes('+') && !utcTime.includes('-', 10)) {
+            // 检查是否有时区标识（Z或±HH:MM）
+            // 注意：不能用 includes('-') 判断，因为日期格式本身包含 '-'
+            const hasTimezone = utcTime.endsWith('Z') ||
+                               /[+-]\d{2}:\d{2}$/.test(utcTime) ||
+                               /[+-]\d{4}$/.test(utcTime);
+
+            if (!hasTimezone) {
+                // 没有时区信息，假设是UTC时间，添加Z后缀
                 date = new Date(utcTime + 'Z');
             } else {
                 date = new Date(utcTime);
