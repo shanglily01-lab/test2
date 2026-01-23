@@ -222,49 +222,6 @@ paper_trading_accounts (账户)
 
 ---
 
-## 6. trading_strategies (交易策略)
-
-存储策略配置信息。
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | bigint(20) | 主键，策略ID |
-| user_id | int(11) | 用户ID |
-| name | varchar(100) | 策略名称 |
-| description | text | 策略描述 |
-| account_id | int(11) | 关联账户ID |
-| enabled | tinyint(1) | 是否启用 |
-| market_type | varchar(10) | 市场类型：test/live |
-| adaptive_regime | tinyint(1) | 自适应市场状态 |
-| sync_live | tinyint(1) | 是否同步到实盘 |
-| live_quantity_pct | decimal(5,2) | 实盘仓位比例 |
-| config | longtext | 策略配置JSON |
-| created_at | datetime | 创建时间 |
-| updated_at | datetime | 更新时间 |
-
-### config 字段结构示例
-
-```json
-{
-  "trading_pairs": ["BTC/USDT", "ETH/USDT"],
-  "timeframes": ["15m"],
-  "leverage": 10,
-  "quantity_pct": 5.0,
-  "stop_loss_pct": 2.0,
-  "take_profit_pct": 4.0,
-  "max_positions": 3,
-  "ema_diff_threshold": 0.05,
-  "entry_conditions": {
-    "ema_golden_cross": true,
-    "ema_death_cross": true
-  },
-  "exit_conditions": {
-    "hard_stop_loss": true,
-    "trailing_take_profit": true,
-    "ema_diff_take_profit": true
-  }
-}
-```
 
 ---
 

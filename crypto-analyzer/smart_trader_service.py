@@ -19,6 +19,9 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.services.binance_ws_price import get_ws_price_service, BinanceWSPriceService
 from app.services.adaptive_optimizer import AdaptiveOptimizer
+from app.services.optimization_config import OptimizationConfig
+from app.services.symbol_rating_manager import SymbolRatingManager
+from app.services.volatility_profile_updater import VolatilityProfileUpdater
 
 # 加载环境变量
 load_dotenv()
@@ -441,12 +444,22 @@ class SmartTraderService:
         self.optimizer = AdaptiveOptimizer(self.db_config)
         self.last_optimization_date = None  # 记录上次优化日期
 
+        # 优化配置管理器 (支持自我优化的参数配置)
+        self.opt_config = OptimizationConfig(self.db_config)
+
+        # 交易对评级管理器 (3级黑名单制度)
+        self.rating_manager = SymbolRatingManager(self.db_config)
+
+        # 波动率配置更新器 (15M K线动态止盈)
+        self.volatility_updater = VolatilityProfileUpdater(self.db_config)
+
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
         logger.info(f"账户ID: {self.account_id}")
         logger.info(f"仓位: 正常${self.position_size_usdt} / 黑名单${self.blacklist_position_size_usdt} | 杠杆: {self.leverage}x | 最大持仓: {self.max_positions}")
         logger.info(f"白名单: {len(self.brain.whitelist)}个币种 | 黑名单: {len(self.brain.blacklist)}个币种 | 扫描间隔: {self.scan_interval}秒")
         logger.info("🧠 自适应优化器已启用 (每日凌晨2点自动运行)")
+        logger.info("🔧 优化配置管理器已启用 (支持4大优化问题的自我配置)")
         logger.info("=" * 60)
 
     def _get_connection(self):
@@ -558,9 +571,22 @@ class SmartTraderService:
             else:
                 price_source = "WS"
 
-            # 判断是否在黑名单，决定使用哪个仓位大小
-            is_blacklisted = symbol in self.brain.blacklist
-            base_position_size = self.blacklist_position_size_usdt if is_blacklisted else self.position_size_usdt
+            # 问题2优化: 使用3级评级制度替代简单黑名单
+            rating_level = self.opt_config.get_symbol_rating_level(symbol)
+            rating_config = self.opt_config.get_blacklist_config(rating_level)
+
+            # Level 3 = 永久禁止
+            if rating_level == 3:
+                logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
+                return False
+
+            # 获取评级对应的保证金倍数
+            rating_margin_multiplier = rating_config['margin_multiplier']
+            base_position_size = self.position_size_usdt * rating_margin_multiplier
+
+            # 记录评级信息
+            rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
+            logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
 
             # 使用自适应参数调整仓位大小
             if side == 'LONG':
@@ -573,13 +599,40 @@ class SmartTraderService:
             # 应用仓位倍数
             adjusted_position_size = base_position_size * position_multiplier
 
+            # 问题3优化: 检查是否为对冲开仓,如果是则应用对冲保证金倍数
+            opposite_side = 'SHORT' if side == 'LONG' else 'LONG'
+            is_hedge = self.has_position(symbol, opposite_side)
+            if is_hedge:
+                hedge_multiplier = self.opt_config.get_hedge_margin_multiplier()
+                adjusted_position_size = adjusted_position_size * hedge_multiplier
+                logger.info(f"[HEDGE_MARGIN] {symbol} 对冲开仓, 保证金缩减到{hedge_multiplier*100:.0f}%")
+
+
             quantity = adjusted_position_size * self.leverage / current_price
             notional_value = quantity * current_price
             margin = adjusted_position_size
 
-            # 使用自适应参数计算止盈止损
+            # 使用自适应参数计算止损
             stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
-            take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+
+            # 问题4优化: 使用波动率配置计算动态止盈
+            volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
+            if volatility_profile:
+                # 根据方向使用对应的止盈配置
+                if side == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
+                    take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
+                    logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
+                elif side == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
+                    take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
+                    logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
+                else:
+                    # 回退到自适应参数
+                    take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+                    logger.debug(f"[TP_FALLBACK] {symbol} {side} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
+            else:
+                # 回退到自适应参数
+                take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+                logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
 
             if side == 'LONG':
                 stop_loss = current_price * (1 - stop_loss_pct)    # 止损
@@ -600,17 +653,25 @@ class SmartTraderService:
             signal_components_json = json.dumps(signal_components) if signal_components else None
             entry_score = opp.get('score', 0)
 
-            # 插入持仓记录
+            # 问题1优化: 计算动态超时时间
+            base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
+            # 计算超时时间点 (UTC时间)
+            from datetime import datetime, timedelta
+            timeout_at = datetime.utcnow() + timedelta(minutes=base_timeout_minutes)
+
+            # 插入持仓记录 (包含动态超时字段)
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 entry_signal_type, entry_score, signal_components, source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+                 entry_signal_type, entry_score, signal_components, max_hold_minutes, timeout_at,
+                 source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, side, quantity, current_price, self.leverage,
                 notional_value, margin, stop_loss, take_profit,
-                f"SMART_BRAIN_{opp['score']}", entry_score, signal_components_json
+                f"SMART_BRAIN_{opp['score']}", entry_score, signal_components_json,
+                base_timeout_minutes, timeout_at
             ))
 
             # 冻结资金 (开仓时扣除可用余额，增加冻结余额)
@@ -628,10 +689,11 @@ class SmartTraderService:
             sl_pct = f"-{stop_loss_pct*100:.1f}%" if side == 'LONG' else f"+{stop_loss_pct*100:.1f}%"
             tp_pct = f"+{take_profit_pct*100:.1f}%" if side == 'LONG' else f"-{take_profit_pct*100:.1f}%"
             blacklist_tag = " [黑名单-小仓位]" if is_blacklisted else ""
+            hedge_tag = " [对冲]" if is_hedge else ""
             logger.info(
-                f"[SUCCESS] {symbol} {side}开仓成功{blacklist_tag} | "
+                f"[SUCCESS] {symbol} {side}开仓成功{blacklist_tag}{hedge_tag} | "
                 f"止损: ${stop_loss:.4f} ({sl_pct}) | 止盈: ${take_profit:.4f} ({tp_pct}) | "
-                f"仓位: ${margin:.0f} (x{position_multiplier:.1f})"
+                f"仓位: ${margin:.0f} (x{position_multiplier:.1f}) | 超时: {base_timeout_minutes}分钟"
             )
             return True
 
@@ -911,7 +973,11 @@ class SmartTraderService:
             logger.error(f"[ERROR] 检查止盈止损失败: {e}")
 
     def close_old_positions(self):
-        """关闭超时持仓 (4小时后强制平仓)"""
+        """
+        问题1优化: 关闭超时持仓 (动态超时 + 分阶段超时)
+        - 动态超时: 根据entry_score和当前盈亏调整超时时间
+        - 分阶段超时: 1h/2h/3h/4h检查不同的亏损阈值
+        """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -923,53 +989,80 @@ class SmartTraderService:
             """, (self.account_id,))
             total_open = cursor.fetchone()[0]
 
-            # created_at存储的是UTC+0时间，所以用NOW()比较（NOW()返回UTC+0）
+            # 查询所有开仓持仓 (包含动态超时字段)
             cursor.execute("""
-                SELECT id, symbol, position_side, quantity, entry_price, created_at,
-                       TIMESTAMPDIFF(HOUR, created_at, NOW()) as hours_old
+                SELECT id, symbol, position_side, quantity, entry_price, margin, leverage,
+                       created_at, entry_score, max_hold_minutes, timeout_at,
+                       TIMESTAMPDIFF(MINUTE, created_at, NOW()) as minutes_old
                 FROM futures_positions
                 WHERE status = 'open' AND account_id = %s
-                AND created_at < DATE_SUB(NOW(), INTERVAL 4 HOUR)
             """, (self.account_id,))
 
-            old_positions = cursor.fetchall()
+            open_positions = cursor.fetchall()
 
-            if total_open > 0:
-                logger.info(f"[TIMEOUT_CHECK] 总持仓: {total_open}, 超时持仓(>4h): {len(old_positions)}")
-
-            if not old_positions:
+            if not open_positions:
                 cursor.close()
                 return
 
-            for pos in old_positions:
-                pos_id, symbol, position_side, quantity, entry_price, created_at, hours_old = pos
+            # 获取分阶段超时阈值
+            staged_thresholds = self.opt_config.get_staged_timeout_thresholds()
 
-                logger.info(f"[TIMEOUT_FOUND] {symbol} {position_side} 已持仓 {hours_old} 小时 (创建于 {created_at})")
+            timeout_positions = []  # 需要超时平仓的持仓
 
+            for pos in open_positions:
+                pos_id, symbol, position_side, quantity, entry_price, margin, leverage, \
+                created_at, entry_score, max_hold_minutes, timeout_at, minutes_old = pos
+
+                # 获取当前价格
                 current_price = self.get_current_price(symbol)
                 if not current_price:
                     continue
 
-                # Calculate realized PnL
+                # 计算当前盈亏
                 if position_side == 'LONG':
                     realized_pnl = (current_price - float(entry_price)) * float(quantity)
                 else:  # SHORT
                     realized_pnl = (float(entry_price) - current_price) * float(quantity)
 
-                logger.info(f"[CLOSE_TIMEOUT] {symbol} 超时平仓 | 价格: ${current_price:.4f} | 盈亏: {realized_pnl:+.2f} USDT")
+                pnl_pct = (realized_pnl / (float(entry_price) * float(quantity))) if float(quantity) > 0 else 0
+                hours_old = minutes_old / 60
 
-                # Get leverage and margin for ROI calculation
-                cursor.execute("""
-                    SELECT leverage, margin FROM futures_positions WHERE id = %s
-                """, (pos_id,))
-                pos_detail = cursor.fetchone()
-                leverage = pos_detail[0] if pos_detail else 1
-                margin = float(pos_detail[1]) if pos_detail else 0.0
-                pnl_pct = (realized_pnl / (float(entry_price) * float(quantity))) * 100 if float(quantity) > 0 else 0
-                roi = (realized_pnl / margin) * 100 if margin > 0 else 0
+                # 方案1: 动态超时 - 检查是否达到timeout_at
+                if timeout_at:
+                    from datetime import datetime
+                    now_utc = datetime.utcnow()
+                    if now_utc >= timeout_at:
+                        timeout_positions.append((pos_id, symbol, position_side, quantity, entry_price,
+                                                margin, leverage, current_price, realized_pnl, pnl_pct,
+                                                hours_old, f"DYNAMIC_TIMEOUT({max_hold_minutes}min)"))
+                        continue
 
-                # 平仓原因
-                close_reason = f"TIMEOUT_4H(持仓{hours_old}小时)"
+                # 方案2: 分阶段超时 - 检查不同时间节点的亏损阈值
+                for hour_checkpoint, loss_threshold in sorted(staged_thresholds.items()):
+                    if hours_old >= hour_checkpoint:
+                        # 检查是否达到该阶段的亏损阈值
+                        if pnl_pct < loss_threshold:
+                            timeout_positions.append((pos_id, symbol, position_side, quantity, entry_price,
+                                                    margin, leverage, current_price, realized_pnl, pnl_pct,
+                                                    hours_old, f"STAGED_TIMEOUT_{hour_checkpoint}H(亏损{pnl_pct*100:.1f}%>{loss_threshold*100:.1f}%)"))
+                            break  # 找到就退出,避免重复
+
+            logger.info(f"[TIMEOUT_CHECK] 总持仓: {total_open}, 超时持仓: {len(timeout_positions)}")
+
+            if not timeout_positions:
+                cursor.close()
+                return
+
+            # 执行超时平仓
+            for pos_data in timeout_positions:
+                pos_id, symbol, position_side, quantity, entry_price, margin, leverage, \
+                current_price, realized_pnl, pnl_pct, hours_old, close_reason = pos_data
+
+                logger.info(f"[CLOSE_TIMEOUT] {symbol} {position_side} 超时平仓 | "
+                          f"价格: ${current_price:.4f} | 盈亏: {realized_pnl:+.2f} USDT ({pnl_pct*100:+.2f}%) | "
+                          f"原因: {close_reason}")
+
+                roi = (realized_pnl / float(margin)) * 100 if margin and float(margin) > 0 else 0
 
                 cursor.execute("""
                     UPDATE futures_positions
@@ -1626,7 +1719,24 @@ class SmartTraderService:
             # 检查是否是凌晨2点且今天还没运行过
             if now.hour == 2 and self.last_optimization_date != current_date:
                 logger.info(f"⏰ 触发每日自适应优化 (时间: {now.strftime('%Y-%m-%d %H:%M:%S')})")
+
+                # 1. 运行原有的自适应优化 (参数调整)
                 self.run_adaptive_optimization()
+
+                # 2. 问题2优化: 更新交易对评级
+                logger.info("=" * 80)
+                logger.info("🏆 开始更新交易对评级 (3级黑名单制度)")
+                logger.info("=" * 80)
+                rating_results = self.rating_manager.update_all_symbol_ratings()
+                self.rating_manager.print_rating_report(rating_results)
+
+                # 3. 问题4优化: 更新波动率配置 (15M K线动态止盈)
+                logger.info("=" * 80)
+                logger.info("📊 开始更新波动率配置 (15M K线动态止盈)")
+                logger.info("=" * 80)
+                volatility_results = self.volatility_updater.update_all_symbols_volatility(self.brain.whitelist)
+                self.volatility_updater.print_volatility_report(volatility_results)
+
                 self.last_optimization_date = current_date
 
         except Exception as e:
@@ -1710,19 +1820,31 @@ class SmartTraderService:
                         # 获取反向持仓的开仓得分
                         old_score = self.get_position_score(symbol, opposite_side)
 
-                        # 如果新信号比旧信号强30分以上 -> 主动反向平仓
-                        # 数据显示：21分差距胜率87.5%但盈利小($2.28)，30分差距更谨慎减少交易次数
-                        if new_score > old_score + 30:
+                        # 问题2+3优化: 综合反转阈值 = 基础阈值(15分) + 评级额外阈值
+                        # 黑名单等级越高,反转阈值越高,更难反转
+                        rating_level = self.opt_config.get_symbol_rating_level(symbol)
+                        rating_config = self.opt_config.get_blacklist_config(rating_level)
+                        base_reversal_threshold = self.opt_config.get_hedge_reversal_threshold()
+                        rating_reversal_threshold = rating_config['reversal_threshold']
+
+                        # 使用两者中的较大值
+                        reversal_threshold = max(base_reversal_threshold, rating_reversal_threshold - old_score)
+                        if reversal_threshold < base_reversal_threshold:
+                            reversal_threshold = base_reversal_threshold
+
+                        # 如果新信号比旧信号强(反转阈值)以上 -> 主动反向平仓
+                        if new_score > old_score + reversal_threshold:
                             logger.info(
                                 f"[REVERSE] {symbol} 检测到强反向信号! "
-                                f"原{opposite_side}得分{old_score}, 新{new_side}得分{new_score} (差距{new_score-old_score}分)"
+                                f"原{opposite_side}得分{old_score}, 新{new_side}得分{new_score} "
+                                f"(差距{new_score-old_score}分 > 阈值{reversal_threshold}分)"
                             )
 
                             # 平掉反向持仓
                             self.close_position_by_side(
                                 symbol,
                                 opposite_side,
-                                reason=f"reverse_signal|new_{new_side}_score:{new_score}|old_score:{old_score}"
+                                reason=f"reverse_signal|new_{new_side}_score:{new_score}|old_score:{old_score}|threshold:{reversal_threshold}"
                             )
 
                             # 开新方向
@@ -1733,7 +1855,7 @@ class SmartTraderService:
                         # 反向信号不够强,允许对冲
                         logger.info(
                             f"[HEDGE] {symbol} 已有{opposite_side}(得分{old_score})持仓, "
-                            f"新{new_side}得分{new_score}未达反转阈值(需>{old_score+20}), 允许对冲"
+                            f"新{new_side}得分{new_score}未达反转阈值(需>{old_score+reversal_threshold:.0f}), 允许对冲"
                         )
 
                     # 正常开仓
