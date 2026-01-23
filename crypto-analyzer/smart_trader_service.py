@@ -52,7 +52,7 @@ class SmartDecisionBrain:
         # 从config.yaml加载配置
         self._load_config()
 
-        self.threshold = 25  # 提高阈值，确保交易质量，减少手续费损耗
+        self.threshold = 30  # 开仓阈值与超时配置对齐 (30/35/40/45分档)
 
     def _load_config(self):
         """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
