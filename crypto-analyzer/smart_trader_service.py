@@ -889,6 +889,9 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # 获取当前UTC+8时间用于比较
+            current_local_time = get_local_time()
+
             # 先检查有多少开仓持仓
             cursor.execute("""
                 SELECT COUNT(*) FROM futures_positions
@@ -896,13 +899,14 @@ class SmartTraderService:
             """, (self.account_id,))
             total_open = cursor.fetchone()[0]
 
+            # 使用参数传递时间，而不是NOW()，因为created_at是UTC+8
             cursor.execute("""
                 SELECT id, symbol, position_side, quantity, entry_price, created_at,
-                       TIMESTAMPDIFF(HOUR, created_at, NOW()) as hours_old
+                       TIMESTAMPDIFF(HOUR, created_at, %s) as hours_old
                 FROM futures_positions
                 WHERE status = 'open' AND account_id = %s
-                AND created_at < DATE_SUB(NOW(), INTERVAL 4 HOUR)
-            """, (self.account_id,))
+                AND created_at < DATE_SUB(%s, INTERVAL 4 HOUR)
+            """, (current_local_time, self.account_id, current_local_time))
 
             old_positions = cursor.fetchall()
 
