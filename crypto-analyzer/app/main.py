@@ -243,31 +243,8 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  Telegram通知服务初始化失败: {e}")
             trade_notifier = None
 
-        # 初始化合约限价单自动执行器
-        try:
-            from app.services.futures_limit_order_executor import FuturesLimitOrderExecutor
-            from app.trading.futures_trading_engine import FuturesTradingEngine
-            from app.services.position_validator import init_position_validator
-
-            db_config = config.get('database', {}).get('mysql', {})
-            futures_engine = FuturesTradingEngine(db_config, trade_notifier=trade_notifier, live_engine=live_engine)
-
-            # 初始化 PositionValidator（供限价单超时转自检使用）
-            init_position_validator(db_config, futures_engine, trade_notifier)
-            logger.info("✅ PositionValidator 初始化成功（供限价单超时转自检）")
-
-            futures_limit_order_executor = FuturesLimitOrderExecutor(
-                db_config=db_config,
-                trading_engine=futures_engine,
-                price_cache_service=price_cache_service,
-                live_engine=live_engine
-            )
-            logger.info("✅ 合约限价单自动执行服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  合约限价单自动执行服务初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-            futures_limit_order_executor = None
+        # 合约限价单自动执行器已移除（archived）
+        futures_limit_order_executor = None
 
         # 初始化合约止盈止损监控服务
         try:
@@ -498,14 +475,6 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 注册策略管理API路由
-try:
-    from app.api.strategy_api import router as strategy_router
-    app.include_router(strategy_router)
-    logger.info("✅ 策略管理API路由已注册")
-except Exception as e:
-    logger.warning(f"⚠️  策略管理API路由注册失败: {e}")
-
 # 注册模拟交易API路由
 try:
     from app.api.paper_trading_api import router as paper_trading_router
@@ -611,17 +580,6 @@ except Exception as e:
     logger.warning(f"⚠️  行情识别API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
-
-# 注册策略分析API路由
-try:
-    from app.api.strategy_analyzer_api import router as strategy_analyzer_router
-    app.include_router(strategy_analyzer_router)
-    logger.info("✅ 策略分析API路由已注册（/api/strategy-analyzer）")
-except Exception as e:
-    logger.warning(f"⚠️  策略分析API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
-
 
 # ==================== API路由 ====================
 
