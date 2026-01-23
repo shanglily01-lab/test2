@@ -842,8 +842,8 @@ class SmartTraderService:
                             should_close = True
                             close_reason = 'STOP_LOSS'
 
-                # 2. 智能顶底识别 (优先于固定止盈)
-                if not should_close:
+                # 2. 智能顶底识别 (优先于固定止盈) - 要求至少持仓2小时
+                if not should_close and holding_minutes >= 120:  # 至少持仓2小时才检查顶底
                     is_top_bottom, tb_reason = self.check_top_bottom(symbol, position_side, float(entry_price))
                     if is_top_bottom:
                         should_close = True
