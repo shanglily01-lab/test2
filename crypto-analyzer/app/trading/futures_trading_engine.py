@@ -473,7 +473,7 @@ class FuturesTradingEngine:
                     
                     # 检查账户余额
                     cursor.execute(
-                        "SELECT current_balance, frozen_balance, total_equity FROM paper_trading_accounts WHERE id = %s",
+                        "SELECT current_balance, frozen_balance, total_equity FROM futures_trading_accounts WHERE id = %s",
                         (account_id,)
                     )
                     account = cursor.fetchone()
@@ -543,7 +543,7 @@ class FuturesTradingEngine:
                     
                     # 更新总权益（限价单时还没有持仓，未实现盈亏为0）
                     cursor.execute(
-                        """UPDATE paper_trading_accounts a
+                        """UPDATE futures_trading_accounts a
                         SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
                             SELECT SUM(p.unrealized_pnl) 
                             FROM futures_positions p 
@@ -615,7 +615,7 @@ class FuturesTradingEngine:
             # 4. 检查账户余额（并保存变化前的余额信息）
             try:
                 cursor.execute(
-                    "SELECT current_balance, frozen_balance, total_equity FROM paper_trading_accounts WHERE id = %s",
+                    "SELECT current_balance, frozen_balance, total_equity FROM futures_trading_accounts WHERE id = %s",
                     (account_id,)
                 )
                 account = cursor.fetchone()
@@ -792,7 +792,7 @@ class FuturesTradingEngine:
             # 手续费直接扣除，只冻结保证金
             new_balance = current_balance - margin_required - fee  # 扣除保证金和手续费
             cursor.execute(
-                """UPDATE paper_trading_accounts
+                """UPDATE futures_trading_accounts
                 SET current_balance = %s, frozen_balance = frozen_balance + %s
                 WHERE id = %s""",
                 (float(new_balance), float(margin_required), account_id)  # 只冻结保证金
@@ -805,7 +805,7 @@ class FuturesTradingEngine:
 
             # 10. 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
             cursor.execute(
-                """UPDATE paper_trading_accounts a
+                """UPDATE futures_trading_accounts a
                 SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
                     SELECT SUM(p.unrealized_pnl) 
                     FROM futures_positions p 
@@ -929,7 +929,7 @@ class FuturesTradingEngine:
             
             # 获取变化前的账户余额信息（用于资金管理记录）
             cursor.execute(
-                "SELECT current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
+                "SELECT current_balance, frozen_balance FROM futures_trading_accounts WHERE id = %s",
                 (account_id,)
             )
             account_before = cursor.fetchone()
@@ -1135,7 +1135,7 @@ class FuturesTradingEngine:
             is_winning_trade = realized_pnl > 0
             
             cursor.execute(
-                """UPDATE paper_trading_accounts
+                """UPDATE futures_trading_accounts
                 SET current_balance = current_balance + %s + %s,
                     frozen_balance = frozen_balance - %s,
                     realized_pnl = realized_pnl + %s,
@@ -1149,7 +1149,7 @@ class FuturesTradingEngine:
             
             # 更新胜率
             cursor.execute(
-                """UPDATE paper_trading_accounts
+                """UPDATE futures_trading_accounts
                 SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
                 WHERE id = %s""",
                 (account_id,)
@@ -1157,7 +1157,7 @@ class FuturesTradingEngine:
 
             # 9. 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
             cursor.execute(
-                """UPDATE paper_trading_accounts a
+                """UPDATE futures_trading_accounts a
                 SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
                     SELECT SUM(p.unrealized_pnl) 
                     FROM futures_positions p 
@@ -1169,7 +1169,7 @@ class FuturesTradingEngine:
             
             # 获取变化后的账户余额信息（用于资金管理记录）
             cursor.execute(
-                "SELECT current_balance, frozen_balance FROM paper_trading_accounts WHERE id = %s",
+                "SELECT current_balance, frozen_balance FROM futures_trading_accounts WHERE id = %s",
                 (account_id,)
             )
             account_after = cursor.fetchone()
@@ -1564,7 +1564,7 @@ class FuturesTradingEngine:
             account_ids_with_positions = [row['account_id'] for row in cursor.fetchall()]
             
             # 获取所有账户（包括没有持仓的）
-            cursor.execute("SELECT id FROM paper_trading_accounts")
+            cursor.execute("SELECT id FROM futures_trading_accounts")
             all_account_ids = [row['id'] for row in cursor.fetchall()]
             
             updated_count = 0
@@ -1572,7 +1572,7 @@ class FuturesTradingEngine:
                 try:
                     # 更新该账户的总权益
                     cursor.execute(
-                        """UPDATE paper_trading_accounts a
+                        """UPDATE futures_trading_accounts a
                         SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
                             SELECT SUM(p.unrealized_pnl) 
                             FROM futures_positions p 

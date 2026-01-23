@@ -378,7 +378,8 @@ async def get_data_statistics():
             {'name': 'futures_positions', 'label': '合约持仓', 'description': '存储合约交易持仓记录', 'time_field': 'created_at', 'is_binance': False},
             {'name': 'futures_orders', 'label': '合约订单', 'description': '存储合约交易订单记录', 'time_field': 'created_at', 'is_binance': False},
             {'name': 'futures_trades', 'label': '合约交易', 'description': '存储合约交易记录', 'time_field': 'timestamp', 'is_binance': False},
-            {'name': 'paper_trading_accounts', 'label': '模拟账户', 'description': '存储模拟交易账户信息', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'futures_trading_accounts', 'label': '合约账户', 'description': '存储合约模拟交易账户信息', 'time_field': 'created_at', 'is_binance': False},
+            {'name': 'paper_trading_accounts', 'label': '现货账户', 'description': '存储现货模拟交易账户信息', 'time_field': 'created_at', 'is_binance': False},
             {'name': 'paper_trading_orders', 'label': '模拟订单', 'description': '存储模拟交易订单记录', 'time_field': 'created_at', 'is_binance': False},
             {'name': 'paper_trading_positions', 'label': '模拟持仓', 'description': '存储模拟交易持仓记录', 'time_field': 'created_at', 'is_binance': False},
             {'name': 'crypto_etf_flows', 'label': 'ETF数据', 'description': '存储加密货币ETF资金流向数据', 'time_field': 'date', 'is_binance': False},
@@ -624,7 +625,7 @@ async def get_table_sample(table_name: str, limit: int = 10):
             'futures_open_interest', 'futures_long_short_ratio',
             'smart_money_transactions', 'smart_money_signals', 'ema_signals',
             'investment_recommendations', 'futures_positions', 'futures_orders',
-            'futures_trades', 'paper_trading_accounts', 'paper_trading_orders',
+            'futures_trades', 'futures_trading_accounts', 'paper_trading_accounts', 'paper_trading_orders',
             'paper_trading_positions', 'crypto_etf_flows', 'corporate_treasury_financing'
         ]
         

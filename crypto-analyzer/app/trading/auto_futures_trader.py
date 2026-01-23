@@ -382,7 +382,7 @@ class AutoFuturesTrader:
             total_equity,
             total_trades,
             win_rate
-        FROM paper_trading_accounts
+        FROM futures_trading_accounts
         WHERE id = %s
         """
 

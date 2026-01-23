@@ -700,7 +700,7 @@ async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual
 
             # 释放保证金和手续费到可用余额
             cursor.execute(
-                """UPDATE paper_trading_accounts
+                """UPDATE futures_trading_accounts
                 SET current_balance = current_balance + %s,
                     frozen_balance = frozen_balance - %s,
                     updated_at = NOW()
@@ -710,7 +710,7 @@ async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual
 
             # 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
             cursor.execute(
-                """UPDATE paper_trading_accounts a
+                """UPDATE futures_trading_accounts a
                 SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
                     SELECT SUM(p.unrealized_pnl)
                     FROM futures_positions p
@@ -1110,7 +1110,7 @@ async def get_account(account_id: int):
             total_trades,
             win_rate,
             status
-        FROM paper_trading_accounts
+        FROM futures_trading_accounts
         WHERE id = %s
         """
 
