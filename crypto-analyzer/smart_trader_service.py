@@ -823,7 +823,7 @@ class SmartTraderService:
                             %s, %s, 'FILLED',
                             %s, %s,
                             %s, %s,
-                            'smart_trader', '止盈止损'
+                            'smart_trader', %s
                         )
                     """, (
                         self.account_id, order_id, pos_id, symbol,
@@ -832,7 +832,7 @@ class SmartTraderService:
                         notional_value, notional_value,
                         fee, 0.0004,
                         current_price, datetime.utcnow(),
-                        realized_pnl, pnl_pct
+                        realized_pnl, pnl_pct, close_reason
                     ))
 
                     # Create futures_trades record for frontend display
@@ -980,7 +980,7 @@ class SmartTraderService:
                         %s, %s, 'FILLED',
                         %s, %s,
                         %s, %s,
-                        'smart_trader', '超时平仓(4小时)'
+                        'smart_trader', %s
                     )
                 """, (
                     self.account_id, order_id, pos_id, symbol,
@@ -989,7 +989,7 @@ class SmartTraderService:
                     notional_value, notional_value,
                     fee, 0.0004,
                     current_price, datetime.utcnow(),
-                    realized_pnl, pnl_pct
+                    realized_pnl, pnl_pct, close_reason
                 ))
 
                 # Create futures_trades record for frontend display
@@ -1173,7 +1173,7 @@ class SmartTraderService:
                                     %s, %s, 'FILLED',
                                     %s, %s,
                                     %s, %s,
-                                    'smart_trader', '对冲平仓(亏损止损)'
+                                    'smart_trader', %s
                                 )
                             """, (
                                 self.account_id, order_id, long_pos['id'], symbol,
@@ -1182,7 +1182,7 @@ class SmartTraderService:
                                 notional_value, notional_value,
                                 fee, 0.0004,
                                 current_price, datetime.utcnow(),
-                                long_pos['realized_pnl'], long_pos['pnl_pct']
+                                long_pos['realized_pnl'], long_pos['pnl_pct'], '对冲止损平仓'
                             ))
 
                             # Create futures_trades record for frontend display
@@ -1278,7 +1278,7 @@ class SmartTraderService:
                                     %s, %s, 'FILLED',
                                     %s, %s,
                                     %s, %s,
-                                    'smart_trader', '对冲平仓(亏损止损)'
+                                    'smart_trader', %s
                                 )
                             """, (
                                 self.account_id, order_id, short_pos['id'], symbol,
@@ -1464,7 +1464,7 @@ class SmartTraderService:
                         %s, %s, 'FILLED',
                         %s, %s,
                         %s, %s,
-                        'smart_trader', '反向信号平仓'
+                        'smart_trader', %s
                     )
                 """, (
                     self.account_id, order_id, pos['id'], symbol,
@@ -1473,7 +1473,7 @@ class SmartTraderService:
                     notional_value, notional_value,
                     fee, 0.0004,
                     current_price, datetime.utcnow(),
-                    realized_pnl, pnl_pct
+                    realized_pnl, pnl_pct, reason
                 ))
 
                 # Create futures_trades record for frontend display
