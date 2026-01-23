@@ -1198,7 +1198,6 @@ class FuturesTradingEngine:
                     if position.get('open_time'):
                         open_time = position['open_time']
                         if isinstance(open_time, str):
-                            from datetime import datetime
                             open_time = datetime.strptime(open_time, '%Y-%m-%d %H:%M:%S')
                         hold_duration = datetime.utcnow() - open_time
                         hours, remainder = divmod(hold_duration.total_seconds(), 3600)
