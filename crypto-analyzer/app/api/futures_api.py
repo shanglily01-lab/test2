@@ -1099,7 +1099,7 @@ async def get_account(account_id: int):
         SELECT
             id as account_id,
             account_name,
-            account_type,
+            'futures' as account_type,
             initial_balance,
             current_balance,
             frozen_balance,
