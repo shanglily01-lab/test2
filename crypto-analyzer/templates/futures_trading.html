@@ -2051,15 +2051,9 @@
                         const entryNotional = (trade.quantity && trade.entry_price) ?
                             (parseFloat(trade.quantity) * parseFloat(trade.entry_price)) : 0;
 
-                        // 格式化时间函数
+                        // 格式化时间函数（使用全局的UTC+8转换）
                         function formatTradeTime(timeStr) {
-                            if (!timeStr) return '--';
-                            const date = new Date(timeStr);
-                            const month = String(date.getMonth() + 1).padStart(2, '0');
-                            const day = String(date.getDate()).padStart(2, '0');
-                            const hours = String(date.getHours()).padStart(2, '0');
-                            const minutes = String(date.getMinutes()).padStart(2, '0');
-                            return `${month}-${day} ${hours}:${minutes}`;
+                            return formatTimeUTC8(timeStr, 'datetime', false);
                         }
 
                         return `
