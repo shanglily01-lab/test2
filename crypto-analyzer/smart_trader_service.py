@@ -130,19 +130,19 @@ class SmartDecisionBrain:
                 # 如果表不存在，使用空字典
                 self.signal_blacklist = {}
 
-            # 6. 过滤掉黑名单中的交易对
-            self.whitelist = [s for s in all_symbols if s not in self.blacklist]
+            # 6. 所有交易对都可以交易（不过滤黑名单）
+            self.whitelist = all_symbols
 
             logger.info(f"✅ 从数据库加载配置:")
             logger.info(f"   总交易对: {len(all_symbols)}")
-            logger.info(f"   数据库黑名单: {len(self.blacklist)} 个")
+            logger.info(f"   数据库黑名单: {len(self.blacklist)} 个 (使用100U小仓位)")
             logger.info(f"   可交易: {len(self.whitelist)} 个")
             logger.info(f"   📊 自适应参数 (从数据库):")
             logger.info(f"      LONG止损: {self.adaptive_long['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_long['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_long['min_holding_minutes']:.0f}分钟, 仓位倍数: {self.adaptive_long['position_size_multiplier']:.1f}")
             logger.info(f"      SHORT止损: {self.adaptive_short['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_short['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_short['min_holding_minutes']:.0f}分钟, 仓位倍数: {self.adaptive_short['position_size_multiplier']:.1f}")
 
             if self.blacklist:
-                logger.info(f"   🚫 黑名单交易对: {', '.join(self.blacklist)}")
+                logger.info(f"   ⚠️  黑名单交易对(小仓位): {', '.join(self.blacklist)}")
 
             if self.signal_blacklist:
                 logger.info(f"   🚫 禁用信号: {len(self.signal_blacklist)} 个")
@@ -429,7 +429,8 @@ class SmartTraderService:
         }
 
         self.account_id = 2
-        self.position_size_usdt = 400
+        self.position_size_usdt = 400  # 默认仓位
+        self.blacklist_position_size_usdt = 100  # 黑名单交易对使用小仓位
         self.max_positions = 999  # 不限制持仓数量
         self.leverage = 5
         self.scan_interval = 300
@@ -448,8 +449,8 @@ class SmartTraderService:
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
         logger.info(f"账户ID: {self.account_id}")
-        logger.info(f"仓位: ${self.position_size_usdt} | 杠杆: {self.leverage}x | 最大持仓: {self.max_positions}")
-        logger.info(f"白名单: {len(self.brain.whitelist)}个币种 | 扫描间隔: {self.scan_interval}秒")
+        logger.info(f"仓位: 正常${self.position_size_usdt} / 黑名单${self.blacklist_position_size_usdt} | 杠杆: {self.leverage}x | 最大持仓: {self.max_positions}")
+        logger.info(f"白名单: {len(self.brain.whitelist)}个币种 | 黑名单: {len(self.brain.blacklist)}个币种 | 扫描间隔: {self.scan_interval}秒")
         logger.info("🧠 自适应优化器已启用 (每日凌晨2点自动运行)")
         logger.info("=" * 60)
 
@@ -562,6 +563,10 @@ class SmartTraderService:
             else:
                 price_source = "WS"
 
+            # 判断是否在黑名单，决定使用哪个仓位大小
+            is_blacklisted = symbol in self.brain.blacklist
+            base_position_size = self.blacklist_position_size_usdt if is_blacklisted else self.position_size_usdt
+
             # 使用自适应参数调整仓位大小
             if side == 'LONG':
                 position_multiplier = self.brain.adaptive_long.get('position_size_multiplier', 1.0)
@@ -571,7 +576,7 @@ class SmartTraderService:
                 adaptive_params = self.brain.adaptive_short
 
             # 应用仓位倍数
-            adjusted_position_size = self.position_size_usdt * position_multiplier
+            adjusted_position_size = base_position_size * position_multiplier
 
             quantity = adjusted_position_size * self.leverage / current_price
             notional_value = quantity * current_price
@@ -618,8 +623,9 @@ class SmartTraderService:
             # 显示实际使用的止损止盈百分比
             sl_pct = f"-{stop_loss_pct*100:.1f}%" if side == 'LONG' else f"+{stop_loss_pct*100:.1f}%"
             tp_pct = f"+{take_profit_pct*100:.1f}%" if side == 'LONG' else f"-{take_profit_pct*100:.1f}%"
+            blacklist_tag = " [黑名单-小仓位]" if is_blacklisted else ""
             logger.info(
-                f"[SUCCESS] {symbol} {side}开仓成功 | "
+                f"[SUCCESS] {symbol} {side}开仓成功{blacklist_tag} | "
                 f"止损: ${stop_loss:.4f} ({sl_pct}) | 止盈: ${take_profit:.4f} ({tp_pct}) | "
                 f"仓位: ${margin:.0f} (x{position_multiplier:.1f})"
             )
