@@ -187,7 +187,7 @@ class UnifiedDataScheduler:
             enabled_exchanges = list(self.price_collector.collectors.keys())
             exchanges_str = ' + '.join(enabled_exchanges) if enabled_exchanges else 'Binance'
 
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始采集多交易所数据 ({exchanges_str}) ({timeframe})...")
+            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始采集多交易所数据 ({exchanges_str}) ({timeframe})...")
 
             for symbol in self.symbols:
                 try:
@@ -206,7 +206,7 @@ class UnifiedDataScheduler:
 
             # 更新统计
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
             logger.info(f"  ✓ 多交易所数据采集完成 ({exchanges_str}) ({timeframe})")
 
         except Exception as e:
@@ -300,7 +300,7 @@ class UnifiedDataScheduler:
     #         return
     #
     #     task_name = 'binance_futures_1m'
-    #     start_time = datetime.now()
+    #     start_time = datetime.utcnow()
     #
     #     try:
     #         logger.info(f"[{start_time.strftime('%H:%M:%S')}] 开始采集币安合约数据...")
@@ -438,10 +438,10 @@ class UnifiedDataScheduler:
     #
     #         # 更新统计
     #         self.task_stats[task_name]['count'] += 1
-    #         self.task_stats[task_name]['last_run'] = datetime.now()
+    #         self.task_stats[task_name]['last_run'] = datetime.utcnow()
     #
     #         # 计算执行时间
-    #         elapsed_time = (datetime.now() - start_time).total_seconds()
+    #         elapsed_time = (datetime.utcnow() - start_time).total_seconds()
     #         logger.info(
     #             f"  ✓ 合约数据采集完成: 成功 {collected_count}/{len(self.symbols)}, "
     #             f"失败 {error_count}, 耗时 {elapsed_time:.1f}秒"
@@ -466,7 +466,7 @@ class UnifiedDataScheduler:
     #
     #     task_name = f'binance_futures_kline_{timeframe}'
     #     try:
-    #         logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始采集币安合约 {timeframe} K线数据...")
+    #         logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始采集币安合约 {timeframe} K线数据...")
     #
     #         collected_count = 0
     #         error_count = 0
@@ -512,7 +512,7 @@ class UnifiedDataScheduler:
     #         if task_name not in self.task_stats:
     #             self.task_stats[task_name] = {'count': 0, 'last_run': None, 'last_error': None}
     #         self.task_stats[task_name]['count'] += 1
-    #         self.task_stats[task_name]['last_run'] = datetime.now()
+    #         self.task_stats[task_name]['last_run'] = datetime.utcnow()
     #
     #         logger.info(
     #             f"  ✓ 合约 {timeframe} K线采集完成: 成功 {collected_count}/{len(self.symbols)}, "
@@ -531,7 +531,7 @@ class UnifiedDataScheduler:
         """采集资金费率数据 (每5分钟) - 从所有交易所"""
         task_name = 'funding_rate'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始采集资金费率...")
+            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始采集资金费率...")
 
             total_count = 0
 
@@ -562,7 +562,7 @@ class UnifiedDataScheduler:
 
             # 更新统计
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
             logger.info(f"  ✓ 资金费率采集完成 (共 {total_count} 条)")
 
         except Exception as e:
@@ -575,7 +575,7 @@ class UnifiedDataScheduler:
         """采集新闻数据 (每15分钟) - 多渠道采集"""
         task_name = 'news'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始采集新闻数据...")
+            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始采集新闻数据...")
 
             # 提取币种代码 (BTC/USDT -> BTC)
             symbols_codes = [symbol.split('/')[0] for symbol in self.symbols]
@@ -629,7 +629,7 @@ class UnifiedDataScheduler:
 
             # 更新统计
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
 
         except Exception as e:
             logger.error(f"新闻采集任务失败: {e}")
@@ -649,7 +649,7 @@ class UnifiedDataScheduler:
 
         task_name = f'ethereum_{timeframe}'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始采集 Ethereum 链上数据 ({timeframe})...")
+            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始采集 Ethereum 链上数据 ({timeframe})...")
 
             # 根据时间周期确定回溯时间
             lookback_hours_map = {
@@ -676,7 +676,7 @@ class UnifiedDataScheduler:
 
             # 更新统计
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
 
         except Exception as e:
             logger.error(f"Ethereum 数据采集任务失败 ({timeframe}): {e}")
@@ -691,7 +691,7 @@ class UnifiedDataScheduler:
 
         task_name = 'auto_trading'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 🤖 开始自动合约交易...")
+            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 🤖 开始自动合约交易...")
 
             # 执行自动交易
             results = self.auto_trader.run_auto_trading_cycle()
@@ -714,7 +714,7 @@ class UnifiedDataScheduler:
 
             # 更新统计
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
 
         except Exception as e:
             logger.error(f"自动交易任务失败: {e}")
@@ -733,7 +733,7 @@ class UnifiedDataScheduler:
 
         task_name = 'hyperliquid_daily'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始采集 Hyperliquid 排行榜...")
+            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始采集 Hyperliquid 排行榜...")
 
             # 1. 获取排行榜
             leaderboard = await self.hyperliquid_collector.fetch_leaderboard()
@@ -807,7 +807,7 @@ class UnifiedDataScheduler:
 
             # 更新统计
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
 
         except Exception as e:
             logger.error(f"Hyperliquid 数据采集任务失败: {e}")
@@ -825,7 +825,7 @@ class UnifiedDataScheduler:
 
         task_name = 'hyperliquid_monitor'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始监控 Hyperliquid 聪明钱包 (优先级: {priority})...")
+            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始监控 Hyperliquid 聪明钱包 (优先级: {priority})...")
 
             from app.database.hyperliquid_db import HyperliquidDB
 
@@ -869,7 +869,7 @@ class UnifiedDataScheduler:
 
                         # 保存持仓快照
                         positions = result.get('positions', [])
-                        snapshot_time = datetime.now()
+                        snapshot_time = datetime.utcnow()
                         for pos in positions:
                             position_data = {
                                 'coin': pos['coin'],
@@ -926,7 +926,7 @@ class UnifiedDataScheduler:
 
             # 更新统计
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
 
         except Exception as e:
             logger.error(f"Hyperliquid 钱包监控任务失败: {e}")
@@ -1266,7 +1266,7 @@ class UnifiedDataScheduler:
             await self.cache_service.update_price_stats_cache(self.symbols)
 
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
             # 移除成功时的日志，仅在失败时打印
 
         except Exception as e:
@@ -1286,7 +1286,7 @@ class UnifiedDataScheduler:
             
             # 更新统计
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
             self.task_stats[task_name]['last_error'] = None
             
         except Exception as e:
@@ -1297,7 +1297,7 @@ class UnifiedDataScheduler:
         """更新分析类缓存 (每5分钟) - 技术指标、新闻情绪、资金费率、投资建议"""
         task_name = 'cache_analysis'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始更新分析缓存...")
+            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始更新分析缓存...")
 
             # 并发更新4个分析缓存
             await asyncio.gather(
@@ -1309,7 +1309,7 @@ class UnifiedDataScheduler:
             )
 
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
             logger.info(f"  ✓ 分析缓存更新完成 (技术指标、新闻情绪、资金费率、投资建议)")
 
         except Exception as e:
@@ -1320,7 +1320,7 @@ class UnifiedDataScheduler:
         """更新Hyperliquid聚合缓存 (每10分钟)"""
         task_name = 'cache_hyperliquid'
         try:
-            logger.info(f"[{datetime.now().strftime('%H:%M:%S')}] 开始更新Hyperliquid缓存...")
+            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始更新Hyperliquid缓存...")
 
             # 添加60秒超时保护，防止无限挂起
             await asyncio.wait_for(
@@ -1329,7 +1329,7 @@ class UnifiedDataScheduler:
             )
 
             self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.now()
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
             logger.info(f"  ✓ Hyperliquid缓存更新完成 - {len(self.symbols)} 个币种")
 
         except asyncio.TimeoutError:

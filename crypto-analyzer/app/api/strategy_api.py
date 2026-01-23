@@ -1506,7 +1506,7 @@ async def predict_price_trend(request: PricePredictionRequest):
         from app.strategies.price_predictor import PricePredictor
         
         # 获取过去7天的数据（用于分析）
-        end_date = datetime.now()
+        end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=7)
         
         # 获取历史数据
@@ -1835,7 +1835,7 @@ async def get_strategy_execution_list(
         from app.database.db_service import get_db_config
         
         # 计算时间范围
-        now = datetime.now()
+        now = datetime.utcnow()
         time_delta_map = {
             '1h': timedelta(hours=1),
             '24h': timedelta(hours=24),
@@ -2027,7 +2027,7 @@ async def get_strategy_hits(
         from app.database.db_service import get_db_config
         
         # 计算时间范围
-        now = datetime.now()
+        now = datetime.utcnow()
         time_delta_map = {
             '1h': timedelta(hours=1),
             '24h': timedelta(hours=24),

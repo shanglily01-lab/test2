@@ -271,7 +271,7 @@ class AutoFuturesTrader:
             交易结果统计
         """
         logger.info("=" * 70)
-        logger.info(f"🤖 Auto-Trading Cycle Started - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"🤖 Auto-Trading Cycle Started - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 70)
 
         # 获取最新建议
@@ -314,7 +314,7 @@ class AutoFuturesTrader:
                 'symbol': symbol,
                 'recommendation': rec_type,
                 'confidence': confidence,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.utcnow().isoformat()
             }
 
             # 判断是否开仓

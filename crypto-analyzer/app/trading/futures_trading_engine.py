@@ -11,13 +11,6 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 import pymysql
 
-# 定义本地时区（UTC+8）
-LOCAL_TIMEZONE = timezone(timedelta(hours=8))
-
-def datetime.utcnow() -> datetime:
-    """获取本地时间（UTC+8）"""
-    return datetime.now(LOCAL_TIMEZONE).replace(tzinfo=None)
-
 def get_quantity_precision(symbol: str) -> int:
     """
     根据交易对获取数量精度（小数位数）

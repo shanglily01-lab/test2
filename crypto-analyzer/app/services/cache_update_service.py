@@ -44,7 +44,7 @@ class CacheUpdateService:
             symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
 
         # logger.info(f"🔄 开始更新缓存 - {len(symbols)} 个币种")  # 减少日志输出
-        start_time = datetime.now()
+        start_time = datetime.utcnow()
 
         try:
             # 并行更新各个缓存表
@@ -65,9 +65,9 @@ class CacheUpdateService:
             success_count = sum(1 for r in results if not isinstance(r, Exception))
             failed_count = len(results) - success_count
 
-            elapsed = (datetime.now() - start_time).total_seconds()
+            elapsed = (datetime.utcnow() - start_time).total_seconds()
             # 只在有失败时输出日志，或者每小时输出一次
-            if failed_count > 0 or datetime.now().minute == 0:
+            if failed_count > 0 or datetime.utcnow().minute == 0:
                 logger.info(
                     f"✅ 缓存更新完成 - 成功: {success_count}, 失败: {failed_count}, "
                     f"耗时: {elapsed:.2f}秒"
@@ -113,7 +113,7 @@ class CacheUpdateService:
                 else:
                     # 回退到从K线数据计算
                     # 获取24小时前的价格
-                    past_time = datetime.now() - timedelta(hours=24)
+                    past_time = datetime.utcnow() - timedelta(hours=24)
                     past_kline = self.db_service.get_kline_at_time(symbol, '5m', past_time)
                     price_24h_ago = float(past_kline.close_price) if past_kline else current_price
 
@@ -121,7 +121,7 @@ class CacheUpdateService:
                     # 注意：数据库存储的是本地时间（UTC+8），不是UTC时间
                     klines_24h = self.db_service.get_klines(
                         symbol, '5m',  # 使用5分钟K线
-                        start_time=datetime.now() - timedelta(hours=24),  # 使用本地时间
+                        start_time=datetime.utcnow() - timedelta(hours=24),  # 使用本地时间
                         limit=288  # 5分钟 * 288 = 24小时
                     )
 
@@ -135,7 +135,7 @@ class CacheUpdateService:
                         )
                         # 只取最近24小时的数据
                         if klines_24h:
-                            cutoff_time = datetime.now() - timedelta(hours=24)
+                            cutoff_time = datetime.utcnow() - timedelta(hours=24)
                             klines_24h = [k for k in klines_24h if k.timestamp >= cutoff_time]
                     
                     # 如果仍然没有数据，使用最新价格作为默认值

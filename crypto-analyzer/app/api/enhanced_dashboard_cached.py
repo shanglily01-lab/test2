@@ -45,7 +45,7 @@ class EnhancedDashboardCached:
             symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
 
         # logger.info(f"📊 从缓存获取Dashboard数据 - {len(symbols)} 个币种")  # 减少日志输出
-        start_time = datetime.now()
+        start_time = datetime.utcnow()
 
         # 并行读取缓存表
         tasks = [
@@ -103,7 +103,7 @@ class EnhancedDashboardCached:
         # 统计信号
         signal_stats = self._calculate_signal_stats(recommendations)
 
-        elapsed = (datetime.now() - start_time).total_seconds()
+        elapsed = (datetime.utcnow() - start_time).total_seconds()
         # logger.info(f"✅ Dashboard数据获取完成，耗时: {elapsed:.3f}秒（从缓存）")  # 减少日志输出
 
         # 确保所有数据都是可序列化的
@@ -126,7 +126,7 @@ class EnhancedDashboardCached:
                         **stats,
                         **signal_stats
                     },
-                    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'last_updated': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
                     'from_cache': True  # 标记数据来源于缓存
                 }
             }
@@ -144,7 +144,7 @@ class EnhancedDashboardCached:
                     'hyperliquid': {},
                     'futures': [],
                     'stats': {},
-                    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'last_updated': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
                 },
                 'error': str(e)
             }
@@ -188,7 +188,7 @@ class EnhancedDashboardCached:
             results = session.execute(sql, params).fetchall()
 
             # 检查哪些价格需要实时更新（超过30秒）
-            now = datetime.now()
+            now = datetime.utcnow()
             symbols_need_realtime = []
             
             for row in results:
@@ -569,7 +569,7 @@ class EnhancedDashboardCached:
 
             # 获取最近大额交易（优化版本：减少时间范围，添加索引提示）
             from datetime import timedelta
-            cutoff_time = datetime.now() - timedelta(hours=24)  # 减少到24小时以提高性能
+            cutoff_time = datetime.utcnow() - timedelta(hours=24)  # 减少到24小时以提高性能
             
             # 先统计24小时内有交易的钱包数（活跃钱包）
             active_wallets_result = session.execute(text("""

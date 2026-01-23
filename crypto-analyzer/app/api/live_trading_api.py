@@ -731,7 +731,7 @@ async def cancel_order(request: CancelOrderRequest):
 📋 订单ID: {request.order_id}
 💡 原因: 手动取消
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}
 """
                     notifier._send_telegram(message)
             except Exception as notify_err:

@@ -528,7 +528,7 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
                 return {
                     "symbol": symbol,
                     "price": price,
-                    "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
                     "source": "realtime_api"
                 }
         
@@ -545,7 +545,7 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
         return {
             "symbol": symbol,
             "price": float(price),
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
             "source": "realtime_or_cache"
         }
     except HTTPException:
@@ -968,7 +968,7 @@ async def get_ema_signals(limit: int = 10):
                                             'signal_type': 'BUY',
                                             'timeframe': '15m',
                                             'message': line.strip(),
-                                            'timestamp': datetime.now().isoformat()
+                                            'timestamp': datetime.utcnow().isoformat()
                                         })
 
                                         if len(signals) >= limit:

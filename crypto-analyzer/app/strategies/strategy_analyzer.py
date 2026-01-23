@@ -75,7 +75,7 @@ class StrategyBasedAnalyzer:
                 'risk_reward_ratio': risk_reward,
                 'reasons': reasons,
                 'dimension_scores': dimension_scores,
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.utcnow().isoformat()
             }
 
         except Exception as e:

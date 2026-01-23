@@ -80,14 +80,14 @@ class BinanceWSPriceService:
             return False
         if self._last_update_time is None:
             return False
-        elapsed = (datetime.now() - self._last_update_time).total_seconds()
+        elapsed = (datetime.utcnow() - self._last_update_time).total_seconds()
         return elapsed < self._stale_threshold
 
     def get_health_status(self) -> dict:
         """获取详细的健康状态"""
         elapsed = None
         if self._last_update_time:
-            elapsed = (datetime.now() - self._last_update_time).total_seconds()
+            elapsed = (datetime.utcnow() - self._last_update_time).total_seconds()
 
         return {
             'running': self.running,
@@ -171,7 +171,7 @@ class BinanceWSPriceService:
             subscribe_msg = {
                 "method": "SUBSCRIBE",
                 "params": streams,
-                "id": int(datetime.now().timestamp())
+                "id": int(datetime.utcnow().timestamp())
             }
             await self.ws.send(json.dumps(subscribe_msg))
             logger.info(f"WebSocket 订阅新交易对: {new_symbols}")
@@ -196,7 +196,7 @@ class BinanceWSPriceService:
             unsubscribe_msg = {
                 "method": "UNSUBSCRIBE",
                 "params": streams,
-                "id": int(datetime.now().timestamp())
+                "id": int(datetime.utcnow().timestamp())
             }
             await self.ws.send(json.dumps(unsubscribe_msg))
             logger.info(f"WebSocket 取消订阅: {symbols_to_remove}")
@@ -208,7 +208,7 @@ class BinanceWSPriceService:
 
         # 更新最后收到数据的时间
         was_healthy = self.is_healthy()
-        self._last_update_time = datetime.now()
+        self._last_update_time = datetime.utcnow()
 
         # 如果之前不健康，现在恢复了，通知健康状态变化
         if not was_healthy and self.is_healthy():
@@ -320,7 +320,7 @@ class BinanceWSPriceService:
             if last_healthy and not current_healthy:
                 elapsed = 0
                 if self._last_update_time:
-                    elapsed = (datetime.now() - self._last_update_time).total_seconds()
+                    elapsed = (datetime.utcnow() - self._last_update_time).total_seconds()
                 reason = f"超过 {self._stale_threshold} 秒未收到数据（已过 {elapsed:.1f}s）"
                 logger.warning(f"⚠️ WebSocket 数据过期: {reason}")
                 self._notify_health_change(False, reason)

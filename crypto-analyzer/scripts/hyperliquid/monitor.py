@@ -321,11 +321,11 @@ async def cmd_watch(args):
 
         # 保存结果
         if args.save:
-            filename = f"watch_{args.address[:10]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            filename = f"watch_{args.address[:10]}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.txt"
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(f"钱包监控报告\n")
                 f.write(f"地址: {args.address}\n")
-                f.write(f"时间: {datetime.now()}\n")
+                f.write(f"时间: {datetime.utcnow()}\n")
                 f.write(f"范围: 最近 {args.hours} 小时\n\n")
                 f.write(f"交易数: {len(trades)}\n")
                 f.write(f"持仓数: {len(positions)}\n")

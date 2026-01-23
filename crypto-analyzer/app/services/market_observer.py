@@ -90,7 +90,7 @@ class MarketObserver:
             market_strength = 50
 
         result = {
-            'timestamp': datetime.now(),
+            'timestamp': datetime.utcnow(),
             'overall_trend': overall_trend,
             'market_strength': round(market_strength, 2),
             'bullish_count': bullish_count,

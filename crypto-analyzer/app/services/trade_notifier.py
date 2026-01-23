@@ -146,7 +146,7 @@ class TradeNotifier:
         if strategy_name:
             message += f"📋 策略: {strategy_name}\n"
 
-        message += f"\n⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        message += f"\n⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
 
         result = self._send_telegram(message)
         if result:
@@ -243,7 +243,7 @@ class TradeNotifier:
         if strategy_name:
             message += f"📋 策略: {strategy_name}\n"
 
-        message += f"\n⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        message += f"\n⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}"
 
         self._send_telegram(message)
 
@@ -279,7 +279,7 @@ class TradeNotifier:
 💵 限价: ${price:,.4f}
 📋 类型: {order_type}
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
         self._send_telegram(message)
@@ -316,7 +316,7 @@ class TradeNotifier:
 💵 价格: ${price:,.4f}
 📋 类型: {order_type}
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
         self._send_telegram(message)
@@ -351,7 +351,7 @@ class TradeNotifier:
 💰 数量: {quantity:.6f}
 💵 止损价: ${stop_price:,.4f}
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
         result = self._send_telegram(message)
@@ -390,7 +390,7 @@ class TradeNotifier:
 💰 数量: {quantity:.6f}
 💵 止盈价: ${take_profit_price:,.4f}
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
         result = self._send_telegram(message)
@@ -414,7 +414,7 @@ class TradeNotifier:
 ❌ 类型: {error_type}
 📝 信息: {error_message}
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
         self._send_telegram(message)
@@ -442,7 +442,7 @@ class TradeNotifier:
 💵 可用余额: ${available_balance:,.2f}
 {pnl_emoji} 未实现盈亏: {'+' if unrealized_pnl >= 0 else ''}{unrealized_pnl:,.2f}
 
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}
 """
 
         self._send_telegram(message)

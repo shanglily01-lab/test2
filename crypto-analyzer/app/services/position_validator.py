@@ -80,8 +80,8 @@ class PositionValidator:
         self.validation_config = self.DEFAULT_VALIDATION_CONFIG.copy()
 
     def get_local_time(self):
-        """获取本地时间（UTC+8）"""
-        return datetime.now(self.LOCAL_TZ).replace(tzinfo=None)
+        """获取UTC时间"""
+        return datetime.utcnow()
 
     def get_db_connection(self):
         """获取数据库连接"""

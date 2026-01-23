@@ -230,7 +230,7 @@ def main():
     else:
         purchase_date = input("\n请输入数据日期 (YYYY-MM-DD，回车=今天): ").strip()
         if not purchase_date:
-            purchase_date = datetime.now().strftime('%Y-%m-%d')
+            purchase_date = datetime.utcnow().strftime('%Y-%m-%d')
 
     print(f"数据日期: {purchase_date}")
 

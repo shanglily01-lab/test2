@@ -23,13 +23,6 @@ from app.services.adaptive_optimizer import AdaptiveOptimizer
 # 加载环境变量
 load_dotenv()
 
-# 定义本地时区（UTC+8）
-LOCAL_TIMEZONE = timezone(timedelta(hours=8))
-
-def datetime.utcnow() -> datetime:
-    """获取本地时间（UTC+8）"""
-    return datetime.now(LOCAL_TIMEZONE).replace(tzinfo=None)
-
 # 配置日志
 logger.remove()
 logger.add(

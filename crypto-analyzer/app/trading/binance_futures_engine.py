@@ -23,14 +23,6 @@ try:
 except ImportError:
     get_trade_notifier = None
 
-# 定义本地时区（UTC+8）
-LOCAL_TIMEZONE = timezone(timedelta(hours=8))
-
-def datetime.utcnow() -> datetime:
-    """获取本地时间（UTC+8）"""
-    return datetime.now(LOCAL_TIMEZONE).replace(tzinfo=None)
-
-
 class BinanceFuturesEngine:
     """币安实盘合约交易引擎"""
 

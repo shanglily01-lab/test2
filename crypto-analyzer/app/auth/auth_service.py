@@ -118,7 +118,7 @@ class AuthService:
         # 生成随机令牌
         token = secrets.token_urlsafe(64)
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        expires_at = datetime.now() + timedelta(days=self.refresh_token_expire_days)
+        expires_at = datetime.utcnow() + timedelta(days=self.refresh_token_expire_days)
 
         # 存储到数据库
         conn = self._get_connection()
@@ -188,7 +188,7 @@ class AuthService:
                     return None
 
                 # 检查是否过期
-                if result['expires_at'] < datetime.now():
+                if result['expires_at'] < datetime.utcnow():
                     return None
 
                 # 检查用户状态

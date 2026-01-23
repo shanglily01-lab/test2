@@ -86,7 +86,7 @@ class MarketRegimeManager:
         # 更新内部状态
         self.current_regime = regime['regime']
         self.regime_strength = regime['strength']
-        self.last_update = datetime.now()
+        self.last_update = datetime.utcnow()
 
         cursor.close()
         conn.close()
@@ -248,7 +248,7 @@ class MarketRegimeManager:
             'eth_6h_change': round(momentum['eth_change'] * 100, 2),
             'trend_consistency': round(consistency['consistency'] * 100, 1),
             'recommendations': recommendations,
-            'timestamp': datetime.now()
+            'timestamp': datetime.utcnow()
         }
 
     def _get_conservative_regime(self) -> Dict:
@@ -263,7 +263,7 @@ class MarketRegimeManager:
             'eth_6h_change': 0,
             'trend_consistency': 0,
             'recommendations': ["数据不足,采用保守策略"],
-            'timestamp': datetime.now()
+            'timestamp': datetime.utcnow()
         }
 
     def _save_market_regime(self, regime: Dict):
@@ -322,7 +322,7 @@ class MarketRegimeManager:
         """获取当前市场状态"""
         # 如果最近更新过(6小时内),直接返回缓存
         if (self.last_update and
-            (datetime.now() - self.last_update).seconds < 21600):
+            (datetime.utcnow() - self.last_update).seconds < 21600):
             return {
                 'regime': self.current_regime,
                 'strength': self.regime_strength

@@ -323,7 +323,7 @@ class SpotSignalGenerator:
                 'best_strategy': best_strategy,
                 'all_scores': scores,
                 'details': ' | '.join(details) if details else '无信号',
-                'timestamp': datetime.now()
+                'timestamp': datetime.utcnow()
             }
         except Exception as e:
             logger.error(f"生成信号失败 {symbol}: {e}")
@@ -333,7 +333,7 @@ class SpotSignalGenerator:
                 'best_strategy': 'ERROR',
                 'all_scores': {},
                 'details': str(e),
-                'timestamp': datetime.now()
+                'timestamp': datetime.utcnow()
             }
 
 
@@ -726,7 +726,7 @@ class SpotTraderService:
             try:
                 cycle += 1
                 logger.info(f"\n{'='*80}")
-                logger.info(f"📊 现货交易周期 #{cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                logger.info(f"📊 现货交易周期 #{cycle} - {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}")
                 logger.info(f"{'='*80}")
 
                 # 1. 风险管理 (止盈止损 + 加仓检查)

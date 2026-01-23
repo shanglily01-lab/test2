@@ -109,7 +109,7 @@ class PriceCacheService:
                         if symbol and price:
                             self._cache[symbol] = {
                                 'price': Decimal(str(price)),
-                                'timestamp': datetime.now(),
+                                'timestamp': datetime.utcnow(),
                                 'bid': Decimal(str(price_data.get('bid', price))),
                                 'ask': Decimal(str(price_data.get('ask', price))),
                             }
@@ -207,7 +207,7 @@ class PriceCacheService:
             if not cache_entry:
                 return False
 
-            age = (datetime.now() - cache_entry['timestamp']).total_seconds()
+            age = (datetime.utcnow() - cache_entry['timestamp']).total_seconds()
             return age <= max_age_seconds
 
     def get_cache_age(self, symbol: str) -> Optional[float]:
@@ -224,7 +224,7 @@ class PriceCacheService:
             cache_entry = self._cache.get(symbol)
 
             if cache_entry:
-                return (datetime.now() - cache_entry['timestamp']).total_seconds()
+                return (datetime.utcnow() - cache_entry['timestamp']).total_seconds()
 
             return None
 

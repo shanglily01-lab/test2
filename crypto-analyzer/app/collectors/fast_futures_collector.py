@@ -111,7 +111,7 @@ class FastFuturesCollector:
                     return {
                         'symbol': f"{symbol[:-4]}/USDT",
                         'price': Decimal(data['price']),
-                        'timestamp': datetime.now()
+                        'timestamp': datetime.utcnow()
                     }
                 else:
                     logger.warning(f"获取 {symbol} 价格失败: HTTP {response.status}")
@@ -323,7 +323,7 @@ class FastFuturesCollector:
         执行一次完整的采集周期
         注意：只采集K线数据，实时价格由 WebSocket 服务提供
         """
-        start_time = datetime.now()
+        start_time = datetime.utcnow()
         logger.info("=" * 60)
         logger.info("开始快速数据采集周期")
 
@@ -348,7 +348,7 @@ class FastFuturesCollector:
         # 合约交易需要毫秒级的实时价格推送，而不是每5分钟的轮询
 
         # 统计
-        elapsed = (datetime.now() - start_time).total_seconds()
+        elapsed = (datetime.utcnow() - start_time).total_seconds()
         logger.info(f"✓ 采集周期完成，耗时 {elapsed:.2f} 秒")
         logger.info(f"  K线: {len(klines)}/{len(symbols)}")
         logger.info("=" * 60)

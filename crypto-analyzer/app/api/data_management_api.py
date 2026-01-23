@@ -315,7 +315,7 @@ def _check_status_active(latest_time, threshold_seconds):
             latest_time = latest_time.replace(tzinfo=None)
         
         # 计算时间差（秒）
-        now = datetime.now()
+        now = datetime.utcnow()
         time_diff = (now - latest_time).total_seconds()
         
         # 判断状态
@@ -348,7 +348,7 @@ async def get_data_statistics():
     # 检查缓存是否有效
     with _statistics_cache_lock:
         if _statistics_cache is not None and _statistics_cache_time is not None:
-            cache_age = (datetime.now() - _statistics_cache_time).total_seconds()
+            cache_age = (datetime.utcnow() - _statistics_cache_time).total_seconds()
             if cache_age < STATISTICS_CACHE_TTL:
                 logger.debug(f"使用缓存的数据统计 (缓存年龄: {cache_age:.0f}秒)")
                 return _statistics_cache
@@ -595,7 +595,7 @@ async def get_data_statistics():
         # 更新缓存
         with _statistics_cache_lock:
             _statistics_cache = result
-            _statistics_cache_time = datetime.now()
+            _statistics_cache_time = datetime.utcnow()
             logger.debug("数据统计已缓存")
 
         return result
@@ -826,7 +826,7 @@ async def get_collection_status():
     # 检查缓存是否有效
     with _collection_status_cache_lock:
         if _collection_status_cache is not None and _collection_status_cache_time is not None:
-            cache_age = (datetime.now() - _collection_status_cache_time).total_seconds()
+            cache_age = (datetime.utcnow() - _collection_status_cache_time).total_seconds()
             if cache_age < COLLECTION_STATUS_CACHE_TTL:
                 logger.debug(f"使用缓存的数据采集情况 (缓存年龄: {cache_age:.0f}秒)")
                 return _collection_status_cache
@@ -1056,7 +1056,7 @@ async def get_collection_status():
                             latest_datetime = datetime.combine(latest_time, datetime.min.time())
                         else:
                             latest_datetime = latest_time
-                        time_diff = (datetime.now() - latest_datetime).total_seconds()
+                        time_diff = (datetime.utcnow() - latest_datetime).total_seconds()
                         if time_diff < 2592000:  # 30天 = 2592000秒
                             status = 'active'
                         else:
@@ -1146,7 +1146,7 @@ async def get_collection_status():
                     # 检查最新更新时间是否在30天内
                     # latest_time已经是datetime对象（从数据库查询返回）
                     # 计算时间差（秒）
-                    time_diff = (datetime.now() - latest_time).total_seconds()
+                    time_diff = (datetime.utcnow() - latest_time).total_seconds()
                     if time_diff < 2592000:  # 30天 = 2592000秒
                         status = 'active'
                     else:
@@ -1312,7 +1312,7 @@ async def get_collection_status():
         # 更新缓存
         with _collection_status_cache_lock:
             _collection_status_cache = result
-            _collection_status_cache_time = datetime.now()
+            _collection_status_cache_time = datetime.utcnow()
             logger.debug("已更新数据采集情况缓存")
 
         return result
@@ -1632,7 +1632,7 @@ async def import_corporate_treasury_data(
                 except:
                     raise HTTPException(status_code=400, detail="数据日期格式错误 (应为 YYYY-MM-DD)")
             else:
-                purchase_date = datetime.now().date()
+                purchase_date = datetime.utcnow().date()
             
             # 解析文本格式
             companies = parse_bitcoin_treasuries_format(text_content)
@@ -1757,7 +1757,7 @@ async def import_corporate_treasury_data(
                 except:
                     raise HTTPException(status_code=400, detail="数据日期格式错误 (应为 YYYY-MM-DD)")
             else:
-                financing_date = datetime.now().date()
+                financing_date = datetime.utcnow().date()
             
             # 读取CSV内容
             text_content_bom = content.decode('utf-8-sig')  # 处理BOM
@@ -2251,7 +2251,7 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                         for idx, row_tuple in enumerate(df.iterrows()):
                             try:
                                 _, row = row_tuple
-                                created_at = datetime.now()
+                                created_at = datetime.utcnow()
                                 cursor.execute("""
                                     INSERT INTO price_data
                                     (symbol, exchange, timestamp, price, open_price, high_price, low_price, close_price, volume, quote_volume, bid_price, ask_price, change_24h, created_at)
@@ -2409,7 +2409,7 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                                             '1h': 60, '4h': 240, '1d': 1440
                                         }.get(timeframe, 60)
                                         close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
-                                        created_at = datetime.now()
+                                        created_at = datetime.utcnow()
                                         
                                         cursor.execute("""
                                             INSERT INTO kline_data
@@ -2543,7 +2543,7 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                                                     '1h': 60, '4h': 240, '1d': 1440
                                                 }.get(timeframe, 60)
                                                 close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
-                                                created_at = datetime.now()
+                                                created_at = datetime.utcnow()
                                                 
                                                 cursor.execute("""
                                                     INSERT INTO kline_data
@@ -2676,7 +2676,7 @@ async def _execute_collection_task(task_id: str, request_data: Dict):
                                                     '1h': 60, '4h': 240, '1d': 1440
                                                 }.get(timeframe, 60)
                                                 close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
-                                                created_at = datetime.now()
+                                                created_at = datetime.utcnow()
                                                 
                                                 cursor.execute("""
                                                     INSERT INTO kline_data
@@ -2985,7 +2985,7 @@ async def collect_historical_data_sync(request: Dict):
                         for _, row in df.iterrows():
                             try:
                                 # 获取当前时间作为created_at
-                                created_at = datetime.now()
+                                created_at = datetime.utcnow()
                                 
                                 # 从K线数据转换为价格数据格式
                                 cursor.execute("""
@@ -3118,7 +3118,7 @@ async def collect_historical_data_sync(request: Dict):
                                         close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
                                         
                                         # 获取当前时间作为created_at
-                                        created_at = datetime.now()
+                                        created_at = datetime.utcnow()
                                         
                                         cursor.execute("""
                                             INSERT INTO kline_data
@@ -3224,7 +3224,7 @@ async def collect_historical_data_sync(request: Dict):
                                             close_time_ms = open_time_ms + (timeframe_minutes * 60 * 1000) - 1
                                             
                                             # 获取当前时间作为created_at
-                                            created_at = datetime.now()
+                                            created_at = datetime.utcnow()
                                             
                                             # 保存合约K线数据
                                             cursor.execute("""

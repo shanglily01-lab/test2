@@ -80,7 +80,7 @@ class NotificationService:
     def _file_alert(self, message: str, title: str):
         """文件通知"""
         try:
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
             with open(self.alert_file, 'a', encoding='utf-8') as f:
                 f.write(f"\n{'='*60}\n")
                 f.write(f"[{timestamp}] {title}\n")

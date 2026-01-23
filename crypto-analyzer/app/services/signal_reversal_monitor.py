@@ -201,7 +201,7 @@ class SignalReversalMonitor:
 
             if reversal_detected:
                 reversal_key = (symbol, position_side, reversal_detected)
-                now = datetime.now()
+                now = datetime.utcnow()
 
                 # 检查冷却
                 if reversal_key in self._detected_reversals:

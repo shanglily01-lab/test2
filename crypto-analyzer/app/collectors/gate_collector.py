@@ -70,7 +70,7 @@ class GateCollector:
                             return {
                                 'exchange': self.exchange_id,
                                 'symbol': symbol,
-                                'timestamp': datetime.now(),
+                                'timestamp': datetime.utcnow(),
                                 'price': last_price,
                                 'open': open_24h,
                                 'high': float(ticker['high_24h']),
@@ -213,7 +213,7 @@ class GateCollector:
                         return {
                             'exchange': self.exchange_id,
                             'symbol': symbol,
-                            'timestamp': datetime.now(),
+                            'timestamp': datetime.utcnow(),
                             'bids': bids,
                             'asks': asks,
                             'bid_volume': sum(bid[1] for bid in bids),
@@ -303,7 +303,7 @@ class GateCollector:
                             ticker = data[0]
 
                             # 获取时间戳 (使用当前时间)
-                            now = datetime.now()
+                            now = datetime.utcnow()
 
                             return {
                                 'exchange': self.exchange_id,
@@ -438,7 +438,7 @@ class GateCollector:
         from datetime import timedelta
         
         # 计算起始时间（秒时间戳）
-        since = int((datetime.now() - timedelta(days=days)).timestamp())
+        since = int((datetime.utcnow() - timedelta(days=days)).timestamp())
         
         all_data = []
         limit = 1000  # 每次获取1000条

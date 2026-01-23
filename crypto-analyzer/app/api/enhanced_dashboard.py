@@ -96,7 +96,7 @@ class EnhancedDashboard:
                     **stats,
                     **signal_stats
                 },
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                'last_updated': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
             }
         }
 
@@ -284,7 +284,7 @@ class EnhancedDashboard:
                 # 查询所有监控钱包的交易，按交易金额倒序排列
                 logger.info(f"查询最近24小时的交易记录（从 {total_monitored} 个监控钱包）...")
 
-                cutoff_time = datetime.now() - timedelta(hours=24)
+                cutoff_time = datetime.utcnow() - timedelta(hours=24)
 
                 # 查询最近24小时的所有交易，按交易量倒序
                 # 这会从所有5000+个钱包中找出交易金额最大的交易
@@ -580,7 +580,7 @@ class EnhancedDashboard:
             past_kline = self.db_service.get_kline_at_time(
                 symbol,
                 '5m',
-                datetime.now() - timedelta(hours=24)
+                datetime.utcnow() - timedelta(hours=24)
             )
 
             if now_kline and past_kline:
@@ -602,7 +602,7 @@ class EnhancedDashboard:
             klines = self.db_service.get_klines(
                 symbol,
                 '1h',
-                start_time=datetime.now() - timedelta(hours=24),
+                start_time=datetime.utcnow() - timedelta(hours=24),
                 limit=24
             )
             return sum(float(k.volume) for k in klines)
@@ -615,7 +615,7 @@ class EnhancedDashboard:
             klines = self.db_service.get_klines(
                 symbol,
                 '1h',
-                start_time=datetime.now() - timedelta(hours=24),
+                start_time=datetime.utcnow() - timedelta(hours=24),
                 limit=24
             )
             return max(float(k.high_price) for k in klines) if klines else 0
@@ -628,7 +628,7 @@ class EnhancedDashboard:
             klines = self.db_service.get_klines(
                 symbol,
                 '1h',
-                start_time=datetime.now() - timedelta(hours=24),
+                start_time=datetime.utcnow() - timedelta(hours=24),
                 limit=24
             )
             return min(float(k.low_price) for k in klines) if klines else 0
