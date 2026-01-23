@@ -620,9 +620,11 @@ class SpotTraderService:
     def scan_opportunities(self) -> List[Dict]:
         """扫描所有币种，寻找买入机会"""
         opportunities = []
+        all_signals = []
 
         for symbol in self.symbols:
             signal = self.signal_generator.generate_signal(symbol)
+            all_signals.append((symbol, signal['signal_strength']))
 
             # 信号强度 >= 60 才考虑
             if signal['signal_strength'] >= 60:
@@ -630,6 +632,14 @@ class SpotTraderService:
 
         # 按信号强度排序
         opportunities.sort(key=lambda x: x['signal_strength'], reverse=True)
+
+        # 日志：显示评分最高的前5个币种（无论是否达到阈值）
+        all_signals.sort(key=lambda x: x[1], reverse=True)
+        top_5 = all_signals[:5]
+        logger.info(f"📊 评分TOP5: {', '.join([f'{s[0]}({s[1]}分)' for s in top_5])}")
+
+        if opportunities:
+            logger.info(f"✅ 发现 {len(opportunities)} 个机会（≥60分）")
 
         return opportunities
 
