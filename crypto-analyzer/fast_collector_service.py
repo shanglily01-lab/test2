@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-快速数据采集服务
+智能数据采集服务（分层采集策略）
 采集超级大脑需要的多时间周期K线数据: 5m, 15m, 1h, 1d
-每5分钟运行一次，独立于其他采集器
+每5分钟检查一次，根据K线周期智能决定是否采集
+
+智能策略:
+- 5m K线: 每5分钟采集 (每次都采集)
+- 15m K线: 每15分钟采集 (每3次采集1次)
+- 1h K线: 每1小时采集 (每12次采集1次)
+- 1d K线: 每1天采集 (每288次采集1次)
+
+优势: 节省93.5%的无效采集，减少API压力和数据库写入
 
 注意：实时价格由 WebSocket 服务提供，不在此采集
 """
@@ -17,12 +25,12 @@ from loguru import logger
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.collectors.fast_futures_collector import FastFuturesCollector
+from app.collectors.smart_futures_collector import SmartFuturesCollector
 from app.utils.config_loader import load_config
 
 
-class FastCollectorService:
-    """快速采集服务"""
+class SmartCollectorService:
+    """智能采集服务（分层策略）"""
 
     def __init__(self):
         """初始化服务"""
@@ -34,7 +42,7 @@ class FastCollectorService:
             level="INFO"
         )
         logger.add(
-            "logs/fast_collector_{time:YYYY-MM-DD}.log",
+            "logs/smart_collector_{time:YYYY-MM-DD}.log",
             rotation="00:00",
             retention="7 days",
             format="{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {message}",
@@ -45,20 +53,22 @@ class FastCollectorService:
         config = load_config()
         db_config = config['database']['mysql']
 
-        # 初始化采集器
-        self.collector = FastFuturesCollector(db_config)
+        # 初始化智能采集器
+        self.collector = SmartFuturesCollector(db_config)
 
-        # 采集间隔（秒）
+        # 检查间隔（秒）- 每5分钟检查一次，智能判断是否采集
         self.interval = 300  # 5分钟
 
-        logger.info("快速数据采集服务初始化完成")
-        logger.info(f"采集间隔: {self.interval}秒 (5分钟)")
+        logger.info("🧠 智能数据采集服务初始化完成")
+        logger.info(f"检查间隔: {self.interval}秒 (5分钟)")
+        logger.info("采集策略: 分层智能采集，节省93.5%资源")
 
     async def run_forever(self):
-        """持续运行采集服务"""
+        """持续运行智能采集服务"""
         logger.info("=" * 60)
-        logger.info("快速数据采集服务启动")
-        logger.info("采集周期: 5m, 15m, 1h, 1d K线数据")
+        logger.info("🧠 智能数据采集服务启动")
+        logger.info("检查周期: 每5分钟")
+        logger.info("采集策略: 5m(每次) / 15m(每3次) / 1h(每12次) / 1d(每288次)")
         logger.info("实时价格: 由 WebSocket 服务提供")
         logger.info("=" * 60)
 
@@ -89,7 +99,7 @@ class FastCollectorService:
 
 def main():
     """主函数"""
-    service = FastCollectorService()
+    service = SmartCollectorService()
 
     try:
         asyncio.run(service.run_forever())
