@@ -108,6 +108,31 @@ def parse_close_reason(notes: str) -> tuple:
 
     notes_lower = notes.lower()
 
+    # 超级大脑智能顶底识别 (优先处理)
+    if notes.startswith('TOP_DETECTED('):
+        # 提取参数: TOP_DETECTED(高点回落1.4%,盈利-0.4%)
+        import re
+        match = re.match(r'TOP_DETECTED\((.*?)\)$', notes)
+        if match:
+            params = match.group(1)
+            return 'top_detected', f'智能顶部识别({params})'
+        return 'top_detected', '智能顶部识别'
+
+    if notes.startswith('BOTTOM_DETECTED('):
+        # 提取参数: BOTTOM_DETECTED(低点反弹1.8%,盈利+1.1%)
+        import re
+        match = re.match(r'BOTTOM_DETECTED\((.*?)\)$', notes)
+        if match:
+            params = match.group(1)
+            return 'bottom_detected', f'智能底部识别({params})'
+        return 'bottom_detected', '智能底部识别'
+
+    # 超级大脑止损止盈（大写格式）
+    if notes == 'STOP_LOSS':
+        return 'stop_loss', '止损'
+    if notes == 'TAKE_PROFIT':
+        return 'take_profit', '固定止盈'
+
     # 英文代码直接匹配
     if notes in CLOSE_REASON_MAP:
         return notes, CLOSE_REASON_MAP[notes]
