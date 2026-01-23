@@ -95,7 +95,7 @@ class SmartDecisionBrain:
 
     def load_klines(self, symbol: str, timeframe: str, limit: int = 100) -> List[Dict]:
         """
-        加载K线数据
+        加载合约K线数据
 
         Args:
             symbol: 交易对 (如 BTC/USDT)
@@ -108,7 +108,7 @@ class SmartDecisionBrain:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        # 确保数据是最新的
+        # 只读取合约K线数据 (exchange='binance_futures')
         query = """
             SELECT open_time,
                    open_price as open,
@@ -119,6 +119,7 @@ class SmartDecisionBrain:
             FROM kline_data
             WHERE symbol = %s
             AND timeframe = %s
+            AND exchange = 'binance_futures'
             AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 60 DAY)) * 1000
             ORDER BY open_time DESC
             LIMIT %s
