@@ -629,36 +629,44 @@ class SmartTraderService:
             return False
 
     def check_top_bottom(self, symbol: str, position_side: str, entry_price: float):
-        """智能识别顶部和底部 - 超级大脑动态监控"""
+        """智能识别顶部和底部 - 使用1h K线更稳健的判断"""
         try:
-            # 使用15分钟K线分析
-            klines_15m = self.brain.load_klines(symbol, '15m', 30)
-            if len(klines_15m) < 30:
+            # 使用1小时K线分析（更稳健，减少假信号）
+            klines_1h = self.brain.load_klines(symbol, '1h', 48)
+            if len(klines_1h) < 24:
                 return False, None
 
-            current = klines_15m[-1]
-            recent_10 = klines_15m[-10:]
-            recent_5 = klines_15m[-5:]
+            current = klines_1h[-1]
+            recent_24 = klines_1h[-24:]  # 最近24小时
+            recent_12 = klines_1h[-12:]  # 最近12小时
 
             if position_side == 'LONG':
                 # 做多持仓 - 寻找顶部信号
 
-                # 1. 价格创新高后回落 (最高点在5-10根K线前)
-                max_high = max(k['high'] for k in recent_10)
-                max_high_idx = len(recent_10) - 1 - [k['high'] for k in reversed(recent_10)].index(max_high)
-                is_peak = max_high_idx < 8  # 高点在前面,现在回落
+                # 1. 价格在最近12小时创新高后回落
+                max_high = max(k['high'] for k in recent_12)
+                max_high_idx = len(recent_12) - 1 - [k['high'] for k in reversed(recent_12)].index(max_high)
+                is_peak = max_high_idx < 10  # 高点在前10根K线，现在回落
 
-                # 2. 当前价格已经从高点回落
+                # 2. 当前价格已经从高点回落（1h级别阈值提高到1.5%）
                 current_price = current['close']
                 pullback_pct = (max_high - current_price) / max_high * 100
 
-                # 3. 最近3根K线连续收阴或连续长上影线
-                recent_3 = klines_15m[-3:]
-                bearish_count = sum(1 for k in recent_3 if k['close'] < k['open'])
-                long_upper_shadow = sum(1 for k in recent_3 if (k['high'] - max(k['open'], k['close'])) > (k['close'] - k['open']) * 2)
+                # 3. 最近4根1h K线趋势确认：至少3根收阴或长上影线
+                recent_4 = klines_1h[-4:]
+                bearish_count = sum(1 for k in recent_4 if k['close'] < k['open'])
+                long_upper_shadow = sum(1 for k in recent_4 if (k['high'] - max(k['open'], k['close'])) > abs(k['close'] - k['open']) * 1.5)
 
-                # 见顶判断条件
-                if is_peak and pullback_pct >= 1.0 and (bearish_count >= 2 or long_upper_shadow >= 2):
+                # 4. 成交量确认：最近3根K线成交量放大
+                if len(recent_24) >= 24:
+                    avg_volume_24h = sum(k['volume'] for k in recent_24[:21]) / 21
+                    recent_3_volume = sum(k['volume'] for k in klines_1h[-3:]) / 3
+                    volume_surge = recent_3_volume > avg_volume_24h * 1.2
+                else:
+                    volume_surge = True  # 数据不足时忽略成交量确认
+
+                # 见顶判断条件（更严格）
+                if is_peak and pullback_pct >= 1.5 and (bearish_count >= 3 or long_upper_shadow >= 2):
                     # 计算当前盈利
                     profit_pct = (current_price - entry_price) / entry_price * 100
                     return True, f"TOP_DETECTED(高点回落{pullback_pct:.1f}%,盈利{profit_pct:+.1f}%)"
@@ -666,22 +674,30 @@ class SmartTraderService:
             elif position_side == 'SHORT':
                 # 做空持仓 - 寻找底部信号
 
-                # 1. 价格创新低后反弹 (最低点在5-10根K线前)
-                min_low = min(k['low'] for k in recent_10)
-                min_low_idx = len(recent_10) - 1 - [k['low'] for k in reversed(recent_10)].index(min_low)
-                is_bottom = min_low_idx < 8  # 低点在前面,现在反弹
+                # 1. 价格在最近12小时创新低后反弹
+                min_low = min(k['low'] for k in recent_12)
+                min_low_idx = len(recent_12) - 1 - [k['low'] for k in reversed(recent_12)].index(min_low)
+                is_bottom = min_low_idx < 10  # 低点在前10根K线，现在反弹
 
-                # 2. 当前价格已经从低点反弹
+                # 2. 当前价格已经从低点反弹（1h级别阈值提高到1.5%）
                 current_price = current['close']
                 bounce_pct = (current_price - min_low) / min_low * 100
 
-                # 3. 最近3根K线连续收阳或连续长下影线
-                recent_3 = klines_15m[-3:]
-                bullish_count = sum(1 for k in recent_3 if k['close'] > k['open'])
-                long_lower_shadow = sum(1 for k in recent_3 if (min(k['open'], k['close']) - k['low']) > (k['close'] - k['open']) * 2)
+                # 3. 最近4根1h K线趋势确认：至少3根收阳或长下影线
+                recent_4 = klines_1h[-4:]
+                bullish_count = sum(1 for k in recent_4 if k['close'] > k['open'])
+                long_lower_shadow = sum(1 for k in recent_4 if (min(k['open'], k['close']) - k['low']) > abs(k['close'] - k['open']) * 1.5)
 
-                # 见底判断条件
-                if is_bottom and bounce_pct >= 1.0 and (bullish_count >= 2 or long_lower_shadow >= 2):
+                # 4. 成交量确认：最近3根K线成交量放大
+                if len(recent_24) >= 24:
+                    avg_volume_24h = sum(k['volume'] for k in recent_24[:21]) / 21
+                    recent_3_volume = sum(k['volume'] for k in klines_1h[-3:]) / 3
+                    volume_surge = recent_3_volume > avg_volume_24h * 1.2
+                else:
+                    volume_surge = True  # 数据不足时忽略成交量确认
+
+                # 见底判断条件（更严格）
+                if is_bottom and bounce_pct >= 1.5 and (bullish_count >= 3 or long_lower_shadow >= 2):
                     # 计算当前盈利
                     profit_pct = (entry_price - current_price) / entry_price * 100
                     return True, f"BOTTOM_DETECTED(低点反弹{bounce_pct:.1f}%,盈利{profit_pct:+.1f}%)"
