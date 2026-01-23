@@ -46,6 +46,9 @@ CLOSE_REASON_MAP = {
     'liquidation': '强制平仓',
     'sync_close': '同步平仓',
     'reversal_warning': '反转预警平仓',
+    # 超级大脑新增
+    'hedge_loss_cut': '对冲止损平仓',
+    'reverse_signal': '反向信号平仓',
 }
 
 # 开仓原因中英文映射（基于 entry_signal_type 字段）
@@ -132,6 +135,19 @@ def parse_close_reason(notes: str) -> tuple:
         return 'stop_loss', '止损'
     if notes == 'TAKE_PROFIT':
         return 'take_profit', '固定止盈'
+
+    # 超时平仓格式: TIMEOUT_4H(持仓5小时)
+    if notes.startswith('TIMEOUT_4H('):
+        import re
+        match = re.match(r'TIMEOUT_4H\((.*?)\)$', notes)
+        if match:
+            params = match.group(1)
+            return 'timeout_4h', f'超时平仓({params})'
+        return 'timeout_4h', '超时平仓'
+
+    # 中文平仓原因（对冲）
+    if notes == '对冲止损平仓':
+        return 'hedge_loss_cut', '对冲止损平仓'
 
     # 英文代码直接匹配
     if notes in CLOSE_REASON_MAP:

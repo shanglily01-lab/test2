@@ -1897,6 +1897,10 @@
                         // 超级大脑智能顶底识别
                         'TOP_DETECTED': '智能顶部识别',
                         'BOTTOM_DETECTED': '智能底部识别',
+                        // 超级大脑超时和对冲
+                        'TIMEOUT_4H': '超时平仓',
+                        '对冲止损平仓': '对冲止损平仓',
+                        'reverse_signal': '反向信号平仓',
                         // 反转相关
                         'death_cross_reversal': '死叉反转平仓',
                         'golden_cross_reversal': '金叉反转平仓',
@@ -1924,6 +1928,20 @@
                                 const label = type === 'TOP_DETECTED' ? '智能顶部识别' : '智能底部识别';
                                 return `<span class="badge badge-primary">${label}</span> <span class="text-secondary">${params}</span>`;
                             }
+                        }
+
+                        // 处理超时平仓格式：TIMEOUT_4H(持仓5小时)
+                        if (notes.startsWith('TIMEOUT_4H(')) {
+                            const match = notes.match(/^TIMEOUT_4H\((.*?)\)$/);
+                            if (match) {
+                                const params = match[1];
+                                return `<span class="badge badge-warning">超时平仓</span> <span class="text-secondary">${params}</span>`;
+                            }
+                        }
+
+                        // 处理中文平仓原因（直接显示）
+                        if (notes === '对冲止损平仓') {
+                            return '<span class="badge badge-danger">对冲止损平仓</span>';
                         }
 
                         // 提取第一个关键字（在|之前的部分）
