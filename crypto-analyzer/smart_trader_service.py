@@ -26,7 +26,7 @@ load_dotenv()
 # 定义本地时区（UTC+8）
 LOCAL_TIMEZONE = timezone(timedelta(hours=8))
 
-def get_local_time() -> datetime:
+def datetime.utcnow() -> datetime:
     """获取本地时间（UTC+8）"""
     return datetime.now(LOCAL_TIMEZONE).replace(tzinfo=None)
 
@@ -726,7 +726,7 @@ class SmartTraderService:
 
                 # 0. 检查最小持仓时间 (自适应参数)
                 from datetime import datetime
-                now = datetime.now()
+                now = datetime.utcnow()
                 holding_minutes = (now - open_time).total_seconds() / 60
 
                 # 获取该方向的最小持仓时间
@@ -837,7 +837,7 @@ class SmartTraderService:
                         current_price, quantity, quantity,
                         notional_value, notional_value,
                         fee, 0.0004,
-                        current_price, get_local_time(),
+                        current_price, datetime.utcnow(),
                         realized_pnl, pnl_pct
                     ))
 
@@ -858,7 +858,7 @@ class SmartTraderService:
                         trade_id, pos_id, self.account_id, symbol, close_side,
                         current_price, quantity, notional_value, leverage, margin,
                         fee, realized_pnl, pnl_pct, roi, entry_price,
-                        f'CLOSE-{pos_id}', get_local_time(), get_local_time()
+                        f'CLOSE-{pos_id}', datetime.utcnow(), datetime.utcnow()
                     ))
 
                     # Update account balance
@@ -990,7 +990,7 @@ class SmartTraderService:
                     current_price, quantity, quantity,
                     notional_value, notional_value,
                     fee, 0.0004,
-                    current_price, get_local_time(),
+                    current_price, datetime.utcnow(),
                     realized_pnl, pnl_pct
                 ))
 
@@ -1012,7 +1012,7 @@ class SmartTraderService:
                     trade_id, pos_id, self.account_id, symbol, close_side,
                     current_price, quantity, notional_value, leverage, margin,
                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                    f'TIMEOUT-{pos_id}', get_local_time(), get_local_time()
+                    f'TIMEOUT-{pos_id}', datetime.utcnow(), datetime.utcnow()
                 ))
 
                 # Update account balance
@@ -1183,7 +1183,7 @@ class SmartTraderService:
                                 current_price, long_pos['quantity'], long_pos['quantity'],
                                 notional_value, notional_value,
                                 fee, 0.0004,
-                                current_price, get_local_time(),
+                                current_price, datetime.utcnow(),
                                 long_pos['realized_pnl'], long_pos['pnl_pct']
                             ))
 
@@ -1204,7 +1204,7 @@ class SmartTraderService:
                                 trade_id, long_pos['id'], self.account_id, symbol, 'CLOSE_LONG',
                                 current_price, long_pos['quantity'], notional_value, leverage, margin,
                                 fee, long_pos['realized_pnl'], long_pos['pnl_pct'], roi, long_pos['entry_price'],
-                                f"HEDGE-{long_pos['id']}", get_local_time(), get_local_time()
+                                f"HEDGE-{long_pos['id']}", datetime.utcnow(), datetime.utcnow()
                             ))
 
                             # Update account balance
@@ -1288,7 +1288,7 @@ class SmartTraderService:
                                 current_price, short_pos['quantity'], short_pos['quantity'],
                                 notional_value, notional_value,
                                 fee, 0.0004,
-                                current_price, get_local_time(),
+                                current_price, datetime.utcnow(),
                                 short_pos['realized_pnl'], short_pos['pnl_pct']
                             ))
 
@@ -1309,7 +1309,7 @@ class SmartTraderService:
                                 trade_id, short_pos['id'], self.account_id, symbol, 'CLOSE_SHORT',
                                 current_price, short_pos['quantity'], notional_value, leverage, margin,
                                 fee, short_pos['realized_pnl'], short_pos['pnl_pct'], roi, short_pos['entry_price'],
-                                order_id, get_local_time(), get_local_time()
+                                order_id, datetime.utcnow(), datetime.utcnow()
                             ))
 
                             # Update account balance
@@ -1474,7 +1474,7 @@ class SmartTraderService:
                     current_price, quantity, quantity,
                     notional_value, notional_value,
                     fee, 0.0004,
-                    current_price, get_local_time(),
+                    current_price, datetime.utcnow(),
                     realized_pnl, pnl_pct
                 ))
 
@@ -1495,7 +1495,7 @@ class SmartTraderService:
                     trade_id, pos['id'], self.account_id, symbol, close_side,
                     current_price, quantity, notional_value, leverage, margin,
                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                    order_id, get_local_time(), get_local_time()
+                    order_id, datetime.utcnow(), datetime.utcnow()
                 ))
 
                 # Update account balance
@@ -1595,7 +1595,7 @@ class SmartTraderService:
     def check_and_run_daily_optimization(self):
         """检查是否需要运行每日优化 (凌晨2点)"""
         try:
-            now = datetime.now()
+            now = datetime.utcnow()
             current_date = now.date()
 
             # 检查是否是凌晨2点且今天还没运行过

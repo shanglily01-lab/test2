@@ -1,9 +1,11 @@
 # 模拟合约交易数据库表结构
 
 > 数据库: binance-data
-> 更新日期: 2026-01-16
+> 更新日期: 2026-01-22
 >
 > **重要更新**:
+> - 2026-01-22: 添加超级大脑相关表结构（信号评分、组件性能分析）
+> - 2026-01-22: 更新 futures_positions 新增字段（entry_score, signal_components）
 > - 2026-01-16: 新增盈利保护平仓原因代码（profit_protect_*）
 > - 2026-01-16: 新增智能渐进止损平仓原因代码
 > - 2026-01-15: 新增V3趋势质量平仓原因代码
@@ -12,7 +14,7 @@
 
 --服务端的数据库
 database: binance-data
-host:13.212.252.171 
+host:13.212.252.171
 port:3306
 user:admin
 password:Tonny@1000
@@ -24,7 +26,14 @@ paper_trading_accounts (账户)
     ├── futures_positions (持仓) ──┬── futures_orders (订单)
     │                              └── futures_trades (成交)
     ├── paper_trading_balance_history (余额历史)
-    └── trading_strategies (策略配置)
+    ├── trading_strategies (策略配置)
+    └── 超级大脑信号系统
+        ├── ema_signals (EMA信号)
+        ├── paper_trading_signal_executions (信号执行记录)
+        ├── signal_blacklist (信号黑名单)
+        ├── signal_component_performance (组件性能)
+        ├── signal_position_multipliers (仓位倍数)
+        └── signal_scoring_weights (评分权重)
 ```
 
 ---
@@ -107,7 +116,9 @@ paper_trading_accounts (账户)
 | max_profit_price | decimal(18,8) | 最大浮盈时价格 |
 | trailing_stop_activated | tinyint(1) | 移动止盈是否激活 |
 | trailing_stop_price | decimal(18,8) | 移动止盈触发价 |
-| entry_signal_type | varchar(50) | 入场信号类型 |
+| entry_signal_type | varchar(50) | 入场信号类型，如 SMART_BRAIN_75 |
+| entry_score | int(11) | 入场信号评分（0-100） ⚡ 新增 2026-01-22 |
+| signal_components | text | 信号组成部分JSON ⚡ 新增 2026-01-22 |
 | entry_reason | varchar(500) | 入场原因 |
 | live_position_id | int(11) | 关联实盘持仓ID |
 | created_at | datetime | 创建时间 |
@@ -382,3 +393,148 @@ profit_protect_2pct|profit:2.35%|reason:trend_weak_70pct
 ```
 close_reason: hard_stop_loss|pnl:-5.02%
 ```
+
+---
+
+## 7. ema_signals (EMA信号表) ⚡ 超级大脑
+
+存储EMA交叉信号数据，用于超级大脑决策分析。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| symbol | varchar(20) | 交易对 |
+| timeframe | varchar(10) | 时间周期，如 5m, 15m, 1h |
+| signal_type | varchar(10) | 信号类型：LONG/SHORT |
+| signal_strength | varchar(20) | 信号强度：weak/medium/strong |
+| timestamp | datetime | 信号时间 |
+| price | decimal(20,8) | 信号价格 |
+| short_ema | decimal(20,8) | 短期EMA值 |
+| long_ema | decimal(20,8) | 长期EMA值 |
+| ema_config | varchar(50) | EMA配置，如 9-21 |
+| volume_ratio | decimal(10,2) | 成交量比率 |
+| volume_type | varchar(10) | 成交量类型 |
+| price_change_pct | decimal(10,4) | 价格变化百分比 |
+| ema_distance_pct | decimal(10,4) | EMA距离百分比 |
+| created_at | timestamp | 创建时间 |
+
+---
+
+## 8. paper_trading_signal_executions (信号执行记录) ⚡ 超级大脑
+
+记录每个交易信号的执行情况和决策过程。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| account_id | int(11) | 账户ID |
+| signal_id | int(11) | 关联信号ID |
+| symbol | varchar(20) | 交易对 |
+| signal_type | varchar(20) | 信号类型 |
+| signal_strength | varchar(20) | 信号强度 |
+| confidence_score | decimal(5,2) | 置信度分数（0-100） |
+| is_executed | tinyint(1) | 是否已执行 |
+| execution_status | varchar(20) | 执行状态：success/failed/skipped |
+| order_id | varchar(50) | 关联订单ID |
+| decision | varchar(20) | 决策结果：open/skip |
+| decision_reason | text | 决策原因（为何执行/跳过） |
+| execution_price | decimal(18,8) | 执行价格 |
+| execution_quantity | decimal(18,8) | 执行数量 |
+| execution_amount | decimal(20,2) | 执行金额 |
+| signal_time | datetime | 信号时间 |
+| execution_time | datetime | 执行时间 |
+| created_at | datetime | 创建时间 |
+
+---
+
+## 9. signal_blacklist (信号黑名单) ⚡ 超级大脑
+
+存储表现不佳的信号组合，用于过滤低质量信号。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| signal_type | varchar(50) | 信号类型 |
+| position_side | varchar(10) | 持仓方向：LONG/SHORT |
+| reason | varchar(255) | 加入黑名单原因 |
+| total_loss | decimal(15,2) | 累计亏损 |
+| win_rate | decimal(5,4) | 胜率 |
+| order_count | int(11) | 订单数量 |
+| created_at | timestamp | 创建时间 |
+| updated_at | timestamp | 更新时间 |
+| is_active | tinyint(1) | 是否激活 |
+| notes | text | 备注 |
+
+---
+
+## 10. signal_component_performance (信号组件性能) ⚡ 超级大脑
+
+分析各个信号组件的表现，用于动态调整权重。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| component_name | varchar(50) | 组件名称，如 ema_golden_cross |
+| position_side | varchar(10) | 方向：LONG/SHORT |
+| total_orders | int(11) | 总订单数 |
+| win_orders | int(11) | 盈利订单数 |
+| total_pnl | decimal(15,2) | 累计盈亏 |
+| avg_pnl | decimal(10,2) | 平均盈亏 |
+| win_rate | decimal(5,4) | 胜率 |
+| contribution_score | decimal(5,2) | 贡献分数 |
+| last_analyzed | timestamp | 最后分析时间 |
+| updated_at | timestamp | 更新时间 |
+
+---
+
+## 11. signal_position_multipliers (仓位倍数表) ⚡ 超级大脑
+
+根据组件表现动态调整开仓倍数。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| component_name | varchar(50) | 组件名称 |
+| position_side | varchar(10) | 方向：LONG/SHORT |
+| position_multiplier | decimal(5,2) | 仓位倍数，默认1.00 |
+| total_trades | int(11) | 交易次数 |
+| win_rate | decimal(5,4) | 胜率 |
+| avg_pnl | decimal(10,2) | 平均盈亏 |
+| total_pnl | decimal(15,2) | 累计盈亏 |
+| last_analyzed | timestamp | 最后分析时间 |
+| adjustment_count | int(11) | 调整次数 |
+| is_active | tinyint(1) | 是否激活 |
+| created_at | timestamp | 创建时间 |
+| updated_at | timestamp | 更新时间 |
+
+---
+
+## 12. signal_scoring_weights (信号评分权重) ⚡ 超级大脑
+
+存储各信号组件的评分权重，用于计算综合信号分数。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| signal_component | varchar(50) | 信号组件，唯一键 |
+| weight_long | decimal(5,2) | 做多权重 |
+| weight_short | decimal(5,2) | 做空权重 |
+| base_weight | decimal(5,2) | 基础权重 |
+| performance_score | decimal(5,2) | 性能分数 |
+| last_adjusted | timestamp | 最后调整时间 |
+| adjustment_count | int(11) | 调整次数 |
+| description | varchar(255) | 组件描述 |
+| is_active | tinyint(1) | 是否激活 |
+| updated_at | timestamp | 更新时间 |
+
+---
+
+## 超级大脑工作流程
+
+1. **信号采集**: `ema_signals` 表记录各时间周期的EMA交叉信号
+2. **信号评分**: 根据 `signal_scoring_weights` 计算综合分数
+3. **性能分析**: `signal_component_performance` 分析各组件表现
+4. **黑名单过滤**: `signal_blacklist` 过滤低质量信号
+5. **仓位调整**: `signal_position_multipliers` 根据表现调整仓位
+6. **执行记录**: `paper_trading_signal_executions` 记录执行过程
+7. **持仓管理**: 将评分和组件信息存入 `futures_positions` 的 `entry_score` 和 `signal_components` 字段

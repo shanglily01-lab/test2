@@ -14,7 +14,7 @@ import pymysql
 # 定义本地时区（UTC+8）
 LOCAL_TIMEZONE = timezone(timedelta(hours=8))
 
-def get_local_time() -> datetime:
+def datetime.utcnow() -> datetime:
     """获取本地时间（UTC+8）"""
     return datetime.now(LOCAL_TIMEZONE).replace(tzinfo=None)
 
@@ -545,7 +545,7 @@ class FuturesTradingEngine:
                         float(limit_fee), float(Decimal('0.0004')),
                         float(limit_stop_loss_price) if limit_stop_loss_price else None,
                         float(limit_take_profit_price) if limit_take_profit_price else None,
-                        source, entry_signal_type, signal_id, strategy_id, get_local_time()
+                        source, entry_signal_type, signal_id, strategy_id, datetime.utcnow()
                     ))
                     
                     # 更新总权益（限价单时还没有持仓，未实现盈亏为0）
@@ -729,7 +729,7 @@ class FuturesTradingEngine:
                 float(stop_loss_pct) if stop_loss_pct else None,
                 float(take_profit_pct) if take_profit_pct else None,
                 entry_ema_diff, entry_signal_type, entry_score, entry_reason,
-                get_local_time(), source, signal_id, strategy_id
+                datetime.utcnow(), source, signal_id, strategy_id
             ))
 
             position_id = cursor.lastrowid
@@ -767,7 +767,7 @@ class FuturesTradingEngine:
                 float(entry_price), float(quantity), float(quantity),
                 float(margin_required), float(notional_value), float(notional_value),
                 float(fee), float(fee_rate),
-                float(entry_price), get_local_time(),
+                float(entry_price), datetime.utcnow(),
                 source, signal_id, strategy_id
             ))
 
@@ -792,7 +792,7 @@ class FuturesTradingEngine:
                 account_id, order_id, position_id, trade_id,
                 symbol, side, float(entry_price), float(quantity), float(notional_value),
                 leverage, float(margin_required), float(fee), float(fee_rate),
-                float(entry_price), get_local_time()
+                float(entry_price), datetime.utcnow()
             ))
 
             # 9. 更新账户余额
@@ -825,7 +825,7 @@ class FuturesTradingEngine:
             self.connection.commit()
 
             # 记录当前时间（本地时间）
-            current_time_str = get_local_time().strftime('%Y-%m-%d %H:%M:%S')
+            current_time_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
             # 根据交易对确定数量显示精度
             qty_precision = get_quantity_precision(symbol)
             logger.info(
@@ -1061,7 +1061,7 @@ class FuturesTradingEngine:
                 float(current_price), float(close_quantity), float(close_quantity),
                 float(close_value), float(close_value),
                 float(fee), float(fee_rate),
-                float(current_price), get_local_time(),
+                float(current_price), datetime.utcnow(),
                 float(realized_pnl), float(pnl_pct),
                 'strategy', reason
             ))
@@ -1090,7 +1090,7 @@ class FuturesTradingEngine:
                 symbol, side, float(current_price), float(close_quantity), float(close_value),
                 leverage, float(position_margin), float(fee), float(fee_rate),
                 float(realized_pnl), float(pnl_pct), float(roi),
-                float(entry_price), get_local_time()
+                float(entry_price), datetime.utcnow()
             ))
 
             # 7. 更新持仓状态
@@ -1116,7 +1116,7 @@ class FuturesTradingEngine:
                     SET status = 'closed', close_time = %s,
                         realized_pnl = %s, notes = %s
                     WHERE id = %s""",
-                    (get_local_time(), float(realized_pnl), notes_reason, position_id)
+                    (datetime.utcnow(), float(realized_pnl), notes_reason, position_id)
                 )
 
                 # 释放全部保证金
@@ -1207,7 +1207,7 @@ class FuturesTradingEngine:
                         if isinstance(open_time, str):
                             from datetime import datetime
                             open_time = datetime.strptime(open_time, '%Y-%m-%d %H:%M:%S')
-                        hold_duration = get_local_time() - open_time
+                        hold_duration = datetime.utcnow() - open_time
                         hours, remainder = divmod(hold_duration.total_seconds(), 3600)
                         minutes = remainder // 60
                         if hours >= 24:

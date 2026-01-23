@@ -226,7 +226,7 @@ class PositionValidator:
             pnl_pct = (entry_price - current_price) / entry_price * 100
 
         # 计算开仓时间
-        now = self.get_local_time()
+        now = self.datetime.utcnow()
         hold_seconds = (now - created_at).total_seconds()
 
         # ========== 检查1: 震荡市追单 (已移至开仓前检查) ==========
@@ -578,7 +578,7 @@ class PositionValidator:
         close_side = f"CLOSE_{direction.upper()}"
 
         # 计算时间阈值（使用Python计算，避免MySQL函数）
-        now = self.get_local_time()
+        now = self.datetime.utcnow()
         time_threshold = now - timedelta(seconds=cooldown_seconds)
 
         # 带重试的查询
@@ -639,7 +639,7 @@ class PositionValidator:
         expire_seconds = self.validation_config.get('pending_expire_seconds', 300)
 
         # 计算时间阈值（使用Python计算，避免MySQL函数）
-        now = self.get_local_time()
+        now = self.datetime.utcnow()
         expire_threshold = now - timedelta(seconds=expire_seconds)
 
         # 带重试的数据库操作
