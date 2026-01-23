@@ -798,9 +798,9 @@ class SmartTraderService:
                         UPDATE futures_positions
                         SET status = 'closed', mark_price = %s,
                             realized_pnl = %s,
-                            close_time = %s, updated_at = %s
+                            close_time = NOW(), updated_at = NOW()
                         WHERE id = %s
-                    """, (current_price, realized_pnl, get_local_time(), get_local_time(), pos_id))
+                    """, (current_price, realized_pnl, pos_id))
 
                     # Calculate values for orders and trades
                     import uuid
@@ -951,9 +951,9 @@ class SmartTraderService:
                     UPDATE futures_positions
                     SET status = 'closed', mark_price = %s,
                         realized_pnl = %s,
-                        close_time = %s, updated_at = %s
+                        close_time = NOW(), updated_at = NOW()
                     WHERE id = %s
-                """, (current_price, realized_pnl, get_local_time(), get_local_time(), pos_id))
+                """, (current_price, realized_pnl, pos_id))
 
                 # Calculate values for orders and trades
                 import uuid
@@ -1144,10 +1144,10 @@ class SmartTraderService:
                                 UPDATE futures_positions
                                 SET status = 'closed', mark_price = %s,
                                     realized_pnl = %s,
-                                    close_time = %s, updated_at = %s,
+                                    close_time = NOW(), updated_at = NOW(),
                                     notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
                                 WHERE id = %s
-                            """, (current_price, long_pos['realized_pnl'], get_local_time(), get_local_time(), long_pos['id']))
+                            """, (current_price, long_pos['realized_pnl'], long_pos['id']))
 
                             # Calculate values for orders and trades
                             import uuid
@@ -1249,10 +1249,10 @@ class SmartTraderService:
                                 UPDATE futures_positions
                                 SET status = 'closed', mark_price = %s,
                                     realized_pnl = %s,
-                                    close_time = %s, updated_at = %s,
+                                    close_time = NOW(), updated_at = NOW(),
                                     notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
                                 WHERE id = %s
-                            """, (current_price, short_pos['realized_pnl'], get_local_time(), get_local_time(), short_pos['id']))
+                            """, (current_price, short_pos['realized_pnl'], short_pos['id']))
 
                             # Calculate values for orders and trades
                             import uuid
@@ -1434,10 +1434,10 @@ class SmartTraderService:
                     UPDATE futures_positions
                     SET status = 'closed', mark_price = %s,
                         realized_pnl = %s,
-                        close_time = %s, updated_at = %s,
+                        close_time = NOW(), updated_at = NOW(),
                         notes = CONCAT(IFNULL(notes, ''), '|', %s)
                     WHERE id = %s
-                """, (current_price, realized_pnl, get_local_time(), get_local_time(), reason, pos['id']))
+                """, (current_price, realized_pnl, reason, pos['id']))
 
                 # Calculate values for orders and trades
                 import uuid
