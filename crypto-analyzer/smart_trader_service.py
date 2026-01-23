@@ -218,7 +218,8 @@ class SmartDecisionBrain:
 
         query = """
             SELECT open_price as open, high_price as high,
-                   low_price as low, close_price as close
+                   low_price as low, close_price as close,
+                   volume
             FROM kline_data
             WHERE symbol = %s AND timeframe = %s
             AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 60 DAY)) * 1000
@@ -234,6 +235,7 @@ class SmartDecisionBrain:
             k['high'] = float(k['high'])
             k['low'] = float(k['low'])
             k['close'] = float(k['close'])
+            k['volume'] = float(k['volume'])
 
         return klines
 
