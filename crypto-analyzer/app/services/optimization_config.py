@@ -386,18 +386,34 @@ class OptimizationConfig:
             end_date = datetime.now().date()
             start_date = end_date - timedelta(days=observation_days)
 
+            # 计算margin_multiplier和score_bonus
+            if new_level == 3:
+                margin_multiplier = 0.0
+                score_bonus = 999
+            elif new_level == 2:
+                margin_multiplier = 0.125  # 50/400
+                score_bonus = 10
+            elif new_level == 1:
+                margin_multiplier = 0.25  # 100/400
+                score_bonus = 5
+            else:
+                margin_multiplier = 1.0
+                score_bonus = 0
+
             # 更新或插入
             cursor.execute("""
                 INSERT INTO trading_symbol_rating (
-                    symbol, rating_level, hard_stop_loss_count,
-                    total_loss_amount, total_profit_amount, win_rate, total_trades,
-                    previous_level, level_changed_at, level_change_reason,
-                    stats_start_date, stats_end_date
+                    symbol, rating_level, margin_multiplier, score_bonus,
+                    hard_stop_loss_count, total_loss_amount, total_profit_amount,
+                    win_rate, total_trades, previous_level, level_changed_at,
+                    level_change_reason, stats_start_date, stats_end_date
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s
                 )
                 ON DUPLICATE KEY UPDATE
                     rating_level = VALUES(rating_level),
+                    margin_multiplier = VALUES(margin_multiplier),
+                    score_bonus = VALUES(score_bonus),
                     hard_stop_loss_count = VALUES(hard_stop_loss_count),
                     total_loss_amount = VALUES(total_loss_amount),
                     total_profit_amount = VALUES(total_profit_amount),
@@ -408,9 +424,10 @@ class OptimizationConfig:
                     level_change_reason = VALUES(level_change_reason),
                     stats_start_date = VALUES(stats_start_date),
                     stats_end_date = VALUES(stats_end_date)
-            """, (symbol, new_level, hard_stop_loss_count,
-                  total_loss_amount, total_profit_amount, win_rate, total_trades,
-                  old_level, reason, start_date, end_date, old_level))
+            """, (symbol, new_level, margin_multiplier, score_bonus,
+                  hard_stop_loss_count, total_loss_amount, total_profit_amount,
+                  win_rate, total_trades, old_level, reason, start_date, end_date,
+                  old_level))
 
             conn.commit()
 
