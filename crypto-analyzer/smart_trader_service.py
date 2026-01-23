@@ -49,7 +49,7 @@ class SmartDecisionBrain:
         # 从config.yaml加载配置
         self._load_config()
 
-        self.threshold = 10  # 降低阈值,更容易找到交易机会
+        self.threshold = 25  # 提高阈值，确保交易质量，减少手续费损耗
 
     def _load_config(self):
         """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
@@ -1699,8 +1699,9 @@ class SmartTraderService:
                         # 获取反向持仓的开仓得分
                         old_score = self.get_position_score(symbol, opposite_side)
 
-                        # 如果新信号比旧信号强20分以上 -> 主动反向平仓
-                        if new_score > old_score + 20:
+                        # 如果新信号比旧信号强30分以上 -> 主动反向平仓
+                        # 数据显示：21分差距胜率87.5%但盈利小($2.28)，30分差距更谨慎减少交易次数
+                        if new_score > old_score + 30:
                             logger.info(
                                 f"[REVERSE] {symbol} 检测到强反向信号! "
                                 f"原{opposite_side}得分{old_score}, 新{new_side}得分{new_score} (差距{new_score-old_score}分)"
