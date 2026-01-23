@@ -40,13 +40,15 @@ class FastFuturesCollector:
         """获取数据库连接"""
         return pymysql.connect(**self.db_config, autocommit=False)
 
-    async def fetch_kline(self, session: aiohttp.ClientSession, symbol: str) -> Optional[Dict]:
+    async def fetch_kline(self, session: aiohttp.ClientSession, symbol: str, interval: str = '5m', limit: int = 1) -> Optional[Dict]:
         """
         异步获取单个交易对的最新K线
 
         Args:
             session: aiohttp会话
             symbol: 交易对符号（如 BTCUSDT）
+            interval: 时间周期 (5m, 15m, 1h, 1d)
+            limit: 获取K线数量
 
         Returns:
             K线数据字典，失败返回None
@@ -54,8 +56,8 @@ class FastFuturesCollector:
         url = f"{self.base_url}/fapi/v1/klines"
         params = {
             'symbol': symbol,
-            'interval': '5m',
-            'limit': 1  # 只获取最新的一条
+            'interval': interval,
+            'limit': limit
         }
 
         try:
@@ -63,23 +65,26 @@ class FastFuturesCollector:
                 if response.status == 200:
                     data = await response.json()
                     if data and len(data) > 0:
-                        kline = data[0]
-                        return {
-                            'symbol': f"{symbol[:-4]}/USDT",  # BTCUSDT -> BTC/USDT
-                            'timeframe': '5m',
-                            'open_time': kline[0],
-                            'close_time': kline[6],
-                            'timestamp': datetime.fromtimestamp(kline[0] / 1000),
-                            'open_price': Decimal(kline[1]),
-                            'high_price': Decimal(kline[2]),
-                            'low_price': Decimal(kline[3]),
-                            'close_price': Decimal(kline[4]),
-                            'volume': Decimal(kline[5]),
-                            'quote_volume': Decimal(kline[7]),
-                            'number_of_trades': int(kline[8]),
-                            'taker_buy_base_volume': Decimal(kline[9]),
-                            'taker_buy_quote_volume': Decimal(kline[10])
-                        }
+                        # 返回所有K线数据
+                        klines = []
+                        for kline in data:
+                            klines.append({
+                                'symbol': f"{symbol[:-4]}/USDT",  # BTCUSDT -> BTC/USDT
+                                'timeframe': interval,
+                                'open_time': kline[0],
+                                'close_time': kline[6],
+                                'timestamp': datetime.fromtimestamp(kline[0] / 1000),
+                                'open_price': Decimal(kline[1]),
+                                'high_price': Decimal(kline[2]),
+                                'low_price': Decimal(kline[3]),
+                                'close_price': Decimal(kline[4]),
+                                'volume': Decimal(kline[5]),
+                                'quote_volume': Decimal(kline[7]),
+                                'number_of_trades': int(kline[8]),
+                                'taker_buy_base_volume': Decimal(kline[9]),
+                                'taker_buy_quote_volume': Decimal(kline[10])
+                            })
+                        return klines
                 else:
                     logger.warning(f"获取 {symbol} K线失败: HTTP {response.status}")
                     return None
@@ -123,26 +128,24 @@ class FastFuturesCollector:
             logger.error(f"获取 {symbol} 价格异常: {e}")
             return None
 
-    async def collect_batch(self, symbols: List[str], collect_type: str = 'kline') -> List[Dict]:
+    async def collect_batch(self, symbols: List[str], interval: str = '5m', limit: int = 1) -> List[Dict]:
         """
-        批量采集数据（并发）
+        批量采集K线数据（并发）
 
         Args:
             symbols: 交易对列表（如 ['BTCUSDT', 'ETHUSDT']）
-            collect_type: 采集类型 'kline' 或 'price'
+            interval: 时间周期 (5m, 15m, 1h, 1d)
+            limit: 每个交易对获取的K线数量
 
         Returns:
-            成功采集的数据列表
+            成功采集的K线数据列表（扁平化）
         """
         results = []
 
         # 创建aiohttp会话
         async with aiohttp.ClientSession() as session:
             # 创建任务列表
-            if collect_type == 'kline':
-                tasks = [self.fetch_kline(session, symbol) for symbol in symbols]
-            else:
-                tasks = [self.fetch_price(session, symbol) for symbol in symbols]
+            tasks = [self.fetch_kline(session, symbol, interval, limit) for symbol in symbols]
 
             # 使用信号量限制并发数
             semaphore = asyncio.Semaphore(self.max_concurrent)
@@ -155,10 +158,13 @@ class FastFuturesCollector:
             bounded_tasks = [bounded_task(task) for task in tasks]
             results_raw = await asyncio.gather(*bounded_tasks, return_exceptions=True)
 
-            # 过滤成功的结果
+            # 过滤成功的结果并扁平化（因为每个symbol返回多条K线）
             for result in results_raw:
                 if result is not None and not isinstance(result, Exception):
-                    results.append(result)
+                    if isinstance(result, list):
+                        results.extend(result)  # 扁平化列表
+                    else:
+                        results.append(result)
 
         return results
 
@@ -321,7 +327,8 @@ class FastFuturesCollector:
     async def run_collection_cycle(self):
         """
         执行一次完整的采集周期
-        注意：只采集K线数据，实时价格由 WebSocket 服务提供
+        采集多个时间周期的K线: 5m, 15m, 1h, 1d
+        注意：实时价格由 WebSocket 服务提供
         """
         start_time = datetime.utcnow()
         logger.info("=" * 60)
@@ -335,14 +342,26 @@ class FastFuturesCollector:
 
         logger.info(f"目标: {len(symbols)} 个交易对")
 
-        # 采集K线数据（5m周期）
-        logger.info("采集5m K线数据...")
-        klines = await self.collect_batch(symbols, 'kline')
-        logger.info(f"成功获取 {len(klines)}/{len(symbols)} 条K线")
+        # 定义需要采集的时间周期和数量
+        intervals = [
+            ('5m', 1),    # 5分钟K线，只要最新1条
+            ('15m', 1),   # 15分钟K线，只要最新1条
+            ('1h', 100),  # 1小时K线，要100条（超级大脑需要）
+            ('1d', 50)    # 1天K线，要50条（超级大脑需要）
+        ]
 
-        # 保存K线
-        if klines:
-            self.save_klines(klines)
+        all_klines = []
+
+        # 依次采集各个时间周期
+        for interval, limit in intervals:
+            logger.info(f"采集 {interval} K线数据 (每个交易对{limit}条)...")
+            klines = await self.collect_batch(symbols, interval, limit)
+            logger.info(f"成功获取 {len(klines)} 条 {interval} K线")
+            all_klines.extend(klines)
+
+        # 保存所有K线
+        if all_klines:
+            self.save_klines(all_klines)
 
         # 注意：不再采集价格数据，实时价格由 binance_ws_price.py 的 WebSocket 服务提供
         # 合约交易需要毫秒级的实时价格推送，而不是每5分钟的轮询
@@ -350,7 +369,11 @@ class FastFuturesCollector:
         # 统计
         elapsed = (datetime.utcnow() - start_time).total_seconds()
         logger.info(f"✓ 采集周期完成，耗时 {elapsed:.2f} 秒")
-        logger.info(f"  K线: {len(klines)}/{len(symbols)}")
+        logger.info(f"  总K线数: {len(all_klines)}")
+        logger.info(f"  5m: {len([k for k in all_klines if k['timeframe'] == '5m'])} 条")
+        logger.info(f"  15m: {len([k for k in all_klines if k['timeframe'] == '15m'])} 条")
+        logger.info(f"  1h: {len([k for k in all_klines if k['timeframe'] == '1h'])} 条")
+        logger.info(f"  1d: {len([k for k in all_klines if k['timeframe'] == '1d'])} 条")
         logger.info("=" * 60)
 
 
