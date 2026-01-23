@@ -688,10 +688,21 @@ class SmartTraderService:
             # 显示实际使用的止损止盈百分比
             sl_pct = f"-{stop_loss_pct*100:.1f}%" if side == 'LONG' else f"+{stop_loss_pct*100:.1f}%"
             tp_pct = f"+{take_profit_pct*100:.1f}%" if side == 'LONG' else f"-{take_profit_pct*100:.1f}%"
-            blacklist_tag = " [黑名单-小仓位]" if is_blacklisted else ""
+
+            # 显示评级和对冲标签
+            if rating_level == 0:
+                rating_tag = ""
+            elif rating_level == 1:
+                rating_tag = " [黑名单L1-25%]"
+            elif rating_level == 2:
+                rating_tag = " [黑名单L2-12.5%]"
+            else:
+                rating_tag = " [黑名单L3-禁止]"
+
             hedge_tag = " [对冲]" if is_hedge else ""
+
             logger.info(
-                f"[SUCCESS] {symbol} {side}开仓成功{blacklist_tag}{hedge_tag} | "
+                f"[SUCCESS] {symbol} {side}开仓成功{rating_tag}{hedge_tag} | "
                 f"止损: ${stop_loss:.4f} ({sl_pct}) | 止盈: ${take_profit:.4f} ({tp_pct}) | "
                 f"仓位: ${margin:.0f} (x{position_multiplier:.1f}) | 超时: {base_timeout_minutes}分钟"
             )
