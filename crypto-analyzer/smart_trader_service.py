@@ -791,9 +791,10 @@ class SmartTraderService:
                         UPDATE futures_positions
                         SET status = 'closed', mark_price = %s,
                             realized_pnl = %s,
+                            notes = %s,
                             close_time = NOW(), updated_at = NOW()
                         WHERE id = %s
-                    """, (current_price, realized_pnl, pos_id))
+                    """, (current_price, realized_pnl, close_reason, pos_id))
 
                     # Calculate values for orders and trades
                     import uuid
@@ -940,13 +941,17 @@ class SmartTraderService:
                 pnl_pct = (realized_pnl / (float(entry_price) * float(quantity))) * 100 if float(quantity) > 0 else 0
                 roi = (realized_pnl / margin) * 100 if margin > 0 else 0
 
+                # 平仓原因
+                close_reason = f"TIMEOUT_4H(持仓{hours_old}小时)"
+
                 cursor.execute("""
                     UPDATE futures_positions
                     SET status = 'closed', mark_price = %s,
                         realized_pnl = %s,
+                        notes = %s,
                         close_time = NOW(), updated_at = NOW()
                     WHERE id = %s
-                """, (current_price, realized_pnl, pos_id))
+                """, (current_price, realized_pnl, close_reason, pos_id))
 
                 # Calculate values for orders and trades
                 import uuid
