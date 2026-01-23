@@ -613,6 +613,15 @@ class SmartTraderService:
                 f"SMART_BRAIN_{opp['score']}", entry_score, signal_components_json
             ))
 
+            # 冻结资金 (开仓时扣除可用余额，增加冻结余额)
+            cursor.execute("""
+                UPDATE futures_trading_accounts
+                SET current_balance = current_balance - %s,
+                    frozen_balance = frozen_balance + %s,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (margin, margin, self.account_id))
+
             cursor.close()
 
             # 显示实际使用的止损止盈百分比
@@ -875,7 +884,7 @@ class SmartTraderService:
 
                     # Update account balance
                     cursor.execute("""
-                        UPDATE paper_trading_accounts
+                        UPDATE futures_trading_accounts
                         SET current_balance = current_balance + %s + %s,
                             frozen_balance = frozen_balance - %s,
                             realized_pnl = realized_pnl + %s,
@@ -891,7 +900,7 @@ class SmartTraderService:
 
                     # Update win rate
                     cursor.execute("""
-                        UPDATE paper_trading_accounts
+                        UPDATE futures_trading_accounts
                         SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
                         WHERE id = %s
                     """, (self.account_id,))
@@ -1033,7 +1042,7 @@ class SmartTraderService:
 
                 # Update account balance
                 cursor.execute("""
-                    UPDATE paper_trading_accounts
+                    UPDATE futures_trading_accounts
                     SET current_balance = current_balance + %s + %s,
                         frozen_balance = frozen_balance - %s,
                         realized_pnl = realized_pnl + %s,
@@ -1049,7 +1058,7 @@ class SmartTraderService:
 
                 # Update win rate
                 cursor.execute("""
-                    UPDATE paper_trading_accounts
+                    UPDATE futures_trading_accounts
                     SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
                     WHERE id = %s
                 """, (self.account_id,))
@@ -1225,7 +1234,7 @@ class SmartTraderService:
 
                             # Update account balance
                             cursor.execute("""
-                                UPDATE paper_trading_accounts
+                                UPDATE futures_trading_accounts
                                 SET current_balance = current_balance + %s + %s,
                                     frozen_balance = frozen_balance - %s,
                                     realized_pnl = realized_pnl + %s,
@@ -1240,7 +1249,7 @@ class SmartTraderService:
                             ))
 
                             cursor.execute("""
-                                UPDATE paper_trading_accounts
+                                UPDATE futures_trading_accounts
                                 SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
                                 WHERE id = %s
                             """, (self.account_id,))
@@ -1330,7 +1339,7 @@ class SmartTraderService:
 
                             # Update account balance
                             cursor.execute("""
-                                UPDATE paper_trading_accounts
+                                UPDATE futures_trading_accounts
                                 SET current_balance = current_balance + %s + %s,
                                     frozen_balance = frozen_balance - %s,
                                     realized_pnl = realized_pnl + %s,
@@ -1345,7 +1354,7 @@ class SmartTraderService:
                             ))
 
                             cursor.execute("""
-                                UPDATE paper_trading_accounts
+                                UPDATE futures_trading_accounts
                                 SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
                                 WHERE id = %s
                             """, (self.account_id,))
@@ -1516,7 +1525,7 @@ class SmartTraderService:
 
                 # Update account balance
                 cursor.execute("""
-                    UPDATE paper_trading_accounts
+                    UPDATE futures_trading_accounts
                     SET current_balance = current_balance + %s + %s,
                         frozen_balance = frozen_balance - %s,
                         realized_pnl = realized_pnl + %s,
@@ -1531,7 +1540,7 @@ class SmartTraderService:
                 ))
 
                 cursor.execute("""
-                    UPDATE paper_trading_accounts
+                    UPDATE futures_trading_accounts
                     SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
                     WHERE id = %s
                 """, (self.account_id,))
