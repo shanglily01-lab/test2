@@ -68,7 +68,7 @@ class SymbolRatingManager:
                 COUNT(*) as total_trades,
                 SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as wins,
                 SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) as losses,
-                SUM(CASE WHEN notes LIKE '%hard_stop_loss%' THEN 1 ELSE 0 END) as hard_stop_loss_count,
+                SUM(CASE WHEN notes LIKE '%%hard_stop_loss%%' THEN 1 ELSE 0 END) as hard_stop_loss_count,
                 SUM(realized_pnl) as total_pnl,
                 SUM(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE 0 END) as total_profit,
                 SUM(CASE WHEN realized_pnl < 0 THEN ABS(realized_pnl) ELSE 0 END) as total_loss,

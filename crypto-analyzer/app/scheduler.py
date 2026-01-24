@@ -93,7 +93,6 @@ class UnifiedDataScheduler:
             'funding_rate': {'count': 0, 'last_run': None, 'last_error': None},
             'news': {'count': 0, 'last_run': None, 'last_error': None},
             'futures_monitor': {'count': 0, 'last_run': None, 'last_error': None},
-            'auto_trading': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_price': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_analysis': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_hyperliquid': {'count': 0, 'last_run': None, 'last_error': None},
@@ -162,13 +161,9 @@ class UnifiedDataScheduler:
             logger.warning(f"  ⊗ 合约交易引擎初始化失败: {e}")
             self.futures_engine = None
 
-        # 6. 自动合约交易服务
-        try:
-            self.auto_trader = AutoFuturesTrader()
-            logger.info("  ✓ 自动合约交易服务 (BTC, ETH, SOL, BNB)")
-        except Exception as e:
-            self.auto_trader = None
-            logger.warning(f"  ⊗ 自动合约交易服务初始化失败: {e}")
+        # 注意: 自动合约交易和评级更新已移至 smart_trader_service.py
+        # 6. 自动合约交易服务 - 已移至 smart_trader_service.py
+        # 7. 交易对评级管理器 - 已移至 smart_trader_service.py (每天凌晨2点自动运行)
 
 
 
@@ -682,43 +677,11 @@ class UnifiedDataScheduler:
             logger.error(f"Ethereum 数据采集任务失败 ({timeframe}): {e}")
             self.task_stats[task_name]['last_error'] = str(e)
 
+    # ==================== 交易对评级更新任务 ====================
+    # 注意: 评级更新已移至 smart_trader_service.py (每天凌晨2点自动运行)
+
     # ==================== 自动合约交易任务 ====================
-
-    async def run_auto_trading(self):
-        """自动合约交易 - 根据投资建议开仓 (每30分钟)"""
-        if not self.auto_trader:
-            return
-
-        task_name = 'auto_trading'
-        try:
-            logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 🤖 开始自动合约交易...")
-
-            # 执行自动交易
-            results = self.auto_trader.run_auto_trading_cycle()
-
-            # 统计
-            total = results['processed']
-            opened = results['opened']
-            skipped = results['skipped']
-            failed = results['failed']
-
-            logger.info(f"  ✓ 自动交易: 处理 {total}, 开仓 {opened}, 跳过 {skipped}, 失败 {failed}")
-
-            # 重要事件通知
-            if opened > 0:
-                logger.info(f"  🚀 {opened} 个新持仓已开启")
-                for detail in results['details']:
-                    if detail['status'] == 'opened':
-                        logger.info(f"     • {detail['symbol']}: {detail['recommendation']} "
-                                  f"(置信度 {detail['confidence']:.1f}%, ID: {detail['position_id']})")
-
-            # 更新统计
-            self.task_stats[task_name]['count'] += 1
-            self.task_stats[task_name]['last_run'] = datetime.utcnow()
-
-        except Exception as e:
-            logger.error(f"自动交易任务失败: {e}")
-            self.task_stats[task_name]['last_error'] = str(e)
+    # 注意: 自动合约交易已移至 smart_trader_service.py
 
     # ==================== 合约监控任务 ====================
     # 合约止盈止损监控已移至 main.py，由 FastAPI 生命周期管理
@@ -1062,12 +1025,9 @@ class UnifiedDataScheduler:
             )
             logger.info("  ✓ Hyperliquid 排行榜 - 每天 02:00")
 
-        # 3.5 自动合约交易
-        if self.auto_trader:
-            schedule.every(30).minutes.do(
-                lambda: asyncio.run(self.run_auto_trading())
-            )
-            logger.info("  ✓ 自动合约交易 (BTC, ETH, SOL, BNB) - 每 30 分钟")
+        # 3.5 自动合约交易 - 已移至 smart_trader_service.py
+        logger.info("  ℹ️  自动合约交易已移至 smart_trader_service.py")
+        logger.info("     请单独运行: python smart_trader_service.py")
 
         # 3.6 合约持仓监控（已移至 main.py，由 FastAPI 生命周期管理）
         # 合约止盈止损监控现在在 main.py 中启动，与现货限价单执行器保持一致
@@ -1101,6 +1061,9 @@ class UnifiedDataScheduler:
         if self.hyperliquid_collector:
             logger.info("  ℹ️  Hyperliquid 钱包监控已移至独立调度器 (app/hyperliquid_scheduler.py)")
             logger.info("     请单独运行: python app/hyperliquid_scheduler.py")
+
+        # 6.5 交易对评级更新 - 已移至 smart_trader_service.py
+        logger.info("  ℹ️  交易对评级更新已移至 smart_trader_service.py (每天凌晨2点自动运行)")
 
         # 7. 缓存更新任务
         logger.info("\n  🚀 性能优化: 缓存自动更新")
