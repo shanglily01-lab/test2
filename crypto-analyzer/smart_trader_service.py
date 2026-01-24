@@ -573,6 +573,9 @@ class SmartTraderService:
 
             # 检查是否为反转开仓(使用原仓位保证金)
             is_reversal = 'reversal_from' in opp
+            rating_level = 0  # 默认白名单
+            is_hedge = False  # 默认非对冲
+
             if is_reversal and 'original_margin' in opp:
                 # 反转开仓: 使用原仓位相同的保证金
                 adjusted_position_size = opp['original_margin']
@@ -583,6 +586,9 @@ class SmartTraderService:
                     adaptive_params = self.brain.adaptive_long
                 else:  # SHORT
                     adaptive_params = self.brain.adaptive_short
+
+                # 反转开仓也需要检查评级(用于日志显示)
+                rating_level = self.opt_config.get_symbol_rating_level(symbol)
             else:
                 # 正常开仓流程
                 # 问题2优化: 使用3级评级制度替代简单黑名单
@@ -666,6 +672,19 @@ class SmartTraderService:
             signal_components_json = json.dumps(signal_components) if signal_components else None
             entry_score = opp.get('score', 0)
 
+            # 生成信号组合键 (按字母顺序排序信号名称)
+            if signal_components:
+                sorted_signals = sorted(signal_components.keys())
+                signal_combination_key = " + ".join(sorted_signals)
+            else:
+                signal_combination_key = "unknown"
+
+            # 检查是否为反转信号
+            if is_reversal:
+                signal_combination_key = f"REVERSAL_{opp.get('reversal_from', 'unknown')}"
+
+            logger.info(f"[SIGNAL_COMBO] {symbol} {side} 信号组合: {signal_combination_key} (评分: {entry_score})")
+
             # 问题1优化: 计算动态超时时间
             base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
             # 计算超时时间点 (UTC时间)
@@ -683,7 +702,7 @@ class SmartTraderService:
             """, (
                 self.account_id, symbol, side, quantity, current_price, self.leverage,
                 notional_value, margin, stop_loss, take_profit,
-                f"SMART_BRAIN_{opp['score']}", entry_score, signal_components_json,
+                signal_combination_key, entry_score, signal_components_json,
                 base_timeout_minutes, timeout_at
             ))
 
@@ -714,11 +733,19 @@ class SmartTraderService:
 
             hedge_tag = " [对冲]" if is_hedge else ""
 
+            # 格式化信号组合显示(显示各信号的分数)
+            if signal_components:
+                signal_details = ", ".join([f"{k}:{v}" for k, v in sorted(signal_components.items(), key=lambda x: x[1], reverse=True)])
+            else:
+                signal_details = "无"
+
             logger.info(
                 f"[SUCCESS] {symbol} {side}开仓成功{rating_tag}{hedge_tag} | "
+                f"信号: [{signal_combination_key}] | "
                 f"止损: ${stop_loss:.4f} ({sl_pct}) | 止盈: ${take_profit:.4f} ({tp_pct}) | "
-                f"仓位: ${margin:.0f} (x{position_multiplier:.1f}) | 超时: {base_timeout_minutes}分钟"
+                f"仓位: ${margin:.0f} | 超时: {base_timeout_minutes}分钟"
             )
+            logger.info(f"[SIGNAL_DETAIL] {symbol} 信号详情: {signal_details}")
             return True
 
         except Exception as e:

@@ -145,7 +145,8 @@
       "Bash(dir:*)",
       "Bash(git restore:*)",
       "Bash(where:*)",
-      "Bash(D:\\\\python\\\\python.exe:*)"
+      "Bash(D:\\\\python\\\\python.exe:*)",
+      "Bash(tail:*)"
     ],
     "deny": [],
     "ask": []
