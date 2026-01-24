@@ -438,6 +438,7 @@ class SmartTraderService:
         self.brain = SmartDecisionBrain(self.db_config)
         self.connection = None
         self.running = True
+        self.event_loop = None  # 事件循环引用，在async_main中设置
 
         # WebSocket 价格服务
         self.ws_service: BinanceWSPriceService = get_ws_price_service()
@@ -729,15 +730,17 @@ class SmartTraderService:
                 # 在后台异步执行分批建仓，不阻塞主循环
                 import asyncio
                 try:
-                    # 获取当前事件循环
-                    loop = asyncio.get_event_loop()
-                    # 在后台创建任务，不等待完成
-                    asyncio.run_coroutine_threadsafe(
-                        self._open_position_with_batch(opp),
-                        loop
-                    )
-                    logger.info(f"[BATCH_ENTRY] {symbol} {side} 分批建仓任务已启动（后台运行30分钟）")
-                    return True  # 立即返回，不阻塞
+                    # 使用保存的事件循环引用
+                    if self.event_loop:
+                        # 在后台创建任务，不等待完成
+                        asyncio.run_coroutine_threadsafe(
+                            self._open_position_with_batch(opp),
+                            self.event_loop
+                        )
+                        logger.info(f"[BATCH_ENTRY] {symbol} {side} 分批建仓任务已启动（后台运行30分钟）")
+                        return True  # 立即返回，不阻塞
+                    else:
+                        logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 事件循环未初始化，降级到一次性开仓")
                 except Exception as e:
                     logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 分批建仓启动失败: {e}，降级到一次性开仓")
                     # 降级到原有一次性开仓逻辑
@@ -2319,6 +2322,9 @@ class SmartTraderService:
 async def async_main():
     """异步主函数"""
     service = SmartTraderService()
+
+    # 保存事件循环引用，供分批建仓使用
+    service.event_loop = asyncio.get_event_loop()
 
     # 初始化 WebSocket 服务
     await service.init_ws_service()
