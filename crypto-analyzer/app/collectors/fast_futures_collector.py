@@ -16,7 +16,7 @@ from decimal import Decimal
 
 
 class FastFuturesCollector:
-    """快速合约数据采集器 - 专注于K线和价格"""
+    """快速合约数据采集器 - 支持U本位和币本位合约"""
 
     def __init__(self, db_config: dict):
         """
@@ -26,7 +26,12 @@ class FastFuturesCollector:
             db_config: 数据库配置
         """
         self.db_config = db_config
-        self.base_url = "https://fapi.binance.com"
+
+        # U本位合约API
+        self.usdt_base_url = "https://fapi.binance.com"
+
+        # 币本位合约API
+        self.coin_base_url = "https://dapi.binance.com"
 
         # 超时设置（秒）
         self.timeout = aiohttp.ClientTimeout(total=5, connect=2)
@@ -34,7 +39,7 @@ class FastFuturesCollector:
         # 并发限制（同时采集的交易对数量）
         self.max_concurrent = 10
 
-        logger.info("初始化快速合约数据采集器")
+        logger.info("初始化快速合约数据采集器 (支持U本位+币本位)")
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -42,7 +47,7 @@ class FastFuturesCollector:
 
     async def fetch_kline(self, session: aiohttp.ClientSession, symbol: str, interval: str = '5m', limit: int = 1) -> Optional[Dict]:
         """
-        异步获取单个交易对的最新K线
+        异步获取单个U本位合约交易对的最新K线
 
         Args:
             session: aiohttp会话
@@ -53,7 +58,7 @@ class FastFuturesCollector:
         Returns:
             K线数据字典，失败返回None
         """
-        url = f"{self.base_url}/fapi/v1/klines"
+        url = f"{self.usdt_base_url}/fapi/v1/klines"
         params = {
             'symbol': symbol,
             'interval': interval,
@@ -106,7 +111,7 @@ class FastFuturesCollector:
         Returns:
             价格数据字典，失败返回None
         """
-        url = f"{self.base_url}/fapi/v1/ticker/price"
+        url = f"{self.usdt_base_url}/fapi/v1/ticker/price"
         params = {'symbol': symbol}
 
         try:
@@ -126,6 +131,100 @@ class FastFuturesCollector:
             return None
         except Exception as e:
             logger.error(f"获取 {symbol} 价格异常: {e}")
+            return None
+
+    async def fetch_coin_kline(self, session: aiohttp.ClientSession, symbol: str, interval: str = '5m', limit: int = 1) -> Optional[Dict]:
+        """
+        异步获取币本位合约的最新K线
+
+        Args:
+            session: aiohttp会话
+            symbol: 交易对符号（如 BTCUSD_PERP）
+            interval: 时间周期 (5m, 15m, 1h, 1d)
+            limit: 获取K线数量
+
+        Returns:
+            K线数据字典，失败返回None
+        """
+        url = f"{self.coin_base_url}/dapi/v1/klines"
+        params = {
+            'symbol': symbol,
+            'interval': interval,
+            'limit': limit
+        }
+
+        try:
+            async with session.get(url, params=params, timeout=self.timeout) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data and len(data) > 0:
+                        # 返回所有K线数据
+                        klines = []
+                        for kline in data:
+                            # BTCUSD_PERP -> BTC/USD
+                            base_symbol = symbol.replace('USD_PERP', '/USD')
+                            klines.append({
+                                'symbol': base_symbol,
+                                'contract_type': 'coin_futures',
+                                'timeframe': interval,
+                                'open_time': kline[0],
+                                'close_time': kline[6],
+                                'timestamp': datetime.fromtimestamp(kline[0] / 1000),
+                                'open_price': Decimal(kline[1]),
+                                'high_price': Decimal(kline[2]),
+                                'low_price': Decimal(kline[3]),
+                                'close_price': Decimal(kline[4]),
+                                'volume': Decimal(kline[5]),
+                                'quote_volume': Decimal(kline[7]),
+                                'number_of_trades': int(kline[8]),
+                                'taker_buy_base_volume': Decimal(kline[9]),
+                                'taker_buy_quote_volume': Decimal(kline[10])
+                            })
+                        return klines
+                else:
+                    logger.warning(f"获取币本位 {symbol} K线失败: HTTP {response.status}")
+                    return None
+        except asyncio.TimeoutError:
+            logger.warning(f"获取币本位 {symbol} K线超时")
+            return None
+        except Exception as e:
+            logger.error(f"获取币本位 {symbol} K线异常: {e}")
+            return None
+
+    async def fetch_coin_price(self, session: aiohttp.ClientSession, symbol: str) -> Optional[Dict]:
+        """
+        异步获取币本位合约的最新价格
+
+        Args:
+            session: aiohttp会话
+            symbol: 交易对符号（如 BTCUSD_PERP）
+
+        Returns:
+            价格数据字典，失败返回None
+        """
+        url = f"{self.coin_base_url}/dapi/v1/ticker/price"
+        params = {'symbol': symbol}
+
+        try:
+            async with session.get(url, params=params, timeout=self.timeout) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # BTCUSD_PERP -> BTC/USD
+                    base_symbol = symbol.replace('USD_PERP', '/USD')
+                    return {
+                        'symbol': base_symbol,
+                        'contract_type': 'coin_futures',
+                        'price': Decimal(data['price']),
+                        'timestamp': datetime.utcnow()
+                    }
+                else:
+                    logger.warning(f"获取币本位 {symbol} 价格失败: HTTP {response.status}")
+                    return None
+        except asyncio.TimeoutError:
+            logger.warning(f"获取币本位 {symbol} 价格超时")
+            return None
+        except Exception as e:
+            logger.error(f"获取币本位 {symbol} 价格异常: {e}")
             return None
 
     async def collect_batch(self, symbols: List[str], interval: str = '5m', limit: int = 1) -> List[Dict]:
@@ -168,6 +267,46 @@ class FastFuturesCollector:
 
         return results
 
+    async def collect_coin_batch(self, symbols: List[str], interval: str = '5m', limit: int = 1) -> List[Dict]:
+        """
+        批量采集币本位合约K线数据（并发）
+
+        Args:
+            symbols: 币本位合约交易对列表（如 ['BTCUSD_PERP', 'ETHUSD_PERP']）
+            interval: 时间周期 (5m, 15m, 1h, 1d)
+            limit: 每个交易对获取的K线数量
+
+        Returns:
+            成功采集的K线数据列表（扁平化）
+        """
+        results = []
+
+        # 创建aiohttp会话
+        async with aiohttp.ClientSession() as session:
+            # 创建任务列表
+            tasks = [self.fetch_coin_kline(session, symbol, interval, limit) for symbol in symbols]
+
+            # 使用信号量限制并发数
+            semaphore = asyncio.Semaphore(self.max_concurrent)
+
+            async def bounded_task(task):
+                async with semaphore:
+                    return await task
+
+            # 执行所有任务
+            bounded_tasks = [bounded_task(task) for task in tasks]
+            results_raw = await asyncio.gather(*bounded_tasks, return_exceptions=True)
+
+            # 过滤成功的结果并扁平化
+            for result in results_raw:
+                if result is not None and not isinstance(result, Exception):
+                    if isinstance(result, list):
+                        results.extend(result)
+                    else:
+                        results.append(result)
+
+        return results
+
     def save_klines(self, klines: List[Dict]) -> int:
         """
         保存K线数据到数据库（批量插入）
@@ -194,7 +333,7 @@ class FastFuturesCollector:
                     taker_buy_base_volume, taker_buy_quote_volume,
                     created_at
                 ) VALUES (
-                    %s, 'binance_futures', %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s,
                     %s, %s,
@@ -215,8 +354,10 @@ class FastFuturesCollector:
             # 准备批量数据
             values = []
             for k in klines:
+                # 确定exchange类型: U本位或币本位
+                exchange = 'binance_coin_futures' if k.get('contract_type') == 'coin_futures' else 'binance_futures'
                 values.append((
-                    k['symbol'], k['timeframe'], k['open_time'], k['close_time'], k['timestamp'],
+                    k['symbol'], exchange, k['timeframe'], k['open_time'], k['close_time'], k['timestamp'],
                     float(k['open_price']), float(k['high_price']), float(k['low_price']), float(k['close_price']),
                     float(k['volume']), float(k['quote_volume']), k['number_of_trades'],
                     float(k['taker_buy_base_volume']), float(k['taker_buy_quote_volume'])
@@ -283,7 +424,7 @@ class FastFuturesCollector:
 
     def get_trading_symbols(self) -> List[str]:
         """
-        从config.yaml获取需要监控的交易对列表
+        从config.yaml获取需要监控的U本位合约交易对列表
 
         Returns:
             交易对列表（币安格式，如 ['BTCUSDT', 'ETHUSDT']）
@@ -311,7 +452,7 @@ class FastFuturesCollector:
             # 转换为币安格式: BTC/USDT -> BTCUSDT
             symbols = [s.replace('/', '') for s in symbols_list]
 
-            logger.info(f"从配置文件获取 {len(symbols)} 个交易对")
+            logger.info(f"从配置文件获取 {len(symbols)} 个U本位交易对")
             return symbols
 
         except Exception as e:
@@ -324,23 +465,61 @@ class FastFuturesCollector:
             logger.info(f"使用默认交易对列表: {len(default_symbols)} 个")
             return default_symbols
 
+    def get_coin_futures_symbols(self) -> List[str]:
+        """
+        从config.yaml获取需要监控的币本位合约交易对列表
+
+        Returns:
+            币本位合约交易对列表（币安格式，如 ['BTCUSD_PERP', 'ETHUSD_PERP']）
+        """
+        try:
+            import yaml
+            from pathlib import Path
+
+            # 查找config.yaml文件
+            config_path = Path(__file__).parent.parent.parent / 'config.yaml'
+
+            if not config_path.exists():
+                logger.error(f"配置文件不存在: {config_path}")
+                return []
+
+            # 读取配置文件
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                coin_symbols_list = config.get('coin_futures_symbols', [])
+
+            if not coin_symbols_list:
+                logger.info("配置文件中没有币本位合约交易对")
+                return []
+
+            logger.info(f"从配置文件获取 {len(coin_symbols_list)} 个币本位交易对")
+            return coin_symbols_list
+
+        except Exception as e:
+            logger.error(f"获取币本位合约交易对列表失败: {e}")
+            return []
+
     async def run_collection_cycle(self):
         """
         执行一次完整的采集周期
         采集多个时间周期的K线: 5m, 15m, 1h, 1d
+        同时采集U本位和币本位合约数据
         注意：实时价格由 WebSocket 服务提供
         """
         start_time = datetime.utcnow()
         logger.info("=" * 60)
         logger.info("开始快速数据采集周期")
 
-        # 获取交易对列表
-        symbols = self.get_trading_symbols()
-        if not symbols:
+        # 获取U本位交易对列表
+        usdt_symbols = self.get_trading_symbols()
+        # 获取币本位交易对列表
+        coin_symbols = self.get_coin_futures_symbols()
+
+        if not usdt_symbols and not coin_symbols:
             logger.warning("没有可采集的交易对")
             return
 
-        logger.info(f"目标: {len(symbols)} 个交易对")
+        logger.info(f"目标: {len(usdt_symbols)} 个U本位交易对 + {len(coin_symbols)} 个币本位交易对")
 
         # 定义需要采集的时间周期和数量
         intervals = [
@@ -352,12 +531,23 @@ class FastFuturesCollector:
 
         all_klines = []
 
-        # 依次采集各个时间周期
-        for interval, limit in intervals:
-            logger.info(f"采集 {interval} K线数据 (每个交易对{limit}条)...")
-            klines = await self.collect_batch(symbols, interval, limit)
-            logger.info(f"成功获取 {len(klines)} 条 {interval} K线")
-            all_klines.extend(klines)
+        # 采集U本位合约数据
+        if usdt_symbols:
+            logger.info(f"--- U本位合约数据采集 ({len(usdt_symbols)}个) ---")
+            for interval, limit in intervals:
+                logger.info(f"采集U本位 {interval} K线数据 (每个交易对{limit}条)...")
+                klines = await self.collect_batch(usdt_symbols, interval, limit)
+                logger.info(f"成功获取 {len(klines)} 条 {interval} K线")
+                all_klines.extend(klines)
+
+        # 采集币本位合约数据
+        if coin_symbols:
+            logger.info(f"--- 币本位合约数据采集 ({len(coin_symbols)}个) ---")
+            for interval, limit in intervals:
+                logger.info(f"采集币本位 {interval} K线数据 (每个交易对{limit}条)...")
+                klines = await self.collect_coin_batch(coin_symbols, interval, limit)
+                logger.info(f"成功获取 {len(klines)} 条 {interval} K线")
+                all_klines.extend(klines)
 
         # 保存所有K线
         if all_klines:
@@ -368,8 +558,14 @@ class FastFuturesCollector:
 
         # 统计
         elapsed = (datetime.utcnow() - start_time).total_seconds()
+
+        # 分别统计U本位和币本位数据
+        usdt_klines = [k for k in all_klines if k.get('contract_type') != 'coin_futures']
+        coin_klines = [k for k in all_klines if k.get('contract_type') == 'coin_futures']
+
         logger.info(f"✓ 采集周期完成，耗时 {elapsed:.2f} 秒")
         logger.info(f"  总K线数: {len(all_klines)}")
+        logger.info(f"  U本位: {len(usdt_klines)} 条 | 币本位: {len(coin_klines)} 条")
         logger.info(f"  5m: {len([k for k in all_klines if k['timeframe'] == '5m'])} 条")
         logger.info(f"  15m: {len([k for k in all_klines if k['timeframe'] == '15m'])} 条")
         logger.info(f"  1h: {len([k for k in all_klines if k['timeframe'] == '1h'])} 条")

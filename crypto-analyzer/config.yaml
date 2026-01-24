@@ -44,6 +44,18 @@ symbols:
 - OP/USDT
 - FET/USDT
 - INJ/USDT
+
+# 币本位合约交易对 (Coin-M Futures)
+coin_futures_symbols:
+- BTCUSD_PERP
+- ETHUSD_PERP
+- BNBUSD_PERP
+- SOLUSD_PERP
+- XRPUSD_PERP
+- ADAUSD_PERP
+- DOTUSD_PERP
+- LINKUSD_PERP
+
 demo_mode: false
 exchanges:
   binance:
