@@ -571,42 +571,55 @@ class SmartTraderService:
             else:
                 price_source = "WS"
 
-            # 问题2优化: 使用3级评级制度替代简单黑名单
-            rating_level = self.opt_config.get_symbol_rating_level(symbol)
-            rating_config = self.opt_config.get_blacklist_config(rating_level)
+            # 检查是否为反转开仓(使用原仓位保证金)
+            is_reversal = 'reversal_from' in opp
+            if is_reversal and 'original_margin' in opp:
+                # 反转开仓: 使用原仓位相同的保证金
+                adjusted_position_size = opp['original_margin']
+                logger.info(f"[REVERSAL_MARGIN] {symbol} 反转开仓, 使用原仓位保证金: ${adjusted_position_size:.2f}")
 
-            # Level 3 = 永久禁止
-            if rating_level == 3:
-                logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
-                return False
+                # 仍需获取自适应参数用于止损止盈
+                if side == 'LONG':
+                    adaptive_params = self.brain.adaptive_long
+                else:  # SHORT
+                    adaptive_params = self.brain.adaptive_short
+            else:
+                # 正常开仓流程
+                # 问题2优化: 使用3级评级制度替代简单黑名单
+                rating_level = self.opt_config.get_symbol_rating_level(symbol)
+                rating_config = self.opt_config.get_blacklist_config(rating_level)
 
-            # 获取评级对应的保证金倍数
-            rating_margin_multiplier = rating_config['margin_multiplier']
-            base_position_size = self.position_size_usdt * rating_margin_multiplier
+                # Level 3 = 永久禁止
+                if rating_level == 3:
+                    logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
+                    return False
 
-            # 记录评级信息
-            rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
-            logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
+                # 获取评级对应的保证金倍数
+                rating_margin_multiplier = rating_config['margin_multiplier']
+                base_position_size = self.position_size_usdt * rating_margin_multiplier
 
-            # 使用自适应参数调整仓位大小
-            if side == 'LONG':
-                position_multiplier = self.brain.adaptive_long.get('position_size_multiplier', 1.0)
-                adaptive_params = self.brain.adaptive_long
-            else:  # SHORT
-                position_multiplier = self.brain.adaptive_short.get('position_size_multiplier', 1.0)
-                adaptive_params = self.brain.adaptive_short
+                # 记录评级信息
+                rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
+                logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
 
-            # 应用仓位倍数
-            adjusted_position_size = base_position_size * position_multiplier
+                # 使用自适应参数调整仓位大小
+                if side == 'LONG':
+                    position_multiplier = self.brain.adaptive_long.get('position_size_multiplier', 1.0)
+                    adaptive_params = self.brain.adaptive_long
+                else:  # SHORT
+                    position_multiplier = self.brain.adaptive_short.get('position_size_multiplier', 1.0)
+                    adaptive_params = self.brain.adaptive_short
 
-            # 问题3优化: 检查是否为对冲开仓,如果是则应用对冲保证金倍数
-            opposite_side = 'SHORT' if side == 'LONG' else 'LONG'
-            is_hedge = self.has_position(symbol, opposite_side)
-            if is_hedge:
-                hedge_multiplier = self.opt_config.get_hedge_margin_multiplier()
-                adjusted_position_size = adjusted_position_size * hedge_multiplier
-                logger.info(f"[HEDGE_MARGIN] {symbol} 对冲开仓, 保证金缩减到{hedge_multiplier*100:.0f}%")
+                # 应用仓位倍数
+                adjusted_position_size = base_position_size * position_multiplier
 
+                # 问题3优化: 检查是否为对冲开仓,如果是则应用对冲保证金倍数
+                opposite_side = 'SHORT' if side == 'LONG' else 'LONG'
+                is_hedge = self.has_position(symbol, opposite_side)
+                if is_hedge:
+                    hedge_multiplier = self.opt_config.get_hedge_margin_multiplier()
+                    adjusted_position_size = adjusted_position_size * hedge_multiplier
+                    logger.info(f"[HEDGE_MARGIN] {symbol} 对冲开仓, 保证金缩减到{hedge_multiplier*100:.0f}%")
 
             quantity = adjusted_position_size * self.leverage / current_price
             notional_value = quantity * current_price
@@ -816,6 +829,7 @@ class SmartTraderService:
 
                 should_close = False
                 close_reason = None
+                top_bottom_reversal_signal = None  # 用于记录顶底反转信号
 
                 # 0. 检查最小持仓时间 (自适应参数)
                 from datetime import datetime
@@ -848,6 +862,8 @@ class SmartTraderService:
                     if is_top_bottom:
                         should_close = True
                         close_reason = tb_reason
+                        # 记录顶底识别标志,用于后续反转开仓
+                        top_bottom_reversal_signal = (symbol, position_side, tb_reason, float(margin))
 
                 # 3. 固定止盈作为兜底 (如果顶底识别没触发)
                 if not should_close:
@@ -977,6 +993,76 @@ class SmartTraderService:
                         SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
                         WHERE id = %s
                     """, (self.account_id,))
+
+                    # 5. 顶底反转开仓逻辑
+                    if top_bottom_reversal_signal:
+                        rev_symbol, rev_old_side, rev_reason, rev_margin = top_bottom_reversal_signal
+
+                        # 确定反向方向
+                        if 'TOP_DETECTED' in rev_reason and rev_old_side == 'LONG':
+                            reverse_side = 'SHORT'
+                        elif 'BOTTOM_DETECTED' in rev_reason and rev_old_side == 'SHORT':
+                            reverse_side = 'LONG'
+                        else:
+                            reverse_side = None
+
+                        if reverse_side:
+                            # 分析反向信号评分
+                            reverse_signal = self.brain.analyze(rev_symbol)
+
+                            if reverse_signal and reverse_signal['side'] == reverse_side:
+                                reverse_score = reverse_signal['score']
+
+                                # 应用交易对评级的评分加成要求
+                                score_bonus = self.rating_manager.get_score_bonus(rev_symbol)
+                                required_score = self.brain.threshold + score_bonus
+
+                                if reverse_score >= required_score:
+                                    logger.info(
+                                        f"[REVERSAL] {rev_symbol} {rev_reason}后触发反转信号 | "
+                                        f"反向{reverse_side}评分: {reverse_score} (要求≥{required_score}) | "
+                                        f"准备开仓"
+                                    )
+
+                                    # 构造反向开仓机会
+                                    reverse_opp = {
+                                        'symbol': rev_symbol,
+                                        'side': reverse_side,
+                                        'score': reverse_score,
+                                        'current_price': reverse_signal['current_price'],
+                                        'signal_components': reverse_signal.get('signal_components', {}),
+                                        'reversal_from': rev_reason,  # 标记这是反转开仓
+                                        'original_margin': rev_margin  # 使用原仓位保证金
+                                    }
+
+                                    # 提交数据库更改,避免冲突
+                                    conn.commit()
+                                    cursor.close()
+
+                                    # 执行反向开仓
+                                    try:
+                                        self.open_position(reverse_opp)
+                                    except Exception as e:
+                                        logger.error(f"[ERROR] {rev_symbol} 反转开仓失败: {e}")
+
+                                    # 重新获取cursor以继续循环
+                                    cursor = conn.cursor()
+                                    cursor.execute("""
+                                        SELECT id, symbol, position_side, quantity, entry_price,
+                                               stop_loss_price, take_profit_price, open_time
+                                        FROM futures_positions
+                                        WHERE status = 'open' AND account_id = %s
+                                    """, (self.account_id,))
+                                    positions = cursor.fetchall()
+                                else:
+                                    logger.info(
+                                        f"[REVERSAL_SKIP] {rev_symbol} 反向{reverse_side}评分不足: "
+                                        f"{reverse_score} < {required_score}"
+                                    )
+                            else:
+                                logger.debug(
+                                    f"[REVERSAL_SKIP] {rev_symbol} 反向{reverse_side}信号无效或方向不符"
+                                )
 
             cursor.close()
 
