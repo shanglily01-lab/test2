@@ -984,7 +984,7 @@ class SmartTraderService:
             # 获取所有持仓
             cursor.execute("""
                 SELECT id, symbol, position_side, quantity, entry_price,
-                       stop_loss_price, take_profit_price, open_time
+                       stop_loss_price, take_profit_price, open_time, margin
                 FROM futures_positions
                 WHERE status = 'open' AND account_id = %s
             """, (self.account_id,))
@@ -992,7 +992,7 @@ class SmartTraderService:
             positions = cursor.fetchall()
 
             for pos in positions:
-                pos_id, symbol, position_side, quantity, entry_price, stop_loss, take_profit, open_time = pos
+                pos_id, symbol, position_side, quantity, entry_price, stop_loss, take_profit, open_time, margin = pos
                 current_price = self.get_current_price(symbol)
                 if not current_price:
                     continue
@@ -1213,7 +1213,7 @@ class SmartTraderService:
                                 cursor = conn.cursor()
                                 cursor.execute("""
                                     SELECT id, symbol, position_side, quantity, entry_price,
-                                           stop_loss_price, take_profit_price, open_time
+                                           stop_loss_price, take_profit_price, open_time, margin
                                     FROM futures_positions
                                     WHERE status = 'open' AND account_id = %s
                                 """, (self.account_id,))
