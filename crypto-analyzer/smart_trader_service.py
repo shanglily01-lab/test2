@@ -998,7 +998,7 @@ class SmartTraderService:
                     if top_bottom_reversal_signal:
                         rev_symbol, rev_old_side, rev_reason, rev_margin = top_bottom_reversal_signal
 
-                        # 确定反向方向
+                        # 确定反向方向(识别到顶部就做空,识别到底部就做多)
                         if 'TOP_DETECTED' in rev_reason and rev_old_side == 'LONG':
                             reverse_side = 'SHORT'
                         elif 'BOTTOM_DETECTED' in rev_reason and rev_old_side == 'SHORT':
@@ -1007,62 +1007,47 @@ class SmartTraderService:
                             reverse_side = None
 
                         if reverse_side:
-                            # 分析反向信号评分
-                            reverse_signal = self.brain.analyze(rev_symbol)
+                            logger.info(
+                                f"[REVERSAL] {rev_symbol} {rev_reason} | "
+                                f"平{rev_old_side}后立即开{reverse_side} | "
+                                f"保证金: ${rev_margin:.2f}"
+                            )
 
-                            if reverse_signal and reverse_signal['side'] == reverse_side:
-                                reverse_score = reverse_signal['score']
-
-                                # 应用交易对评级的评分加成要求
-                                score_bonus = self.rating_manager.get_score_bonus(rev_symbol)
-                                required_score = self.brain.threshold + score_bonus
-
-                                if reverse_score >= required_score:
-                                    logger.info(
-                                        f"[REVERSAL] {rev_symbol} {rev_reason}后触发反转信号 | "
-                                        f"反向{reverse_side}评分: {reverse_score} (要求≥{required_score}) | "
-                                        f"准备开仓"
-                                    )
-
-                                    # 构造反向开仓机会
-                                    reverse_opp = {
-                                        'symbol': rev_symbol,
-                                        'side': reverse_side,
-                                        'score': reverse_score,
-                                        'current_price': reverse_signal['current_price'],
-                                        'signal_components': reverse_signal.get('signal_components', {}),
-                                        'reversal_from': rev_reason,  # 标记这是反转开仓
-                                        'original_margin': rev_margin  # 使用原仓位保证金
-                                    }
-
-                                    # 提交数据库更改,避免冲突
-                                    conn.commit()
-                                    cursor.close()
-
-                                    # 执行反向开仓
-                                    try:
-                                        self.open_position(reverse_opp)
-                                    except Exception as e:
-                                        logger.error(f"[ERROR] {rev_symbol} 反转开仓失败: {e}")
-
-                                    # 重新获取cursor以继续循环
-                                    cursor = conn.cursor()
-                                    cursor.execute("""
-                                        SELECT id, symbol, position_side, quantity, entry_price,
-                                               stop_loss_price, take_profit_price, open_time
-                                        FROM futures_positions
-                                        WHERE status = 'open' AND account_id = %s
-                                    """, (self.account_id,))
-                                    positions = cursor.fetchall()
-                                else:
-                                    logger.info(
-                                        f"[REVERSAL_SKIP] {rev_symbol} 反向{reverse_side}评分不足: "
-                                        f"{reverse_score} < {required_score}"
-                                    )
+                            # 获取当前价格
+                            reverse_price = self.get_current_price(rev_symbol)
+                            if not reverse_price:
+                                logger.error(f"[ERROR] {rev_symbol} 反转开仓失败: 无法获取价格")
                             else:
-                                logger.debug(
-                                    f"[REVERSAL_SKIP] {rev_symbol} 反向{reverse_side}信号无效或方向不符"
-                                )
+                                # 构造反向开仓机会(不需要评分,因为顶底识别本身就是强信号)
+                                reverse_opp = {
+                                    'symbol': rev_symbol,
+                                    'side': reverse_side,
+                                    'score': 99,  # 给一个高分,表示这是顶底反转信号
+                                    'current_price': reverse_price,
+                                    'signal_components': {'top_bottom_reversal': 99},
+                                    'reversal_from': rev_reason,  # 标记这是反转开仓
+                                    'original_margin': rev_margin  # 使用原仓位保证金
+                                }
+
+                                # 提交数据库更改,避免冲突
+                                conn.commit()
+                                cursor.close()
+
+                                # 执行反向开仓
+                                try:
+                                    self.open_position(reverse_opp)
+                                except Exception as e:
+                                    logger.error(f"[ERROR] {rev_symbol} 反转开仓失败: {e}")
+
+                                # 重新获取cursor以继续循环
+                                cursor = conn.cursor()
+                                cursor.execute("""
+                                    SELECT id, symbol, position_side, quantity, entry_price,
+                                           stop_loss_price, take_profit_price, open_time
+                                    FROM futures_positions
+                                    WHERE status = 'open' AND account_id = %s
+                                """, (self.account_id,))
+                                positions = cursor.fetchall()
 
             cursor.close()
 
