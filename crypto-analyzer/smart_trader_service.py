@@ -725,13 +725,21 @@ class SmartTraderService:
             is_reversal = 'reversal_from' in opp
 
             if should_use_batch and not is_reversal:
-                logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓")
-                # 使用 asyncio.run 来运行异步函数
+                logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓（后台异步执行）")
+                # 在后台异步执行分批建仓，不阻塞主循环
                 import asyncio
                 try:
-                    return asyncio.run(self._open_position_with_batch(opp))
+                    # 获取当前事件循环
+                    loop = asyncio.get_event_loop()
+                    # 在后台创建任务，不等待完成
+                    asyncio.run_coroutine_threadsafe(
+                        self._open_position_with_batch(opp),
+                        loop
+                    )
+                    logger.info(f"[BATCH_ENTRY] {symbol} {side} 分批建仓任务已启动（后台运行30分钟）")
+                    return True  # 立即返回，不阻塞
                 except Exception as e:
-                    logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 分批建仓失败: {e}，降级到一次性开仓")
+                    logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 分批建仓启动失败: {e}，降级到一次性开仓")
                     # 降级到原有一次性开仓逻辑
 
         # ========== 原有逻辑（一次性开仓） ==========
