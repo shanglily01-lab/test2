@@ -715,7 +715,22 @@ class SmartTraderService:
         symbol = opp['symbol']
         side = opp['side']  # 'LONG' 或 'SHORT'
 
-        # ========== 新增：智能分批建仓逻辑 ==========
+        # ========== 第一步：验证信号（无论用哪种开仓方式都要验证） ==========
+        signal_components = opp.get('signal_components', {})
+
+        # 缺陷1修复: 验证时间框架一致性
+        is_valid, reason = self.validate_signal_timeframe(signal_components, side, symbol)
+        if not is_valid:
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
+            return False
+
+        # 缺陷2修复: position_high信号额外验证
+        is_valid, reason = self.validate_position_high_signal(symbol, signal_components, side)
+        if not is_valid:
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
+            return False
+
+        # ========== 第二步：决定使用分批建仓还是一次性开仓 ==========
         # 检查是否启用分批建仓
         if self.smart_entry_executor and self.batch_entry_config.get('enabled'):
             # 检查是否在白名单中（如果白名单为空，则对所有币种启用）
@@ -745,20 +760,8 @@ class SmartTraderService:
                     logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 分批建仓启动失败: {e}，降级到一次性开仓")
                     # 降级到原有一次性开仓逻辑
 
-        # ========== 原有逻辑（一次性开仓） ==========
+        # ========== 第三步：一次性开仓逻辑 ==========
         try:
-            # 缺陷1修复: 验证时间框架一致性
-            signal_components = opp.get('signal_components', {})
-            is_valid, reason = self.validate_signal_timeframe(signal_components, side, symbol)
-            if not is_valid:
-                logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
-                return False
-
-            # 缺陷2修复: position_high信号额外验证
-            is_valid, reason = self.validate_position_high_signal(symbol, signal_components, side)
-            if not is_valid:
-                logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
-                return False
 
             # 优先从 WebSocket 获取实时价格
             current_price = self.ws_service.get_price(symbol)
@@ -961,22 +964,13 @@ class SmartTraderService:
             return False
 
     async def _open_position_with_batch(self, opp: dict):
-        """使用智能分批建仓执行器开仓"""
+        """使用智能分批建仓执行器开仓（信号已在调用前验证）"""
         symbol = opp['symbol']
         side = opp['side']
 
         try:
-            # 验证信号（复用原有验证逻辑）
+            # 注意：信号验证已在 open_position() 中完成，这里直接计算保证金
             signal_components = opp.get('signal_components', {})
-            is_valid, reason = self.validate_signal_timeframe(signal_components, side, symbol)
-            if not is_valid:
-                logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
-                return False
-
-            is_valid, reason = self.validate_position_high_signal(symbol, signal_components, side)
-            if not is_valid:
-                logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
-                return False
 
             # 计算保证金（复用原有逻辑）
             rating_level = self.opt_config.get_symbol_rating_level(symbol)
