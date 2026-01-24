@@ -1130,17 +1130,19 @@ class SmartTraderService:
             return False, None
 
     def check_stop_loss_take_profit(self):
-        """检查止盈止损 + 智能趋势监控"""
+        """检查止盈止损 + 智能趋势监控（不处理分批建仓持仓）"""
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 获取所有持仓
+            # 获取所有持仓（排除分批建仓持仓，它们由智能平仓优化器管理）
             cursor.execute("""
                 SELECT id, symbol, position_side, quantity, entry_price,
                        stop_loss_price, take_profit_price, open_time, margin
                 FROM futures_positions
-                WHERE status = 'open' AND account_id = %s
+                WHERE status = 'open'
+                AND account_id = %s
+                AND (batch_plan IS NULL OR batch_plan = '')
             """, (self.account_id,))
 
             positions = cursor.fetchall()
@@ -1380,7 +1382,7 @@ class SmartTraderService:
 
     def close_old_positions(self):
         """
-        问题1优化: 关闭超时持仓 (动态超时 + 分阶段超时)
+        问题1优化: 关闭超时持仓 (动态超时 + 分阶段超时)（不处理分批建仓持仓）
         - 动态超时: 根据entry_score和当前盈亏调整超时时间
         - 分阶段超时: 1h/2h/3h/4h检查不同的亏损阈值
         """
@@ -1388,20 +1390,24 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 先检查有多少开仓持仓
+            # 先检查有多少开仓持仓（排除分批建仓持仓）
             cursor.execute("""
                 SELECT COUNT(*) FROM futures_positions
-                WHERE status = 'open' AND account_id = %s
+                WHERE status = 'open'
+                AND account_id = %s
+                AND (batch_plan IS NULL OR batch_plan = '')
             """, (self.account_id,))
             total_open = cursor.fetchone()[0]
 
-            # 查询所有开仓持仓 (包含动态超时字段)
+            # 查询所有开仓持仓（排除分批建仓持仓，它们由智能平仓优化器管理）
             cursor.execute("""
                 SELECT id, symbol, position_side, quantity, entry_price, margin, leverage,
                        created_at, entry_score, max_hold_minutes, timeout_at,
                        TIMESTAMPDIFF(MINUTE, created_at, NOW()) as minutes_old
                 FROM futures_positions
-                WHERE status = 'open' AND account_id = %s
+                WHERE status = 'open'
+                AND account_id = %s
+                AND (batch_plan IS NULL OR batch_plan = '')
             """, (self.account_id,))
 
             open_positions = cursor.fetchall()
