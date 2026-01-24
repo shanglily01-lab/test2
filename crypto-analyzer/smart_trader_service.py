@@ -22,6 +22,8 @@ from app.services.adaptive_optimizer import AdaptiveOptimizer
 from app.services.optimization_config import OptimizationConfig
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
+from app.services.smart_entry_executor import SmartEntryExecutor
+from app.services.smart_exit_optimizer import SmartExitOptimizer
 
 # 加载环境变量
 load_dotenv()
@@ -453,6 +455,37 @@ class SmartTraderService:
         # 波动率配置更新器 (15M K线动态止盈)
         self.volatility_updater = VolatilityProfileUpdater(self.db_config)
 
+        # 加载分批建仓和智能平仓配置
+        import yaml
+        with open('config.yaml', 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+            self.batch_entry_config = config.get('signals', {}).get('batch_entry', {'enabled': False})
+            self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
+
+        # 初始化智能分批建仓执行器
+        if self.batch_entry_config.get('enabled'):
+            self.smart_entry_executor = SmartEntryExecutor(
+                db_config=self.db_config,
+                live_engine=self,
+                price_service=self.ws_service
+            )
+            logger.info("✅ 智能分批建仓执行器已启动")
+        else:
+            self.smart_entry_executor = None
+            logger.info("⚠️ 智能分批建仓未启用")
+
+        # 初始化智能平仓优化器
+        if self.smart_exit_config.get('enabled'):
+            self.smart_exit_optimizer = SmartExitOptimizer(
+                db_config=self.db_config,
+                live_engine=self,
+                price_service=self.ws_service
+            )
+            logger.info("✅ 智能平仓优化器已启动")
+        else:
+            self.smart_exit_optimizer = None
+            logger.info("⚠️ 智能平仓优化器未启用")
+
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
         logger.info(f"账户ID: {self.account_id}")
@@ -677,10 +710,31 @@ class SmartTraderService:
             return True, "验证异常,默认通过"
 
     def open_position(self, opp: dict):
-        """开仓 - 支持做多和做空，使用 WebSocket 实时价格"""
+        """开仓 - 支持做多和做空，支持分批建仓，使用 WebSocket 实时价格"""
         symbol = opp['symbol']
         side = opp['side']  # 'LONG' 或 'SHORT'
 
+        # ========== 新增：智能分批建仓逻辑 ==========
+        # 检查是否启用分批建仓
+        if self.smart_entry_executor and self.batch_entry_config.get('enabled'):
+            # 检查是否在白名单中（如果白名单为空，则对所有币种启用）
+            whitelist = self.batch_entry_config.get('whitelist_symbols', [])
+            should_use_batch = (not whitelist) or (symbol in whitelist)
+
+            # 反转开仓不使用分批建仓（直接一次性开仓）
+            is_reversal = 'reversal_from' in opp
+
+            if should_use_batch and not is_reversal:
+                logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓")
+                # 使用 asyncio.run 来运行异步函数
+                import asyncio
+                try:
+                    return asyncio.run(self._open_position_with_batch(opp))
+                except Exception as e:
+                    logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 分批建仓失败: {e}，降级到一次性开仓")
+                    # 降级到原有一次性开仓逻辑
+
+        # ========== 原有逻辑（一次性开仓） ==========
         try:
             # 缺陷1修复: 验证时间框架一致性
             signal_components = opp.get('signal_components', {})
@@ -894,6 +948,101 @@ class SmartTraderService:
         except Exception as e:
             logger.error(f"[ERROR] {symbol} 开仓失败: {e}")
             return False
+
+    async def _open_position_with_batch(self, opp: dict):
+        """使用智能分批建仓执行器开仓"""
+        symbol = opp['symbol']
+        side = opp['side']
+
+        try:
+            # 验证信号（复用原有验证逻辑）
+            signal_components = opp.get('signal_components', {})
+            is_valid, reason = self.validate_signal_timeframe(signal_components, side, symbol)
+            if not is_valid:
+                logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
+                return False
+
+            is_valid, reason = self.validate_position_high_signal(symbol, signal_components, side)
+            if not is_valid:
+                logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
+                return False
+
+            # 计算保证金（复用原有逻辑）
+            rating_level = self.opt_config.get_symbol_rating_level(symbol)
+            rating_config = self.opt_config.get_blacklist_config(rating_level)
+
+            if rating_level == 3:
+                logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
+                return False
+
+            rating_margin_multiplier = rating_config['margin_multiplier']
+            base_position_size = self.position_size_usdt * rating_margin_multiplier
+
+            # 使用自适应参数调整仓位大小
+            if side == 'LONG':
+                position_multiplier = self.brain.adaptive_long.get('position_size_multiplier', 1.0)
+                adaptive_params = self.brain.adaptive_long
+            else:
+                position_multiplier = self.brain.adaptive_short.get('position_size_multiplier', 1.0)
+                adaptive_params = self.brain.adaptive_short
+
+            adjusted_position_size = base_position_size * position_multiplier
+
+            # 检查对冲
+            opposite_side = 'SHORT' if side == 'LONG' else 'LONG'
+            is_hedge = self.has_position(symbol, opposite_side)
+            if is_hedge:
+                hedge_multiplier = self.opt_config.get_hedge_margin_multiplier()
+                adjusted_position_size = adjusted_position_size * hedge_multiplier
+                logger.info(f"[HEDGE_MARGIN] {symbol} 对冲开仓, 保证金缩减到{hedge_multiplier*100:.0f}%")
+
+            # 调用智能建仓执行器
+            entry_result = await self.smart_entry_executor.execute_entry({
+                'symbol': symbol,
+                'direction': side,
+                'total_margin': adjusted_position_size,
+                'leverage': self.leverage,
+                'strategy_id': 'smart_trader',
+                'trade_params': {
+                    'entry_score': opp.get('score', 0),
+                    'signal_components': signal_components,
+                    'adaptive_params': adaptive_params,
+                    'signal_combination_key': self._generate_signal_combination_key(signal_components)
+                }
+            })
+
+            if entry_result['success']:
+                position_id = entry_result['position_id']
+                logger.info(
+                    f"✅ [BATCH_ENTRY_COMPLETE] {symbol} {side} | "
+                    f"持仓ID: {position_id} | "
+                    f"平均价格: ${entry_result['avg_price']:.4f} | "
+                    f"总数量: {entry_result['total_quantity']:.2f}"
+                )
+
+                # 启动智能平仓监控（如果启用）
+                if self.smart_exit_optimizer:
+                    await self.smart_exit_optimizer.start_monitoring_position(position_id)
+                    logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
+
+                return True
+            else:
+                logger.error(f"❌ [BATCH_ENTRY_FAILED] {symbol} {side} | {entry_result.get('error')}")
+                return False
+
+        except Exception as e:
+            logger.error(f"❌ [BATCH_ENTRY_ERROR] {symbol} {side} | {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+
+    def _generate_signal_combination_key(self, signal_components: dict) -> str:
+        """生成信号组合键"""
+        if signal_components:
+            sorted_signals = sorted(signal_components.keys())
+            return " + ".join(sorted_signals)
+        else:
+            return "unknown"
 
     def check_top_bottom(self, symbol: str, position_side: str, entry_price: float):
         """智能识别顶部和底部 - 使用1h K线更稳健的判断"""
@@ -2011,6 +2160,36 @@ class SmartTraderService:
         except Exception as e:
             logger.error(f"WebSocket 服务初始化失败: {e}，将使用数据库价格")
 
+    async def _start_smart_exit_monitoring(self):
+        """为所有已开仓的分批建仓持仓启动智能平仓监控"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 查询所有开仓持仓（有batch_plan的为分批建仓持仓）
+            cursor.execute("""
+                SELECT id, symbol, position_side
+                FROM futures_positions
+                WHERE status = 'open'
+                AND account_id = %s
+                AND batch_plan IS NOT NULL
+            """, (self.account_id,))
+
+            positions = cursor.fetchall()
+            cursor.close()
+
+            for pos in positions:
+                position_id, symbol, side = pos
+                await self.smart_exit_optimizer.start_monitoring_position(position_id)
+                logger.info(f"✅ 启动智能平仓监控: 持仓{position_id} {symbol} {side}")
+
+            logger.info(f"✅ 智能平仓监控已启动，监控 {len(positions)} 个持仓")
+
+        except Exception as e:
+            logger.error(f"❌ 启动智能平仓监控失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
     def run(self):
         """主循环"""
         while self.running:
@@ -2135,6 +2314,10 @@ async def async_main():
 
     # 初始化 WebSocket 服务
     await service.init_ws_service()
+
+    # 初始化智能平仓监控（为所有已开仓的分批建仓持仓启动监控）
+    if service.smart_exit_optimizer:
+        await service._start_smart_exit_monitoring()
 
     # 在事件循环中运行同步的主循环
     loop = asyncio.get_event_loop()
