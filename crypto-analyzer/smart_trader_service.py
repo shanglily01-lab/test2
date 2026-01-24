@@ -713,6 +713,7 @@ class SmartTraderService:
             is_reversal = 'reversal_from' in opp
             rating_level = 0  # 默认白名单
             is_hedge = False  # 默认非对冲
+            adjusted_position_size = None  # 初始化变量,避免UnboundLocalError
 
             if is_reversal and 'original_margin' in opp:
                 # 反转开仓: 使用原仓位相同的保证金
@@ -727,7 +728,8 @@ class SmartTraderService:
 
                 # 反转开仓也需要检查评级(用于日志显示)
                 rating_level = self.opt_config.get_symbol_rating_level(symbol)
-            else:
+
+            if not is_reversal or 'original_margin' not in opp:
                 # 正常开仓流程
                 # 问题2优化: 使用3级评级制度替代简单黑名单
                 rating_level = self.opt_config.get_symbol_rating_level(symbol)
