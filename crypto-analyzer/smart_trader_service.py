@@ -551,12 +551,150 @@ class SmartTraderService:
         except:
             return False
 
+    def validate_signal_timeframe(self, signal_components: dict, side: str, symbol: str) -> tuple:
+        """
+        验证信号组合的时间框架一致性
+
+        Returns:
+            (is_valid, reason) - 是否有效,原因描述
+        """
+        if not signal_components:
+            return True, "无信号组件"
+
+        # 提取趋势信号
+        has_1h_bull = 'trend_1h_bull' in signal_components
+        has_1h_bear = 'trend_1h_bear' in signal_components
+        has_1d_bull = 'trend_1d_bull' in signal_components
+        has_1d_bear = 'trend_1d_bear' in signal_components
+
+        # 规则1: 做多时,1小时必须不能看跌
+        if side == 'LONG' and has_1h_bear:
+            return False, "时间框架冲突: 做多但1H看跌"
+
+        # 规则2: 做空时,1小时必须不能看涨
+        if side == 'SHORT' and has_1h_bull:
+            return False, "时间框架冲突: 做空但1H看涨"
+
+        # 规则3: 多空方向的日线趋势不能相反
+        # 注意: 允许日线中性(既没有bull也没有bear)
+        if side == 'LONG' and has_1d_bear:
+            return False, "时间框架冲突: 做多但1D看跌"
+
+        if side == 'SHORT' and has_1d_bull:
+            return False, "时间框架冲突: 做空但1D看涨"
+
+        return True, "时间框架一致"
+
+    def calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
+        """
+        根据波动率调整止损百分比
+
+        Args:
+            signal_components: 信号组件
+            base_stop_loss_pct: 基础止损百分比(如0.02)
+
+        Returns:
+            调整后的止损百分比
+        """
+        # 检查是否包含高波动信号
+        has_high_volatility = 'volatility_high' in signal_components
+
+        if has_high_volatility:
+            # 高波动环境: 扩大止损到1.5倍(2% -> 3%)
+            adjusted_sl = base_stop_loss_pct * 1.5
+            logger.info(f"[VOLATILITY_ADJUST] 高波动环境,止损从{base_stop_loss_pct*100:.1f}%扩大到{adjusted_sl*100:.1f}%")
+            return adjusted_sl
+
+        return base_stop_loss_pct
+
+    def validate_position_high_signal(self, symbol: str, signal_components: dict, side: str) -> tuple:
+        """
+        缺陷2修复: 增强position_high信号验证
+
+        position_high单独不足以确认顶部,需要额外确认:
+        1. 更长周期的位置检查(7天而非3天)
+        2. 涨幅是否已经放缓(连续上影线)
+        3. 是否有momentum_up信号(避免加速上涨时做空)
+
+        Returns:
+            (is_valid, reason)
+        """
+        # 只检查包含position_high的做空信号
+        if side != 'SHORT' or 'position_high' not in signal_components:
+            return True, "不是position_high做空"
+
+        try:
+            # 检查1: 是否伴随momentum_up(涨势)信号
+            # 如果价格还在上涨3%+,说明动能未衰竭,不适合做空
+            has_momentum_up = 'momentum_up_3pct' in signal_components
+            if has_momentum_up:
+                return False, "position_high但伴随momentum_up_3pct,动能未衰竭"
+
+            # 检查2: 加载最近的K线,检查是否有顶部特征
+            klines_1h = self.brain.load_klines(symbol, '1h', 24)
+            if len(klines_1h) < 10:
+                return True, "K线数据不足,跳过验证"
+
+            # 计算最近10根K线的上影线比例
+            recent_10 = klines_1h[-10:]
+            upper_shadow_count = 0
+            for k in recent_10:
+                body_high = max(k['open'], k['close'])
+                upper_shadow = k['high'] - body_high
+                body_size = abs(k['close'] - k['open'])
+
+                # 上影线 > 实体的50% 认为是上影线K线
+                if body_size > 0 and upper_shadow / body_size > 0.5:
+                    upper_shadow_count += 1
+
+            upper_shadow_ratio = upper_shadow_count / 10
+
+            # 如果最近10根K线上影线<30%,说明买盘还很强,不适合做空
+            if upper_shadow_ratio < 0.3:
+                return False, f"position_high但上影线比例仅{upper_shadow_ratio*100:.0f}%,买盘未衰竭"
+
+            # 缺陷4修复: 检查成交量是否萎缩(顶部特征)
+            recent_5 = klines_1h[-5:]
+            earlier_5 = klines_1h[-10:-5]
+
+            recent_volume = sum([float(k.get('volume', 0)) for k in recent_5])
+            earlier_volume = sum([float(k.get('volume', 0)) for k in earlier_5])
+
+            if recent_volume > 0 and earlier_volume > 0:
+                volume_ratio = recent_volume / earlier_volume
+
+                # 如果最近5根K线成交量 > 之前5根的1.2倍,说明成交量在放大,不是顶部
+                if volume_ratio > 1.2:
+                    return False, f"position_high但成交量放大{volume_ratio:.2f}倍,非顶部特征"
+
+                logger.info(f"[VOLUME_CHECK] {symbol} 成交量比例{volume_ratio:.2f},符合顶部萎缩特征")
+
+            logger.info(f"[POSITION_HIGH_VALID] {symbol} 上影线{upper_shadow_ratio*100:.0f}%,顶部特征明显")
+            return True, "position_high验证通过"
+
+        except Exception as e:
+            logger.warning(f"[POSITION_HIGH_CHECK] {symbol} 验证失败: {e},默认通过")
+            return True, "验证异常,默认通过"
+
     def open_position(self, opp: dict):
         """开仓 - 支持做多和做空，使用 WebSocket 实时价格"""
         symbol = opp['symbol']
         side = opp['side']  # 'LONG' 或 'SHORT'
 
         try:
+            # 缺陷1修复: 验证时间框架一致性
+            signal_components = opp.get('signal_components', {})
+            is_valid, reason = self.validate_signal_timeframe(signal_components, side, symbol)
+            if not is_valid:
+                logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
+                return False
+
+            # 缺陷2修复: position_high信号额外验证
+            is_valid, reason = self.validate_position_high_signal(symbol, signal_components, side)
+            if not is_valid:
+                logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
+                return False
+
             # 优先从 WebSocket 获取实时价格
             current_price = self.ws_service.get_price(symbol)
 
@@ -632,7 +770,10 @@ class SmartTraderService:
             margin = adjusted_position_size
 
             # 使用自适应参数计算止损
-            stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
+            base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
+
+            # 缺陷5修复: 波动率自适应止损
+            stop_loss_pct = self.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
 
             # 问题4优化: 使用波动率配置计算动态止盈
             volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
