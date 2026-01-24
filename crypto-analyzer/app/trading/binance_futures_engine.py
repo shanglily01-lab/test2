@@ -39,6 +39,10 @@ class BinanceFuturesEngine:
     _open_orders_cache_time = None
     _open_orders_cache_duration = 5  # 缓存5秒
 
+    # 无效交易对缓存（避免重复请求已知无效的交易对）
+    _invalid_symbols_cache = {}  # symbol -> timestamp
+    _invalid_symbols_cache_duration = 300  # 5分钟内不再重试
+
     def __init__(self, db_config: dict, api_key: str = None, api_secret: str = None, trade_notifier=None):
         """
         初始化币安实盘合约交易引擎
@@ -417,6 +421,17 @@ class BinanceFuturesEngine:
         """
         binance_symbol = self._convert_symbol(symbol)
 
+        # 检查是否在无效交易对缓存中
+        current_time = time.time()
+        if symbol in self._invalid_symbols_cache:
+            cache_time = self._invalid_symbols_cache[symbol]
+            if (current_time - cache_time) < self._invalid_symbols_cache_duration:
+                # 5分钟内不再重试，直接返回0（静默失败）
+                return Decimal('0')
+            else:
+                # 缓存过期，移除并重试
+                del self._invalid_symbols_cache[symbol]
+
         try:
             result = self._request('GET', '/fapi/v1/ticker/price',
                                   {'symbol': binance_symbol}, signed=False)
@@ -424,11 +439,18 @@ class BinanceFuturesEngine:
             if 'price' in result:
                 return Decimal(str(result['price']))
 
+            # 检查是否是无效交易对错误
+            if 'code' in result and result['code'] == -1121:
+                # 无效交易对，加入缓存
+                self._invalid_symbols_cache[symbol] = current_time
+                logger.warning(f"交易对 {symbol} 无效，已加入缓存，5分钟内不再重试")
+                return Decimal('0')
+
             logger.warning(f"无法获取 {symbol} 价格")
             return Decimal('0')
 
         except Exception as e:
-            logger.error(f"获取价格失败: {e}")
+            logger.error(f"获取 {symbol} 实时价格失败: {e}")
             return Decimal('0')
 
     # ==================== 杠杆设置 ====================
