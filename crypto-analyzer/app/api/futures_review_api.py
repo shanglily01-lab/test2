@@ -221,27 +221,33 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
             else:
                 return 'reversal', '反转信号'
 
+        # 信号名称映射(用于单信号和组合)
+        signal_map = {
+            'position_low': '低位',
+            'position_mid': '中位',
+            'position_high': '高位',
+            'trend_1h_bull': '1H看涨',
+            'trend_1h_bear': '1H看跌',
+            'trend_1d_bull': '1D看涨',
+            'trend_1d_bear': '1D看跌',
+            'momentum_up_3pct': '涨势3%',
+            'momentum_down_3pct': '跌势3%',
+            'consecutive_bull': '连阳',
+            'consecutive_bear': '连阴',
+            'volatility_high': '高波动'
+        }
+
         # 处理新的信号组合格式 (例如: "position_low + trend_1d_bull + trend_1h_bull")
         if ' + ' in signal_type:
             # 信号组合 - 转换为中文
-            signal_map = {
-                'position_low': '低位',
-                'position_mid': '中位',
-                'position_high': '高位',
-                'trend_1h_bull': '1H看涨',
-                'trend_1h_bear': '1H看跌',
-                'trend_1d_bull': '1D看涨',
-                'trend_1d_bear': '1D看跌',
-                'momentum_up_3pct': '涨势3%',
-                'momentum_down_3pct': '跌势3%',
-                'consecutive_bull': '连阳',
-                'consecutive_bear': '连阴',
-                'volatility_high': '高波动'
-            }
             signals = signal_type.split(' + ')
             chinese_signals = [signal_map.get(s.strip(), s.strip()) for s in signals]
             combo_name = '+'.join(chinese_signals)
             return signal_type, f'信号组合({combo_name})'
+
+        # 处理单个信号(如 "position_high")
+        if signal_type in signal_map:
+            return signal_type, f'单一信号({signal_map[signal_type]})'
 
         # 直接匹配
         if signal_type in ENTRY_REASON_MAP:
