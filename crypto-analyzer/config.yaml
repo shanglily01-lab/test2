@@ -234,7 +234,7 @@ signals:
       percent: 1  # 百分比模式：账户资金的1%
   # 智能分批建仓配置
   batch_entry:
-    enabled: false  # 初始禁用，测试后再启用
+    enabled: true  # 初始禁用，测试后再启用
     whitelist_symbols: []  # 白名单：只有这些币种启用分批建仓（空=全部）
     batch_ratios: [0.3, 0.3, 0.4]  # 分批比例：30%, 30%, 40%
     time_window_minutes: 30  # 建仓时间窗口（分钟）
@@ -242,7 +242,7 @@ signals:
     sampling_interval_seconds: 10  # 采样间隔（10秒）
   # 智能平仓优化配置
   smart_exit:
-    enabled: false  # 初始禁用，测试后再启用
+    enabled: true  # 初始禁用，测试后再启用
     high_profit_threshold: 3.0  # 高盈利阈值（%）
     high_profit_drawback: 0.5  # 高盈利回撤止盈（%）
     mid_profit_threshold: 1.0  # 中盈利阈值（%）
