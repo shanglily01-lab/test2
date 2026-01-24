@@ -212,11 +212,42 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
     if entry_signal_type:
         signal_type = entry_signal_type.strip()
 
+        # 处理反转信号
+        if signal_type.startswith('REVERSAL_'):
+            if 'TOP_DETECTED' in signal_type:
+                return 'reversal_top', '顶部反转做空'
+            elif 'BOTTOM_DETECTED' in signal_type:
+                return 'reversal_bottom', '底部反转做多'
+            else:
+                return 'reversal', '反转信号'
+
+        # 处理新的信号组合格式 (例如: "position_low + trend_1d_bull + trend_1h_bull")
+        if ' + ' in signal_type:
+            # 信号组合 - 转换为中文
+            signal_map = {
+                'position_low': '低位',
+                'position_mid': '中位',
+                'position_high': '高位',
+                'trend_1h_bull': '1H看涨',
+                'trend_1h_bear': '1H看跌',
+                'trend_1d_bull': '1D看涨',
+                'trend_1d_bear': '1D看跌',
+                'momentum_up_3pct': '涨势3%',
+                'momentum_down_3pct': '跌势3%',
+                'consecutive_bull': '连阳',
+                'consecutive_bear': '连阴',
+                'volatility_high': '高波动'
+            }
+            signals = signal_type.split(' + ')
+            chinese_signals = [signal_map.get(s.strip(), s.strip()) for s in signals]
+            combo_name = '+'.join(chinese_signals)
+            return signal_type, f'信号组合({combo_name})'
+
         # 直接匹配
         if signal_type in ENTRY_REASON_MAP:
             return signal_type, ENTRY_REASON_MAP[signal_type]
 
-        # 超级大脑信号类型匹配 (支持整数和浮点数格式)
+        # 超级大脑信号类型匹配 (支持整数和浮点数格式) - 兼容旧格式
         if 'SMART_BRAIN_' in signal_type:
             import re
             # 提取分数 (支持 SMART_BRAIN_30 和 SMART_BRAIN_30.0 格式)
@@ -224,7 +255,7 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
             if match:
                 score = float(match.group(1))
                 score_int = int(score)
-                return f'SMART_BRAIN_{score_int}', f'超级大脑({score_int}分)'
+                return f'SMART_BRAIN_{score_int}', f'超级大脑({score_int}分-旧格式)'
 
         # 包含匹配
         if 'sustained_trend' in signal_type:

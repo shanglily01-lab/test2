@@ -147,6 +147,15 @@ class SmartAutoTrader:
             # 开仓
             logger.info(f"📈 {symbol} {direction} 开仓 | 价格: ${current_price:.4f} | 数量: {quantity:.4f}")
 
+            # 生成信号组合键
+            signal_components = opportunity.get('signal_components', {})
+            if signal_components:
+                sorted_signals = sorted(signal_components.keys())
+                signal_combination_key = " + ".join(sorted_signals)
+            else:
+                # 如果没有信号组件,使用旧格式(用于兼容)
+                signal_combination_key = f"SMART_BRAIN_SCORE_{opportunity['score']}"
+
             result = self.futures_engine.open_position(
                 symbol=symbol,
                 side=direction,
@@ -155,7 +164,7 @@ class SmartAutoTrader:
                 leverage=self.leverage,
                 stop_loss_price=Decimal(str(trade_params['stop_loss'])),
                 take_profit_price=Decimal(str(trade_params['take_profit'])),
-                entry_signal_type=f"SMART_BRAIN_SCORE_{opportunity['score']}",
+                entry_signal_type=signal_combination_key,
                 entry_score=trade_params.get('entry_score', opportunity['score'])
             )
 
