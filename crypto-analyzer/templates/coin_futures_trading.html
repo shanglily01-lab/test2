@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>U本位合约交易 - AlphaFlow</title>
+    <title>币本位合约交易 - AlphaFlow</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
@@ -383,7 +383,7 @@
                         <div style="flex: 1;">
                             <h1 class="header-title" style="margin: 0;">
                                 <i class="bi bi-graph-up-arrow"></i>
-                                U本位合约交易
+                                币本位合约交易
                             </h1>
                             <p class="header-subtitle">
                                 <span class="status-indicator">
@@ -421,10 +421,10 @@
                 <a href="/paper_trading" class="nav-link">
                     <i class="bi bi-journals"></i> 现货交易
                 </a>
-                <a href="/futures_trading" class="nav-link active">
-                    <i class="bi bi-graph-up-arrow"></i> U本位合约
+                <a href="/futures_trading" class="nav-link">
+                    <i class="bi bi-graph-up-arrow"></i> 币本位合约
                 </a>
-                <a href="/coin_futures_trading" class="nav-link">
+                <a href="/coin_futures_trading" class="nav-link active">
                     <i class="bi bi-currency-bitcoin"></i> 币本位合约
                 </a>
                 <a href="/futures_review" class="nav-link">
@@ -691,7 +691,7 @@
         </div>
 
     <script>
-        const API_BASE = '/api/futures';
+        const API_BASE = '/api/coin-futures';
         let currentSymbol = 'BTC/USDT';
         let currentPrice = 0;
         let previousPrice = 0; // 用于价格变化检测
@@ -786,7 +786,7 @@
         async function loadSymbols() {
             try {
                 // 从API获取交易对列表（从配置文件读取）
-                const response = await fetch('/api/futures/symbols');
+                const response = await fetch('/api/coin-futures/symbols');
                 const data = await response.json();
                 
                 if (data.success && data.symbols && data.symbols.length > 0) {
@@ -893,7 +893,7 @@
                 const timeoutId = setTimeout(() => controller.abort(), 2000); // 缩短到2秒超时
                 
                 try {
-                    const response = await fetch(`/api/futures/price/${encodeURIComponent(symbol)}`, {
+                    const response = await fetch(`/api/coin-futures/price/${encodeURIComponent(symbol)}`, {
                         signal: controller.signal
                     });
                     clearTimeout(timeoutId);
@@ -1520,7 +1520,7 @@
                     let priceMap = {};
 
                     try {
-                        const priceResponse = await fetch('/api/futures/prices/batch', {
+                        const priceResponse = await fetch('/api/coin-futures/prices/batch', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ symbols: symbols })
@@ -3039,7 +3039,7 @@
                 // 批量获取价格（单次API调用）
                 let pricesMap = {};
                 try {
-                    const priceResponse = await fetch('/api/futures/prices/batch', {
+                    const priceResponse = await fetch('/api/coin-futures/prices/batch', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ symbols: Array.from(symbolsSet) })

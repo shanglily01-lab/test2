@@ -485,13 +485,23 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 注册合约交易API路由
+# 注册U本位合约交易API路由
 try:
     from app.api.futures_api import router as futures_router
     app.include_router(futures_router)
-    logger.info("✅ 合约交易API路由已注册")
+    logger.info("✅ U本位合约交易API路由已注册")
 except Exception as e:
-    logger.warning(f"⚠️  合约交易API路由注册失败: {e}")
+    logger.warning(f"⚠️  U本位合约交易API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
+# 注册币本位合约交易API路由
+try:
+    from app.api.coin_futures_api import router as coin_futures_router
+    app.include_router(coin_futures_router)
+    logger.info("✅ 币本位合约交易API路由已注册")
+except Exception as e:
+    logger.warning(f"⚠️  币本位合约交易API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
@@ -868,13 +878,25 @@ def paper_trading_page():
 @app.get("/futures_trading")
 async def futures_trading_page():
     """
-    合约交易页面
+    U本位合约交易页面
     """
     futures_path = project_root / "templates" / "futures_trading.html"
     if futures_path.exists():
         return FileResponse(str(futures_path))
     else:
         raise HTTPException(status_code=404, detail="Futures trading page not found")
+
+
+@app.get("/coin_futures_trading")
+async def coin_futures_trading_page():
+    """
+    币本位合约交易页面
+    """
+    coin_futures_path = project_root / "templates" / "coin_futures_trading.html"
+    if coin_futures_path.exists():
+        return FileResponse(str(coin_futures_path))
+    else:
+        raise HTTPException(status_code=404, detail="Coin futures trading page not found")
 
 
 @app.get("/live_trading")
