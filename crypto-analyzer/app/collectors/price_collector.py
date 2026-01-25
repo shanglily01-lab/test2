@@ -53,8 +53,8 @@ class PriceCollector:
             # 转换交易对格式: BTC/USDT -> BTCUSDT
             binance_symbol = symbol.replace('/', '')
 
-            # 获取24小时ticker数据
-            ticker = await asyncio.to_thread(self.client.get_ticker, symbol=binance_symbol)
+            # 获取24小时ticker数据（使用合约API）
+            ticker = await asyncio.to_thread(self.client.futures_ticker, symbol=binance_symbol)
 
             return {
                 'exchange': self.exchange_id,
