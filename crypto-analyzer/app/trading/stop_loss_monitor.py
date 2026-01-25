@@ -485,7 +485,10 @@ class StopLossMonitor:
         # 计算收益率
         unrealized_pnl_pct = (unrealized_pnl / Decimal(str(position['margin']))) * 100
 
-        # 更新数据库
+        # 确保数据库连接有效
+        self._ensure_connection()
+
+        # 更新数据库（只更新status='open'的持仓，避免更新已平仓的）
         cursor = self.connection.cursor()
 
         sql = """
@@ -495,20 +498,30 @@ class StopLossMonitor:
             unrealized_pnl = %s,
             unrealized_pnl_pct = %s,
             last_update_time = NOW()
-        WHERE id = %s
+        WHERE id = %s AND status = 'open'
         """
 
         try:
-            cursor.execute(sql, (
+            affected_rows = cursor.execute(sql, (
                 float(current_price),
                 float(unrealized_pnl),
                 float(unrealized_pnl_pct),
                 position['id']
             ))
+
+            # 如果没有更新任何行，说明持仓可能已经关闭
+            if affected_rows == 0:
+                logger.debug(f"Position #{position['id']} may have been closed, skipping unrealized PnL update")
+
             self.connection.commit()
         except Exception as e:
             logger.error(f"Failed to update unrealized PnL for position #{position['id']}: {e}")
             self.connection.rollback()
+            # 重新初始化连接，避免后续操作失败
+            try:
+                self._ensure_connection()
+            except:
+                pass
         finally:
             cursor.close()
 
