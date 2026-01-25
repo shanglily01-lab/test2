@@ -740,12 +740,6 @@ class SmartTraderService:
             # 反转开仓不使用分批建仓（直接一次性开仓）
             is_reversal = 'reversal_from' in opp
 
-            # 黑名单L1/L2不使用分批建仓（保证金太小，单笔金额过低，手续费占比高）
-            rating_level = self.opt_config.get_symbol_rating_level(symbol)
-            if rating_level >= 1:
-                should_use_batch = False
-                logger.debug(f"[BATCH_SKIP] {symbol} 黑名单L{rating_level} 跳过分批建仓（保证金太小）")
-
             if should_use_batch and not is_reversal:
                 logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓（后台异步执行）")
                 # 在后台异步执行分批建仓，不阻塞主循环
