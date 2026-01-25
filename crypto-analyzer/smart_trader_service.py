@@ -567,16 +567,16 @@ class SmartTraderService:
             cursor = conn.cursor()
 
             if side:
-                # 检查特定方向的持仓
+                # 检查特定方向的持仓（包括正在建仓的持仓）
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
-                    WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
+                    WHERE symbol = %s AND position_side = %s AND status IN ('open', 'building') AND account_id = %s
                 """, (symbol, side, self.account_id))
             else:
-                # 检查任意方向的持仓
+                # 检查任意方向的持仓（包括正在建仓的持仓）
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
-                    WHERE symbol = %s AND status = 'open' AND account_id = %s
+                    WHERE symbol = %s AND status IN ('open', 'building') AND account_id = %s
                 """, (symbol, self.account_id))
 
             result = cursor.fetchone()
