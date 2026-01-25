@@ -2057,6 +2057,32 @@ class SmartTraderService:
             logger.error(f"[ERROR] 关闭{symbol} {side}持仓失败: {e}")
             return False
 
+    async def close_position(self, symbol: str, direction: str, position_size: float, reason: str = "smart_exit"):
+        """
+        异步平仓方法（供SmartExitOptimizer调用）
+
+        Args:
+            symbol: 交易对
+            direction: 方向 (LONG/SHORT)
+            position_size: 持仓数量
+            reason: 平仓原因
+
+        Returns:
+            dict: {'success': bool, 'error': str}
+        """
+        try:
+            # 调用同步方法执行平仓
+            success = self.close_position_by_side(symbol, direction, reason)
+
+            if success:
+                return {'success': True}
+            else:
+                return {'success': False, 'error': 'close_position_by_side returned False'}
+
+        except Exception as e:
+            logger.error(f"异步平仓失败: {symbol} {direction} | {e}")
+            return {'success': False, 'error': str(e)}
+
     def run_adaptive_optimization(self):
         """运行自适应优化 - 每日定时任务"""
         try:
