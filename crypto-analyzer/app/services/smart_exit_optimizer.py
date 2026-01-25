@@ -452,12 +452,10 @@ class SmartExitOptimizer:
                 UPDATE futures_positions
                 SET
                     status = 'closed',
-                    close_price = %s,
                     close_time = %s,
-                    close_reason = %s
+                    notes = %s
                 WHERE id = %s
             """, (
-                close_price,
                 datetime.now(),
                 close_reason,
                 position_id
