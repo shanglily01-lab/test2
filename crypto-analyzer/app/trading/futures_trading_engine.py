@@ -1446,7 +1446,8 @@ class FuturesTradingEngine:
                         # 回退到数据库价格
                         current_price = self.get_current_price(symbol, use_realtime=False)
 
-                    entry_price = Decimal(str(pos['entry_price']))
+                    # 对于分批建仓的持仓，使用avg_entry_price，否则使用entry_price
+                    entry_price = Decimal(str(pos.get('avg_entry_price') or pos['entry_price']))
                     quantity = Decimal(str(pos['quantity']))
                     leverage = Decimal(str(pos.get('leverage', 1)))
                     margin = Decimal(str(pos.get('margin', 0)))

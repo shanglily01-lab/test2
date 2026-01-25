@@ -145,7 +145,7 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
                 symbol,
                 position_side,
                 quantity,
-                entry_price,
+                COALESCE(avg_entry_price, entry_price) as entry_price,
                 mark_price as current_price,
                 leverage,
                 margin,
