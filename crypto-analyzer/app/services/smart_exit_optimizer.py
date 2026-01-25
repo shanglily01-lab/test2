@@ -296,13 +296,8 @@ class SmartExitOptimizer:
         if 0 <= max_profit_pct < 1.0 and profit_pct >= 1.0:
             return True, f"低盈利快速止盈(盈利{profit_pct:.2f}%)"
 
-        # 层级4: 亏损 0-0.5%，实时捕捉盈亏平衡点
+        # 层级4: 微亏损（-0.5% ~ 0%），根据时间和亏损程度决策
         if -0.5 <= profit_pct < 0:
-            # 检查是否触及盈亏平衡点（-0.05% ~ +0.05%）
-            if -0.05 <= profit_pct <= 0.05:
-                return True, f"捕捉盈亏平衡点(盈利{profit_pct:.2f}%)"
-
-            # 检查是否需要延长平仓时间
             planned_close_time = position['planned_close_time']
             close_extended = position['close_extended']
             now = datetime.now()
@@ -310,8 +305,12 @@ class SmartExitOptimizer:
             # 提前30分钟开始监控
             monitoring_start_time = planned_close_time - timedelta(minutes=30)
 
+            # 如果还未到监控时间，继续持有
+            if now < monitoring_start_time:
+                return False, ""
+
+            # 到达监控时间，检查是否需要延长
             if now >= monitoring_start_time and not close_extended:
-                # 检查是否到达计划平仓时间
                 if now >= planned_close_time:
                     # 延长30分钟
                     await self._extend_close_time(position['id'], 30)
