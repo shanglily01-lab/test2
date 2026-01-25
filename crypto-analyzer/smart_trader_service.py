@@ -1001,8 +1001,8 @@ class SmartTraderService:
                 adjusted_position_size = adjusted_position_size * hedge_multiplier
                 logger.info(f"[HEDGE_MARGIN] {symbol} 对冲开仓, 保证金缩减到{hedge_multiplier*100:.0f}%")
 
-            # 调用智能建仓执行器
-            entry_result = await self.smart_entry_executor.execute_entry({
+            # 调用智能建仓执行器（作为后台任务，避免阻塞主循环）
+            entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
                 'symbol': symbol,
                 'direction': side,
                 'total_margin': adjusted_position_size,
@@ -1014,26 +1014,34 @@ class SmartTraderService:
                     'adaptive_params': adaptive_params,
                     'signal_combination_key': self._generate_signal_combination_key(signal_components)
                 }
-            })
+            }))
 
-            if entry_result['success']:
-                position_id = entry_result['position_id']
-                logger.info(
-                    f"✅ [BATCH_ENTRY_COMPLETE] {symbol} {side} | "
-                    f"持仓ID: {position_id} | "
-                    f"平均价格: ${entry_result['avg_price']:.4f} | "
-                    f"总数量: {entry_result['total_quantity']:.2f}"
-                )
+            # 添加完成回调来启动智能平仓监控
+            def on_entry_complete(task):
+                try:
+                    entry_result = task.result()
+                    if entry_result['success']:
+                        position_id = entry_result['position_id']
+                        logger.info(
+                            f"✅ [BATCH_ENTRY_COMPLETE] {symbol} {side} | "
+                            f"持仓ID: {position_id} | "
+                            f"平均价格: ${entry_result['avg_price']:.4f} | "
+                            f"总数量: {entry_result['total_quantity']:.2f}"
+                        )
 
-                # 启动智能平仓监控（如果启用）
-                if self.smart_exit_optimizer:
-                    await self.smart_exit_optimizer.start_monitoring_position(position_id)
-                    logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
+                        # 启动智能平仓监控（如果启用）
+                        if self.smart_exit_optimizer:
+                            asyncio.create_task(self.smart_exit_optimizer.start_monitoring_position(position_id))
+                            logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
+                    else:
+                        logger.error(f"❌ [BATCH_ENTRY_FAILED] {symbol} {side} | {entry_result.get('error')}")
+                except Exception as e:
+                    logger.error(f"❌ [BATCH_ENTRY_CALLBACK_ERROR] {symbol} {side} | {e}")
 
-                return True
-            else:
-                logger.error(f"❌ [BATCH_ENTRY_FAILED] {symbol} {side} | {entry_result.get('error')}")
-                return False
+            entry_task.add_done_callback(on_entry_complete)
+            logger.info(f"🚀 [BATCH_ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行30分钟）")
+
+            return True
 
         except Exception as e:
             logger.error(f"❌ [BATCH_ENTRY_ERROR] {symbol} {side} | {e}")
