@@ -27,10 +27,11 @@ class SmartExitOptimizer:
         self.live_engine = live_engine
         self.price_service = price_service
 
-        # 数据库连接池
+        # 数据库连接池（增加池大小以支持多个并发监控任务）
+        # 每个监控任务每秒需要1个连接，预留20个连接支持20个并发持仓监控
         self.db_pool = pooling.MySQLConnectionPool(
             pool_name="exit_optimizer_pool",
-            pool_size=3,
+            pool_size=20,
             **db_config
         )
 
