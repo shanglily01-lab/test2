@@ -204,12 +204,12 @@ class OptimizationConfig:
         elif level == 1:
             return {
                 'margin_multiplier': self.get_param('blacklist_level1_margin_multiplier', 0.25),
-                'reversal_threshold': self.get_param('blacklist_level1_reversal_threshold', 35)
+                'reversal_threshold': self.get_param('blacklist_level1_reversal_threshold', 30)
             }
         elif level == 2:
             return {
                 'margin_multiplier': self.get_param('blacklist_level2_margin_multiplier', 0.125),
-                'reversal_threshold': self.get_param('blacklist_level2_reversal_threshold', 40)
+                'reversal_threshold': self.get_param('blacklist_level2_reversal_threshold', 30)
             }
         else:  # level 3
             return {
