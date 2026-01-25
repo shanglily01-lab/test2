@@ -101,6 +101,13 @@ symbols:
 - SNT/USDT
 - MKR/USDT
 - WLD/USDT
+- RLC/USDT
+- VET/USDT
+- XLM/USDT
+- INJ/USDT
+- FET/USDT
+- APT/USDT
+- TON/USDT
 
 # 币本位合约交易对 (Coin-M Futures)
 coin_futures_symbols:
