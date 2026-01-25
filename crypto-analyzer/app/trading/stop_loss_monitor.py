@@ -155,11 +155,13 @@ class StopLossMonitor:
                 open_time,
                 trailing_stop_activated,
                 trailing_stop_price,
-                strategy_id
+                strategy_id,
+                batch_plan
             FROM futures_positions
             WHERE status = 'open'
+            AND (batch_plan IS NULL OR batch_plan = '')
             """
-            
+
             params = []
             if account_id is not None:
                 sql += " AND account_id = %s"

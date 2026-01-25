@@ -78,8 +78,13 @@ class SmartExitOptimizer:
                 # 获取持仓信息
                 position = await self._get_position(position_id)
 
-                if not position or position['status'] != 'open':
-                    logger.info(f"持仓 {position_id} 已关闭或不存在，停止监控")
+                if not position:
+                    logger.info(f"持仓 {position_id} 不存在，停止监控")
+                    break
+
+                # 支持monitoring status='open'和'building'（分批建仓中）
+                if position['status'] not in ('open', 'building'):
+                    logger.info(f"持仓 {position_id} 已关闭 (status={position['status']})，停止监控")
                     break
 
                 # 获取实时价格
