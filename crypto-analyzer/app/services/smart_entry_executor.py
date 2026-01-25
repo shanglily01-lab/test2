@@ -430,15 +430,87 @@ class SmartEntryExecutor:
                 await self._execute_batch(plan, i, current_price, "超时强制建仓")
 
     async def _get_current_price(self, symbol: str) -> Decimal:
-        """获取当前价格"""
+        """
+        获取当前价格（多级降级策略）
+
+        优先级:
+        1. WebSocket实时价格
+        2. REST API实时价格
+        3. 数据库最新K线价格
+        """
+        # 第1级: 尝试从WebSocket获取
         try:
-            price = self.price_service.get_price(symbol)
-            if price:
-                return Decimal(str(price))
-            return Decimal('0')
+            ws_price = self.price_service.get_price(symbol)
+            if ws_price and ws_price > 0:
+                logger.debug(f"[价格获取] {symbol} 使用WebSocket价格: {ws_price}")
+                return Decimal(str(ws_price))
         except Exception as e:
-            logger.error(f"获取价格失败: {e}")
-            return Decimal('0')
+            logger.warning(f"[价格获取] {symbol} WebSocket获取失败: {e}")
+
+        # 第2级: 降级到REST API实时价格
+        try:
+            import requests
+            from requests.adapters import HTTPAdapter
+            from urllib3.util.retry import Retry
+
+            symbol_clean = symbol.replace('/', '').upper()
+
+            session = requests.Session()
+            retry_strategy = Retry(
+                total=2,
+                backoff_factor=0.1,
+                status_forcelist=[429, 500, 502, 503, 504],
+            )
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            session.mount("https://", adapter)
+
+            # 尝试合约API
+            response = session.get(
+                'https://fapi.binance.com/fapi/v1/ticker/price',
+                params={'symbol': symbol_clean},
+                timeout=3
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                rest_price = float(data['price'])
+                if rest_price > 0:
+                    logger.info(f"[价格获取] {symbol} 降级到REST API价格: {rest_price}")
+                    return Decimal(str(rest_price))
+        except Exception as e:
+            logger.warning(f"[价格获取] {symbol} REST API获取失败: {e}")
+
+        # 第3级: 最后降级到数据库K线价格
+        try:
+            import pymysql
+
+            conn = pymysql.connect(**self.db_config)
+            cursor = conn.cursor()
+
+            # 优先使用5m K线
+            cursor.execute("""
+                SELECT close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '5m'
+                ORDER BY open_time DESC
+                LIMIT 1
+            """, (symbol,))
+
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if result and result[0]:
+                db_price = float(result[0])
+                if db_price > 0:
+                    logger.warning(f"[价格获取] {symbol} 降级到数据库K线价格: {db_price}")
+                    return Decimal(str(db_price))
+        except Exception as e:
+            logger.error(f"[价格获取] {symbol} 数据库获取失败: {e}")
+
+        # 所有方法都失败，返回0并记录错误
+        logger.error(f"[价格获取] ❌ {symbol} 所有价格获取方法均失败，无法开仓！")
+        return Decimal('0')
 
     def _calculate_avg_price(self, plan: Dict) -> float:
         """计算加权平均价格"""

@@ -88,25 +88,41 @@ class PriceSampler:
 
     async def _get_realtime_price(self) -> Decimal:
         """
-        获取实时价格（从价格服务）
+        获取实时价格（多级降级策略）
 
         Returns:
             当前价格
         """
+        # 第1级: WebSocket价格
         try:
-            # 从WebSocket价格服务获取
             price = self.price_service.get_price(self.symbol)
-            if price:
+            if price and price > 0:
                 return Decimal(str(price))
-
-            # 降级：从REST API获取
-            logger.warning(f"{self.symbol} WebSocket价格不可用，降级到REST API")
-            # TODO: 调用REST API获取价格
-            return Decimal('0')
-
         except Exception as e:
-            logger.error(f"获取实时价格失败: {e}")
-            return Decimal('0')
+            logger.warning(f"{self.symbol} WebSocket获取失败: {e}")
+
+        # 第2级: REST API实时价格
+        try:
+            import requests
+            symbol_clean = self.symbol.replace('/', '').upper()
+
+            response = requests.get(
+                'https://fapi.binance.com/fapi/v1/ticker/price',
+                params={'symbol': symbol_clean},
+                timeout=3
+            )
+
+            if response.status_code == 200:
+                rest_price = float(response.json()['price'])
+                if rest_price > 0:
+                    logger.debug(f"{self.symbol} 使用REST API价格: {rest_price}")
+                    return Decimal(str(rest_price))
+        except Exception as e:
+            logger.warning(f"{self.symbol} REST API获取失败: {e}")
+
+        # 所有方法都失败
+        logger.error(f"{self.symbol} 所有价格获取方法均失败")
+        return Decimal('0')
 
     def _build_baseline(self) -> Optional[Dict]:
         """
