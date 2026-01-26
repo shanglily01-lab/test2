@@ -382,13 +382,18 @@ class SmartExitOptimizer:
         profit_info: Dict
     ) -> bool:
         """
-        智能分批平仓逻辑（计划平仓前30分钟）
+        智能平仓逻辑（计划平仓前30分钟）
 
         策略：
-        1. 进入监控窗口后，启动价格基线采样器
-        2. 分2批平仓（50% + 50%）
-        3. 第1批：在价格好的时候先锁定一半利润
-        4. 第2批：等待更优价格或超时平仓
+        1. T-30启动监控，T-25完成价格基线（5分钟采样）
+        2. T-25到T+0寻找最佳价格，一次性平仓100%
+        3. T+0（planned_close_time）必须强制执行
+
+        时间窗口示例（planned_close_time = 11:46）:
+        - 11:16 (T-30): 启动监控
+        - 11:21 (T-25): 完成5分钟价格基线
+        - 11:21-11:46: 25分钟寻找最佳平仓价格
+        - 11:46 (T+0): 计划平仓时间，必须强制执行
 
         Args:
             position_id: 持仓ID
@@ -397,7 +402,7 @@ class SmartExitOptimizer:
             profit_info: 盈亏信息
 
         Returns:
-            是否完成全部平仓
+            是否完成平仓
         """
         planned_close_time = position['planned_close_time']
         now = datetime.now()
@@ -410,8 +415,9 @@ class SmartExitOptimizer:
         # 初始化平仓计划（第一次进入监控窗口）
         if position_id not in self.exit_plans:
             logger.info(
-                f"🎯 {position['symbol']} 进入智能分批平仓窗口（30分钟） | "
-                f"当前盈亏: {profit_info['profit_pct']:.2f}%"
+                f"🎯 {position['symbol']} 进入智能平仓窗口（30分钟） | "
+                f"当前盈亏: {profit_info['profit_pct']:.2f}% | "
+                f"计划平仓: {planned_close_time.strftime('%H:%M:%S')}"
             )
 
             # 启动价格基线采样器
@@ -425,13 +431,11 @@ class SmartExitOptimizer:
                 'entry_price': float(position['avg_entry_price']),
                 'total_quantity': float(position['position_size']),
                 'monitoring_start_time': monitoring_start_time,
-                'batches': [
-                    {'ratio': 0.5, 'filled': False, 'price': None, 'time': None, 'reason': None},
-                    {'ratio': 0.5, 'filled': False, 'price': None, 'time': None, 'reason': None},
-                ],
+                'planned_close_time': planned_close_time,
                 'sampler': sampler,
                 'sampling_task': sampling_task,
-                'baseline_built': False
+                'baseline_built': False,
+                'closed': False
             }
 
             self.exit_plans[position_id] = exit_plan
@@ -440,6 +444,11 @@ class SmartExitOptimizer:
             logger.info(f"📊 {position['symbol']} 等待5分钟建立平仓价格基线...")
 
         exit_plan = self.exit_plans[position_id]
+
+        # 如果已经平仓，直接返回
+        if exit_plan['closed']:
+            return True
+
         sampler = exit_plan['sampler']
 
         # 等待基线建立
@@ -461,87 +470,60 @@ class SmartExitOptimizer:
 
         elapsed_minutes = (now - exit_plan['monitoring_start_time']).total_seconds() / 60
 
-        # ========== 第1批平仓判断（50%）==========
-        if not exit_plan['batches'][0]['filled']:
-            should_exit, reason = await self._should_exit_batch1(
-                position, current_price, baseline, exit_plan['entry_price'], elapsed_minutes
+        # ========== 平仓判断（一次性100%）==========
+        should_exit, reason = await self._should_exit_single(
+            position, current_price, baseline, exit_plan['entry_price'],
+            elapsed_minutes, planned_close_time
+        )
+
+        if should_exit:
+            # 一次性平仓100%
+            await self._execute_close(position_id, current_price, reason)
+            exit_plan['closed'] = True
+
+            logger.info(
+                f"✅ 智能平仓完成: {position['symbol']} @ {current_price:.6f} | {reason}"
             )
 
-            if should_exit:
-                await self._execute_partial_close(
-                    position_id, position, current_price, 0.5, reason
-                )
-                exit_plan['batches'][0]['filled'] = True
-                exit_plan['batches'][0]['price'] = float(current_price)
-                exit_plan['batches'][0]['time'] = datetime.now()
-                exit_plan['batches'][0]['reason'] = reason
+            # 停止采样器
+            sampler.stop_sampling()
+            exit_plan['sampling_task'].cancel()
 
-                logger.info(
-                    f"✅ 第1批平仓完成(50%): {position['symbol']} @ {current_price:.6f} | {reason}"
-                )
+            # 清理平仓计划
+            del self.exit_plans[position_id]
 
-        # ========== 第2批平仓判断（剩余50%）==========
-        elif not exit_plan['batches'][1]['filled']:
-            batch1_price = exit_plan['batches'][0]['price']
+            return True  # 完成平仓
 
-            should_exit, reason = await self._should_exit_batch2(
-                position, current_price, baseline, exit_plan['entry_price'],
-                batch1_price, elapsed_minutes
-            )
+        return False  # 未完成平仓
 
-            if should_exit:
-                await self._execute_partial_close(
-                    position_id, position, current_price, 1.0, reason  # 平掉剩余全部
-                )
-                exit_plan['batches'][1]['filled'] = True
-                exit_plan['batches'][1]['price'] = float(current_price)
-                exit_plan['batches'][1]['time'] = datetime.now()
-                exit_plan['batches'][1]['reason'] = reason
-
-                logger.info(
-                    f"✅ 第2批平仓完成(50%): {position['symbol']} @ {current_price:.6f} | {reason}"
-                )
-
-                # 计算平均平仓价
-                avg_exit_price = (
-                    exit_plan['batches'][0]['price'] * 0.5 +
-                    exit_plan['batches'][1]['price'] * 0.5
-                )
-                logger.info(
-                    f"🎉 智能分批平仓完成: {position['symbol']} | "
-                    f"平均平仓价: {avg_exit_price:.6f} | "
-                    f"第1批: {exit_plan['batches'][0]['price']:.6f} | "
-                    f"第2批: {exit_plan['batches'][1]['price']:.6f}"
-                )
-
-                # 停止采样器
-                sampler.stop_sampling()
-                exit_plan['sampling_task'].cancel()
-
-                # 清理平仓计划
-                del self.exit_plans[position_id]
-
-                return True  # 完成全部平仓
-
-        return False  # 未完成全部平仓
-
-    async def _should_exit_batch1(
+    async def _should_exit_single(
         self,
         position: Dict,
         current_price: Decimal,
         baseline: Dict,
         entry_price: float,
-        elapsed_minutes: float
+        elapsed_minutes: float,
+        planned_close_time: datetime
     ) -> tuple[bool, str]:
         """
-        第1批平仓判断（50%）
+        一次性平仓判断（100%）
 
-        条件：在价格好的时候先锁定一半利润
+        时间窗口: T-30 到 T+0 (30分钟)
+        强制截止: T+0 (planned_close_time必须执行)
+
+        策略：
+        1. 寻找最佳价格立即平仓
+        2. T+0（planned_close_time）必须强制执行
 
         Returns:
             (是否平仓, 原因)
         """
         direction = position['direction']
+        now = datetime.now()
+
+        # ========== 最高优先级：超时强制平仓（已到达planned_close_time）==========
+        if now >= planned_close_time:
+            return True, f"计划平仓时间已到，强制执行"
 
         if direction == 'LONG':
             # 使用 PriceSampler 的评分系统
@@ -570,9 +552,9 @@ class SmartExitOptimizer:
                 if evaluation['profit_pct'] >= 0.5:  # 有盈利就跑
                     return True, f"强下跌趋势预警，快速止盈(+{evaluation['profit_pct']:.2f}%)"
 
-            # 条件6: 时间兜底（距离计划平仓还有10分钟，评分 >= 60分）
+            # 条件6: 时间压力（T-10分钟，评分 >= 60分）
             if elapsed_minutes >= 20 and evaluation['score'] >= 60:
-                return True, f"接近平仓时间(已{elapsed_minutes:.0f}分钟)，评分{evaluation['score']}"
+                return True, f"接近截止(已{elapsed_minutes:.0f}分钟)，评分{evaluation['score']}"
 
         else:  # SHORT
             exit_plan = self.exit_plans[position['id']]
@@ -600,87 +582,9 @@ class SmartExitOptimizer:
                 if evaluation['profit_pct'] >= 0.5:
                     return True, f"强上涨趋势预警，快速止盈(+{evaluation['profit_pct']:.2f}%)"
 
-            # 条件6: 时间兜底
+            # 条件6: 时间压力
             if elapsed_minutes >= 20 and evaluation['score'] >= 60:
-                return True, f"接近平仓时间(已{elapsed_minutes:.0f}分钟)，评分{evaluation['score']}"
-
-        return False, ""
-
-    async def _should_exit_batch2(
-        self,
-        position: Dict,
-        current_price: Decimal,
-        baseline: Dict,
-        entry_price: float,
-        batch1_price: float,
-        elapsed_minutes: float
-    ) -> tuple[bool, str]:
-        """
-        第2批平仓判断（剩余50%）
-
-        条件：等待比第1批更优的价格或超时平仓
-
-        Returns:
-            (是否平仓, 原因)
-        """
-        direction = position['direction']
-
-        if direction == 'LONG':
-            exit_plan = self.exit_plans[position['id']]
-            sampler = exit_plan['sampler']
-            evaluation = sampler.is_good_long_exit_price(current_price, entry_price)
-
-            # 条件1: 价格比第1批高（更优卖点）
-            if float(current_price) >= batch1_price * 1.002:  # 高0.2%以上
-                return True, f"更优卖点(比第1批高{((float(current_price)/batch1_price-1)*100):.2f}%)"
-
-            # 条件2: 极佳卖点（评分 >= 95分）
-            if evaluation['score'] >= 95:
-                return True, f"极佳卖点(评分{evaluation['score']})"
-
-            # 条件3: 突破新高（比基线最高价还高）
-            if float(current_price) >= baseline['max_price'] * 1.002:
-                return True, f"突破新高({baseline['max_price']:.6f})"
-
-            # 条件4: 价格接近第1批（在-0.2%以内）+ 评分良好
-            if float(current_price) >= batch1_price * 0.998 and evaluation['score'] >= 70:
-                return True, f"价格接近第1批(评分{evaluation['score']})"
-
-            # 条件5: 时间兜底（距离计划平仓还有5分钟）
-            if elapsed_minutes >= 25:
-                return True, f"接近截止时间(已{elapsed_minutes:.0f}分钟)，强制平仓"
-
-            # 条件6: 强制平仓（计划时间已到）
-            if elapsed_minutes >= 30:
-                return True, f"计划平仓时间已到，强制执行"
-
-        else:  # SHORT
-            exit_plan = self.exit_plans[position['id']]
-            sampler = exit_plan['sampler']
-            evaluation = sampler.is_good_short_exit_price(current_price, entry_price)
-
-            # 条件1: 价格比第1批低（更优买点）
-            if float(current_price) <= batch1_price * 0.998:
-                return True, f"更优买点(比第1批低{((1-float(current_price)/batch1_price)*100):.2f}%)"
-
-            # 条件2: 极佳买点
-            if evaluation['score'] >= 95:
-                return True, f"极佳买点(评分{evaluation['score']})"
-
-            # 条件3: 跌破新低
-            if float(current_price) <= baseline['min_price'] * 0.998:
-                return True, f"跌破新低({baseline['min_price']:.6f})"
-
-            # 条件4: 价格接近第1批 + 评分良好
-            if float(current_price) <= batch1_price * 1.002 and evaluation['score'] >= 70:
-                return True, f"价格接近第1批(评分{evaluation['score']})"
-
-            # 条件5-6: 时间兜底
-            if elapsed_minutes >= 25:
-                return True, f"接近截止时间(已{elapsed_minutes:.0f}分钟)，强制平仓"
-
-            if elapsed_minutes >= 30:
-                return True, f"计划平仓时间已到，强制执行"
+                return True, f"接近截止(已{elapsed_minutes:.0f}分钟)，评分{evaluation['score']}"
 
         return False, ""
 
