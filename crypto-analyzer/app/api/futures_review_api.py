@@ -1167,3 +1167,273 @@ async def get_strategy_suggestions(
     except Exception as e:
         logger.error(f"获取策略建议失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/signal-analysis")
+async def get_signal_analysis(
+    hours: int = Query(24, description="时间范围(小时)"),
+    account_id: int = Query(2, description="账户ID: 1=实盘, 2=模拟")
+):
+    """
+    信号分析API - 获取最新的每日复盘信号分析数据
+
+    返回各个信号类型的详细表现分析，包括:
+    - 交易笔数、胜率、平均盈亏
+    - 最佳/最差交易
+    - 捕获的大行情机会数
+    - 做多/做空笔数
+    - 平均持仓时长
+    - 评分和评级
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 查询最新的信号分析数据（从daily_review_signal_analysis表）
+        cursor.execute("""
+            SELECT
+                review_date,
+                signal_type,
+                total_trades,
+                win_trades,
+                loss_trades,
+                win_rate,
+                avg_pnl,
+                best_trade,
+                worst_trade,
+                long_trades,
+                short_trades,
+                avg_holding_minutes,
+                captured_opportunities,
+                rating,
+                score
+            FROM daily_review_signal_analysis
+            WHERE review_date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+            ORDER BY review_date DESC, score DESC
+            LIMIT 50
+        """)
+
+        signal_rows = cursor.fetchall()
+
+        # 如果没有每日复盘数据，返回空结果
+        if not signal_rows:
+            return {
+                "success": True,
+                "data": {
+                    "signal_stats": {},
+                    "total_signals": 0,
+                    "summary": {
+                        "best_signal": None,
+                        "worst_signal": None
+                    }
+                }
+            }
+
+        # 组织信号统计数据
+        signal_stats = {}
+        for row in signal_rows:
+            signal_type = row['signal_type']
+            signal_stats[signal_type] = {
+                'total_trades': row['total_trades'],
+                'win_trades': row['win_trades'],
+                'loss_trades': row['loss_trades'],
+                'win_rate': float(row['win_rate']) if row['win_rate'] else 0,
+                'avg_pnl': float(row['avg_pnl']) if row['avg_pnl'] else 0,
+                'best_trade': float(row['best_trade']) if row['best_trade'] else 0,
+                'worst_trade': float(row['worst_trade']) if row['worst_trade'] else 0,
+                'long_trades': row['long_trades'],
+                'short_trades': row['short_trades'],
+                'avg_holding_minutes': float(row['avg_holding_minutes']) if row['avg_holding_minutes'] else 0,
+                'captured_opportunities': row['captured_opportunities'],
+                'rating': row['rating'],
+                'score': row['score']
+            }
+
+        # 找出最佳和最差信号
+        best_signal = max(signal_stats.items(), key=lambda x: x[1]['score'])[0] if signal_stats else None
+        worst_signal = min(signal_stats.items(), key=lambda x: x[1]['score'])[0] if signal_stats else None
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "success": True,
+            "data": {
+                "signal_stats": signal_stats,
+                "total_signals": len(signal_stats),
+                "summary": {
+                    "best_signal": best_signal,
+                    "worst_signal": worst_signal
+                }
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取信号分析失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/opportunity-analysis")
+async def get_opportunity_analysis(
+    hours: int = Query(24, description="时间范围(小时)"),
+    account_id: int = Query(2, description="账户ID: 1=实盘, 2=模拟")
+):
+    """
+    买入机会分析API - 获取最新的每日复盘买入机会分析数据
+
+    返回不同维度下的买入机会捕获情况，包括:
+    - 按时间周期(5m/15m/1h)的捕获统计
+    - 错过原因分析
+    - 交易对表现排名
+    - 总体统计摘要
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 查询最新的机会数据（从daily_review_opportunities表）
+        cursor.execute("""
+            SELECT
+                timeframe,
+                move_type,
+                captured,
+                symbol,
+                miss_reason,
+                price_change_pct
+            FROM daily_review_opportunities
+            WHERE review_date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+            ORDER BY review_date DESC
+            LIMIT 1000
+        """)
+
+        opportunity_rows = cursor.fetchall()
+
+        # 如果没有数据，返回空结果
+        if not opportunity_rows:
+            return {
+                "success": True,
+                "data": {
+                    "timeframe_analysis": {},
+                    "miss_reasons": {},
+                    "symbol_analysis": {
+                        "all_symbols": {},
+                        "best_symbols": [],
+                        "worst_symbols": []
+                    },
+                    "summary": {
+                        "total_opportunities": 0,
+                        "best_timeframe": None,
+                        "worst_timeframe": None,
+                        "main_miss_reason": None
+                    }
+                }
+            }
+
+        # 1. 按时间周期统计
+        timeframe_analysis = {}
+        for tf in ['5m', '15m', '1h']:
+            tf_opps = [o for o in opportunity_rows if o['timeframe'] == tf]
+            captured = [o for o in tf_opps if o['captured']]
+            missed = [o for o in tf_opps if not o['captured']]
+
+            pumps = [o for o in tf_opps if o['move_type'] == 'pump']
+            dumps = [o for o in tf_opps if o['move_type'] == 'dump']
+
+            captured_pumps = [o for o in pumps if o['captured']]
+            captured_dumps = [o for o in dumps if o['captured']]
+
+            timeframe_analysis[tf] = {
+                'total_opportunities': len(tf_opps),
+                'captured': len(captured),
+                'missed': len(missed),
+                'capture_rate': len(captured) / len(tf_opps) * 100 if tf_opps else 0,
+                'pumps': {
+                    'total': len(pumps),
+                    'captured': len(captured_pumps),
+                    'rate': len(captured_pumps) / len(pumps) * 100 if pumps else 0
+                },
+                'dumps': {
+                    'total': len(dumps),
+                    'captured': len(captured_dumps),
+                    'rate': len(captured_dumps) / len(dumps) * 100 if dumps else 0
+                }
+            }
+
+        # 2. 错过原因统计
+        miss_reasons = {}
+        for opp in opportunity_rows:
+            if not opp['captured'] and opp['miss_reason']:
+                reason = opp['miss_reason']
+                if reason not in miss_reasons:
+                    miss_reasons[reason] = {
+                        'count': 0,
+                        'total_pct_change': 0,
+                        'examples': []
+                    }
+                miss_reasons[reason]['count'] += 1
+                miss_reasons[reason]['total_pct_change'] += abs(float(opp['price_change_pct']))
+
+                if len(miss_reasons[reason]['examples']) < 3:
+                    miss_reasons[reason]['examples'].append({
+                        'symbol': opp['symbol'],
+                        'change': abs(float(opp['price_change_pct'])),
+                        'type': opp['move_type']
+                    })
+
+        # 计算平均错失幅度
+        for reason, data in miss_reasons.items():
+            data['avg_missed_change'] = data['total_pct_change'] / data['count']
+
+        # 3. 按交易对统计
+        symbol_analysis = {}
+        for opp in opportunity_rows:
+            symbol = opp['symbol']
+            if symbol not in symbol_analysis:
+                symbol_analysis[symbol] = {
+                    'total_opportunities': 0,
+                    'captured': 0,
+                    'missed': 0
+                }
+
+            symbol_analysis[symbol]['total_opportunities'] += 1
+            if opp['captured']:
+                symbol_analysis[symbol]['captured'] += 1
+            else:
+                symbol_analysis[symbol]['missed'] += 1
+
+        # 计算捕获率并排序
+        for symbol, stats in symbol_analysis.items():
+            stats['capture_rate'] = stats['captured'] / stats['total_opportunities'] * 100 if stats['total_opportunities'] > 0 else 0
+
+        sorted_symbols = sorted(symbol_analysis.items(), key=lambda x: x[1]['capture_rate'], reverse=True)
+
+        # 4. 总结
+        best_timeframe = max(timeframe_analysis.items(), key=lambda x: x[1]['capture_rate'])[0] if timeframe_analysis else None
+        worst_timeframe = min(timeframe_analysis.items(), key=lambda x: x[1]['capture_rate'])[0] if timeframe_analysis else None
+        main_miss_reason = max(miss_reasons.items(), key=lambda x: x[1]['count'])[0] if miss_reasons else None
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "success": True,
+            "data": {
+                "timeframe_analysis": timeframe_analysis,
+                "miss_reasons": miss_reasons,
+                "symbol_analysis": {
+                    "all_symbols": symbol_analysis,
+                    "best_symbols": sorted_symbols[:5],
+                    "worst_symbols": sorted_symbols[-5:] if len(sorted_symbols) >= 5 else []
+                },
+                "summary": {
+                    "total_opportunities": len(opportunity_rows),
+                    "best_timeframe": best_timeframe,
+                    "worst_timeframe": worst_timeframe,
+                    "main_miss_reason": main_miss_reason
+                }
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取买入机会分析失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

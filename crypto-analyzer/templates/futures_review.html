@@ -255,6 +255,12 @@
                 <button class="tab-btn" onclick="switchTab('suggestions')">
                     <i class="bi bi-lightbulb"></i> 优化建议
                 </button>
+                <button class="tab-btn" onclick="switchTab('signals')">
+                    <i class="bi bi-broadcast"></i> 信号分析
+                </button>
+                <button class="tab-btn" onclick="switchTab('opportunities')">
+                    <i class="bi bi-graph-up"></i> 买入机会分析
+                </button>
             </div>
 
             <!-- Trades Tab -->
@@ -391,6 +397,136 @@
                     <div class="spinner"></div>
                 </div>
                 <div id="suggestionsContent" style="display: none;"></div>
+            </div>
+
+            <!-- Signals Analysis Tab -->
+            <div id="signals-tab" class="tab-content">
+                <div id="signalsLoading" class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+                <div id="signalsContent" style="display: none;">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>评级</th>
+                                    <th>信号类型</th>
+                                    <th>评分</th>
+                                    <th>交易笔数</th>
+                                    <th>胜率</th>
+                                    <th>平均盈亏</th>
+                                    <th>最佳交易</th>
+                                    <th>最差交易</th>
+                                    <th>捕获机会</th>
+                                    <th>做多笔数</th>
+                                    <th>做空笔数</th>
+                                    <th>平均持仓</th>
+                                </tr>
+                            </thead>
+                            <tbody id="signals-table-body">
+                                <tr>
+                                    <td colspan="12" class="empty-state">
+                                        <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
+                                        <div class="empty-state-text">暂无信号分析数据</div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="signals-summary" style="margin-top: 24px;"></div>
+                </div>
+            </div>
+
+            <!-- Opportunities Analysis Tab -->
+            <div id="opportunities-tab" class="tab-content">
+                <div id="opportunitiesLoading" class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+                <div id="opportunitiesContent" style="display: none;">
+                    <!-- Timeframe Performance -->
+                    <div style="margin-bottom: 32px;">
+                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                            <i class="bi bi-clock-history"></i> 时间周期表现
+                        </h3>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>时间周期</th>
+                                        <th>总机会</th>
+                                        <th>已捕获</th>
+                                        <th>已错过</th>
+                                        <th>捕获率</th>
+                                        <th>上涨机会</th>
+                                        <th>上涨捕获率</th>
+                                        <th>下跌机会</th>
+                                        <th>下跌捕获率</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="timeframe-analysis-body">
+                                    <tr>
+                                        <td colspan="9" class="empty-state">暂无数据</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Miss Reasons -->
+                    <div style="margin-bottom: 32px;">
+                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                            <i class="bi bi-exclamation-triangle"></i> 主要错过原因
+                        </h3>
+                        <div id="miss-reasons-content"></div>
+                    </div>
+
+                    <!-- Symbol Performance -->
+                    <div class="analysis-grid">
+                        <div>
+                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                                <i class="bi bi-trophy"></i> 捕获率最高交易对
+                            </h3>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>交易对</th>
+                                            <th>总机会</th>
+                                            <th>已捕获</th>
+                                            <th>捕获率</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="best-symbols-body">
+                                        <tr><td colspan="4" class="empty-state">暂无数据</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                                <i class="bi bi-exclamation-circle"></i> 捕获率最低交易对
+                            </h3>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>交易对</th>
+                                            <th>总机会</th>
+                                            <th>已捕获</th>
+                                            <th>捕获率</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="worst-symbols-body">
+                                        <tr><td colspan="4" class="empty-state">暂无数据</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Summary -->
+                    <div id="opportunities-summary" style="margin-top: 24px;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -802,6 +938,202 @@
             document.getElementById('suggestionsContent').style.display = 'block';
         }
 
+        async function loadSignalAnalysis() {
+            document.getElementById('signalsLoading').style.display = 'flex';
+            document.getElementById('signalsContent').style.display = 'none';
+
+            try {
+                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                const response = await fetch(`/api/futures/review/signal-analysis?hours=${hours}&account_id=${accountId}`);
+                const result = await response.json();
+
+                if (result.success && result.data) {
+                    const data = result.data;
+                    const tbody = document.getElementById('signals-table-body');
+
+                    if (!data.signal_stats || Object.keys(data.signal_stats).length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="12" class="empty-state">暂无信号分析数据</td></tr>`;
+                    } else {
+                        // 按评分排序
+                        const sortedSignals = Object.entries(data.signal_stats).sort((a, b) => b[1].score - a[1].score);
+
+                        tbody.innerHTML = sortedSignals.map(([signalType, stats]) => `
+                            <tr>
+                                <td><span class="badge ${
+                                    stats.rating === '🌟优秀' ? 'badge-success' :
+                                    stats.rating === '✅良好' ? 'badge-info' :
+                                    stats.rating === '⚠️一般' ? 'badge-warning' : 'badge-danger'
+                                }">${stats.rating}</span></td>
+                                <td><strong>${signalType}</strong></td>
+                                <td><span class="badge badge-neutral">${stats.score}</span></td>
+                                <td>${stats.total_trades}</td>
+                                <td><span class="${stats.win_rate >= 50 ? 'pnl-positive' : 'pnl-negative'}">${stats.win_rate.toFixed(1)}%</span></td>
+                                <td>${formatPnlPct(stats.avg_pnl)}</td>
+                                <td class="pnl-positive">+${stats.best_trade.toFixed(2)}%</td>
+                                <td class="pnl-negative">${stats.worst_trade.toFixed(2)}%</td>
+                                <td><span class="badge badge-info">${stats.captured_opportunities}</span></td>
+                                <td class="text-success">${stats.long_trades}</td>
+                                <td class="text-danger">${stats.short_trades}</td>
+                                <td>${formatHoldingTime(stats.avg_holding_minutes)}</td>
+                            </tr>
+                        `).join('');
+
+                        // 显示总结
+                        if (data.summary) {
+                            document.getElementById('signals-summary').innerHTML = `
+                                <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
+                                    <div class="stat-card" style="border-left: 4px solid var(--success-green);">
+                                        <div class="stat-label">最佳信号</div>
+                                        <div class="stat-value">${data.summary.best_signal || 'N/A'}</div>
+                                        <div class="stat-change">表现最优秀的信号类型</div>
+                                    </div>
+                                    <div class="stat-card" style="border-left: 4px solid var(--danger-red);">
+                                        <div class="stat-label">需改进信号</div>
+                                        <div class="stat-value">${data.summary.worst_signal || 'N/A'}</div>
+                                        <div class="stat-change">需要优化参数或考虑禁用</div>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('加载信号分析失败:', error);
+                document.getElementById('signals-table-body').innerHTML = `
+                    <tr><td colspan="12" class="empty-state">加载失败，请稍后重试</td></tr>
+                `;
+            }
+
+            document.getElementById('signalsLoading').style.display = 'none';
+            document.getElementById('signalsContent').style.display = 'block';
+        }
+
+        async function loadOpportunityAnalysis() {
+            document.getElementById('opportunitiesLoading').style.display = 'flex';
+            document.getElementById('opportunitiesContent').style.display = 'none';
+
+            try {
+                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                const response = await fetch(`/api/futures/review/opportunity-analysis?hours=${hours}&account_id=${accountId}`);
+                const result = await response.json();
+
+                if (result.success && result.data) {
+                    const data = result.data;
+
+                    // 时间周期分析
+                    if (data.timeframe_analysis) {
+                        const tbody = document.getElementById('timeframe-analysis-body');
+                        const timeframes = ['5m', '15m', '1h'];
+
+                        tbody.innerHTML = timeframes.map(tf => {
+                            const stats = data.timeframe_analysis[tf];
+                            if (!stats) return '';
+
+                            return `
+                                <tr>
+                                    <td><strong>${tf.toUpperCase()}</strong></td>
+                                    <td>${stats.total_opportunities}</td>
+                                    <td class="pnl-positive">${stats.captured}</td>
+                                    <td class="pnl-negative">${stats.missed}</td>
+                                    <td><span class="${stats.capture_rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${stats.capture_rate.toFixed(1)}%</span></td>
+                                    <td>${stats.pumps.total}</td>
+                                    <td><span class="${stats.pumps.rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${stats.pumps.rate.toFixed(1)}%</span></td>
+                                    <td>${stats.dumps.total}</td>
+                                    <td><span class="${stats.dumps.rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${stats.dumps.rate.toFixed(1)}%</span></td>
+                                </tr>
+                            `;
+                        }).join('');
+                    }
+
+                    // 错过原因分析
+                    if (data.miss_reasons && Object.keys(data.miss_reasons).length > 0) {
+                        const sortedReasons = Object.entries(data.miss_reasons).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+
+                        document.getElementById('miss-reasons-content').innerHTML = sortedReasons.map(([reason, stats]) => `
+                            <div class="suggestion-card warning">
+                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                                    <div class="suggestion-category">${reason}</div>
+                                    <div>
+                                        <span class="badge badge-warning">${stats.count}次</span>
+                                        <span class="badge badge-neutral" style="margin-left: 8px;">平均错失${stats.avg_missed_change.toFixed(2)}%</span>
+                                    </div>
+                                </div>
+                                ${stats.examples && stats.examples.length > 0 ? `
+                                    <div class="suggestion-message" style="font-size: 12px; color: var(--text-secondary);">
+                                        示例: ${stats.examples.slice(0, 2).map(ex =>
+                                            `${ex.symbol} ${ex.time} ${ex.type.toUpperCase()} ${ex.change.toFixed(2)}%`
+                                        ).join(' | ')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('');
+                    } else {
+                        document.getElementById('miss-reasons-content').innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-text">暂无错过记录</div>
+                            </div>
+                        `;
+                    }
+
+                    // 最佳和最差交易对
+                    if (data.symbol_analysis) {
+                        const bestSymbols = data.symbol_analysis.best_symbols || [];
+                        const worstSymbols = data.symbol_analysis.worst_symbols || [];
+
+                        document.getElementById('best-symbols-body').innerHTML = bestSymbols.length > 0 ?
+                            bestSymbols.slice(0, 5).map(([symbol, stats]) => `
+                                <tr>
+                                    <td><strong>${symbol}</strong></td>
+                                    <td>${stats.total_opportunities}</td>
+                                    <td class="pnl-positive">${stats.captured}</td>
+                                    <td><span class="pnl-positive">${stats.capture_rate.toFixed(1)}%</span></td>
+                                </tr>
+                            `).join('') :
+                            `<tr><td colspan="4" class="empty-state">暂无数据</td></tr>`;
+
+                        document.getElementById('worst-symbols-body').innerHTML = worstSymbols.length > 0 ?
+                            worstSymbols.slice(0, 5).map(([symbol, stats]) => `
+                                <tr>
+                                    <td><strong>${symbol}</strong></td>
+                                    <td>${stats.total_opportunities}</td>
+                                    <td class="pnl-negative">${stats.captured}</td>
+                                    <td><span class="pnl-negative">${stats.capture_rate.toFixed(1)}%</span></td>
+                                </tr>
+                            `).join('') :
+                            `<tr><td colspan="4" class="empty-state">暂无数据</td></tr>`;
+                    }
+
+                    // 总结
+                    if (data.summary) {
+                        document.getElementById('opportunities-summary').innerHTML = `
+                            <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+                                <div class="stat-card">
+                                    <div class="stat-label">总机会数</div>
+                                    <div class="stat-value">${data.summary.total_opportunities || 0}</div>
+                                    <div class="stat-change">识别到的大行情机会</div>
+                                </div>
+                                <div class="stat-card" style="border-left: 4px solid var(--success-green);">
+                                    <div class="stat-label">最佳时间周期</div>
+                                    <div class="stat-value">${data.summary.best_timeframe ? data.summary.best_timeframe.toUpperCase() : 'N/A'}</div>
+                                    <div class="stat-change">捕获率最高</div>
+                                </div>
+                                <div class="stat-card" style="border-left: 4px solid var(--danger-red);">
+                                    <div class="stat-label">最弱时间周期</div>
+                                    <div class="stat-value">${data.summary.worst_timeframe ? data.summary.worst_timeframe.toUpperCase() : 'N/A'}</div>
+                                    <div class="stat-change">需要改进</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+            } catch (error) {
+                console.error('加载买入机会分析失败:', error);
+            }
+
+            document.getElementById('opportunitiesLoading').style.display = 'none';
+            document.getElementById('opportunitiesContent').style.display = 'block';
+        }
+
         function refreshAll() {
             hours = parseInt(document.getElementById('hours-select').value);
             // Reset page numbers when time range changes
@@ -810,6 +1142,8 @@
             loadTrades();
             loadAnalysis();
             loadSuggestions();
+            loadSignalAnalysis();
+            loadOpportunityAnalysis();
         }
 
         // Initialize
