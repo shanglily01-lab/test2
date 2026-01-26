@@ -274,9 +274,6 @@ signals:
     whitelist_symbols: []
   blacklist:
   - IP/USDT
-  - VIRTUAL/USDT
-  - LDO/USDT
-  - ATOM/USDT
   - ADA/USDT
   confidence:
     hold: 0.4
