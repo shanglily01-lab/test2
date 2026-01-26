@@ -773,10 +773,10 @@
                                 <td>
                                     ${formatPnl(item.total_pnl)}
                                 </td>
-                                <td class="pnl-positive">+${formatNumber(item.avg_win)}</td>
-                                <td class="pnl-negative">${formatNumber(item.avg_loss)}</td>
-                                <td class="pnl-positive">+${formatNumber(item.max_win)}</td>
-                                <td class="pnl-negative">${formatNumber(item.max_loss)}</td>
+                                <td>${formatPnl(item.avg_win)}</td>
+                                <td>${formatPnl(item.avg_loss)}</td>
+                                <td>${formatPnl(item.max_win)}</td>
+                                <td>${formatPnl(item.max_loss)}</td>
                             </tr>
                         `).join('');
                     }
