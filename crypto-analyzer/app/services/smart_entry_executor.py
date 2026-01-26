@@ -546,6 +546,32 @@ class SmartEntryExecutor:
             signal = plan['signal']
             batch = plan['batches'][0]  # 第1批
 
+            # ========== 防重复检查：检查是否已有相同交易对+方向的持仓 ==========
+            cursor.execute("""
+                SELECT id, status, created_at
+                FROM futures_positions
+                WHERE symbol = %s
+                AND position_side = %s
+                AND status IN ('building', 'open')
+                AND account_id = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (symbol, direction, self.account_id))
+
+            existing = cursor.fetchone()
+            if existing:
+                existing_id = existing['id']
+                existing_status = existing['status']
+                existing_time = existing['created_at']
+                logger.warning(
+                    f"⚠️ 跳过重复信号: {symbol} {direction} 已有持仓 "
+                    f"(ID:{existing_id}, 状态:{existing_status}, 创建于:{existing_time})"
+                )
+                cursor.close()
+                conn.close()
+                # 返回已存在的持仓ID，不创建新持仓
+                return existing_id
+
             # 第1批的数据
             quantity = batch['quantity']
             price = batch['price']
