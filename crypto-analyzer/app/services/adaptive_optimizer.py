@@ -16,6 +16,14 @@ from .scoring_weight_optimizer import ScoringWeightOptimizer
 class AdaptiveOptimizer:
     """自适应优化器 - 让超级大脑自我学习和改进"""
 
+    # 黑名单白名单 - 四大天王永不拉黑
+    BLACKLIST_WHITELIST = {
+        'BTC/USDT',
+        'ETH/USDT',
+        'SOL/USDT',
+        'BNB/USDT'
+    }
+
     def __init__(self, db_config: dict, config_path: str = 'config.yaml'):
         """
         初始化优化器
@@ -149,6 +157,12 @@ class AdaptiveOptimizer:
 
         for symbol_data in analysis['symbol_performance']:
             symbol = symbol_data['symbol']
+
+            # ⚠️ 白名单保护 - 四大天王永不拉黑
+            if symbol in self.BLACKLIST_WHITELIST:
+                logger.info(f"🛡️ {symbol} 在白名单中,跳过黑名单检查")
+                continue
+
             total_pnl = symbol_data['total_pnl']
             order_count = symbol_data['order_count']
             wins = symbol_data['wins']

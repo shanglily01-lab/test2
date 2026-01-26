@@ -396,3 +396,141 @@ class PriceSampler:
                 score += 15
 
         return score
+
+    def is_good_long_exit_price(self, current_price: Decimal, entry_price: float) -> Dict:
+        """
+        判断当前价格是否适合做多平仓（基于实时滚动基线）
+        目标：在高位卖出
+
+        Args:
+            current_price: 当前价格
+            entry_price: 开仓价格
+
+        Returns:
+            {'score': 0-100, 'reason': str, 'profit_pct': float}
+        """
+        baseline = self.get_current_baseline()
+
+        if not baseline:
+            return {'score': 0, 'reason': '基线未建立', 'profit_pct': 0}
+
+        price_float = float(current_price)
+        profit_pct = (price_float - entry_price) / entry_price * 100
+
+        score = 0
+        reasons = []
+
+        # 评分标准1: 价格分位数（权重70分）
+        if price_float >= baseline['p90']:
+            score += 70
+            reasons.append(f"顶部10%极佳卖点(p90={baseline['p90']:.6f})")
+        elif price_float >= baseline['p75']:
+            score += 55
+            reasons.append(f"顶部25%优秀卖点(p75={baseline['p75']:.6f})")
+        elif price_float >= baseline['p50']:
+            score += 35
+            reasons.append(f"中位数以上良好卖点(p50={baseline['p50']:.6f})")
+        elif price_float >= baseline['p25']:
+            score += 20
+            reasons.append(f"一般卖点(p25以上)")
+        else:
+            score += 5
+            reasons.append(f"底部区间较差卖点")
+
+        # 评分标准2: 盈利加分（权重30分）
+        if profit_pct >= 2.0:
+            score += 30
+            reasons.append(f"高盈利+{profit_pct:.2f}%")
+        elif profit_pct >= 1.0:
+            score += 20
+            reasons.append(f"中盈利+{profit_pct:.2f}%")
+        elif profit_pct > 0:
+            score += 10
+            reasons.append(f"微盈利+{profit_pct:.2f}%")
+        elif profit_pct < -1.0:
+            score -= 10
+            reasons.append(f"亏损{profit_pct:.2f}%")
+
+        # 评分标准3: 突破最高价加分（+15分）
+        if price_float >= baseline['max_price']:
+            score += 15
+            reasons.append(f"突破滚动最高价({baseline['max_price']:.6f})")
+
+        total_score = max(0, min(100, score))
+
+        return {
+            'score': total_score,
+            'reason': ' | '.join(reasons),
+            'profit_pct': profit_pct,
+            'current_price': price_float,
+            'baseline_updated_at': baseline['updated_at']
+        }
+
+    def is_good_short_exit_price(self, current_price: Decimal, entry_price: float) -> Dict:
+        """
+        判断当前价格是否适合做空平仓（基于实时滚动基线）
+        目标：在低位买入平仓
+
+        Args:
+            current_price: 当前价格
+            entry_price: 开仓价格
+
+        Returns:
+            {'score': 0-100, 'reason': str, 'profit_pct': float}
+        """
+        baseline = self.get_current_baseline()
+
+        if not baseline:
+            return {'score': 0, 'reason': '基线未建立', 'profit_pct': 0}
+
+        price_float = float(current_price)
+        profit_pct = (entry_price - price_float) / entry_price * 100
+
+        score = 0
+        reasons = []
+
+        # 评分标准1: 价格分位数（权重70分）
+        if price_float <= baseline['p10']:
+            score += 70
+            reasons.append(f"底部10%极佳买点(p10={baseline['p10']:.6f})")
+        elif price_float <= baseline['p25']:
+            score += 55
+            reasons.append(f"底部25%优秀买点(p25={baseline['p25']:.6f})")
+        elif price_float <= baseline['p50']:
+            score += 35
+            reasons.append(f"中位数以下良好买点(p50={baseline['p50']:.6f})")
+        elif price_float <= baseline['p75']:
+            score += 20
+            reasons.append(f"一般买点(p75以下)")
+        else:
+            score += 5
+            reasons.append(f"顶部区间较差买点")
+
+        # 评分标准2: 盈利加分（权重30分）
+        if profit_pct >= 2.0:
+            score += 30
+            reasons.append(f"高盈利+{profit_pct:.2f}%")
+        elif profit_pct >= 1.0:
+            score += 20
+            reasons.append(f"中盈利+{profit_pct:.2f}%")
+        elif profit_pct > 0:
+            score += 10
+            reasons.append(f"微盈利+{profit_pct:.2f}%")
+        elif profit_pct < -1.0:
+            score -= 10
+            reasons.append(f"亏损{profit_pct:.2f}%")
+
+        # 评分标准3: 跌破最低价加分（+15分）
+        if price_float <= baseline['min_price']:
+            score += 15
+            reasons.append(f"跌破滚动最低价({baseline['min_price']:.6f})")
+
+        total_score = max(0, min(100, score))
+
+        return {
+            'score': total_score,
+            'reason': ' | '.join(reasons),
+            'profit_pct': profit_pct,
+            'current_price': price_float,
+            'baseline_updated_at': baseline['updated_at']
+        }

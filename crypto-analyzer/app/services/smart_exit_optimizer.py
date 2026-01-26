@@ -1,6 +1,6 @@
 """
 智能平仓优化器
-基于实时价格监控的分层平仓策略
+基于实时价格监控的智能分批平仓策略
 """
 import asyncio
 from datetime import datetime, timedelta
@@ -10,9 +10,11 @@ from loguru import logger
 import mysql.connector
 from mysql.connector import pooling
 
+from app.services.price_sampler import PriceSampler
+
 
 class SmartExitOptimizer:
-    """智能平仓优化器（基于实时价格监控）"""
+    """智能平仓优化器（基于实时价格监控 + 智能分批平仓）"""
 
     def __init__(self, db_config: dict, live_engine, price_service):
         """
@@ -37,6 +39,9 @@ class SmartExitOptimizer:
 
         # 监控状态
         self.monitoring_tasks: Dict[str, asyncio.Task] = {}  # position_id -> task
+
+        # 智能平仓计划（分批平仓）
+        self.exit_plans: Dict[int, Dict] = {}  # position_id -> exit_plan
 
     async def start_monitoring_position(self, position_id: int):
         """
@@ -97,17 +102,26 @@ class SmartExitOptimizer:
                 # 更新最高盈利记录
                 await self._update_max_profit(position_id, profit_info)
 
-                # 检查是否需要平仓
+                # 检查兜底平仓条件（超高盈利/巨额亏损）
                 should_close, reason = await self._check_exit_conditions(
                     position, current_price, profit_info
                 )
 
                 if should_close:
                     logger.info(
-                        f"🚨 触发平仓条件: 持仓{position_id} {position['symbol']} "
+                        f"🚨 触发兜底平仓: 持仓{position_id} {position['symbol']} "
                         f"{position['direction']} | {reason}"
                     )
                     await self._execute_close(position_id, current_price, reason)
+                    break
+
+                # 检查智能分批平仓
+                exit_completed = await self._smart_batch_exit(
+                    position_id, position, current_price, profit_info
+                )
+
+                if exit_completed:
+                    logger.info(f"✅ 智能分批平仓完成: 持仓{position_id}")
                     break
 
                 await asyncio.sleep(1)  # 每秒检查一次（实时监控）
@@ -335,57 +349,470 @@ class SmartExitOptimizer:
                 if current_price <= take_profit_price:
                     return True, f"止盈(价格{current_price:.8f} <= 止盈价{take_profit_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
-        # ========== 检查时间：只在计划平仓前30分钟才开始检查智能平仓条件 ==========
+        # ========== 智能分批平仓逻辑（计划平仓前30分钟）==========
         planned_close_time = position['planned_close_time']
-        close_extended = position['close_extended']
         now = datetime.now()
-
-        # 计划平仓前30分钟
         monitoring_start_time = planned_close_time - timedelta(minutes=30)
 
-        # 如果还未到监控时间（距离计划平仓还有30分钟以上），只检查止损止盈，不检查其他条件
+        # 如果还未到监控时间，只检查止损止盈
         if now < monitoring_start_time:
             return False, ""
 
-        # ========== 到达监控时间后，开始检查分层平仓逻辑 ==========
+        # ========== 到达监控窗口，使用智能分批平仓 ==========
+        # 注意：这里不再直接返回平仓决策
+        # 而是在 _monitor_position 中调用 _smart_batch_exit 处理分批平仓
+        # 这个方法现在主要用于兜底逻辑
 
-        # 层级1: 当前盈利 ≥ 3%，且回撤 ≥ 0.5% → 平仓（修复：检查当前盈利而不是历史最高）
-        if profit_pct >= 3.0 and drawback >= 0.5:
-            return True, f"高盈利回撤止盈(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
+        # 兜底逻辑1: 超高盈利立即全部平仓
+        if profit_pct >= 5.0:
+            return True, f"超高盈利全部平仓(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
-        # 层级2: 当前盈利 1-3%，且回撤 ≥ 0.4% → 平仓（修复：检查当前盈利而不是历史最高）
-        if profit_pct >= 1.0 and profit_pct < 3.0 and drawback >= 0.4:
-            return True, f"中盈利回撤止盈(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
+        # 兜底逻辑2: 巨额亏损立即全部平仓
+        if profit_pct <= -3.0:
+            return True, f"巨额亏损全部平仓(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
-        # 层级3: 盈利 ≥ 1%，立即平仓（保住利润）
-        if profit_pct >= 1.0:
-            return True, f"盈利止盈(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
-
-        # 层级4: 微亏损（-0.5% ~ 0%）或微盈利（0-1%），根据时间决策
-        if -0.5 <= profit_pct < 1.0:
-            # 到达监控时间但未到计划时间，检查是否需要延长
-            if now >= monitoring_start_time and now < planned_close_time and not close_extended:
-                # 继续持有，等待到达计划平仓时间
-                return False, ""
-
-            # 到达计划平仓时间，延长30分钟
-            if now >= planned_close_time and not close_extended:
-                await self._extend_close_time(position['id'], 30)
-                return False, "延长平仓时间30分钟（微盈利/微亏损）"
-
-            # 如果已经延长过，检查延长后的时间
-            if close_extended:
-                extended_close_time = position['extended_close_time']
-                if now >= extended_close_time:
-                    return True, f"延长时间已到，强制平仓(价格变化{profit_pct:+.2f}%, ROI {roi_pct:+.2f}%)"
-
-        # 层级5: 亏损 > 0.5%，到达计划时间直接平仓
-        if profit_pct < -0.5:
-            if now >= planned_close_time:
-                return True, f"计划平仓时间已到(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
-
-        # 默认：不平仓
+        # 默认：不平仓（由智能分批平仓处理）
         return False, ""
+
+    async def _smart_batch_exit(
+        self,
+        position_id: int,
+        position: Dict,
+        current_price: Decimal,
+        profit_info: Dict
+    ) -> bool:
+        """
+        智能分批平仓逻辑（计划平仓前30分钟）
+
+        策略：
+        1. 进入监控窗口后，启动价格基线采样器
+        2. 分2批平仓（50% + 50%）
+        3. 第1批：在价格好的时候先锁定一半利润
+        4. 第2批：等待更优价格或超时平仓
+
+        Args:
+            position_id: 持仓ID
+            position: 持仓信息
+            current_price: 当前价格
+            profit_info: 盈亏信息
+
+        Returns:
+            是否完成全部平仓
+        """
+        planned_close_time = position['planned_close_time']
+        now = datetime.now()
+        monitoring_start_time = planned_close_time - timedelta(minutes=30)
+
+        # 如果还未到监控时间，直接返回
+        if now < monitoring_start_time:
+            return False
+
+        # 初始化平仓计划（第一次进入监控窗口）
+        if position_id not in self.exit_plans:
+            logger.info(
+                f"🎯 {position['symbol']} 进入智能分批平仓窗口（30分钟） | "
+                f"当前盈亏: {profit_info['profit_pct']:.2f}%"
+            )
+
+            # 启动价格基线采样器
+            sampler = PriceSampler(position['symbol'], self.price_service, window_seconds=300)
+            sampling_task = asyncio.create_task(sampler.start_background_sampling())
+
+            # 创建平仓计划
+            exit_plan = {
+                'symbol': position['symbol'],
+                'direction': position['direction'],
+                'entry_price': float(position['avg_entry_price']),
+                'total_quantity': float(position['position_size']),
+                'monitoring_start_time': monitoring_start_time,
+                'batches': [
+                    {'ratio': 0.5, 'filled': False, 'price': None, 'time': None, 'reason': None},
+                    {'ratio': 0.5, 'filled': False, 'price': None, 'time': None, 'reason': None},
+                ],
+                'sampler': sampler,
+                'sampling_task': sampling_task,
+                'baseline_built': False
+            }
+
+            self.exit_plans[position_id] = exit_plan
+
+            # 等待5分钟建立基线
+            logger.info(f"📊 {position['symbol']} 等待5分钟建立平仓价格基线...")
+
+        exit_plan = self.exit_plans[position_id]
+        sampler = exit_plan['sampler']
+
+        # 等待基线建立
+        if not exit_plan['baseline_built']:
+            if sampler.initial_baseline_built:
+                exit_plan['baseline_built'] = True
+                baseline = sampler.get_current_baseline()
+                logger.info(
+                    f"✅ {position['symbol']} 平仓基线建立: "
+                    f"范围 {baseline['min_price']:.6f} - {baseline['max_price']:.6f}"
+                )
+            else:
+                # 基线还未建立，继续等待
+                return False
+
+        baseline = sampler.get_current_baseline()
+        if not baseline:
+            return False
+
+        elapsed_minutes = (now - exit_plan['monitoring_start_time']).total_seconds() / 60
+
+        # ========== 第1批平仓判断（50%）==========
+        if not exit_plan['batches'][0]['filled']:
+            should_exit, reason = await self._should_exit_batch1(
+                position, current_price, baseline, exit_plan['entry_price'], elapsed_minutes
+            )
+
+            if should_exit:
+                await self._execute_partial_close(
+                    position_id, position, current_price, 0.5, reason
+                )
+                exit_plan['batches'][0]['filled'] = True
+                exit_plan['batches'][0]['price'] = float(current_price)
+                exit_plan['batches'][0]['time'] = datetime.now()
+                exit_plan['batches'][0]['reason'] = reason
+
+                logger.info(
+                    f"✅ 第1批平仓完成(50%): {position['symbol']} @ {current_price:.6f} | {reason}"
+                )
+
+        # ========== 第2批平仓判断（剩余50%）==========
+        elif not exit_plan['batches'][1]['filled']:
+            batch1_price = exit_plan['batches'][0]['price']
+
+            should_exit, reason = await self._should_exit_batch2(
+                position, current_price, baseline, exit_plan['entry_price'],
+                batch1_price, elapsed_minutes
+            )
+
+            if should_exit:
+                await self._execute_partial_close(
+                    position_id, position, current_price, 1.0, reason  # 平掉剩余全部
+                )
+                exit_plan['batches'][1]['filled'] = True
+                exit_plan['batches'][1]['price'] = float(current_price)
+                exit_plan['batches'][1]['time'] = datetime.now()
+                exit_plan['batches'][1]['reason'] = reason
+
+                logger.info(
+                    f"✅ 第2批平仓完成(50%): {position['symbol']} @ {current_price:.6f} | {reason}"
+                )
+
+                # 计算平均平仓价
+                avg_exit_price = (
+                    exit_plan['batches'][0]['price'] * 0.5 +
+                    exit_plan['batches'][1]['price'] * 0.5
+                )
+                logger.info(
+                    f"🎉 智能分批平仓完成: {position['symbol']} | "
+                    f"平均平仓价: {avg_exit_price:.6f} | "
+                    f"第1批: {exit_plan['batches'][0]['price']:.6f} | "
+                    f"第2批: {exit_plan['batches'][1]['price']:.6f}"
+                )
+
+                # 停止采样器
+                sampler.stop_sampling()
+                exit_plan['sampling_task'].cancel()
+
+                # 清理平仓计划
+                del self.exit_plans[position_id]
+
+                return True  # 完成全部平仓
+
+        return False  # 未完成全部平仓
+
+    async def _should_exit_batch1(
+        self,
+        position: Dict,
+        current_price: Decimal,
+        baseline: Dict,
+        entry_price: float,
+        elapsed_minutes: float
+    ) -> tuple[bool, str]:
+        """
+        第1批平仓判断（50%）
+
+        条件：在价格好的时候先锁定一半利润
+
+        Returns:
+            (是否平仓, 原因)
+        """
+        direction = position['direction']
+
+        if direction == 'LONG':
+            # 使用 PriceSampler 的评分系统
+            exit_plan = self.exit_plans[position['id']]
+            sampler = exit_plan['sampler']
+            evaluation = sampler.is_good_long_exit_price(current_price, entry_price)
+
+            # 条件1: 极佳卖点（评分 >= 95分）
+            if evaluation['score'] >= 95:
+                return True, f"极佳卖点(评分{evaluation['score']}): {evaluation['reason']}"
+
+            # 条件2: 优秀卖点 + 有盈利（评分 >= 85分，盈利 > 0）
+            if evaluation['score'] >= 85 and evaluation['profit_pct'] > 0:
+                return True, f"优秀卖点(评分{evaluation['score']}, 盈利{evaluation['profit_pct']:.2f}%)"
+
+            # 条件3: 突破基线最高价（冲高机会）
+            if float(current_price) >= baseline['max_price'] * 1.001:
+                return True, f"突破基线最高价({baseline['max_price']:.6f})"
+
+            # 条件4: 盈利 >= 2% + 价格在P50以上
+            if evaluation['profit_pct'] >= 2.0 and float(current_price) >= baseline['p50']:
+                return True, f"高盈利(+{evaluation['profit_pct']:.2f}%) + 价格在中位数以上"
+
+            # 条件5: 强下跌趋势预警（趋势转向，快速止盈）
+            if baseline['trend']['direction'] == 'down' and baseline['trend']['strength'] > 0.6:
+                if evaluation['profit_pct'] >= 0.5:  # 有盈利就跑
+                    return True, f"强下跌趋势预警，快速止盈(+{evaluation['profit_pct']:.2f}%)"
+
+            # 条件6: 时间兜底（距离计划平仓还有10分钟，评分 >= 60分）
+            if elapsed_minutes >= 20 and evaluation['score'] >= 60:
+                return True, f"接近平仓时间(已{elapsed_minutes:.0f}分钟)，评分{evaluation['score']}"
+
+        else:  # SHORT
+            exit_plan = self.exit_plans[position['id']]
+            sampler = exit_plan['sampler']
+            evaluation = sampler.is_good_short_exit_price(current_price, entry_price)
+
+            # 条件1: 极佳买点（评分 >= 95分）
+            if evaluation['score'] >= 95:
+                return True, f"极佳买点(评分{evaluation['score']}): {evaluation['reason']}"
+
+            # 条件2: 优秀买点 + 有盈利
+            if evaluation['score'] >= 85 and evaluation['profit_pct'] > 0:
+                return True, f"优秀买点(评分{evaluation['score']}, 盈利{evaluation['profit_pct']:.2f}%)"
+
+            # 条件3: 跌破基线最低价
+            if float(current_price) <= baseline['min_price'] * 0.999:
+                return True, f"跌破基线最低价({baseline['min_price']:.6f})"
+
+            # 条件4: 盈利 >= 2% + 价格在P50以下
+            if evaluation['profit_pct'] >= 2.0 and float(current_price) <= baseline['p50']:
+                return True, f"高盈利(+{evaluation['profit_pct']:.2f}%) + 价格在中位数以下"
+
+            # 条件5: 强上涨趋势预警
+            if baseline['trend']['direction'] == 'up' and baseline['trend']['strength'] > 0.6:
+                if evaluation['profit_pct'] >= 0.5:
+                    return True, f"强上涨趋势预警，快速止盈(+{evaluation['profit_pct']:.2f}%)"
+
+            # 条件6: 时间兜底
+            if elapsed_minutes >= 20 and evaluation['score'] >= 60:
+                return True, f"接近平仓时间(已{elapsed_minutes:.0f}分钟)，评分{evaluation['score']}"
+
+        return False, ""
+
+    async def _should_exit_batch2(
+        self,
+        position: Dict,
+        current_price: Decimal,
+        baseline: Dict,
+        entry_price: float,
+        batch1_price: float,
+        elapsed_minutes: float
+    ) -> tuple[bool, str]:
+        """
+        第2批平仓判断（剩余50%）
+
+        条件：等待比第1批更优的价格或超时平仓
+
+        Returns:
+            (是否平仓, 原因)
+        """
+        direction = position['direction']
+
+        if direction == 'LONG':
+            exit_plan = self.exit_plans[position['id']]
+            sampler = exit_plan['sampler']
+            evaluation = sampler.is_good_long_exit_price(current_price, entry_price)
+
+            # 条件1: 价格比第1批高（更优卖点）
+            if float(current_price) >= batch1_price * 1.002:  # 高0.2%以上
+                return True, f"更优卖点(比第1批高{((float(current_price)/batch1_price-1)*100):.2f}%)"
+
+            # 条件2: 极佳卖点（评分 >= 95分）
+            if evaluation['score'] >= 95:
+                return True, f"极佳卖点(评分{evaluation['score']})"
+
+            # 条件3: 突破新高（比基线最高价还高）
+            if float(current_price) >= baseline['max_price'] * 1.002:
+                return True, f"突破新高({baseline['max_price']:.6f})"
+
+            # 条件4: 价格接近第1批（在-0.2%以内）+ 评分良好
+            if float(current_price) >= batch1_price * 0.998 and evaluation['score'] >= 70:
+                return True, f"价格接近第1批(评分{evaluation['score']})"
+
+            # 条件5: 时间兜底（距离计划平仓还有5分钟）
+            if elapsed_minutes >= 25:
+                return True, f"接近截止时间(已{elapsed_minutes:.0f}分钟)，强制平仓"
+
+            # 条件6: 强制平仓（计划时间已到）
+            if elapsed_minutes >= 30:
+                return True, f"计划平仓时间已到，强制执行"
+
+        else:  # SHORT
+            exit_plan = self.exit_plans[position['id']]
+            sampler = exit_plan['sampler']
+            evaluation = sampler.is_good_short_exit_price(current_price, entry_price)
+
+            # 条件1: 价格比第1批低（更优买点）
+            if float(current_price) <= batch1_price * 0.998:
+                return True, f"更优买点(比第1批低{((1-float(current_price)/batch1_price)*100):.2f}%)"
+
+            # 条件2: 极佳买点
+            if evaluation['score'] >= 95:
+                return True, f"极佳买点(评分{evaluation['score']})"
+
+            # 条件3: 跌破新低
+            if float(current_price) <= baseline['min_price'] * 0.998:
+                return True, f"跌破新低({baseline['min_price']:.6f})"
+
+            # 条件4: 价格接近第1批 + 评分良好
+            if float(current_price) <= batch1_price * 1.002 and evaluation['score'] >= 70:
+                return True, f"价格接近第1批(评分{evaluation['score']})"
+
+            # 条件5-6: 时间兜底
+            if elapsed_minutes >= 25:
+                return True, f"接近截止时间(已{elapsed_minutes:.0f}分钟)，强制平仓"
+
+            if elapsed_minutes >= 30:
+                return True, f"计划平仓时间已到，强制执行"
+
+        return False, ""
+
+    async def _execute_partial_close(
+        self,
+        position_id: int,
+        position: Dict,
+        current_price: Decimal,
+        close_ratio: float,
+        reason: str
+    ):
+        """
+        执行部分平仓
+
+        Args:
+            position_id: 持仓ID
+            position: 持仓信息
+            current_price: 当前价格
+            close_ratio: 平仓比例（0.5=平50%, 1.0=平剩余全部）
+            reason: 平仓原因
+        """
+        try:
+            # 计算平仓数量
+            remaining_quantity = float(position['position_size'])
+
+            # 如果是第2批，检查已平仓的数量
+            if position_id in self.exit_plans:
+                exit_plan = self.exit_plans[position_id]
+                if exit_plan['batches'][0]['filled']:
+                    # 第1批已平仓，计算剩余数量
+                    remaining_quantity = exit_plan['total_quantity'] * 0.5
+
+            close_quantity = remaining_quantity * close_ratio
+
+            logger.info(
+                f"🔴 执行部分平仓({close_ratio*100:.0f}%): 持仓{position_id} {position['symbol']} "
+                f"{position['direction']} | 数量{close_quantity:.8f} | 价格{current_price} | {reason}"
+            )
+
+            # 调用实盘引擎执行部分平仓
+            close_result = await self.live_engine.close_position(
+                symbol=position['symbol'],
+                direction=position['direction'],
+                position_size=close_quantity,
+                reason=reason
+            )
+
+            if close_result['success']:
+                # 更新数据库（减少持仓数量）
+                await self._update_position_partial_close(
+                    position_id,
+                    close_quantity,
+                    float(current_price),
+                    reason
+                )
+
+                logger.info(f"✅ 部分平仓成功: 持仓{position_id} 平仓{close_quantity:.8f}")
+            else:
+                logger.error(f"部分平仓失败: 持仓{position_id} | {close_result.get('error')}")
+
+        except Exception as e:
+            logger.error(f"执行部分平仓异常: {e}")
+
+    async def _update_position_partial_close(
+        self,
+        position_id: int,
+        close_quantity: float,
+        close_price: float,
+        close_reason: str
+    ):
+        """
+        更新持仓记录（部分平仓）
+
+        Args:
+            position_id: 持仓ID
+            close_quantity: 平仓数量
+            close_price: 平仓价格
+            close_reason: 平仓原因
+        """
+        try:
+            conn = self.db_pool.get_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            # 获取当前持仓数量
+            cursor.execute("""
+                SELECT quantity, notes
+                FROM futures_positions
+                WHERE id = %s
+            """, (position_id,))
+
+            result = cursor.fetchone()
+            if not result:
+                return
+
+            current_quantity = float(result['quantity'])
+            current_notes = result['notes'] or ''
+
+            # 计算剩余数量
+            remaining_quantity = current_quantity - close_quantity
+
+            # 更新持仓数量和备注
+            new_notes = f"{current_notes}\n部分平仓: {close_quantity:.8f} @ {close_price:.6f} - {close_reason}" if current_notes else f"部分平仓: {close_quantity:.8f} @ {close_price:.6f} - {close_reason}"
+
+            if remaining_quantity <= 0.0001:  # 全部平仓
+                cursor.execute("""
+                    UPDATE futures_positions
+                    SET
+                        quantity = 0,
+                        status = 'closed',
+                        close_time = %s,
+                        notes = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, (datetime.now(), new_notes, position_id))
+            else:  # 部分平仓
+                cursor.execute("""
+                    UPDATE futures_positions
+                    SET
+                        quantity = %s,
+                        notional_value = quantity * avg_entry_price,
+                        notes = %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, (remaining_quantity, new_notes, position_id))
+
+            conn.commit()
+
+            cursor.close()
+            conn.close()
+
+        except Exception as e:
+            logger.error(f"更新部分平仓状态失败: {e}")
 
     async def _extend_close_time(self, position_id: int, extend_minutes: int):
         """
