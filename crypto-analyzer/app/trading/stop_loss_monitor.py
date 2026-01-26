@@ -158,8 +158,7 @@ class StopLossMonitor:
                 strategy_id,
                 batch_plan
             FROM futures_positions
-            WHERE status = 'open'
-            AND (batch_plan IS NULL OR batch_plan = '')
+            WHERE status IN ('open', 'building')
             """
 
             params = []

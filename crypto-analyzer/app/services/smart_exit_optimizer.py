@@ -137,7 +137,8 @@ class SmartExitOptimizer:
                     avg_entry_price, quantity as position_size,
                     entry_signal_time, planned_close_time,
                     close_extended, extended_close_time,
-                    max_profit_pct, max_profit_price, max_profit_time
+                    max_profit_pct, max_profit_price, max_profit_time,
+                    stop_loss_price, take_profit_price, leverage
                 FROM futures_positions
                 WHERE id = %s
             """, (position_id,))
@@ -298,7 +299,39 @@ class SmartExitOptimizer:
         # 计算当前回撤（从最高点）
         drawback = max_profit_pct - profit_pct
 
-        # ========== 首先检查时间：只在计划平仓前30分钟才开始检查平仓条件 ==========
+        # ========== 优先级最高：止损止盈检查（任何时候都检查） ==========
+
+        # 检查止损价格
+        stop_loss_price = position.get('stop_loss_price')
+        if stop_loss_price and float(stop_loss_price) > 0:
+            stop_loss_price = Decimal(str(stop_loss_price))
+            direction = position['direction']
+
+            if direction == 'LONG':
+                # 多头：当前价格 <= 止损价
+                if current_price <= stop_loss_price:
+                    return True, f"止损(价格{current_price:.8f} <= 止损价{stop_loss_price:.8f}, 亏损{profit_pct:.2f}%)"
+            else:  # SHORT
+                # 空头：当前价格 >= 止损价
+                if current_price >= stop_loss_price:
+                    return True, f"止损(价格{current_price:.8f} >= 止损价{stop_loss_price:.8f}, 亏损{profit_pct:.2f}%)"
+
+        # 检查止盈价格
+        take_profit_price = position.get('take_profit_price')
+        if take_profit_price and float(take_profit_price) > 0:
+            take_profit_price = Decimal(str(take_profit_price))
+            direction = position['direction']
+
+            if direction == 'LONG':
+                # 多头：当前价格 >= 止盈价
+                if current_price >= take_profit_price:
+                    return True, f"止盈(价格{current_price:.8f} >= 止盈价{take_profit_price:.8f}, 盈利{profit_pct:.2f}%)"
+            else:  # SHORT
+                # 空头：当前价格 <= 止盈价
+                if current_price <= take_profit_price:
+                    return True, f"止盈(价格{current_price:.8f} <= 止盈价{take_profit_price:.8f}, 盈利{profit_pct:.2f}%)"
+
+        # ========== 检查时间：只在计划平仓前30分钟才开始检查智能平仓条件 ==========
         planned_close_time = position['planned_close_time']
         close_extended = position['close_extended']
         now = datetime.now()
@@ -306,19 +339,19 @@ class SmartExitOptimizer:
         # 计划平仓前30分钟
         monitoring_start_time = planned_close_time - timedelta(minutes=30)
 
-        # 如果还未到监控时间（距离计划平仓还有30分钟以上），不检查任何平仓条件
+        # 如果还未到监控时间（距离计划平仓还有30分钟以上），只检查止损止盈，不检查其他条件
         if now < monitoring_start_time:
             return False, ""
 
         # ========== 到达监控时间后，开始检查分层平仓逻辑 ==========
 
-        # 层级1: 盈利 ≥ 3%，回撤 ≥ 0.5% → 平仓
-        if max_profit_pct >= 3.0 and drawback >= 0.5:
-            return True, f"高盈利回撤止盈(盈利{profit_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
+        # 层级1: 当前盈利 ≥ 3%，且回撤 ≥ 0.5% → 平仓（修复：检查当前盈利而不是历史最高）
+        if profit_pct >= 3.0 and drawback >= 0.5:
+            return True, f"高盈利回撤止盈(当前盈利{profit_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
 
-        # 层级2: 盈利 1-3%，回撤 ≥ 0.4% → 平仓
-        if max_profit_pct >= 1.0 and max_profit_pct < 3.0 and drawback >= 0.4:
-            return True, f"中盈利回撤止盈(盈利{profit_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
+        # 层级2: 当前盈利 1-3%，且回撤 ≥ 0.4% → 平仓（修复：检查当前盈利而不是历史最高）
+        if profit_pct >= 1.0 and profit_pct < 3.0 and drawback >= 0.4:
+            return True, f"中盈利回撤止盈(当前盈利{profit_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
 
         # 层级3: 盈利 ≥ 1%，立即平仓（保住利润）
         if profit_pct >= 1.0:
