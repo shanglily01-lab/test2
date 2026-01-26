@@ -610,7 +610,7 @@ async def get_review_trades(
             SELECT
                 id, symbol, position_side, leverage,
                 quantity, entry_price, mark_price as close_price,
-                realized_pnl, unrealized_pnl_pct as pnl_pct,
+                realized_pnl, margin,
                 holding_hours, entry_reason, notes as close_reason,
                 open_time, close_time, entry_signal_type, status
             FROM futures_positions
@@ -641,6 +641,11 @@ async def get_review_trades(
                 delta = pos['close_time'] - pos['open_time']
                 holding_minutes = int(delta.total_seconds() / 60)
 
+            # 计算ROI (realized_pnl / margin * 100%)
+            realized_pnl = float(pos['realized_pnl'] or 0)
+            margin = float(pos['margin'] or 0)
+            pnl_pct = (realized_pnl / margin * 100) if margin > 0 else 0
+
             trades.append({
                 "id": pos['id'],
                 "symbol": pos['symbol'],
@@ -650,8 +655,8 @@ async def get_review_trades(
                 "quantity": float(pos['quantity']),
                 "entry_price": float(pos['entry_price']),
                 "close_price": float(pos['close_price']) if pos['close_price'] else None,
-                "realized_pnl": float(pos['realized_pnl'] or 0),
-                "pnl_pct": float(pos['pnl_pct'] or 0),
+                "realized_pnl": realized_pnl,
+                "pnl_pct": pnl_pct,
                 "holding_minutes": holding_minutes,
                 "entry_reason_code": entry_reason_code,
                 "entry_reason_cn": entry_reason_cn,

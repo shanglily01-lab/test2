@@ -296,6 +296,10 @@ class SmartExitOptimizer:
         profit_pct = profit_info['profit_pct']
         max_profit_pct = float(position['max_profit_pct']) if position['max_profit_pct'] else 0.0
 
+        # 计算ROI（相对保证金的收益率）
+        leverage = float(position.get('leverage', 1))
+        roi_pct = profit_pct * leverage
+
         # 计算当前回撤（从最高点）
         drawback = max_profit_pct - profit_pct
 
@@ -310,11 +314,11 @@ class SmartExitOptimizer:
             if direction == 'LONG':
                 # 多头：当前价格 <= 止损价
                 if current_price <= stop_loss_price:
-                    return True, f"止损(价格{current_price:.8f} <= 止损价{stop_loss_price:.8f}, 亏损{profit_pct:.2f}%)"
+                    return True, f"止损(价格{current_price:.8f} <= 止损价{stop_loss_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
             else:  # SHORT
                 # 空头：当前价格 >= 止损价
                 if current_price >= stop_loss_price:
-                    return True, f"止损(价格{current_price:.8f} >= 止损价{stop_loss_price:.8f}, 亏损{profit_pct:.2f}%)"
+                    return True, f"止损(价格{current_price:.8f} >= 止损价{stop_loss_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
         # 检查止盈价格
         take_profit_price = position.get('take_profit_price')
@@ -325,11 +329,11 @@ class SmartExitOptimizer:
             if direction == 'LONG':
                 # 多头：当前价格 >= 止盈价
                 if current_price >= take_profit_price:
-                    return True, f"止盈(价格{current_price:.8f} >= 止盈价{take_profit_price:.8f}, 盈利{profit_pct:.2f}%)"
+                    return True, f"止盈(价格{current_price:.8f} >= 止盈价{take_profit_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
             else:  # SHORT
                 # 空头：当前价格 <= 止盈价
                 if current_price <= take_profit_price:
-                    return True, f"止盈(价格{current_price:.8f} <= 止盈价{take_profit_price:.8f}, 盈利{profit_pct:.2f}%)"
+                    return True, f"止盈(价格{current_price:.8f} <= 止盈价{take_profit_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
         # ========== 检查时间：只在计划平仓前30分钟才开始检查智能平仓条件 ==========
         planned_close_time = position['planned_close_time']
@@ -347,15 +351,15 @@ class SmartExitOptimizer:
 
         # 层级1: 当前盈利 ≥ 3%，且回撤 ≥ 0.5% → 平仓（修复：检查当前盈利而不是历史最高）
         if profit_pct >= 3.0 and drawback >= 0.5:
-            return True, f"高盈利回撤止盈(当前盈利{profit_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
+            return True, f"高盈利回撤止盈(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
 
         # 层级2: 当前盈利 1-3%，且回撤 ≥ 0.4% → 平仓（修复：检查当前盈利而不是历史最高）
         if profit_pct >= 1.0 and profit_pct < 3.0 and drawback >= 0.4:
-            return True, f"中盈利回撤止盈(当前盈利{profit_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
+            return True, f"中盈利回撤止盈(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%, 最高{max_profit_pct:.2f}%, 回撤{drawback:.2f}%)"
 
         # 层级3: 盈利 ≥ 1%，立即平仓（保住利润）
         if profit_pct >= 1.0:
-            return True, f"盈利止盈(盈利{profit_pct:.2f}%)"
+            return True, f"盈利止盈(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
         # 层级4: 微亏损（-0.5% ~ 0%）或微盈利（0-1%），根据时间决策
         if -0.5 <= profit_pct < 1.0:
@@ -373,12 +377,12 @@ class SmartExitOptimizer:
             if close_extended:
                 extended_close_time = position['extended_close_time']
                 if now >= extended_close_time:
-                    return True, f"延长时间已到，强制平仓(盈亏{profit_pct:+.2f}%)"
+                    return True, f"延长时间已到，强制平仓(价格变化{profit_pct:+.2f}%, ROI {roi_pct:+.2f}%)"
 
         # 层级5: 亏损 > 0.5%，到达计划时间直接平仓
         if profit_pct < -0.5:
             if now >= planned_close_time:
-                return True, f"计划平仓时间已到(亏损{profit_pct:.2f}%)"
+                return True, f"计划平仓时间已到(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
         # 默认：不平仓
         return False, ""
