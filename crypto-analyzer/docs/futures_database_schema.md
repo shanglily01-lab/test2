@@ -1,9 +1,11 @@
 # 模拟合约交易数据库表结构
 
 > 数据库: binance-data
-> 更新日期: 2026-01-22
+> 更新日期: 2026-01-26
 >
 > **重要更新**:
+> - 2026-01-26: 添加每日复盘系统相关表（复盘报告、机会详情、信号分析、参数调整）
+> - 2026-01-26: 添加现货交易系统表（spot_positions）
 > - 2026-01-22: 添加超级大脑相关表结构（信号评分、组件性能分析）
 > - 2026-01-22: 更新 futures_positions 新增字段（entry_score, signal_components）
 > - 2026-01-16: 新增盈利保护平仓原因代码（profit_protect_*）
@@ -27,13 +29,20 @@ paper_trading_accounts (账户)
     │                              └── futures_trades (成交)
     ├── paper_trading_balance_history (余额历史)
     ├── trading_strategies (策略配置)
-    └── 超级大脑信号系统
-        ├── ema_signals (EMA信号)
-        ├── paper_trading_signal_executions (信号执行记录)
-        ├── signal_blacklist (信号黑名单)
-        ├── signal_component_performance (组件性能)
-        ├── signal_position_multipliers (仓位倍数)
-        └── signal_scoring_weights (评分权重)
+    ├── 超级大脑信号系统
+    │   ├── ema_signals (EMA信号)
+    │   ├── paper_trading_signal_executions (信号执行记录)
+    │   ├── signal_blacklist (信号黑名单)
+    │   ├── signal_component_performance (组件性能)
+    │   ├── signal_position_multipliers (仓位倍数)
+    │   └── signal_scoring_weights (评分权重)
+    ├── 每日复盘系统 ⚡ 新增 2026-01-26
+    │   ├── daily_review_reports (复盘报告主表)
+    │   ├── daily_review_opportunities (机会详情表)
+    │   ├── daily_review_signal_analysis (信号分析表)
+    │   └── parameter_adjustments (参数调整历史)
+    └── 现货交易系统 ⚡ 新增 2026-01-26
+        └── spot_positions (现货持仓表)
 ```
 
 ---
@@ -495,3 +504,302 @@ close_reason: hard_stop_loss|pnl:-5.02%
 5. **仓位调整**: `signal_position_multipliers` 根据表现调整仓位
 6. **执行记录**: `paper_trading_signal_executions` 记录执行过程
 7. **持仓管理**: 将评分和组件信息存入 `futures_positions` 的 `entry_score` 和 `signal_components` 字段
+
+---
+
+## 13. daily_review_reports (每日复盘报告主表) ⚡ 新增 2026-01-26
+
+存储每日复盘报告的汇总信息和完整JSON数据。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| date | date | 复盘日期，唯一索引 |
+| report_json | mediumtext | 完整报告JSON数据 |
+| total_opportunities | int(11) | 总机会数 |
+| captured_count | int(11) | 已捕获机会数 |
+| missed_count | int(11) | 错过机会数 |
+| capture_rate | float | 捕获率（百分比） |
+| created_at | timestamp | 创建时间 |
+| updated_at | timestamp | 更新时间 |
+
+**索引**:
+- UNIQUE KEY `unique_date` (date)
+- INDEX `idx_date` (date)
+- INDEX `idx_capture_rate` (capture_rate)
+
+**用途**:
+- 按日期查询复盘报告
+- 追踪捕获率趋势
+- 存储完整复盘分析结果
+
+---
+
+## 14. daily_review_opportunities (机会详情表) ⚡ 新增 2026-01-26
+
+存储每个识别到的大行情机会的详细信息。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| review_date | date | 复盘日期 |
+| symbol | varchar(20) | 交易对，如 BTC/USDT |
+| timeframe | varchar(10) | 时间周期：5m/15m/1h |
+| move_type | varchar(10) | 机会类型：pump(上涨)/dump(下跌) |
+| start_time | datetime | 机会开始时间 |
+| end_time | datetime | 机会结束时间 |
+| price_change_pct | float | 价格变化百分比 |
+| volume_ratio | float | 成交量倍数 |
+| captured | boolean | 是否被系统捕获 |
+| capture_delay_minutes | int(11) | 捕获延迟（分钟），NULL表示未捕获 |
+| signal_type | varchar(50) | 捕获信号类型（已捕获时） |
+| position_pnl_pct | float | 实际持仓盈亏百分比 |
+| miss_reason | text | 错过原因（未捕获时） |
+| created_at | timestamp | 创建时间 |
+
+**索引**:
+- INDEX `idx_review_date` (review_date)
+- INDEX `idx_symbol` (symbol)
+- INDEX `idx_captured` (captured)
+- INDEX `idx_timeframe` (timeframe)
+
+**用途**:
+- 分析不同交易对的捕获表现
+- 统计各时间周期的机会分布
+- 追踪错过原因分布
+- 评估实际盈亏效果
+
+---
+
+## 15. daily_review_signal_analysis (信号分析表) ⚡ 新增 2026-01-26
+
+存储每个信号类型的详细分析数据和评分。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| review_date | date | 复盘日期 |
+| signal_type | varchar(50) | 信号类型，如 BOTTOM_REVERSAL_LONG |
+| total_trades | int(11) | 总交易笔数 |
+| win_trades | int(11) | 盈利笔数 |
+| loss_trades | int(11) | 亏损笔数 |
+| win_rate | float | 胜率（百分比） |
+| avg_pnl | float | 平均盈亏（百分比） |
+| best_trade | float | 最佳交易盈亏（百分比） |
+| worst_trade | float | 最差交易盈亏（百分比） |
+| long_trades | int(11) | 做多笔数 |
+| short_trades | int(11) | 做空笔数 |
+| avg_holding_minutes | float | 平均持仓时长（分钟） |
+| captured_opportunities | int(11) | 捕获的大行情机会数 |
+| rating | varchar(20) | 评级：优秀/良好/一般/较差 |
+| score | int(11) | 综合评分（0-100） |
+| created_at | timestamp | 创建时间 |
+
+**索引**:
+- UNIQUE KEY `unique_review_signal` (review_date, signal_type)
+- INDEX `idx_review_date` (review_date)
+- INDEX `idx_score` (score)
+
+**评分机制** (总分100):
+- 胜率权重 50%: ≥60%得50分，≥50%得30分，≥40%得10分
+- 平均盈亏权重 30%: ≥1.5%得30分，≥0.5%得20分，≥0%得10分
+- 捕获机会权重 20%: ≥5个得20分，≥3个得10分，≥1个得5分
+
+**评级标准**:
+- 🌟优秀: ≥80分
+- ✅良好: 60-79分
+- ⚠️一般: 40-59分
+- ❌较差: <40分
+
+**用途**:
+- 对比不同信号的表现
+- 识别最佳和最差信号
+- 追踪信号评分变化趋势
+- 优化信号权重配置
+
+---
+
+## 16. parameter_adjustments (参数调整历史表) ⚡ 新增 2026-01-26
+
+存储自动优化系统的参数调整记录。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| adjustment_date | timestamp | 调整时间，默认当前时间 |
+| param_group | varchar(100) | 参数组，如 signal_thresholds |
+| param_name | varchar(100) | 参数名，如 BOTTOM_REVERSAL_LONG.min_score |
+| old_value | varchar(100) | 旧值 |
+| new_value | varchar(100) | 新值 |
+| reason | text | 调整原因说明 |
+| applied | boolean | 是否已应用，默认TRUE |
+
+**索引**:
+- INDEX `idx_adjustment_date` (adjustment_date)
+- INDEX `idx_param_group` (param_group)
+
+**用途**:
+- 追踪参数优化历史
+- 评估优化效果
+- 回滚不当的参数调整
+- 分析参数变化趋势
+
+---
+
+## 17. spot_positions (现货持仓表) ⚡ 新增 2026-01-26
+
+存储现货交易系统的持仓信息。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | int(11) | 主键 |
+| symbol | varchar(20) | 交易对，如 BTC/USDT |
+| entry_price | decimal(20,8) | 首次买入价格 |
+| avg_entry_price | decimal(20,8) | 平均成本价 |
+| quantity | decimal(20,8) | 持仓数量 |
+| total_cost | decimal(20,4) | 总成本（USDT） |
+| current_batch | int(11) | 当前批次（1-5），默认1 |
+| take_profit_price | decimal(20,8) | 止盈价格 |
+| stop_loss_price | decimal(20,8) | 止损价格 |
+| exit_price | decimal(20,8) | 平仓价格（平仓后） |
+| pnl | decimal(20,4) | 盈亏金额（USDT） |
+| pnl_pct | decimal(10,6) | 盈亏百分比 |
+| close_reason | varchar(50) | 平仓原因：止盈/止损/手动 |
+| signal_strength | decimal(5,2) | 开仓信号强度（0-100） |
+| signal_details | text | 信号详情 |
+| status | varchar(20) | 状态：active/closed，默认active |
+| created_at | timestamp | 创建时间 |
+| updated_at | timestamp | 更新时间 |
+| closed_at | timestamp | 平仓时间，NULL表示未平仓 |
+
+**索引**:
+- INDEX `idx_symbol` (symbol)
+- INDEX `idx_status` (status)
+- INDEX `idx_created` (created_at)
+- INDEX `idx_pnl` (pnl_pct)
+
+**批次建仓比例**:
+- 批次1: 15%（底部反转信号可增至19.5%）
+- 批次2: 15%
+- 批次3: 25%
+- 批次4: 25%
+- 批次5: 20%
+
+**止盈止损**:
+- 止盈: 相对成本价 +30%
+- 止损: 相对成本价 -15%
+
+**用途**:
+- 管理现货持仓
+- 追踪分批建仓进度
+- 统计现货交易盈亏
+- 分析信号表现
+
+---
+
+## 每日复盘系统工作流程
+
+1. **机会识别**: 扫描历史K线数据，识别大行情机会（pump/dump）
+2. **捕获检测**: 对比实际交易记录，判断是否捕获机会
+3. **信号分析**: 统计各信号类型的交易表现和评分
+4. **报告生成**: 汇总分析结果，存入 `daily_review_reports`
+5. **详情存储**: 机会详情存入 `daily_review_opportunities`
+6. **信号评估**: 信号评分存入 `daily_review_signal_analysis`
+7. **参数优化**: 根据复盘结果调整参数，记录到 `parameter_adjustments`
+
+---
+
+## 现货交易系统特点
+
+1. **底部反转策略**: 专注捕捉触底反弹机会
+2. **仅做多**: 现货只能做多，无爆仓风险
+3. **分批建仓**: 5批渐进式买入，降低成本
+4. **激进抄底**: 底部反转信号首批加仓30%
+5. **宽松止损**: 15%止损空间，可承受更大波动
+
+---
+
+## 复盘系统查询示例
+
+### 查询最近7天捕获率趋势
+```sql
+SELECT
+    date,
+    total_opportunities,
+    captured_count,
+    capture_rate
+FROM daily_review_reports
+WHERE date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+ORDER BY date DESC;
+```
+
+### 查询今日错过的机会
+```sql
+SELECT
+    symbol,
+    timeframe,
+    move_type,
+    price_change_pct,
+    miss_reason,
+    start_time
+FROM daily_review_opportunities
+WHERE review_date = CURDATE()
+AND captured = FALSE
+ORDER BY ABS(price_change_pct) DESC
+LIMIT 10;
+```
+
+### 查询信号评分排名
+```sql
+SELECT
+    signal_type,
+    rating,
+    score,
+    win_rate,
+    avg_pnl,
+    total_trades
+FROM daily_review_signal_analysis
+WHERE review_date = CURDATE()
+ORDER BY score DESC;
+```
+
+### 统计各交易对捕获表现
+```sql
+SELECT
+    symbol,
+    COUNT(*) as total,
+    SUM(CASE WHEN captured = TRUE THEN 1 ELSE 0 END) as captured,
+    ROUND(AVG(CASE WHEN captured = TRUE THEN 1 ELSE 0 END) * 100, 2) as rate
+FROM daily_review_opportunities
+WHERE review_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+GROUP BY symbol
+ORDER BY rate DESC;
+```
+
+### 查询参数调整历史
+```sql
+SELECT
+    adjustment_date,
+    param_name,
+    old_value,
+    new_value,
+    reason
+FROM parameter_adjustments
+WHERE adjustment_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+ORDER BY adjustment_date DESC;
+```
+
+### 查询现货活跃持仓
+```sql
+SELECT
+    symbol,
+    entry_price,
+    avg_entry_price,
+    quantity,
+    current_batch,
+    signal_strength,
+    created_at
+FROM spot_positions
+WHERE status = 'active'
+ORDER BY signal_strength DESC;
+```
