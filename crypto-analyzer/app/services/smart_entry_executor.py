@@ -1003,6 +1003,8 @@ class SmartEntryExecutor:
 
     async def _recover_single_position(self, pos: Dict):
         """恢复单个building状态的持仓"""
+        import json
+
         position_id = pos['id']
         symbol = pos['symbol']
         direction = pos['position_side']
