@@ -1,0 +1,18 @@
+BOTTOM_REVERSAL_LONG:
+  min_hammer_count: 2
+  min_lower_shadow_pct: 0.6
+  min_score_threshold: 45
+  min_volume_ratio: 2.0
+WEAK_RALLY_SHORT:
+  min_drop_pct: 0.35000000000000003
+  min_score_threshold: 45
+  min_volume_ratio: 2.0
+  weak_rally_hours: 6
+batch_entry:
+  batch1_score_threshold: 75
+  batch1_timeout_minutes: 15
+  sampling_window_seconds: 300
+batch_exit:
+  batch1_score_threshold: 95
+  batch2_score_threshold: 95
+  monitoring_window_minutes: 30

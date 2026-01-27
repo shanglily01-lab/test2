@@ -379,6 +379,19 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  启动实盘订单监控任务失败: {e}")
             live_order_monitor = None
 
+    # 启动信号分析后台服务（每6小时执行一次）
+    signal_analysis_service = None
+    try:
+        from app.services.signal_analysis_background_service import SignalAnalysisBackgroundService
+        signal_analysis_service = SignalAnalysisBackgroundService()
+        asyncio.create_task(signal_analysis_service.run_loop(interval_hours=6))
+        logger.info("✅ 信号分析后台服务已启动（每6小时执行一次）")
+    except Exception as e:
+        logger.warning(f"⚠️  启动信号分析后台服务失败: {e}")
+        import traceback
+        traceback.print_exc()
+        signal_analysis_service = None
+
     yield
 
     # 关闭时的清理工作
@@ -415,6 +428,14 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 实盘订单监控服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止实盘订单监控服务失败: {e}")
+
+    # 停止信号分析后台服务
+    if signal_analysis_service:
+        try:
+            signal_analysis_service.stop()
+            logger.info("✅ 信号分析后台服务已停止")
+        except Exception as e:
+            logger.warning(f"⚠️  停止信号分析后台服务失败: {e}")
 
     # 停止价格缓存服务
     if price_cache_service:

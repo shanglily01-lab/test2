@@ -399,41 +399,98 @@
                 <div id="suggestionsContent" style="display: none;"></div>
             </div>
 
-            <!-- Signals Analysis Tab -->
+            <!-- K线信号分析 Tab -->
             <div id="signals-tab" class="tab-content">
                 <div id="signalsLoading" class="loading-overlay">
                     <div class="spinner"></div>
                 </div>
                 <div id="signalsContent" style="display: none;">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>评级</th>
-                                    <th>信号类型</th>
-                                    <th>评分</th>
-                                    <th>交易笔数</th>
-                                    <th>胜率</th>
-                                    <th>平均盈亏</th>
-                                    <th>最佳交易</th>
-                                    <th>最差交易</th>
-                                    <th>捕获机会</th>
-                                    <th>做多笔数</th>
-                                    <th>做空笔数</th>
-                                    <th>平均持仓</th>
-                                </tr>
-                            </thead>
-                            <tbody id="signals-table-body">
-                                <tr>
-                                    <td colspan="12" class="empty-state">
-                                        <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
-                                        <div class="empty-state-text">暂无信号分析数据</div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <!-- 总体统计 -->
+                    <div id="kline-summary" style="margin-bottom: 24px;"></div>
+
+                    <!-- Top强力信号 -->
+                    <div style="margin-bottom: 32px;">
+                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                            <i class="bi bi-star-fill"></i> Top 15 强力信号（按1H净力量排序）
+                        </h3>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;">#</th>
+                                        <th style="width: 120px;">交易对</th>
+                                        <th style="width: 80px;">趋势</th>
+                                        <th style="width: 100px;">状态</th>
+                                        <th>1H K线强度</th>
+                                        <th>15M K线强度</th>
+                                        <th>5M K线强度</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="kline-opportunities-body">
+                                    <tr>
+                                        <td colspan="7" class="empty-state">
+                                            <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
+                                            <div class="empty-state-text">暂无信号分析数据</div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div id="signals-summary" style="margin-top: 24px;"></div>
+
+                    <!-- 错过的机会 -->
+                    <div style="margin-bottom: 32px;">
+                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                            <i class="bi bi-exclamation-triangle-fill"></i> 错过的高质量机会（Top 10）
+                        </h3>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;">#</th>
+                                        <th style="width: 120px;">交易对</th>
+                                        <th style="width: 80px;">建议方向</th>
+                                        <th>原因</th>
+                                        <th>1H净力量</th>
+                                        <th>15M净力量</th>
+                                        <th>5M净力量</th>
+                                        <th>可能原因</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="kline-missed-body">
+                                    <tr>
+                                        <td colspan="8" class="empty-state">暂无数据</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 历史趋势 -->
+                    <div>
+                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                            <i class="bi bi-graph-up"></i> 历史趋势（最近7次）
+                        </h3>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>分析时间</th>
+                                        <th>分析数</th>
+                                        <th>机会数</th>
+                                        <th>开仓数</th>
+                                        <th>错过数</th>
+                                        <th>捕获率</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="kline-history-body">
+                                    <tr>
+                                        <td colspan="6" class="empty-state">暂无历史数据</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -943,64 +1000,137 @@
             document.getElementById('signalsContent').style.display = 'none';
 
             try {
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
-                const response = await fetch(`/api/futures/review/signal-analysis?hours=${hours}&account_id=${accountId}`);
+                const response = await fetch(`/api/futures/review/kline-signal-analysis?hours=${hours}`);
                 const result = await response.json();
 
-                if (result.success && result.data) {
+                if (result.success && result.data && result.data.has_data) {
                     const data = result.data;
-                    const tbody = document.getElementById('signals-table-body');
 
-                    if (!data.signal_stats || Object.keys(data.signal_stats).length === 0) {
-                        tbody.innerHTML = `<tr><td colspan="12" class="empty-state">暂无信号分析数据</td></tr>`;
+                    // 1. 显示总体统计
+                    const summary = data.summary;
+                    document.getElementById('kline-summary').innerHTML = `
+                        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 16px;">
+                            <div class="stat-card" style="border-left: 4px solid var(--primary-blue);">
+                                <div class="stat-label">分析交易对</div>
+                                <div class="stat-value">${summary.total_analyzed}</div>
+                            </div>
+                            <div class="stat-card" style="border-left: 4px solid var(--warning-yellow);">
+                                <div class="stat-label">有交易机会</div>
+                                <div class="stat-value">${summary.should_trade}</div>
+                            </div>
+                            <div class="stat-card" style="border-left: 4px solid var(--success-green);">
+                                <div class="stat-label">已开仓</div>
+                                <div class="stat-value">${summary.has_position}</div>
+                                <div class="stat-change">正确${summary.correct_captures}个 / 错误${summary.wrong_direction}个</div>
+                            </div>
+                            <div class="stat-card" style="border-left: 4px solid var(--danger-red);">
+                                <div class="stat-label">有效捕获率</div>
+                                <div class="stat-value ${summary.capture_rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${summary.capture_rate.toFixed(1)}%</div>
+                                <div class="stat-change">错过${summary.missed_opportunities}个机会</div>
+                            </div>
+                        </div>
+                        <div style="text-align: right; color: var(--text-tertiary); font-size: 12px;">
+                            分析时间: ${data.analysis_time}
+                        </div>
+                    `;
+
+                    // 2. 显示Top强力信号
+                    const opportunitiesBody = document.getElementById('kline-opportunities-body');
+                    if (data.top_opportunities && data.top_opportunities.length > 0) {
+                        opportunitiesBody.innerHTML = data.top_opportunities.map((opp, index) => {
+                            const formatKline = (kline) => `
+                                阳线${kline.bull_pct.toFixed(0)}% (${kline.bull}/${kline.total}) |
+                                强阳${kline.strong_bull} 强阴${kline.strong_bear} |
+                                净力量<span class="${kline.net_power >= 0 ? 'pnl-positive' : 'pnl-negative'}">${kline.net_power >= 0 ? '+' : ''}${kline.net_power}</span>
+                            `;
+
+                            const trendBadge = `<span class="badge ${
+                                opp.trend === '强多' ? 'badge-success' :
+                                opp.trend === '强空' ? 'badge-danger' :
+                                opp.trend === '偏多' ? 'badge-info' :
+                                opp.trend === '偏空' ? 'badge-warning' : 'badge-neutral'
+                            }">${opp.trend}</span>`;
+
+                            const statusBadge = opp.status_type === 'captured'
+                                ? `<span class="badge badge-success">${opp.status}</span>`
+                                : `<span class="badge badge-danger">${opp.status}</span>`;
+
+                            return `
+                                <tr>
+                                    <td>${index + 1}</td>
+                                    <td><strong>${opp.symbol}</strong></td>
+                                    <td>${trendBadge}</td>
+                                    <td>${statusBadge}</td>
+                                    <td style="font-size: 11px;">${formatKline(opp.kline_1h)}</td>
+                                    <td style="font-size: 11px;">${formatKline(opp.kline_15m)}</td>
+                                    <td style="font-size: 11px;">${formatKline(opp.kline_5m)}</td>
+                                </tr>
+                            `;
+                        }).join('');
                     } else {
-                        // 按评分排序
-                        const sortedSignals = Object.entries(data.signal_stats).sort((a, b) => b[1].score - a[1].score);
+                        opportunitiesBody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无数据</td></tr>';
+                    }
 
-                        tbody.innerHTML = sortedSignals.map(([signalType, stats]) => `
+                    // 3. 显示错过的机会
+                    const missedBody = document.getElementById('kline-missed-body');
+                    if (data.missed_opportunities && data.missed_opportunities.length > 0) {
+                        missedBody.innerHTML = data.missed_opportunities.map((missed, index) => {
+                            const sideBadge = missed.side === 'LONG'
+                                ? '<span class="badge badge-success">LONG</span>'
+                                : '<span class="badge badge-danger">SHORT</span>';
+
+                            const formatPower = (power) => `<span class="${power >= 0 ? 'pnl-positive' : 'pnl-negative'}">${power >= 0 ? '+' : ''}${power}</span>`;
+
+                            return `
+                                <tr>
+                                    <td>${index + 1}</td>
+                                    <td><strong>${missed.symbol}</strong></td>
+                                    <td>${sideBadge}</td>
+                                    <td style="font-size: 12px;">${missed.reason}</td>
+                                    <td>${formatPower(missed.net_power_1h)}</td>
+                                    <td>${formatPower(missed.net_power_15m)}</td>
+                                    <td>${formatPower(missed.net_power_5m)}</td>
+                                    <td style="font-size: 11px;">${missed.possible_reasons[0] || ''}</td>
+                                </tr>
+                            `;
+                        }).join('');
+                    } else {
+                        missedBody.innerHTML = '<tr><td colspan="8" class="empty-state">无错过机会</td></tr>';
+                    }
+
+                    // 4. 显示历史趋势
+                    const historyBody = document.getElementById('kline-history-body');
+                    if (data.history && data.history.length > 0) {
+                        historyBody.innerHTML = data.history.map(h => `
                             <tr>
-                                <td><span class="badge ${
-                                    stats.rating === '🌟优秀' ? 'badge-success' :
-                                    stats.rating === '✅良好' ? 'badge-info' :
-                                    stats.rating === '⚠️一般' ? 'badge-warning' : 'badge-danger'
-                                }">${stats.rating}</span></td>
-                                <td><strong>${signalType}</strong></td>
-                                <td><span class="badge badge-neutral">${stats.score}</span></td>
-                                <td>${stats.total_trades}</td>
-                                <td><span class="${stats.win_rate >= 50 ? 'pnl-positive' : 'pnl-negative'}">${stats.win_rate.toFixed(1)}%</span></td>
-                                <td>${formatPnlPct(stats.avg_pnl)}</td>
-                                <td class="pnl-positive">+${stats.best_trade.toFixed(2)}%</td>
-                                <td class="pnl-negative">${stats.worst_trade.toFixed(2)}%</td>
-                                <td><span class="badge badge-info">${stats.captured_opportunities}</span></td>
-                                <td class="text-success">${stats.long_trades}</td>
-                                <td class="text-danger">${stats.short_trades}</td>
-                                <td>${formatHoldingTime(stats.avg_holding_minutes)}</td>
+                                <td>${h.time}</td>
+                                <td>${h.total_analyzed}</td>
+                                <td>${h.should_trade}</td>
+                                <td>${h.has_position}</td>
+                                <td>${h.missed_opportunities}</td>
+                                <td><span class="${h.capture_rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${h.capture_rate.toFixed(1)}%</span></td>
                             </tr>
                         `).join('');
-
-                        // 显示总结
-                        if (data.summary) {
-                            document.getElementById('signals-summary').innerHTML = `
-                                <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
-                                    <div class="stat-card" style="border-left: 4px solid var(--success-green);">
-                                        <div class="stat-label">最佳信号</div>
-                                        <div class="stat-value">${data.summary.best_signal || 'N/A'}</div>
-                                        <div class="stat-change">表现最优秀的信号类型</div>
-                                    </div>
-                                    <div class="stat-card" style="border-left: 4px solid var(--danger-red);">
-                                        <div class="stat-label">需改进信号</div>
-                                        <div class="stat-value">${data.summary.worst_signal || 'N/A'}</div>
-                                        <div class="stat-change">需要优化参数或考虑禁用</div>
-                                    </div>
-                                </div>
-                            `;
-                        }
+                    } else {
+                        historyBody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无历史数据</td></tr>';
                     }
+
+                } else {
+                    // 没有数据
+                    document.getElementById('kline-summary').innerHTML = `
+                        <div class="empty-state" style="padding: 40px;">
+                            <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
+                            <div class="empty-state-text">${result.data.message || '暂无信号分析数据，请等待首次分析完成'}</div>
+                        </div>
+                    `;
                 }
             } catch (error) {
-                console.error('加载信号分析失败:', error);
-                document.getElementById('signals-table-body').innerHTML = `
-                    <tr><td colspan="12" class="empty-state">加载失败，请稍后重试</td></tr>
+                console.error('加载K线信号分析失败:', error);
+                document.getElementById('kline-summary').innerHTML = `
+                    <div class="empty-state" style="padding: 40px;">
+                        <div class="empty-state-icon"><i class="bi bi-exclamation-triangle"></i></div>
+                        <div class="empty-state-text">加载失败，请稍后重试</div>
+                    </div>
                 `;
             }
 

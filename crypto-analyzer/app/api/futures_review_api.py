@@ -1437,3 +1437,194 @@ async def get_opportunity_analysis(
     except Exception as e:
         logger.error(f"获取买入机会分析失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/kline-signal-analysis")
+async def get_kline_signal_analysis(
+    hours: int = Query(24, description="时间范围(小时)")
+):
+    """
+    K线信号分析API - 获取最新的K线强度 + 信号捕捉分析
+    
+    返回数据包括:
+    - 总体统计（捕获率、机会数、错过数）
+    - Top强力信号（1H/15M/5M K线强度）
+    - 错过的高质量机会
+    - 历史趋势
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 获取最新的分析报告
+        cursor.execute("""
+            SELECT 
+                id,
+                analysis_time,
+                total_analyzed,
+                has_position,
+                should_trade,
+                missed_opportunities,
+                wrong_direction,
+                correct_captures,
+                capture_rate,
+                report_json,
+                created_at
+            FROM signal_analysis_reports
+            ORDER BY analysis_time DESC
+            LIMIT 1
+        """)
+
+        latest_report = cursor.fetchone()
+
+        if not latest_report:
+            return {
+                "success": True,
+                "data": {
+                    "has_data": False,
+                    "message": "暂无信号分析数据，请等待首次分析完成"
+                }
+            }
+
+        # 解析JSON数据
+        import json
+        report_data = json.loads(latest_report['report_json']) if latest_report.get('report_json') else {}
+
+        # 获取历史趋势（最近7次）
+        cursor.execute("""
+            SELECT 
+                analysis_time,
+                total_analyzed,
+                should_trade,
+                has_position,
+                missed_opportunities,
+                capture_rate
+            FROM signal_analysis_reports
+            ORDER BY analysis_time DESC
+            LIMIT 7
+        """)
+
+        history = cursor.fetchall()
+
+        # 处理Top机会数据
+        top_opportunities = report_data.get('top_opportunities', [])[:15]
+        
+        # 格式化Top机会
+        formatted_opportunities = []
+        for opp in top_opportunities:
+            s1h = opp.get('strength_1h', {})
+            s15m = opp.get('strength_15m', {})
+            s5m = opp.get('strength_5m', {})
+            sig = opp.get('signal_status', {})
+            
+            # 判断多空倾向
+            net_power = s1h.get('net_power', 0)
+            bull_pct = s1h.get('bull_pct', 50)
+            
+            if net_power >= 3:
+                trend = '强多'
+            elif net_power <= -3:
+                trend = '强空'
+            elif bull_pct > 55:
+                trend = '偏多'
+            elif bull_pct < 45:
+                trend = '偏空'
+            else:
+                trend = '震荡'
+            
+            # 判断捕捉状态
+            has_pos = sig.get('has_position', False)
+            if has_pos:
+                position = sig.get('position', {})
+                status = f"已捕捉({position.get('position_side', 'N/A')})"
+                status_type = 'captured'
+            else:
+                status = "错过"
+                status_type = 'missed'
+            
+            formatted_opportunities.append({
+                'symbol': opp.get('symbol', 'N/A'),
+                'trend': trend,
+                'status': status,
+                'status_type': status_type,
+                'kline_1h': {
+                    'bull_pct': s1h.get('bull_pct', 0),
+                    'bull': s1h.get('bull', 0),
+                    'total': s1h.get('total', 0),
+                    'strong_bull': s1h.get('strong_bull', 0),
+                    'strong_bear': s1h.get('strong_bear', 0),
+                    'net_power': s1h.get('net_power', 0)
+                },
+                'kline_15m': {
+                    'bull_pct': s15m.get('bull_pct', 0),
+                    'bull': s15m.get('bull', 0),
+                    'total': s15m.get('total', 0),
+                    'strong_bull': s15m.get('strong_bull', 0),
+                    'strong_bear': s15m.get('strong_bear', 0),
+                    'net_power': s15m.get('net_power', 0)
+                },
+                'kline_5m': {
+                    'bull_pct': s5m.get('bull_pct', 0),
+                    'bull': s5m.get('bull', 0),
+                    'total': s5m.get('total', 0),
+                    'strong_bull': s5m.get('strong_bull', 0),
+                    'strong_bear': s5m.get('strong_bear', 0),
+                    'net_power': s5m.get('net_power', 0)
+                }
+            })
+
+        # 处理错过机会数据
+        missed_opportunities = report_data.get('missed_opportunities', [])[:10]
+        
+        formatted_missed = []
+        for missed in missed_opportunities:
+            formatted_missed.append({
+                'symbol': missed.get('symbol', 'N/A'),
+                'side': missed.get('side', 'N/A'),
+                'reason': missed.get('reason', ''),
+                'net_power_1h': missed.get('net_power_1h', 0),
+                'net_power_15m': missed.get('net_power_15m', 0),
+                'net_power_5m': missed.get('net_power_5m', 0),
+                'possible_reasons': missed.get('possible_reasons', [])
+            })
+
+        # 处理历史趋势
+        history_data = []
+        for h in history:
+            history_data.append({
+                'time': h['analysis_time'].strftime('%m-%d %H:%M'),
+                'total_analyzed': h['total_analyzed'],
+                'should_trade': h['should_trade'],
+                'has_position': h['has_position'],
+                'missed_opportunities': h['missed_opportunities'],
+                'capture_rate': float(h['capture_rate'])
+            })
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "success": True,
+            "data": {
+                "has_data": True,
+                "analysis_time": latest_report['analysis_time'].strftime('%Y-%m-%d %H:%M:%S'),
+                "summary": {
+                    "total_analyzed": latest_report['total_analyzed'],
+                    "has_position": latest_report['has_position'],
+                    "should_trade": latest_report['should_trade'],
+                    "missed_opportunities": latest_report['missed_opportunities'],
+                    "wrong_direction": latest_report['wrong_direction'],
+                    "correct_captures": latest_report['correct_captures'],
+                    "capture_rate": float(latest_report['capture_rate'])
+                },
+                "top_opportunities": formatted_opportunities,
+                "missed_opportunities": formatted_missed,
+                "history": history_data
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取K线信号分析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
