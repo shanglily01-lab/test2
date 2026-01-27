@@ -1519,6 +1519,16 @@ class SmartTraderService:
             # 获取分阶段超时阈值
             staged_thresholds = self.opt_config.get_staged_timeout_thresholds()
 
+            # 防御性检查：如果获取失败，使用默认值
+            if not staged_thresholds:
+                logger.warning("[TIMEOUT_CHECK] 无法获取分阶段超时阈值，使用默认值")
+                staged_thresholds = {
+                    1: -0.02,   # 1小时: -2%
+                    2: -0.015,  # 2小时: -1.5%
+                    3: -0.01,   # 3小时: -1%
+                    4: -0.005   # 4小时: -0.5%
+                }
+
             timeout_positions = []  # 需要超时平仓的持仓
 
             for pos in open_positions:
