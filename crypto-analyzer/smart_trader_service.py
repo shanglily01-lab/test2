@@ -177,6 +177,12 @@ class SmartDecisionBrain:
                     'volatility_high': {'long': 10, 'short': 10},
                     'consecutive_bull': {'long': 15, 'short': 0},
                     'consecutive_bear': {'long': 0, 'short': 15},
+                    'volume_power_bull': {'long': 25, 'short': 0},        # 1H+15M量能多头
+                    'volume_power_bear': {'long': 0, 'short': 25},        # 1H+15M量能空头
+                    'volume_power_1h_bull': {'long': 15, 'short': 0},     # 仅1H量能多头
+                    'volume_power_1h_bear': {'long': 0, 'short': 15},     # 仅1H量能空头
+                    'breakout_long': {'long': 20, 'short': 0},            # 高位突破追涨
+                    'breakdown_short': {'long': 0, 'short': 20},          # 低位破位追空
                     'trend_1d_bull': {'long': 10, 'short': 0},
                     'trend_1d_bear': {'long': 0, 'short': 10}
                 }
@@ -252,8 +258,9 @@ class SmartDecisionBrain:
         try:
             klines_1d = self.load_klines(symbol, '1d', 50)
             klines_1h = self.load_klines(symbol, '1h', 100)
+            klines_15m = self.load_klines(symbol, '15m', 96)  # 24小时的15分钟K线
 
-            if len(klines_1d) < 30 or len(klines_1h) < 72:  # 至少需要72小时(3天)数据
+            if len(klines_1d) < 30 or len(klines_1h) < 72 or len(klines_15m) < 48:  # 至少需要72小时(3天)数据
                 return None
 
             current = klines_1h[-1]['close']
@@ -359,6 +366,91 @@ class SmartDecisionBrain:
                 short_score += weight['short']
                 if weight['short'] > 0:
                     signal_components['consecutive_bear'] = weight['short']
+
+            # ========== 量能加权K线分析 (核心趋势判断) ==========
+
+            # 6. 1小时K线量能分析 - 最近24根(1天)
+            volumes_1h = [k['volume'] for k in klines_1h[-24:]]
+            avg_volume_1h = sum(volumes_1h) / len(volumes_1h) if volumes_1h else 1
+
+            strong_bull_1h = 0  # 有力量的阳线
+            strong_bear_1h = 0  # 有力量的阴线
+
+            for k in klines_1h[-24:]:
+                is_bull = k['close'] > k['open']
+                is_high_volume = k['volume'] > avg_volume_1h * 1.2  # 成交量 > 1.2倍平均量
+
+                if is_bull and is_high_volume:
+                    strong_bull_1h += 1
+                elif not is_bull and is_high_volume:
+                    strong_bear_1h += 1
+
+            net_power_1h = strong_bull_1h - strong_bear_1h
+
+            # 7. 15分钟K线量能分析 - 最近24根(6小时)
+            volumes_15m = [k['volume'] for k in klines_15m[-24:]]
+            avg_volume_15m = sum(volumes_15m) / len(volumes_15m) if volumes_15m else 1
+
+            strong_bull_15m = 0
+            strong_bear_15m = 0
+
+            for k in klines_15m[-24:]:
+                is_bull = k['close'] > k['open']
+                is_high_volume = k['volume'] > avg_volume_15m * 1.2
+
+                if is_bull and is_high_volume:
+                    strong_bull_15m += 1
+                elif not is_bull and is_high_volume:
+                    strong_bear_15m += 1
+
+            net_power_15m = strong_bull_15m - strong_bear_15m
+
+            # 量能多头信号: 1H和15M都显示强力多头
+            if net_power_1h >= 2 and net_power_15m >= 2:
+                weight = self.scoring_weights.get('volume_power_bull', {'long': 25, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['volume_power_bull'] = weight['long']
+                    logger.info(f"{symbol} 量能多头强势: 1H净力量={net_power_1h}, 15M净力量={net_power_15m}")
+
+            # 量能空头信号: 1H和15M都显示强力空头
+            elif net_power_1h <= -2 and net_power_15m <= -2:
+                weight = self.scoring_weights.get('volume_power_bear', {'long': 0, 'short': 25})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['volume_power_bear'] = weight['short']
+                    logger.info(f"{symbol} 量能空头强势: 1H净力量={net_power_1h}, 15M净力量={net_power_15m}")
+
+            # 单一时间框架量能信号 (辅助)
+            elif net_power_1h >= 3:  # 仅1H强力多头
+                weight = self.scoring_weights.get('volume_power_1h_bull', {'long': 15, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['volume_power_1h_bull'] = weight['long']
+            elif net_power_1h <= -3:  # 仅1H强力空头
+                weight = self.scoring_weights.get('volume_power_1h_bear', {'long': 0, 'short': 15})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['volume_power_1h_bear'] = weight['short']
+
+            # 8. 突破追涨信号: position_high + 强力量能多头 → 可以做多
+            # 用户反馈: "不适合做空，那就适合做多啊", "K线多空比，还要结合量能一起看"
+            if position_pct > 70 and (net_power_1h >= 2 or (net_power_1h >= 2 and net_power_15m >= 2)):
+                # position_high时有强力量能支撑,可以追涨做多
+                weight = self.scoring_weights.get('breakout_long', {'long': 20, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['breakout_long'] = weight['long']
+                    logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
+
+            # 9. 破位追空信号: position_low + 强力量能空头 → 可以做空
+            elif position_pct < 30 and (net_power_1h <= -2 or (net_power_1h <= -2 and net_power_15m <= -2)):
+                # position_low时有强力量能压制,可以追空做空
+                weight = self.scoring_weights.get('breakdown_short', {'long': 0, 'short': 20})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['breakdown_short'] = weight['short']
+                    logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
 
             # ========== 1天K线确认 (辅助) ==========
 
