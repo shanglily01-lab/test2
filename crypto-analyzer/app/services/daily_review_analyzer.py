@@ -395,15 +395,15 @@ class DailyReviewAnalyzer:
             # 检查方向是否匹配
             expected_direction = 'LONG' if opportunity.move_type == 'pump' else 'SHORT'
 
-            if position['direction'] == expected_direction:
+            if position['position_side'] == expected_direction:
                 # 计算捕捉延迟
-                delay_seconds = (position['entry_signal_time'] - opportunity.start_time).total_seconds()
+                delay_seconds = (position['open_time'] - opportunity.start_time).total_seconds()
                 delay_minutes = int(delay_seconds / 60)
 
                 opportunity.captured = True
                 opportunity.capture_delay_minutes = delay_minutes
                 opportunity.signal_type = position['entry_signal_type']
-                opportunity.position_pnl_pct = float(position['realized_pnl_pct']) if position['realized_pnl_pct'] else None
+                opportunity.position_pnl_pct = float(position['unrealized_pnl_pct']) if position['unrealized_pnl_pct'] else None
 
                 logger.debug(
                     f"✅ 捕捉到: {opportunity.symbol} {opportunity.move_type} "
@@ -411,7 +411,7 @@ class DailyReviewAnalyzer:
                 )
             else:
                 opportunity.captured = False
-                opportunity.miss_reason = f"方向错误(期望{expected_direction},实际{position['direction']})"
+                opportunity.miss_reason = f"方向错误(期望{expected_direction},实际{position['position_side']})"
         else:
             opportunity.captured = False
             opportunity.miss_reason = "未产生信号或未开仓"
