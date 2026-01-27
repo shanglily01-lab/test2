@@ -2195,9 +2195,18 @@ class SmartTraderService:
         Returns:
             dict: {'success': bool, 'position_id': int, 'closed_quantity': float}
         """
+        conn = None
+        cursor = None
         try:
-            conn = self._get_connection()
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            # 创建独立连接，避免与其他异步操作冲突（重要！）
+            # SmartExitOptimizer异步调用此方法时，共享连接会导致竞态条件
+            conn = pymysql.connect(
+                **self.db_config,
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=False  # 使用事务确保数据一致性
+            )
+            cursor = conn.cursor()
 
             # 获取持仓信息
             cursor.execute("""
@@ -2211,6 +2220,7 @@ class SmartTraderService:
 
             if not position:
                 cursor.close()
+                conn.close()
                 logger.error(f"持仓 {position_id} 不存在或已关闭")
                 return {'success': False, 'error': 'Position not found or already closed'}
 
@@ -2231,6 +2241,7 @@ class SmartTraderService:
             current_price = self.get_current_price(symbol)
             if not current_price:
                 cursor.close()
+                conn.close()
                 logger.error(f"无法获取 {symbol} 当前价格")
                 return {'success': False, 'error': 'Failed to get current price'}
 
@@ -2356,6 +2367,7 @@ class SmartTraderService:
 
             conn.commit()
             cursor.close()
+            conn.close()
 
             logger.info(f"✅ 部分平仓成功: 持仓{position_id} | 剩余数量: {remaining_quantity:.4f}")
 
@@ -2371,6 +2383,18 @@ class SmartTraderService:
             logger.error(f"部分平仓失败: 持仓{position_id} | {e}")
             import traceback
             logger.error(traceback.format_exc())
+
+            # 确保回滚事务并关闭连接
+            try:
+                if conn:
+                    conn.rollback()
+                if cursor:
+                    cursor.close()
+                if conn:
+                    conn.close()
+            except Exception as cleanup_error:
+                logger.error(f"清理连接时出错: {cleanup_error}")
+
             return {'success': False, 'error': str(e)}
 
     def run_adaptive_optimization(self):
