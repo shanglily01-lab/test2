@@ -144,7 +144,7 @@ async def lifespan(app: FastAPI):
         if USE_REAL_API:
             try:
                 price_collector = MultiExchangeCollector(config)
-                logger.info("✅ 价格采集器初始化成功（真实API模式 - Binance + Gate.io）")
+                logger.info("✅ 价格采集器初始化成功（真实API模式 - Binance ）")
             except Exception as e:
                 logger.error(f"❌ 真实API初始化失败: {e}，切换到模拟模式")
                 price_collector = MockPriceCollector('binance_demo', config)
