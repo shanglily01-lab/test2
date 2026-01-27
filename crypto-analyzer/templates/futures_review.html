@@ -500,29 +500,31 @@
                     <div class="spinner"></div>
                 </div>
                 <div id="opportunitiesContent" style="display: none;">
-                    <!-- Timeframe Performance -->
+                    <!-- 总体统计 -->
+                    <div id="opportunities-summary" style="margin-bottom: 24px;"></div>
+
+                    <!-- 已捕获的信号 -->
                     <div style="margin-bottom: 32px;">
                         <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                            <i class="bi bi-clock-history"></i> 时间周期表现
+                            <i class="bi bi-check-circle"></i> 已捕获信号（按强度排序）
                         </h3>
                         <div class="table-container">
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>时间周期</th>
-                                        <th>总机会</th>
-                                        <th>已捕获</th>
-                                        <th>已错过</th>
-                                        <th>捕获率</th>
-                                        <th>上涨机会</th>
-                                        <th>上涨捕获率</th>
-                                        <th>下跌机会</th>
-                                        <th>下跌捕获率</th>
+                                        <th>交易对</th>
+                                        <th>方向</th>
+                                        <th>质量</th>
+                                        <th>信号强度</th>
+                                        <th>1H净力量</th>
+                                        <th>15M净力量</th>
+                                        <th>5M净力量</th>
+                                        <th>状态</th>
                                     </tr>
                                 </thead>
                                 <tbody id="timeframe-analysis-body">
                                     <tr>
-                                        <td colspan="9" class="empty-state">暂无数据</td>
+                                        <td colspan="8" class="empty-state">暂无数据</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -537,52 +539,36 @@
                         <div id="miss-reasons-content"></div>
                     </div>
 
-                    <!-- Symbol Performance -->
-                    <div class="analysis-grid">
-                        <div>
-                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                                <i class="bi bi-trophy"></i> 捕获率最高交易对
-                            </h3>
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>交易对</th>
-                                            <th>总机会</th>
-                                            <th>已捕获</th>
-                                            <th>捕获率</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="best-symbols-body">
-                                        <tr><td colspan="4" class="empty-state">暂无数据</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div>
-                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                                <i class="bi bi-exclamation-circle"></i> 捕获率最低交易对
-                            </h3>
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>交易对</th>
-                                            <th>总机会</th>
-                                            <th>已捕获</th>
-                                            <th>捕获率</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="worst-symbols-body">
-                                        <tr><td colspan="4" class="empty-state">暂无数据</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                    <!-- 错过的高质量机会 -->
+                    <div style="margin-bottom: 32px;">
+                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
+                            <i class="bi bi-exclamation-triangle"></i> 错过的高质量机会（按强度排序）
+                        </h3>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>交易对</th>
+                                        <th>方向</th>
+                                        <th>质量</th>
+                                        <th>信号强度</th>
+                                        <th>1H净力量</th>
+                                        <th>15M净力量</th>
+                                        <th>5M净力量</th>
+                                        <th>错过原因</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="best-symbols-body">
+                                    <tr><td colspan="8" class="empty-state">暂无数据</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <!-- Summary -->
-                    <div id="opportunities-summary" style="margin-top: 24px;"></div>
+                    <!-- 隐藏的表格（保留用于兼容性） -->
+                    <table style="display: none;">
+                        <tbody id="worst-symbols-body"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1144,40 +1130,83 @@
 
             try {
                 const accountId = currentTradingMode === 'paper' ? 2 : 1;
-                const response = await fetch(`/api/futures/review/opportunity-analysis?hours=${hours}&account_id=${accountId}`);
+                const response = await fetch(`/api/futures/review/realtime-opportunity-analysis?account_id=${accountId}`);
                 const result = await response.json();
 
-                if (result.success && result.data) {
+                if (result.success && result.data && result.data.has_data) {
                     const data = result.data;
 
-                    // 时间周期分析
-                    if (data.timeframe_analysis) {
-                        const tbody = document.getElementById('timeframe-analysis-body');
-                        const timeframes = ['5m', '15m', '1h'];
+                    // 渲染总体统计
+                    const summary = data.summary;
+                    document.getElementById('opportunities-summary').innerHTML = `
+                        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+                            <div class="stat-card">
+                                <div class="stat-label">监控交易对</div>
+                                <div class="stat-value">${summary.total_monitored}</div>
+                                <div class="stat-change">正在分析</div>
+                            </div>
+                            <div class="stat-card" style="border-left: 4px solid var(--warning-yellow);">
+                                <div class="stat-label">有效信号</div>
+                                <div class="stat-value">${summary.total_signals}</div>
+                                <div class="stat-change">强信号${summary.strong_signals}个</div>
+                            </div>
+                            <div class="stat-card" style="border-left: 4px solid var(--success-green);">
+                                <div class="stat-label">已捕获</div>
+                                <div class="stat-value">${summary.captured}</div>
+                                <div class="stat-change">正确${summary.correct_captures}个 / 错误${summary.wrong_direction}个</div>
+                            </div>
+                            <div class="stat-card" style="border-left: 4px solid var(--danger-red);">
+                                <div class="stat-label">捕获率</div>
+                                <div class="stat-value ${summary.capture_rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${summary.capture_rate}%</div>
+                                <div class="stat-change">错过${summary.missed}个</div>
+                            </div>
+                        </div>
+                        <div style="text-align: right; margin-top: 12px; color: var(--text-tertiary); font-size: 12px;">
+                            分析时间: ${data.analysis_time} | 可用余额: $${summary.available_balance.toFixed(2)} | 黑名单: ${summary.blacklist_count}个
+                        </div>
+                    `;
 
-                        tbody.innerHTML = timeframes.map(tf => {
-                            const stats = data.timeframe_analysis[tf];
-                            if (!stats) return '';
+                    // 已捕获的信号（按强度排序）
+                    const capturedSignals = data.captured_signals || [];
+                    const tbody1 = document.getElementById('timeframe-analysis-body');
+
+                    if (capturedSignals.length > 0) {
+                        tbody1.innerHTML = capturedSignals.map(sig => {
+                            const directionBadge = sig.signal_direction === 'LONG'
+                                ? `<span class="badge badge-success">做多</span>`
+                                : `<span class="badge badge-danger">做空</span>`;
+
+                            const qualityBadge = sig.signal_quality === '强'
+                                ? `<span class="badge badge-success">${sig.signal_quality}</span>`
+                                : `<span class="badge badge-info">${sig.signal_quality}</span>`;
+
+                            const statusBadge = sig.correct_direction
+                                ? `<span class="badge badge-success">✅ 正确</span>`
+                                : `<span class="badge badge-danger">⚠️ 错误</span>`;
+
+                            const formatPower = (power) => `<span class="${power >= 0 ? 'pnl-positive' : 'pnl-negative'}">${power >= 0 ? '+' : ''}${power}</span>`;
 
                             return `
                                 <tr>
-                                    <td><strong>${tf.toUpperCase()}</strong></td>
-                                    <td>${stats.total_opportunities}</td>
-                                    <td class="pnl-positive">${stats.captured}</td>
-                                    <td class="pnl-negative">${stats.missed}</td>
-                                    <td><span class="${stats.capture_rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${stats.capture_rate.toFixed(1)}%</span></td>
-                                    <td>${stats.pumps.total}</td>
-                                    <td><span class="${stats.pumps.rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${stats.pumps.rate.toFixed(1)}%</span></td>
-                                    <td>${stats.dumps.total}</td>
-                                    <td><span class="${stats.dumps.rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${stats.dumps.rate.toFixed(1)}%</span></td>
+                                    <td><strong>${sig.symbol}</strong></td>
+                                    <td>${directionBadge}</td>
+                                    <td>${qualityBadge}</td>
+                                    <td>${sig.signal_strength.toFixed(1)}</td>
+                                    <td>${formatPower(sig.net_power_1h)}</td>
+                                    <td>${formatPower(sig.net_power_15m)}</td>
+                                    <td>${formatPower(sig.net_power_5m)}</td>
+                                    <td>${statusBadge}</td>
                                 </tr>
                             `;
                         }).join('');
+                    } else {
+                        tbody1.innerHTML = '<tr><td colspan="8" class="empty-state">暂无已捕获信号</td></tr>';
                     }
 
                     // 错过原因分析
-                    if (data.miss_reasons && Object.keys(data.miss_reasons).length > 0) {
-                        const sortedReasons = Object.entries(data.miss_reasons).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
+                    const missReasonStats = data.miss_reason_stats || {};
+                    if (Object.keys(missReasonStats).length > 0) {
+                        const sortedReasons = Object.entries(missReasonStats).sort((a, b) => b[1].count - a[1].count);
 
                         document.getElementById('miss-reasons-content').innerHTML = sortedReasons.map(([reason, stats]) => `
                             <div class="suggestion-card warning">
@@ -1185,13 +1214,12 @@
                                     <div class="suggestion-category">${reason}</div>
                                     <div>
                                         <span class="badge badge-warning">${stats.count}次</span>
-                                        <span class="badge badge-neutral" style="margin-left: 8px;">平均错失${stats.avg_missed_change.toFixed(2)}%</span>
                                     </div>
                                 </div>
                                 ${stats.examples && stats.examples.length > 0 ? `
                                     <div class="suggestion-message" style="font-size: 12px; color: var(--text-secondary);">
-                                        示例: ${stats.examples.slice(0, 2).map(ex =>
-                                            `${ex.symbol} ${ex.time} ${ex.type.toUpperCase()} ${ex.change.toFixed(2)}%`
+                                        示例: ${stats.examples.map(ex =>
+                                            `${ex.symbol} ${ex.direction} 强度${ex.strength} (${ex.quality})`
                                         ).join(' | ')}
                                     </div>
                                 ` : ''}
@@ -1200,64 +1228,65 @@
                     } else {
                         document.getElementById('miss-reasons-content').innerHTML = `
                             <div class="empty-state">
-                                <div class="empty-state-text">暂无错过记录</div>
+                                <div class="empty-state-text">✅ 没有错过任何信号</div>
                             </div>
                         `;
                     }
 
-                    // 最佳和最差交易对
-                    if (data.symbol_analysis) {
-                        const bestSymbols = data.symbol_analysis.best_symbols || [];
-                        const worstSymbols = data.symbol_analysis.worst_symbols || [];
+                    // 错过的高质量机会
+                    const missedOpps = data.missed_opportunities || [];
+                    const tbody2 = document.getElementById('best-symbols-body');
+                    const tbody3 = document.getElementById('worst-symbols-body');
 
-                        document.getElementById('best-symbols-body').innerHTML = bestSymbols.length > 0 ?
-                            bestSymbols.slice(0, 5).map(([symbol, stats]) => `
-                                <tr>
-                                    <td><strong>${symbol}</strong></td>
-                                    <td>${stats.total_opportunities}</td>
-                                    <td class="pnl-positive">${stats.captured}</td>
-                                    <td><span class="pnl-positive">${stats.capture_rate.toFixed(1)}%</span></td>
-                                </tr>
-                            `).join('') :
-                            `<tr><td colspan="4" class="empty-state">暂无数据</td></tr>`;
+                    if (missedOpps.length > 0) {
+                        tbody2.innerHTML = missedOpps.map(sig => {
+                            const directionBadge = sig.signal_direction === 'LONG'
+                                ? `<span class="badge badge-success">做多</span>`
+                                : `<span class="badge badge-danger">做空</span>`;
 
-                        document.getElementById('worst-symbols-body').innerHTML = worstSymbols.length > 0 ?
-                            worstSymbols.slice(0, 5).map(([symbol, stats]) => `
+                            const qualityBadge = sig.signal_quality === '强'
+                                ? `<span class="badge badge-danger">${sig.signal_quality}</span>`
+                                : `<span class="badge badge-warning">${sig.signal_quality}</span>`;
+
+                            const formatPower = (power) => `<span class="${power >= 0 ? 'pnl-positive' : 'pnl-negative'}">${power >= 0 ? '+' : ''}${power}</span>`;
+
+                            return `
                                 <tr>
-                                    <td><strong>${symbol}</strong></td>
-                                    <td>${stats.total_opportunities}</td>
-                                    <td class="pnl-negative">${stats.captured}</td>
-                                    <td><span class="pnl-negative">${stats.capture_rate.toFixed(1)}%</span></td>
+                                    <td><strong>${sig.symbol}</strong></td>
+                                    <td>${directionBadge}</td>
+                                    <td>${qualityBadge}</td>
+                                    <td>${sig.signal_strength.toFixed(1)}</td>
+                                    <td>${formatPower(sig.net_power_1h)}</td>
+                                    <td>${formatPower(sig.net_power_15m)}</td>
+                                    <td>${formatPower(sig.net_power_5m)}</td>
+                                    <td style="font-size: 11px;">${sig.main_reason}</td>
                                 </tr>
-                            `).join('') :
-                            `<tr><td colspan="4" class="empty-state">暂无数据</td></tr>`;
+                            `;
+                        }).join('');
+                    } else {
+                        tbody2.innerHTML = '<tr><td colspan="8" class="empty-state">✅ 没有错过任何强信号</td></tr>';
                     }
 
-                    // 总结
-                    if (data.summary) {
-                        document.getElementById('opportunities-summary').innerHTML = `
-                            <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
-                                <div class="stat-card">
-                                    <div class="stat-label">总机会数</div>
-                                    <div class="stat-value">${data.summary.total_opportunities || 0}</div>
-                                    <div class="stat-change">识别到的大行情机会</div>
-                                </div>
-                                <div class="stat-card" style="border-left: 4px solid var(--success-green);">
-                                    <div class="stat-label">最佳时间周期</div>
-                                    <div class="stat-value">${data.summary.best_timeframe ? data.summary.best_timeframe.toUpperCase() : 'N/A'}</div>
-                                    <div class="stat-change">捕获率最高</div>
-                                </div>
-                                <div class="stat-card" style="border-left: 4px solid var(--danger-red);">
-                                    <div class="stat-label">最弱时间周期</div>
-                                    <div class="stat-value">${data.summary.worst_timeframe ? data.summary.worst_timeframe.toUpperCase() : 'N/A'}</div>
-                                    <div class="stat-change">需要改进</div>
-                                </div>
-                            </div>
-                        `;
-                    }
+                    // 清空右侧表格（不再需要）
+                    tbody3.innerHTML = '<tr><td colspan="4" class="empty-state">-</td></tr>';
+
+                } else {
+                    // 没有数据
+                    document.getElementById('opportunities-summary').innerHTML = `
+                        <div class="empty-state" style="padding: 40px;">
+                            <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
+                            <div class="empty-state-text">${result.data?.message || '暂无实时机会分析数据'}</div>
+                        </div>
+                    `;
                 }
             } catch (error) {
                 console.error('加载机会分析失败:', error);
+                document.getElementById('opportunities-summary').innerHTML = `
+                    <div class="empty-state" style="padding: 40px;">
+                        <div class="empty-state-icon"><i class="bi bi-exclamation-triangle"></i></div>
+                        <div class="empty-state-text">加载失败，请稍后重试</div>
+                    </div>
+                `;
             }
 
             document.getElementById('opportunitiesLoading').style.display = 'none';
