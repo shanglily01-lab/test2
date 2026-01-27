@@ -372,7 +372,7 @@ class DailyReviewAnalyzer:
             SELECT
                 id,
                 symbol,
-                direction,
+                position_side,
                 entry_signal_type,
                 entry_signal_time,
                 avg_entry_price,
