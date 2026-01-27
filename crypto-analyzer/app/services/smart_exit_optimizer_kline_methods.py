@@ -173,35 +173,20 @@ async def _execute_partial_close(
         )
 
         # 调用实盘引擎执行平仓
+        # 注意：close_position_partial会负责更新数据库（quantity, margin, notes等）
+        # 因此这里不再重复更新数据库，避免竞态条件导致数量被重复扣除
         if self.live_engine:
-            await self.live_engine.close_position_partial(
+            result = await self.live_engine.close_position_partial(
                 position_id=position_id,
                 close_ratio=close_ratio,
                 reason=reason
             )
 
-        # 更新数据库 (减少持仓数量)
-        conn = self.db_pool.get_connection()
-        cursor = conn.cursor()
-
-        remaining_size = total_size - close_size
-
-        cursor.execute("""
-            UPDATE futures_positions
-            SET quantity = %s,
-                notes = CONCAT(COALESCE(notes, ''), %s)
-            WHERE id = %s
-        """, (
-            float(remaining_size),
-            f"\n[部分平仓{close_ratio*100:.0f}%] {reason} @ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            position_id
-        ))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        logger.info(f"✅ 部分平仓完成: 持仓{position_id} | 剩余数量{float(remaining_size):.4f}")
+            if result and result.get('success'):
+                remaining_quantity = result.get('remaining_quantity', 0)
+                logger.info(f"✅ 部分平仓完成: 持仓{position_id} | 剩余数量{remaining_quantity:.4f}")
+            else:
+                logger.error(f"❌ 部分平仓失败: 持仓{position_id}")
 
     except Exception as e:
         logger.error(f"执行部分平仓失败: {e}")
