@@ -394,6 +394,11 @@ class SmartExitOptimizer:
 
         # ========== 智能分批平仓逻辑（计划平仓前30分钟）==========
         planned_close_time = position['planned_close_time']
+
+        # 如果没有设置计划平仓时间（恢复的分批建仓持仓），只检查止损止盈，不执行智能分批平仓
+        if planned_close_time is None:
+            return False, ""
+
         now = datetime.now()
         monitoring_start_time = planned_close_time - timedelta(minutes=30)
 
@@ -448,6 +453,11 @@ class SmartExitOptimizer:
             是否完成平仓
         """
         planned_close_time = position['planned_close_time']
+
+        # 如果没有设置计划平仓时间（恢复的分批建仓持仓），不执行智能分批平仓
+        if planned_close_time is None:
+            return False
+
         now = datetime.now()
         monitoring_start_time = planned_close_time - timedelta(minutes=30)
 

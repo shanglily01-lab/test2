@@ -147,7 +147,8 @@
       "Bash(where:*)",
       "Bash(D:\\\\python\\\\python.exe:*)",
       "Bash(tail:*)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []
