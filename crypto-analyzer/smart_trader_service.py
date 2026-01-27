@@ -1136,8 +1136,15 @@ class SmartTraderService:
 
                         # 启动智能平仓监控（如果启用）
                         if self.smart_exit_optimizer:
-                            asyncio.create_task(self.smart_exit_optimizer.start_monitoring_position(position_id))
-                            logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
+                            try:
+                                loop = asyncio.get_event_loop()
+                                if loop.is_closed():
+                                    logger.warning(f"⚠️ 事件循环已关闭，无法启动智能平仓监控: 持仓{position_id}")
+                                else:
+                                    asyncio.create_task(self.smart_exit_optimizer.start_monitoring_position(position_id))
+                                    logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
+                            except RuntimeError as e:
+                                logger.warning(f"⚠️ 无法启动智能平仓监控: {e}")
                     else:
                         logger.error(f"❌ [BATCH_ENTRY_FAILED] {symbol} {side} | {entry_result.get('error')}")
                 except Exception as e:
