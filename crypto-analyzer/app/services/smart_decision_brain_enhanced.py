@@ -12,10 +12,12 @@ from loguru import logger
 import pymysql
 
 from app.services.advanced_signal_detector import AdvancedSignalDetector
+from app.analyzers.kline_strength_scorer import KlineStrengthScorer
+from app.services.signal_analysis_service import SignalAnalysisService
 
 
 class SmartDecisionBrainEnhanced:
-    """增强版智能决策大脑 (集成高级信号检测)"""
+    """增强版智能决策大脑 (集成高级信号检测 + K线强度评分)"""
 
     def __init__(self, db_config: dict):
         """
@@ -62,16 +64,23 @@ class SmartDecisionBrainEnhanced:
         # 合并所有可交易币种
         self.all_tradable = list(set(self.whitelist_main + self.whitelist_long))
 
-        # 决策阈值
-        self.threshold = 30  # 最低30分才开仓
+        # 决策阈值 (优化后提升到45分)
+        self.threshold = 45  # 最低45分才开仓 (原30分)
+        self.min_kline_score = 15  # K线强度最低15分
 
         # === 新增: 高级信号检测器 ===
         self.advanced_detector = AdvancedSignalDetector(db_config)
         self.enable_advanced_signals = True  # 启用高级信号检测
 
+        # === 新增: K线强度评分器 ===
+        self.kline_scorer = KlineStrengthScorer()
+        self.signal_analyzer = SignalAnalysisService(db_config)
+        self.enable_kline_scoring = True  # 启用K线强度评分
+
         logger.info(f"✅ 增强版智能决策大脑已初始化")
         logger.info(f"   主流币: {len(self.whitelist_main)}个 | 白名单: {len(self.whitelist_long)}个 | 黑名单: {len(self.blacklist)}个")
-        logger.info(f"   决策阈值: {self.threshold}分 | 高级信号: {'启用' if self.enable_advanced_signals else '禁用'}")
+        logger.info(f"   决策阈值: {self.threshold}分 (K线强度>={self.min_kline_score}分) | 高级信号: {'启用' if self.enable_advanced_signals else '禁用'}")
+        logger.info(f"   K线强度评分: {'启用' if self.enable_kline_scoring else '禁用'}")
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -370,7 +379,7 @@ class SmartDecisionBrainEnhanced:
                         }
                     }
 
-            # === 原有的白名单+多维度分析 ===
+            # === 白名单检查 ===
             if symbol not in self.whitelist_long and symbol not in self.whitelist_main:
                 return {
                     'decision': False,
@@ -381,6 +390,29 @@ class SmartDecisionBrainEnhanced:
                     'trade_params': {}
                 }
 
+            # === K线强度评分 (新增) ===
+            kline_score_result = None
+            kline_score = 0
+
+            if self.enable_kline_scoring:
+                try:
+                    # 获取三周期K线强度
+                    strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
+                    strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
+                    strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
+
+                    if all([strength_1h, strength_15m, strength_5m]):
+                        # 计算K线强度评分
+                        kline_score_result = self.kline_scorer.calculate_strength_score(
+                            strength_1h, strength_15m, strength_5m
+                        )
+                        kline_score = kline_score_result['total_score']
+
+                        logger.debug(f"{symbol} K线强度: {kline_score}/40分 ({kline_score_result['direction']}, {kline_score_result['strength']})")
+                except Exception as e:
+                    logger.warning(f"{symbol} K线强度评分失败: {e}")
+
+            # === 传统多维度分析 ===
             # 加载K线
             klines_1d = self.load_klines(symbol, '1d', 50)
             klines_1h = self.load_klines(symbol, '1h', 100)
@@ -395,48 +427,89 @@ class SmartDecisionBrainEnhanced:
                     'trade_params': {}
                 }
 
-            # 多维度分析
+            # 多维度分析 (总分60分)
             pos_score, pos_reasons = self.analyze_position(klines_1d)
             trend_score, trend_reasons = self.analyze_trend(klines_1d, klines_1h)
             sr_score, sr_reasons, sr_data = self.analyze_support_resistance(klines_1h)
 
-            # 综合评分
-            total_score = pos_score + trend_score + sr_score
+            traditional_score = pos_score + trend_score + sr_score
+
+            # === 综合评分 = K线强度分(40) + 传统分析分(60) ===
+            total_score = kline_score + traditional_score
 
             # 汇总理由
             all_reasons = []
+
+            # K线强度原因 (优先显示)
+            if kline_score_result:
+                all_reasons.extend([f"【K线强度{kline_score}/40】"] + kline_score_result['reasons'])
+
+            # 传统分析原因
+            all_reasons.append(f"【传统分析{traditional_score}/60】")
             all_reasons.extend(pos_reasons)
             all_reasons.extend(trend_reasons)
             all_reasons.extend(sr_reasons)
 
-            # 决策
-            decision = total_score >= self.threshold
+            # === 决策判断 ===
+            # 总分>=45分 且 K线强度>=15分
+            decision = (total_score >= self.threshold) and (kline_score >= self.min_kline_score)
+
+            # 确定方向
+            if kline_score_result and kline_score_result['direction'] != 'NEUTRAL':
+                # 优先使用K线强度方向
+                direction = kline_score_result['direction']
+            elif decision:
+                # 回退到LONG (白名单默认)
+                direction = 'LONG'
+            else:
+                direction = None
+
+            # 只做LONG方向检查 (whitelist_long)
+            if symbol in self.whitelist_long and symbol not in self.whitelist_main:
+                if direction == 'SHORT':
+                    decision = False
+                    all_reasons.insert(0, f"⚠️ {symbol}仅允许LONG方向")
 
             result = {
                 'decision': decision,
-                'direction': 'LONG' if decision else None,
+                'direction': direction if decision else None,
                 'score': total_score,
+                'kline_score': kline_score,
+                'traditional_score': traditional_score,
                 'threshold': self.threshold,
-                'signal_source': 'analysis',
+                'signal_source': 'kline_enhanced_analysis',
                 'reasons': all_reasons,
-                'trade_params': {}
+                'trade_params': {},
+                'kline_strength': kline_score_result  # 保存完整K线强度数据
             }
 
             if decision:
-                if total_score >= 45:
-                    max_hold_minutes = 360
-                elif total_score >= 30:
-                    max_hold_minutes = 240
+                # 根据K线强度确定持仓时长
+                if kline_score_result:
+                    entry_strategy = self.kline_scorer.get_entry_strategy(kline_score)
+                    max_hold_minutes = entry_strategy['max_hold_minutes']
                 else:
-                    max_hold_minutes = 120
+                    # 回退到传统评分
+                    if total_score >= 60:
+                        max_hold_minutes = 360
+                    elif total_score >= 45:
+                        max_hold_minutes = 240
+                    else:
+                        max_hold_minutes = 180
 
                 result['trade_params'] = {
                     'stop_loss': sr_data['support'],
                     'take_profit': sr_data['resistance'],
                     'risk_reward': sr_data['risk_reward'],
                     'max_hold_minutes': max_hold_minutes,
-                    'entry_score': total_score
+                    'entry_score': total_score,
+                    'kline_strength_score': kline_score
                 }
+
+                # 如果有K线强度数据,添加入场策略
+                if kline_score_result:
+                    entry_strategy = self.kline_scorer.get_entry_strategy(kline_score)
+                    result['trade_params']['entry_strategy'] = entry_strategy
 
             return result
 
@@ -495,12 +568,18 @@ class SmartDecisionBrainEnhanced:
                     # 日志输出
                     source_label = {
                         'advanced_signal': '🎯高级信号',
-                        'analysis': '📊分析',
+                        'kline_enhanced_analysis': '📊K线增强',
+                        'analysis': '📊传统分析',
                         'whitelist': '⭐白名单'
                     }.get(result['signal_source'], '❓未知')
 
                     if result['signal_source'] == 'advanced_signal':
                         logger.info(f"✅ {symbol} | {source_label} | {result.get('signal_type', '')} | 评分{result['score']}")
+                    elif result['signal_source'] == 'kline_enhanced_analysis':
+                        kline_s = result.get('kline_score', 0)
+                        trad_s = result.get('traditional_score', 0)
+                        direction = result.get('direction', 'N/A')
+                        logger.info(f"✅ {symbol} | {source_label} | {direction} | 总分{result['score']} (K线{kline_s}+分析{trad_s})")
                     else:
                         rr = result['trade_params'].get('risk_reward', 0)
                         logger.info(f"✅ {symbol} | {source_label} | 评分{result['score']} | 盈亏比{rr:.1f}:1")

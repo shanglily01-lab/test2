@@ -37,12 +37,18 @@ class SmartEntryExecutor:
         执行智能分批建仓
 
         流程：
-        1. 启动后台采样器（滚动5分钟窗口）
-        2. 前5分钟：建立初始基线
-        3. 5-30分钟：基于实时更新的基线动态入场
+        1. 根据K线强度调整建仓策略 (新增)
+        2. 启动后台采样器（滚动5分钟窗口）
+        3. 前5分钟：建立初始基线
+        4. 动态入场：基于实时更新的基线动态入场
 
         Args:
-            signal: 开仓信号 {'symbol': str, 'direction': 'LONG'/'SHORT', 'amount': float}
+            signal: 开仓信号 {
+                'symbol': str,
+                'direction': 'LONG'/'SHORT',
+                'amount': float,
+                'kline_strength': dict (可选 - K线强度评分结果)
+            }
 
         Returns:
             建仓结果 {'success': bool, 'plan': dict, 'avg_price': float}
@@ -51,7 +57,24 @@ class SmartEntryExecutor:
         direction = signal['direction']
         signal_time = datetime.now()
 
-        logger.info(f"🚀 {symbol} 开始智能建仓流程 | 方向: {direction}")
+        # === 根据K线强度调整建仓策略 (新增) ===
+        entry_strategy = signal.get('entry_strategy')
+        kline_strength = signal.get('kline_strength')
+
+        if entry_strategy:
+            # 使用K线强度推荐的策略
+            self.batch_ratio = entry_strategy['batch_ratio']
+            self.time_window = entry_strategy['window_minutes']
+            entry_mode = entry_strategy['mode']
+
+            logger.info(f"🚀 {symbol} 开始智能建仓 | 方向: {direction} | 策略: {entry_mode}")
+            logger.info(f"   K线强度: {kline_strength['total_score']}/40分 ({kline_strength['direction']}, {kline_strength['strength']})")
+            logger.info(f"   建仓窗口: {self.time_window}分钟 | 分批比例: {self.batch_ratio}")
+        else:
+            # 使用默认策略
+            self.batch_ratio = [0.3, 0.3, 0.4]
+            self.time_window = 30
+            logger.info(f"🚀 {symbol} 开始智能建仓流程 | 方向: {direction} (默认策略)")
 
         # 初始化建仓计划
         plan = {
@@ -61,14 +84,15 @@ class SmartEntryExecutor:
             'total_margin': signal.get('total_margin', 400),
             'leverage': signal.get('leverage', 5),
             'batches': [
-                {'ratio': 0.3, 'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
-                {'ratio': 0.3, 'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
-                {'ratio': 0.4, 'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
+                {'ratio': self.batch_ratio[0], 'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
+                {'ratio': self.batch_ratio[1], 'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
+                {'ratio': self.batch_ratio[2], 'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
             ],
-            'signal': signal  # 保存原始信号用于创建持仓记录
+            'signal': signal,  # 保存原始信号用于创建持仓记录
+            'kline_strength': kline_strength  # 保存K线强度数据
         }
 
-        # 启动后台采样器（独立协程，持续运行30分钟）
+        # 启动后台采样器（独立协程）
         sampler = PriceSampler(symbol, self.price_service, window_seconds=300)
         sampling_task = asyncio.create_task(sampler.start_background_sampling())
 
@@ -90,11 +114,12 @@ class SmartEntryExecutor:
                 f"趋势 {baseline['trend']['direction']} ({baseline['trend']['change_pct']:.2f}%)"
             )
 
-        # 动态入场执行（5-30分钟）
-        logger.info(f"⚡ 开始动态入场执行（基线实时更新）...")
+        # 动态入场执行（根据策略调整时间窗口）
+        max_window_seconds = self.time_window * 60
+        logger.info(f"⚡ 开始动态入场执行（窗口{self.time_window}分钟，基线实时更新）...")
 
         try:
-            while (datetime.now() - signal_time).total_seconds() < 1800:  # 总共30分钟
+            while (datetime.now() - signal_time).total_seconds() < max_window_seconds:
                 current_price = await self._get_current_price(symbol)
                 elapsed_minutes = (datetime.now() - signal_time).total_seconds() / 60
 
