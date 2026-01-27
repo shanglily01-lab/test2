@@ -2183,6 +2183,193 @@ class SmartTraderService:
             logger.error(f"异步平仓失败: {symbol} {direction} | {e}")
             return {'success': False, 'error': str(e)}
 
+    async def close_position_partial(self, position_id: int, close_ratio: float, reason: str):
+        """
+        部分平仓方法（供SmartExitOptimizer调用）
+
+        Args:
+            position_id: 持仓ID
+            close_ratio: 平仓比例 (0.0-1.0)
+            reason: 平仓原因
+
+        Returns:
+            dict: {'success': bool, 'position_id': int, 'closed_quantity': float}
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # 获取持仓信息
+            cursor.execute("""
+                SELECT id, symbol, position_side, quantity, entry_price, avg_entry_price,
+                       leverage, margin, status
+                FROM futures_positions
+                WHERE id = %s AND status = 'open' AND account_id = %s
+            """, (position_id, self.account_id))
+
+            position = cursor.fetchone()
+
+            if not position:
+                cursor.close()
+                logger.error(f"持仓 {position_id} 不存在或已关闭")
+                return {'success': False, 'error': 'Position not found or already closed'}
+
+            symbol = position['symbol']
+            side = position['position_side']
+            total_quantity = float(position['quantity'])
+            entry_price = float(position['avg_entry_price'])
+            leverage = position['leverage'] if position.get('leverage') else 1
+            total_margin = float(position['margin']) if position.get('margin') else 0.0
+
+            # 计算平仓数量和保证金
+            close_quantity = total_quantity * close_ratio
+            close_margin = total_margin * close_ratio
+            remaining_quantity = total_quantity - close_quantity
+            remaining_margin = total_margin - close_margin
+
+            # 获取当前价格
+            current_price = self.get_current_price(symbol)
+            if not current_price:
+                cursor.close()
+                logger.error(f"无法获取 {symbol} 当前价格")
+                return {'success': False, 'error': 'Failed to get current price'}
+
+            # 计算盈亏
+            if side == 'LONG':
+                realized_pnl = (current_price - entry_price) * close_quantity
+                pnl_pct = (current_price - entry_price) / entry_price * 100
+            else:  # SHORT
+                realized_pnl = (entry_price - current_price) * close_quantity
+                pnl_pct = (entry_price - current_price) / entry_price * 100
+
+            roi = (realized_pnl / close_margin) * 100 if close_margin > 0 else 0
+
+            logger.info(
+                f"[PARTIAL_CLOSE] {symbol} {side} | 持仓{position_id} | "
+                f"平仓比例: {close_ratio*100:.0f}% | 数量: {close_quantity:.4f}/{total_quantity:.4f} | "
+                f"盈亏: {pnl_pct:+.2f}% ({realized_pnl:+.2f} USDT) | 原因: {reason}"
+            )
+
+            # 更新持仓记录
+            cursor.execute("""
+                UPDATE futures_positions
+                SET quantity = %s,
+                    margin = %s,
+                    notional_value = %s,
+                    realized_pnl = IFNULL(realized_pnl, 0) + %s,
+                    updated_at = NOW(),
+                    notes = CONCAT(IFNULL(notes, ''), '|partial_close:', %s, ',ratio:', %s)
+                WHERE id = %s
+            """, (
+                remaining_quantity,
+                remaining_margin,
+                remaining_quantity * entry_price,
+                realized_pnl,
+                reason,
+                f"{close_ratio:.2f}",
+                position_id
+            ))
+
+            # 创建平仓订单记录
+            import uuid
+            close_side = 'CLOSE_LONG' if side == 'LONG' else 'CLOSE_SHORT'
+            notional_value = current_price * close_quantity
+            fee = notional_value * 0.0004
+            order_id = f"PARTIAL-{position_id}-{int(close_ratio*100)}"
+            trade_id = str(uuid.uuid4())
+
+            cursor.execute("""
+                INSERT INTO futures_orders (
+                    account_id, order_id, position_id, symbol,
+                    side, order_type, leverage,
+                    price, quantity, executed_quantity,
+                    total_value, executed_value,
+                    fee, fee_rate, status,
+                    avg_fill_price, fill_time,
+                    realized_pnl, pnl_pct,
+                    order_source, notes
+                ) VALUES (
+                    %s, %s, %s, %s,
+                    %s, 'MARKET', %s,
+                    %s, %s, %s,
+                    %s, %s,
+                    %s, %s, 'FILLED',
+                    %s, %s,
+                    %s, %s,
+                    'smart_exit', %s
+                )
+            """, (
+                self.account_id, order_id, position_id, symbol,
+                close_side, leverage,
+                current_price, close_quantity, close_quantity,
+                notional_value, notional_value,
+                fee, 0.0004,
+                current_price, datetime.utcnow(),
+                realized_pnl, pnl_pct,
+                f"partial_close_{close_ratio:.0%}:{reason}"
+            ))
+
+            # 创建交易记录
+            cursor.execute("""
+                INSERT INTO futures_trades (
+                    trade_id, position_id, account_id, symbol, side,
+                    price, quantity, notional_value, leverage, margin,
+                    fee, realized_pnl, pnl_pct, roi, entry_price,
+                    order_id, trade_time, created_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s
+                )
+            """, (
+                trade_id, position_id, self.account_id, symbol, close_side,
+                current_price, close_quantity, notional_value, leverage, close_margin,
+                fee, realized_pnl, pnl_pct, roi, entry_price,
+                order_id, datetime.utcnow(), datetime.utcnow()
+            ))
+
+            # 更新账户余额
+            cursor.execute("""
+                UPDATE futures_trading_accounts
+                SET current_balance = current_balance + %s + %s,
+                    frozen_balance = frozen_balance - %s,
+                    realized_pnl = realized_pnl + %s,
+                    total_trades = total_trades + 1,
+                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                WHERE id = %s
+            """, (
+                float(close_margin), float(realized_pnl), float(close_margin),
+                float(realized_pnl), float(realized_pnl), float(realized_pnl),
+                self.account_id
+            ))
+
+            cursor.execute("""
+                UPDATE futures_trading_accounts
+                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                WHERE id = %s
+            """, (self.account_id,))
+
+            conn.commit()
+            cursor.close()
+
+            logger.info(f"✅ 部分平仓成功: 持仓{position_id} | 剩余数量: {remaining_quantity:.4f}")
+
+            return {
+                'success': True,
+                'position_id': position_id,
+                'closed_quantity': close_quantity,
+                'remaining_quantity': remaining_quantity,
+                'realized_pnl': realized_pnl
+            }
+
+        except Exception as e:
+            logger.error(f"部分平仓失败: 持仓{position_id} | {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return {'success': False, 'error': str(e)}
+
     def run_adaptive_optimization(self):
         """运行自适应优化 - 每日定时任务"""
         try:
