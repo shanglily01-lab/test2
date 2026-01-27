@@ -1652,11 +1652,12 @@ async def get_realtime_opportunity_analysis(
         # 初始化信号分析服务
         signal_service = SignalAnalysisService(db_config)
 
-        # 1. 获取监控列表中的所有交易对（从trading_symbol_rating表获取）
+        # 1. 获取监控列表中的所有交易对（从K线数据表获取最近活跃的交易对）
         cursor.execute("""
             SELECT DISTINCT symbol
-            FROM trading_symbol_rating
-            WHERE rating_level >= 1
+            FROM kline_data
+            WHERE timeframe = '1h'
+            AND timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
             ORDER BY symbol
         """)
         monitored_symbols = [row['symbol'] for row in cursor.fetchall()]
@@ -1698,11 +1699,9 @@ async def get_realtime_opportunity_analysis(
         blacklist = {row['symbol']: row['reason'] for row in cursor.fetchall()}
 
         # 4. 获取账户余额
-        # 根据account_id选择对应的账户表
-        account_table = 'paper_trading_accounts' if account_id == 2 else 'live_trading_accounts'
-        cursor.execute(f"""
+        cursor.execute("""
             SELECT balance
-            FROM {account_table}
+            FROM futures_trading_accounts
             WHERE id = %s
         """, (account_id,))
         account_balance = cursor.fetchone()
