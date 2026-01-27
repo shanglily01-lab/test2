@@ -253,7 +253,9 @@ class AutoParameterOptimizer:
 
         # 规则4: 如果某个信号胜率 < 45%，提高该信号的阈值（收紧）
         for perf in report.get('signal_performances', []):
-            if perf['win_rate'] < 45 and perf['total_trades'] >= 10:
+            win_rate = float(perf['win_rate']) if perf.get('win_rate') is not None else 0
+            total_trades = int(perf.get('total_trades', 0))
+            if win_rate < 45 and total_trades >= 10:
                 signal_type = perf['signal_type']
 
                 if signal_type == 'BOTTOM_REVERSAL_LONG':
@@ -262,7 +264,7 @@ class AutoParameterOptimizer:
                         'param_name': 'min_score_threshold',
                         'old_value': self.current_params['BOTTOM_REVERSAL_LONG']['min_score_threshold'],
                         'new_value': min(70, self.current_params['BOTTOM_REVERSAL_LONG']['min_score_threshold'] + 5),
-                        'reason': f'{signal_type}胜率过低({perf["win_rate"]:.1f}%)，收紧条件'
+                        'reason': f'{signal_type}胜率过低({win_rate:.1f}%)，收紧条件'
                     })
 
                 elif signal_type == 'WEAK_RALLY_SHORT':
@@ -271,7 +273,7 @@ class AutoParameterOptimizer:
                         'param_name': 'min_score_threshold',
                         'old_value': self.current_params['WEAK_RALLY_SHORT']['min_score_threshold'],
                         'new_value': min(70, self.current_params['WEAK_RALLY_SHORT']['min_score_threshold'] + 5),
-                        'reason': f'{signal_type}胜率过低({perf["win_rate"]:.1f}%)，收紧条件'
+                        'reason': f'{signal_type}胜率过低({win_rate:.1f}%)，收紧条件'
                     })
 
         # 规则5: 如果5M机会很多但错过率高，降低第1批建仓阈值
