@@ -375,8 +375,8 @@ class DailyReviewAnalyzer:
                 position_side,
                 entry_signal_type,
                 entry_signal_time,
-                avg_entry_price,
-                exit_price,
+                entry_price,
+                close_price,
                 realized_pnl_pct,
                 created_at
             FROM futures_positions
