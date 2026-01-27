@@ -1818,6 +1818,19 @@ class SmartTraderService:
             remaining_quantity = total_quantity - close_quantity
             remaining_margin = total_margin - close_margin
 
+            # 如果剩余保证金太小(<10 USDT),直接全部平仓避免垃圾仓位
+            MIN_MARGIN_THRESHOLD = 10.0
+            if remaining_margin < MIN_MARGIN_THRESHOLD and remaining_margin > 0:
+                logger.warning(
+                    f"⚠️ 剩余保证金太小(${remaining_margin:.2f} < ${MIN_MARGIN_THRESHOLD}), "
+                    f"改为全部平仓避免垃圾仓位"
+                )
+                close_quantity = total_quantity
+                close_margin = total_margin
+                remaining_quantity = 0
+                remaining_margin = 0
+                close_ratio = 1.0
+
             # 获取当前价格
             current_price = self.get_current_price(symbol)
             if not current_price:
@@ -1843,24 +1856,45 @@ class SmartTraderService:
             )
 
             # 更新持仓记录
-            cursor.execute("""
-                UPDATE futures_positions
-                SET quantity = %s,
-                    margin = %s,
-                    notional_value = %s,
-                    realized_pnl = IFNULL(realized_pnl, 0) + %s,
-                    updated_at = NOW(),
-                    notes = CONCAT(IFNULL(notes, ''), '|partial_close:', %s, ',ratio:', %s)
-                WHERE id = %s
-            """, (
-                remaining_quantity,
-                remaining_margin,
-                remaining_quantity * entry_price,
-                realized_pnl,
-                reason,
-                f"{close_ratio:.2f}",
-                position_id
-            ))
+            if remaining_quantity <= 0.0001:  # 全部平仓
+                cursor.execute("""
+                    UPDATE futures_positions
+                    SET quantity = 0,
+                        margin = 0,
+                        notional_value = 0,
+                        status = 'closed',
+                        close_price = %s,
+                        close_time = NOW(),
+                        realized_pnl = IFNULL(realized_pnl, 0) + %s,
+                        updated_at = NOW(),
+                        notes = CONCAT(IFNULL(notes, ''), '|full_close:', %s, ' (from partial_close due to small remaining)')
+                    WHERE id = %s
+                """, (
+                    current_price,
+                    realized_pnl,
+                    reason,
+                    position_id
+                ))
+                logger.info(f"✅ 持仓{position_id}已全部平仓(剩余保证金太小)")
+            else:  # 部分平仓
+                cursor.execute("""
+                    UPDATE futures_positions
+                    SET quantity = %s,
+                        margin = %s,
+                        notional_value = %s,
+                        realized_pnl = IFNULL(realized_pnl, 0) + %s,
+                        updated_at = NOW(),
+                        notes = CONCAT(IFNULL(notes, ''), '|partial_close:', %s, ',ratio:', %s)
+                    WHERE id = %s
+                """, (
+                    remaining_quantity,
+                    remaining_margin,
+                    remaining_quantity * entry_price,
+                    realized_pnl,
+                    reason,
+                    f"{close_ratio:.2f}",
+                    position_id
+                ))
 
             # 创建平仓订单记录
             import uuid
