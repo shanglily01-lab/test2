@@ -1652,11 +1652,11 @@ async def get_realtime_opportunity_analysis(
         # 初始化信号分析服务
         signal_service = SignalAnalysisService(db_config)
 
-        # 1. 获取监控列表中的所有交易对
+        # 1. 获取监控列表中的所有交易对（从trading_symbol_rating表获取）
         cursor.execute("""
-            SELECT symbol
-            FROM monitored_symbols
-            WHERE is_active = 1
+            SELECT DISTINCT symbol
+            FROM trading_symbol_rating
+            WHERE rating_level >= 1
             ORDER BY symbol
         """)
         monitored_symbols = [row['symbol'] for row in cursor.fetchall()]
