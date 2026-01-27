@@ -203,24 +203,9 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  价格缓存服务初始化失败: {e}")
             price_cache_service = None
 
-        # 初始化待成交订单自动执行器（现货交易）
-        try:
-            from app.services.pending_order_executor import PendingOrderExecutor
-            from app.trading.paper_trading_engine import PaperTradingEngine
-            
-            db_config = config.get('database', {}).get('mysql', {})
-            trading_engine = PaperTradingEngine(db_config, price_cache_service=price_cache_service)
-            pending_order_executor = PendingOrderExecutor(
-                db_config=db_config,
-                trading_engine=trading_engine,
-                price_cache_service=price_cache_service
-            )
-            logger.info("✅ 待成交订单自动执行服务初始化成功（现货交易）")
-        except Exception as e:
-            logger.warning(f"⚠️  待成交订单自动执行服务初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-            pending_order_executor = None
+        # 待成交订单自动执行器已停用（现货交易，系统使用合约交易）
+        # 当前系统使用 smart_trader_service.py 进行合约自动交易，不需要现货限价单服务
+        pending_order_executor = None
 
         # 初始化实盘交易引擎（需要在限价单执行器之前初始化）
         live_engine = None
@@ -321,25 +306,25 @@ async def lifespan(app: FastAPI):
 
     logger.info("🚀 FastAPI 启动完成")
     
-    # 在异步上下文中启动后台任务
-    if pending_order_executor:
-        try:
-            import asyncio
-            pending_order_executor.task = asyncio.create_task(pending_order_executor.run_loop(interval=5))
-            logger.info("✅ 待成交订单自动执行服务已启动（每5秒检查，现货交易）")
-        except Exception as e:
-            logger.warning(f"⚠️  启动待成交订单自动执行任务失败: {e}")
-            pending_order_executor = None
-
-    # 启动合约限价单自动执行服务
-    if futures_limit_order_executor:
-        try:
-            import asyncio
-            futures_limit_order_executor.task = asyncio.create_task(futures_limit_order_executor.run_loop(interval=5))
-            logger.info("✅ 合约限价单自动执行服务已启动（每5秒检查）")
-        except Exception as e:
-            logger.warning(f"⚠️  启动合约限价单自动执行任务失败: {e}")
-            futures_limit_order_executor = None
+    # 限价单自动执行服务已停用（系统使用合约市价单交易）
+    # 当前系统通过 smart_trader_service.py 使用市价单进行合约交易，不需要限价单服务
+    # if pending_order_executor:
+    #     try:
+    #         import asyncio
+    #         pending_order_executor.task = asyncio.create_task(pending_order_executor.run_loop(interval=5))
+    #         logger.info("✅ 待成交订单自动执行服务已启动（每5秒检查，现货交易）")
+    #     except Exception as e:
+    #         logger.warning(f"⚠️  启动待成交订单自动执行任务失败: {e}")
+    #         pending_order_executor = None
+    #
+    # if futures_limit_order_executor:
+    #     try:
+    #         import asyncio
+    #         futures_limit_order_executor.task = asyncio.create_task(futures_limit_order_executor.run_loop(interval=5))
+    #         logger.info("✅ 合约限价单自动执行服务已启动（每5秒检查）")
+    #     except Exception as e:
+    #         logger.warning(f"⚠️  启动合约限价单自动执行任务失败: {e}")
+    #         futures_limit_order_executor = None
 
     # 合约止盈止损监控服务已停用（平仓逻辑已统一到SmartExitOptimizer）
     # 所有止盈止损、超时平仓逻辑现在由 smart_trader_service.py 中的 SmartExitOptimizer 统一处理
@@ -446,29 +431,28 @@ async def lifespan(app: FastAPI):
     # 关闭时的清理工作
     logger.info("👋 关闭系统...")
 
-    # 停止待成交订单自动执行器
-    if pending_order_executor:
-        try:
-            pending_order_executor.stop()
-            logger.info("✅ 待成交订单自动执行服务已停止")
-        except Exception as e:
-            logger.warning(f"⚠️  停止待成交订单自动执行服务失败: {e}")
-
-    # 停止合约限价单自动执行器
-    if futures_limit_order_executor:
-        try:
-            futures_limit_order_executor.stop()
-            logger.info("✅ 合约限价单自动执行服务已停止")
-        except Exception as e:
-            logger.warning(f"⚠️  停止合约限价单自动执行服务失败: {e}")
-    
-    # 合约止盈止损监控服务已停用（平仓逻辑已统一到SmartExitOptimizer）
-    # if futures_monitor_service:
+    # 限价单自动执行服务已停用（系统使用合约市价单交易）
+    # if pending_order_executor:
     #     try:
-    #         futures_monitor_service.stop_monitor()
-    #         logger.info("✅ 合约止盈止损监控服务已停止")
+    #         pending_order_executor.stop()
+    #         logger.info("✅ 待成交订单自动执行服务已停止")
     #     except Exception as e:
-    #         logger.warning(f"⚠️  停止合约止盈止损监控服务失败: {e}")
+    #         logger.warning(f"⚠️  停止待成交订单自动执行服务失败: {e}")
+    #
+    # if futures_limit_order_executor:
+    #     try:
+    #         futures_limit_order_executor.stop()
+    #         logger.info("✅ 合约限价单自动执行服务已停止")
+    #     except Exception as e:
+    #         logger.warning(f"⚠️  停止合约限价单自动执行服务失败: {e}")
+    
+    # 停止合约止盈止损监控服务
+    if futures_monitor_service:
+        try:
+            futures_monitor_service.stop_monitor()
+            logger.info("✅ 合约止盈止损监控服务已停止")
+        except Exception as e:
+            logger.warning(f"⚠️  停止合约止盈止损监控服务失败: {e}")
 
     # 停止实盘订单监控服务
     if live_order_monitor:
