@@ -138,9 +138,14 @@ class DailyReviewAnalyzer:
     def _get_connection(self):
         """获取数据库连接"""
         if self.connection is None or not self.connection.open:
+            port = self.db_config.get('port', 3306)
+            # 确保port是整数类型
+            if isinstance(port, str):
+                port = int(port)
+
             self.connection = pymysql.connect(
                 host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
+                port=port,
                 user=self.db_config.get('user', 'root'),
                 password=self.db_config.get('password', ''),
                 database=self.db_config.get('database', 'binance-data'),
