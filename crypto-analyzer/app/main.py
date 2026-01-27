@@ -398,13 +398,14 @@ async def lifespan(app: FastAPI):
         import schedule
         from app.services.auto_parameter_optimizer import AutoParameterOptimizer
 
-        # 配置数据库
+        # 配置数据库（从 mysql 子配置读取）
+        mysql_config = config['database']['mysql']
         db_config = {
-            'host': config['database']['host'],
-            'port': config['database']['port'],
-            'user': config['database']['user'],
-            'password': config['database']['password'],
-            'database': config['database']['database']
+            'host': mysql_config['host'],
+            'port': mysql_config['port'],
+            'user': mysql_config['user'],
+            'password': mysql_config['password'],
+            'database': mysql_config['database']
         }
 
         # 定义优化任务
