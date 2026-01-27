@@ -283,15 +283,15 @@ signals:
     strong_short: 0.75
   margin:
     live:
-      fixed_amount: 50
+      fixed_amount: 400
       mode: fixed
       percent: 1
     paper:
-      fixed_amount: 50
+      fixed_amount: 400
       mode: fixed
       percent: 1
   risk:
-    live_max_position_usdt: 50
+    live_max_position_usdt: 400
     max_position: 0.5
     stop_loss_pct: 0.02
     take_profit_pct: 0.06
