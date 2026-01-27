@@ -1690,10 +1690,10 @@ async def get_realtime_opportunity_analysis(
         current_positions = cursor.fetchall()
         position_symbols = {pos['symbol']: pos for pos in current_positions}
 
-        # 3. 获取信号黑名单
+        # 3. 获取交易黑名单
         cursor.execute("""
             SELECT symbol, reason, created_at
-            FROM signal_blacklist
+            FROM trading_blacklist
             WHERE is_active = 1
         """)
         blacklist = {row['symbol']: row['reason'] for row in cursor.fetchall()}
