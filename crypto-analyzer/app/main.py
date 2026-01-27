@@ -246,18 +246,9 @@ async def lifespan(app: FastAPI):
         # 合约限价单自动执行器已移除（archived）
         futures_limit_order_executor = None
 
-        # 初始化合约止盈止损监控服务
-        try:
-            from app.trading.futures_monitor_service import FuturesMonitorService
-
-            futures_monitor_service = FuturesMonitorService(config_path=str(project_root / 'config.yaml'))
-            futures_monitor_service.start_monitor()
-            logger.info("✅ 合约止盈止损监控服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  合约止盈止损监控服务初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-            futures_monitor_service = None
+        # 合约止盈止损监控服务已停用（平仓逻辑已统一到SmartExitOptimizer）
+        # 所有止盈止损、超时平仓逻辑现在由 smart_trader_service.py 中的 SmartExitOptimizer 统一处理
+        futures_monitor_service = None
 
         # 初始化实盘订单监控服务（限价单成交后自动设置止损止盈）
         try:
@@ -350,25 +341,25 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  启动合约限价单自动执行任务失败: {e}")
             futures_limit_order_executor = None
 
-    # 启动合约止盈止损监控服务
-    if futures_monitor_service:
-        try:
-            import asyncio
-            async def monitor_futures_positions_loop():
-                """合约止盈止损监控循环（每5秒）"""
-                while True:
-                    try:
-                        # 使用 asyncio.to_thread 在线程池中执行同步方法，避免阻塞事件循环
-                        await asyncio.to_thread(futures_monitor_service.monitor_positions)
-                    except Exception as e:
-                        logger.error(f"合约止盈止损监控出错: {e}")
-                    await asyncio.sleep(5)
-
-            asyncio.create_task(monitor_futures_positions_loop())
-            logger.info("✅ 合约止盈止损监控服务已启动（每5秒检查）")
-        except Exception as e:
-            logger.warning(f"⚠️  启动合约止盈止损监控任务失败: {e}")
-            futures_monitor_service = None
+    # 合约止盈止损监控服务已停用（平仓逻辑已统一到SmartExitOptimizer）
+    # 所有止盈止损、超时平仓逻辑现在由 smart_trader_service.py 中的 SmartExitOptimizer 统一处理
+    # if futures_monitor_service:
+    #     try:
+    #         import asyncio
+    #         async def monitor_futures_positions_loop():
+    #             """合约止盈止损监控循环（每5秒）"""
+    #             while True:
+    #                 try:
+    #                     await asyncio.to_thread(futures_monitor_service.monitor_positions)
+    #                 except Exception as e:
+    #                     logger.error(f"合约止盈止损监控出错: {e}")
+    #                 await asyncio.sleep(5)
+    #
+    #         asyncio.create_task(monitor_futures_positions_loop())
+    #         logger.info("✅ 合约止盈止损监控服务已启动（每5秒检查）")
+    #     except Exception as e:
+    #         logger.warning(f"⚠️  启动合约止盈止损监控任务失败: {e}")
+    #         futures_monitor_service = None
 
     # 启动实盘订单监控服务（限价单成交后自动设置止损止盈）
     if live_order_monitor:
@@ -471,13 +462,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"⚠️  停止合约限价单自动执行服务失败: {e}")
     
-    # 停止合约止盈止损监控服务
-    if futures_monitor_service:
-        try:
-            futures_monitor_service.stop_monitor()
-            logger.info("✅ 合约止盈止损监控服务已停止")
-        except Exception as e:
-            logger.warning(f"⚠️  停止合约止盈止损监控服务失败: {e}")
+    # 合约止盈止损监控服务已停用（平仓逻辑已统一到SmartExitOptimizer）
+    # if futures_monitor_service:
+    #     try:
+    #         futures_monitor_service.stop_monitor()
+    #         logger.info("✅ 合约止盈止损监控服务已停止")
+    #     except Exception as e:
+    #         logger.warning(f"⚠️  停止合约止盈止损监控服务失败: {e}")
 
     # 停止实盘订单监控服务
     if live_order_monitor:
