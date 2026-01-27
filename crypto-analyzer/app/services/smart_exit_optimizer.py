@@ -4,7 +4,7 @@
 """
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Tuple
 from decimal import Decimal
 from loguru import logger
 import mysql.connector
