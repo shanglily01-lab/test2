@@ -1148,25 +1148,48 @@ class SmartEntryExecutor:
             sampling_task.cancel()
 
     async def _mark_position_as_open(self, position_id: int):
-        """将持仓标记为open状态"""
+        """将持仓标记为open状态,并设置计划平仓时间"""
         import pymysql
+        from datetime import timedelta
 
         try:
             conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
             cursor = conn.cursor()
 
+            # 查询持仓的entry_score以计算持仓时长
+            cursor.execute("""
+                SELECT entry_score
+                FROM futures_positions
+                WHERE id = %s
+            """, (position_id,))
+
+            result = cursor.fetchone()
+            entry_score = result['entry_score'] if result else 30
+
+            # 根据entry_score计算持仓时长
+            if entry_score >= 45:
+                max_hold_minutes = 360  # 6小时
+            elif entry_score >= 30:
+                max_hold_minutes = 240  # 4小时
+            else:
+                max_hold_minutes = 120  # 2小时
+
+            planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
+
             cursor.execute("""
                 UPDATE futures_positions
                 SET status = 'open',
-                    notes = CONCAT(COALESCE(notes, ''), ' [自动恢复] 系统重启后标记为open')
+                    planned_close_time = %s,
+                    notes = CONCAT(COALESCE(notes, ''), ' [自动恢复] 系统重启后标记为open'),
+                    updated_at = NOW()
                 WHERE id = %s
-            """, (position_id,))
+            """, (planned_close_time, position_id))
 
             conn.commit()
             cursor.close()
             conn.close()
 
-            logger.info(f"✅ 持仓 {position_id} 已标记为open")
+            logger.info(f"✅ 持仓 {position_id} 已标记为open,计划平仓时间: {planned_close_time.strftime('%H:%M:%S')}")
 
         except Exception as e:
             logger.error(f"标记持仓 {position_id} 为open失败: {e}")
