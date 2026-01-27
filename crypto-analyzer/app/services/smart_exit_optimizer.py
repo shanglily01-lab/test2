@@ -54,6 +54,9 @@ class SmartExitOptimizer:
         self.kline_check_interval = 900  # 秒
         self.last_kline_check: Dict[int, datetime] = {}  # position_id -> last_check_time
 
+        # 部分平仓阶段跟踪（避免重复触发）
+        self.partial_close_stage: Dict[int, int] = {}  # position_id -> stage (0=未平仓, 1=平50%, 2=平70%, 3=平100%)
+
     async def start_monitoring_position(self, position_id: int):
         """
         开始监控持仓（从开仓完成后立即开始）
@@ -81,6 +84,15 @@ class SmartExitOptimizer:
         if position_id in self.monitoring_tasks:
             self.monitoring_tasks[position_id].cancel()
             del self.monitoring_tasks[position_id]
+
+            # 清理部分平仓阶段记录
+            if position_id in self.partial_close_stage:
+                del self.partial_close_stage[position_id]
+
+            # 清理K线检查时间记录
+            if position_id in self.last_kline_check:
+                del self.last_kline_check[position_id]
+
             logger.info(f"⏹️ 停止监控持仓 {position_id}")
 
     async def _monitor_position(self, position_id: int):
@@ -941,12 +953,23 @@ class SmartExitOptimizer:
             (平仓原因, 平仓比例) 或 None
         """
         try:
+            position_id = position['id']
             symbol = position['symbol']
             direction = position['direction']
             entry_time = position.get('entry_signal_time', datetime.now())
 
             # 获取持仓时长（分钟）
             hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
+
+            # 获取当前部分平仓阶段
+            current_stage = self.partial_close_stage.get(position_id, 0)
+
+            # === 检测0: 6小时绝对时间托底（最高优先级） ===
+            max_hold_minutes = position.get('max_hold_minutes', 360)  # 默认6小时
+            if hold_minutes >= max_hold_minutes:
+                # 超过6小时，无论什么情况都必须平仓
+                logger.warning(f"⏰ 持仓{position_id} {symbol}已持有{hold_minutes/60:.1f}小时，触发时间托底")
+                return ('持仓时长到期(6小时托底)', 1.0)  # 强制全部平仓
 
             # 获取当前K线强度
             strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
@@ -961,22 +984,7 @@ class SmartExitOptimizer:
                 strength_1h, strength_15m, strength_5m
             )
 
-            # === 检测1: 1H K线反转 ===
-            if direction == 'LONG' and strength_1h['net_power'] <= -3:
-                # 多头持仓，但1H出现空头信号
-                if profit_info['profit_pct'] >= 2.0:
-                    return ('1H K线反转+盈利>=2%', 0.7)  # 平仓70%
-                else:
-                    return ('1H K线反转', 0.5)  # 平仓50%
-
-            elif direction == 'SHORT' and strength_1h['net_power'] >= 3:
-                # 空头持仓，但1H出现多头信号
-                if profit_info['profit_pct'] >= 2.0:
-                    return ('1H K线反转+盈利>=2%', 0.7)
-                else:
-                    return ('1H K线反转', 0.5)
-
-            # === 检测2: 15M连续强力反转 ===
+            # === 检测1: 15M连续强力反转（最危险，立即全平） ===
             if direction == 'LONG':
                 # 检查15M是否连续3根强空K线
                 is_strong_reversal = (
@@ -995,37 +1003,51 @@ class SmartExitOptimizer:
                 if is_strong_reversal:
                     return ('15M连续强力反转', 1.0)  # 全部平仓
 
-            # === 检测3: 持仓时长到期 + 强度衰减 ===
-            # 获取最大持仓时长
-            max_hold_minutes = position.get('max_hold_minutes', 360)
-
-            if hold_minutes >= max_hold_minutes:
-                # 检查K线强度是否明显衰减
-                if current_kline['total_score'] < 15:
-                    # 强度不足15分
-                    if profit_info['profit_pct'] >= 4.0:
-                        return ('持仓时长到期+强度衰减+盈利>=4%', 1.0)  # 全部平仓
-                    elif profit_info['profit_pct'] >= 2.0:
-                        return ('持仓时长到期+强度衰减+盈利>=2%', 0.7)  # 平仓70%
-                    else:
-                        return ('持仓时长到期+强度衰减', 0.5)  # 平仓50%
-
-            # === 检测4: 盈利+强度衰减 ===
-            if profit_info['profit_pct'] >= 4.0:
-                # 盈利>=4%，检查强度是否减弱
-                if current_kline['total_score'] < 20:
-                    return ('盈利>=4%+强度减弱', 1.0)  # 全部平仓
-
-            elif profit_info['profit_pct'] >= 2.0:
-                # 盈利>=2%，检查强度是否大幅减弱
-                if current_kline['total_score'] < 15:
-                    return ('盈利>=2%+强度大幅减弱', 0.7)  # 平仓70%
-
-            # === 检测5: 亏损 + 强度反转 ===
+            # === 检测2: 亏损 + 强度反转（止损，全平） ===
             if profit_info['profit_pct'] < -1.0:
                 # 亏损>1%，检查K线方向是否反转
                 if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
                     return ('亏损>1%+方向反转', 1.0)  # 止损
+
+            # === 分阶段平仓逻辑（避免重复触发） ===
+
+            # 阶段0 → 阶段1: 首次触发部分平仓50%
+            if current_stage == 0:
+                # 检测1H K线反转
+                if direction == 'LONG' and strength_1h['net_power'] <= -3:
+                    return ('1H K线反转', 0.5)  # 首次平仓50%
+                elif direction == 'SHORT' and strength_1h['net_power'] >= 3:
+                    return ('1H K线反转', 0.5)  # 首次平仓50%
+
+                # 检测盈利+强度大幅减弱
+                if profit_info['profit_pct'] >= 2.0 and current_kline['total_score'] < 15:
+                    return ('盈利>=2%+强度大幅减弱', 0.5)  # 首次平仓50%
+
+            # 阶段1 → 阶段2: 条件恶化，再平70%（总共平85%）
+            elif current_stage == 1:
+                # 如果K线反转加剧或盈利提高
+                if direction == 'LONG' and strength_1h['net_power'] <= -5:
+                    return ('1H K线反转加剧', 0.7)  # 再平70%
+                elif direction == 'SHORT' and strength_1h['net_power'] >= 5:
+                    return ('1H K线反转加剧', 0.7)  # 再平70%
+
+                # 盈利>=4%且强度减弱
+                if profit_info['profit_pct'] >= 4.0 and current_kline['total_score'] < 20:
+                    return ('盈利>=4%+强度减弱', 0.7)  # 再平70%
+
+                # 持仓接近4小时且强度不足
+                if hold_minutes >= 240 and current_kline['total_score'] < 15:
+                    return ('持仓4小时+强度衰减', 0.7)  # 再平70%
+
+            # 阶段2 → 阶段3: 最终清仓
+            elif current_stage == 2:
+                # 持仓接近5小时，清空剩余15%
+                if hold_minutes >= 300:
+                    return ('持仓5小时+部分平仓后托底', 1.0)  # 全部平仓
+
+                # K线强度持续减弱
+                if current_kline['total_score'] < 10:
+                    return ('强度持续减弱', 1.0)  # 全部平仓
 
             return None
 
@@ -1093,7 +1115,22 @@ class SmartExitOptimizer:
             cursor.close()
             conn.close()
 
-            logger.info(f"✅ 部分平仓完成: 持仓{position_id} | 剩余数量{float(remaining_size):.4f}")
+            # 更新部分平仓阶段
+            current_stage = self.partial_close_stage.get(position_id, 0)
+            if close_ratio >= 1.0:
+                # 全部平仓，设置为阶段3
+                self.partial_close_stage[position_id] = 3
+            elif close_ratio >= 0.7:
+                # 平仓70%，进入阶段2
+                self.partial_close_stage[position_id] = 2
+            elif close_ratio >= 0.5:
+                # 平仓50%，进入阶段1
+                self.partial_close_stage[position_id] = 1
+
+            logger.info(
+                f"✅ 部分平仓完成: 持仓{position_id} | 剩余数量{float(remaining_size):.4f} | "
+                f"阶段{current_stage}→{self.partial_close_stage[position_id]}"
+            )
 
         except Exception as e:
             logger.error(f"执行部分平仓失败: {e}")
