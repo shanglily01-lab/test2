@@ -77,8 +77,8 @@ class KlineStrengthScorer:
         # 2. 计算15M评分 (-10~15分)
         score_15m = self._score_15m_kline(strength_15m, direction, reasons)
 
-        # 3. 计算5M评分 (-5~5分)
-        score_5m = self._score_5m_kline(strength_5m, direction, reasons)
+        # 3. 计算5M评分 (-5~5分) - 传入15M评分用于优化判断
+        score_5m = self._score_5m_kline(strength_5m, direction, score_15m, strength_level, reasons)
 
         # 4. 综合评分
         total_score = max(0, score_1h + score_15m + score_5m)
@@ -111,12 +111,17 @@ class KlineStrengthScorer:
         direction = 'NEUTRAL'
         strength_level = 'WEAK'
 
-        # 基于净力量评分
+        # 基于净力量评分 (细化档位)
         if net_power >= self.strong_net_power:
             score = 20
             direction = 'LONG'
             strength_level = 'STRONG'
             reasons.append(f"1H强多 (净力量+{net_power})")
+        elif net_power >= 6:  # 新增：6-7档给18分
+            score = 18
+            direction = 'LONG'
+            strength_level = 'MEDIUM'
+            reasons.append(f"1H较强多头 (净力量+{net_power})")
         elif net_power >= self.medium_net_power:
             score = 15
             direction = 'LONG'
@@ -132,6 +137,11 @@ class KlineStrengthScorer:
             direction = 'SHORT'
             strength_level = 'STRONG'
             reasons.append(f"1H强空 (净力量{net_power})")
+        elif net_power <= -6:  # 新增：-7~-6档给18分
+            score = 18
+            direction = 'SHORT'
+            strength_level = 'MEDIUM'
+            reasons.append(f"1H较强空头 (净力量{net_power})")
         elif net_power <= -self.medium_net_power:
             score = 15
             direction = 'SHORT'
@@ -227,14 +237,28 @@ class KlineStrengthScorer:
             reasons.append(f"15M震荡 (净力量{net_power:+d})")
             return 0
 
-    def _score_5m_kline(self, strength: Dict, direction_1h: str, reasons: List[str]) -> int:
+    def _score_5m_kline(
+        self,
+        strength: Dict,
+        direction_1h: str,
+        score_15m: int,
+        strength_1h: str,
+        reasons: List[str]
+    ) -> int:
         """
-        评分5M K线强度 (-5~5分)
+        评分5M K线强度 (-3~5分)
         主要作为入场时机优化
+
+        优化逻辑：
+        - 如果1H+15M都很强势，5M回调视为健康回调（更好的入场点）
+        - 只在5M极端反向时才扣分
 
         Args:
             strength: 5M K线强度
             direction_1h: 1H确定的方向
+            score_15m: 15M的评分
+            strength_1h: 1H的强度等级 (STRONG/MEDIUM/WEAK)
+            reasons: 评分原因列表
 
         Returns:
             5M评分
@@ -257,15 +281,28 @@ class KlineStrengthScorer:
             reasons.append(f"5M同向 (净力量{net_power:+d}) - 最佳入场点")
             return 5
 
-        # 反向但力量弱 (可接受的回调)
-        elif direction_5m != direction_1h and abs(net_power) < 10:
-            reasons.append(f"5M小幅回调 (净力量{net_power:+d})")
-            return 0
+        # 反向情况：根据1H+15M的强度判断
+        elif direction_5m != direction_1h and direction_5m != 'NEUTRAL':
+            # 如果1H强势(STRONG) + 15M确认(score_15m >= 10)，5M回调是好事
+            if strength_1h == 'STRONG' and score_15m >= 10:
+                reasons.append(f"5M健康回调 (净力量{net_power:+d}) - 更好入场点")
+                return 2  # 奖励分！回调是入场机会
 
-        # 反向且力量强 (等待更好价格)
-        elif direction_5m != direction_1h:
-            reasons.append(f"5M强力回调 (净力量{net_power:+d}) - 等待")
-            return -5
+            # 如果1H中等强度 + 15M确认，5M回调可接受
+            elif (strength_1h == 'MEDIUM' and score_15m >= 10) or \
+                 (strength_1h == 'STRONG' and score_15m >= 5):
+                reasons.append(f"5M小幅回调 (净力量{net_power:+d})")
+                return 0
+
+            # 5M极端反向(净力量>15)才扣分
+            elif abs(net_power) >= 15:
+                reasons.append(f"5M强力反向 (净力量{net_power:+d}) - 等待")
+                return -3  # 减少扣分，从-5改为-3
+
+            # 其他情况回调可接受
+            else:
+                reasons.append(f"5M回调 (净力量{net_power:+d})")
+                return 0
 
         # 震荡
         else:
