@@ -16,6 +16,8 @@ import asyncio
 from datetime import datetime
 from loguru import logger
 import yaml
+import os
+from dotenv import load_dotenv
 
 from app.services.daily_review_analyzer import DailyReviewAnalyzer
 from app.services.auto_parameter_optimizer import AutoParameterOptimizer
@@ -27,11 +29,22 @@ async def main():
     logger.info(f"🚀 每日复盘 + 自动优化 | 开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("="*80)
 
-    # 加载配置
+    # 加载环境变量
+    load_dotenv()
+
+    # 从.env加载数据库配置
+    db_config = {
+        'host': os.getenv('DB_HOST'),
+        'port': int(os.getenv('DB_PORT', 3306)),
+        'user': os.getenv('DB_USER'),
+        'password': os.getenv('DB_PASSWORD'),
+        'database': os.getenv('DB_NAME')
+    }
+
+    # 加载交易对列表
     with open('config.yaml', 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
 
-    db_config = config['database']['mysql']
     symbols = config.get('symbols', [])
 
     # ========== 步骤1: 执行复盘分析 ==========
