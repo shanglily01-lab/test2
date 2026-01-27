@@ -935,6 +935,67 @@ class SmartExitOptimizer:
 
         return False
 
+    async def _check_top_bottom(self, symbol: str, position_side: str, entry_price: float) -> tuple:
+        """
+        检查是否触发顶底识别
+
+        Args:
+            symbol: 交易对
+            position_side: 持仓方向（LONG/SHORT）
+            entry_price: 开仓价格
+
+        Returns:
+            (is_top_bottom: bool, reason: str)
+        """
+        try:
+            # 从live_engine获取当前价格
+            current_price = self.live_engine.get_current_price(symbol)
+            if not current_price:
+                return False, ""
+
+            # 计算当前盈亏比例
+            if position_side == 'LONG':
+                profit_pct = ((current_price - entry_price) / entry_price) * 100
+            else:  # SHORT
+                profit_pct = ((entry_price - current_price) / entry_price) * 100
+
+            # 获取1h和4h K线强度
+            strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
+            strength_4h = self.signal_analyzer.analyze_kline_strength(symbol, '4h', 24)
+
+            if not strength_1h or not strength_4h:
+                return False, ""
+
+            # 顶部识别（针对LONG持仓）
+            if position_side == 'LONG':
+                # 条件1: 有盈利（至少2%）
+                has_profit = profit_pct >= 2.0
+
+                # 条件2: 1h和4h都转为强烈看空
+                strong_bearish_1h = strength_1h.get('net_power', 0) <= -5
+                strong_bearish_4h = strength_4h.get('net_power', 0) <= -3
+
+                if has_profit and strong_bearish_1h and strong_bearish_4h:
+                    return True, f"顶部识别(盈利{profit_pct:.1f}%+强烈看空)"
+
+            # 底部识别（针对SHORT持仓）
+            elif position_side == 'SHORT':
+                # 条件1: 有盈利（至少2%）
+                has_profit = profit_pct >= 2.0
+
+                # 条件2: 1h和4h都转为强烈看多
+                strong_bullish_1h = strength_1h.get('net_power', 0) >= 5
+                strong_bullish_4h = strength_4h.get('net_power', 0) >= 3
+
+                if has_profit and strong_bullish_1h and strong_bullish_4h:
+                    return True, f"底部识别(盈利{profit_pct:.1f}%+强烈看多)"
+
+            return False, ""
+
+        except Exception as e:
+            logger.error(f"检查顶底识别失败: {e}")
+            return False, ""
+
     async def _check_kline_strength_decay(
         self,
         position: Dict,
@@ -942,7 +1003,16 @@ class SmartExitOptimizer:
         profit_info: Dict
     ) -> Optional[Tuple[str, float]]:
         """
-        检查K线强度是否衰减，决定是否平仓
+        统一平仓检查（止盈止损 + 超时 + K线强度衰减）
+
+        优先级（从高到低）：
+        1. 保证金过小检查
+        2. 固定止损检查（风控底线）
+        3. 智能顶底识别（替代固定止盈）
+        4. 固定止盈检查（兜底）
+        5. 动态超时检查
+        6. 分阶段超时检查
+        7. K线强度衰减检查
 
         Args:
             position: 持仓信息
@@ -956,30 +1026,154 @@ class SmartExitOptimizer:
             position_id = position['id']
             symbol = position['symbol']
             direction = position['direction']
+            position_side = position.get('position_side', direction)  # LONG/SHORT
+            entry_price = float(position.get('entry_price', 0))
             entry_time = position.get('entry_signal_time', datetime.now())
+            quantity = float(position.get('quantity', 0))
+            margin = float(position.get('margin', 0))
+            leverage = float(position.get('leverage', 1))
 
             # 获取持仓时长（分钟）
             hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
+            hold_hours = hold_minutes / 60
 
             # 获取当前部分平仓阶段
             current_stage = self.partial_close_stage.get(position_id, 0)
 
-            # === 检测0: 保证金过小检查（最高优先级之一） ===
-            # 如果保证金低于$5，直接全部平仓，避免后续部分平仓金额过小导致交易失败
-            current_margin = float(position.get('margin', 0))
-            if current_margin < 5.0:
+            # ============================================================
+            # === 优先级1: 保证金过小检查（最高优先级） ===
+            # ============================================================
+            if margin < 5.0:
                 logger.warning(
-                    f"💰 持仓{position_id} {symbol}保证金过小(${current_margin:.2f})，"
+                    f"💰 持仓{position_id} {symbol}保证金过小(${margin:.2f})，"
                     f"直接全部平仓避免订单金额低于交易所限制"
                 )
-                return ('保证金过小', 1.0)  # 强制全部平仓
+                return ('保证金过小', 1.0)
 
-            # === 检测1: 6小时绝对时间托底（最高优先级） ===
+            # ============================================================
+            # === 优先级2: 固定止损检查（风控底线，但要考虑最小持仓时间） ===
+            # ============================================================
+            stop_loss_price = position.get('stop_loss_price')
+
+            # 获取最小持仓时间（从live_engine的自适应参数中获取）
+            min_holding_minutes = 60  # 默认1小时
+            if hasattr(self.live_engine, 'brain'):
+                if position_side == 'LONG':
+                    min_holding_minutes = self.live_engine.brain.adaptive_long.get('min_holding_minutes', 60)
+                else:
+                    min_holding_minutes = self.live_engine.brain.adaptive_short.get('min_holding_minutes', 60)
+
+            # 只有达到最小持仓时间才允许止损
+            if hold_minutes >= min_holding_minutes and stop_loss_price and float(stop_loss_price) > 0:
+                if position_side == 'LONG':
+                    if current_price <= float(stop_loss_price):
+                        pnl_pct = profit_info.get('profit_pct', 0)
+                        logger.warning(
+                            f"🛑 持仓{position_id} {symbol} LONG触发固定止损 | "
+                            f"当前价${current_price:.6f} <= 止损价${stop_loss_price:.6f} | "
+                            f"盈亏{pnl_pct:+.2f}%"
+                        )
+                        return ('固定止损', 1.0)
+                elif position_side == 'SHORT':
+                    if current_price >= float(stop_loss_price):
+                        pnl_pct = profit_info.get('profit_pct', 0)
+                        logger.warning(
+                            f"🛑 持仓{position_id} {symbol} SHORT触发固定止损 | "
+                            f"当前价${current_price:.6f} >= 止损价${stop_loss_price:.6f} | "
+                            f"盈亏{pnl_pct:+.2f}%"
+                        )
+                        return ('固定止损', 1.0)
+
+            # ============================================================
+            # === 优先级3: 智能顶底识别（替代固定止盈，要求至少持仓2小时） ===
+            # ============================================================
+            if hold_minutes >= 120:  # 至少持仓2小时才检查顶底
+                is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price)
+                if is_top_bottom:
+                    logger.info(
+                        f"🔝 持仓{position_id} {symbol}触发顶底识别: {tb_reason} | "
+                        f"持仓{hold_hours:.1f}小时"
+                    )
+                    return (tb_reason, 1.0)
+
+            # ============================================================
+            # === 优先级4: 固定止盈检查（兜底） ===
+            # ============================================================
+            take_profit_price = position.get('take_profit_price')
+            if take_profit_price and float(take_profit_price) > 0:
+                if position_side == 'LONG':
+                    if current_price >= float(take_profit_price):
+                        pnl_pct = profit_info.get('profit_pct', 0)
+                        logger.info(
+                            f"✅ 持仓{position_id} {symbol} LONG触发固定止盈 | "
+                            f"当前价${current_price:.6f} >= 止盈价${take_profit_price:.6f} | "
+                            f"盈亏{pnl_pct:+.2f}%"
+                        )
+                        return ('固定止盈', 1.0)
+                elif position_side == 'SHORT':
+                    if current_price <= float(take_profit_price):
+                        pnl_pct = profit_info.get('profit_pct', 0)
+                        logger.info(
+                            f"✅ 持仓{position_id} {symbol} SHORT触发固定止盈 | "
+                            f"当前价${current_price:.6f} <= 止盈价${take_profit_price:.6f} | "
+                            f"盈亏{pnl_pct:+.2f}%"
+                        )
+                        return ('固定止盈', 1.0)
+
+            # ============================================================
+            # === 优先级5: 动态超时检查（基于timeout_at字段） ===
+            # ============================================================
+            timeout_at = position.get('timeout_at')
+            if timeout_at:
+                now_utc = datetime.utcnow()
+                if now_utc >= timeout_at:
+                    max_hold_minutes = position.get('max_hold_minutes', 360)
+                    logger.warning(
+                        f"⏰ 持仓{position_id} {symbol}触发动态超时 | "
+                        f"超时阈值{max_hold_minutes}分钟"
+                    )
+                    return (f'动态超时({max_hold_minutes}min)', 1.0)
+
+            # ============================================================
+            # === 优先级6: 分阶段超时检查（1h/2h/3h/4h不同亏损阈值） ===
+            # ============================================================
+            # 获取分阶段超时阈值配置
+            staged_thresholds = {
+                1: -0.02,   # 1小时: -2%
+                2: -0.015,  # 2小时: -1.5%
+                3: -0.01,   # 3小时: -1%
+                4: -0.005   # 4小时: -0.5%
+            }
+
+            # 尝试从配置中获取
+            if hasattr(self.live_engine, 'opt_config'):
+                config_thresholds = self.live_engine.opt_config.get_staged_timeout_thresholds()
+                if config_thresholds:
+                    staged_thresholds = config_thresholds
+
+            pnl_pct = profit_info.get('profit_pct', 0) / 100.0  # 转换为小数
+
+            for hour_checkpoint, loss_threshold in sorted(staged_thresholds.items()):
+                if hold_hours >= hour_checkpoint:
+                    if pnl_pct < loss_threshold:
+                        logger.warning(
+                            f"⏱️ 持仓{position_id} {symbol}触发分阶段超时 | "
+                            f"持仓{hold_hours:.1f}h >= {hour_checkpoint}h | "
+                            f"亏损{pnl_pct*100:.2f}% < {loss_threshold*100:.2f}%"
+                        )
+                        return (f'分阶段超时{hour_checkpoint}H(亏损{pnl_pct*100:.1f}%)', 1.0)
+
+            # ============================================================
+            # === 优先级7: 6小时绝对时间托底 ===
+            # ============================================================
             max_hold_minutes = position.get('max_hold_minutes', 360)  # 默认6小时
             if hold_minutes >= max_hold_minutes:
-                # 超过6小时，无论什么情况都必须平仓
-                logger.warning(f"⏰ 持仓{position_id} {symbol}已持有{hold_minutes/60:.1f}小时，触发时间托底")
-                return ('持仓时长到期(6小时托底)', 1.0)  # 强制全部平仓
+                logger.warning(f"⏰ 持仓{position_id} {symbol}已持有{hold_hours:.1f}小时，触发时间托底")
+                return ('持仓时长到期(6小时托底)', 1.0)
+
+            # ============================================================
+            # === 优先级8: K线强度衰减检查（智能分批平仓） ===
+            # ============================================================
 
             # 获取当前K线强度
             strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
@@ -994,7 +1188,7 @@ class SmartExitOptimizer:
                 strength_1h, strength_15m, strength_5m
             )
 
-            # === 检测2: 15M连续强力反转（最危险，立即全平） ===
+            # === 子检测1: 15M连续强力反转（最危险，立即全平） ===
             if direction == 'LONG':
                 # 检查15M是否连续3根强空K线
                 is_strong_reversal = (
@@ -1002,7 +1196,8 @@ class SmartExitOptimizer:
                     strength_5m['net_power'] <= -5
                 )
                 if is_strong_reversal:
-                    return ('15M连续强力反转', 1.0)  # 全部平仓
+                    logger.warning(f"⚠️ 持仓{position_id} {symbol} 15M连续强力反转")
+                    return ('15M连续强力反转', 1.0)
 
             elif direction == 'SHORT':
                 # 检查15M是否连续3根强多K线
@@ -1011,13 +1206,18 @@ class SmartExitOptimizer:
                     strength_5m['net_power'] >= 5
                 )
                 if is_strong_reversal:
-                    return ('15M连续强力反转', 1.0)  # 全部平仓
+                    logger.warning(f"⚠️ 持仓{position_id} {symbol} 15M连续强力反转")
+                    return ('15M连续强力反转', 1.0)
 
-            # === 检测3: 亏损 + 强度反转（止损，全平） ===
+            # === 子检测2: 亏损 + 强度反转（止损，全平） ===
             if profit_info['profit_pct'] < -1.0:
                 # 亏损>1%，检查K线方向是否反转
                 if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
-                    return ('亏损>1%+方向反转', 1.0)  # 止损
+                    logger.warning(
+                        f"⚠️ 持仓{position_id} {symbol}亏损>1%且K线方向反转 | "
+                        f"当前方向{current_kline['direction']} vs 持仓{direction}"
+                    )
+                    return ('亏损>1%+方向反转', 1.0)
 
             # === 分阶段平仓逻辑（避免重复触发） ===
 

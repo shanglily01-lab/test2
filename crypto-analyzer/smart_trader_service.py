@@ -1049,6 +1049,19 @@ class SmartTraderService:
                 f"仓位: ${margin:.0f} | 超时: {base_timeout_minutes}分钟"
             )
             logger.info(f"[SIGNAL_DETAIL] {symbol} 信号详情: {signal_details}")
+
+            # 启动智能平仓监控（统一平仓入口）
+            if self.smart_exit_optimizer and self.event_loop:
+                try:
+                    import asyncio
+                    asyncio.run_coroutine_threadsafe(
+                        self.smart_exit_optimizer.start_monitoring_position(position_id),
+                        self.event_loop
+                    )
+                    logger.info(f"✅ 持仓{position_id}已加入智能平仓监控")
+                except Exception as e:
+                    logger.error(f"❌ 持仓{position_id}启动监控失败: {e}")
+
             return True
 
         except Exception as e:
@@ -2522,18 +2535,17 @@ class SmartTraderService:
             logger.error(f"WebSocket 服务初始化失败: {e}，将使用数据库价格")
 
     async def _start_smart_exit_monitoring(self):
-        """为所有已开仓的分批建仓持仓启动智能平仓监控"""
+        """为所有已开仓的持仓启动统一智能平仓监控（包括普通持仓和分批建仓持仓）"""
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 查询所有开仓持仓（有batch_plan的为分批建仓持仓）
+            # 查询所有开仓持仓（不再区分是否分批建仓，统一由SmartExitOptimizer管理）
             cursor.execute("""
                 SELECT id, symbol, position_side
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
-                AND batch_plan IS NOT NULL
             """, (self.account_id,))
 
             positions = cursor.fetchall()
@@ -2544,7 +2556,7 @@ class SmartTraderService:
                 await self.smart_exit_optimizer.start_monitoring_position(position_id)
                 logger.info(f"✅ 启动智能平仓监控: 持仓{position_id} {symbol} {side}")
 
-            logger.info(f"✅ 智能平仓监控已启动，监控 {len(positions)} 个持仓")
+            logger.info(f"✅ 智能平仓监控已启动，统一监控 {len(positions)} 个持仓")
 
         except Exception as e:
             logger.error(f"❌ 启动智能平仓监控失败: {e}")
@@ -2558,14 +2570,15 @@ class SmartTraderService:
                 # 0. 检查是否需要运行每日自适应优化 (凌晨2点)
                 self.check_and_run_daily_optimization()
 
-                # 1. 检查止盈止损
-                self.check_stop_loss_take_profit()
+                # 注意：止盈止损、超时检查已统一迁移到SmartExitOptimizer
+                # 1. [已停用] 检查止盈止损 -> 由SmartExitOptimizer处理
+                # self.check_stop_loss_take_profit()
 
                 # 2. 检查对冲持仓(平掉亏损方向)
                 self.check_hedge_positions()
 
-                # 3. 关闭超时持仓
-                self.close_old_positions()
+                # 3. [已停用] 关闭超时持仓 -> 由SmartExitOptimizer处理
+                # self.close_old_positions()
 
                 # 4. 检查持仓
                 current_positions = self.get_open_positions_count()
