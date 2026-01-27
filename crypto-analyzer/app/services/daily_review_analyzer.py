@@ -439,10 +439,10 @@ class DailyReviewAnalyzer:
             SELECT
                 entry_signal_type,
                 COUNT(*) as total_trades,
-                SUM(CASE WHEN realized_pnl_pct > 0 THEN 1 ELSE 0 END) as winning_trades,
-                AVG(realized_pnl_pct) as avg_pnl_pct,
-                MAX(realized_pnl_pct) as best_trade,
-                MIN(realized_pnl_pct) as worst_trade
+                SUM(CASE WHEN unrealized_pnl_pct > 0 THEN 1 ELSE 0 END) as winning_trades,
+                AVG(unrealized_pnl_pct) as avg_pnl_pct,
+                MAX(unrealized_pnl_pct) as best_trade,
+                MIN(unrealized_pnl_pct) as worst_trade
             FROM futures_positions
             WHERE status = 'closed'
             AND close_time >= %s
@@ -622,10 +622,10 @@ class DailyReviewAnalyzer:
         cursor.execute("""
             SELECT
                 entry_signal_type,
-                side,
+                position_side,
                 entry_price,
-                exit_price,
-                realized_pnl_pct,
+                mark_price,
+                unrealized_pnl_pct,
                 open_time,
                 close_time,
                 symbol
@@ -663,7 +663,7 @@ class DailyReviewAnalyzer:
             stats = signal_stats[signal_type]
             stats['total_trades'] += 1
 
-            pnl = float(trade['realized_pnl_pct']) if trade['realized_pnl_pct'] else 0
+            pnl = float(trade['unrealized_pnl_pct']) if trade['unrealized_pnl_pct'] else 0
             stats['total_pnl'] += pnl
 
             if pnl > 0:
@@ -677,7 +677,7 @@ class DailyReviewAnalyzer:
             if stats['worst_trade'] is None or pnl < stats['worst_trade']:
                 stats['worst_trade'] = pnl
 
-            if trade['side'] == 'LONG':
+            if trade['position_side'] == 'LONG':
                 stats['long_trades'] += 1
             else:
                 stats['short_trades'] += 1
