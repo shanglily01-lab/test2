@@ -903,8 +903,9 @@ class FuturesTradingEngine:
 
         try:
             # 1. 获取持仓信息（使用新连接确保获取最新数据）
+            # 支持平仓 'open' 和 'building' 状态的持仓
             cursor.execute(
-                """SELECT * FROM futures_positions WHERE id = %s AND status = 'open'""",
+                """SELECT * FROM futures_positions WHERE id = %s AND status IN ('open', 'building')""",
                 (position_id,)
             )
             position = cursor.fetchone()
