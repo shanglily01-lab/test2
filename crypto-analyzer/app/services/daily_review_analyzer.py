@@ -140,8 +140,11 @@ class DailyReviewAnalyzer:
         if self.connection is None or not self.connection.open:
             port = self.db_config.get('port', 3306)
             # 确保port是整数类型
-            if isinstance(port, str):
-                port = int(port)
+            if not isinstance(port, int):
+                try:
+                    port = int(port)
+                except (ValueError, TypeError):
+                    port = 3306
 
             self.connection = pymysql.connect(
                 host=self.db_config.get('host', 'localhost'),
