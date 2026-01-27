@@ -958,3 +958,215 @@ class SmartEntryExecutor:
         finally:
             cursor.close()
             conn.close()
+
+    async def recover_building_positions(self):
+        """
+        恢复building状态的持仓,继续完成分批建仓
+        在系统启动时调用,确保重启不会丢失建仓任务
+        """
+        import pymysql
+        import json
+
+        try:
+            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
+            cursor = conn.cursor()
+
+            # 查询所有building状态的持仓
+            cursor.execute("""
+                SELECT
+                    id, symbol, position_side, batch_plan, batch_filled,
+                    created_at, entry_signal_time
+                FROM futures_positions
+                WHERE account_id = %s
+                AND status = 'building'
+                ORDER BY created_at ASC
+            """, (self.account_id,))
+
+            building_positions = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            if not building_positions:
+                logger.info("✅ 没有需要恢复的building状态持仓")
+                return
+
+            logger.info(f"🔄 发现 {len(building_positions)} 个building状态持仓,开始恢复...")
+
+            for pos in building_positions:
+                try:
+                    await self._recover_single_position(pos)
+                except Exception as e:
+                    logger.error(f"恢复持仓 {pos['id']} 失败: {e}")
+
+        except Exception as e:
+            logger.error(f"恢复building状态持仓失败: {e}")
+
+    async def _recover_single_position(self, pos: Dict):
+        """恢复单个building状态的持仓"""
+        position_id = pos['id']
+        symbol = pos['symbol']
+        direction = pos['position_side']
+
+        batch_plan = json.loads(pos['batch_plan']) if pos['batch_plan'] else None
+        batch_filled = json.loads(pos['batch_filled']) if pos['batch_filled'] else None
+
+        if not batch_plan or not batch_filled:
+            logger.warning(f"持仓 {position_id} 缺少batch数据,标记为open")
+            await self._mark_position_as_open(position_id)
+            return
+
+        total_batches = len(batch_plan['batches'])
+        filled_count = len(batch_filled['batches'])
+
+        # 检查是否已经超时太久(超过1小时)
+        from datetime import datetime, timedelta
+        created_at = pos['created_at']
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+
+        hours_since_created = (datetime.now() - created_at).total_seconds() / 3600
+
+        if hours_since_created > 1:
+            # 超过1小时,直接标记为open
+            logger.info(
+                f"持仓 {position_id} ({symbol} {direction}) 创建已超过{hours_since_created:.1f}小时, "
+                f"完成度 {filled_count}/{total_batches}, 标记为open"
+            )
+            await self._mark_position_as_open(position_id)
+            return
+
+        # 如果还在合理时间范围内,继续完成建仓
+        logger.info(
+            f"🔄 恢复建仓任务: 持仓{position_id} ({symbol} {direction}) | "
+            f"进度: {filled_count}/{total_batches}"
+        )
+
+        # 重建plan对象
+        plan = {
+            'position_id': position_id,
+            'symbol': symbol,
+            'direction': direction,
+            'signal_time': pos.get('entry_signal_time') or created_at,
+            'total_margin': 400,  # 默认值,实际已经在数据库中
+            'leverage': 5,
+            'batches': [],
+            'signal': {}
+        }
+
+        # 重建batches结构
+        for i, batch_plan_item in enumerate(batch_plan['batches']):
+            batch = {
+                'ratio': batch_plan_item['ratio'],
+                'filled': False,
+                'price': None,
+                'time': None,
+                'margin': None,
+                'quantity': None
+            }
+
+            # 如果这个批次已完成,填充数据
+            for filled_batch in batch_filled['batches']:
+                if filled_batch['batch_num'] == i:
+                    batch['filled'] = True
+                    batch['price'] = filled_batch['price']
+                    batch['time'] = datetime.fromisoformat(filled_batch['time'])
+                    batch['margin'] = filled_batch.get('margin')
+                    batch['quantity'] = filled_batch.get('quantity')
+                    break
+
+            plan['batches'].append(batch)
+
+        # 启动后台任务继续建仓
+        asyncio.create_task(self._continue_batch_entry(plan))
+        logger.info(f"✅ 已启动持仓 {position_id} 的后台建仓任务")
+
+    async def _continue_batch_entry(self, plan: Dict):
+        """继续未完成的分批建仓"""
+        symbol = plan['symbol']
+        direction = plan['direction']
+        position_id = plan['position_id']
+
+        logger.info(f"🚀 继续建仓: {symbol} {direction} (持仓#{position_id})")
+
+        # 启动价格采样器
+        from app.services.price_sampler import PriceSampler
+        sampler = PriceSampler(symbol, self.price_service, window_seconds=300)
+        sampling_task = asyncio.create_task(sampler.start_background_sampling())
+
+        # 等待基线建立
+        wait_start = datetime.now()
+        while not sampler.initial_baseline_built:
+            await asyncio.sleep(1)
+            if (datetime.now() - wait_start).total_seconds() > 180:  # 3分钟超时
+                break
+
+        try:
+            # 最多继续尝试20分钟
+            start_time = datetime.now()
+            while (datetime.now() - start_time).total_seconds() < 1200:
+                current_price = await self._get_current_price(symbol)
+                elapsed_minutes = (datetime.now() - plan['signal_time']).total_seconds() / 60
+                current_baseline = sampler.get_current_baseline()
+
+                # 检查每个未完成的批次
+                for batch_num, batch in enumerate(plan['batches']):
+                    if batch['filled']:
+                        continue
+
+                    # 使用简化的判断逻辑:只要价格合理就建仓
+                    should_fill = False
+                    reason = ""
+
+                    if batch_num == 0:
+                        should_fill = True
+                        reason = "恢复第1批建仓"
+                    elif batch_num == 1 and plan['batches'][0]['filled']:
+                        should_fill = True
+                        reason = "恢复第2批建仓"
+                    elif batch_num == 2 and plan['batches'][1]['filled']:
+                        should_fill = True
+                        reason = "恢复第3批建仓"
+
+                    if should_fill:
+                        await self._execute_batch(plan, batch_num, current_price, reason)
+
+                        # 如果是最后一批,完成建仓
+                        if batch_num == 2:
+                            await self._finalize_position(plan)
+                            logger.info(f"🎉 持仓 {position_id} 恢复建仓完成!")
+                            return
+
+                await asyncio.sleep(10)
+
+            # 超时强制完成
+            logger.warning(f"持仓 {position_id} 恢复建仓超时,强制完成剩余批次")
+            await self._force_fill_remaining(plan)
+            await self._finalize_position(plan)
+
+        finally:
+            sampler.stop_sampling()
+            sampling_task.cancel()
+
+    async def _mark_position_as_open(self, position_id: int):
+        """将持仓标记为open状态"""
+        import pymysql
+
+        try:
+            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                UPDATE futures_positions
+                SET status = 'open',
+                    notes = CONCAT(COALESCE(notes, ''), ' [自动恢复] 系统重启后标记为open')
+                WHERE id = %s
+            """, (position_id,))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            logger.info(f"✅ 持仓 {position_id} 已标记为open")
+
+        except Exception as e:
+            logger.error(f"标记持仓 {position_id} 为open失败: {e}")
