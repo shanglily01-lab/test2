@@ -1029,7 +1029,7 @@ class SmartExitOptimizer:
             direction = position['direction']
             position_side = position.get('position_side', direction)  # LONG/SHORT
             entry_price = float(position.get('entry_price', 0))
-            entry_time = position.get('entry_signal_time', datetime.now())
+            entry_time = position.get('entry_signal_time') or position.get('open_time') or datetime.now()
             quantity = float(position.get('quantity', 0))
             margin = float(position.get('margin', 0))
             leverage = float(position.get('leverage', 1))
