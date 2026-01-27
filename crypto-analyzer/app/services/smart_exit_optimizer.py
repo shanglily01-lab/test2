@@ -964,7 +964,17 @@ class SmartExitOptimizer:
             # 获取当前部分平仓阶段
             current_stage = self.partial_close_stage.get(position_id, 0)
 
-            # === 检测0: 6小时绝对时间托底（最高优先级） ===
+            # === 检测0: 保证金过小检查（最高优先级之一） ===
+            # 如果保证金低于$5，直接全部平仓，避免后续部分平仓金额过小导致交易失败
+            current_margin = float(position.get('margin', 0))
+            if current_margin < 5.0:
+                logger.warning(
+                    f"💰 持仓{position_id} {symbol}保证金过小(${current_margin:.2f})，"
+                    f"直接全部平仓避免订单金额低于交易所限制"
+                )
+                return ('保证金过小', 1.0)  # 强制全部平仓
+
+            # === 检测1: 6小时绝对时间托底（最高优先级） ===
             max_hold_minutes = position.get('max_hold_minutes', 360)  # 默认6小时
             if hold_minutes >= max_hold_minutes:
                 # 超过6小时，无论什么情况都必须平仓
@@ -984,7 +994,7 @@ class SmartExitOptimizer:
                 strength_1h, strength_15m, strength_5m
             )
 
-            # === 检测1: 15M连续强力反转（最危险，立即全平） ===
+            # === 检测2: 15M连续强力反转（最危险，立即全平） ===
             if direction == 'LONG':
                 # 检查15M是否连续3根强空K线
                 is_strong_reversal = (
@@ -1003,7 +1013,7 @@ class SmartExitOptimizer:
                 if is_strong_reversal:
                     return ('15M连续强力反转', 1.0)  # 全部平仓
 
-            # === 检测2: 亏损 + 强度反转（止损，全平） ===
+            # === 检测3: 亏损 + 强度反转（止损，全平） ===
             if profit_info['profit_pct'] < -1.0:
                 # 亏损>1%，检查K线方向是否反转
                 if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
