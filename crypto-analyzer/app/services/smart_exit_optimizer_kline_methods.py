@@ -104,7 +104,7 @@ async def _check_kline_strength_decay(
 
         # === 检测3: 持仓时长到期 + 强度衰减 ===
         # 获取最大持仓时长
-        max_hold_minutes = position.get('max_hold_minutes', 360)
+        max_hold_minutes = position.get('max_hold_minutes') or 360
 
         if hold_minutes >= max_hold_minutes:
             # 检查K线强度是否明显衰减
