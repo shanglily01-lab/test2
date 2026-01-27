@@ -91,8 +91,8 @@ class ReviewReport:
     # 信号分析（新增）
     signal_analysis: Dict[str, any]  # 各类信号的详细分析
 
-    # 买入机会分析（新增）
-    entry_opportunity_analysis: Dict[str, any]  # 买入时机分析
+    # 机会分析（新增）
+    opportunity_analysis: Dict[str, any]  # 交易机会分析（信号评分、捕获情况、错过原因）
 
     # 优化建议
     optimization_suggestions: List[str]
@@ -196,8 +196,8 @@ class DailyReviewAnalyzer:
         # 4. 详细信号分析（新增）
         signal_analysis = await self._analyze_signals_detailed(start_time, end_time, all_opportunities)
 
-        # 5. 买入机会分析（新增）
-        entry_opportunity_analysis = await self._analyze_entry_opportunities(start_time, end_time, all_opportunities)
+        # 5. 机会分析（新增）
+        opportunity_analysis = await self._analyze_entry_opportunities(start_time, end_time, all_opportunities)
 
         # 6. 生成优化建议
         optimization_suggestions = self._generate_optimization_suggestions(
@@ -228,7 +228,7 @@ class DailyReviewAnalyzer:
             missed_opportunities=missed[:20],  # 只保留前20个
             signal_performances=signal_performances,
             signal_analysis=signal_analysis,  # 新增
-            entry_opportunity_analysis=entry_opportunity_analysis,  # 新增
+            opportunity_analysis=opportunity_analysis,  # 新增
             optimization_suggestions=optimization_suggestions,
             parameter_adjustments=parameter_adjustments
         )
@@ -756,7 +756,7 @@ class DailyReviewAnalyzer:
         opportunities: List[BigMoveOpportunity]
     ) -> Dict[str, any]:
         """
-        分析买入机会的捕获情况
+        分析交易机会的捕获情况（包括信号评分对比、捕获/错过分析）
 
         Args:
             start_time: 开始时间
@@ -764,7 +764,7 @@ class DailyReviewAnalyzer:
             opportunities: 大行情机会列表
 
         Returns:
-            买入机会分析字典
+            机会分析字典（信号评分、捕获情况、错过原因等）
         """
         # 1. 按时间周期统计捕获情况
         timeframe_analysis = {}
@@ -1110,11 +1110,11 @@ class DailyReviewAnalyzer:
                     f"需改进信号: {summary.get('worst_signal', 'N/A')}"
                 )
 
-        # 买入机会分析（新增）
-        if report.entry_opportunity_analysis:
-            logger.info(f"\n【买入机会分析】")
+        # 机会分析（新增）
+        if report.opportunity_analysis:
+            logger.info(f"\n【机会分析】")
 
-            tf_analysis = report.entry_opportunity_analysis.get('timeframe_analysis', {})
+            tf_analysis = report.opportunity_analysis.get('timeframe_analysis', {})
 
             # 1. 按时间周期展示
             logger.info("  时间周期表现:")
@@ -1132,7 +1132,7 @@ class DailyReviewAnalyzer:
                     )
 
             # 2. 错过原因分析
-            miss_reasons = report.entry_opportunity_analysis.get('miss_reasons', {})
+            miss_reasons = report.opportunity_analysis.get('miss_reasons', {})
             if miss_reasons:
                 logger.info(f"\n  主要错过原因:")
                 sorted_reasons = sorted(miss_reasons.items(), key=lambda x: x[1]['count'], reverse=True)[:3]
@@ -1152,7 +1152,7 @@ class DailyReviewAnalyzer:
                             )
 
             # 3. 交易对表现
-            symbol_analysis = report.entry_opportunity_analysis.get('symbol_analysis', {})
+            symbol_analysis = report.opportunity_analysis.get('symbol_analysis', {})
             if symbol_analysis:
                 best_symbols = symbol_analysis.get('best_symbols', [])[:3]
                 worst_symbols = symbol_analysis.get('worst_symbols', [])[:3]
@@ -1174,8 +1174,8 @@ class DailyReviewAnalyzer:
                         )
 
             # 4. 总结建议
-            if report.entry_opportunity_analysis.get('summary'):
-                summary = report.entry_opportunity_analysis['summary']
+            if report.opportunity_analysis.get('summary'):
+                summary = report.opportunity_analysis['summary']
                 logger.info(f"\n  📊 总结:")
                 logger.info(f"     最佳时间周期: {summary.get('best_timeframe', 'N/A')}")
                 logger.info(f"     最弱时间周期: {summary.get('worst_timeframe', 'N/A')}")

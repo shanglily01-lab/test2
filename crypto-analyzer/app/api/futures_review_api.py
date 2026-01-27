@@ -1279,13 +1279,15 @@ async def get_opportunity_analysis(
     account_id: int = Query(2, description="账户ID: 1=实盘, 2=模拟")
 ):
     """
-    买入机会分析API - 获取最新的每日复盘买入机会分析数据
+    机会分析API - 获取最新的每日复盘机会分析数据
 
-    返回不同维度下的买入机会捕获情况，包括:
+    返回不同维度下的交易机会捕获情况，包括:
     - 按时间周期(5m/15m/1h)的捕获统计
     - 错过原因分析
     - 交易对表现排名
     - 总体统计摘要
+    - 当前信号评分对比
+    - 已捕获和错过的信号分析
     """
     try:
         conn = get_db_connection()
