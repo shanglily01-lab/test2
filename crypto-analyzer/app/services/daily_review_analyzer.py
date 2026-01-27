@@ -290,7 +290,7 @@ class DailyReviewAnalyzer:
             return []
 
         # 计算平均成交量
-        avg_volume = sum(k['volume'] for k in klines) / len(klines)
+        avg_volume = float(sum(k['volume'] for k in klines) / len(klines))
 
         opportunities = []
         threshold = self.thresholds[timeframe]
