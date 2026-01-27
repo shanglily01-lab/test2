@@ -191,7 +191,7 @@ class SmartExitOptimizer:
                 SELECT
                     id, symbol, position_side as direction, status,
                     avg_entry_price, quantity as position_size,
-                    entry_signal_time, planned_close_time,
+                    entry_signal_time, open_time, planned_close_time,
                     close_extended, extended_close_time,
                     max_profit_pct, max_profit_price, max_profit_time,
                     stop_loss_price, take_profit_price, leverage,
