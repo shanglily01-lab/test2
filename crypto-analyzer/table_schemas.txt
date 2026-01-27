@@ -1,0 +1,2460 @@
+数据库 binance-data 共有 100 张表
+
+========================================================================================================================
+
+## 表: adaptive_params
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| param_key | varchar(100) | NO | UNI | NULL |  |
+| param_value | decimal(10,6) | NO |  | NULL |  |
+| param_type | varchar(50) | NO | MUL | NULL |  |
+| description | varchar(255) | YES |  | NULL |  |
+| updated_at | timestamp | NO | MUL | current_timestamp() | on update current_timestamp() |
+| updated_by | varchar(100) | YES |  | adaptive_optimizer |  |
+
+表注释: 自适应参数表
+
+========================================================================================================================
+
+## 表: blockchain_gas_daily
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| chain_name | varchar(50) | NO | MUL | NULL |  |
+| chain_display_name | varchar(50) | NO |  | NULL |  |
+| date | date | NO | MUL | NULL |  |
+| total_gas_used | decimal(30,0) | NO |  | 0 |  |
+| total_transactions | bigint(20) | NO |  | 0 |  |
+| avg_gas_per_tx | decimal(20,2) | NO |  | 0.00 |  |
+| avg_gas_price | decimal(30,0) | NO |  | 0 |  |
+| max_gas_price | decimal(30,0) | YES |  | NULL |  |
+| min_gas_price | decimal(30,0) | YES |  | NULL |  |
+| native_token_price_usd | decimal(18,8) | YES |  | NULL |  |
+| total_gas_value_usd | decimal(24,2) | NO |  | 0.00 |  |
+| avg_gas_value_usd | decimal(18,8) | NO |  | 0.00000000 |  |
+| total_blocks | bigint(20) | NO |  | 0 |  |
+| avg_block_size | decimal(20,2) | YES |  | NULL |  |
+| active_addresses | bigint(20) | YES |  | NULL |  |
+| new_addresses | bigint(20) | YES |  | NULL |  |
+| data_source | varchar(100) | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 区块链Gas消耗日统计表
+
+========================================================================================================================
+
+## 表: blockchain_gas_daily_summary
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| date | date | NO |  | NULL |  |
+| chain_count | bigint(21) | NO |  | 0 |  |
+| total_gas_used_all_chains | decimal(52,0) | YES |  | NULL |  |
+| total_transactions_all_chains | decimal(41,0) | YES |  | NULL |  |
+| total_gas_value_usd_all_chains | decimal(46,2) | YES |  | NULL |  |
+| avg_gas_value_usd_per_tx | decimal(22,12) | YES |  | NULL |  |
+| total_active_addresses | decimal(41,0) | YES |  | NULL |  |
+
+表注释: VIEW
+
+========================================================================================================================
+
+## 表: corporate_treasury_companies
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| company_name | varchar(100) | NO | UNI | NULL |  |
+| ticker_symbol | varchar(20) | YES | MUL | NULL |  |
+| category | varchar(50) | YES |  | NULL |  |
+| description | text | YES |  | NULL |  |
+| official_website | varchar(255) | YES |  | NULL |  |
+| is_active | tinyint(1) | YES |  | 1 |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+| updated_at | timestamp | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 企业金库公司基础信息
+
+========================================================================================================================
+
+## 表: corporate_treasury_financing
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| company_id | int(11) | NO | MUL | NULL |  |
+| financing_date | date | NO | MUL | NULL |  |
+| financing_type | varchar(50) | YES | MUL | NULL |  |
+| amount | decimal(20,2) | YES |  | NULL |  |
+| purpose | text | YES |  | NULL |  |
+| announcement_url | varchar(500) | YES |  | NULL |  |
+| notes | text | YES |  | NULL |  |
+| data_source | varchar(50) | YES |  | manual |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+| updated_at | timestamp | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 企业融资记录
+
+========================================================================================================================
+
+## 表: corporate_treasury_purchases
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| company_id | int(11) | NO | MUL | NULL |  |
+| purchase_date | date | NO | MUL | NULL |  |
+| asset_type | varchar(20) | NO | MUL | NULL |  |
+| quantity | decimal(20,8) | NO |  | NULL |  |
+| average_price | decimal(20,2) | YES |  | NULL |  |
+| total_amount | decimal(20,2) | YES |  | NULL |  |
+| cumulative_holdings | decimal(20,8) | YES |  | NULL |  |
+| announcement_url | varchar(500) | YES |  | NULL |  |
+| notes | text | YES |  | NULL |  |
+| data_source | varchar(50) | YES |  | manual |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+| updated_at | timestamp | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 企业金库购买记录
+
+========================================================================================================================
+
+## 表: corporate_treasury_stock_prices
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| company_id | int(11) | NO | MUL | NULL |  |
+| trade_date | date | NO | MUL | NULL |  |
+| open_price | decimal(10,2) | YES |  | NULL |  |
+| close_price | decimal(10,2) | YES |  | NULL |  |
+| high_price | decimal(10,2) | YES |  | NULL |  |
+| low_price | decimal(10,2) | YES |  | NULL |  |
+| volume | bigint(20) | YES |  | NULL |  |
+| market_cap | decimal(20,2) | YES |  | NULL |  |
+| change_pct | decimal(10,4) | YES |  | NULL |  |
+| data_source | varchar(50) | YES |  | manual |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+| updated_at | timestamp | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 企业股价数据
+
+========================================================================================================================
+
+## 表: corporate_treasury_summary
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO |  | 0 |  |
+| company_name | varchar(100) | NO |  | NULL |  |
+| ticker_symbol | varchar(20) | YES |  | NULL |  |
+| category | varchar(50) | YES |  | NULL |  |
+| btc_holdings | decimal(20,8) | YES |  | NULL |  |
+| btc_total_investment | decimal(42,2) | YES |  | NULL |  |
+| eth_holdings | decimal(20,8) | YES |  | NULL |  |
+| eth_total_investment | decimal(42,2) | YES |  | NULL |  |
+| last_purchase_date | date | YES |  | NULL |  |
+| total_financing | decimal(42,2) | YES |  | NULL |  |
+| last_financing_date | date | YES |  | NULL |  |
+| latest_stock_price | decimal(10,2) | YES |  | NULL |  |
+| latest_change_pct | decimal(10,4) | YES |  | NULL |  |
+| is_active | tinyint(1) | YES |  | 1 |  |
+
+表注释: VIEW
+
+========================================================================================================================
+
+## 表: crypto_etf_daily_summary
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| trade_date | date | NO | MUL | NULL |  |
+| asset_type | varchar(20) | NO | MUL | NULL |  |
+| total_net_inflow | decimal(20,2) | YES |  | 0.00 |  |
+| total_gross_inflow | decimal(20,2) | YES |  | 0.00 |  |
+| total_gross_outflow | decimal(20,2) | YES |  | 0.00 |  |
+| total_aum | decimal(20,2) | YES |  | NULL |  |
+| total_holdings | decimal(20,8) | YES |  | NULL |  |
+| etf_count | int(11) | YES |  | 0 |  |
+| inflow_count | int(11) | YES |  | 0 |  |
+| outflow_count | int(11) | YES |  | 0 |  |
+| top_inflow_ticker | varchar(20) | YES |  | NULL |  |
+| top_inflow_amount | decimal(20,2) | YES |  | NULL |  |
+| top_outflow_ticker | varchar(20) | YES |  | NULL |  |
+| top_outflow_amount | decimal(20,2) | YES |  | NULL |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+| updated_at | timestamp | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 加密货币ETF每日汇总
+
+========================================================================================================================
+
+## 表: crypto_etf_events
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| event_date | date | NO | MUL | NULL |  |
+| asset_type | varchar(20) | YES | MUL | NULL |  |
+| event_type | varchar(50) | NO | MUL | NULL |  |
+| title | varchar(200) | NO |  | NULL |  |
+| description | text | YES |  | NULL |  |
+| impact_level | varchar(20) | YES |  | NULL |  |
+| related_etf_id | int(11) | YES | MUL | NULL |  |
+| related_ticker | varchar(20) | YES |  | NULL |  |
+| amount | decimal(20,2) | YES |  | NULL |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+
+表注释: ETF重要事件记录
+
+========================================================================================================================
+
+## 表: crypto_etf_flows
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| etf_id | int(11) | NO | MUL | NULL |  |
+| ticker | varchar(20) | NO | MUL | NULL |  |
+| trade_date | date | NO | MUL | NULL |  |
+| net_inflow | decimal(20,2) | YES | MUL | 0.00 |  |
+| gross_inflow | decimal(20,2) | YES |  | 0.00 |  |
+| gross_outflow | decimal(20,2) | YES |  | 0.00 |  |
+| aum | decimal(20,2) | YES |  | NULL |  |
+| btc_holdings | decimal(20,8) | YES |  | NULL |  |
+| eth_holdings | decimal(20,8) | YES |  | NULL |  |
+| shares_outstanding | decimal(20,2) | YES |  | NULL |  |
+| nav | decimal(18,8) | YES |  | NULL |  |
+| close_price | decimal(18,8) | YES |  | NULL |  |
+| volume | decimal(20,2) | YES |  | NULL |  |
+| data_source | varchar(50) | YES |  | manual |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+| updated_at | timestamp | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 加密货币ETF每日资金流向
+
+========================================================================================================================
+
+## 表: crypto_etf_products
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| ticker | varchar(20) | NO | UNI | NULL |  |
+| full_name | varchar(200) | NO |  | NULL |  |
+| provider | varchar(100) | NO | MUL | NULL |  |
+| asset_type | varchar(20) | NO | MUL | NULL |  |
+| etf_type | varchar(20) | NO |  | NULL |  |
+| launch_date | date | YES |  | NULL |  |
+| official_website | varchar(500) | YES |  | NULL |  |
+| expense_ratio | decimal(5,4) | YES |  | NULL |  |
+| is_active | tinyint(1) | YES |  | 1 |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+| updated_at | timestamp | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 加密货币ETF产品信息
+
+========================================================================================================================
+
+## 表: crypto_etf_sentiment
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| trade_date | date | NO | MUL | NULL |  |
+| asset_type | varchar(20) | NO |  | NULL |  |
+| sentiment_score | decimal(5,2) | YES | MUL | NULL |  |
+| flow_trend | varchar(20) | YES |  | NULL |  |
+| consecutive_inflow_days | int(11) | YES |  | 0 |  |
+| consecutive_outflow_days | int(11) | YES |  | 0 |  |
+| ma_5day_inflow | decimal(20,2) | YES |  | NULL |  |
+| ma_10day_inflow | decimal(20,2) | YES |  | NULL |  |
+| ma_20day_inflow | decimal(20,2) | YES |  | NULL |  |
+| mtd_net_inflow | decimal(20,2) | YES |  | NULL |  |
+| ytd_net_inflow | decimal(20,2) | YES |  | NULL |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+| updated_at | timestamp | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: ETF市场情绪指标
+
+========================================================================================================================
+
+## 表: daily_review_opportunities
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| review_date | date | NO | MUL | NULL |  |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| timeframe | varchar(10) | NO | MUL | NULL |  |
+| move_type | varchar(10) | NO |  | NULL |  |
+| start_time | datetime | NO |  | NULL |  |
+| end_time | datetime | NO |  | NULL |  |
+| price_change_pct | float | NO |  | NULL |  |
+| volume_ratio | float | NO |  | NULL |  |
+| captured | tinyint(1) | NO | MUL | NULL |  |
+| capture_delay_minutes | int(11) | YES |  | NULL |  |
+| signal_type | varchar(50) | YES |  | NULL |  |
+| position_pnl_pct | float | YES |  | NULL |  |
+| miss_reason | text | YES |  | NULL |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+
+表注释: 大行情机会详情表
+
+========================================================================================================================
+
+## 表: daily_review_reports
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| date | date | NO | UNI | NULL |  |
+| report_json | mediumtext | NO |  | NULL |  |
+| total_opportunities | int(11) | YES |  | NULL |  |
+| captured_count | int(11) | YES |  | NULL |  |
+| missed_count | int(11) | YES |  | NULL |  |
+| capture_rate | float | YES | MUL | NULL |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 每日复盘报告主表
+
+========================================================================================================================
+
+## 表: daily_review_signal_analysis
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| review_date | date | NO | MUL | NULL |  |
+| signal_type | varchar(200) | NO |  | NULL |  |
+| total_trades | int(11) | NO |  | NULL |  |
+| win_trades | int(11) | NO |  | NULL |  |
+| loss_trades | int(11) | NO |  | NULL |  |
+| win_rate | float | NO |  | NULL |  |
+| avg_pnl | float | NO |  | NULL |  |
+| best_trade | float | YES |  | NULL |  |
+| worst_trade | float | YES |  | NULL |  |
+| long_trades | int(11) | NO |  | NULL |  |
+| short_trades | int(11) | NO |  | NULL |  |
+| avg_holding_minutes | float | YES |  | NULL |  |
+| captured_opportunities | int(11) | NO |  | NULL |  |
+| rating | varchar(20) | YES |  | NULL |  |
+| score | int(11) | YES | MUL | NULL |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+
+表注释: 信号分析表
+
+========================================================================================================================
+
+## 表: ema_signals
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| timeframe | varchar(10) | NO |  | NULL |  |
+| signal_type | varchar(10) | NO | MUL | NULL |  |
+| signal_strength | varchar(20) | NO |  | NULL |  |
+| timestamp | datetime | NO | MUL | NULL |  |
+| price | decimal(20,8) | NO |  | NULL |  |
+| short_ema | decimal(20,8) | NO |  | NULL |  |
+| long_ema | decimal(20,8) | NO |  | NULL |  |
+| ema_config | varchar(50) | NO |  | NULL |  |
+| volume_ratio | decimal(10,2) | NO |  | NULL |  |
+| volume_type | varchar(10) | YES |  | NULL |  |
+| price_change_pct | decimal(10,4) | NO |  | NULL |  |
+| ema_distance_pct | decimal(10,4) | NO |  | NULL |  |
+| created_at | timestamp | YES | MUL | current_timestamp() |  |
+
+表注释: EMA信号记录表
+
+========================================================================================================================
+
+## 表: funding_rate_data
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| exchange | varchar(20) | NO |  | NULL |  |
+| funding_rate | float | NO |  | NULL |  |
+| funding_time | bigint(20) | NO | MUL | NULL |  |
+| timestamp | datetime | NO | MUL | NULL |  |
+| mark_price | decimal(18,8) | YES |  | NULL |  |
+| index_price | decimal(18,8) | YES |  | NULL |  |
+| next_funding_time | bigint(20) | YES |  | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: funding_rate_stats
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | UNI | NULL |  |
+| current_rate | decimal(10,6) | YES | MUL | NULL |  |
+| current_rate_pct | decimal(10,6) | YES |  | NULL |  |
+| rate_24h_ago | decimal(10,6) | YES |  | NULL |  |
+| rate_avg_7d | decimal(10,6) | YES |  | NULL |  |
+| rate_avg_30d | decimal(10,6) | YES |  | NULL |  |
+| rate_max_7d | decimal(10,6) | YES |  | NULL |  |
+| rate_min_7d | decimal(10,6) | YES |  | NULL |  |
+| trend | varchar(20) | YES | MUL | NULL |  |
+| market_sentiment | varchar(20) | YES |  | NULL |  |
+| funding_score | decimal(5,2) | YES |  | NULL |  |
+| exchange | varchar(20) | YES |  | NULL |  |
+| updated_at | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: 资金费率统计表 - 每5分钟更新
+
+========================================================================================================================
+
+## 表: futures_funding_fees
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| position_id | int(11) | NO | MUL | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| funding_rate | decimal(18,8) | NO |  | NULL |  |
+| position_value | decimal(20,2) | NO |  | NULL |  |
+| funding_fee | decimal(20,8) | NO |  | NULL |  |
+| funding_time | datetime | NO | MUL | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+
+表注释: 合约资金费率记录表
+
+========================================================================================================================
+
+## 表: futures_klines
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| timeframe | varchar(10) | NO |  | NULL |  |
+| open_time | datetime | NO | MUL | NULL |  |
+| close_time | datetime | NO |  | NULL |  |
+| open_price | decimal(20,8) | NO |  | NULL |  |
+| high_price | decimal(20,8) | NO |  | NULL |  |
+| low_price | decimal(20,8) | NO |  | NULL |  |
+| close_price | decimal(20,8) | NO |  | NULL |  |
+| volume | decimal(20,8) | NO |  | 0.00000000 |  |
+| quote_volume | decimal(20,8) | NO |  | 0.00000000 |  |
+| trades | int(11) | NO |  | 0 |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 合约K线数据表
+
+========================================================================================================================
+
+## 表: futures_liquidations
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| position_id | int(11) | NO | MUL | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| position_side | varchar(10) | NO |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| entry_price | decimal(18,8) | NO |  | NULL |  |
+| liquidation_price | decimal(18,8) | NO |  | NULL |  |
+| mark_price | decimal(18,8) | NO |  | NULL |  |
+| loss_amount | decimal(20,2) | NO |  | NULL |  |
+| margin_lost | decimal(20,2) | NO |  | NULL |  |
+| leverage | int(11) | NO |  | NULL |  |
+| liquidation_time | datetime | NO | MUL | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+
+表注释: 合约强平记录表
+
+========================================================================================================================
+
+## 表: futures_long_short_ratio
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| exchange | varchar(20) | NO | MUL | NULL |  |
+| period | varchar(10) | NO |  | NULL |  |
+| long_account | float | NO |  | NULL |  |
+| short_account | float | NO |  | NULL |  |
+| long_position | float | YES |  | NULL |  |
+| short_position | float | YES |  | NULL |  |
+| long_short_position_ratio | float | YES |  | NULL |  |
+| long_short_ratio | float | NO |  | NULL |  |
+| timestamp | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: futures_open_interest
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| exchange | varchar(20) | NO | MUL | NULL |  |
+| open_interest | decimal(20,8) | NO |  | NULL |  |
+| open_interest_value | decimal(20,2) | YES |  | NULL |  |
+| timestamp | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: futures_orders
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| user_id | int(11) | YES | MUL | 1 |  |
+| strategy_id | bigint(11) | YES | MUL | NULL |  |
+| timeout_minutes | int(11) | YES |  | 0 |  |
+| order_id | varchar(50) | NO | UNI | NULL |  |
+| position_id | int(11) | YES | MUL | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| side | varchar(20) | NO |  | NULL |  |
+| order_type | varchar(20) | NO |  | MARKET |  |
+| leverage | int(11) | NO |  | 1 |  |
+| price | decimal(18,8) | YES |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| executed_quantity | decimal(18,8) | YES |  | 0.00000000 |  |
+| margin | decimal(20,2) | YES |  | NULL |  |
+| total_value | decimal(20,2) | YES |  | NULL |  |
+| executed_value | decimal(20,2) | YES |  | 0.00 |  |
+| fee | decimal(20,8) | YES |  | 0.00000000 |  |
+| fee_rate | decimal(10,6) | YES |  | 0.000400 |  |
+| status | varchar(20) | NO | MUL | PENDING |  |
+| avg_fill_price | decimal(18,8) | YES |  | NULL |  |
+| fill_time | datetime | YES |  | NULL |  |
+| stop_price | decimal(18,8) | YES |  | NULL |  |
+| stop_loss_price | decimal(18,8) | YES |  | NULL |  |
+| take_profit_price | decimal(18,8) | YES |  | NULL |  |
+| order_source | varchar(500) | YES |  | NULL |  |
+| entry_signal_type | varchar(50) | YES |  | NULL |  |
+| signal_id | int(11) | YES |  | NULL |  |
+| realized_pnl | decimal(20,2) | YES |  | NULL |  |
+| pnl_pct | decimal(10,4) | YES |  | NULL |  |
+| notes | text | YES |  | NULL |  |
+| cancellation_reason | varchar(100) | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+| canceled_at | datetime | YES |  | NULL |  |
+
+表注释: 模拟合约订单表
+
+========================================================================================================================
+
+## 表: futures_positions
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| user_id | int(11) | YES | MUL | 1 |  |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| position_side | varchar(10) | NO | MUL | NULL |  |
+| leverage | int(11) | NO |  | 1 |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| notional_value | decimal(20,2) | NO |  | NULL |  |
+| margin | decimal(20,2) | NO |  | NULL |  |
+| entry_price | decimal(18,8) | NO |  | NULL |  |
+| mark_price | decimal(18,8) | YES |  | NULL |  |
+| liquidation_price | decimal(18,8) | YES |  | NULL |  |
+| unrealized_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| unrealized_pnl_pct | decimal(10,4) | YES |  | 0.0000 |  |
+| realized_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| stop_loss_price | decimal(18,8) | YES |  | NULL |  |
+| take_profit_price | decimal(18,8) | YES |  | NULL |  |
+| stop_loss_pct | decimal(5,2) | YES |  | NULL |  |
+| take_profit_pct | decimal(5,2) | YES |  | NULL |  |
+| entry_ema_diff | decimal(18,8) | YES |  | NULL |  |
+| total_funding_fee | decimal(20,8) | YES |  | 0.00000000 |  |
+| open_time | datetime | NO | MUL | NULL |  |
+| last_update_time | datetime | YES |  | NULL |  |
+| close_time | datetime | YES |  | NULL |  |
+| holding_hours | int(11) | YES |  | 0 |  |
+| status | varchar(20) | YES | MUL | open |  |
+| source | varchar(50) | YES |  | manual |  |
+| signal_id | int(11) | YES |  | NULL |  |
+| strategy_id | bigint(20) | YES | MUL | NULL |  |
+| notes | text | YES |  | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+| max_profit_pct | decimal(10,4) | YES |  | 0.0000 |  |
+| max_profit_price | decimal(18,8) | YES |  | NULL |  |
+| trailing_stop_activated | tinyint(1) | YES |  | 0 |  |
+| trailing_stop_price | decimal(18,8) | YES |  | NULL |  |
+| entry_signal_type | varchar(500) | YES |  | NULL |  |
+| entry_score | int(11) | YES |  | NULL |  |
+| signal_components | text | YES |  | NULL |  |
+| entry_reason | varchar(500) | YES |  | NULL |  |
+| live_position_id | int(11) | YES |  | NULL |  |
+| max_hold_minutes | int(11) | YES |  | NULL |  |
+| timeout_at | timestamp | YES | MUL | NULL |  |
+| batch_plan | longtext | YES |  | NULL |  |
+| batch_filled | longtext | YES |  | NULL |  |
+| entry_signal_time | datetime | YES | MUL | NULL |  |
+| avg_entry_price | decimal(20,8) | YES |  | NULL |  |
+| planned_close_time | datetime | YES | MUL | NULL |  |
+| close_extended | tinyint(1) | YES | MUL | 0 |  |
+| extended_close_time | datetime | YES |  | NULL |  |
+| max_profit_time | datetime | YES |  | NULL |  |
+
+表注释: 合约持仓表（支持超级大脑智能建仓/平仓优化）
+
+========================================================================================================================
+
+## 表: futures_trades
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| order_id | varchar(50) | NO | MUL | NULL |  |
+| position_id | int(11) | YES | MUL | NULL |  |
+| trade_id | varchar(50) | NO | UNI | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| side | varchar(20) | NO |  | NULL |  |
+| price | decimal(18,8) | NO |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| notional_value | decimal(20,2) | NO |  | NULL |  |
+| leverage | int(11) | NO |  | NULL |  |
+| margin | decimal(20,2) | NO |  | NULL |  |
+| fee | decimal(20,8) | YES |  | 0.00000000 |  |
+| fee_rate | decimal(10,6) | YES |  | NULL |  |
+| realized_pnl | decimal(20,2) | YES |  | NULL |  |
+| pnl_pct | decimal(10,4) | YES |  | NULL |  |
+| roi | decimal(10,4) | YES |  | NULL |  |
+| entry_price | decimal(18,8) | YES |  | NULL |  |
+| trade_time | datetime | NO | MUL | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+
+表注释: 模拟合约交易历史表
+
+========================================================================================================================
+
+## 表: futures_trading_accounts
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| user_id | int(11) | YES | MUL | 1 |  |
+| account_name | varchar(100) | NO |  | NULL |  |
+| initial_balance | decimal(20,2) | YES |  | 10000.00 |  |
+| current_balance | decimal(20,2) | YES |  | 10000.00 |  |
+| frozen_balance | decimal(20,2) | YES |  | 0.00 |  |
+| total_equity | decimal(20,2) | YES |  | 10000.00 |  |
+| total_profit_loss | decimal(20,2) | YES |  | 0.00 |  |
+| total_profit_loss_pct | decimal(10,4) | YES |  | 0.0000 |  |
+| realized_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| unrealized_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| winning_trades | int(11) | YES |  | 0 |  |
+| losing_trades | int(11) | YES |  | 0 |  |
+| win_rate | decimal(5,2) | YES |  | 0.00 |  |
+| max_balance | decimal(20,2) | YES |  | 10000.00 |  |
+| max_drawdown | decimal(20,2) | YES |  | 0.00 |  |
+| max_drawdown_pct | decimal(10,4) | YES |  | 0.0000 |  |
+| max_position_size | decimal(5,2) | YES |  | 0.10 |  |
+| max_daily_loss | decimal(20,2) | YES |  | NULL |  |
+| default_leverage | int(11) | YES |  | 10 |  |
+| default_stop_loss_pct | decimal(5,2) | YES |  | 0.02 |  |
+| default_take_profit_pct | decimal(5,2) | YES |  | 0.05 |  |
+| strategy_name | varchar(100) | YES |  | NULL |  |
+| auto_trading | tinyint(1) | YES |  | 0 |  |
+| status | varchar(20) | YES | MUL | active |  |
+| is_default | tinyint(1) | YES |  | 0 |  |
+| created_at | datetime | YES | MUL | current_timestamp() |  |
+| updated_at | datetime | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 合约交易账户表
+
+========================================================================================================================
+
+## 表: hyperliquid_leaderboard_history
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| record_date | date | NO | MUL | NULL |  |
+| period_type | varchar(20) | NO |  | NULL |  |
+| total_traders | int(11) | YES |  | 0 |  |
+| total_positive_pnl | int(11) | YES |  | 0 |  |
+| total_negative_pnl | int(11) | YES |  | 0 |  |
+| avg_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| median_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| top10_avg_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| recorded_at | datetime | NO |  | NULL |  |
+
+表注释: Hyperliquid 排行榜统计历史
+
+========================================================================================================================
+
+## 表: hyperliquid_monitored_wallets
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| trader_id | int(11) | NO | UNI | NULL |  |
+| address | varchar(66) | NO | MUL | NULL |  |
+| label | varchar(100) | YES |  | NULL |  |
+| monitor_type | varchar(50) | YES |  | auto |  |
+| is_monitoring | tinyint(1) | YES | MUL | 1 |  |
+| discovered_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| discovered_roi | decimal(10,4) | YES |  | 0.0000 |  |
+| discovered_account_value | decimal(20,2) | YES |  | 0.00 |  |
+| discovered_at | datetime | NO |  | NULL |  |
+| last_check_at | datetime | YES | MUL | NULL |  |
+| last_trade_at | datetime | YES |  | NULL |  |
+| check_count | int(11) | YES |  | 0 |  |
+| created_at | datetime | NO |  | NULL |  |
+| updated_at | datetime | NO |  | NULL |  |
+| notes | text | YES |  | NULL |  |
+
+表注释: Hyperliquid 监控钱包列表
+
+========================================================================================================================
+
+## 表: hyperliquid_monthly_performance
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| trader_id | int(11) | NO | MUL | NULL |  |
+| address | varchar(66) | NO | MUL | NULL |  |
+| month_start | date | NO | MUL | NULL |  |
+| month_end | date | NO |  | NULL |  |
+| pnl | decimal(20,2) | YES | MUL | 0.00 |  |
+| roi | decimal(10,4) | YES | MUL | 0.0000 |  |
+| volume | decimal(20,2) | YES |  | 0.00 |  |
+| account_value | decimal(20,2) | YES |  | 0.00 |  |
+| pnl_rank | int(11) | YES |  | NULL |  |
+| roi_rank | int(11) | YES |  | NULL |  |
+| recorded_at | datetime | NO |  | NULL |  |
+| data_source | varchar(50) | YES |  | leaderboard |  |
+
+表注释: Hyperliquid 交易者月度表现
+
+========================================================================================================================
+
+## 表: hyperliquid_performance_snapshots
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| trader_id | int(11) | NO | MUL | NULL |  |
+| address | varchar(66) | NO | MUL | NULL |  |
+| snapshot_date | date | NO | MUL | NULL |  |
+| day_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| day_roi | decimal(10,4) | YES |  | 0.0000 |  |
+| day_volume | decimal(20,2) | YES |  | 0.00 |  |
+| week_pnl | decimal(20,2) | YES | MUL | 0.00 |  |
+| week_roi | decimal(10,4) | YES |  | 0.0000 |  |
+| week_volume | decimal(20,2) | YES |  | 0.00 |  |
+| month_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| month_roi | decimal(10,4) | YES |  | 0.0000 |  |
+| month_volume | decimal(20,2) | YES |  | 0.00 |  |
+| alltime_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| alltime_roi | decimal(10,4) | YES |  | 0.0000 |  |
+| alltime_volume | decimal(20,2) | YES |  | 0.00 |  |
+| account_value | decimal(20,2) | YES |  | 0.00 |  |
+| recorded_at | datetime | NO |  | NULL |  |
+
+表注释: Hyperliquid 交易者表现快照(每日)
+
+========================================================================================================================
+
+## 表: hyperliquid_symbol_aggregation
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| period | varchar(10) | NO |  | 24h |  |
+| net_flow | decimal(20,2) | YES | MUL | NULL |  |
+| inflow | decimal(20,2) | YES |  | NULL |  |
+| outflow | decimal(20,2) | YES |  | NULL |  |
+| long_trades | int(11) | YES |  | NULL |  |
+| short_trades | int(11) | YES |  | NULL |  |
+| total_trades | int(11) | YES |  | NULL |  |
+| long_short_ratio | decimal(10,4) | YES |  | NULL |  |
+| total_volume | decimal(20,2) | YES | MUL | NULL |  |
+| avg_trade_size | decimal(20,2) | YES |  | NULL |  |
+| max_trade_size | decimal(20,2) | YES |  | NULL |  |
+| active_wallets | int(11) | YES |  | NULL |  |
+| unique_wallets | int(11) | YES |  | NULL |  |
+| total_pnl | decimal(20,2) | YES |  | NULL |  |
+| avg_pnl | decimal(18,2) | YES |  | NULL |  |
+| win_rate | decimal(5,2) | YES |  | NULL |  |
+| hyperliquid_score | decimal(5,2) | YES | MUL | NULL |  |
+| hyperliquid_signal | varchar(20) | YES |  | NULL |  |
+| sentiment | varchar(20) | YES |  | NULL |  |
+| updated_at | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: Hyperliquid币种聚合数据 - 每10分钟更新
+
+========================================================================================================================
+
+## 表: hyperliquid_traders
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| address | varchar(66) | NO | UNI | NULL |  |
+| display_name | varchar(100) | YES |  | NULL |  |
+| first_seen | datetime | NO |  | NULL |  |
+| last_updated | datetime | NO | MUL | NULL |  |
+| is_active | tinyint(1) | YES |  | 1 |  |
+| notes | text | YES |  | NULL |  |
+
+表注释: Hyperliquid 交易者基本信息
+
+========================================================================================================================
+
+## 表: hyperliquid_wallet_fund_changes
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| trader_id | int(11) | NO | MUL | NULL |  |
+| address | varchar(66) | NO | MUL | NULL |  |
+| change_type | varchar(50) | NO | MUL | NULL |  |
+| amount | decimal(20,2) | NO |  | NULL |  |
+| balance_before | decimal(20,2) | YES |  | NULL |  |
+| balance_after | decimal(20,2) | YES |  | NULL |  |
+| change_time | datetime | NO | MUL | NULL |  |
+| detected_at | datetime | NO |  | NULL |  |
+| raw_data | longtext | YES |  | NULL |  |
+| notes | text | YES |  | NULL |  |
+
+表注释: Hyperliquid 钱包资金变动记录
+
+========================================================================================================================
+
+## 表: hyperliquid_wallet_positions
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| trader_id | int(11) | NO | MUL | NULL |  |
+| address | varchar(66) | NO | MUL | NULL |  |
+| snapshot_time | datetime | NO | MUL | NULL |  |
+| coin | varchar(20) | NO | MUL | NULL |  |
+| side | varchar(10) | NO |  | NULL |  |
+| size | decimal(20,8) | NO |  | NULL |  |
+| entry_price | decimal(20,8) | NO |  | NULL |  |
+| mark_price | decimal(20,8) | YES |  | NULL |  |
+| notional_usd | decimal(20,2) | NO |  | NULL |  |
+| unrealized_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| leverage | decimal(10,2) | YES |  | 1.00 |  |
+| raw_data | longtext | YES |  | NULL |  |
+
+表注释: Hyperliquid 钱包持仓快照
+
+========================================================================================================================
+
+## 表: hyperliquid_wallet_trades
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| trader_id | int(11) | NO | MUL | NULL |  |
+| address | varchar(66) | NO | MUL | NULL |  |
+| coin | varchar(20) | NO | MUL | NULL |  |
+| side | varchar(10) | NO |  | NULL |  |
+| action | varchar(20) | NO |  | NULL |  |
+| price | decimal(20,8) | NO |  | NULL |  |
+| size | decimal(20,8) | NO |  | NULL |  |
+| notional_usd | decimal(20,2) | NO | MUL | NULL |  |
+| closed_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| trade_time | datetime | NO | MUL | NULL |  |
+| detected_at | datetime | NO |  | NULL |  |
+| raw_data | longtext | YES |  | NULL |  |
+
+表注释: Hyperliquid 钱包交易记录
+
+========================================================================================================================
+
+## 表: hyperliquid_weekly_performance
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| trader_id | int(11) | NO | MUL | NULL |  |
+| address | varchar(66) | NO | MUL | NULL |  |
+| week_start | date | NO | MUL | NULL |  |
+| week_end | date | NO |  | NULL |  |
+| pnl | decimal(20,2) | YES | MUL | 0.00 |  |
+| roi | decimal(10,4) | YES | MUL | 0.0000 |  |
+| volume | decimal(20,2) | YES |  | 0.00 |  |
+| account_value | decimal(20,2) | YES |  | 0.00 |  |
+| pnl_rank | int(11) | YES | MUL | NULL |  |
+| roi_rank | int(11) | YES |  | NULL |  |
+| recorded_at | datetime | NO |  | NULL |  |
+| data_source | varchar(50) | YES |  | leaderboard |  |
+
+表注释: Hyperliquid 交易者周度表现
+
+========================================================================================================================
+
+## 表: investment_recommendations
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | UNI | NULL |  |
+| recommendation | varchar(20) | NO |  | NULL |  |
+| confidence | decimal(5,2) | NO | MUL | NULL |  |
+| reasoning | text | YES |  | NULL |  |
+| technical_score | decimal(5,2) | YES |  | NULL |  |
+| news_sentiment_score | decimal(5,2) | YES |  | NULL |  |
+| funding_rate_score | decimal(5,2) | YES |  | NULL |  |
+| smart_money_score | decimal(5,2) | YES |  | NULL |  |
+| onchain_score | decimal(5,2) | YES |  | NULL |  |
+| rsi | decimal(10,4) | YES |  | NULL |  |
+| macd | decimal(10,4) | YES |  | NULL |  |
+| macd_signal | decimal(10,4) | YES |  | NULL |  |
+| macd_histogram | decimal(10,4) | YES |  | NULL |  |
+| current_price | decimal(18,8) | YES |  | NULL |  |
+| price_change_24h | decimal(10,4) | YES |  | NULL |  |
+| risk_level | varchar(10) | YES |  | NULL |  |
+| volatility | decimal(10,4) | YES |  | NULL |  |
+| created_at | timestamp | YES |  | current_timestamp() |  |
+| updated_at | timestamp | YES | MUL | current_timestamp() | on update current_timestamp() |
+
+表注释: 投资建议表
+
+========================================================================================================================
+
+## 表: investment_recommendations_cache
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | UNI | NULL |  |
+| total_score | decimal(5,2) | YES | MUL | NULL |  |
+| technical_score | decimal(5,2) | YES |  | NULL |  |
+| news_score | decimal(5,2) | YES |  | NULL |  |
+| funding_score | decimal(5,2) | YES |  | NULL |  |
+| hyperliquid_score | decimal(5,2) | YES |  | NULL |  |
+| ethereum_score | decimal(5,2) | YES |  | NULL |  |
+| signal | varchar(20) | NO | MUL | NULL |  |
+| confidence | decimal(5,2) | YES | MUL | NULL |  |
+| current_price | decimal(18,8) | YES |  | NULL |  |
+| entry_price | decimal(18,8) | YES |  | NULL |  |
+| stop_loss | decimal(18,8) | YES |  | NULL |  |
+| take_profit | decimal(18,8) | YES |  | NULL |  |
+| potential_gain_pct | decimal(10,4) | YES |  | NULL |  |
+| potential_loss_pct | decimal(10,4) | YES |  | NULL |  |
+| risk_reward_ratio | decimal(10,4) | YES |  | NULL |  |
+| risk_level | varchar(20) | YES | MUL | NULL |  |
+| risk_factors | text | YES |  | NULL |  |
+| reasons | text | YES |  | NULL |  |
+| analysis_summary | text | YES |  | NULL |  |
+| has_technical | tinyint(1) | YES |  | 0 |  |
+| has_news | tinyint(1) | YES |  | 0 |  |
+| has_funding | tinyint(1) | YES |  | 0 |  |
+| has_hyperliquid | tinyint(1) | YES |  | 0 |  |
+| has_ethereum | tinyint(1) | YES |  | 0 |  |
+| data_completeness | decimal(5,2) | YES |  | NULL |  |
+| updated_at | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: 投资建议缓存表 - 每5分钟更新
+
+========================================================================================================================
+
+## 表: kline_data
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| exchange | varchar(20) | NO |  | NULL |  |
+| timeframe | varchar(10) | NO |  | NULL |  |
+| open_time | bigint(20) | NO | MUL | NULL |  |
+| close_time | bigint(20) | YES |  | NULL |  |
+| timestamp | datetime | NO | MUL | NULL |  |
+| open_price | decimal(18,8) | NO |  | NULL |  |
+| high_price | decimal(18,8) | NO |  | NULL |  |
+| low_price | decimal(18,8) | NO |  | NULL |  |
+| close_price | decimal(18,8) | NO |  | NULL |  |
+| volume | decimal(20,8) | YES |  | NULL |  |
+| quote_volume | decimal(24,2) | YES |  | NULL |  |
+| number_of_trades | int(11) | YES |  | NULL |  |
+| taker_buy_base_volume | decimal(20,8) | YES |  | NULL |  |
+| taker_buy_quote_volume | decimal(24,2) | YES |  | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: live_futures_orders
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| user_id | int(11) | YES | MUL | 1 |  |
+| position_id | int(11) | YES |  | NULL |  |
+| binance_order_id | varchar(50) | NO | MUL | NULL |  |
+| client_order_id | varchar(50) | YES |  | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| side | varchar(10) | NO |  | NULL |  |
+| position_side | varchar(10) | YES |  | NULL |  |
+| order_type | varchar(20) | NO |  | NULL |  |
+| price | decimal(18,8) | YES |  | NULL |  |
+| stop_price | decimal(18,8) | YES |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| executed_quantity | decimal(18,8) | YES |  | 0.00000000 |  |
+| avg_fill_price | decimal(18,8) | YES |  | NULL |  |
+| commission | decimal(20,8) | YES |  | 0.00000000 |  |
+| commission_asset | varchar(10) | YES |  | USDT |  |
+| status | varchar(20) | NO | MUL | NULL |  |
+| realized_pnl | decimal(20,8) | YES |  | NULL |  |
+| source | varchar(50) | YES |  | manual |  |
+| strategy_id | bigint(20) | YES |  | NULL |  |
+| order_time | datetime | YES | MUL | NULL |  |
+| fill_time | datetime | YES |  | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 实盘合约订单表
+
+========================================================================================================================
+
+## 表: live_futures_positions
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| user_id | int(11) | YES | MUL | 1 |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| position_side | varchar(10) | NO |  | NULL |  |
+| leverage | int(11) | NO |  | 1 |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| notional_value | decimal(20,2) | YES |  | NULL |  |
+| margin | decimal(20,2) | YES |  | NULL |  |
+| entry_price | decimal(18,8) | NO |  | NULL |  |
+| mark_price | decimal(18,8) | YES |  | NULL |  |
+| liquidation_price | decimal(18,8) | YES |  | NULL |  |
+| close_price | decimal(18,8) | YES |  | NULL |  |
+| unrealized_pnl | decimal(20,8) | YES |  | 0.00000000 |  |
+| realized_pnl | decimal(20,8) | YES |  | 0.00000000 |  |
+| stop_loss_price | decimal(18,8) | YES |  | NULL |  |
+| take_profit_price | decimal(18,8) | YES |  | NULL |  |
+| binance_order_id | varchar(50) | YES |  | NULL |  |
+| sl_order_id | varchar(50) | YES |  | NULL |  |
+| tp_order_id | varchar(50) | YES |  | NULL |  |
+| entry_ema_diff | decimal(18,8) | YES |  | NULL |  |
+| open_time | datetime | NO | MUL | NULL |  |
+| close_time | datetime | YES |  | NULL |  |
+| status | varchar(50) | YES | MUL | OPEN |  |
+| close_reason | varchar(50) | YES |  | NULL |  |
+| source | varchar(50) | YES |  | manual |  |
+| signal_id | int(11) | YES |  | NULL |  |
+| strategy_id | bigint(20) | YES | MUL | NULL |  |
+| notes | text | YES |  | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+| max_profit_pct | decimal(10,4) | YES |  | 0.0000 |  |
+| max_profit_price | decimal(18,8) | YES |  | NULL |  |
+| trailing_stop_activated | tinyint(1) | YES |  | 0 |  |
+| trailing_stop_price | decimal(18,8) | YES |  | NULL |  |
+| entry_signal_type | varchar(100) | YES |  | NULL |  |
+| paper_position_id | int(11) | YES |  | NULL |  |
+
+表注释: 实盘合约持仓表
+
+========================================================================================================================
+
+## 表: live_futures_trades
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| position_id | int(11) | YES |  | NULL |  |
+| order_id | bigint(20) | YES |  | NULL |  |
+| binance_trade_id | varchar(50) | YES | MUL | NULL |  |
+| binance_order_id | varchar(50) | YES |  | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| side | varchar(10) | NO |  | NULL |  |
+| position_side | varchar(10) | YES |  | NULL |  |
+| price | decimal(18,8) | NO |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| quote_quantity | decimal(20,8) | YES |  | NULL |  |
+| commission | decimal(20,8) | YES |  | 0.00000000 |  |
+| commission_asset | varchar(10) | YES |  | USDT |  |
+| realized_pnl | decimal(20,8) | YES |  | NULL |  |
+| trade_time | datetime | NO | MUL | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+
+表注释: 实盘交易历史表
+
+========================================================================================================================
+
+## 表: live_trading_accounts
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| user_id | int(11) | YES | MUL | 1 |  |
+| api_key_id | int(11) | YES |  | NULL |  |
+| account_name | varchar(100) | NO | UNI | NULL |  |
+| exchange | varchar(50) | NO | MUL | binance |  |
+| account_type | varchar(20) | NO |  | futures |  |
+| api_key_ref | varchar(100) | YES |  | NULL |  |
+| max_position_value | decimal(20,2) | YES |  | 1000.00 |  |
+| max_daily_loss | decimal(20,2) | YES |  | 100.00 |  |
+| max_total_positions | int(11) | YES |  | 5 |  |
+| max_leverage | int(11) | YES |  | 10 |  |
+| total_balance | decimal(20,8) | YES |  | 0.00000000 |  |
+| available_balance | decimal(20,8) | YES |  | 0.00000000 |  |
+| unrealized_pnl | decimal(20,8) | YES |  | 0.00000000 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| winning_trades | int(11) | YES |  | 0 |  |
+| losing_trades | int(11) | YES |  | 0 |  |
+| total_realized_pnl | decimal(20,8) | YES |  | 0.00000000 |  |
+| status | varchar(20) | YES | MUL | active |  |
+| is_default | tinyint(1) | YES |  | 0 |  |
+| last_sync_time | datetime | YES |  | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 实盘交易账户表
+
+========================================================================================================================
+
+## 表: live_trading_logs
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | YES | MUL | NULL |  |
+| log_level | varchar(10) | NO | MUL | INFO |  |
+| action | varchar(50) | NO | MUL | NULL |  |
+| symbol | varchar(20) | YES |  | NULL |  |
+| message | text | NO |  | NULL |  |
+| request_data | longtext | YES |  | NULL |  |
+| response_data | longtext | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | current_timestamp() |  |
+
+表注释: 实盘交易日志表
+
+========================================================================================================================
+
+## 表: login_logs
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| user_id | int(11) | YES | MUL | NULL |  |
+| username | varchar(50) | YES |  | NULL |  |
+| success | tinyint(1) | NO | MUL | 0 |  |
+| ip_address | varchar(45) | YES | MUL | NULL |  |
+| user_agent | text | YES |  | NULL |  |
+| failure_reason | varchar(100) | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | current_timestamp() |  |
+
+表注释: ç™»å½•æ—¥å¿—è¡¨
+
+========================================================================================================================
+
+## 表: market_observations
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| timestamp | timestamp | NO | MUL | current_timestamp() | on update current_timestamp() |
+| overall_trend | varchar(20) | YES |  | NULL |  |
+| market_strength | decimal(5,2) | YES |  | NULL |  |
+| bullish_count | int(11) | YES |  | NULL |  |
+| bearish_count | int(11) | YES |  | NULL |  |
+| neutral_count | int(11) | YES |  | NULL |  |
+| btc_price | decimal(12,2) | YES |  | NULL |  |
+| btc_trend | varchar(20) | YES |  | NULL |  |
+| eth_price | decimal(12,2) | YES |  | NULL |  |
+| eth_trend | varchar(20) | YES |  | NULL |  |
+| warnings | text | YES |  | NULL |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+
+
+========================================================================================================================
+
+## 表: market_regime
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| timeframe | varchar(10) | NO | MUL | 15m |  |
+| regime_type | varchar(30) | NO | MUL | NULL |  |
+| regime_score | decimal(5,2) | YES |  | 0.00 |  |
+| ema_diff_pct | decimal(8,4) | YES |  | NULL |  |
+| adx_value | decimal(8,4) | YES |  | NULL |  |
+| trend_bars | int(11) | YES |  | NULL |  |
+| volatility | decimal(8,4) | YES |  | NULL |  |
+| details | longtext | YES |  | NULL |  |
+| detected_at | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: 行情状态记录表
+
+========================================================================================================================
+
+## 表: market_regime_changes
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| timeframe | varchar(10) | NO |  | 15m |  |
+| old_regime | varchar(30) | YES |  | NULL |  |
+| new_regime | varchar(30) | NO |  | NULL |  |
+| old_score | decimal(5,2) | YES |  | NULL |  |
+| new_score | decimal(5,2) | YES |  | NULL |  |
+| changed_at | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: 行情切换日志表
+
+========================================================================================================================
+
+## 表: news_data
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| news_id | varchar(100) | YES | UNI | NULL |  |
+| title | varchar(500) | NO |  | NULL |  |
+| url | varchar(500) | NO | UNI | NULL |  |
+| source | varchar(100) | YES | MUL | NULL |  |
+| description | varchar(2000) | YES |  | NULL |  |
+| published_at | varchar(100) | YES |  | NULL |  |
+| published_datetime | datetime | YES | MUL | NULL |  |
+| symbols | varchar(200) | YES | MUL | NULL |  |
+| sentiment | varchar(20) | YES | MUL | NULL |  |
+| sentiment_score | float | YES |  | NULL |  |
+| votes_positive | int(11) | YES |  | NULL |  |
+| votes_negative | int(11) | YES |  | NULL |  |
+| votes_important | int(11) | YES |  | NULL |  |
+| data_source | varchar(50) | YES |  | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: news_sentiment_aggregation
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| period | varchar(10) | NO |  | 24h |  |
+| total_news | int(11) | YES |  | NULL |  |
+| positive_news | int(11) | YES |  | NULL |  |
+| negative_news | int(11) | YES |  | NULL |  |
+| neutral_news | int(11) | YES |  | NULL |  |
+| sentiment_index | decimal(10,4) | YES | MUL | NULL |  |
+| avg_sentiment_score | decimal(5,4) | YES |  | NULL |  |
+| sentiment_trend | varchar(20) | YES |  | NULL |  |
+| major_events_count | int(11) | YES |  | NULL |  |
+| critical_news | text | YES |  | NULL |  |
+| sources_count | int(11) | YES |  | NULL |  |
+| top_sources | text | YES |  | NULL |  |
+| news_score | decimal(5,2) | YES | MUL | NULL |  |
+| updated_at | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: 新闻情绪聚合表 - 每15分钟更新
+
+========================================================================================================================
+
+## 表: optimization_history
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| optimization_type | varchar(50) | NO | MUL | NULL |  |
+| target_name | varchar(100) | NO |  | NULL |  |
+| param_name | varchar(50) | NO |  | NULL |  |
+| old_value | decimal(10,6) | YES |  | NULL |  |
+| new_value | decimal(10,6) | YES |  | NULL |  |
+| change_amount | decimal(10,6) | YES |  | NULL |  |
+| sample_size | int(11) | YES |  | NULL |  |
+| win_rate | decimal(5,4) | YES |  | NULL |  |
+| reason | text | YES |  | NULL |  |
+| optimized_at | timestamp | NO |  | current_timestamp() |  |
+
+
+========================================================================================================================
+
+## 表: optimization_history_old
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| optimization_date | date | NO | MUL | NULL |  |
+| analysis_hours | int(11) | YES |  | 24 |  |
+| blacklist_added | int(11) | YES |  | 0 |  |
+| params_updated | int(11) | YES |  | 0 |  |
+| high_severity_issues | int(11) | YES |  | 0 |  |
+| report_summary | text | YES |  | NULL |  |
+| created_at | timestamp | NO | MUL | current_timestamp() |  |
+
+表注释: 优化历史记录
+
+========================================================================================================================
+
+## 表: optimization_logs
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| log_type | varchar(50) | NO | MUL | NULL |  |
+| action | varchar(100) | NO |  | NULL |  |
+| symbol | varchar(50) | YES | MUL | NULL |  |
+| old_value | varchar(255) | YES |  | NULL |  |
+| new_value | varchar(255) | YES |  | NULL |  |
+| reason | text | YES |  | NULL |  |
+| created_at | timestamp | NO | MUL | current_timestamp() |  |
+
+表注释: 优化日志表
+
+========================================================================================================================
+
+## 表: orderbook_data
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| exchange | varchar(20) | NO |  | NULL |  |
+| timestamp | datetime | NO | MUL | NULL |  |
+| best_bid | decimal(18,8) | YES |  | NULL |  |
+| best_ask | decimal(18,8) | YES |  | NULL |  |
+| spread | decimal(18,8) | YES |  | NULL |  |
+| bid_volume | decimal(18,8) | YES |  | NULL |  |
+| ask_volume | decimal(18,8) | YES |  | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: paper_trading_accounts
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| user_id | int(11) | YES | MUL | 1 |  |
+| account_name | varchar(100) | NO | MUL | NULL |  |
+| account_type | varchar(20) | YES |  | spot |  |
+| initial_balance | decimal(20,2) | NO |  | 10000.00 |  |
+| current_balance | decimal(20,2) | NO |  | 10000.00 |  |
+| frozen_balance | decimal(20,2) | YES |  | 0.00 |  |
+| total_equity | decimal(20,2) | YES |  | 10000.00 |  |
+| total_profit_loss | decimal(20,2) | YES |  | 0.00 |  |
+| total_profit_loss_pct | decimal(10,4) | YES |  | 0.0000 |  |
+| realized_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| unrealized_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| winning_trades | int(11) | YES |  | 0 |  |
+| losing_trades | int(11) | YES |  | 0 |  |
+| win_rate | decimal(5,2) | YES |  | 0.00 |  |
+| max_balance | decimal(20,2) | YES |  | 10000.00 |  |
+| max_drawdown | decimal(20,2) | YES |  | 0.00 |  |
+| max_drawdown_pct | decimal(10,4) | YES |  | 0.0000 |  |
+| strategy_name | varchar(100) | YES |  | NULL |  |
+| auto_trading | tinyint(1) | YES |  | 0 |  |
+| max_position_size | decimal(5,2) | YES |  | 20.00 |  |
+| stop_loss_pct | decimal(5,2) | YES |  | 5.00 |  |
+| take_profit_pct | decimal(5,2) | YES |  | 15.00 |  |
+| max_daily_loss | decimal(20,2) | YES |  | NULL |  |
+| status | varchar(20) | YES | MUL | active |  |
+| is_default | tinyint(1) | YES |  | 0 |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 模拟交易账户表
+
+========================================================================================================================
+
+## 表: paper_trading_balance_history
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| balance | decimal(20,2) | NO |  | NULL |  |
+| frozen_balance | decimal(20,2) | NO |  | NULL |  |
+| total_equity | decimal(20,2) | NO |  | NULL |  |
+| realized_pnl | decimal(20,2) | NO |  | NULL |  |
+| unrealized_pnl | decimal(20,2) | NO |  | NULL |  |
+| total_pnl | decimal(20,2) | NO |  | NULL |  |
+| total_pnl_pct | decimal(10,4) | NO |  | NULL |  |
+| change_type | varchar(50) | YES | MUL | NULL |  |
+| change_amount | decimal(20,2) | YES |  | NULL |  |
+| related_order_id | varchar(50) | YES |  | NULL |  |
+| notes | text | YES |  | NULL |  |
+| snapshot_time | datetime | NO |  | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+
+表注释: 账户资金变动历史表
+
+========================================================================================================================
+
+## 表: paper_trading_orders
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| order_id | varchar(50) | NO | UNI | NULL |  |
+| client_order_id | varchar(50) | YES |  | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| side | varchar(10) | NO |  | NULL |  |
+| order_type | varchar(20) | NO |  | MARKET |  |
+| price | decimal(18,8) | YES |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| executed_quantity | decimal(18,8) | YES |  | 0.00000000 |  |
+| total_amount | decimal(20,2) | YES |  | NULL |  |
+| executed_amount | decimal(20,2) | YES |  | 0.00 |  |
+| fee | decimal(20,8) | YES |  | 0.00000000 |  |
+| fee_asset | varchar(10) | YES |  | USDT |  |
+| status | varchar(20) | NO | MUL | PENDING |  |
+| avg_fill_price | decimal(18,8) | YES |  | NULL |  |
+| fill_time | datetime | YES |  | NULL |  |
+| stop_price | decimal(18,8) | YES |  | NULL |  |
+| order_source | varchar(50) | YES |  | manual |  |
+| signal_id | int(11) | YES |  | NULL |  |
+| notes | text | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 模拟交易订单表
+
+========================================================================================================================
+
+## 表: paper_trading_pending_orders
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| order_id | varchar(50) | NO | UNI | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| side | varchar(10) | NO |  | NULL |  |
+| order_type | varchar(20) | NO |  | TRIGGER |  |
+| trigger_price | decimal(18,8) | NO |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| frozen_amount | decimal(20,2) | YES |  | 0.00 |  |
+| frozen_quantity | decimal(18,8) | YES |  | 0.00000000 |  |
+| status | varchar(20) | NO | MUL | PENDING |  |
+| executed | tinyint(1) | YES | MUL | 0 |  |
+| executed_at | datetime | YES |  | NULL |  |
+| executed_order_id | varchar(50) | YES |  | NULL |  |
+| order_source | varchar(50) | YES |  | auto |  |
+| stop_loss_price | decimal(18,8) | YES |  | NULL |  |
+| take_profit_price | decimal(18,8) | YES |  | NULL |  |
+| notes | text | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 待成交订单表
+
+========================================================================================================================
+
+## 表: paper_trading_positions
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| position_side | varchar(10) | YES |  | LONG |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| available_quantity | decimal(18,8) | NO |  | NULL |  |
+| avg_entry_price | decimal(18,8) | NO |  | NULL |  |
+| total_cost | decimal(20,2) | NO |  | NULL |  |
+| current_price | decimal(18,8) | YES |  | NULL |  |
+| market_value | decimal(20,2) | YES |  | NULL |  |
+| unrealized_pnl | decimal(20,2) | YES |  | 0.00 |  |
+| unrealized_pnl_pct | decimal(10,4) | YES |  | 0.0000 |  |
+| stop_loss_price | decimal(18,8) | YES |  | NULL |  |
+| take_profit_price | decimal(18,8) | YES |  | NULL |  |
+| first_buy_time | datetime | YES |  | NULL |  |
+| last_update_time | datetime | YES |  | NULL |  |
+| holding_days | int(11) | YES |  | 0 |  |
+| status | varchar(20) | YES | MUL | open |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 模拟交易持仓表
+
+========================================================================================================================
+
+## 表: paper_trading_signal_executions
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| signal_id | int(11) | YES |  | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| signal_type | varchar(20) | NO |  | NULL |  |
+| signal_strength | varchar(20) | YES |  | NULL |  |
+| confidence_score | decimal(5,2) | YES |  | NULL |  |
+| is_executed | tinyint(1) | YES |  | 0 |  |
+| execution_status | varchar(20) | YES | MUL | NULL |  |
+| order_id | varchar(50) | YES |  | NULL |  |
+| decision | varchar(20) | YES |  | NULL |  |
+| decision_reason | text | YES |  | NULL |  |
+| execution_price | decimal(18,8) | YES |  | NULL |  |
+| execution_quantity | decimal(18,8) | YES |  | NULL |  |
+| execution_amount | decimal(20,2) | YES |  | NULL |  |
+| signal_time | datetime | NO | MUL | NULL |  |
+| execution_time | datetime | YES |  | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+
+表注释: 交易信号执行记录表
+
+========================================================================================================================
+
+## 表: paper_trading_trades
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| account_id | int(11) | NO | MUL | NULL |  |
+| order_id | varchar(50) | NO | MUL | NULL |  |
+| trade_id | varchar(50) | NO | UNI | NULL |  |
+| symbol | varchar(20) | NO |  | NULL |  |
+| side | varchar(10) | NO |  | NULL |  |
+| price | decimal(18,8) | NO |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| total_amount | decimal(20,2) | NO |  | NULL |  |
+| fee | decimal(20,8) | YES |  | 0.00000000 |  |
+| fee_asset | varchar(10) | YES |  | USDT |  |
+| realized_pnl | decimal(20,2) | YES |  | NULL |  |
+| pnl_pct | decimal(10,4) | YES |  | NULL |  |
+| cost_price | decimal(18,8) | YES |  | NULL |  |
+| trade_time | datetime | NO | MUL | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+
+表注释: 模拟交易成交历史表
+
+========================================================================================================================
+
+## 表: parameter_adjustments
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| adjustment_date | timestamp | NO | MUL | current_timestamp() |  |
+| param_group | varchar(100) | YES | MUL | NULL |  |
+| param_name | varchar(100) | YES |  | NULL |  |
+| old_value | varchar(100) | YES |  | NULL |  |
+| new_value | varchar(100) | YES |  | NULL |  |
+| reason | text | YES |  | NULL |  |
+| applied | tinyint(1) | YES |  | 1 |  |
+
+表注释: 参数调整历史表
+
+========================================================================================================================
+
+## 表: pending_positions
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(50) | NO | MUL | NULL |  |
+| direction | varchar(10) | NO |  | NULL |  |
+| signal_type | varchar(50) | NO |  | NULL |  |
+| signal_price | decimal(20,8) | NO |  | NULL |  |
+| signal_ema9 | decimal(20,8) | YES |  | NULL |  |
+| signal_ema26 | decimal(20,8) | YES |  | NULL |  |
+| signal_ema_diff_pct | decimal(10,4) | YES |  | NULL |  |
+| signal_reason | text | YES |  | NULL |  |
+| strategy_id | bigint(11) | NO | MUL | NULL |  |
+| account_id | int(11) | NO |  | 2 |  |
+| leverage | int(11) | NO |  | 10 |  |
+| margin_pct | decimal(10,4) | YES |  | NULL |  |
+| status | varchar(20) | NO | MUL | pending |  |
+| validation_count | int(11) | YES |  | 0 |  |
+| last_validation_time | datetime | YES |  | NULL |  |
+| rejection_reason | text | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+| expired_at | datetime | YES |  | NULL |  |
+
+表注释: å¾…å¼€ä»“ä¿¡å·è¡¨
+
+========================================================================================================================
+
+## 表: price_data
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| exchange | varchar(20) | NO | MUL | NULL |  |
+| timestamp | datetime | NO | MUL | NULL |  |
+| price | decimal(18,8) | NO |  | NULL |  |
+| open_price | decimal(18,8) | YES |  | NULL |  |
+| high_price | decimal(18,8) | YES |  | NULL |  |
+| low_price | decimal(18,8) | YES |  | NULL |  |
+| close_price | decimal(18,8) | YES |  | NULL |  |
+| volume | decimal(20,8) | YES |  | NULL |  |
+| quote_volume | decimal(24,2) | YES |  | NULL |  |
+| bid_price | decimal(18,8) | YES |  | NULL |  |
+| ask_price | decimal(18,8) | YES |  | NULL |  |
+| change_24h | float | YES |  | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: refresh_tokens
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| user_id | int(11) | NO | MUL | NULL |  |
+| token_hash | varchar(255) | NO | UNI | NULL |  |
+| device_info | varchar(255) | YES |  | NULL |  |
+| ip_address | varchar(45) | YES |  | NULL |  |
+| expires_at | datetime | NO | MUL | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| revoked_at | datetime | YES |  | NULL |  |
+
+表注释: åˆ·æ–°ä»¤ç‰Œè¡¨
+
+========================================================================================================================
+
+## 表: sentinel_orders
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| direction | varchar(10) | NO | MUL | NULL |  |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| entry_price | decimal(18,8) | NO |  | NULL |  |
+| stop_loss_price | decimal(18,8) | NO |  | NULL |  |
+| take_profit_price | decimal(18,8) | NO |  | NULL |  |
+| stop_loss_pct | decimal(10,4) | YES |  | NULL |  |
+| take_profit_pct | decimal(10,4) | YES |  | NULL |  |
+| status | varchar(20) | YES | MUL | open |  |
+| close_price | decimal(18,8) | YES |  | NULL |  |
+| close_reason | varchar(50) | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | current_timestamp() |  |
+| closed_at | datetime | YES |  | NULL |  |
+| strategy_id | bigint(20) | YES |  | NULL |  |
+
+表注释: å“¨å…µå•è¡¨ï¼ˆç†”æ–­åŽè™šæ‹Ÿç›‘æŽ§ï¼‰
+
+========================================================================================================================
+
+## 表: signal_analysis_reports
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| analysis_time | datetime | NO | MUL | NULL |  |
+| total_analyzed | int(11) | NO |  | NULL |  |
+| has_position | int(11) | NO |  | NULL |  |
+| should_trade | int(11) | NO |  | NULL |  |
+| missed_opportunities | int(11) | NO |  | NULL |  |
+| wrong_direction | int(11) | NO |  | NULL |  |
+| correct_captures | int(11) | NO |  | NULL |  |
+| capture_rate | decimal(5,2) | NO |  | NULL |  |
+| report_json | text | YES |  | NULL |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+
+
+========================================================================================================================
+
+## 表: signal_blacklist
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| signal_type | varchar(50) | NO | MUL | NULL |  |
+| position_side | varchar(10) | NO | MUL | NULL |  |
+| reason | varchar(255) | YES |  | NULL |  |
+| total_loss | decimal(15,2) | YES |  | NULL |  |
+| win_rate | decimal(5,4) | YES |  | NULL |  |
+| order_count | int(11) | YES |  | NULL |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+| is_active | tinyint(1) | YES | MUL | 1 |  |
+| notes | text | YES |  | NULL |  |
+
+表注释: 信号黑名单表
+
+========================================================================================================================
+
+## 表: signal_component_performance
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| component_name | varchar(50) | NO | MUL | NULL |  |
+| position_side | varchar(10) | NO | MUL | NULL |  |
+| total_orders | int(11) | YES |  | 0 |  |
+| win_orders | int(11) | YES |  | 0 |  |
+| total_pnl | decimal(15,2) | YES |  | 0.00 |  |
+| avg_pnl | decimal(10,2) | YES |  | NULL |  |
+| win_rate | decimal(5,4) | YES |  | NULL |  |
+| contribution_score | decimal(5,2) | YES |  | NULL |  |
+| last_analyzed | timestamp | NO | MUL | current_timestamp() | on update current_timestamp() |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 信号组件表现统计
+
+========================================================================================================================
+
+## 表: signal_position_multipliers
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| component_name | varchar(50) | NO | MUL | NULL |  |
+| position_side | varchar(10) | NO |  | NULL |  |
+| position_multiplier | decimal(5,2) | YES |  | 1.00 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| win_rate | decimal(5,4) | YES | MUL | 0.0000 |  |
+| avg_pnl | decimal(10,2) | YES |  | 0.00 |  |
+| total_pnl | decimal(15,2) | YES |  | 0.00 |  |
+| last_analyzed | timestamp | YES |  | NULL |  |
+| adjustment_count | int(11) | YES |  | 0 |  |
+| is_active | tinyint(1) | YES |  | 1 |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 信号组件仓位倍数配置
+
+========================================================================================================================
+
+## 表: signal_scoring_weights
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| signal_component | varchar(50) | NO | UNI | NULL |  |
+| weight_long | decimal(5,2) | NO |  | NULL |  |
+| weight_short | decimal(5,2) | NO |  | NULL |  |
+| base_weight | decimal(5,2) | NO |  | NULL |  |
+| performance_score | decimal(5,2) | YES |  | NULL |  |
+| last_adjusted | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+| adjustment_count | int(11) | YES |  | 0 |  |
+| description | varchar(255) | YES |  | NULL |  |
+| is_active | tinyint(1) | YES | MUL | 1 |  |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 信号评分权重表
+
+========================================================================================================================
+
+## 表: smart_money_addresses
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| address | varchar(100) | NO | UNI | NULL |  |
+| blockchain | varchar(20) | NO | MUL | NULL |  |
+| label | varchar(200) | YES |  | NULL |  |
+| address_type | varchar(50) | YES |  | NULL |  |
+| total_value_usd | decimal(18,2) | YES |  | NULL |  |
+| win_rate | float | YES |  | NULL |  |
+| total_trades | int(11) | YES |  | NULL |  |
+| profitable_trades | int(11) | YES |  | NULL |  |
+| is_active | tinyint(1) | YES | MUL | NULL |  |
+| first_seen | datetime | YES |  | NULL |  |
+| last_active | datetime | YES | MUL | NULL |  |
+| data_source | varchar(50) | YES |  | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+| updated_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: smart_money_signals
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| token_symbol | varchar(20) | NO | MUL | NULL |  |
+| token_address | varchar(100) | YES | MUL | NULL |  |
+| blockchain | varchar(20) | NO | MUL | NULL |  |
+| signal_type | varchar(20) | NO | MUL | NULL |  |
+| signal_strength | varchar(20) | NO |  | NULL |  |
+| confidence_score | float | NO |  | NULL |  |
+| smart_money_count | int(11) | YES |  | NULL |  |
+| total_buy_amount_usd | decimal(18,2) | YES |  | NULL |  |
+| total_sell_amount_usd | decimal(18,2) | YES |  | NULL |  |
+| net_flow_usd | decimal(18,2) | YES |  | NULL |  |
+| transaction_count | int(11) | YES |  | NULL |  |
+| price_before | decimal(18,8) | YES |  | NULL |  |
+| price_current | decimal(18,8) | YES |  | NULL |  |
+| price_change_pct | float | YES |  | NULL |  |
+| signal_start_time | datetime | NO |  | NULL |  |
+| signal_end_time | datetime | NO |  | NULL |  |
+| timestamp | datetime | NO | MUL | NULL |  |
+| related_tx_hashes | varchar(2000) | YES |  | NULL |  |
+| top_addresses | varchar(500) | YES |  | NULL |  |
+| is_active | tinyint(1) | YES | MUL | NULL |  |
+| is_verified | tinyint(1) | YES |  | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+| updated_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: smart_money_transactions
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| tx_hash | varchar(100) | NO | UNI | NULL |  |
+| address | varchar(100) | NO | MUL | NULL |  |
+| blockchain | varchar(20) | NO | MUL | NULL |  |
+| token_address | varchar(100) | NO | MUL | NULL |  |
+| token_symbol | varchar(20) | NO | MUL | NULL |  |
+| token_name | varchar(100) | YES |  | NULL |  |
+| action | varchar(20) | NO | MUL | NULL |  |
+| amount | decimal(30,8) | NO |  | NULL |  |
+| amount_usd | decimal(18,2) | YES |  | NULL |  |
+| price_usd | decimal(18,8) | YES |  | NULL |  |
+| from_address | varchar(100) | YES | MUL | NULL |  |
+| to_address | varchar(100) | YES | MUL | NULL |  |
+| dex_name | varchar(50) | YES |  | NULL |  |
+| contract_address | varchar(100) | YES |  | NULL |  |
+| block_number | bigint(20) | NO | MUL | NULL |  |
+| block_timestamp | bigint(20) | NO | MUL | NULL |  |
+| timestamp | datetime | NO | MUL | NULL |  |
+| gas_used | bigint(20) | YES |  | NULL |  |
+| gas_price | bigint(20) | YES |  | NULL |  |
+| transaction_fee | decimal(18,8) | YES |  | NULL |  |
+| is_large_transaction | tinyint(1) | YES | MUL | NULL |  |
+| is_first_buy | tinyint(1) | YES |  | NULL |  |
+| signal_strength | varchar(20) | YES |  | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: spot_batch_history
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| position_id | int(11) | NO | MUL | NULL |  |
+| batch_number | int(11) | NO |  | NULL |  |
+| buy_price | decimal(20,8) | NO |  | NULL |  |
+| quantity | decimal(20,8) | NO |  | NULL |  |
+| cost | decimal(20,4) | NO |  | NULL |  |
+| signal_strength | decimal(5,2) | YES |  | NULL |  |
+| signal_details | text | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | NULL |  |
+
+表注释: 现货加仓记录表
+
+========================================================================================================================
+
+## 表: spot_capital_usage
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| total_capital | decimal(20,4) | NO |  | NULL |  |
+| available_capital | decimal(20,4) | NO |  | NULL |  |
+| locked_capital | decimal(20,4) | NO |  | NULL |  |
+| active_positions | int(11) | NO |  | 0 |  |
+| total_pnl | decimal(20,4) | YES |  | NULL |  |
+| realized_pnl | decimal(20,4) | YES |  | NULL |  |
+| unrealized_pnl | decimal(20,4) | YES |  | NULL |  |
+| snapshot_time | datetime | NO | MUL | NULL |  |
+
+表注释: 现货资金使用统计表
+
+========================================================================================================================
+
+## 表: spot_positions
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| entry_price | decimal(20,8) | NO |  | NULL |  |
+| avg_entry_price | decimal(20,8) | NO |  | NULL |  |
+| quantity | decimal(20,8) | NO |  | NULL |  |
+| total_cost | decimal(20,4) | NO |  | NULL |  |
+| current_batch | int(11) | NO |  | 1 |  |
+| take_profit_price | decimal(20,8) | YES |  | NULL |  |
+| stop_loss_price | decimal(20,8) | YES |  | NULL |  |
+| exit_price | decimal(20,8) | YES |  | NULL |  |
+| pnl | decimal(20,4) | YES |  | NULL |  |
+| pnl_pct | decimal(10,6) | YES |  | NULL |  |
+| close_reason | varchar(50) | YES |  | NULL |  |
+| signal_strength | decimal(5,2) | YES |  | NULL |  |
+| signal_details | text | YES |  | NULL |  |
+| status | varchar(20) | NO | MUL | active |  |
+| created_at | datetime | NO | MUL | NULL |  |
+| updated_at | datetime | NO |  | NULL |  |
+| closed_at | datetime | YES |  | NULL |  |
+
+表注释: 现货持仓表
+
+========================================================================================================================
+
+## 表: spot_signals_history
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| signal_strength | decimal(5,2) | NO | MUL | NULL |  |
+| best_strategy | varchar(50) | YES |  | NULL |  |
+| score_a | decimal(5,2) | YES |  | NULL |  |
+| score_b | decimal(5,2) | YES |  | NULL |  |
+| score_c | decimal(5,2) | YES |  | NULL |  |
+| score_d | decimal(5,2) | YES |  | NULL |  |
+| details | text | YES |  | NULL |  |
+| is_executed | tinyint(1) | YES |  | 0 |  |
+| position_id | int(11) | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | NULL |  |
+
+表注释: 现货信号历史表
+
+========================================================================================================================
+
+## 表: spot_trading_logs
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| action | varchar(20) | NO | MUL | NULL |  |
+| price | decimal(20,8) | NO |  | NULL |  |
+| quantity | decimal(20,8) | NO |  | NULL |  |
+| amount | decimal(20,4) | NO |  | NULL |  |
+| position_id | int(11) | YES | MUL | NULL |  |
+| batch_number | int(11) | YES |  | NULL |  |
+| details | text | YES |  | NULL |  |
+| created_at | datetime | NO | MUL | NULL |  |
+
+表注释: 现货交易日志表
+
+========================================================================================================================
+
+## 表: strategy_capital_management
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| strategy_id | bigint(20) | YES | MUL | NULL |  |
+| strategy_name | varchar(100) | YES |  | NULL |  |
+| account_id | int(11) | NO | MUL | NULL |  |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| trade_record_id | bigint(20) | YES | MUL | NULL |  |
+| position_id | int(11) | YES | MUL | NULL |  |
+| order_id | varchar(50) | YES |  | NULL |  |
+| change_type | varchar(20) | NO | MUL | NULL |  |
+| action | varchar(20) | YES |  | NULL |  |
+| direction | varchar(10) | YES |  | NULL |  |
+| amount_change | decimal(18,8) | NO |  | NULL |  |
+| balance_before | decimal(18,8) | YES |  | NULL |  |
+| balance_after | decimal(18,8) | YES |  | NULL |  |
+| frozen_before | decimal(18,8) | YES |  | NULL |  |
+| frozen_after | decimal(18,8) | YES |  | NULL |  |
+| available_before | decimal(18,8) | YES |  | NULL |  |
+| available_after | decimal(18,8) | YES |  | NULL |  |
+| entry_price | decimal(18,8) | YES |  | NULL |  |
+| exit_price | decimal(18,8) | YES |  | NULL |  |
+| quantity | decimal(18,8) | YES |  | NULL |  |
+| leverage | int(11) | YES |  | NULL |  |
+| margin | decimal(18,8) | YES |  | NULL |  |
+| realized_pnl | decimal(18,8) | YES |  | NULL |  |
+| fee | decimal(18,8) | YES |  | NULL |  |
+| reason | varchar(200) | YES |  | NULL |  |
+| description | text | YES |  | NULL |  |
+| change_time | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: 策略资金管理表 - 记录策略资金变化
+
+========================================================================================================================
+
+## 表: strategy_execution_result_details
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| execution_result_id | int(11) | NO | MUL | NULL |  |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| trades_count | int(11) | YES |  | 0 |  |
+| buy_count | int(11) | YES |  | 0 |  |
+| sell_count | int(11) | YES |  | 0 |  |
+| winning_trades | int(11) | YES |  | 0 |  |
+| losing_trades | int(11) | YES |  | 0 |  |
+| win_rate | decimal(10,2) | YES |  | NULL |  |
+| initial_balance | decimal(20,2) | YES |  | 10000.00 |  |
+| final_balance | decimal(20,2) | YES |  | NULL |  |
+| total_pnl | decimal(20,2) | YES |  | NULL |  |
+| total_pnl_percent | decimal(10,2) | YES |  | NULL |  |
+| golden_cross_count | int(11) | YES |  | 0 |  |
+| death_cross_count | int(11) | YES |  | 0 |  |
+| klines_count | int(11) | YES |  | 0 |  |
+| indicators_count | int(11) | YES |  | 0 |  |
+| error_message | text | YES |  | NULL |  |
+| execution_result_data | longtext | YES |  | NULL |  |
+| debug_info | longtext | YES |  | NULL |  |
+| debug_info_count | int(11) | YES |  | 0 |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+
+========================================================================================================================
+
+## 表: strategy_execution_results
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| strategy_id | bigint(20) | YES | MUL | NULL |  |
+| strategy_name | varchar(200) | NO | MUL | NULL |  |
+| account_id | int(11) | NO | MUL | 2 |  |
+| strategy_config | longtext | YES |  | NULL |  |
+| execution_start_time | datetime | NO | MUL | NULL |  |
+| execution_end_time | datetime | NO |  | NULL |  |
+| execution_duration_hours | decimal(10,2) | YES |  | NULL |  |
+| total_symbols | int(11) | YES |  | 0 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| winning_trades | int(11) | YES |  | 0 |  |
+| losing_trades | int(11) | YES |  | 0 |  |
+| win_rate | decimal(10,2) | YES |  | NULL |  |
+| initial_balance | decimal(20,2) | YES |  | 10000.00 |  |
+| final_balance | decimal(20,2) | YES |  | NULL |  |
+| total_pnl | decimal(20,2) | YES |  | NULL |  |
+| total_pnl_percent | decimal(10,2) | YES |  | NULL |  |
+| max_drawdown | decimal(10,2) | YES |  | NULL |  |
+| status | varchar(20) | YES | MUL | completed |  |
+| error_message | text | YES |  | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+| updated_at | datetime | YES |  | current_timestamp() | on update current_timestamp() |
+
+
+========================================================================================================================
+
+## 表: strategy_hits
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| strategy_id | bigint(11) | NO | MUL | NULL |  |
+| strategy_name | varchar(100) | NO |  | NULL |  |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| account_id | int(11) | NO |  | NULL |  |
+| signal_type | varchar(20) | NO | MUL | NULL |  |
+| signal_source | varchar(50) | NO |  | NULL |  |
+| signal_timeframe | varchar(10) | NO |  | NULL |  |
+| signal_timestamp | datetime | NO | MUL | NULL |  |
+| ema_short | decimal(20,8) | YES |  | NULL |  |
+| ema_long | decimal(20,8) | YES |  | NULL |  |
+| ma10 | decimal(20,8) | YES |  | NULL |  |
+| ema10 | decimal(20,8) | YES |  | NULL |  |
+| ma5 | decimal(20,8) | YES |  | NULL |  |
+| ema5 | decimal(20,8) | YES |  | NULL |  |
+| current_price | decimal(20,8) | NO |  | NULL |  |
+| ema_cross_strength_pct | decimal(10,4) | YES |  | NULL |  |
+| ma10_ema10_strength_pct | decimal(10,4) | YES |  | NULL |  |
+| volume_ratio | decimal(10,2) | YES |  | NULL |  |
+| volume_condition_met | tinyint(1) | YES |  | NULL |  |
+| ma10_ema10_trend_ok | tinyint(1) | YES |  | NULL |  |
+| trend_confirm_ok | tinyint(1) | YES |  | NULL |  |
+| signal_strength_ok | tinyint(1) | YES |  | NULL |  |
+| executed | tinyint(1) | YES | MUL | 0 |  |
+| execution_result | varchar(20) | YES |  | NULL |  |
+| execution_reason | varchar(200) | YES |  | NULL |  |
+| position_id | int(11) | YES |  | NULL |  |
+| order_id | varchar(100) | YES |  | NULL |  |
+| direction | varchar(10) | YES |  | NULL |  |
+| leverage | int(11) | YES |  | NULL |  |
+| position_size_pct | decimal(5,2) | YES |  | NULL |  |
+| created_at | timestamp | NO | MUL | current_timestamp() |  |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 策略命中记录表 - 实时记录所有策略信号命中情况
+
+========================================================================================================================
+
+## 表: strategy_regime_params
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| strategy_id | bigint(11) | NO | MUL | NULL |  |
+| regime_type | varchar(30) | NO | MUL | NULL |  |
+| enabled | tinyint(1) | YES |  | 1 |  |
+| params | longtext | NO |  | NULL |  |
+| description | varchar(500) | YES |  | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+| updated_at | datetime | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 策略行情参数预设表
+
+========================================================================================================================
+
+## 表: strategy_test_records
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| strategy_id | bigint(20) | NO | MUL | NULL |  |
+| strategy_name | varchar(100) | YES |  | NULL |  |
+| account_id | int(11) | NO | MUL | NULL |  |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| action | varchar(20) | NO | MUL | NULL |  |
+| direction | varchar(10) | YES |  | NULL |  |
+| position_side | varchar(10) | YES |  | NULL |  |
+| entry_price | decimal(18,8) | YES |  | NULL |  |
+| exit_price | decimal(18,8) | YES |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| leverage | int(11) | YES |  | NULL |  |
+| margin | decimal(18,8) | YES |  | NULL |  |
+| total_value | decimal(18,8) | YES |  | NULL |  |
+| fee | decimal(18,8) | YES |  | NULL |  |
+| realized_pnl | decimal(18,8) | YES |  | NULL |  |
+| position_id | int(11) | YES | MUL | NULL |  |
+| order_id | varchar(50) | YES | MUL | NULL |  |
+| signal_id | int(11) | YES |  | NULL |  |
+| reason | varchar(200) | YES |  | NULL |  |
+| trade_time | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: strategy_test_results
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| strategy_id | bigint(20) | YES | MUL | NULL |  |
+| strategy_name | varchar(200) | NO | MUL | NULL |  |
+| strategy_config | longtext | YES |  | NULL |  |
+| test_start_time | datetime | NO | MUL | NULL |  |
+| test_end_time | datetime | NO |  | NULL |  |
+| test_duration_hours | decimal(10,2) | YES |  | NULL |  |
+| total_symbols | int(11) | YES |  | 0 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| winning_trades | int(11) | YES |  | 0 |  |
+| losing_trades | int(11) | YES |  | 0 |  |
+| win_rate | decimal(10,2) | YES |  | NULL |  |
+| initial_balance | decimal(20,2) | YES |  | 10000.00 |  |
+| final_balance | decimal(20,2) | YES |  | NULL |  |
+| total_pnl | decimal(20,2) | YES |  | NULL |  |
+| total_pnl_percent | decimal(10,2) | YES |  | NULL |  |
+| max_drawdown | decimal(10,2) | YES |  | NULL |  |
+| status | varchar(20) | YES | MUL | completed |  |
+| error_message | text | YES |  | NULL |  |
+| created_at | datetime | YES | MUL | current_timestamp() |  |
+| updated_at | datetime | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 策略测试结果主表
+
+========================================================================================================================
+
+## 表: strategy_trade_records
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| strategy_id | bigint(20) | NO | MUL | NULL |  |
+| strategy_name | varchar(100) | YES |  | NULL |  |
+| account_id | int(11) | NO | MUL | NULL |  |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| action | varchar(20) | NO | MUL | NULL |  |
+| direction | varchar(10) | YES |  | NULL |  |
+| position_side | varchar(10) | YES |  | NULL |  |
+| entry_price | decimal(18,8) | YES |  | NULL |  |
+| exit_price | decimal(18,8) | YES |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| leverage | int(11) | YES |  | 1 |  |
+| margin | decimal(18,8) | YES |  | NULL |  |
+| total_value | decimal(18,8) | YES |  | NULL |  |
+| fee | decimal(18,8) | YES |  | NULL |  |
+| realized_pnl | decimal(18,8) | YES |  | NULL |  |
+| position_id | int(11) | YES | MUL | NULL |  |
+| order_id | varchar(50) | YES |  | NULL |  |
+| signal_id | int(11) | YES |  | NULL |  |
+| reason | varchar(200) | YES |  | NULL |  |
+| trade_time | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: 策略交易记录表 - 存储策略执行的买入、平仓等交易信息
+
+========================================================================================================================
+
+## 表: symbol_risk_params
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | UNI | NULL |  |
+| long_take_profit_pct | decimal(6,4) | YES |  | 0.0500 |  |
+| long_stop_loss_pct | decimal(6,4) | YES |  | 0.0200 |  |
+| short_take_profit_pct | decimal(6,4) | YES |  | 0.0500 |  |
+| short_stop_loss_pct | decimal(6,4) | YES |  | 0.0200 |  |
+| position_multiplier | decimal(5,2) | YES |  | 1.00 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| win_rate | decimal(5,4) | YES | MUL | 0.0000 |  |
+| avg_pnl | decimal(10,2) | YES |  | 0.00 |  |
+| total_pnl | decimal(15,2) | YES |  | 0.00 |  |
+| sharpe_ratio | decimal(6,3) | YES |  | 0.000 |  |
+| avg_volatility | decimal(6,4) | YES |  | 0.0000 |  |
+| max_drawdown | decimal(6,4) | YES |  | 0.0000 |  |
+| last_optimized | timestamp | YES | MUL | NULL |  |
+| optimization_count | int(11) | YES |  | 0 |  |
+| is_active | tinyint(1) | YES |  | 1 |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 交易对风险参数配置
+
+========================================================================================================================
+
+## 表: symbol_volatility_profile
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(50) | NO | UNI | NULL |  |
+| long_avg_bullish_range_pct | decimal(10,6) | YES |  | NULL |  |
+| long_fixed_tp_pct | decimal(10,6) | YES |  | NULL |  |
+| long_trailing_activation_pct | decimal(10,6) | YES |  | NULL |  |
+| long_candles_analyzed | int(11) | YES |  | 0 |  |
+| short_avg_bearish_range_pct | decimal(10,6) | YES |  | NULL |  |
+| short_fixed_tp_pct | decimal(10,6) | YES |  | NULL |  |
+| short_trailing_activation_pct | decimal(10,6) | YES |  | NULL |  |
+| short_candles_analyzed | int(11) | YES |  | 0 |  |
+| last_updated_at | timestamp | NO | MUL | current_timestamp() | on update current_timestamp() |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+
+表注释: 交易对波动率配置表(15M K线动态止盈)
+
+========================================================================================================================
+
+## 表: system_status
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| key_name | varchar(100) | NO | UNI | NULL |  |
+| value | text | YES |  | NULL |  |
+| updated_at | datetime | YES |  | current_timestamp() | on update current_timestamp() |
+
+
+========================================================================================================================
+
+## 表: technical_indicators_cache
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| timeframe | varchar(10) | NO | MUL | 1h |  |
+| rsi_value | decimal(10,2) | YES |  | NULL |  |
+| rsi_signal | varchar(20) | YES |  | NULL |  |
+| macd_value | decimal(18,8) | YES |  | NULL |  |
+| macd_signal_line | decimal(18,8) | YES |  | NULL |  |
+| macd_histogram | decimal(18,8) | YES |  | NULL |  |
+| macd_trend | varchar(20) | YES |  | NULL |  |
+| bb_upper | decimal(18,8) | YES |  | NULL |  |
+| bb_middle | decimal(18,8) | YES |  | NULL |  |
+| bb_lower | decimal(18,8) | YES |  | NULL |  |
+| bb_position | varchar(20) | YES |  | NULL |  |
+| bb_width | decimal(10,4) | YES |  | NULL |  |
+| ema_short | decimal(18,8) | YES |  | NULL |  |
+| ema_long | decimal(18,8) | YES |  | NULL |  |
+| ema_trend | varchar(20) | YES |  | NULL |  |
+| kdj_k | decimal(10,2) | YES |  | NULL |  |
+| kdj_d | decimal(10,2) | YES |  | NULL |  |
+| kdj_j | decimal(10,2) | YES |  | NULL |  |
+| kdj_signal | varchar(20) | YES |  | NULL |  |
+| volume_24h | decimal(20,8) | YES |  | NULL |  |
+| volume_avg | decimal(20,8) | YES |  | NULL |  |
+| volume_ratio | decimal(10,4) | YES |  | NULL |  |
+| volume_signal | varchar(20) | YES |  | NULL |  |
+| technical_score | decimal(5,2) | YES | MUL | NULL |  |
+| technical_signal | varchar(20) | YES | MUL | NULL |  |
+| data_points | int(11) | YES |  | NULL |  |
+| updated_at | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: 技术指标缓存表 - 每5分钟更新
+
+========================================================================================================================
+
+## 表: trade_data
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| trade_id | bigint(20) | YES | UNI | NULL |  |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| exchange | varchar(20) | NO |  | NULL |  |
+| price | decimal(18,8) | NO |  | NULL |  |
+| quantity | decimal(18,8) | NO |  | NULL |  |
+| quote_quantity | decimal(18,8) | YES |  | NULL |  |
+| trade_time | bigint(20) | NO | MUL | NULL |  |
+| timestamp | datetime | NO |  | NULL |  |
+| is_buyer_maker | tinyint(1) | YES |  | NULL |  |
+| is_best_match | tinyint(1) | YES |  | NULL |  |
+| side | varchar(10) | YES |  | NULL |  |
+| created_at | datetime | YES |  | NULL |  |
+
+
+========================================================================================================================
+
+## 表: trading_blacklist
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(50) | NO | UNI | NULL |  |
+| reason | varchar(255) | YES |  | NULL |  |
+| total_loss | decimal(15,2) | YES |  | NULL |  |
+| win_rate | decimal(5,4) | YES |  | NULL |  |
+| order_count | int(11) | YES |  | NULL |  |
+| created_at | timestamp | NO | MUL | current_timestamp() |  |
+| updated_at | timestamp | NO |  | current_timestamp() | on update current_timestamp() |
+| is_active | tinyint(1) | YES | MUL | 1 |  |
+
+表注释: 交易黑名单
+
+========================================================================================================================
+
+## 表: trading_cooldowns
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(20) | NO | MUL | NULL |  |
+| cooldown_type | varchar(50) | NO |  | NULL |  |
+| cooldown_until | datetime | NO | MUL | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+
+表注释: äº¤æ˜“å†·å´æœŸè®°å½•
+
+========================================================================================================================
+
+## 表: trading_strategies
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | bigint(20) | NO | PRI | NULL | auto_increment |
+| user_id | int(11) | YES | MUL | 1 |  |
+| name | varchar(100) | NO | MUL | NULL |  |
+| description | text | YES |  | NULL |  |
+| account_id | int(11) | NO | MUL | 2 |  |
+| enabled | tinyint(1) | NO | MUL | 0 |  |
+| market_type | varchar(10) | YES |  | test |  |
+| adaptive_regime | tinyint(1) | YES |  | 0 |  |
+| sync_live | tinyint(1) | YES |  | 0 |  |
+| live_quantity_pct | decimal(5,2) | YES |  | 100.00 |  |
+| config | longtext | YES |  | NULL |  |
+| created_at | datetime | YES |  | current_timestamp() |  |
+| updated_at | datetime | YES |  | current_timestamp() | on update current_timestamp() |
+
+表注释: 交易策略配置表
+
+========================================================================================================================
+
+## 表: trading_symbol_rating
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| symbol | varchar(50) | NO | UNI | NULL |  |
+| rating_level | int(11) | NO | MUL | 0 |  |
+| margin_multiplier | decimal(10,4) | YES |  | 1.0000 |  |
+| score_bonus | int(11) | YES |  | 0 |  |
+| reason | text | YES |  | NULL |  |
+| hard_stop_loss_count | int(11) | YES |  | 0 |  |
+| total_loss_amount | decimal(20,8) | YES |  | 0.00000000 |  |
+| total_profit_amount | decimal(20,8) | YES |  | 0.00000000 |  |
+| win_rate | decimal(5,4) | YES |  | 0.0000 |  |
+| total_trades | int(11) | YES |  | 0 |  |
+| previous_level | int(11) | YES |  | NULL |  |
+| level_changed_at | timestamp | YES |  | NULL |  |
+| level_change_reason | varchar(500) | YES |  | NULL |  |
+| stats_start_date | date | NO |  | NULL |  |
+| stats_end_date | date | NO |  | NULL |  |
+| created_at | timestamp | NO |  | current_timestamp() |  |
+| updated_at | timestamp | NO | MUL | current_timestamp() | on update current_timestamp() |
+
+表注释: 交易对评级表(黑名单分级制度)
+
+========================================================================================================================
+
+## 表: user_api_keys
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| user_id | int(11) | NO | MUL | NULL |  |
+| exchange | varchar(50) | NO | MUL | binance |  |
+| account_name | varchar(100) | NO |  | NULL |  |
+| api_key | varchar(500) | NO |  | NULL |  |
+| api_secret | varchar(500) | NO |  | NULL |  |
+| permissions | varchar(255) | YES |  | spot,futures |  |
+| is_testnet | tinyint(1) | YES |  | 0 |  |
+| status | varchar(20) | YES | MUL | active |  |
+| max_position_value | decimal(20,2) | YES |  | 1000.00 |  |
+| max_daily_loss | decimal(20,2) | YES |  | 100.00 |  |
+| max_leverage | int(11) | YES |  | 10 |  |
+| last_used_at | datetime | YES |  | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: ç”¨æˆ·APIå¯†é’¥è¡¨
+
+========================================================================================================================
+
+## 表: users
+------------------------------------------------------------------------------------------------------------------------
+| 字段 | 类型 | 是否NULL | 键 | 默认值 | 说明 |
+|------|------|----------|-----|--------|------|
+| id | int(11) | NO | PRI | NULL | auto_increment |
+| username | varchar(50) | NO | UNI | NULL |  |
+| email | varchar(100) | NO | UNI | NULL |  |
+| password_hash | varchar(255) | NO |  | NULL |  |
+| role | varchar(20) | YES | MUL | user |  |
+| status | varchar(20) | YES | MUL | active |  |
+| last_login | datetime | YES |  | NULL |  |
+| created_at | datetime | NO |  | current_timestamp() |  |
+| updated_at | datetime | NO |  | current_timestamp() | on update current_timestamp() |
+
+表注释: ç”¨æˆ·è¡¨
+
+========================================================================================================================

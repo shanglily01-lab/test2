@@ -65,7 +65,8 @@ debug_*.py
 *问题*.md
 
 
-# 文本文件（排除 requirements.txt）
+# 文本文件（排除 requirements.txt 和 table_schemas.txt）
 *.txt
 ema_alerts.txt
 !requirements.txt
+!table_schemas.txt
