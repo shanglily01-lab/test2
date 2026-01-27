@@ -42,12 +42,13 @@ class DailyOptimizerService:
 
         # 加载配置
         config = load_config()
+        mysql_config = config['database']['mysql']
         self.db_config = {
-            'host': config['database']['host'],
-            'port': config['database']['port'],
-            'user': config['database']['user'],
-            'password': config['database']['password'],
-            'database': config['database']['database']
+            'host': mysql_config['host'],
+            'port': mysql_config['port'],
+            'user': mysql_config['user'],
+            'password': mysql_config['password'],
+            'database': mysql_config['database']
         }
 
         logger.info("=" * 100)
