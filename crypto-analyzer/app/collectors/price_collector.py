@@ -56,19 +56,22 @@ class PriceCollector:
             # 获取24小时ticker数据（使用合约API）
             ticker = await asyncio.to_thread(self.client.futures_ticker, symbol=binance_symbol)
 
+            # futures_ticker API可能不返回bidPrice/askPrice,使用.get()安全访问
+            last_price = float(ticker['lastPrice'])
+
             return {
                 'exchange': self.exchange_id,
                 'symbol': symbol,
                 'timestamp': datetime.fromtimestamp(ticker['closeTime'] / 1000),
-                'price': float(ticker['lastPrice']),
+                'price': last_price,
                 'open': float(ticker['openPrice']),
                 'high': float(ticker['highPrice']),
                 'low': float(ticker['lowPrice']),
-                'close': float(ticker['lastPrice']),
+                'close': last_price,
                 'volume': float(ticker['volume']),
                 'quote_volume': float(ticker['quoteVolume']),
-                'bid': float(ticker['bidPrice']),
-                'ask': float(ticker['askPrice']),
+                'bid': float(ticker.get('bidPrice', last_price)),  # 如果没有bid,使用lastPrice
+                'ask': float(ticker.get('askPrice', last_price)),  # 如果没有ask,使用lastPrice
                 'change_24h': float(ticker['priceChangePercent']),
             }
 
