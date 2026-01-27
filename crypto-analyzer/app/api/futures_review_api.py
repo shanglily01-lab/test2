@@ -1698,9 +1698,11 @@ async def get_realtime_opportunity_analysis(
         blacklist = {row['symbol']: row['reason'] for row in cursor.fetchall()}
 
         # 4. 获取账户余额
-        cursor.execute("""
+        # 根据account_id选择对应的账户表
+        account_table = 'paper_trading_accounts' if account_id == 2 else 'live_trading_accounts'
+        cursor.execute(f"""
             SELECT balance
-            FROM futures_accounts
+            FROM {account_table}
             WHERE id = %s
         """, (account_id,))
         account_balance = cursor.fetchone()
