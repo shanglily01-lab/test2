@@ -2272,10 +2272,13 @@ class SmartTraderService:
 
             # 创建平仓订单记录
             import uuid
+            from datetime import datetime
             close_side = 'CLOSE_LONG' if side == 'LONG' else 'CLOSE_SHORT'
             notional_value = current_price * close_quantity
             fee = notional_value * 0.0004
-            order_id = f"PARTIAL-{position_id}-{int(close_ratio*100)}"
+            # 使用时间戳确保order_id唯一性，避免重复触发时主键冲突
+            timestamp = datetime.now().strftime('%H%M%S%f')[:9]  # HHMMSSMMM (毫秒)
+            order_id = f"PARTIAL-{position_id}-{int(close_ratio*100)}-{timestamp}"
             trade_id = str(uuid.uuid4())
 
             cursor.execute("""
