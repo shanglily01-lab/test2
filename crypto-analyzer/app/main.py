@@ -392,6 +392,63 @@ async def lifespan(app: FastAPI):
         traceback.print_exc()
         signal_analysis_service = None
 
+    # 启动每日优化服务（每天凌晨1点执行）
+    daily_optimizer_task = None
+    try:
+        import schedule
+        from app.services.auto_parameter_optimizer import AutoParameterOptimizer
+
+        # 配置数据库
+        db_config = {
+            'host': config['database']['host'],
+            'port': config['database']['port'],
+            'user': config['database']['user'],
+            'password': config['database']['password'],
+            'database': config['database']['database']
+        }
+
+        # 定义优化任务
+        def run_daily_optimization():
+            """执行每日优化"""
+            try:
+                logger.info("=" * 80)
+                logger.info("🔧 开始执行每日自我优化...")
+                optimizer = AutoParameterOptimizer(db_config)
+                result = optimizer.optimize_and_update(days=7)
+
+                if result['success']:
+                    logger.info(f"✅ 每日优化完成: {result['message']}")
+                    logger.info(f"   胜率: {result['stats']['win_rate']:.1f}%")
+                    logger.info(f"   平均盈亏比: {result['stats']['avg_profit_loss_ratio']:.2f}")
+                    logger.info(f"   总盈亏: {result['stats']['total_pnl']:.2f} USDT")
+                else:
+                    logger.warning(f"⚠️  优化失败: {result.get('error', '未知错误')}")
+
+                optimizer.close()
+                logger.info("=" * 80)
+            except Exception as e:
+                logger.error(f"❌ 每日优化任务失败: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+
+        # 配置定时任务：每天凌晨1点执行
+        schedule.every().day.at("01:00").do(run_daily_optimization)
+
+        # 创建后台任务运行调度器
+        async def schedule_runner():
+            """运行调度器"""
+            while True:
+                schedule.run_pending()
+                await asyncio.sleep(60)  # 每分钟检查一次
+
+        daily_optimizer_task = asyncio.create_task(schedule_runner())
+        logger.info("✅ 每日优化服务已启动（每天凌晨1点执行）")
+
+    except Exception as e:
+        logger.warning(f"⚠️  启动每日优化服务失败: {e}")
+        import traceback
+        traceback.print_exc()
+
     yield
 
     # 关闭时的清理工作
@@ -428,6 +485,14 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 实盘订单监控服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止实盘订单监控服务失败: {e}")
+
+    # 停止每日优化服务
+    if daily_optimizer_task:
+        try:
+            daily_optimizer_task.cancel()
+            logger.info("✅ 每日优化服务已停止")
+        except Exception as e:
+            logger.warning(f"⚠️  停止每日优化服务失败: {e}")
 
     # 停止信号分析后台服务
     if signal_analysis_service:
