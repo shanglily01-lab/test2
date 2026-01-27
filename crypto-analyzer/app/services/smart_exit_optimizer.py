@@ -1118,7 +1118,7 @@ class SmartExitOptimizer:
             if timeout_at:
                 now_utc = datetime.utcnow()
                 if now_utc >= timeout_at:
-                    max_hold_minutes = position.get('max_hold_minutes', 360)
+                    max_hold_minutes = position.get('max_hold_minutes') or 360
                     logger.warning(
                         f"⏰ 持仓{position_id} {symbol}触发动态超时 | "
                         f"超时阈值{max_hold_minutes}分钟"
@@ -1157,7 +1157,7 @@ class SmartExitOptimizer:
             # ============================================================
             # === 优先级6: 6小时绝对时间托底 ===
             # ============================================================
-            max_hold_minutes = position.get('max_hold_minutes', 360)  # 默认6小时
+            max_hold_minutes = position.get('max_hold_minutes') or 360  # 默认6小时
             if hold_minutes >= max_hold_minutes:
                 logger.warning(f"⏰ 持仓{position_id} {symbol}已持有{hold_hours:.1f}小时，触发时间托底")
                 return ('持仓时长到期(6小时托底)', 1.0)
