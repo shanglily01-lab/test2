@@ -26,6 +26,8 @@ router = APIRouter(prefix='/api/futures/review', tags=['futures-review'])
 
 # 加载配置
 from app.utils.config_loader import load_config
+from app.services.signal_analysis_service import SignalAnalysisService
+
 config = load_config()
 db_config = config['database']['mysql']
 
