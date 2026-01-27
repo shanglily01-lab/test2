@@ -1700,12 +1700,12 @@ async def get_realtime_opportunity_analysis(
 
         # 4. 获取账户余额
         cursor.execute("""
-            SELECT balance
+            SELECT current_balance
             FROM futures_trading_accounts
             WHERE id = %s
         """, (account_id,))
         account_balance = cursor.fetchone()
-        available_balance = float(account_balance['balance']) if account_balance else 0
+        available_balance = float(account_balance['current_balance']) if account_balance else 0
 
         # 5. 分析每个交易对的信号强度
         all_signals = []
