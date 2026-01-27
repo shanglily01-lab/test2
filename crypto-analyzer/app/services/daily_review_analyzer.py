@@ -374,17 +374,17 @@ class DailyReviewAnalyzer:
                 symbol,
                 position_side,
                 entry_signal_type,
-                entry_signal_time,
+                open_time,
                 entry_price,
-                close_price,
-                realized_pnl_pct,
+                mark_price,
+                unrealized_pnl_pct,
                 created_at
             FROM futures_positions
             WHERE symbol = %s
-            AND entry_signal_time >= %s
-            AND entry_signal_time <= %s
+            AND open_time >= %s
+            AND open_time <= %s
             AND status = 'closed'
-            ORDER BY entry_signal_time ASC
+            ORDER BY open_time ASC
             LIMIT 1
         """, (opportunity.symbol, search_start, search_end))
 
