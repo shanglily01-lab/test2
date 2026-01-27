@@ -408,6 +408,18 @@ class SmartExitOptimizer:
         now = datetime.now()
         monitoring_start_time = planned_close_time - timedelta(minutes=30)
 
+        # ========== 最高优先级：超时强制平仓 ==========
+        if now >= planned_close_time:
+            logger.warning(
+                f"⚡ {position['symbol']} 已超过计划平仓时间，立即强制平仓! | "
+                f"计划: {planned_close_time.strftime('%H:%M:%S')}, "
+                f"当前: {now.strftime('%H:%M:%S')}"
+            )
+            # 获取当前价格
+            current_price = await self._get_realtime_price(position['symbol'])
+            await self._execute_close(position_id, current_price, "超时强制平仓")
+            return True
+
         # 如果还未到监控时间，直接返回
         if now < monitoring_start_time:
             return False
