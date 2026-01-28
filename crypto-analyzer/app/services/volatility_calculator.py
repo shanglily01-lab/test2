@@ -124,8 +124,8 @@ class VolatilityCalculator:
         final_sl = max(adjusted_sl, 2.0)  # 最小2%
         final_sl = min(final_sl, 15.0)    # 最大15%(避免过于宽松)
 
-        final_tp = max(base_tp, 1.0)      # 最小1%
-        final_tp = min(final_tp, 10.0)    # 最大10%
+        final_tp = max(base_tp, 4.0)      # 最小4% (5x杠杆下ROI 20%)
+        final_tp = min(final_tp, 12.0)    # 最大12% (5x杠杆下ROI 60%)
 
         # 6. 确保盈亏比不会太差
         risk_reward = final_tp / final_sl if final_sl > 0 else 0
