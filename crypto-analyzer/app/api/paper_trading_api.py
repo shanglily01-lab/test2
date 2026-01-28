@@ -1037,7 +1037,8 @@ async def get_spot_v2_positions():
         positions = []
         for pos in active_positions:
             # 获取当前价格
-            current_price = price_cache.get(pos['symbol']) if price_cache else None
+            current_price = price_cache.get_price(pos['symbol']) if price_cache else None
+            current_price = float(current_price) if current_price and current_price > 0 else None
 
             # 计算未实现盈亏和市值
             total_quantity = float(pos['total_quantity']) if pos['total_quantity'] else 0
