@@ -1217,28 +1217,18 @@ class SmartExitOptimizer:
                     return ('亏损>1%+方向反转', 1.0)
 
             # === 分阶段平仓逻辑（避免重复触发） ===
+            # 注: 删除1H K线反转检查,避免打脸开仓信号
+            # 只保留盈利+强度减弱的止盈逻辑
 
             # 阶段0 → 阶段1: 首次触发部分平仓50%
             if current_stage == 0:
-                # 检测1H K线反转
-                if direction == 'LONG' and strength_1h['net_power'] <= -3:
-                    return ('1H K线反转', 0.5)  # 首次平仓50%
-                elif direction == 'SHORT' and strength_1h['net_power'] >= 3:
-                    return ('1H K线反转', 0.5)  # 首次平仓50%
-
-                # 检测盈利+强度大幅减弱
+                # 检测盈利+强度大幅减弱(止盈)
                 if profit_info['profit_pct'] >= 2.0 and current_kline['total_score'] < 15:
                     return ('盈利>=2%+强度大幅减弱', 0.5)  # 首次平仓50%
 
             # 阶段1 → 阶段2: 条件恶化，再平70%（总共平85%）
             elif current_stage == 1:
-                # 如果K线反转加剧或盈利提高
-                if direction == 'LONG' and strength_1h['net_power'] <= -5:
-                    return ('1H K线反转加剧', 0.7)  # 再平70%
-                elif direction == 'SHORT' and strength_1h['net_power'] >= 5:
-                    return ('1H K线反转加剧', 0.7)  # 再平70%
-
-                # 盈利>=4%且强度减弱
+                # 盈利>=4%且强度减弱(止盈加码)
                 if profit_info['profit_pct'] >= 4.0 and current_kline['total_score'] < 20:
                     return ('盈利>=4%+强度减弱', 0.7)  # 再平70%
 
