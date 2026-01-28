@@ -448,26 +448,20 @@
             </div>
 
             <!-- Positions & Trades -->
-            <div style="display: flex; flex-direction: column;">
+            <div style="display: flex; flex-direction: column; height: calc(100vh - 300px);">
                 <!-- Combined Card with Tab Headers -->
-                <div class="card" id="positionsPanelCard" style="display: flex; flex-direction: column;">
+                <div class="card" id="positionsPanelCard" style="display: flex; flex-direction: column; height: 100%;">
                     <div class="card-header">
                         <div style="display: flex; gap: var(--spacing-md); align-items: center; flex-wrap: wrap;">
                             <button class="btn btn-primary" id="tabPositionsTitle" onclick="showTab('positions')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-md);">
                                 <i class="bi bi-briefcase"></i> 当前持仓
                             </button>
-                            <button class="btn btn-secondary" id="tabPendingTitle" onclick="showTab('pending')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
-                                <i class="bi bi-hourglass-split"></i> 待成交
-                            </button>
                             <button class="btn btn-secondary" id="tabHistoryTitle" onclick="showTab('history')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
                                 <i class="bi bi-clock-history"></i> 交易历史
                             </button>
-                            <button class="btn btn-secondary" id="tabCancelledTitle" onclick="showTab('cancelled')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
-                                <i class="bi bi-x-circle"></i> 已取消
-                            </button>
                         </div>
                     </div>
-                    <div class="card-body" id="positionsCardBody" style="overflow-y: auto; overflow-x: hidden; padding: var(--spacing-md);">
+                    <div class="card-body" id="positionsCardBody" style="overflow-y: auto; overflow-x: hidden; padding: var(--spacing-md); flex: 1;">
                         <!-- Positions Content -->
                         <div id="positionsTab">
                         <div id="positions-list">
@@ -476,27 +470,11 @@
                             </div>
                         </div>
                     </div>
-                        <!-- Pending Orders Content -->
-                        <div id="pendingTab" style="display: none;">
-                            <div id="pending-orders-list">
-                                <div class="empty-state">
-                                    <div class="empty-state-text">加载中...</div>
-                </div>
-                    </div>
-                        </div>
                         <!-- History Content -->
                         <div id="historyTab" style="display: none;">
                         <div id="trades-list">
                             <div class="empty-state">
                                 <div class="empty-state-text">加载中...</div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Cancelled Orders Content -->
-                        <div id="cancelledTab" style="display: none;">
-                            <div id="cancelled-orders-list">
-                                <div class="empty-state">
-                                    <div class="empty-state-text">加载中...</div>
                                 </div>
                             </div>
                         </div>
@@ -820,53 +798,35 @@
         // 切换标签页
         function showTab(tab) {
             const tabPositionsTitle = document.getElementById('tabPositionsTitle');
-            const tabPendingTitle = document.getElementById('tabPendingTitle');
             const tabHistoryTitle = document.getElementById('tabHistoryTitle');
-            const tabCancelledTitle = document.getElementById('tabCancelledTitle');
             const positionsTab = document.getElementById('positionsTab');
-            const pendingTab = document.getElementById('pendingTab');
             const historyTab = document.getElementById('historyTab');
-            const cancelledTab = document.getElementById('cancelledTab');
 
             // 重置所有标签样式
-            [tabPositionsTitle, tabPendingTitle, tabHistoryTitle, tabCancelledTitle].forEach(title => {
-                title.className = 'btn btn-secondary';
-                title.style.opacity = '0.7';
-                title.style.boxShadow = 'var(--shadow-sm)';
+            [tabPositionsTitle, tabHistoryTitle].forEach(title => {
+                if (title) {
+                    title.className = 'btn btn-secondary';
+                    title.style.opacity = '0.7';
+                    title.style.boxShadow = 'var(--shadow-sm)';
+                }
             });
 
             // 隐藏所有内容
-            positionsTab.style.display = 'none';
-            pendingTab.style.display = 'none';
-            historyTab.style.display = 'none';
-            cancelledTab.style.display = 'none';
+            if (positionsTab) positionsTab.style.display = 'none';
+            if (historyTab) historyTab.style.display = 'none';
 
             if (tab === 'positions') {
                 tabPositionsTitle.className = 'btn btn-primary';
                 tabPositionsTitle.style.opacity = '1';
                 tabPositionsTitle.style.boxShadow = 'var(--shadow-md)';
                 positionsTab.style.display = 'block';
-            } else if (tab === 'pending') {
-                tabPendingTitle.className = 'btn btn-primary';
-                tabPendingTitle.style.opacity = '1';
-                tabPendingTitle.style.boxShadow = 'var(--shadow-md)';
-                pendingTab.style.display = 'block';
-                loadPendingOrders(); // 加载待成交订单
             } else if (tab === 'history') {
                 tabHistoryTitle.className = 'btn btn-primary';
                 tabHistoryTitle.style.opacity = '1';
                 tabHistoryTitle.style.boxShadow = 'var(--shadow-md)';
                 historyTab.style.display = 'block';
                 loadTrades(); // 加载交易历史
-            } else if (tab === 'cancelled') {
-                tabCancelledTitle.className = 'btn btn-primary';
-                tabCancelledTitle.style.opacity = '1';
-                tabCancelledTitle.style.boxShadow = 'var(--shadow-md)';
-                cancelledTab.style.display = 'block';
-                loadCancelledOrders(); // 加载已取消订单
             }
-            // 切换后重新同步高度
-            setTimeout(syncPanelHeights, 50);
         }
 
         // 同步面板高度
@@ -1396,7 +1356,39 @@
                 } else {
                     container.innerHTML = htmlContent;
                 }
+
+                // 动态计算并更新总盈亏统计
+                updateTotalPnlStats(positionsWithPrices, data.stats);
             } catch (error) {
+            }
+        }
+
+        // 动态更新总盈亏统计
+        function updateTotalPnlStats(positions, stats) {
+            // 计算未实现盈亏总和
+            const totalUnrealizedPnl = positions.reduce((sum, pos) => sum + (parseFloat(pos.unrealized_pnl) || 0), 0);
+
+            // 获取已实现盈亏（从stats获取）
+            const totalRealizedPnl = parseFloat(stats?.total_pnl) || 0;
+
+            // 总盈亏 = 已实现 + 未实现
+            const totalPnl = totalRealizedPnl + totalUnrealizedPnl;
+
+            // 更新总盈亏显示
+            const pnlElement = document.getElementById('total-pnl');
+            if (pnlElement) {
+                pnlElement.textContent = totalPnl.toFixed(2);
+                pnlElement.className = 'stat-value pnl ' + (totalPnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+            }
+
+            // 计算总盈亏百分比（基于初始余额10000）
+            const initialBalance = 10000;
+            const totalPnlPct = (totalPnl / initialBalance) * 100;
+
+            const pnlPctElement = document.getElementById('total-pnl-pct');
+            if (pnlPctElement) {
+                pnlPctElement.textContent = `(${totalPnlPct >= 0 ? '+' : ''}${totalPnlPct.toFixed(2)}%)`;
+                pnlPctElement.className = 'stat-change ' + (totalPnlPct >= 0 ? 'positive' : 'negative');
             }
         }
         
