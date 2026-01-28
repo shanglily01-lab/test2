@@ -334,7 +334,7 @@ class SpotTraderV2:
 
         self.position_manager = DynamicPositionManager(self.db_config)
         self.price_sampler = PriceSampler()
-        self.ws_price_service = get_ws_price_service(is_futures=False)
+        self.ws_price_service = get_ws_price_service(market_type='spot')
 
         # 监控币种 (从24H强势信号中筛选)
         self.symbols = self._get_strong_signals()
