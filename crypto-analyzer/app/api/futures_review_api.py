@@ -49,7 +49,6 @@ CLOSE_REASON_MAP = {
     'sync_close': '同步平仓',
     'reversal_warning': '反转预警平仓',
     # 超级大脑新增
-    'hedge_loss_cut': '对冲止损平仓',
     'reverse_signal': '反向信号平仓',
 }
 
@@ -147,10 +146,6 @@ def parse_close_reason(notes: str) -> tuple:
             return 'timeout_4h', f'超时平仓({params})'
         return 'timeout_4h', '超时平仓'
 
-    # 中文平仓原因（对冲）
-    if notes == '对冲止损平仓':
-        return 'hedge_loss_cut', '对冲止损平仓'
-
     # 英文代码直接匹配
     if notes in CLOSE_REASON_MAP:
         return notes, CLOSE_REASON_MAP[notes]
@@ -191,11 +186,7 @@ def parse_close_reason(notes: str) -> tuple:
     if '同步' in notes:
         return 'sync_close', '同步平仓'
 
-    # 对冲止损平仓 (新增)
-    if '|hedge_loss_cut' in notes or 'hedge_loss_cut' in notes:
-        return 'hedge_loss_cut', '对冲止损平仓'
-
-    # 反向信号平仓 (新增)
+    # 反向信号平仓
     if '|reverse_signal' in notes or 'reverse_signal' in notes:
         return 'reverse_signal', '反向信号平仓'
 

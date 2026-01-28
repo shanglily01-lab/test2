@@ -120,6 +120,47 @@ class SmartAutoTrader:
             logger.error(f"❌ 检查持仓失败: {e}")
             return False
 
+    def check_recent_close(self, symbol: str, cooldown_minutes: int = 60) -> bool:
+        """
+        检查指定交易对是否在冷却期内(刚刚平仓)
+        返回True表示在冷却期,不应该开仓
+        默认冷却期1小时,避免频繁开平同一交易对
+
+        Args:
+            symbol: 交易对
+            cooldown_minutes: 冷却期时长(分钟)
+
+        Returns:
+            True: 在冷却期内, False: 不在冷却期
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT close_time
+                FROM futures_positions
+                WHERE symbol = %s
+                AND status = 'closed'
+                AND account_id = %s
+                AND close_time IS NOT NULL
+                AND close_time >= DATE_SUB(NOW(), INTERVAL %s MINUTE)
+                ORDER BY close_time DESC
+                LIMIT 1
+            """, (symbol, self.account_id, cooldown_minutes))
+
+            result = cursor.fetchone()
+            cursor.close()
+
+            if result:
+                # 在冷却期内
+                return True
+            return False
+
+        except Exception as e:
+            logger.error(f"❌ 检查冷却期失败: {e}")
+            return False
+
     def open_position(self, opportunity: Dict) -> bool:
         """
         开仓
@@ -226,7 +267,7 @@ class SmartAutoTrader:
     def check_and_rescore_positions(self):
         """
         检查并重新评分持仓
-        - 每1小时检查一次
+        - 每2小时检查一次（符合最小持仓时间）
         - 如果评分下降超过15分，平仓
         - 如果方向反转，立即平仓
         """
@@ -234,7 +275,7 @@ class SmartAutoTrader:
             conn = self._get_connection()
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 查询持仓超过1小时的仓位（需要重新评分）
+            # 查询持仓超过2小时的仓位（需要重新评分）
             cursor.execute("""
                 SELECT
                     id, symbol, position_side, quantity, entry_price,
@@ -243,7 +284,7 @@ class SmartAutoTrader:
                 WHERE status = 'open'
                 AND account_id = %s
                 AND entry_score IS NOT NULL
-                AND open_time < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+                AND open_time < DATE_SUB(NOW(), INTERVAL 2 HOUR)
             """, (self.account_id,))
 
             positions_to_check = cursor.fetchall()
@@ -324,7 +365,7 @@ class SmartAutoTrader:
                 # 1. 检查并关闭超时持仓
                 self.check_and_close_old_positions()
 
-                # 2. 检查并重新评分持仓（每1小时检查）
+                # 2. 检查并重新评分持仓（每2小时检查，符合最小持仓时间）
                 self.check_and_rescore_positions()
 
                 # 3. 检查当前持仓数
@@ -356,6 +397,11 @@ class SmartAutoTrader:
                     # 检查是否已有该币种持仓
                     if self.has_position_for_symbol(opp['symbol']):
                         logger.info(f"⚠️ {opp['symbol']} 已有持仓,跳过")
+                        continue
+
+                    # 检查是否在冷却期内(刚平仓)
+                    if self.check_recent_close(opp['symbol'], cooldown_minutes=60):
+                        logger.warning(f"⚠️ {opp['symbol']} 平仓后1小时冷却期内,跳过")
                         continue
 
                     # 开仓

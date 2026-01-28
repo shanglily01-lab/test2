@@ -266,29 +266,7 @@ class OptimizationConfig:
         }
 
     # ============================================================
-    # 问题3: 对冲优化
-    # ============================================================
-
-    def get_hedge_reversal_threshold(self) -> float:
-        """
-        获取对冲反转阈值(分)
-
-        Returns:
-            反转阈值(分) - 默认15
-        """
-        return self.get_param('hedge_reversal_threshold', 15)
-
-    def get_hedge_margin_multiplier(self) -> float:
-        """
-        获取对冲保证金倍数
-
-        Returns:
-            保证金倍数 - 默认0.25 (25%)
-        """
-        return self.get_param('hedge_margin_multiplier', 0.25)
-
-    # ============================================================
-    # 问题4: 15M K线动态止盈
+    # 问题3: 15M K线动态止盈
     # ============================================================
 
     def get_take_profit_config(self) -> Dict[str, Any]:
@@ -614,13 +592,8 @@ if __name__ == '__main__':
     print(f"升级配置: profit={upgrade_cfg['profit_amount']}, win_rate={upgrade_cfg['win_rate']}, "
           f"days={upgrade_cfg['observation_days']}")
 
-    # 测试问题3: 对冲优化
-    print("\n=== 问题3: 对冲优化 ===")
-    print(f"反转阈值: {config.get_hedge_reversal_threshold()}分")
-    print(f"保证金倍数: {config.get_hedge_margin_multiplier()}")
-
-    # 测试问题4: 止盈配置
-    print("\n=== 问题4: 15M K线动态止盈 ===")
+    # 测试问题3: 止盈配置
+    print("\n=== 问题3: 15M K线动态止盈 ===")
     tp_cfg = config.get_take_profit_config()
     print(f"分析{tp_cfg['candle_count']}根, 选择{tp_cfg['select_count']}根")
     print(f"固定系数: {tp_cfg['fixed_coefficient']}, 移动系数: {tp_cfg['trailing_coefficient']}")

@@ -1058,20 +1058,12 @@ class SmartExitOptimizer:
             MIN_HOLD_MINUTES = 120  # 2小时最小持仓时间
 
             # ============================================================
-            # === 优先级1: 固定止损检查（风控底线，但要考虑最小持仓时间） ===
+            # === 优先级1: 固定止损检查（风控底线，无需等待最小持仓时间） ===
             # ============================================================
             stop_loss_price = position.get('stop_loss_price')
 
-            # 获取最小持仓时间（从live_engine的自适应参数中获取,但不低于2小时）
-            min_holding_minutes = 120  # 最小2小时
-            if hasattr(self.live_engine, 'brain'):
-                if position_side == 'LONG':
-                    min_holding_minutes = self.live_engine.brain.adaptive_long.get('min_holding_minutes', 60)
-                else:
-                    min_holding_minutes = self.live_engine.brain.adaptive_short.get('min_holding_minutes', 60)
-
-            # 只有达到最小持仓时间才允许止损
-            if hold_minutes >= min_holding_minutes and stop_loss_price and float(stop_loss_price) > 0:
+            # 止损立即生效，无需等待最小持仓时间
+            if stop_loss_price and float(stop_loss_price) > 0:
                 if position_side == 'LONG':
                     if current_price <= float(stop_loss_price):
                         pnl_pct = profit_info.get('profit_pct', 0)
