@@ -663,8 +663,18 @@ class SmartTraderService:
         return self.connection
 
     def get_current_price(self, symbol: str):
-        """获取当前价格 - 带数据新鲜度检查 (使用5m K线)"""
+        """获取当前价格 - 优先WebSocket实时价,回退到5m K线"""
         try:
+            # 优先从WebSocket获取实时价格(与SmartExitOptimizer检查止盈时用同一价格源,避免止盈缩水)
+            if self.ws_service:
+                ws_price = self.ws_service.get_price(symbol)
+                if ws_price and ws_price > 0:
+                    logger.debug(f"[PRICE] {symbol} 使用WebSocket实时价: {ws_price}")
+                    return ws_price
+                else:
+                    logger.debug(f"[PRICE] {symbol} WebSocket价格无效,回退到K线")
+
+            # 回退到5分钟K线
             conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
@@ -677,6 +687,7 @@ class SmartTraderService:
             cursor.close()
 
             if not result:
+                logger.warning(f"[PRICE] {symbol} K线数据不存在")
                 return None
 
             close_price, open_time = result
@@ -693,6 +704,7 @@ class SmartTraderService:
                 )
                 return None
 
+            logger.debug(f"[PRICE] {symbol} 使用K线价格: {close_price} (数据年龄: {data_age_minutes:.1f}分钟)")
             return float(close_price)
         except Exception as e:
             logger.error(f"[ERROR] 获取{symbol}价格失败: {e}")
