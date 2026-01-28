@@ -24,6 +24,7 @@ from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
+from app.services.big4_trend_detector import Big4TrendDetector
 
 # 加载环境变量
 load_dotenv()
@@ -579,6 +580,11 @@ class SmartTraderService:
             self.smart_exit_optimizer = None
             logger.info("⚠️ 智能平仓优化器未启用")
 
+        # 初始化Big4趋势检测器 (四大天王: BTC/ETH/BNB/SOL)
+        self.big4_detector = Big4TrendDetector()
+        self.big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+        logger.info("🔱 Big4趋势检测器已启动 (仅应用于四大天王)")
+
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
         logger.info(f"账户ID: {self.account_id}")
@@ -984,6 +990,12 @@ class SmartTraderService:
                 signal_combination_key = f"REVERSAL_{opp.get('reversal_from', 'unknown')}"
 
             logger.info(f"[SIGNAL_COMBO] {symbol} {side} 信号组合: {signal_combination_key} (评分: {entry_score})")
+
+            # Big4 信号记录
+            if opp.get('big4_adjusted'):
+                big4_signal = opp.get('big4_signal', 'NEUTRAL')
+                big4_strength = opp.get('big4_strength', 0)
+                logger.info(f"[BIG4-APPLIED] {symbol} Big4趋势: {big4_signal} (强度: {big4_strength})")
 
             # 问题1优化: 计算动态超时时间
             base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
@@ -2191,6 +2203,60 @@ class SmartTraderService:
                     new_side = opp['side']
                     new_score = opp['score']
                     opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
+
+                    # Big4 趋势检测 - 仅对四大天王本身进行检测
+                    if symbol in self.big4_symbols:
+                        try:
+                            big4_result = self.big4_detector.detect_market_trend()
+                            symbol_detail = big4_result['details'].get(symbol, {})
+                            symbol_signal = symbol_detail.get('signal', 'NEUTRAL')
+                            signal_strength = symbol_detail.get('strength', 0)
+
+                            logger.info(f"[BIG4] {symbol} 趋势信号: {symbol_signal} (强度: {signal_strength})")
+
+                            # 如果信号方向与交易方向冲突,降低评分或跳过
+                            if symbol_signal == 'BEARISH' and new_side == 'LONG':
+                                if signal_strength >= 60:  # 强烈看空信号
+                                    logger.info(f"[BIG4-SKIP] {symbol} 强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
+                                    continue
+                                else:
+                                    new_score = new_score - 30
+                                    logger.info(f"[BIG4-ADJUST] {symbol} 看空信号, LONG评分降低: {opp['score']} -> {new_score}")
+                                    if new_score < 20:  # 评分太低则跳过
+                                        logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
+                                        continue
+
+                            elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
+                                if signal_strength >= 60:  # 强烈看多信号
+                                    logger.info(f"[BIG4-SKIP] {symbol} 强烈看多 (强度{signal_strength}), 跳过SHORT信号 (原评分{new_score})")
+                                    continue
+                                else:
+                                    new_score = new_score - 30
+                                    logger.info(f"[BIG4-ADJUST] {symbol} 看多信号, SHORT评分降低: {opp['score']} -> {new_score}")
+                                    if new_score < 20:  # 评分太低则跳过
+                                        logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
+                                        continue
+
+                            # 如果信号方向一致,提升评分
+                            elif symbol_signal == 'BULLISH' and new_side == 'LONG':
+                                boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
+                                new_score = new_score + boost
+                                logger.info(f"[BIG4-BOOST] {symbol} 看多信号与LONG方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+
+                            elif symbol_signal == 'BEARISH' and new_side == 'SHORT':
+                                boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
+                                new_score = new_score + boost
+                                logger.info(f"[BIG4-BOOST] {symbol} 看空信号与SHORT方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+
+                            # 更新机会评分 (用于后续记录)
+                            opp['score'] = new_score
+                            opp['big4_adjusted'] = True
+                            opp['big4_signal'] = symbol_signal
+                            opp['big4_strength'] = signal_strength
+
+                        except Exception as e:
+                            logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
+                            # 失败不影响正常交易流程
 
                     # 检查同方向是否已有持仓
                     if self.has_position(symbol, new_side):
