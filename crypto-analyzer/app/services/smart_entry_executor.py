@@ -603,9 +603,10 @@ class SmartEntryExecutor:
             margin = batch['margin']
 
             # 准备 batch_plan JSON
+            # 优化后的分批时间: 1小时内完成 (前15分钟采集样本, 然后30/45/60分钟执行)
             batch_plan_json = json.dumps({
                 'batches': [
-                    {'ratio': b['ratio'], 'timeout_minutes': [15, 20, 28][i]}
+                    {'ratio': b['ratio'], 'timeout_minutes': [30, 45, 60][i]}
                     for i, b in enumerate(plan['batches'])
                 ]
             })
@@ -790,7 +791,17 @@ class SmartEntryExecutor:
                 logger.error("未找到position_id，无法完成持仓")
                 return
 
-            # 计算计划平仓时间
+            # 获取所有已完成的批次,找到最晚一批的时间作为开仓时间
+            filled_batches = [b for b in plan['batches'] if b['filled']]
+            if filled_batches:
+                # 最后一批的时间就是开仓时间
+                last_batch_time = filled_batches[-1]['time']
+                open_time = last_batch_time
+            else:
+                # 如果没有已完成批次(理论上不应该发生),使用当前时间
+                open_time = datetime.now()
+
+            # 计算计划平仓时间(从最晚一批开始计算)
             signal = plan['signal']
             entry_score = signal.get('trade_params', {}).get('entry_score', 30)
 
@@ -801,16 +812,17 @@ class SmartEntryExecutor:
             else:
                 max_hold_minutes = 120  # 2小时
 
-            planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
+            planned_close_time = open_time + timedelta(minutes=max_hold_minutes)
 
-            # 更新状态为'open'并设置计划平仓时间
+            # 更新状态为'open',设置开仓时间和计划平仓时间
             cursor.execute("""
                 UPDATE futures_positions
                 SET status = 'open',
+                    open_time = %s,
                     planned_close_time = %s,
                     updated_at = NOW()
                 WHERE id = %s
-            """, (planned_close_time, position_id))
+            """, (open_time, planned_close_time, position_id))
 
             conn.commit()
 
@@ -851,11 +863,12 @@ class SmartEntryExecutor:
             total_margin = sum(b['margin'] for b in plan['batches'] if b['filled'])
 
             # 准备 batch_plan 和 batch_filled JSON
+            # 优化后的分批时间: 1小时内完成 (前15分钟采集样本, 然后30/45/60分钟执行)
             batch_plan_json = json.dumps({
                 'batches': [
                     {
                         'ratio': b['ratio'],
-                        'timeout_minutes': [15, 20, 28][i]
+                        'timeout_minutes': [30, 45, 60][i]
                     }
                     for i, b in enumerate(plan['batches'])
                 ]
@@ -1150,23 +1163,40 @@ class SmartEntryExecutor:
             sampling_task.cancel()
 
     async def _mark_position_as_open(self, position_id: int):
-        """将持仓标记为open状态,并设置计划平仓时间"""
+        """将持仓标记为open状态,并设置开仓时间和计划平仓时间"""
         import pymysql
         from datetime import timedelta
+        import json
 
         try:
             conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
             cursor = conn.cursor()
 
-            # 查询持仓的entry_score以计算持仓时长
+            # 查询持仓的entry_score和batch_filled以计算开仓时间
             cursor.execute("""
-                SELECT entry_score
+                SELECT entry_score, batch_filled
                 FROM futures_positions
                 WHERE id = %s
             """, (position_id,))
 
             result = cursor.fetchone()
             entry_score = result['entry_score'] if result else 30
+
+            # 从batch_filled JSON中获取最晚一批的时间作为开仓时间
+            open_time = datetime.now()  # 默认值
+            try:
+                batch_filled_json = result.get('batch_filled') if result else None
+                if batch_filled_json:
+                    batch_filled = json.loads(batch_filled_json)
+                    batches = batch_filled.get('batches', [])
+                    if batches:
+                        # 最后一批的时间
+                        last_batch = batches[-1]
+                        time_str = last_batch.get('time')
+                        if time_str:
+                            open_time = datetime.fromisoformat(time_str)
+            except Exception as e:
+                logger.warning(f"解析batch_filled失败,使用当前时间作为开仓时间: {e}")
 
             # 根据entry_score计算持仓时长
             if entry_score >= 45:
@@ -1176,16 +1206,17 @@ class SmartEntryExecutor:
             else:
                 max_hold_minutes = 120  # 2小时
 
-            planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
+            planned_close_time = open_time + timedelta(minutes=max_hold_minutes)
 
             cursor.execute("""
                 UPDATE futures_positions
                 SET status = 'open',
+                    open_time = %s,
                     planned_close_time = %s,
                     notes = CONCAT(COALESCE(notes, ''), ' [自动恢复] 系统重启后标记为open'),
                     updated_at = NOW()
                 WHERE id = %s
-            """, (planned_close_time, position_id))
+            """, (open_time, planned_close_time, position_id))
 
             conn.commit()
             cursor.close()

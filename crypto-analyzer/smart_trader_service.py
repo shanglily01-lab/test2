@@ -802,6 +802,57 @@ class SmartTraderService:
             logger.warning(f"[POSITION_HIGH_CHECK] {symbol} 验证失败: {e},默认通过")
             return True, "验证异常,默认通过"
 
+    def check_recent_close_cooldown(self, symbol: str, side: str) -> tuple:
+        """
+        检查该交易对同方向是否在冷却期内(平仓后1小时)
+
+        平仓后1小时内不开同方向的订单,避免:
+        1. 反复开平造成频繁交易
+        2. 在不利行情下重复亏损
+
+        Args:
+            symbol: 交易对
+            side: 方向 ('LONG' or 'SHORT')
+
+        Returns:
+            (is_valid, reason)
+        """
+        try:
+            conn = self.db_pool.get_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            # 查询最近1小时内该交易对同方向的平仓记录
+            cursor.execute("""
+                SELECT id, close_time, realized_pnl
+                FROM futures_positions
+                WHERE symbol = %s
+                AND position_side = %s
+                AND account_id = %s
+                AND status = 'closed'
+                AND close_time >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+                ORDER BY close_time DESC
+                LIMIT 1
+            """, (symbol, side, self.account_id))
+
+            recent_close = cursor.fetchone()
+
+            cursor.close()
+            conn.close()
+
+            if recent_close:
+                from datetime import datetime
+                close_time = recent_close['close_time']
+                minutes_ago = (datetime.now() - close_time).total_seconds() / 60
+                pnl = recent_close['realized_pnl'] or 0
+
+                return False, f"平仓后冷却期({minutes_ago:.0f}分钟前平仓,盈亏${pnl:.2f})"
+
+            return True, "无冷却期限制"
+
+        except Exception as e:
+            logger.warning(f"[COOLDOWN_CHECK] {symbol} {side} 检查失败: {e},默认通过")
+            return True, "冷却期检查异常,默认通过"
+
     def open_position(self, opp: dict):
         """开仓 - 支持做多和做空，支持分批建仓，使用 WebSocket 实时价格"""
         symbol = opp['symbol']
@@ -818,6 +869,12 @@ class SmartTraderService:
 
         # 缺陷2修复: position_high信号额外验证
         is_valid, reason = self.validate_position_high_signal(symbol, signal_components, side)
+        if not is_valid:
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
+            return False
+
+        # 新增验证: 检查是否在平仓后冷却期内
+        is_valid, reason = self.check_recent_close_cooldown(symbol, side)
         if not is_valid:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
             return False
