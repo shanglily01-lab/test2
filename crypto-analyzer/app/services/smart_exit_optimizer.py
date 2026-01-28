@@ -1104,31 +1104,7 @@ class SmartExitOptimizer:
                     return (tb_reason, 1.0)
 
             # ============================================================
-            # === 优先级3: 紧急风控 - 亏损+方向反转（止损） ===
-            # ============================================================
-            # 只在亏损>1%时检查反转,避免刚开仓就被打脸
-            # 获取当前K线强度(用于紧急风控)
-            strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
-            strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
-            strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
-
-            if all([strength_1h, strength_15m, strength_5m]):
-                # === 亏损 + 强度反转（止损，全平） ===
-                if profit_info['profit_pct'] < -1.0:
-                    # 计算K线强度评分
-                    current_kline = self.kline_scorer.calculate_strength_score(
-                        strength_1h, strength_15m, strength_5m
-                    )
-                    # 亏损>1%，检查K线方向是否反转
-                    if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
-                        logger.warning(
-                            f"⚠️ 持仓{position_id} {symbol}亏损>1%且K线方向反转(紧急止损) | "
-                            f"当前方向{current_kline['direction']} vs 持仓{direction}"
-                        )
-                        return ('亏损>1%+方向反转', 1.0)
-
-            # ============================================================
-            # === 优先级4: 固定止盈检查（兜底） ===
+            # === 优先级3: 固定止盈检查（兜底） ===
             # ============================================================
             take_profit_price = position.get('take_profit_price')
             if take_profit_price and float(take_profit_price) > 0:
@@ -1154,9 +1130,9 @@ class SmartExitOptimizer:
             # ============================================================
             # === 在此之后的所有平仓检查都需要满足最小持仓时间(2小时) ===
             # ============================================================
-            # 开仓2小时内不平仓(除了止损、止盈和紧急风控)
+            # 开仓2小时内不平仓(除了止损和止盈)
             if hold_minutes < MIN_HOLD_MINUTES:
-                # 2小时内只允许止损、止盈和紧急风控,不进行其他平仓检查
+                # 2小时内只允许止损和止盈,不进行其他平仓检查
                 return None
 
             # ============================================================
@@ -1228,6 +1204,17 @@ class SmartExitOptimizer:
             current_kline = self.kline_scorer.calculate_strength_score(
                 strength_1h, strength_15m, strength_5m
             )
+
+            # === 亏损 + 强度反转（止损，全平） ===
+            # 注意: 这个检查在2小时限制之后,所以不会过早触发
+            if profit_info['profit_pct'] < -1.0:
+                # 亏损>1%，检查K线方向是否反转
+                if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
+                    logger.warning(
+                        f"⚠️ 持仓{position_id} {symbol}亏损>1%且K线方向反转 | "
+                        f"当前方向{current_kline['direction']} vs 持仓{direction}"
+                    )
+                    return ('亏损>1%+方向反转', 1.0)
 
             # === 分阶段平仓逻辑（避免重复触发） ===
 
