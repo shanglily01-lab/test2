@@ -55,7 +55,7 @@ class SmartDecisionBrain:
         # 从config.yaml加载配置
         self._load_config()
 
-        self.threshold = 27  # 开仓阈值 (优化后从30降至27，捕获更多高质量信号)
+        self.threshold = 35  # 开仓阈值 (提高到35分,过滤低质量信号,防追高)
 
     def _load_config(self):
         """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
@@ -223,6 +223,64 @@ class SmartDecisionBrain:
                     cursorclass=pymysql.cursors.DictCursor
                 )
         return self.connection
+
+    def check_anti_fomo_filter(self, symbol: str, current_price: float, side: str) -> tuple:
+        """
+        防追高/追跌过滤器
+
+        做多防追高: 不在24H区间80%以上位置开多
+        做空防杀跌: 不在24H区间20%以下位置开空
+
+        返回: (是否通过, 原因)
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 检查24H价格位置
+            cursor.execute("""
+                SELECT high_24h, low_24h, change_24h
+                FROM price_stats_24h
+                WHERE symbol = %s
+            """, (symbol,))
+
+            stats_24h = cursor.fetchone()
+            cursor.close()
+
+            if not stats_24h:
+                return True, "无24H数据,跳过过滤"
+
+            high_24h = float(stats_24h['high_24h'])
+            low_24h = float(stats_24h['low_24h'])
+            change_24h = float(stats_24h['change_24h'] or 0)
+
+            # 计算价格在24H区间的位置百分比
+            if high_24h > low_24h:
+                position_pct = (current_price - low_24h) / (high_24h - low_24h) * 100
+            else:
+                position_pct = 50  # 无波动时默认中间位置
+
+            # 做多防追高: 不在高于80%位置开多
+            if side == 'LONG' and position_pct > 80:
+                return False, f"防追高-价格位于24H区间{position_pct:.1f}%位置,距最高仅{(high_24h-current_price)/current_price*100:.2f}%"
+
+            # 做空防杀跌: 不在低于20%位置开空
+            if side == 'SHORT' and position_pct < 20:
+                return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%位置,距最低仅{(current_price-low_24h)/current_price*100:.2f}%"
+
+            # 额外检查: 24H大涨且在高位 → 更严格
+            if side == 'LONG' and change_24h > 15 and position_pct > 70:
+                return False, f"防追高-24H涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
+
+            # 额外检查: 24H大跌且在低位 → 更严格
+            if side == 'SHORT' and change_24h < -15 and position_pct < 30:
+                return False, f"防杀跌-24H跌{change_24h:+.2f}%且位于{position_pct:.1f}%低位"
+
+            return True, f"位置{position_pct:.1f}%,24H{change_24h:+.2f}%"
+
+        except Exception as e:
+            logger.error(f"防追高检查失败 {symbol}: {e}")
+            return True, "检查失败,放行"
 
     def load_klines(self, symbol: str, timeframe: str, limit: int = 100):
         conn = self._get_connection()
@@ -832,6 +890,16 @@ class SmartTraderService:
         if self.check_recent_close(symbol, side, cooldown_minutes=60):
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后1小时冷却期内")
             return False
+
+        # 新增验证: 防追高/追跌过滤
+        current_price = self.ws_service.get_price(symbol)
+        if current_price:
+            pass_filter, filter_reason = self.brain.check_anti_fomo_filter(symbol, current_price, side)
+            if not pass_filter:
+                logger.warning(f"[ANTI-FOMO] {symbol} {side} - {filter_reason}")
+                return False
+            else:
+                logger.info(f"[ANTI-FOMO] {symbol} {side} 通过防追高检查: {filter_reason}")
 
         # ========== 第二步：决定使用分批建仓还是一次性开仓 ==========
         # 检查是否启用分批建仓
