@@ -1069,13 +1069,13 @@ class FuturesTradingEngine:
                     symbol, side, price, quantity, notional_value,
                     leverage, margin, fee, fee_rate,
                     realized_pnl, pnl_pct, roi,
-                    entry_price, trade_time
+                    entry_price, close_price, trade_time
                 ) VALUES (
                     %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s,
-                    %s, %s
+                    %s, %s, %s
                 )
             """
 
@@ -1084,7 +1084,7 @@ class FuturesTradingEngine:
                 symbol, side, float(current_price), float(close_quantity), float(close_value),
                 leverage, float(position_margin), float(fee), float(fee_rate),
                 float(realized_pnl), float(pnl_pct), float(roi),
-                float(entry_price), datetime.utcnow()
+                float(entry_price), float(current_price), datetime.utcnow()
             ))
 
             # 7. 更新持仓状态

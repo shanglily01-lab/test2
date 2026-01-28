@@ -1485,18 +1485,18 @@ class SmartTraderService:
                                     trade_id, position_id, account_id, symbol, side,
                                     price, quantity, notional_value, leverage, margin,
                                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                                    order_id, trade_time, created_at
+                                    close_price, order_id, trade_time, created_at
                                 ) VALUES (
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
-                                    %s, %s, %s
+                                    %s, %s, %s, %s
                                 )
                             """, (
                                 trade_id, long_pos['id'], self.account_id, symbol, 'CLOSE_LONG',
                                 current_price, long_pos['quantity'], notional_value, leverage, margin,
                                 fee, long_pos['realized_pnl'], long_pos['pnl_pct'], roi, long_pos['entry_price'],
-                                f"HEDGE-{long_pos['id']}", datetime.utcnow(), datetime.utcnow()
+                                current_price, f"HEDGE-{long_pos['id']}", datetime.utcnow(), datetime.utcnow()
                             ))
 
                             # Update account balance
@@ -1590,18 +1590,18 @@ class SmartTraderService:
                                     trade_id, position_id, account_id, symbol, side,
                                     price, quantity, notional_value, leverage, margin,
                                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                                    order_id, trade_time, created_at
+                                    close_price, order_id, trade_time, created_at
                                 ) VALUES (
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
                                     %s, %s, %s, %s, %s,
-                                    %s, %s, %s
+                                    %s, %s, %s, %s
                                 )
                             """, (
                                 trade_id, short_pos['id'], self.account_id, symbol, 'CLOSE_SHORT',
                                 current_price, short_pos['quantity'], notional_value, leverage, margin,
                                 fee, short_pos['realized_pnl'], short_pos['pnl_pct'], roi, short_pos['entry_price'],
-                                order_id, datetime.utcnow(), datetime.utcnow()
+                                current_price, order_id, datetime.utcnow(), datetime.utcnow()
                             ))
 
                             # Update account balance
@@ -1777,18 +1777,18 @@ class SmartTraderService:
                         trade_id, position_id, account_id, symbol, side,
                         price, quantity, notional_value, leverage, margin,
                         fee, realized_pnl, pnl_pct, roi, entry_price,
-                        order_id, trade_time, created_at
+                        close_price, order_id, trade_time, created_at
                     ) VALUES (
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s,
-                        %s, %s, %s
+                        %s, %s, %s, %s
                     )
                 """, (
                     trade_id, pos['id'], self.account_id, symbol, close_side,
                     current_price, quantity, notional_value, leverage, margin,
                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                    order_id, datetime.utcnow(), datetime.utcnow()
+                    current_price, order_id, datetime.utcnow(), datetime.utcnow()
                 ))
 
                 # Update account balance
@@ -2026,18 +2026,18 @@ class SmartTraderService:
                     trade_id, position_id, account_id, symbol, side,
                     price, quantity, notional_value, leverage, margin,
                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                    order_id, trade_time, created_at
+                    close_price, order_id, trade_time, created_at
                 ) VALUES (
                     %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
-                    %s, %s, %s
+                    %s, %s, %s, %s
                 )
             """, (
                 trade_id, position_id, self.account_id, symbol, close_side,
                 current_price, close_quantity, notional_value, leverage, close_margin,
                 fee, realized_pnl, pnl_pct, roi, entry_price,
-                order_id, datetime.utcnow(), datetime.utcnow()
+                current_price, order_id, datetime.utcnow(), datetime.utcnow()
             ))
 
             # 更新账户余额
