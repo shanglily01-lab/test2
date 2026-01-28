@@ -994,3 +994,115 @@ async def get_ema_signals(limit: int = 10):
             "count": 0,
             "message": f"读取信号失败: {str(e)}"
         }
+
+
+# ==================== 现货V2 (动态价格采样策略) API ====================
+
+@router.get("/spot-v2/positions")
+async def get_spot_v2_positions():
+    """
+    获取现货V2持仓列表 (动态价格采样策略)
+
+    Returns:
+        持仓列表和统计信息
+    """
+    import pymysql
+
+    try:
+        db_config = get_db_config()
+        conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor)
+        cursor = conn.cursor()
+
+        # 查询活跃持仓
+        cursor.execute("""
+            SELECT
+                id, symbol, status, phase, current_batch, total_batches,
+                total_quantity, total_cost, avg_entry_price,
+                take_profit_price, stop_loss_price,
+                sampling_start_time, building_start_time, holding_start_time,
+                exit_sampling_start_time, exit_time, exit_price,
+                realized_pnl, realized_pnl_pct, close_reason,
+                created_at, updated_at
+            FROM spot_positions_v2
+            WHERE status = 'active'
+            ORDER BY created_at DESC
+        """)
+
+        active_positions = cursor.fetchall()
+
+        # 获取价格服务
+        price_cache = get_global_price_cache()
+
+        # 处理持仓数据
+        positions = []
+        for pos in active_positions:
+            # 获取当前价格
+            current_price = price_cache.get(pos['symbol']) if price_cache else None
+
+            # 计算未实现盈亏
+            if current_price and pos['avg_entry_price']:
+                unrealized_pnl_pct = (current_price - float(pos['avg_entry_price'])) / float(pos['avg_entry_price']) * 100
+                unrealized_pnl = (current_price - float(pos['avg_entry_price'])) * float(pos['total_quantity'])
+            else:
+                unrealized_pnl_pct = 0
+                unrealized_pnl = 0
+
+            # 计算持仓时长
+            if pos['created_at']:
+                hold_minutes = int((datetime.now() - pos['created_at']).total_seconds() / 60)
+            else:
+                hold_minutes = 0
+
+            positions.append({
+                "id": pos['id'],
+                "symbol": pos['symbol'],
+                "status": pos['status'],
+                "phase": pos['phase'],
+                "current_batch": pos['current_batch'],
+                "total_batches": pos['total_batches'],
+                "total_quantity": float(pos['total_quantity']) if pos['total_quantity'] else 0,
+                "total_cost": float(pos['total_cost']) if pos['total_cost'] else 0,
+                "avg_entry_price": float(pos['avg_entry_price']) if pos['avg_entry_price'] else 0,
+                "current_price": current_price,
+                "unrealized_pnl": unrealized_pnl,
+                "unrealized_pnl_pct": unrealized_pnl_pct,
+                "take_profit_price": float(pos['take_profit_price']) if pos['take_profit_price'] else None,
+                "stop_loss_price": float(pos['stop_loss_price']) if pos['stop_loss_price'] else None,
+                "hold_minutes": hold_minutes,
+                "created_at": pos['created_at'].strftime('%Y-%m-%d %H:%M:%S') if pos['created_at'] else None,
+            })
+
+        # 统计信息
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_positions,
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
+                SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed_count,
+                SUM(CASE WHEN status = 'closed' AND realized_pnl > 0 THEN 1 ELSE 0 END) as winning_count,
+                SUM(CASE WHEN status = 'closed' THEN realized_pnl ELSE 0 END) as total_pnl
+            FROM spot_positions_v2
+        """)
+
+        stats = cursor.fetchone()
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "success": True,
+            "positions": positions,
+            "stats": {
+                "total_positions": stats['total_positions'] or 0,
+                "active_count": stats['active_count'] or 0,
+                "closed_count": stats['closed_count'] or 0,
+                "winning_count": stats['winning_count'] or 0,
+                "win_rate": (stats['winning_count'] / stats['closed_count'] * 100) if stats['closed_count'] and stats['closed_count'] > 0 else 0,
+                "total_pnl": float(stats['total_pnl']) if stats['total_pnl'] else 0
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取现货V2持仓失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
