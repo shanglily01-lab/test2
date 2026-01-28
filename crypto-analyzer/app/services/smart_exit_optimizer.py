@@ -1092,19 +1092,7 @@ class SmartExitOptimizer:
                         return ('固定止损', 1.0)
 
             # ============================================================
-            # === 优先级2: 智能顶底识别（替代固定止盈，要求至少持仓2小时） ===
-            # ============================================================
-            if hold_minutes >= 120:  # 至少持仓2小时才检查顶底
-                is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price)
-                if is_top_bottom:
-                    logger.info(
-                        f"🔝 持仓{position_id} {symbol}触发顶底识别: {tb_reason} | "
-                        f"持仓{hold_hours:.1f}小时"
-                    )
-                    return (tb_reason, 1.0)
-
-            # ============================================================
-            # === 优先级3: 固定止盈检查（兜底） ===
+            # === 优先级2: 固定止盈检查（兜底） ===
             # ============================================================
             take_profit_price = position.get('take_profit_price')
             if take_profit_price and float(take_profit_price) > 0:
@@ -1136,7 +1124,19 @@ class SmartExitOptimizer:
                 return None
 
             # ============================================================
-            # === 优先级4: 动态超时检查（基于timeout_at字段） ===
+            # === 优先级4: 智能顶底识别 ===
+            # ============================================================
+            # 注: 已满足2小时最小持仓时间,现在可以检查顶底
+            is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price)
+            if is_top_bottom:
+                logger.info(
+                    f"🔝 持仓{position_id} {symbol}触发顶底识别: {tb_reason} | "
+                    f"持仓{hold_hours:.1f}小时"
+                )
+                return (tb_reason, 1.0)
+
+            # ============================================================
+            # === 优先级5: 动态超时检查（基于timeout_at字段） ===
             # ============================================================
             timeout_at = position.get('timeout_at')
             if timeout_at:
@@ -1150,7 +1150,7 @@ class SmartExitOptimizer:
                     return (f'动态超时({max_hold_minutes}min)', 1.0)
 
             # ============================================================
-            # === 优先级5: 分阶段超时检查（1h/2h/3h/4h不同亏损阈值） ===
+            # === 优先级6: 分阶段超时检查（1h/2h/3h/4h不同亏损阈值） ===
             # ============================================================
             # 获取分阶段超时阈值配置
             staged_thresholds = {
@@ -1179,7 +1179,7 @@ class SmartExitOptimizer:
                         return (f'分阶段超时{hour_checkpoint}H(亏损{pnl_pct*100:.1f}%)', 1.0)
 
             # ============================================================
-            # === 优先级6: 6小时绝对时间托底 ===
+            # === 优先级7: 6小时绝对时间托底 ===
             # ============================================================
             max_hold_minutes = position.get('max_hold_minutes') or 360  # 默认6小时
             if hold_minutes >= max_hold_minutes:
@@ -1187,7 +1187,7 @@ class SmartExitOptimizer:
                 return ('持仓时长到期(6小时托底)', 1.0)
 
             # ============================================================
-            # === 优先级7: K线强度衰减检查（智能分批平仓） ===
+            # === 优先级8: K线强度衰减检查（智能分批平仓） ===
             # ============================================================
             # 注意: 15M强力反转和亏损+反转已在优先级3处理(紧急风控),这里不再重复检查
 
