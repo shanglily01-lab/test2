@@ -284,9 +284,63 @@ class SpotSignalGenerator:
 
         return 0.0, "共振不足"
 
+    def _get_24h_signal_bonus(self, symbol: str) -> float:
+        """
+        短线策略: 基于24H数据的信号加分
+        涨幅3-5%: +5分
+        涨幅5-8%: +10分
+        涨幅>8%: +15分
+        强势上涨趋势: +5分
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT change_24h, trend, quote_volume_24h
+                FROM price_stats_24h
+                WHERE symbol = %s
+            """, (symbol,))
+
+            result = cursor.fetchone()
+            cursor.close()
+
+            if not result:
+                return 0.0
+
+            change_24h = float(result['change_24h'] or 0)
+            trend = result['trend']
+            volume_24h = float(result['quote_volume_24h'] or 0)
+
+            bonus = 0.0
+
+            # 24H涨幅加分
+            if change_24h >= 8:
+                bonus += 15  # 强势上涨
+            elif change_24h >= 5:
+                bonus += 10  # 稳健上涨
+            elif change_24h >= 3:
+                bonus += 5   # 温和上涨
+
+            # 趋势加分
+            if trend == 'STRONG_UP':
+                bonus += 5
+            elif trend == 'UP':
+                bonus += 3
+
+            # 流动性过滤 (成交额<500万的不加分)
+            if volume_24h < 5_000_000:
+                bonus = 0
+
+            return bonus
+
+        except Exception as e:
+            logger.error(f"获取24H信号加分失败 {symbol}: {e}")
+            return 0.0
+
     def generate_signal(self, symbol: str) -> Dict:
         """
-        生成买入信号 (ABCD综合评分)
+        生成买入信号 (ABCD综合评分 + 24H短线加权)
         返回信号强度和详细描述
         """
         try:
@@ -306,6 +360,12 @@ class SpotSignalGenerator:
             best_strategy = max(scores, key=scores.get)
             best_score = scores[best_strategy]
 
+            # 短线策略: 24H数据加权
+            bonus_24h = self._get_24h_signal_bonus(symbol)
+            if bonus_24h > 0:
+                best_score += bonus_24h
+                logger.debug(f"{symbol} 24H加分: +{bonus_24h:.0f}")
+
             # 组合描述
             details = []
             if score_a > 20:
@@ -316,6 +376,8 @@ class SpotSignalGenerator:
                 details.append(f"C:{score_c:.0f}")
             if score_d > 20:
                 details.append(f"D:{score_d:.0f}")
+            if bonus_24h > 0:
+                details.append(f"24H:+{bonus_24h:.0f}")
 
             return {
                 'symbol': symbol,
@@ -340,21 +402,21 @@ class SpotSignalGenerator:
 class SpotPositionManager:
     """现货仓位管理器 - 5批次建仓"""
 
-    # 5批次建仓比例
-    BATCH_RATIOS = [0.10, 0.10, 0.20, 0.20, 0.40]
+    # 3批次建仓比例 (短线策略 - 快速建仓)
+    BATCH_RATIOS = [0.20, 0.30, 0.50]
 
-    def __init__(self, db_config: dict, total_capital: float = 50000, per_coin_capital: float = 10000):
+    def __init__(self, db_config: dict, total_capital: float = 50000, per_coin_capital: float = 5000):
         self.db_config = db_config
         self.connection = None
 
         self.total_capital = total_capital
-        self.per_coin_capital = per_coin_capital
-        self.reserve_ratio = 0.20  # 20% 现金储备
-        self.max_positions = 5
+        self.per_coin_capital = per_coin_capital  # 短线策略: 单币5000 USDT
+        self.reserve_ratio = 0.10  # 10% 现金储备 (短线提高资金利用率)
+        self.max_positions = 10  # 短线策略: 最多10个持仓
 
-        # 风险管理
-        self.take_profit_pct = 0.50  # 50% 止盈
-        self.stop_loss_pct = 0.10    # 10% 止损
+        # 短线风险管理
+        self.take_profit_pct = 0.18  # 18% 止盈 (短线快进快出)
+        self.stop_loss_pct = 0.06    # 6% 止损 (严格风控)
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -406,40 +468,42 @@ class SpotPositionManager:
 
     def calculate_batch_amount(self, signal_strength: float, batch_index: int) -> float:
         """
-        根据信号强度和批次计算买入金额
+        短线策略: 根据信号强度和批次计算买入金额
 
         signal_strength: 0-100 信号强度
-        batch_index: 0-4 批次索引
+        batch_index: 0-2 批次索引 (短线3批次)
         """
         base_amount = self.per_coin_capital * self.BATCH_RATIOS[batch_index]
 
-        # 根据信号强度调整 (信号越强，首批越大)
-        if batch_index == 0 and signal_strength > 80:
-            # 强信号时，首批加仓10%
-            base_amount *= 1.1
+        # 短线策略: 信号越强，首批越大
+        if batch_index == 0:
+            if signal_strength >= 70:
+                base_amount *= 1.2  # 强信号时，首批+20%
+            elif signal_strength >= 55:
+                base_amount *= 1.1  # 中等信号时，首批+10%
 
         return base_amount
 
     def should_add_batch(self, position: Dict, current_price: float) -> Tuple[bool, int]:
         """
-        判断是否应该加仓，以及加第几批
+        短线策略: 判断是否应该加仓 (3批次)
 
         加仓条件：
-        1. 价格相比上一批下跌 >= 2%，或
-        2. 价格相比上一批上涨 >= 3%，且信号依然强劲
+        1. 价格回调 >= 3% (短线逢低加仓)
+        2. 价格上涨 >= 5% 且信号强劲 (确认趋势)
 
         返回: (是否加仓, 下一批次索引)
         """
         current_batch = position.get('current_batch', 0)
 
-        if current_batch >= 5:
-            return False, -1  # 已完成5批
+        if current_batch >= 3:
+            return False, -1  # 短线策略: 已完成3批
 
         last_buy_price = float(position['avg_entry_price'])
         price_change_pct = (current_price - last_buy_price) / last_buy_price
 
-        # 规则1: 价格回调 >= 2%，加仓 (逢低加仓)
-        if price_change_pct <= -0.02:
+        # 短线策略: 价格回调 >= 3%，加仓
+        if price_change_pct <= -0.03:
             return True, current_batch
 
         # 规则2: 价格上涨 >= 3%，且信号依然强劲 (追涨加仓)
@@ -626,8 +690,8 @@ class SpotTraderService:
             signal = self.signal_generator.generate_signal(symbol)
             all_signals.append((symbol, signal['signal_strength']))
 
-            # 信号强度 >= 60 才考虑
-            if signal['signal_strength'] >= 60:
+            # 短线策略: 信号强度 >= 40 才考虑 (降低阈值,捕捉更多短线机会)
+            if signal['signal_strength'] >= 40:
                 opportunities.append(signal)
 
         # 按信号强度排序
@@ -639,7 +703,7 @@ class SpotTraderService:
         logger.info(f"📊 评分TOP5: {', '.join([f'{s[0]}({s[1]}分)' for s in top_5])}")
 
         if opportunities:
-            logger.info(f"✅ 发现 {len(opportunities)} 个机会（≥60分）")
+            logger.info(f"✅ 发现 {len(opportunities)} 个机会（≥40分,短线模式）")
 
         return opportunities
 
@@ -678,7 +742,7 @@ class SpotTraderService:
                         amount = self.position_manager.calculate_batch_amount(signal['signal_strength'], next_batch)
                         quantity = amount / current_price
 
-                        logger.info(f"📈 加仓信号: {symbol} @ {current_price:.4f}, 批次: {next_batch + 1}/5")
+                        logger.info(f"📈 加仓信号: {symbol} @ {current_price:.4f}, 批次: {next_batch + 1}/3 (短线模式)")
                         self.position_manager.add_batch_to_position(pos, current_price, quantity, next_batch)
 
     def execute_new_entries(self):
