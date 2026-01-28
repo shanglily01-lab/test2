@@ -1039,13 +1039,18 @@ async def get_spot_v2_positions():
             # 获取当前价格
             current_price = price_cache.get(pos['symbol']) if price_cache else None
 
-            # 计算未实现盈亏
-            if current_price and pos['avg_entry_price']:
-                unrealized_pnl_pct = (current_price - float(pos['avg_entry_price'])) / float(pos['avg_entry_price']) * 100
-                unrealized_pnl = (current_price - float(pos['avg_entry_price'])) * float(pos['total_quantity'])
+            # 计算未实现盈亏和市值
+            total_quantity = float(pos['total_quantity']) if pos['total_quantity'] else 0
+            avg_entry_price = float(pos['avg_entry_price']) if pos['avg_entry_price'] else 0
+
+            if current_price and avg_entry_price:
+                unrealized_pnl_pct = (current_price - avg_entry_price) / avg_entry_price * 100
+                unrealized_pnl = (current_price - avg_entry_price) * total_quantity
+                market_value = current_price * total_quantity
             else:
                 unrealized_pnl_pct = 0
                 unrealized_pnl = 0
+                market_value = 0
 
             # 计算持仓时长
             if pos['created_at']:
@@ -1060,16 +1065,21 @@ async def get_spot_v2_positions():
                 "phase": pos['phase'],
                 "current_batch": pos['current_batch'],
                 "total_batches": pos['total_batches'],
-                "total_quantity": float(pos['total_quantity']) if pos['total_quantity'] else 0,
+                "quantity": total_quantity,  # 前端期望的字段名
+                "total_quantity": total_quantity,  # 保留原字段名
+                "available_quantity": total_quantity,  # 现货V2全部可用
                 "total_cost": float(pos['total_cost']) if pos['total_cost'] else 0,
-                "avg_entry_price": float(pos['avg_entry_price']) if pos['avg_entry_price'] else 0,
-                "current_price": current_price,
+                "avg_entry_price": avg_entry_price,
+                "current_price": current_price or 0,
+                "market_value": market_value,  # 新增市值字段
                 "unrealized_pnl": unrealized_pnl,
                 "unrealized_pnl_pct": unrealized_pnl_pct,
                 "take_profit_price": float(pos['take_profit_price']) if pos['take_profit_price'] else None,
                 "stop_loss_price": float(pos['stop_loss_price']) if pos['stop_loss_price'] else None,
                 "hold_minutes": hold_minutes,
                 "created_at": pos['created_at'].strftime('%Y-%m-%d %H:%M:%S') if pos['created_at'] else None,
+                "first_buy_time": pos['created_at'].strftime('%Y-%m-%d %H:%M:%S') if pos['created_at'] else None,  # 兼容旧字段
+                "last_update_time": pos['updated_at'].strftime('%Y-%m-%d %H:%M:%S') if pos.get('updated_at') else None,  # 兼容旧字段
             })
 
         # 统计信息

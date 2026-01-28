@@ -965,7 +965,7 @@
                     });
                     if (response.ok) {
                         // 检查是否有持仓被平仓（通过比较持仓数量）
-                        const positionsResponse = await fetch('/api/paper-trading/positions');
+                        const positionsResponse = await fetch('/api/paper-trading/spot-v2/positions');
                         const positionsData = await positionsResponse.json();
                         const currentCount = positionsData.positions ? positionsData.positions.length : 0;
                         const container = document.getElementById('positions-list');
@@ -1284,7 +1284,7 @@
         // 加载持仓（优化：直接使用API返回的价格，无需额外请求）
         async function loadPositions() {
             try {
-                const response = await fetch('/api/paper-trading/positions');
+                const response = await fetch('/api/paper-trading/spot-v2/positions');
                 const data = await response.json();
 
                 const container = document.getElementById('positions-list');
