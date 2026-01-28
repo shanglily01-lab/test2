@@ -4,7 +4,7 @@
 用于在开仓时一次性计算合适的止损止盈百分比
 
 特点:
-1. 基于最近7天的历史K线数据
+1. 基于最近24小时的历史K线数据
 2. 区分多空方向的不同风险
 3. 计算结果在开仓时固定,持仓期间不变
 4. 使用缓存避免重复计算
@@ -135,7 +135,7 @@ class VolatilityCalculator:
 
         # 7. 生成计算原因
         reason_parts = [
-            f"基于7日数据: 向上{volatility['avg_upside']:.1f}% 向下{volatility['avg_downside']:.1f}%",
+            f"基于24H数据: 向上{volatility['avg_upside']:.1f}% 向下{volatility['avg_downside']:.1f}%",
             f"评分{entry_score}分"
         ]
 
@@ -173,21 +173,22 @@ class VolatilityCalculator:
             conn = mysql.connector.connect(**DB_CONFIG)
             cursor = conn.cursor(dictionary=True)
 
-            # 查询最近7天的1小时K线
+            # 查询最近24小时的1小时K线
+            # 原因: 持仓时间4-6小时,用24小时数据既贴近当前市场,又有足够样本
             cursor.execute("""
                 SELECT
                     open_price, high_price, low_price, close_price
-                FROM futures_klines
+                FROM kline_data
                 WHERE symbol = %s
                 AND timeframe = '1h'
-                AND open_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-                ORDER BY open_time ASC
+                AND timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                ORDER BY timestamp ASC
             """, (symbol,))
 
             klines = cursor.fetchall()
             cursor.close()
 
-            if not klines or len(klines) < 24:
+            if not klines or len(klines) < 12:
                 logger.warning(f"{symbol} K线数据不足: {len(klines) if klines else 0}根")
                 return None
 
