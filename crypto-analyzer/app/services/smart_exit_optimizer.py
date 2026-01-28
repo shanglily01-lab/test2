@@ -1104,34 +1104,15 @@ class SmartExitOptimizer:
                     return (tb_reason, 1.0)
 
             # ============================================================
-            # === 优先级3: 紧急风控 - 15M连续强力反转（最危险，立即全平） ===
+            # === 优先级3: 紧急风控 - 亏损+方向反转（止损） ===
             # ============================================================
+            # 只在亏损>1%时检查反转,避免刚开仓就被打脸
             # 获取当前K线强度(用于紧急风控)
             strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
             strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
             strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
 
             if all([strength_1h, strength_15m, strength_5m]):
-                if direction == 'LONG':
-                    # 检查15M是否连续强空K线
-                    is_strong_reversal = (
-                        strength_15m['net_power'] <= -5 and
-                        strength_5m['net_power'] <= -5
-                    )
-                    if is_strong_reversal:
-                        logger.warning(f"⚠️ 持仓{position_id} {symbol} 15M连续强力反转(紧急风控)")
-                        return ('15M连续强力反转', 1.0)
-
-                elif direction == 'SHORT':
-                    # 检查15M是否连续强多K线
-                    is_strong_reversal = (
-                        strength_15m['net_power'] >= 5 and
-                        strength_5m['net_power'] >= 5
-                    )
-                    if is_strong_reversal:
-                        logger.warning(f"⚠️ 持仓{position_id} {symbol} 15M连续强力反转(紧急风控)")
-                        return ('15M连续强力反转', 1.0)
-
                 # === 亏损 + 强度反转（止损，全平） ===
                 if profit_info['profit_pct'] < -1.0:
                     # 计算K线强度评分
@@ -1141,7 +1122,7 @@ class SmartExitOptimizer:
                     # 亏损>1%，检查K线方向是否反转
                     if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
                         logger.warning(
-                            f"⚠️ 持仓{position_id} {symbol}亏损>1%且K线方向反转 | "
+                            f"⚠️ 持仓{position_id} {symbol}亏损>1%且K线方向反转(紧急止损) | "
                             f"当前方向{current_kline['direction']} vs 持仓{direction}"
                         )
                         return ('亏损>1%+方向反转', 1.0)
