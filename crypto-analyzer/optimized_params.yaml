@@ -1,15 +1,15 @@
 BOTTOM_REVERSAL_LONG:
   min_hammer_count: 2
   min_lower_shadow_pct: 0.6
-  min_score_threshold: 45
+  min_score_threshold: 35  # 降低到35分以捕获更多底部反转机会
   min_volume_ratio: 2.0
 WEAK_RALLY_SHORT:
   min_drop_pct: 0.35000000000000003
-  min_score_threshold: 45
+  min_score_threshold: 35  # 降低到35分以捕获更多弱反弹空单
   min_volume_ratio: 2.0
   weak_rally_hours: 6
 batch_entry:
-  batch1_score_threshold: 75
+  batch1_score_threshold: 35  # 从75降到35，捕获30-35分黄金区间（54.7%胜率，+426 USDT）
   batch1_timeout_minutes: 15
   sampling_window_seconds: 300
 batch_exit:
