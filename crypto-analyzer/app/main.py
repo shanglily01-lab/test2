@@ -408,8 +408,8 @@ async def lifespan(app: FastAPI):
                 import traceback
                 logger.error(traceback.format_exc())
 
-        # 配置定时任务：每天凌晨1点执行
-        schedule.every().day.at("01:00").do(run_daily_optimization)
+        # 配置定时任务：每4小时执行一次
+        schedule.every(4).hours.do(run_daily_optimization)
 
         # 创建后台任务运行调度器
         async def schedule_runner():
@@ -419,7 +419,7 @@ async def lifespan(app: FastAPI):
                 await asyncio.sleep(60)  # 每分钟检查一次
 
         daily_optimizer_task = asyncio.create_task(schedule_runner())
-        logger.info("✅ 每日优化服务已启动（每天凌晨1点执行）")
+        logger.info("✅ 参数优化服务已启动（每4小时执行一次）")
 
     except Exception as e:
         logger.warning(f"⚠️  启动每日优化服务失败: {e}")
