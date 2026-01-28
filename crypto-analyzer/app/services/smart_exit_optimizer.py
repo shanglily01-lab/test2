@@ -1183,11 +1183,10 @@ class SmartExitOptimizer:
             # ============================================================
             # 注意: 15M强力反转和亏损+反转已在优先级3处理(紧急风控),这里不再重复检查
 
-            # 重新获取K线强度(如果之前没有获取成功)
-            if not all([strength_1h, strength_15m, strength_5m]):
-                strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
-                strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
-                strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
+            # 获取K线强度
+            strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
+            strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
+            strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
 
             if not all([strength_1h, strength_15m, strength_5m]):
                 return None
