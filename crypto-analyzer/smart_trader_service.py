@@ -924,14 +924,6 @@ class SmartTraderService:
                 # 应用仓位倍数
                 adjusted_position_size = base_position_size * position_multiplier
 
-                # 问题3优化: 检查是否为对冲开仓,如果是则应用对冲保证金倍数
-                opposite_side = 'SHORT' if side == 'LONG' else 'LONG'
-                is_hedge = self.has_position(symbol, opposite_side)
-                if is_hedge:
-                    hedge_multiplier = self.opt_config.get_hedge_margin_multiplier()
-                    adjusted_position_size = adjusted_position_size * hedge_multiplier
-                    logger.info(f"[HEDGE_MARGIN] {symbol} 对冲开仓, 保证金缩减到{hedge_multiplier*100:.0f}%")
-
             quantity = adjusted_position_size * self.leverage / current_price
             notional_value = quantity * current_price
             margin = adjusted_position_size
@@ -1102,14 +1094,6 @@ class SmartTraderService:
                 adaptive_params = self.brain.adaptive_short
 
             adjusted_position_size = base_position_size * position_multiplier
-
-            # 检查对冲
-            opposite_side = 'SHORT' if side == 'LONG' else 'LONG'
-            is_hedge = self.has_position(symbol, opposite_side)
-            if is_hedge:
-                hedge_multiplier = self.opt_config.get_hedge_margin_multiplier()
-                adjusted_position_size = adjusted_position_size * hedge_multiplier
-                logger.info(f"[HEDGE_MARGIN] {symbol} 对冲开仓, 保证金缩减到{hedge_multiplier*100:.0f}%")
 
             # 调用智能建仓执行器（作为后台任务，避免阻塞主循环）
             entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
@@ -2218,48 +2202,10 @@ class SmartTraderService:
                         logger.info(f"[SKIP] {symbol} {new_side}方向1小时内刚平仓,冷却中")
                         continue
 
-                    # 检查是否有反向持仓
+                    # 检查是否有反向持仓 - 如果有则跳过,不做对冲
                     if self.has_position(symbol, opposite_side):
-                        # 获取反向持仓的开仓得分
-                        old_score = self.get_position_score(symbol, opposite_side)
-
-                        # 问题2+3优化: 综合反转阈值 = 基础阈值(15分) + 评级额外阈值
-                        # 黑名单等级越高,反转阈值越高,更难反转
-                        rating_level = self.opt_config.get_symbol_rating_level(symbol)
-                        rating_config = self.opt_config.get_blacklist_config(rating_level)
-                        base_reversal_threshold = self.opt_config.get_hedge_reversal_threshold()
-                        rating_reversal_threshold = rating_config['reversal_threshold']
-
-                        # 使用两者中的较大值
-                        reversal_threshold = max(base_reversal_threshold, rating_reversal_threshold - old_score)
-                        if reversal_threshold < base_reversal_threshold:
-                            reversal_threshold = base_reversal_threshold
-
-                        # 如果新信号比旧信号强(反转阈值)以上 -> 主动反向平仓
-                        if new_score > old_score + reversal_threshold:
-                            logger.info(
-                                f"[REVERSE] {symbol} 检测到强反向信号! "
-                                f"原{opposite_side}得分{old_score}, 新{new_side}得分{new_score} "
-                                f"(差距{new_score-old_score}分 > 阈值{reversal_threshold}分)"
-                            )
-
-                            # 平掉反向持仓
-                            self.close_position_by_side(
-                                symbol,
-                                opposite_side,
-                                reason=f"reverse_signal|new_{new_side}_score:{new_score}|old_score:{old_score}|threshold:{reversal_threshold}"
-                            )
-
-                            # 开新方向
-                            self.open_position(opp)
-                            time.sleep(2)
-                            continue
-
-                        # 反向信号不够强,允许对冲
-                        logger.info(
-                            f"[HEDGE] {symbol} 已有{opposite_side}(得分{old_score})持仓, "
-                            f"新{new_side}得分{new_score}未达反转阈值(需>{old_score+reversal_threshold:.0f}), 允许对冲"
-                        )
+                        logger.info(f"[SKIP] {symbol} 已有{opposite_side}持仓,跳过{new_side}信号(不做对冲)")
+                        continue
 
                     # 正常开仓
                     self.open_position(opp)
