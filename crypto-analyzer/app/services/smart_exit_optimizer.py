@@ -1104,7 +1104,50 @@ class SmartExitOptimizer:
                     return (tb_reason, 1.0)
 
             # ============================================================
-            # === 优先级3: 固定止盈检查（兜底） ===
+            # === 优先级3: 紧急风控 - 15M连续强力反转（最危险，立即全平） ===
+            # ============================================================
+            # 获取当前K线强度(用于紧急风控)
+            strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
+            strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
+            strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
+
+            if all([strength_1h, strength_15m, strength_5m]):
+                if direction == 'LONG':
+                    # 检查15M是否连续强空K线
+                    is_strong_reversal = (
+                        strength_15m['net_power'] <= -5 and
+                        strength_5m['net_power'] <= -5
+                    )
+                    if is_strong_reversal:
+                        logger.warning(f"⚠️ 持仓{position_id} {symbol} 15M连续强力反转(紧急风控)")
+                        return ('15M连续强力反转', 1.0)
+
+                elif direction == 'SHORT':
+                    # 检查15M是否连续强多K线
+                    is_strong_reversal = (
+                        strength_15m['net_power'] >= 5 and
+                        strength_5m['net_power'] >= 5
+                    )
+                    if is_strong_reversal:
+                        logger.warning(f"⚠️ 持仓{position_id} {symbol} 15M连续强力反转(紧急风控)")
+                        return ('15M连续强力反转', 1.0)
+
+                # === 亏损 + 强度反转（止损，全平） ===
+                if profit_info['profit_pct'] < -1.0:
+                    # 计算K线强度评分
+                    current_kline = self.kline_scorer.calculate_strength_score(
+                        strength_1h, strength_15m, strength_5m
+                    )
+                    # 亏损>1%，检查K线方向是否反转
+                    if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
+                        logger.warning(
+                            f"⚠️ 持仓{position_id} {symbol}亏损>1%且K线方向反转 | "
+                            f"当前方向{current_kline['direction']} vs 持仓{direction}"
+                        )
+                        return ('亏损>1%+方向反转', 1.0)
+
+            # ============================================================
+            # === 优先级4: 固定止盈检查（兜底） ===
             # ============================================================
             take_profit_price = position.get('take_profit_price')
             if take_profit_price and float(take_profit_price) > 0:
@@ -1130,9 +1173,9 @@ class SmartExitOptimizer:
             # ============================================================
             # === 在此之后的所有平仓检查都需要满足最小持仓时间(2小时) ===
             # ============================================================
-            # 开仓2小时内不平仓(除了止损和止盈)
+            # 开仓2小时内不平仓(除了止损、止盈和紧急风控)
             if hold_minutes < MIN_HOLD_MINUTES:
-                # 2小时内只允许止损和止盈,不进行其他平仓检查
+                # 2小时内只允许止损、止盈和紧急风控,不进行其他平仓检查
                 return None
 
             # ============================================================
@@ -1189,11 +1232,13 @@ class SmartExitOptimizer:
             # ============================================================
             # === 优先级7: K线强度衰减检查（智能分批平仓） ===
             # ============================================================
+            # 注意: 15M强力反转和亏损+反转已在优先级3处理(紧急风控),这里不再重复检查
 
-            # 获取当前K线强度
-            strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
-            strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
-            strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
+            # 重新获取K线强度(如果之前没有获取成功)
+            if not all([strength_1h, strength_15m, strength_5m]):
+                strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
+                strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
+                strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
 
             if not all([strength_1h, strength_15m, strength_5m]):
                 return None
@@ -1202,37 +1247,6 @@ class SmartExitOptimizer:
             current_kline = self.kline_scorer.calculate_strength_score(
                 strength_1h, strength_15m, strength_5m
             )
-
-            # === 子检测1: 15M连续强力反转（最危险，立即全平） ===
-            if direction == 'LONG':
-                # 检查15M是否连续3根强空K线
-                is_strong_reversal = (
-                    strength_15m['net_power'] <= -5 and
-                    strength_5m['net_power'] <= -5
-                )
-                if is_strong_reversal:
-                    logger.warning(f"⚠️ 持仓{position_id} {symbol} 15M连续强力反转")
-                    return ('15M连续强力反转', 1.0)
-
-            elif direction == 'SHORT':
-                # 检查15M是否连续3根强多K线
-                is_strong_reversal = (
-                    strength_15m['net_power'] >= 5 and
-                    strength_5m['net_power'] >= 5
-                )
-                if is_strong_reversal:
-                    logger.warning(f"⚠️ 持仓{position_id} {symbol} 15M连续强力反转")
-                    return ('15M连续强力反转', 1.0)
-
-            # === 子检测2: 亏损 + 强度反转（止损，全平） ===
-            if profit_info['profit_pct'] < -1.0:
-                # 亏损>1%，检查K线方向是否反转
-                if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
-                    logger.warning(
-                        f"⚠️ 持仓{position_id} {symbol}亏损>1%且K线方向反转 | "
-                        f"当前方向{current_kline['direction']} vs 持仓{direction}"
-                    )
-                    return ('亏损>1%+方向反转', 1.0)
 
             # === 分阶段平仓逻辑（避免重复触发） ===
 
