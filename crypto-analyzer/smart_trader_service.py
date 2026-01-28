@@ -849,7 +849,7 @@ class SmartTraderService:
                             self._open_position_with_batch(opp),
                             self.event_loop
                         )
-                        logger.info(f"[BATCH_ENTRY] {symbol} {side} 分批建仓任务已启动（后台运行30分钟）")
+                        logger.info(f"[BATCH_ENTRY] {symbol} {side} 分批建仓任务已启动（后台运行60分钟）")
                         return True  # 立即返回，不阻塞
                     else:
                         logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 事件循环未初始化，降级到一次性开仓")
@@ -1156,7 +1156,7 @@ class SmartTraderService:
                     logger.error(f"❌ [BATCH_ENTRY_CALLBACK_ERROR] {symbol} {side} | {e}")
 
             entry_task.add_done_callback(on_entry_complete)
-            logger.info(f"🚀 [BATCH_ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行30分钟）")
+            logger.info(f"🚀 [BATCH_ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行60分钟）")
 
             return True
 
