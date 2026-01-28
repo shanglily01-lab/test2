@@ -364,17 +364,17 @@
         </div>
 
         <!-- Main Content -->
-        <div class="main-content" style="display: grid; grid-template-columns: 608px 1fr; gap: 24px; align-items: start;">
+        <div class="main-content" style="display: grid; grid-template-columns: 608px 1fr; gap: 24px; height: calc(100vh - 380px);">
             <!-- Trading Panel -->
-            <div style="display: flex; flex-direction: column;">
-                <div class="card" id="tradingPanelCard" style="display: flex; flex-direction: column;">
+            <div style="display: flex; flex-direction: column; height: 100%;">
+                <div class="card" id="tradingPanelCard" style="display: flex; flex-direction: column; height: 100%;">
                     <div class="card-header">
                         <h2 class="card-title">
                             <i class="bi bi-currency-exchange"></i>
                             交易面板
                         </h2>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body" style="overflow-y: auto;">
                         <form id="trade-form">
                             <div class="form-group">
                                 <label class="form-label">交易对</label>
@@ -448,7 +448,7 @@
             </div>
 
             <!-- Positions & Trades -->
-            <div style="display: flex; flex-direction: column; height: calc(100vh - 300px);">
+            <div style="display: flex; flex-direction: column; height: 100%;">
                 <!-- Combined Card with Tab Headers -->
                 <div class="card" id="positionsPanelCard" style="display: flex; flex-direction: column; height: 100%;">
                     <div class="card-header">
