@@ -9,6 +9,7 @@ from decimal import Decimal
 from loguru import logger
 
 from app.services.price_sampler import PriceSampler
+from app.services.volatility_calculator import get_volatility_calculator
 
 
 class SmartEntryExecutor:
@@ -623,31 +624,46 @@ class SmartEntryExecutor:
                 }]
             })
 
-            # 计算止损止盈
-            adaptive_params = signal.get('trade_params', {}).get('adaptive_params', {})
-            stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
-            take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+            # 计算止损止盈 (使用基于波动率的动态计算)
+            volatility_calc = get_volatility_calculator()
+            entry_score = signal.get('trade_params', {}).get('entry_score', 30)
+            signal_components = list(signal.get('trade_params', {}).get('signal_components', {}).keys())
+
+            stop_loss_pct, take_profit_pct, calc_reason = volatility_calc.get_sl_tp_for_position(
+                symbol=symbol,
+                position_side=direction,
+                entry_score=entry_score,
+                signal_components=signal_components
+            )
+
+            logger.info(f"[{symbol}] {direction} 止损止盈计算: SL={stop_loss_pct}% TP={take_profit_pct}% | {calc_reason}")
+
+            # 转换为小数(百分比转为0.xx格式)
+            stop_loss_pct_decimal = stop_loss_pct / 100
+            take_profit_pct_decimal = take_profit_pct / 100
 
             if direction == 'LONG':
-                stop_loss = price * (1 - stop_loss_pct)
-                take_profit = price * (1 + take_profit_pct)
+                stop_loss = price * (1 - stop_loss_pct_decimal)
+                take_profit = price * (1 + take_profit_pct_decimal)
             else:
-                stop_loss = price * (1 + stop_loss_pct)
-                take_profit = price * (1 - take_profit_pct)
+                stop_loss = price * (1 + stop_loss_pct_decimal)
+                take_profit = price * (1 - take_profit_pct_decimal)
 
             # 插入持仓记录（status='building'表示正在建仓）
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
+                 stop_loss_pct, take_profit_pct,
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
             """, (
                 self.account_id, symbol, direction, quantity, price, price,
                 plan['leverage'], quantity * price, margin,
                 stop_loss, take_profit,
+                stop_loss_pct, take_profit_pct,
                 signal.get('trade_params', {}).get('signal_combination_key', 'batch_entry'),
                 signal.get('trade_params', {}).get('entry_score', 30),
                 json.dumps(signal.get('trade_params', {}).get('signal_components', {})),
@@ -718,19 +734,31 @@ class SmartEntryExecutor:
                 ]
             })
 
-            # 重新计算止损止盈（基于新的平均价格）
+            # 重新计算止损止盈（基于新的平均价格和波动率）
             signal = plan['signal']
             direction = plan['direction']
-            adaptive_params = signal.get('trade_params', {}).get('adaptive_params', {})
-            stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
-            take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+
+            volatility_calc = get_volatility_calculator()
+            entry_score = signal.get('trade_params', {}).get('entry_score', 30)
+            signal_components = list(signal.get('trade_params', {}).get('signal_components', {}).keys())
+
+            stop_loss_pct, take_profit_pct, calc_reason = volatility_calc.get_sl_tp_for_position(
+                symbol=plan['symbol'],
+                position_side=direction,
+                entry_score=entry_score,
+                signal_components=signal_components
+            )
+
+            # 转换为小数
+            stop_loss_pct_decimal = stop_loss_pct / 100
+            take_profit_pct_decimal = take_profit_pct / 100
 
             if direction == 'LONG':
-                stop_loss = avg_price * (1 - stop_loss_pct)
-                take_profit = avg_price * (1 + take_profit_pct)
+                stop_loss = avg_price * (1 - stop_loss_pct_decimal)
+                take_profit = avg_price * (1 + take_profit_pct_decimal)
             else:
-                stop_loss = avg_price * (1 + stop_loss_pct)
-                take_profit = avg_price * (1 - take_profit_pct)
+                stop_loss = avg_price * (1 + stop_loss_pct_decimal)
+                take_profit = avg_price * (1 - take_profit_pct_decimal)
 
             # 更新持仓记录
             cursor.execute("""
@@ -741,12 +769,15 @@ class SmartEntryExecutor:
                     margin = %s,
                     stop_loss_price = %s,
                     take_profit_price = %s,
+                    stop_loss_pct = %s,
+                    take_profit_pct = %s,
                     batch_filled = %s,
                     updated_at = NOW()
                 WHERE id = %s
             """, (
                 total_quantity, avg_price, total_quantity * avg_price, total_margin,
-                stop_loss, take_profit, batch_filled_json, position_id
+                stop_loss, take_profit, stop_loss_pct, take_profit_pct,
+                batch_filled_json, position_id
             ))
 
             # 冻结新增保证金
@@ -899,27 +930,40 @@ class SmartEntryExecutor:
             from datetime import timedelta
             planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
 
-            # 计算止损止盈价格
-            adaptive_params = signal.get('trade_params', {}).get('adaptive_params', {})
-            stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
-            take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+            # 计算止损止盈价格 (使用基于波动率的动态计算)
+            volatility_calc = get_volatility_calculator()
+            signal_components = list(signal.get('trade_params', {}).get('signal_components', {}).keys())
+
+            stop_loss_pct, take_profit_pct, calc_reason = volatility_calc.get_sl_tp_for_position(
+                symbol=symbol,
+                position_side=direction,
+                entry_score=entry_score,
+                signal_components=signal_components
+            )
+
+            logger.info(f"[{symbol}] {direction} 最终止损止盈: SL={stop_loss_pct}% TP={take_profit_pct}% | {calc_reason}")
+
+            # 转换为小数
+            stop_loss_pct_decimal = stop_loss_pct / 100
+            take_profit_pct_decimal = take_profit_pct / 100
 
             if direction == 'LONG':
-                stop_loss = avg_price * (1 - stop_loss_pct)
-                take_profit = avg_price * (1 + take_profit_pct)
+                stop_loss = avg_price * (1 - stop_loss_pct_decimal)
+                take_profit = avg_price * (1 + take_profit_pct_decimal)
             else:  # SHORT
-                stop_loss = avg_price * (1 + stop_loss_pct)
-                take_profit = avg_price * (1 - take_profit_pct)
+                stop_loss = avg_price * (1 + stop_loss_pct_decimal)
+                take_profit = avg_price * (1 - take_profit_pct_decimal)
 
             # 插入持仓记录
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
+                 stop_loss_pct, take_profit_pct,
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time, planned_close_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'open', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'open', NOW(), NOW())
             """, (
                 self.account_id,
                 symbol,
@@ -932,6 +976,8 @@ class SmartEntryExecutor:
                 total_margin,
                 stop_loss,
                 take_profit,
+                stop_loss_pct,
+                take_profit_pct,
                 signal.get('trade_params', {}).get('signal_combination_key', 'batch_entry'),
                 entry_score,
                 json.dumps(signal.get('trade_params', {}).get('signal_components', {})),
