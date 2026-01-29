@@ -255,21 +255,33 @@ class CoinFuturesTradingEngine:
                 adapter = HTTPAdapter(max_retries=retry_strategy)
                 session.mount("https://", adapter)
                 
-                # 优先从Binance合约API获取实时价格
+                # 优先从Binance币本位合约API获取实时价格
                 try:
+                    # 币本位合约需要使用 dapi，并且符号格式为 BTCUSD_PERP
+                    if symbol.endswith('/USD'):
+                        # 币本位: BTC/USD -> BTCUSD_PERP
+                        symbol_for_api = symbol.replace('/', '') + '_PERP'
+                    else:
+                        symbol_for_api = symbol_clean
+
                     response = session.get(
-                        'https://fapi.binance.com/fapi/v1/ticker/price',
-                        params={'symbol': symbol_clean},
+                        'https://dapi.binance.com/dapi/v1/ticker/price',
+                        params={'symbol': symbol_for_api},
                         timeout=2
                     )
                     if response.status_code == 200:
                         data = response.json()
-                        if data and 'price' in data:
+                        # 币本位API返回数组格式
+                        if isinstance(data, list) and len(data) > 0 and 'price' in data[0]:
+                            price = Decimal(str(data[0]['price']))
+                            logger.debug(f"从Binance币本位合约API获取实时价格: {symbol} = {price}")
+                            return price
+                        elif isinstance(data, dict) and 'price' in data:
                             price = Decimal(str(data['price']))
-                            logger.debug(f"从Binance合约API获取实时价格: {symbol} = {price}")
+                            logger.debug(f"从Binance币本位合约API获取实时价格: {symbol} = {price}")
                             return price
                 except Exception as e:
-                    logger.debug(f"Binance合约API获取失败: {e}")
+                    logger.debug(f"Binance币本位合约API获取失败: {e}")
                 
                 # 如果Binance失败，尝试从Binance现货API获取
                 try:
