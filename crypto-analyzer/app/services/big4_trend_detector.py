@@ -13,6 +13,12 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import mysql.connector
+from dotenv import load_dotenv
+import os
+
+# 加载环境变量
+load_dotenv()
+
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
@@ -87,7 +93,8 @@ class Big4TrendDetector:
 
         avg_strength = total_strength / len(BIG4_SYMBOLS) if BIG4_SYMBOLS else 0
 
-        return {
+
+        result = {
             'overall_signal': overall_signal,
             'signal_strength': avg_strength,
             'bullish_count': bullish_count,
@@ -96,6 +103,12 @@ class Big4TrendDetector:
             'recommendation': recommendation,
             'timestamp': datetime.now()
         }
+
+        # 记录到数据库
+        self._save_to_database(result)
+
+        return result
+
 
     def _analyze_symbol(self, conn, symbol: str) -> Dict:
         """
@@ -444,6 +457,91 @@ class Big4TrendDetector:
         reason = ' | '.join(reasons) if reasons else '无明显信号'
 
         return signal, strength, reason
+
+    def _save_to_database(self, result: Dict):
+        """保存检测结果到数据库"""
+        try:
+            db_config = {
+                'host': os.getenv('DB_HOST'),
+                'port': int(os.getenv('DB_PORT', 3306)),
+                'user': os.getenv('DB_USER'),
+                'password': os.getenv('DB_PASSWORD'),
+                'database': os.getenv('DB_NAME')
+            }
+
+            import pymysql
+            conn = pymysql.connect(**db_config)
+            cursor = conn.cursor()
+
+            details = result['details']
+
+            cursor.execute("""
+                INSERT INTO big4_trend_history (
+                    overall_signal, signal_strength, bullish_count, bearish_count, recommendation,
+                    btc_signal, btc_strength, btc_reason, btc_is_consolidating, btc_price_change_6h,
+                    btc_1h_dominant, btc_15m_dominant,
+                    eth_signal, eth_strength, eth_reason, eth_is_consolidating, eth_price_change_6h,
+                    eth_1h_dominant, eth_15m_dominant,
+                    bnb_signal, bnb_strength, bnb_reason, bnb_is_consolidating, bnb_price_change_6h,
+                    bnb_1h_dominant, bnb_15m_dominant,
+                    sol_signal, sol_strength, sol_reason, sol_is_consolidating, sol_price_change_6h,
+                    sol_1h_dominant, sol_15m_dominant
+                ) VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s
+                )
+            """, (
+                result['overall_signal'],
+                result['signal_strength'],
+                result['bullish_count'],
+                result['bearish_count'],
+                result['recommendation'],
+                # BTC
+                details['BTC/USDT']['signal'],
+                details['BTC/USDT']['strength'],
+                details['BTC/USDT']['reason'],
+                details['BTC/USDT']['is_consolidating'],
+                details['BTC/USDT']['price_change_6h'],
+                details['BTC/USDT']['1h_analysis']['dominant'],
+                details['BTC/USDT']['15m_analysis']['dominant'],
+                # ETH
+                details['ETH/USDT']['signal'],
+                details['ETH/USDT']['strength'],
+                details['ETH/USDT']['reason'],
+                details['ETH/USDT']['is_consolidating'],
+                details['ETH/USDT']['price_change_6h'],
+                details['ETH/USDT']['1h_analysis']['dominant'],
+                details['ETH/USDT']['15m_analysis']['dominant'],
+                # BNB
+                details['BNB/USDT']['signal'],
+                details['BNB/USDT']['strength'],
+                details['BNB/USDT']['reason'],
+                details['BNB/USDT']['is_consolidating'],
+                details['BNB/USDT']['price_change_6h'],
+                details['BNB/USDT']['1h_analysis']['dominant'],
+                details['BNB/USDT']['15m_analysis']['dominant'],
+                # SOL
+                details['SOL/USDT']['signal'],
+                details['SOL/USDT']['strength'],
+                details['SOL/USDT']['reason'],
+                details['SOL/USDT']['is_consolidating'],
+                details['SOL/USDT']['price_change_6h'],
+                details['SOL/USDT']['1h_analysis']['dominant'],
+                details['SOL/USDT']['15m_analysis']['dominant']
+            ))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            logger.debug(f"Big4趋势检测结果已保存到数据库: {result['overall_signal']}")
+
+        except Exception as e:
+            logger.warning(f"保存Big4趋势检测结果失败: {e}")
+
 
 
 def get_big4_detector() -> Big4TrendDetector:
