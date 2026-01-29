@@ -1561,9 +1561,10 @@ class CoinFuturesTradingEngine:
                 except Exception as e:
                     logger.warning(f"更新持仓 {pos.get('symbol', 'unknown')} 价格和盈亏失败: {e}")
                     # 如果更新失败，至少设置默认值
-                    pos['current_price'] = float(pos.get('mark_price', 0))
-                    pos['unrealized_pnl'] = float(pos.get('unrealized_pnl', 0))
-                    pos['unrealized_pnl_pct'] = float(pos.get('unrealized_pnl_pct', 0))
+                    # 使用 or 0 而不是 get(..., 0)，因为值可能是None而不是不存在
+                    pos['current_price'] = float(pos.get('mark_price') or pos.get('entry_price') or 0)
+                    pos['unrealized_pnl'] = float(pos.get('unrealized_pnl') or 0)
+                    pos['unrealized_pnl_pct'] = float(pos.get('unrealized_pnl_pct') or 0)
 
                 # 转换 Decimal 和 datetime 类型，确保所有字段都能正确序列化为 JSON
                 for key, value in pos.items():
