@@ -2284,59 +2284,67 @@ class SmartTraderService:
                     new_score = opp['score']
                     opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
 
-                    # Big4 趋势检测 - 仅对四大天王本身进行检测
-                    if symbol in self.big4_symbols:
-                        try:
-                            big4_result = self.big4_detector.detect_market_trend()
+                    # Big4 趋势检测 - 应用到所有币种
+                    try:
+                        big4_result = self.big4_detector.detect_market_trend()
+
+                        # 如果是四大天王本身,使用该币种的专属信号
+                        if symbol in self.big4_symbols:
                             symbol_detail = big4_result['details'].get(symbol, {})
                             symbol_signal = symbol_detail.get('signal', 'NEUTRAL')
                             signal_strength = symbol_detail.get('strength', 0)
+                            logger.info(f"[BIG4-SELF] {symbol} 自身趋势: {symbol_signal} (强度: {signal_strength})")
+                        else:
+                            # 对其他币种,使用Big4整体趋势信号
+                            symbol_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                            signal_strength = big4_result.get('signal_strength', 0)
+                            logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                            logger.info(f"[BIG4] {symbol} 趋势信号: {symbol_signal} (强度: {signal_strength})")
-
-                            # 如果信号方向与交易方向冲突,降低评分或跳过
-                            if symbol_signal == 'BEARISH' and new_side == 'LONG':
-                                if signal_strength >= 60:  # 强烈看空信号
-                                    logger.info(f"[BIG4-SKIP] {symbol} 强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
+                        # 如果信号方向与交易方向冲突,降低评分或跳过
+                        if symbol_signal == 'BEARISH' and new_side == 'LONG':
+                            if signal_strength >= 60:  # 强烈看空信号
+                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
+                                continue
+                            else:
+                                penalty = int(signal_strength * 0.5)  # 根据强度降低评分
+                                new_score = new_score - penalty
+                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看空, LONG评分降低: {opp['score']} -> {new_score} (-{penalty})")
+                                if new_score < 20:  # 评分太低则跳过
+                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
                                     continue
-                                else:
-                                    new_score = new_score - 30
-                                    logger.info(f"[BIG4-ADJUST] {symbol} 看空信号, LONG评分降低: {opp['score']} -> {new_score}")
-                                    if new_score < 20:  # 评分太低则跳过
-                                        logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
-                                        continue
 
-                            elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
-                                if signal_strength >= 60:  # 强烈看多信号
-                                    logger.info(f"[BIG4-SKIP] {symbol} 强烈看多 (强度{signal_strength}), 跳过SHORT信号 (原评分{new_score})")
+                        elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
+                            if signal_strength >= 60:  # 强烈看多信号
+                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看多 (强度{signal_strength}), 跳过SHORT信号 (原评分{new_score})")
+                                continue
+                            else:
+                                penalty = int(signal_strength * 0.5)  # 根据强度降低评分
+                                new_score = new_score - penalty
+                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看多, SHORT评分降低: {opp['score']} -> {new_score} (-{penalty})")
+                                if new_score < 20:  # 评分太低则跳过
+                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
                                     continue
-                                else:
-                                    new_score = new_score - 30
-                                    logger.info(f"[BIG4-ADJUST] {symbol} 看多信号, SHORT评分降低: {opp['score']} -> {new_score}")
-                                    if new_score < 20:  # 评分太低则跳过
-                                        logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
-                                        continue
 
-                            # 如果信号方向一致,提升评分
-                            elif symbol_signal == 'BULLISH' and new_side == 'LONG':
-                                boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
-                                new_score = new_score + boost
-                                logger.info(f"[BIG4-BOOST] {symbol} 看多信号与LONG方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+                        # 如果信号方向一致,提升评分
+                        elif symbol_signal == 'BULLISH' and new_side == 'LONG':
+                            boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
+                            new_score = new_score + boost
+                            logger.info(f"[BIG4-BOOST] {symbol} 市场看多与LONG方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
 
-                            elif symbol_signal == 'BEARISH' and new_side == 'SHORT':
-                                boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
-                                new_score = new_score + boost
-                                logger.info(f"[BIG4-BOOST] {symbol} 看空信号与SHORT方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+                        elif symbol_signal == 'BEARISH' and new_side == 'SHORT':
+                            boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
+                            new_score = new_score + boost
+                            logger.info(f"[BIG4-BOOST] {symbol} 市场看空与SHORT方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
 
-                            # 更新机会评分 (用于后续记录)
-                            opp['score'] = new_score
-                            opp['big4_adjusted'] = True
-                            opp['big4_signal'] = symbol_signal
-                            opp['big4_strength'] = signal_strength
+                        # 更新机会评分 (用于后续记录)
+                        opp['score'] = new_score
+                        opp['big4_adjusted'] = True
+                        opp['big4_signal'] = symbol_signal
+                        opp['big4_strength'] = signal_strength
 
-                        except Exception as e:
-                            logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
-                            # 失败不影响正常交易流程
+                    except Exception as e:
+                        logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
+                        # 失败不影响正常交易流程
 
                     # 检查同方向是否已有持仓
                     if self.has_position(symbol, new_side):
