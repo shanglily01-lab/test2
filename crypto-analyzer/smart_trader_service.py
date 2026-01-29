@@ -342,12 +342,17 @@ class SmartDecisionBrain:
             else:
                 position_pct = (current - low_72h) / (high_72h - low_72h) * 100
 
-            # 低位做多，高位做空
+            # 低位做多，高位做空 (但要检查量能,避免在破位时做多)
             if position_pct < 30:
-                weight = self.scoring_weights.get('position_low', {'long': 20, 'short': 0})
-                long_score += weight['long']
-                if weight['long'] > 0:
-                    signal_components['position_low'] = weight['long']
+                # 检查是否有强空头量能 (破位信号)
+                net_power_1h_check = (bullish_vol_1h - bearish_vol_1h) / total_vol_1h if total_vol_1h > 0 else 0
+
+                # 如果有强空头量能,不做多 (避免破位时抄底)
+                if net_power_1h_check > -2:  # 没有强空头量能,可以考虑做多
+                    weight = self.scoring_weights.get('position_low', {'long': 20, 'short': 0})
+                    long_score += weight['long']
+                    if weight['long'] > 0:
+                        signal_components['position_low'] = weight['long']
             elif position_pct > 70:
                 weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
                 short_score += weight['short']
@@ -362,16 +367,16 @@ class SmartDecisionBrain:
 
             # 2. 短期动量 - 最近24小时涨幅
             gain_24h = (current - klines_1h[-24]['close']) / klines_1h[-24]['close'] * 100
-            if gain_24h < -3:  # 24小时跌超过3%
-                weight = self.scoring_weights.get('momentum_down_3pct', {'long': 15, 'short': 0})
-                long_score += weight['long']
-                if weight['long'] > 0:
-                    signal_components['momentum_down_3pct'] = weight['long']
-            elif gain_24h > 3:  # 24小时涨超过3%
-                weight = self.scoring_weights.get('momentum_up_3pct', {'long': 0, 'short': 15})
-                short_score += weight['short']
+            if gain_24h < -3:  # 24小时跌超过3% - 看跌信号,应该做空
+                weight = self.scoring_weights.get('momentum_down_3pct', {'long': 0, 'short': 15})  # 修复: 下跌应该增加SHORT评分
+                short_score += weight['short']  # 修复: 改为增加short_score
                 if weight['short'] > 0:
-                    signal_components['momentum_up_3pct'] = weight['short']
+                    signal_components['momentum_down_3pct'] = weight['short']
+            elif gain_24h > 3:  # 24小时涨超过3% - 看涨信号,应该做多
+                weight = self.scoring_weights.get('momentum_up_3pct', {'long': 15, 'short': 0})  # 修复: 上涨应该增加LONG评分
+                long_score += weight['long']  # 修复: 改为增加long_score
+                if weight['long'] > 0:
+                    signal_components['momentum_up_3pct'] = weight['long']
 
             # 3. 1小时趋势评分 - 最近48根K线(2天)
             bullish_1h = sum(1 for k in klines_1h[-48:] if k['close'] > k['open'])
