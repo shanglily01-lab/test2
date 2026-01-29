@@ -596,28 +596,28 @@ class SmartExitOptimizer:
             sampler = exit_plan['sampler']
             evaluation = sampler.is_good_long_exit_price(current_price, entry_price)
 
-            # 条件1: 极佳卖点（评分 >= 95分）
-            if evaluation['score'] >= 95:
-                return True, f"极佳卖点(评分{evaluation['score']}): {evaluation['reason']}"
+            # ===== 智能优化器仅在亏损时介入（止损优化） =====
+            # 盈利订单由正常止盈逻辑处理，不需要优化器提前平仓
+            if evaluation['profit_pct'] < -1.0:
+                # 亏损超过1%，启用止损优化
 
-            # 条件2: 优秀卖点 + 有盈利（评分 >= 85分，盈利 > 0）
-            if evaluation['score'] >= 85 and evaluation['profit_pct'] > 0:
-                return True, f"优秀卖点(评分{evaluation['score']}, 盈利{evaluation['profit_pct']:.2f}%)"
+                # 条件1: 极佳卖点（评分 >= 95分）- 减少亏损
+                if evaluation['score'] >= 95:
+                    return True, f"止损优化-极佳卖点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']:.2f}%): {evaluation['reason']}"
 
-            # 条件3: 突破基线最高价（冲高机会）
-            if float(current_price) >= baseline['max_price'] * 1.001:
-                return True, f"突破基线最高价({baseline['max_price']:.6f})"
+                # 条件2: 优秀卖点（评分 >= 85分）- 减少亏损
+                if evaluation['score'] >= 85:
+                    return True, f"止损优化-优秀卖点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']:.2f}%)"
 
-            # 条件4: 盈利 >= 2% + 价格在P50以上
-            if evaluation['profit_pct'] >= 2.0 and float(current_price) >= baseline['p50']:
-                return True, f"高盈利(+{evaluation['profit_pct']:.2f}%) + 价格在中位数以上"
+                # 条件3: 突破基线最高价（亏损时的反弹机会，减少损失）
+                if float(current_price) >= baseline['max_price'] * 1.001:
+                    return True, f"止损优化-突破基线最高价(亏损{evaluation['profit_pct']:.2f}%)"
 
-            # 条件5: 强下跌趋势预警（趋势转向，快速止盈）
-            if baseline['trend']['direction'] == 'down' and baseline['trend']['strength'] > 0.6:
-                if evaluation['profit_pct'] >= 0.5:  # 有盈利就跑
-                    return True, f"强下跌趋势预警，快速止盈(+{evaluation['profit_pct']:.2f}%)"
+                # 条件4: 强下跌趋势预警（亏损时趋势恶化，提前止损）
+                if baseline['trend']['direction'] == 'down' and baseline['trend']['strength'] > 0.6:
+                    return True, f"止损优化-强下跌趋势预警(亏损{evaluation['profit_pct']:.2f}%)"
 
-            # 条件6: 时间压力（T-10分钟，评分 >= 60分）
+            # 条件5: 时间压力（T-10分钟，无论盈亏都必须平仓）
             if elapsed_minutes >= 20 and evaluation['score'] >= 60:
                 return True, f"接近截止(已{elapsed_minutes:.0f}分钟)，评分{evaluation['score']}"
 
@@ -626,28 +626,28 @@ class SmartExitOptimizer:
             sampler = exit_plan['sampler']
             evaluation = sampler.is_good_short_exit_price(current_price, entry_price)
 
-            # 条件1: 极佳买点（评分 >= 95分）
-            if evaluation['score'] >= 95:
-                return True, f"极佳买点(评分{evaluation['score']}): {evaluation['reason']}"
+            # ===== 智能优化器仅在亏损时介入（止损优化） =====
+            # 盈利订单由正常止盈逻辑处理，不需要优化器提前平仓
+            if evaluation['profit_pct'] < -1.0:
+                # 亏损超过1%，启用止损优化
 
-            # 条件2: 优秀买点 + 有盈利
-            if evaluation['score'] >= 85 and evaluation['profit_pct'] > 0:
-                return True, f"优秀买点(评分{evaluation['score']}, 盈利{evaluation['profit_pct']:.2f}%)"
+                # 条件1: 极佳买点（评分 >= 95分）- 减少亏损
+                if evaluation['score'] >= 95:
+                    return True, f"止损优化-极佳买点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']:.2f}%): {evaluation['reason']}"
 
-            # 条件3: 跌破基线最低价
-            if float(current_price) <= baseline['min_price'] * 0.999:
-                return True, f"跌破基线最低价({baseline['min_price']:.6f})"
+                # 条件2: 优秀买点（评分 >= 85分）- 减少亏损
+                if evaluation['score'] >= 85:
+                    return True, f"止损优化-优秀买点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']:.2f}%)"
 
-            # 条件4: 盈利 >= 2% + 价格在P50以下
-            if evaluation['profit_pct'] >= 2.0 and float(current_price) <= baseline['p50']:
-                return True, f"高盈利(+{evaluation['profit_pct']:.2f}%) + 价格在中位数以下"
+                # 条件3: 跌破基线最低价（亏损时的下探机会，减少损失）
+                if float(current_price) <= baseline['min_price'] * 0.999:
+                    return True, f"止损优化-跌破基线最低价(亏损{evaluation['profit_pct']:.2f}%)"
 
-            # 条件5: 强上涨趋势预警
-            if baseline['trend']['direction'] == 'up' and baseline['trend']['strength'] > 0.6:
-                if evaluation['profit_pct'] >= 0.5:
-                    return True, f"强上涨趋势预警，快速止盈(+{evaluation['profit_pct']:.2f}%)"
+                # 条件4: 强上涨趋势预警（空单亏损时趋势恶化，提前止损）
+                if baseline['trend']['direction'] == 'up' and baseline['trend']['strength'] > 0.6:
+                    return True, f"止损优化-强上涨趋势预警(亏损{evaluation['profit_pct']:.2f}%)"
 
-            # 条件6: 时间压力
+            # 条件5: 时间压力（T-10分钟，无论盈亏都必须平仓）
             if elapsed_minutes >= 20 and evaluation['score'] >= 60:
                 return True, f"接近截止(已{elapsed_minutes:.0f}分钟)，评分{evaluation['score']}"
 
