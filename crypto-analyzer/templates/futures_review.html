@@ -164,11 +164,11 @@
                 </div>
                 <div class="header-actions">
                     <div class="btn-group" role="group" style="margin-right: 12px;">
-                        <button type="button" class="btn btn-sm btn-primary" id="paperTradingBtn" onclick="switchTradingMode('paper')" style="font-size: 13px; padding: 6px 14px;">
-                            <i class="bi bi-journals"></i> 模拟交易
+                        <button type="button" class="btn btn-sm btn-primary" id="usdtMarginBtn" onclick="switchMarginType('usdt')" style="font-size: 13px; padding: 6px 14px;">
+                            <i class="bi bi-currency-dollar"></i> U本位合约
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="liveTradingBtn" onclick="switchTradingMode('live')" style="font-size: 13px; padding: 6px 14px;">
-                            <i class="bi bi-currency-exchange"></i> 实盘交易
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="coinMarginBtn" onclick="switchMarginType('coin')" style="font-size: 13px; padding: 6px 14px;">
+                            <i class="bi bi-coin"></i> 币本位合约
                         </button>
                     </div>
                     <select id="hours-select" class="btn btn-secondary" style="padding: 8px 16px; cursor: pointer;">
@@ -587,26 +587,26 @@
         let hours = 24;
         let tradesPage = 1;
         const pageSize = 100;
-        let currentTradingMode = 'paper'; // 交易模式: paper=模拟, live=实盘
+        let currentMarginType = 'usdt'; // 合约类型: usdt=U本位, coin=币本位
 
-        // 交易模式切换
-        function switchTradingMode(mode) {
-            currentTradingMode = mode;
+        // 合约类型切换
+        function switchMarginType(type) {
+            currentMarginType = type;
 
             // 更新按钮状态
-            const paperBtn = document.getElementById('paperTradingBtn');
-            const liveBtn = document.getElementById('liveTradingBtn');
+            const usdtBtn = document.getElementById('usdtMarginBtn');
+            const coinBtn = document.getElementById('coinMarginBtn');
 
-            if (mode === 'paper') {
-                paperBtn.classList.remove('btn-outline-primary');
-                paperBtn.classList.add('btn-primary');
-                liveBtn.classList.remove('btn-primary');
-                liveBtn.classList.add('btn-outline-primary');
+            if (type === 'usdt') {
+                usdtBtn.classList.remove('btn-outline-primary');
+                usdtBtn.classList.add('btn-primary');
+                coinBtn.classList.remove('btn-primary');
+                coinBtn.classList.add('btn-outline-primary');
             } else {
-                liveBtn.classList.remove('btn-outline-primary');
-                liveBtn.classList.add('btn-primary');
-                paperBtn.classList.remove('btn-primary');
-                paperBtn.classList.add('btn-outline-primary');
+                coinBtn.classList.remove('btn-outline-primary');
+                coinBtn.classList.add('btn-primary');
+                usdtBtn.classList.remove('btn-primary');
+                usdtBtn.classList.add('btn-outline-primary');
             }
 
             // 重新加载所有数据
@@ -748,8 +748,8 @@
             document.getElementById('summaryStats').style.display = 'none';
 
             try {
-                // 根据当前模式选择account_id: 模拟=2, 实盘=1
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                // 根据合约类型选择account_id: U本位=2, 币本位=3
+                const accountId = currentMarginType === 'usdt' ? 2 : 3;
                 const response = await fetch(`/api/futures/review/summary?hours=${hours}&account_id=${accountId}`);
                 const result = await response.json();
 
