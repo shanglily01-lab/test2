@@ -106,8 +106,18 @@ class PriceSampler:
             import requests
             symbol_clean = self.symbol.replace('/', '').upper()
 
+            # 判断是币本位还是U本位合约
+            if self.symbol.endswith('/USD'):
+                # 币本位合约使用 dapi
+                api_url = 'https://dapi.binance.com/dapi/v1/ticker/price'
+                # 币本位API期望格式: BTCUSD_PERP
+                symbol_clean = symbol_clean + '_PERP'
+            else:
+                # U本位合约使用 fapi
+                api_url = 'https://fapi.binance.com/fapi/v1/ticker/price'
+
             response = requests.get(
-                'https://fapi.binance.com/fapi/v1/ticker/price',
+                api_url,
                 params={'symbol': symbol_clean},
                 timeout=3
             )
@@ -115,7 +125,7 @@ class PriceSampler:
             if response.status_code == 200:
                 rest_price = float(response.json()['price'])
                 if rest_price > 0:
-                    logger.debug(f"{self.symbol} 使用REST API价格: {rest_price}")
+                    logger.debug(f"{self.symbol} 使用REST API价格: {rest_price} (from {api_url})")
                     return Decimal(str(rest_price))
         except Exception as e:
             logger.warning(f"{self.symbol} REST API获取失败: {e}")
