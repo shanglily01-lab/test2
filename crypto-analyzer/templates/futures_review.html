@@ -843,7 +843,7 @@
             document.getElementById('tradesContent').style.display = 'none';
 
             try {
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                const accountId = currentMarginType === 'usdt' ? 2 : 3;
                 const response = await fetch(`/api/futures/review/trades?hours=${hours}&account_id=${accountId}&filter_type=${currentFilter}&sort_by=${currentSort}&page=${tradesPage}&page_size=${pageSize}`);
                 const result = await response.json();
 
@@ -893,7 +893,7 @@
             document.getElementById('analysisContent').style.display = 'none';
 
             try {
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                const accountId = currentMarginType === 'usdt' ? 2 : 3;
                 const response = await fetch(`/api/futures/review/analysis?hours=${hours}&account_id=${accountId}`);
                 const result = await response.json();
 
@@ -952,7 +952,7 @@
             document.getElementById('suggestionsContent').style.display = 'none';
 
             try {
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                const accountId = currentMarginType === 'usdt' ? 2 : 3;
                 const response = await fetch(`/api/futures/review/suggestions?hours=${hours}&account_id=${accountId}`);
                 const result = await response.json();
 
@@ -1135,7 +1135,7 @@
             document.getElementById('opportunitiesContent').style.display = 'none';
 
             try {
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                const accountId = currentMarginType === 'usdt' ? 2 : 3;
                 const response = await fetch(`/api/futures/review/realtime-opportunity-analysis?account_id=${accountId}`);
                 const result = await response.json();
 
