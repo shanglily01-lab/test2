@@ -999,12 +999,30 @@ class SmartTraderService:
                 rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
                 logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
 
-                # 使用自适应参数调整仓位大小
+                # 根据Big4市场信号动态调整仓位倍数
+                try:
+                    big4_result = self.big4_detector.detect_market_trend()
+                    market_signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+                    # 根据市场信号决定仓位倍数
+                    if market_signal == 'BULLISH' and side == 'LONG':
+                        position_multiplier = 1.2  # 市场看多,做多加仓
+                        logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
+                    elif market_signal == 'BEARISH' and side == 'SHORT':
+                        position_multiplier = 1.2  # 市场看空,做空加仓
+                        logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
+                    else:
+                        position_multiplier = 1.0  # 其他情况正常仓位
+                        if market_signal != 'NEUTRAL':
+                            logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
+                except Exception as e:
+                    logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                    position_multiplier = 1.0
+
+                # 获取自适应参数
                 if side == 'LONG':
-                    position_multiplier = self.brain.adaptive_long.get('position_size_multiplier', 1.0)
                     adaptive_params = self.brain.adaptive_long
                 else:  # SHORT
-                    position_multiplier = self.brain.adaptive_short.get('position_size_multiplier', 1.0)
                     adaptive_params = self.brain.adaptive_short
 
                 # 应用仓位倍数
@@ -1177,12 +1195,30 @@ class SmartTraderService:
             rating_margin_multiplier = rating_config['margin_multiplier']
             base_position_size = self.position_size_usdt * rating_margin_multiplier
 
-            # 使用自适应参数调整仓位大小
+            # 根据Big4市场信号动态调整仓位倍数
+            try:
+                big4_result = self.big4_detector.detect_market_trend()
+                market_signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+                # 根据市场信号决定仓位倍数
+                if market_signal == 'BULLISH' and side == 'LONG':
+                    position_multiplier = 1.2  # 市场看多,做多加仓
+                    logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
+                elif market_signal == 'BEARISH' and side == 'SHORT':
+                    position_multiplier = 1.2  # 市场看空,做空加仓
+                    logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
+                else:
+                    position_multiplier = 1.0  # 其他情况正常仓位
+                    if market_signal != 'NEUTRAL':
+                        logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
+            except Exception as e:
+                logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                position_multiplier = 1.0
+
+            # 获取自适应参数
             if side == 'LONG':
-                position_multiplier = self.brain.adaptive_long.get('position_size_multiplier', 1.0)
                 adaptive_params = self.brain.adaptive_long
             else:
-                position_multiplier = self.brain.adaptive_short.get('position_size_multiplier', 1.0)
                 adaptive_params = self.brain.adaptive_short
 
             adjusted_position_size = base_position_size * position_multiplier
