@@ -123,7 +123,13 @@ class PriceSampler:
             )
 
             if response.status_code == 200:
-                rest_price = float(response.json()['price'])
+                data = response.json()
+                # 币本位API返回数组，U本位API返回对象
+                if isinstance(data, list) and len(data) > 0:
+                    rest_price = float(data[0]['price'])
+                else:
+                    rest_price = float(data['price'])
+
                 if rest_price > 0:
                     logger.debug(f"{self.symbol} 使用REST API价格: {rest_price} (from {api_url})")
                     return Decimal(str(rest_price))
