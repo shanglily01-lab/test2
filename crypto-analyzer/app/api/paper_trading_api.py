@@ -398,6 +398,93 @@ async def get_trades(account_id: Optional[int] = None, limit: int = 100, engine:
         conn.close()
 
 
+@router.get("/closed-trades")
+async def get_closed_trades(account_id: Optional[int] = None, limit: int = 100, engine: PaperTradingEngine = Depends(get_engine)):
+    """
+    获取已平仓的交易历史记录（仅返回有盈亏的SELL交易）
+
+    Args:
+        account_id: 账户ID
+        limit: 返回数量限制
+
+    Returns:
+        已平仓交易历史列表
+    """
+    conn = engine._get_connection()
+    try:
+        with conn.cursor() as cursor:
+            # 查询所有SELL交易（代表平仓）
+            cursor.execute(
+                """SELECT
+                    t.*,
+                    o.order_source,
+                    COALESCE(
+                        (SELECT p_closed.stop_loss_price
+                         FROM paper_trading_positions p_closed
+                         WHERE p_closed.symbol = t.symbol
+                           AND p_closed.account_id = t.account_id
+                           AND p_closed.status = 'closed'
+                           AND p_closed.last_update_time <= DATE_ADD(t.trade_time, INTERVAL 5 MINUTE)
+                         ORDER BY p_closed.last_update_time DESC
+                         LIMIT 1)
+                    ) as stop_loss_price,
+                    COALESCE(
+                        (SELECT p_closed.take_profit_price
+                         FROM paper_trading_positions p_closed
+                         WHERE p_closed.symbol = t.symbol
+                           AND p_closed.account_id = t.account_id
+                           AND p_closed.status = 'closed'
+                           AND p_closed.last_update_time <= DATE_ADD(t.trade_time, INTERVAL 5 MINUTE)
+                         ORDER BY p_closed.last_update_time DESC
+                         LIMIT 1)
+                    ) as take_profit_price
+                FROM paper_trading_trades t
+                LEFT JOIN paper_trading_orders o ON t.order_id = o.order_id
+                WHERE t.account_id = %s
+                  AND t.side = 'SELL'
+                  AND t.realized_pnl IS NOT NULL
+                ORDER BY t.trade_time DESC
+                LIMIT %s""",
+                (account_id or 1, limit)
+            )
+            trades = cursor.fetchall()
+
+            result = []
+            for trade in trades:
+                result.append({
+                    "trade_id": trade['trade_id'],
+                    "order_id": trade['order_id'],
+                    "symbol": trade['symbol'],
+                    "side": trade['side'],
+                    "price": float(trade['price']),
+                    "quantity": float(trade['quantity']),
+                    "total_amount": float(trade['total_amount']),
+                    "fee": float(trade['fee']),
+                    "realized_pnl": float(trade['realized_pnl']) if trade['realized_pnl'] else 0,
+                    "pnl_pct": float(trade['pnl_pct']) if trade['pnl_pct'] else 0,
+                    "cost_price": float(trade['cost_price']) if trade['cost_price'] else None,
+                    "trade_time": trade['trade_time'].strftime('%Y-%m-%d %H:%M:%S') if trade['trade_time'] else None,
+                    "order_source": trade.get('order_source', 'manual'),
+                    "stop_loss_price": float(trade['stop_loss_price']) if trade.get('stop_loss_price') else None,
+                    "take_profit_price": float(trade['take_profit_price']) if trade.get('take_profit_price') else None
+                })
+
+            return {
+                "success": True,
+                "trades": result,
+                "total_count": len(result)
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取已平仓交易历史失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+
 @router.get("/orders")
 async def get_orders(account_id: Optional[int] = None, limit: int = 100, status: Optional[str] = None, engine: PaperTradingEngine = Depends(get_engine)):
     """

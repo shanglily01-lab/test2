@@ -1679,17 +1679,17 @@
             }
         }
 
-        // 加载交易历史
+        // 加载交易历史（仅显示已平仓的交易）
         async function loadTrades() {
             const container = document.getElementById('trades-list');
             if (!container) {
                 return;
             }
-            
+
             container.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载中...</div></div>';
-            
+
             try {
-                const response = await fetch('/api/paper-trading/trades');
+                const response = await fetch('/api/paper-trading/closed-trades');
                 const data = await response.json();
 
                 if (data.trades && data.trades.length > 0) {
@@ -1779,34 +1779,44 @@
                     }
                     
                     container.innerHTML = data.trades.map(trade => {
-                        const sideClass = trade.side === 'BUY' ? 'badge-success' : 'badge-danger';
-                        const sideText = trade.side === 'BUY' ? '买入' : (trade.side === 'SELL' ? '卖出' : '未知');
-                        const pnlHtml = trade.realized_pnl !== null && trade.realized_pnl !== undefined
-                            ? `<div class="text-sm ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}" style="margin-top: 2px;">盈亏: ${trade.realized_pnl >= 0 ? '+' : ''}${(trade.realized_pnl || 0).toFixed(2)} USDT${trade.pnl_pct !== null && trade.pnl_pct !== undefined ? ` (${trade.pnl_pct >= 0 ? '+' : ''}${(trade.pnl_pct || 0).toFixed(2)}%)` : ''}</div>`
-                            : '';
+                        // 已平仓交易显示
+                        const pnlClass = trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                        const pnlIcon = trade.realized_pnl >= 0 ? '📈' : '📉';
+                        const costPrice = trade.cost_price || 0;
+                        const sellPrice = trade.price || 0;
                         const totalAmount = (trade.total_amount || 0).toFixed(2);
+
                         return `
-                            <div style="padding: 8px; border-bottom: 1px solid var(--border-default);">
+                            <div style="padding: 12px; border-bottom: 1px solid var(--border-default); background: var(--bg-secondary);">
                                 <div class="d-flex justify-between align-center">
                                     <div>
-                                        <span class="badge ${sideClass}">${sideText}</span>
+                                        <span class="badge badge-primary">平仓</span>
                                         <strong style="margin-left: 8px;">${trade.symbol || '-'}</strong>
                                         ${formatOrderSource(trade.order_source)}
                                     </div>
                                     <span class="text-sm text-secondary">${trade.trade_time || '-'}</span>
                                 </div>
-                                <div class="text-sm text-secondary" style="margin-top: 3px;">
-                                    数量: ${trade.quantity || 0} | 价格: ${formatPrice(trade.price)} | 总额: ${totalAmount} USDT
+                                <div class="text-sm" style="margin-top: 6px;">
+                                    <span class="text-secondary">数量:</span> <strong>${trade.quantity || 0}</strong>
+                                </div>
+                                <div class="text-sm" style="margin-top: 3px;">
+                                    <span class="text-secondary">成本价:</span> <strong>${formatPrice(costPrice)}</strong>
+                                    <span class="text-secondary" style="margin-left: 12px;">卖出价:</span> <strong>${formatPrice(sellPrice)}</strong>
+                                </div>
+                                <div class="text-sm" style="margin-top: 3px;">
+                                    <span class="text-secondary">卖出总额:</span> ${totalAmount} USDT
+                                </div>
+                                <div class="text-sm ${pnlClass}" style="margin-top: 6px; font-weight: bold;">
+                                    ${pnlIcon} 盈亏: ${trade.realized_pnl >= 0 ? '+' : ''}${(trade.realized_pnl || 0).toFixed(2)} USDT (${trade.pnl_pct >= 0 ? '+' : ''}${(trade.pnl_pct || 0).toFixed(2)}%)
                                 </div>
                                 <div class="text-sm text-secondary" style="margin-top: 3px;">
                                     ${formatStopLossTakeProfit(trade.stop_loss_price, trade.take_profit_price, trade.order_source)}
                                 </div>
-                                ${pnlHtml}
                             </div>
                         `;
                     }).join('');
                 } else {
-                    container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无交易记录</div></div>';
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无已平仓交易记录</div></div>';
                 }
             } catch (error) {
                 container.innerHTML = `<div class="empty-state"><div class="empty-state-text">加载失败: ${error.message}</div></div>`;
