@@ -121,16 +121,16 @@ class VolatilityCalculator:
             special_adjustments.append('向下偏好+20%')
 
         # 5. 应用安全边界
-        final_sl = max(adjusted_sl, 2.0)  # 最小2%
+        final_sl = max(adjusted_sl, 2.5)  # 最小2.5% (5x杠杆下ROI损失12.5%)
         final_sl = min(final_sl, 15.0)    # 最大15%(避免过于宽松)
 
-        final_tp = max(base_tp, 4.0)      # 最小4% (5x杠杆下ROI 20%)
-        final_tp = min(final_tp, 12.0)    # 最大12% (5x杠杆下ROI 60%)
+        final_tp = max(base_tp, 5.0)      # 最小5% (5x杠杆下ROI 25%)
+        final_tp = min(final_tp, 15.0)    # 最大15% (5x杠杆下ROI 75%)
 
-        # 6. 确保盈亏比不会太差
-        risk_reward = final_tp / final_sl if final_sl > 0 else 0
-        if risk_reward < 0.3:  # 盈亏比低于1:3太差
-            final_tp = final_sl * 0.5  # 至少保证1:2
+        # 6. 确保盈亏比不会太差 (盈亏比 = 止损:止盈 = 风险:收益)
+        risk_reward = final_sl / final_tp if final_tp > 0 else 0
+        if risk_reward > 0.67:  # 盈亏比高于1:1.5太差 (止损不能超过止盈的67%)
+            final_tp = final_sl * 2.0  # 至少保证1:2盈亏比
             special_adjustments.append('盈亏比调整至1:2')
 
         # 7. 生成计算原因
@@ -142,7 +142,7 @@ class VolatilityCalculator:
         if special_adjustments:
             reason_parts.append(', '.join(special_adjustments))
 
-        reason_parts.append(f"盈亏比1:{risk_reward:.2f}")
+        reason_parts.append(f"盈亏比1:{(1/risk_reward if risk_reward > 0 else 0):.2f}")
         reason = ' | '.join(reason_parts)
 
         logger.info(f"{symbol} {position_side} - SL:{final_sl:.2f}% TP:{final_tp:.2f}% - {reason}")
