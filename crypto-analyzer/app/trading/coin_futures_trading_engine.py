@@ -1489,19 +1489,20 @@ class CoinFuturesTradingEngine:
             if positions:
                 try:
                     import requests
+                    # 币本位合约使用 dapi API
                     response = requests.get(
-                        'https://fapi.binance.com/fapi/v1/ticker/price',
+                        'https://dapi.binance.com/dapi/v1/ticker/price',
                         timeout=3
                     )
                     if response.status_code == 200:
                         all_prices = response.json()
                         for item in all_prices:
-                            # 将 BTCUSDT 格式转换为 BTC/USDT 格式
+                            # 将 BTCUSD_PERP 格式转换为 BTC/USD 格式
                             symbol = item['symbol']
-                            if symbol.endswith('USDT'):
-                                formatted_symbol = symbol[:-4] + '/USDT'
+                            if symbol.endswith('USD_PERP'):
+                                formatted_symbol = symbol.replace('USD_PERP', '/USD')
                                 price_cache[formatted_symbol] = Decimal(str(item['price']))
-                        logger.debug(f"批量获取价格成功，共 {len(price_cache)} 个交易对")
+                        logger.debug(f"批量获取币本位价格成功，共 {len(price_cache)} 个交易对")
                 except Exception as e:
                     logger.warning(f"批量获取价格失败，将回退到数据库: {e}")
 
@@ -1518,6 +1519,13 @@ class CoinFuturesTradingEngine:
                     else:
                         # 回退到数据库价格
                         current_price = self.get_current_price(symbol, use_realtime=False)
+
+                    # 如果无法获取价格，使用数据库中的mark_price
+                    if current_price is None:
+                        current_price = pos.get('mark_price')
+                        if current_price is None:
+                            # 如果mark_price也是None，跳过此持仓的盈亏计算
+                            raise ValueError(f"无法获取{symbol}的价格")
 
                     # 对于分批建仓的持仓，使用avg_entry_price，否则使用entry_price
                     entry_price = Decimal(str(pos.get('avg_entry_price') or pos['entry_price']))

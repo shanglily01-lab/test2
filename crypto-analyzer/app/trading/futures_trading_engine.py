@@ -1447,6 +1447,13 @@ class FuturesTradingEngine:
                         # 回退到数据库价格
                         current_price = self.get_current_price(symbol, use_realtime=False)
 
+                    # 如果无法获取价格，使用数据库中的mark_price
+                    if current_price is None:
+                        current_price = pos.get('mark_price')
+                        if current_price is None:
+                            # 如果mark_price也是None，跳过此持仓的盈亏计算
+                            raise ValueError(f"无法获取{symbol}的价格")
+
                     # 对于分批建仓的持仓，使用avg_entry_price，否则使用entry_price
                     entry_price = Decimal(str(pos.get('avg_entry_price') or pos['entry_price']))
                     quantity = Decimal(str(pos['quantity']))
