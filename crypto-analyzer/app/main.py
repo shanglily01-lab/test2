@@ -386,22 +386,14 @@ async def lifespan(app: FastAPI):
 
         # 定义优化任务
         def run_daily_optimization():
-            """执行每日优化"""
+            """执行每日优化（已暂时禁用）"""
             try:
                 logger.info("=" * 80)
-                logger.info("🔧 开始执行每日自我优化...")
-                optimizer = AutoParameterOptimizer(db_config)
-                result = optimizer.optimize_and_update(days=7)
-
-                if result['success']:
-                    logger.info(f"✅ 每日优化完成: {result['message']}")
-                    logger.info(f"   胜率: {result['stats']['win_rate']:.1f}%")
-                    logger.info(f"   平均盈亏比: {result['stats']['avg_profit_loss_ratio']:.2f}")
-                    logger.info(f"   总盈亏: {result['stats']['total_pnl']:.2f} USDT")
-                else:
-                    logger.warning(f"⚠️  优化失败: {result.get('error', '未知错误')}")
-
-                optimizer.close()
+                logger.info("⚠️  每日自我优化功能暂时禁用（AutoParameterOptimizer需要重构）")
+                logger.info("=" * 80)
+                # TODO: 重新实现 AutoParameterOptimizer.optimize_and_update 方法
+                # optimizer = AutoParameterOptimizer(db_config)
+                # result = optimizer.optimize_and_update(days=7)
                 logger.info("=" * 80)
             except Exception as e:
                 logger.error(f"❌ 每日优化任务失败: {e}")
