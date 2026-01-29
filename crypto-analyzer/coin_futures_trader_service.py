@@ -634,7 +634,8 @@ class CoinFuturesTraderService:
             self.smart_entry_executor = SmartEntryExecutor(
                 db_config=self.db_config,
                 live_engine=self,
-                price_service=self.ws_service
+                price_service=self.ws_service,
+                account_id=self.account_id  # 传入币本位account_id=3
             )
             logger.info("✅ 智能分批建仓执行器已启动")
         else:
@@ -646,7 +647,8 @@ class CoinFuturesTraderService:
             self.smart_exit_optimizer = SmartExitOptimizer(
                 db_config=self.db_config,
                 live_engine=self,
-                price_service=self.ws_service
+                price_service=self.ws_service,
+                account_id=self.account_id  # 传入币本位account_id=3
             )
             logger.info("✅ 智能平仓优化器已启动")
         else:

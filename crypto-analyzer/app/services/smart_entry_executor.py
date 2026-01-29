@@ -15,19 +15,24 @@ from app.services.volatility_calculator import get_volatility_calculator
 class SmartEntryExecutor:
     """智能分批建仓执行器"""
 
-    def __init__(self, db_config: dict, live_engine, price_service):
+    def __init__(self, db_config: dict, live_engine, price_service, account_id=None):
         """
         初始化执行器
 
         Args:
             db_config: 数据库配置
-            live_engine: 实盘交易引擎
+            live_engine: 交易引擎（用于同步等操作）
             price_service: 价格服务（WebSocket）
+            account_id: 账户ID（可选，如果不提供则从live_engine获取或默认为2）
         """
         self.db_config = db_config
         self.live_engine = live_engine
         self.price_service = price_service
-        self.account_id = 2  # 模拟盘账户ID
+        # 优先使用传入的account_id，其次从live_engine获取，最后默认为2
+        if account_id is not None:
+            self.account_id = account_id
+        else:
+            self.account_id = getattr(live_engine, 'account_id', 2)
 
         # 分批配置
         self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40%

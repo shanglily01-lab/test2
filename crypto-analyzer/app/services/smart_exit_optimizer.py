@@ -18,18 +18,24 @@ from app.analyzers.kline_strength_scorer import KlineStrengthScorer
 class SmartExitOptimizer:
     """智能平仓优化器（基于实时价格监控 + K线强度衰减检测 + 智能分批平仓）"""
 
-    def __init__(self, db_config: dict, live_engine, price_service):
+    def __init__(self, db_config: dict, live_engine, price_service, account_id=None):
         """
         初始化平仓优化器
 
         Args:
             db_config: 数据库配置
-            live_engine: 实盘引擎（用于执行平仓）
+            live_engine: 交易引擎（用于执行平仓）
             price_service: 价格服务（WebSocket实时价格）
+            account_id: 账户ID（可选，如果不提供则从live_engine获取或默认为2）
         """
         self.db_config = db_config
         self.live_engine = live_engine
         self.price_service = price_service
+        # 优先使用传入的account_id，其次从live_engine获取，最后默认为2
+        if account_id is not None:
+            self.account_id = account_id
+        else:
+            self.account_id = getattr(live_engine, 'account_id', 2)
 
         # 数据库连接池（增加池大小以支持多个并发监控任务）
         # 每个监控任务每秒需要1个连接，预留20个连接支持20个并发持仓监控
