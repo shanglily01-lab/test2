@@ -1420,20 +1420,23 @@ async def get_trades(account_id: int = 3, limit: int = 50, page: int = 1, page_s
 @router.get('/symbols')
 async def get_symbols():
     """
-    获取可交易的币种列表（从配置文件读取）
+    获取可交易的币本位合约交易对列表（从配置文件读取）
 
     Returns:
-        交易对列表
+        币本位合约交易对列表
     """
     try:
-        symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
+        # 读取币本位合约交易对并转换格式
+        coin_symbols = config.get('coin_futures_symbols', ['BTCUSD_PERP', 'ETHUSD_PERP'])
+        # 转换为显示格式: BTCUSD_PERP -> BTC/USD
+        display_symbols = [s.replace('USD_PERP', '/USD') for s in coin_symbols]
         return {
             "success": True,
-            "symbols": symbols,
-            "total": len(symbols)
+            "symbols": display_symbols,
+            "total": len(display_symbols)
         }
     except Exception as e:
-        logger.error(f"获取交易对列表失败: {e}")
+        logger.error(f"获取币本位合约交易对列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

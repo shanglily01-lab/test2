@@ -407,14 +407,14 @@
         </header>
 
         <!-- 功能提示横幅 -->
-        <div style="background: linear-gradient(135deg, rgba(43, 111, 237, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%); border: 1px solid var(--primary-blue); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); display: flex; align-items: center; gap: var(--spacing-md);">
-            <i class="bi bi-info-circle" style="font-size: 24px; color: var(--primary-blue);"></i>
+        <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(43, 111, 237, 0.1) 100%); border: 1px solid var(--success-green); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); display: flex; align-items: center; gap: var(--spacing-md);">
+            <i class="bi bi-check-circle-fill" style="font-size: 24px; color: var(--success-green);"></i>
             <div style="flex: 1;">
                 <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约数据查看模式
+                    <i class="bi bi-currency-bitcoin"></i> 币本位合约交易系统 (Account ID: 3)
                 </div>
                 <div style="font-size: 13px; color: var(--text-secondary);">
-                    当前支持查看币本位合约的实时价格和K线数据。交易功能（开仓、平仓等）即将上线，敬请期待！
+                    支持 BTC/USD, ETH/USD, BNB/USD, SOL/USD, XRP/USD, ADA/USD, DOT/USD, LINK/USD 等币本位永续合约交易。初始资金: $100,000 USDT
                 </div>
             </div>
         </div>
@@ -472,14 +472,9 @@
                     <span id="account-title">账户总览</span>
                 </h2>
                 <div style="display: flex; align-items: center; gap: 12px;">
-                    <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-sm btn-primary" id="paperTradingBtn" onclick="switchTradingMode('paper')" style="font-size: 13px; padding: 6px 14px;">
-                            <i class="bi bi-journals"></i> 模拟交易
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="liveTradingBtn" onclick="switchTradingMode('live')" style="font-size: 13px; padding: 6px 14px;">
-                            <i class="bi bi-currency-exchange"></i> 实盘交易
-                        </button>
-                    </div>
+                    <span class="badge badge-info" style="font-size: 13px; padding: 6px 14px;">
+                        <i class="bi bi-currency-bitcoin"></i> 币本位合约账户 (ID: 3)
+                    </span>
                     <div class="last-update" id="account-update">-</div>
                 </div>
             </div>
@@ -496,7 +491,7 @@
         <!-- Trading Panel and Positions Side by Side -->
         <div class="trading-layout">
             <!-- Trading Panel -->
-            <div class="card slide-up trading-panel-wrapper" style="margin-bottom: 0; display: none;">
+            <div class="card slide-up trading-panel-wrapper" style="margin-bottom: 0;">
                 <div class="card-header">
                     <h2 class="card-title">
                         <i class="bi bi-currency-exchange"></i>
@@ -1103,8 +1098,8 @@
                 // 如果用户输入了价格，则传递限价参数
                 const limitPrice = userPrice && userPrice > 0 ? userPrice : null;
                 
-                // 根据当前模式选择account_id: 模拟=2, 实盘=1
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                // 币本位合约固定使用account_id=3
+                const accountId = 3;
 
                 const response = await fetch(`${API_BASE}/open`, {
                     method: 'POST',
@@ -1167,7 +1162,7 @@
                     // 否则只更新价格和盈亏
                     setTimeout(async () => {
                         try {
-                            const response = await fetch(`${API_BASE}/positions?account_id=2&status=open`);
+                            const response = await fetch(`${API_BASE}/positions?account_id=3&status=open`);
                             const data = await response.json();
                             const positionsBody = document.getElementById('positionsBody');
                             const currentCount = positionsBody ? positionsBody.querySelectorAll('.position-card[data-symbol]').length : 0;
@@ -1386,8 +1381,8 @@
         // 加载账户信息
         async function loadAccount() {
             try {
-                // 根据当前模式选择account_id: 模拟=2, 实盘=1
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                // 币本位合约固定使用account_id=3
+                const accountId = 3;
                 const response = await fetch(`${API_BASE}/account/${accountId}`);
                 const responseText = await response.text();
                 let data;
@@ -1510,8 +1505,8 @@
         // 加载持仓
         async function loadPositions() {
             try {
-                // 根据当前模式选择account_id: 模拟=2, 实盘=1
-                const accountId = currentTradingMode === 'paper' ? 2 : 1;
+                // 币本位合约固定使用account_id=3
+                const accountId = 3;
                 const response = await fetch(`${API_BASE}/positions?account_id=${accountId}&status=open`);
 
                 // 安全解析 JSON
@@ -1898,7 +1893,7 @@
 
             try {
                 // 手动撤单，传递 reason=manual
-                const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}?account_id=2&reason=manual`, {
+                const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}?account_id=3&reason=manual`, {
                     method: 'DELETE'
                 });
 
@@ -1930,7 +1925,7 @@
         // 加载交易记录（从futures_trades表获取，支持分页）
         async function loadTradesPage(page = 1) {
             try {
-                const response = await fetch(`${API_BASE}/trades?account_id=2&page=${page}&page_size=${tradesPageSize}`);
+                const response = await fetch(`${API_BASE}/trades?account_id=3&page=${page}&page_size=${tradesPageSize}`);
                 const responseText = await response.text();
                 let data;
                 try {
