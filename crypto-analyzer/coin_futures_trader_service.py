@@ -606,8 +606,8 @@ class CoinFuturesTraderService:
         self.running = True
         self.event_loop = None  # 事件循环引用，在async_main中设置
 
-        # WebSocket 价格服务
-        self.ws_service: BinanceWSPriceService = get_ws_price_service()
+        # WebSocket 价格服务 (币本位合约)
+        self.ws_service: BinanceWSPriceService = get_ws_price_service(market_type='coin_futures')
 
         # 自适应优化器
         self.optimizer = AdaptiveOptimizer(self.db_config)

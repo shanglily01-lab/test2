@@ -495,16 +495,30 @@ class SmartEntryExecutor:
             adapter = HTTPAdapter(max_retries=retry_strategy)
             session.mount("https://", adapter)
 
-            # 尝试合约API
+            # 根据交易对类型选择API
+            if symbol.endswith('/USD'):
+                # 币本位合约使用dapi
+                api_url = 'https://dapi.binance.com/dapi/v1/ticker/price'
+                symbol_for_api = symbol_clean + '_PERP'
+            else:
+                # U本位合约使用fapi
+                api_url = 'https://fapi.binance.com/fapi/v1/ticker/price'
+                symbol_for_api = symbol_clean
+
             response = session.get(
-                'https://fapi.binance.com/fapi/v1/ticker/price',
-                params={'symbol': symbol_clean},
+                api_url,
+                params={'symbol': symbol_for_api},
                 timeout=3
             )
 
             if response.status_code == 200:
                 data = response.json()
-                rest_price = float(data['price'])
+                # 币本位API返回数组，U本位返回对象
+                if isinstance(data, list) and len(data) > 0:
+                    rest_price = float(data[0]['price'])
+                else:
+                    rest_price = float(data['price'])
+
                 if rest_price > 0:
                     logger.info(f"[价格获取] {symbol} 降级到REST API价格: {rest_price}")
                     return Decimal(str(rest_price))
