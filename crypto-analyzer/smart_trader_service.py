@@ -537,10 +537,17 @@ class SmartDecisionBrain:
                     side = 'SHORT'
                     score = short_score
 
-                # 检查信号黑名单
-                signal_key = f"SMART_BRAIN_{score}_{side}"
-                if signal_key in self.signal_blacklist:
-                    logger.debug(f"{symbol} 信号 {signal_key} 在黑名单中，跳过")
+                # 生成信号组合键用于黑名单检查
+                if signal_components:
+                    sorted_signals = sorted(signal_components.keys())
+                    signal_combination_key = " + ".join(sorted_signals)
+                else:
+                    signal_combination_key = "unknown"
+
+                # 检查信号黑名单 (使用完整的信号组合键)
+                blacklist_key = f"{signal_combination_key}_{side}"
+                if blacklist_key in self.signal_blacklist:
+                    logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（历史表现差）")
                     return None
 
                 return {

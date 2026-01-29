@@ -1,12 +1,12 @@
 {
-  "timestamp": "2026-01-29T05:12:24.229666",
+  "timestamp": "2026-01-29T05:20:50.875511",
   "analysis_period": "24h",
   "actions": [
     {
       "action": "BLACKLIST_SIGNAL",
       "signal_type": "breakdown_short + momentum_down_3pct + position_low + volatility_high + volume_power_1h_bear",
       "side": "LONG",
-      "reason": "24H胜率25.0%,亏损$-584.39"
+      "reason": "24H胜率23.8%,亏损$-654.08"
     },
     {
       "action": "BLACKLIST_SIGNAL",

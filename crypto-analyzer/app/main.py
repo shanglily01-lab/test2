@@ -386,17 +386,78 @@ async def lifespan(app: FastAPI):
 
         # 定义优化任务
         def run_daily_optimization():
-            """执行每日优化（已暂时禁用）"""
+            """执行超级大脑自我优化（每4小时）"""
             try:
+                import subprocess
+                import json
+                from pathlib import Path
+
                 logger.info("=" * 80)
-                logger.info("⚠️  每日自我优化功能暂时禁用（AutoParameterOptimizer需要重构）")
+                logger.info("🧠 开始执行超级大脑自我优化...")
                 logger.info("=" * 80)
-                # TODO: 重新实现 AutoParameterOptimizer.optimize_and_update 方法
-                # optimizer = AutoParameterOptimizer(db_config)
-                # result = optimizer.optimize_and_update(days=7)
+
+                # 1. 运行24小时信号分析
+                logger.info("📊 分析最近24小时信号盈亏...")
+                result = subprocess.run(
+                    ['python', 'analyze_24h_signals.py'],
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5分钟超时
+                )
+
+                if result.returncode != 0:
+                    logger.error(f"❌ 信号分析失败: {result.stderr}")
+                    return
+
+                logger.info("✅ 信号分析完成")
+
+                # 2. 检查是否有优化建议
+                optimization_file = Path('optimization_actions.json')
+                if not optimization_file.exists():
+                    logger.info("ℹ️  未发现需要优化的信号")
+                    return
+
+                # 读取优化建议
+                with open(optimization_file, 'r', encoding='utf-8') as f:
+                    optimization_data = json.load(f)
+
+                actions = optimization_data.get('actions', [])
+                if not actions:
+                    logger.info("ℹ️  没有需要执行的优化操作")
+                    return
+
+                logger.info(f"📋 发现 {len(actions)} 个优化操作待执行")
+
+                # 3. 执行优化
+                logger.info("🔧 执行优化操作...")
+                result = subprocess.run(
+                    ['python', 'execute_brain_optimization.py'],
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+
+                if result.returncode != 0:
+                    logger.error(f"❌ 优化执行失败: {result.stderr}")
+                    return
+
+                logger.info("✅ 超级大脑优化完成")
+
+                # 4. 输出优化结果摘要
+                blacklisted = [a for a in actions if a['action'] == 'BLACKLIST_SIGNAL']
+                threshold_raised = [a for a in actions if a['action'] == 'RAISE_THRESHOLD']
+
+                if blacklisted:
+                    logger.info(f"  🚫 已禁用 {len(blacklisted)} 个低质量信号")
+                if threshold_raised:
+                    logger.info(f"  ⬆️  已提高 {len(threshold_raised)} 个信号阈值")
+
                 logger.info("=" * 80)
+
+            except subprocess.TimeoutExpired:
+                logger.error("❌ 优化任务超时（超过5分钟）")
             except Exception as e:
-                logger.error(f"❌ 每日优化任务失败: {e}")
+                logger.error(f"❌ 超级大脑优化失败: {e}")
                 import traceback
                 logger.error(traceback.format_exc())
 
@@ -411,10 +472,10 @@ async def lifespan(app: FastAPI):
                 await asyncio.sleep(60)  # 每分钟检查一次
 
         daily_optimizer_task = asyncio.create_task(schedule_runner())
-        logger.info("✅ 参数优化服务已启动（每4小时执行一次）")
+        logger.info("✅ 超级大脑自我优化服务已启动（每4小时执行一次）")
 
     except Exception as e:
-        logger.warning(f"⚠️  启动每日优化服务失败: {e}")
+        logger.warning(f"⚠️  启动超级大脑优化服务失败: {e}")
         import traceback
         traceback.print_exc()
 
@@ -454,13 +515,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"⚠️  停止实盘订单监控服务失败: {e}")
 
-    # 停止每日优化服务
+    # 停止超级大脑优化服务
     if daily_optimizer_task:
         try:
             daily_optimizer_task.cancel()
-            logger.info("✅ 每日优化服务已停止")
+            logger.info("✅ 超级大脑优化服务已停止")
         except Exception as e:
-            logger.warning(f"⚠️  停止每日优化服务失败: {e}")
+            logger.warning(f"⚠️  停止超级大脑优化服务失败: {e}")
 
     # 停止信号分析后台服务
     if signal_analysis_service:
