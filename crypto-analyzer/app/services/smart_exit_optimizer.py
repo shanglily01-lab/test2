@@ -125,6 +125,12 @@ class SmartExitOptimizer:
                 # 获取实时价格
                 current_price = await self._get_realtime_price(position['symbol'])
 
+                # 如果无法获取价格，跳过本次检查
+                if current_price is None:
+                    logger.warning(f"持仓{position_id} {position['symbol']} 无法获取价格，跳过本次平仓检查")
+                    await asyncio.sleep(2)  # 等待2秒后重试
+                    continue
+
                 # 计算当前盈亏
                 profit_info = self._calculate_profit(position, current_price)
 
@@ -240,23 +246,40 @@ class SmartExitOptimizer:
             import requests
             symbol_clean = symbol.replace('/', '').upper()
 
+            # 根据交易对类型选择API
+            if symbol.endswith('/USD'):
+                # 币本位合约使用dapi
+                api_url = 'https://dapi.binance.com/dapi/v1/ticker/price'
+                symbol_for_api = symbol_clean + '_PERP'
+            else:
+                # U本位合约使用fapi
+                api_url = 'https://fapi.binance.com/fapi/v1/ticker/price'
+                symbol_for_api = symbol_clean
+
             response = requests.get(
-                'https://fapi.binance.com/fapi/v1/ticker/price',
-                params={'symbol': symbol_clean},
+                api_url,
+                params={'symbol': symbol_for_api},
                 timeout=3
             )
 
             if response.status_code == 200:
-                rest_price = float(response.json()['price'])
+                data = response.json()
+                # 币本位API返回数组，U本位返回对象
+                if isinstance(data, list) and len(data) > 0:
+                    rest_price = float(data[0]['price'])
+                else:
+                    rest_price = float(data['price'])
+
                 if rest_price > 0:
                     logger.info(f"{symbol} 降级到REST API价格: {rest_price}")
                     return Decimal(str(rest_price))
         except Exception as e:
             logger.warning(f"{symbol} REST API获取失败: {e}")
 
-        # 所有方法都失败
-        logger.error(f"{symbol} 所有价格获取方法均失败")
-        return Decimal('0')
+        # 第3级: 使用持仓的最后已知价格（entry_price或mark_price）作为最后保底
+        # 绝对不能返回0，否则会误触发止盈止损
+        logger.error(f"{symbol} WebSocket和REST API都失败，这不应该发生！请检查网络连接")
+        return None  # 返回None表示无法获取价格，让调用方决定如何处理
 
     def _calculate_profit(self, position: Dict, current_price: Decimal) -> Dict:
         """
