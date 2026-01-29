@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-合约交易 API
-Futures Trading API
+币本位合约交易 API
+Coin-Margined Futures Trading API
 
-提供合约交易的HTTP接口：开仓、平仓、查询持仓、基于信号自动开仓
+提供币本位合约交易的HTTP接口：开仓、平仓、查询持仓、基于信号自动开仓
 """
 
 import sys
@@ -19,7 +19,7 @@ from datetime import datetime
 from loguru import logger
 import pymysql
 
-from app.trading.futures_trading_engine import FuturesTradingEngine
+from app.trading.coin_futures_trading_engine import CoinFuturesTradingEngine
 
 try:
     from app.trading.binance_futures_engine import BinanceFuturesEngine
@@ -70,7 +70,7 @@ if BinanceFuturesEngine:
         logger.warning(f"⚠️ Futures API: 实盘引擎初始化失败: {e}")
 
 # 初始化交易引擎（模拟盘不传入trade_notifier，不发送TG通知，传入live_engine以便平仓同步）
-engine = FuturesTradingEngine(db_config, trade_notifier=None, live_engine=live_engine)
+engine = CoinFuturesTradingEngine(db_config, trade_notifier=None, live_engine=live_engine)
 
 
 # ==================== Pydantic Models ====================
@@ -123,7 +123,7 @@ class AutoOpenRequest(BaseModel):
 # ==================== 持仓管理 ====================
 
 @router.get('/positions')
-async def get_positions(account_id: int = 2, status: str = 'open'):
+async def get_positions(account_id: int = 3, status: str = 'open'):
     """
     获取持仓列表
 
@@ -145,7 +145,7 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
                 symbol,
                 position_side,
                 quantity,
-                entry_price,
+                COALESCE(avg_entry_price, entry_price) as entry_price,
                 mark_price as current_price,
                 leverage,
                 margin,
@@ -471,7 +471,7 @@ async def open_position(request: OpenPositionRequest):
 # ==================== 订单管理 ====================
 
 @router.get('/orders')
-async def get_orders(account_id: int = 2, status: str = 'PENDING'):
+async def get_orders(account_id: int = 3, status: str = 'PENDING'):
     """
     获取订单列表
 
@@ -565,7 +565,7 @@ class UpdateOrderStopLossTakeProfitRequest(BaseModel):
 @router.put('/orders/stop-loss-take-profit')
 async def update_order_stop_loss_take_profit(
     request: UpdateOrderStopLossTakeProfitRequest = Body(...),
-    account_id: int = 2
+    account_id: int = 3
 ):
     """
     更新未成交订单的止盈止损价格
@@ -637,7 +637,7 @@ async def update_order_stop_loss_take_profit(
 
 
 @router.delete('/orders/{order_id}')
-async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual'):
+async def cancel_order(order_id: str, account_id: int = 3, reason: str = 'manual'):
     """
     撤销订单（同步撤销模拟盘和实盘订单）
 
@@ -1165,19 +1165,19 @@ async def get_futures_price(symbol: str):
         # 使用较短的超时时间，快速失败并回退
         quick_timeout = ClientTimeout(total=2)  # 2秒快速超时
         
-        # 1. 优先从Binance币本位合约API获取（快速）
+        # 1. 优先从Binance合约API获取（快速）
         try:
             async with aiohttp.ClientSession(timeout=quick_timeout) as session:
                 async with session.get(
-                    'https://dapi.binance.com/dapi/v1/ticker/price',
+                    'https://fapi.binance.com/fapi/v1/ticker/price',
                     params={'symbol': symbol_clean}
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
                         if data and 'price' in data:
                             price = float(data['price'])
-                            source = 'binance_coin_futures'
-                            logger.debug(f"从Binance币本位合约API获取 {symbol} 价格: {price}")
+                            source = 'binance_futures'
+                            logger.debug(f"从Binance合约API获取 {symbol} 价格: {price}")
                             # 成功获取，直接返回
                             return {
                                 'success': True,
@@ -1186,9 +1186,9 @@ async def get_futures_price(symbol: str):
                                 'source': source
                             }
         except (aiohttp.ClientError, aiohttp.ServerTimeoutError, TimeoutError) as e:
-            logger.debug(f"Binance币本位合约API超时或失败: {symbol}, {e}")
+            logger.debug(f"Binance合约API超时或失败: {symbol}, {e}")
         except Exception as e:
-            logger.debug(f"Binance币本位合约API获取失败: {e}")
+            logger.debug(f"Binance合约API获取失败: {e}")
         
         # 2. 如果Binance失败，尝试从Gate.io合约API获取（仅对HYPE/USDT）
         if not price and symbol.upper() == 'HYPE/USDT':
@@ -1271,9 +1271,9 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
     quick_timeout = ClientTimeout(total=3)  # 3秒超时
 
     try:
-        # 1. 从Binance批量获取所有币本位合约价格（单次请求）
+        # 1. 从Binance批量获取所有合约价格（单次请求）
         async with aiohttp.ClientSession(timeout=quick_timeout) as session:
-            async with session.get('https://dapi.binance.com/dapi/v1/ticker/price') as response:
+            async with session.get('https://fapi.binance.com/fapi/v1/ticker/price') as response:
                 if response.status == 200:
                     all_prices = await response.json()
                     # 构建价格映射
@@ -1283,10 +1283,10 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
                         if clean_symbol in price_map:
                             prices[original_symbol] = {
                                 'price': price_map[clean_symbol],
-                                'source': 'binance_coin_futures'
+                                'source': 'binance_futures'
                             }
     except Exception as e:
-        logger.debug(f"批量获取Binance币本位合约价格失败: {e}")
+        logger.debug(f"批量获取Binance价格失败: {e}")
 
     # 2. 对于没有获取到的symbol，尝试其他来源
     missing_symbols = [s for s in symbols if s not in prices]
@@ -1318,7 +1318,7 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
 # ==================== 健康检查 ====================
 
 @router.get('/trades')
-async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_size: int = 10):
+async def get_trades(account_id: int = 3, limit: int = 50, page: int = 1, page_size: int = 10):
     """
     获取交易历史记录
 
@@ -1420,23 +1420,20 @@ async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_s
 @router.get('/symbols')
 async def get_symbols():
     """
-    获取可交易的币本位合约币种列表（从配置文件读取）
+    获取可交易的币种列表（从配置文件读取）
 
     Returns:
-        币本位合约交易对列表
+        交易对列表
     """
     try:
-        # 读取币本位合约交易对
-        coin_symbols = config.get('coin_futures_symbols', ['BTCUSD_PERP', 'ETHUSD_PERP'])
-        # 转换为显示格式: BTCUSD_PERP -> BTC/USD
-        display_symbols = [s.replace('USD_PERP', '/USD') for s in coin_symbols]
+        symbols = config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
         return {
             "success": True,
-            "symbols": display_symbols,
-            "total": len(display_symbols)
+            "symbols": symbols,
+            "total": len(symbols)
         }
     except Exception as e:
-        logger.error(f"获取币本位合约交易对列表失败: {e}")
+        logger.error(f"获取交易对列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
