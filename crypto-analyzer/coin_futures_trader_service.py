@@ -1,0 +1,2463 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+币本位合约智能自动交易服务 - 生产环境版本
+直接在服务器后台运行
+"""
+
+import time
+import sys
+import os
+import asyncio
+from datetime import datetime, time as dt_time, timezone, timedelta
+from decimal import Decimal
+from loguru import logger
+import pymysql
+from dotenv import load_dotenv
+
+# 导入 WebSocket 价格服务和币本位合约交易引擎
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from app.services.binance_ws_price import get_ws_price_service, BinanceWSPriceService
+from app.services.adaptive_optimizer import AdaptiveOptimizer
+from app.services.optimization_config import OptimizationConfig
+from app.services.symbol_rating_manager import SymbolRatingManager
+from app.services.volatility_profile_updater import VolatilityProfileUpdater
+from app.services.smart_entry_executor import SmartEntryExecutor
+from app.services.smart_exit_optimizer import SmartExitOptimizer
+from app.services.big4_trend_detector import Big4TrendDetector
+from app.trading.coin_futures_trading_engine import CoinFuturesTradingEngine
+
+# 加载环境变量
+load_dotenv()
+
+# 配置日志
+logger.remove()
+logger.add(
+    sys.stderr,
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level:8} | {message}",
+    level="INFO"
+)
+logger.add(
+    "logs/coin_futures_trader_{time:YYYY-MM-DD}.log",
+    rotation="00:00",
+    retention="30 days",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level:8} | {message}",
+    level="INFO"
+)
+
+
+class CoinFuturesDecisionBrain:
+    """币本位合约智能决策大脑 - 内嵌版本"""
+
+    def __init__(self, db_config: dict):
+        self.db_config = db_config
+        self.connection = None
+
+        # 从config.yaml加载配置
+        self._load_config()
+
+        self.threshold = 35  # 开仓阈值 (提高到35分,过滤低质量信号,防追高)
+
+    def _load_config(self):
+        """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
+        try:
+            import yaml
+
+            # 1. 从config.yaml加载币本位合约交易对列表
+            with open('config.yaml', 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                coin_symbols = config.get('coin_futures_symbols', [])
+                # 转换格式: BTCUSD_PERP -> BTC/USD
+                all_symbols = [s.replace('USD_PERP', '/USD') for s in coin_symbols]
+
+            # 2. 从数据库加载黑名单
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT symbol FROM trading_blacklist
+                WHERE is_active = TRUE
+                ORDER BY created_at DESC
+            """)
+            blacklist_rows = cursor.fetchall()
+            self.blacklist = [row['symbol'] for row in blacklist_rows] if blacklist_rows else []
+
+            # 3. 从数据库加载自适应参数
+            cursor.execute("""
+                SELECT param_key, param_value
+                FROM adaptive_params
+                WHERE param_type = 'long'
+            """)
+            long_params = {row['param_key']: float(row['param_value']) for row in cursor.fetchall()}
+
+            cursor.execute("""
+                SELECT param_key, param_value
+                FROM adaptive_params
+                WHERE param_type = 'short'
+            """)
+            short_params = {row['param_key']: float(row['param_value']) for row in cursor.fetchall()}
+
+            cursor.close()
+
+            # 4. 构建自适应参数字典
+            self.adaptive_long = {
+                'stop_loss_pct': long_params.get('long_stop_loss_pct', 0.03),
+                'take_profit_pct': long_params.get('long_take_profit_pct', 0.02),
+                'min_holding_minutes': long_params.get('long_min_holding_minutes', 60),
+                'position_size_multiplier': long_params.get('long_position_size_multiplier', 1.0)
+            }
+
+            self.adaptive_short = {
+                'stop_loss_pct': short_params.get('short_stop_loss_pct', 0.03),
+                'take_profit_pct': short_params.get('short_take_profit_pct', 0.02),
+                'min_holding_minutes': short_params.get('short_min_holding_minutes', 60),
+                'position_size_multiplier': short_params.get('short_position_size_multiplier', 1.0)
+            }
+
+            # 5. 从数据库加载信号黑名单
+            self.signal_blacklist = {}
+            try:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT signal_type, position_side
+                    FROM signal_blacklist
+                    WHERE is_active = TRUE
+                """)
+                signal_blacklist_rows = cursor.fetchall()
+                for row in signal_blacklist_rows:
+                    key = f"{row['signal_type']}_{row['position_side']}"
+                    self.signal_blacklist[key] = True
+                cursor.close()
+            except:
+                # 如果表不存在，使用空字典
+                self.signal_blacklist = {}
+
+            # 6. 所有交易对都可以交易（不过滤黑名单）
+            self.whitelist = all_symbols
+
+            logger.info(f"✅ 从数据库加载配置:")
+            logger.info(f"   总交易对: {len(all_symbols)}")
+            logger.info(f"   数据库黑名单: {len(self.blacklist)} 个 (使用100U小仓位)")
+            logger.info(f"   可交易: {len(self.whitelist)} 个")
+            logger.info(f"   📊 自适应参数 (从数据库):")
+            logger.info(f"      LONG止损: {self.adaptive_long['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_long['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_long['min_holding_minutes']:.0f}分钟, 仓位倍数: {self.adaptive_long['position_size_multiplier']:.1f}")
+            logger.info(f"      SHORT止损: {self.adaptive_short['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_short['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_short['min_holding_minutes']:.0f}分钟, 仓位倍数: {self.adaptive_short['position_size_multiplier']:.1f}")
+
+            if self.blacklist:
+                logger.info(f"   ⚠️  黑名单交易对(小仓位): {', '.join(self.blacklist)}")
+
+            if self.signal_blacklist:
+                logger.info(f"   🚫 禁用信号: {len(self.signal_blacklist)} 个")
+
+            # 7. 从数据库加载评分权重
+            self.scoring_weights = {}
+            try:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT signal_component, weight_long, weight_short
+                    FROM signal_scoring_weights
+                    WHERE is_active = TRUE
+                """)
+                weight_rows = cursor.fetchall()
+                for row in weight_rows:
+                    self.scoring_weights[row['signal_component']] = {
+                        'long': float(row['weight_long']),
+                        'short': float(row['weight_short'])
+                    }
+                cursor.close()
+
+                if self.scoring_weights:
+                    logger.info(f"   📊 评分权重: 从数据库加载 {len(self.scoring_weights)} 个组件")
+            except:
+                # 如果表不存在，使用默认权重（硬编码）
+                self.scoring_weights = {
+                    'position_low': {'long': 20, 'short': 0},
+                    'position_mid': {'long': 5, 'short': 5},
+                    'position_high': {'long': 0, 'short': 20},
+                    'momentum_down_3pct': {'long': 15, 'short': 0},
+                    'momentum_up_3pct': {'long': 0, 'short': 15},
+                    'trend_1h_bull': {'long': 20, 'short': 0},
+                    'trend_1h_bear': {'long': 0, 'short': 20},
+                    'volatility_high': {'long': 10, 'short': 10},
+                    'consecutive_bull': {'long': 15, 'short': 0},
+                    'consecutive_bear': {'long': 0, 'short': 15},
+                    'volume_power_bull': {'long': 25, 'short': 0},        # 1H+15M量能多头
+                    'volume_power_bear': {'long': 0, 'short': 25},        # 1H+15M量能空头
+                    'volume_power_1h_bull': {'long': 15, 'short': 0},     # 仅1H量能多头
+                    'volume_power_1h_bear': {'long': 0, 'short': 15},     # 仅1H量能空头
+                    'breakout_long': {'long': 20, 'short': 0},            # 高位突破追涨
+                    'breakdown_short': {'long': 0, 'short': 20},          # 低位破位追空
+                    'trend_1d_bull': {'long': 10, 'short': 0},
+                    'trend_1d_bear': {'long': 0, 'short': 10}
+                }
+                logger.info(f"   📊 评分权重: 使用默认权重")
+
+        except Exception as e:
+            logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
+            self.whitelist = [
+                'BCH/USDT', 'LDO/USDT', 'ENA/USDT', 'WIF/USDT', 'TAO/USDT',
+                'DASH/USDT', 'ETC/USDT', 'VIRTUAL/USDT', 'NEAR/USDT',
+                'AAVE/USDT', 'SUI/USDT', 'UNI/USDT', 'ADA/USDT', 'SOL/USDT'
+            ]
+            self.blacklist = []
+            self.adaptive_long = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
+            self.adaptive_short = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
+
+    def reload_config(self):
+        """重新加载配置 - 供外部调用"""
+        logger.info("🔄 重新加载配置文件...")
+        self._load_config()
+        return len(self.whitelist)
+
+    def _get_connection(self):
+        if self.connection is None or not self.connection.open:
+            self.connection = pymysql.connect(
+                **self.db_config,
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+        else:
+            try:
+                self.connection.ping(reconnect=True)
+            except:
+                self.connection = pymysql.connect(
+                    **self.db_config,
+                    charset='utf8mb4',
+                    cursorclass=pymysql.cursors.DictCursor
+                )
+        return self.connection
+
+    def check_anti_fomo_filter(self, symbol: str, current_price: float, side: str) -> tuple:
+        """
+        防追高/追跌过滤器
+
+        做多防追高: 不在24H区间80%以上位置开多
+        做空防杀跌: 不在24H区间20%以下位置开空
+
+        返回: (是否通过, 原因)
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 检查24H价格位置
+            cursor.execute("""
+                SELECT high_24h, low_24h, change_24h
+                FROM price_stats_24h
+                WHERE symbol = %s
+            """, (symbol,))
+
+            stats_24h = cursor.fetchone()
+            cursor.close()
+
+            if not stats_24h:
+                return True, "无24H数据,跳过过滤"
+
+            high_24h = float(stats_24h['high_24h'])
+            low_24h = float(stats_24h['low_24h'])
+            change_24h = float(stats_24h['change_24h'] or 0)
+
+            # 计算价格在24H区间的位置百分比
+            if high_24h > low_24h:
+                position_pct = (current_price - low_24h) / (high_24h - low_24h) * 100
+            else:
+                position_pct = 50  # 无波动时默认中间位置
+
+            # 做多防追高: 不在高于80%位置开多
+            if side == 'LONG' and position_pct > 80:
+                return False, f"防追高-价格位于24H区间{position_pct:.1f}%位置,距最高仅{(high_24h-current_price)/current_price*100:.2f}%"
+
+            # 做空防杀跌: 不在低于20%位置开空
+            if side == 'SHORT' and position_pct < 20:
+                return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%位置,距最低仅{(current_price-low_24h)/current_price*100:.2f}%"
+
+            # 额外检查: 24H大涨且在高位 → 更严格
+            if side == 'LONG' and change_24h > 15 and position_pct > 70:
+                return False, f"防追高-24H涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
+
+            # 额外检查: 24H大跌且在低位 → 更严格
+            if side == 'SHORT' and change_24h < -15 and position_pct < 30:
+                return False, f"防杀跌-24H跌{change_24h:+.2f}%且位于{position_pct:.1f}%低位"
+
+            return True, f"位置{position_pct:.1f}%,24H{change_24h:+.2f}%"
+
+        except Exception as e:
+            logger.error(f"防追高检查失败 {symbol}: {e}")
+            return True, "检查失败,放行"
+
+    def load_klines(self, symbol: str, timeframe: str, limit: int = 100):
+        conn = self._get_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        query = """
+            SELECT open_price as open, high_price as high,
+                   low_price as low, close_price as close,
+                   volume
+            FROM kline_data
+            WHERE symbol = %s AND timeframe = %s
+            AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 60 DAY)) * 1000
+            ORDER BY open_time DESC LIMIT %s
+        """
+        cursor.execute(query, (symbol, timeframe, limit))
+        klines = list(cursor.fetchall())
+        cursor.close()
+
+        klines.reverse()
+        for k in klines:
+            k['open'] = float(k['open'])
+            k['high'] = float(k['high'])
+            k['low'] = float(k['low'])
+            k['close'] = float(k['close'])
+            k['volume'] = float(k['volume'])
+
+        return klines
+
+    def analyze(self, symbol: str):
+        """分析并决策 - 支持做多和做空 (主要使用1小时K线)"""
+        if symbol not in self.whitelist:
+            return None
+
+        try:
+            klines_1d = self.load_klines(symbol, '1d', 50)
+            klines_1h = self.load_klines(symbol, '1h', 100)
+            klines_15m = self.load_klines(symbol, '15m', 96)  # 24小时的15分钟K线
+
+            if len(klines_1d) < 30 or len(klines_1h) < 72 or len(klines_15m) < 48:  # 至少需要72小时(3天)数据
+                return None
+
+            current = klines_1h[-1]['close']
+
+            # 分别计算做多和做空得分
+            long_score = 0
+            short_score = 0
+
+            # 记录信号组成 (用于后续性能分析)
+            signal_components = {}
+
+            # ========== 1小时K线分析 (主要) ==========
+
+            # 1. 位置评分 - 使用72小时(3天)高低点
+            high_72h = max(k['high'] for k in klines_1h[-72:])
+            low_72h = min(k['low'] for k in klines_1h[-72:])
+
+            if high_72h == low_72h:
+                position_pct = 50
+            else:
+                position_pct = (current - low_72h) / (high_72h - low_72h) * 100
+
+            # 低位做多，高位做空 (但要检查量能,避免在破位时做多)
+            if position_pct < 30:
+                # 检查是否有强空头量能 (破位信号)
+                net_power_1h_check = (bullish_vol_1h - bearish_vol_1h) / total_vol_1h if total_vol_1h > 0 else 0
+
+                # 如果有强空头量能,不做多 (避免破位时抄底)
+                if net_power_1h_check > -2:  # 没有强空头量能,可以考虑做多
+                    weight = self.scoring_weights.get('position_low', {'long': 20, 'short': 0})
+                    long_score += weight['long']
+                    if weight['long'] > 0:
+                        signal_components['position_low'] = weight['long']
+            elif position_pct > 70:
+                weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['position_high'] = weight['short']
+            else:
+                weight = self.scoring_weights.get('position_mid', {'long': 5, 'short': 5})
+                long_score += weight['long']
+                short_score += weight['short']
+                if weight['long'] > 0:
+                    signal_components['position_mid'] = weight['long']
+
+            # 2. 短期动量 - 最近24小时涨幅
+            gain_24h = (current - klines_1h[-24]['close']) / klines_1h[-24]['close'] * 100
+            if gain_24h < -3:  # 24小时跌超过3% - 看跌信号,应该做空
+                weight = self.scoring_weights.get('momentum_down_3pct', {'long': 0, 'short': 15})  # 修复: 下跌应该增加SHORT评分
+                short_score += weight['short']  # 修复: 改为增加short_score
+                if weight['short'] > 0:
+                    signal_components['momentum_down_3pct'] = weight['short']
+            elif gain_24h > 3:  # 24小时涨超过3% - 看涨信号,应该做多
+                weight = self.scoring_weights.get('momentum_up_3pct', {'long': 15, 'short': 0})  # 修复: 上涨应该增加LONG评分
+                long_score += weight['long']  # 修复: 改为增加long_score
+                if weight['long'] > 0:
+                    signal_components['momentum_up_3pct'] = weight['long']
+
+            # 3. 1小时趋势评分 - 最近48根K线(2天)
+            bullish_1h = sum(1 for k in klines_1h[-48:] if k['close'] > k['open'])
+            bearish_1h = 48 - bullish_1h
+
+            if bullish_1h > 30:  # 超过62.5%是阳线
+                weight = self.scoring_weights.get('trend_1h_bull', {'long': 20, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['trend_1h_bull'] = weight['long']
+            elif bearish_1h > 30:  # 超过62.5%是阴线
+                weight = self.scoring_weights.get('trend_1h_bear', {'long': 0, 'short': 20})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['trend_1h_bear'] = weight['short']
+
+            # 4. 波动率评分 - 最近24小时
+            recent_24h = klines_1h[-24:]
+            volatility = (max(k['high'] for k in recent_24h) - min(k['low'] for k in recent_24h)) / current * 100
+
+            # 高波动率更适合交易
+            if volatility > 5:  # 波动超过5%
+                weight = self.scoring_weights.get('volatility_high', {'long': 10, 'short': 10})
+                if long_score > short_score:
+                    long_score += weight['long']
+                    if weight['long'] > 0:
+                        signal_components['volatility_high'] = weight['long']
+                else:
+                    short_score += weight['short']
+                    if weight['short'] > 0:
+                        signal_components['volatility_high'] = weight['short']
+
+            # 5. 连续趋势强化信号 - 最近10根1小时K线
+            recent_10h = klines_1h[-10:]
+            bullish_10h = sum(1 for k in recent_10h if k['close'] > k['open'])
+            bearish_10h = 10 - bullish_10h
+
+            # 计算最近10小时涨跌幅
+            gain_10h = (current - recent_10h[0]['close']) / recent_10h[0]['close'] * 100
+
+            # 连续阳线且上涨幅度适中(不在顶部) - 强做多信号
+            if bullish_10h >= 7 and gain_10h < 5 and position_pct < 70:
+                weight = self.scoring_weights.get('consecutive_bull', {'long': 15, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['consecutive_bull'] = weight['long']
+
+            # 连续阴线且下跌幅度适中(不在底部) - 强做空信号
+            elif bearish_10h >= 7 and gain_10h > -5 and position_pct > 30:
+                weight = self.scoring_weights.get('consecutive_bear', {'long': 0, 'short': 15})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['consecutive_bear'] = weight['short']
+
+            # ========== 量能加权K线分析 (核心趋势判断) ==========
+
+            # 6. 1小时K线量能分析 - 最近24根(1天)
+            volumes_1h = [k['volume'] for k in klines_1h[-24:]]
+            avg_volume_1h = sum(volumes_1h) / len(volumes_1h) if volumes_1h else 1
+
+            strong_bull_1h = 0  # 有力量的阳线
+            strong_bear_1h = 0  # 有力量的阴线
+
+            for k in klines_1h[-24:]:
+                is_bull = k['close'] > k['open']
+                is_high_volume = k['volume'] > avg_volume_1h * 1.2  # 成交量 > 1.2倍平均量
+
+                if is_bull and is_high_volume:
+                    strong_bull_1h += 1
+                elif not is_bull and is_high_volume:
+                    strong_bear_1h += 1
+
+            net_power_1h = strong_bull_1h - strong_bear_1h
+
+            # 7. 15分钟K线量能分析 - 最近24根(6小时)
+            volumes_15m = [k['volume'] for k in klines_15m[-24:]]
+            avg_volume_15m = sum(volumes_15m) / len(volumes_15m) if volumes_15m else 1
+
+            strong_bull_15m = 0
+            strong_bear_15m = 0
+
+            for k in klines_15m[-24:]:
+                is_bull = k['close'] > k['open']
+                is_high_volume = k['volume'] > avg_volume_15m * 1.2
+
+                if is_bull and is_high_volume:
+                    strong_bull_15m += 1
+                elif not is_bull and is_high_volume:
+                    strong_bear_15m += 1
+
+            net_power_15m = strong_bull_15m - strong_bear_15m
+
+            # 量能多头信号: 1H和15M都显示强力多头
+            if net_power_1h >= 2 and net_power_15m >= 2:
+                weight = self.scoring_weights.get('volume_power_bull', {'long': 25, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['volume_power_bull'] = weight['long']
+                    logger.info(f"{symbol} 量能多头强势: 1H净力量={net_power_1h}, 15M净力量={net_power_15m}")
+
+            # 量能空头信号: 1H和15M都显示强力空头
+            elif net_power_1h <= -2 and net_power_15m <= -2:
+                weight = self.scoring_weights.get('volume_power_bear', {'long': 0, 'short': 25})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['volume_power_bear'] = weight['short']
+                    logger.info(f"{symbol} 量能空头强势: 1H净力量={net_power_1h}, 15M净力量={net_power_15m}")
+
+            # 单一时间框架量能信号 (辅助)
+            elif net_power_1h >= 3:  # 仅1H强力多头
+                weight = self.scoring_weights.get('volume_power_1h_bull', {'long': 15, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['volume_power_1h_bull'] = weight['long']
+            elif net_power_1h <= -3:  # 仅1H强力空头
+                weight = self.scoring_weights.get('volume_power_1h_bear', {'long': 0, 'short': 15})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['volume_power_1h_bear'] = weight['short']
+
+            # 8. 突破追涨信号: position_high + 强力量能多头 → 可以做多
+            # 用户反馈: "不适合做空，那就适合做多啊", "K线多空比，还要结合量能一起看"
+            if position_pct > 70 and (net_power_1h >= 2 or (net_power_1h >= 2 and net_power_15m >= 2)):
+                # position_high时有强力量能支撑,可以追涨做多
+                weight = self.scoring_weights.get('breakout_long', {'long': 20, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['breakout_long'] = weight['long']
+                    logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
+
+            # 9. 破位追空信号: position_low + 强力量能空头 → 可以做空
+            elif position_pct < 30 and (net_power_1h <= -2 or (net_power_1h <= -2 and net_power_15m <= -2)):
+                # position_low时有强力量能压制,可以追空做空
+                weight = self.scoring_weights.get('breakdown_short', {'long': 0, 'short': 20})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['breakdown_short'] = weight['short']
+                    logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
+
+            # ========== 1天K线确认 (辅助) ==========
+
+            # 大趋势确认: 如果30天趋势与1小时趋势一致，加分
+            bullish_1d = sum(1 for k in klines_1d[-30:] if k['close'] > k['open'])
+            bearish_1d = 30 - bullish_1d
+
+            if bullish_1d > 18 and long_score > short_score:  # 大趋势上涨且1小时也看多
+                weight = self.scoring_weights.get('trend_1d_bull', {'long': 10, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['trend_1d_bull'] = weight['long']
+            elif bearish_1d > 18 and short_score > long_score:  # 大趋势下跌且1小时也看空
+                weight = self.scoring_weights.get('trend_1d_bear', {'long': 0, 'short': 10})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['trend_1d_bear'] = weight['short']
+
+            # 选择得分更高的方向 (只要达到阈值就可以)
+            if long_score >= self.threshold or short_score >= self.threshold:
+                if long_score >= short_score:
+                    side = 'LONG'
+                    score = long_score
+                else:
+                    side = 'SHORT'
+                    score = short_score
+
+                # 生成信号组合键用于黑名单检查
+                if signal_components:
+                    sorted_signals = sorted(signal_components.keys())
+                    signal_combination_key = " + ".join(sorted_signals)
+                else:
+                    signal_combination_key = "unknown"
+
+                # 检查信号黑名单 (使用完整的信号组合键)
+                blacklist_key = f"{signal_combination_key}_{side}"
+                if blacklist_key in self.signal_blacklist:
+                    logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（历史表现差）")
+                    return None
+
+                return {
+                    'symbol': symbol,
+                    'side': side,
+                    'score': score,
+                    'current_price': current,
+                    'signal_components': signal_components  # 添加信号组成
+                }
+
+            return None
+
+        except Exception as e:
+            logger.error(f"{symbol} 分析失败: {e}")
+            return None
+
+    def scan_all(self):
+        """扫描所有币种"""
+        opportunities = []
+        for symbol in self.whitelist:
+            result = self.analyze(symbol)
+            if result:
+                opportunities.append(result)
+        return opportunities
+
+
+class CoinFuturesTraderService:
+    """币本位合约智能交易服务"""
+
+    def __init__(self):
+        self.db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': int(os.getenv('DB_PORT', '3306')),
+            'user': os.getenv('DB_USER', 'root'),
+            'password': os.getenv('DB_PASSWORD', ''),
+            'database': os.getenv('DB_NAME', 'binance-data')
+        }
+
+        self.account_id = 3
+        self.position_size_usdt = 400  # 默认仓位
+        self.blacklist_position_size_usdt = 100  # 黑名单交易对使用小仓位
+        self.max_positions = 999  # 不限制持仓数量
+        self.leverage = 5
+        self.scan_interval = 300
+
+        self.brain = CoinFuturesDecisionBrain(self.db_config)
+        self.connection = None
+        self.running = True
+        self.event_loop = None  # 事件循环引用，在async_main中设置
+
+        # WebSocket 价格服务
+        self.ws_service: BinanceWSPriceService = get_ws_price_service()
+
+        # 自适应优化器
+        self.optimizer = AdaptiveOptimizer(self.db_config)
+        self.last_optimization_date = None  # 记录上次优化日期
+
+        # 优化配置管理器 (支持自我优化的参数配置)
+        self.opt_config = OptimizationConfig(self.db_config)
+
+        # 交易对评级管理器 (3级黑名单制度)
+        self.rating_manager = SymbolRatingManager(self.db_config)
+
+        # 波动率配置更新器 (15M K线动态止盈)
+        self.volatility_updater = VolatilityProfileUpdater(self.db_config)
+
+        # 加载分批建仓和智能平仓配置
+        import yaml
+        with open('config.yaml', 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+            self.batch_entry_config = config.get('signals', {}).get('batch_entry', {'enabled': False})
+            self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
+
+        # 初始化智能分批建仓执行器
+        if self.batch_entry_config.get('enabled'):
+            self.smart_entry_executor = SmartEntryExecutor(
+                db_config=self.db_config,
+                live_engine=self,
+                price_service=self.ws_service
+            )
+            logger.info("✅ 智能分批建仓执行器已启动")
+        else:
+            self.smart_entry_executor = None
+            logger.info("⚠️ 智能分批建仓未启用")
+
+        # 初始化智能平仓优化器
+        if self.smart_exit_config.get('enabled'):
+            self.smart_exit_optimizer = SmartExitOptimizer(
+                db_config=self.db_config,
+                live_engine=self,
+                price_service=self.ws_service
+            )
+            logger.info("✅ 智能平仓优化器已启动")
+        else:
+            self.smart_exit_optimizer = None
+            logger.info("⚠️ 智能平仓优化器未启用")
+
+        # 初始化Big4趋势检测器 (四大天王: BTC/ETH/BNB/SOL)
+        self.big4_detector = Big4TrendDetector()
+        self.big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+        logger.info("🔱 Big4趋势检测器已启动 (仅应用于四大天王)")
+
+        logger.info("=" * 60)
+        logger.info("币本位合约智能自动交易服务已启动")
+        logger.info(f"账户ID: {self.account_id}")
+        logger.info(f"仓位: 正常${self.position_size_usdt} / 黑名单${self.blacklist_position_size_usdt} | 杠杆: {self.leverage}x | 最大持仓: {self.max_positions}")
+        logger.info(f"白名单: {len(self.brain.whitelist)}个币种 | 黑名单: {len(self.brain.blacklist)}个币种 | 扫描间隔: {self.scan_interval}秒")
+        logger.info("🧠 自适应优化器已启用 (每日凌晨2点自动运行)")
+        logger.info("🔧 优化配置管理器已启用 (支持4大优化问题的自我配置)")
+        logger.info("=" * 60)
+
+    def _get_connection(self):
+        if self.connection is None or not self.connection.open:
+            self.connection = pymysql.connect(**self.db_config, autocommit=True)
+        else:
+            try:
+                self.connection.ping(reconnect=True)
+            except:
+                self.connection = pymysql.connect(**self.db_config, autocommit=True)
+        return self.connection
+
+    def get_current_price(self, symbol: str):
+        """获取当前价格 - 优先WebSocket实时价,回退到5m K线"""
+        try:
+            # 优先从WebSocket获取实时价格(与SmartExitOptimizer检查止盈时用同一价格源,避免止盈缩水)
+            if self.ws_service:
+                ws_price = self.ws_service.get_price(symbol)
+                if ws_price and ws_price > 0:
+                    logger.debug(f"[PRICE] {symbol} 使用WebSocket实时价: {ws_price}")
+                    return ws_price
+                else:
+                    logger.debug(f"[PRICE] {symbol} WebSocket价格无效,回退到K线")
+
+            # 回退到5分钟K线
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT close_price, open_time
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '5m'
+                ORDER BY open_time DESC LIMIT 1
+            """, (symbol,))
+            result = cursor.fetchone()
+            cursor.close()
+
+            if not result:
+                logger.warning(f"[PRICE] {symbol} K线数据不存在")
+                return None
+
+            close_price, open_time = result
+
+            # 检查数据新鲜度: 5m K线数据不能超过10分钟前
+            import time
+            current_timestamp_ms = int(time.time() * 1000)
+            data_age_minutes = (current_timestamp_ms - open_time) / 1000 / 60
+
+            if data_age_minutes > 10:
+                logger.warning(
+                    f"[DATA_STALE] {symbol} K线数据过时! "
+                    f"最新K线时间: {data_age_minutes:.1f}分钟前, 拒绝使用"
+                )
+                return None
+
+            logger.debug(f"[PRICE] {symbol} 使用K线价格: {close_price} (数据年龄: {data_age_minutes:.1f}分钟)")
+            return float(close_price)
+        except Exception as e:
+            logger.error(f"[ERROR] 获取{symbol}价格失败: {e}")
+            return None
+
+    def get_open_positions_count(self):
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COUNT(*) FROM futures_positions
+                WHERE status = 'open' AND account_id = %s
+            """, (self.account_id,))
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0] if result else 0
+        except:
+            return 0
+
+    def has_position(self, symbol: str, side: str = None):
+        """
+        检查是否有持仓
+        symbol: 交易对
+        side: 方向(LONG/SHORT), None表示检查任意方向
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            if side:
+                # 检查特定方向的持仓（包括正在建仓的持仓）
+                cursor.execute("""
+                    SELECT COUNT(*) FROM futures_positions
+                    WHERE symbol = %s AND position_side = %s AND status IN ('open', 'building') AND account_id = %s
+                """, (symbol, side, self.account_id))
+            else:
+                # 检查任意方向的持仓（包括正在建仓的持仓）
+                cursor.execute("""
+                    SELECT COUNT(*) FROM futures_positions
+                    WHERE symbol = %s AND status IN ('open', 'building') AND account_id = %s
+                """, (symbol, self.account_id))
+
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0] > 0 if result else False
+        except:
+            return False
+
+    def validate_signal_timeframe(self, signal_components: dict, side: str, symbol: str) -> tuple:
+        """
+        验证信号组合的时间框架一致性
+
+        Returns:
+            (is_valid, reason) - 是否有效,原因描述
+        """
+        if not signal_components:
+            return True, "无信号组件"
+
+        # 提取趋势信号
+        has_1h_bull = 'trend_1h_bull' in signal_components
+        has_1h_bear = 'trend_1h_bear' in signal_components
+        has_1d_bull = 'trend_1d_bull' in signal_components
+        has_1d_bear = 'trend_1d_bear' in signal_components
+
+        # 规则1: 做多时,1小时必须不能看跌
+        if side == 'LONG' and has_1h_bear:
+            return False, "时间框架冲突: 做多但1H看跌"
+
+        # 规则2: 做空时,1小时必须不能看涨
+        if side == 'SHORT' and has_1h_bull:
+            return False, "时间框架冲突: 做空但1H看涨"
+
+        # 规则3: 多空方向的日线趋势不能相反
+        # 注意: 允许日线中性(既没有bull也没有bear)
+        if side == 'LONG' and has_1d_bear:
+            return False, "时间框架冲突: 做多但1D看跌"
+
+        if side == 'SHORT' and has_1d_bull:
+            return False, "时间框架冲突: 做空但1D看涨"
+
+        return True, "时间框架一致"
+
+    def calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
+        """
+        根据波动率调整止损百分比
+
+        Args:
+            signal_components: 信号组件
+            base_stop_loss_pct: 基础止损百分比(如0.02)
+
+        Returns:
+            调整后的止损百分比
+        """
+        # 检查是否包含高波动信号
+        has_high_volatility = 'volatility_high' in signal_components
+
+        if has_high_volatility:
+            # 高波动环境: 扩大止损到1.5倍(2% -> 3%)
+            adjusted_sl = base_stop_loss_pct * 1.5
+            logger.info(f"[VOLATILITY_ADJUST] 高波动环境,止损从{base_stop_loss_pct*100:.1f}%扩大到{adjusted_sl*100:.1f}%")
+            return adjusted_sl
+
+        return base_stop_loss_pct
+
+    def validate_position_high_signal(self, symbol: str, signal_components: dict, side: str) -> tuple:
+        """
+        缺陷2修复: 增强position_high信号验证
+
+        position_high单独不足以确认顶部,需要额外确认:
+        1. 更长周期的位置检查(7天而非3天)
+        2. 涨幅是否已经放缓(连续上影线)
+        3. 是否有momentum_up信号(避免加速上涨时做空)
+
+        Returns:
+            (is_valid, reason)
+        """
+        # 只检查包含position_high的做空信号
+        if side != 'SHORT' or 'position_high' not in signal_components:
+            return True, "不是position_high做空"
+
+        try:
+            # 检查1: 是否伴随momentum_up(涨势)信号
+            # 如果价格还在上涨3%+,说明动能未衰竭,不适合做空
+            has_momentum_up = 'momentum_up_3pct' in signal_components
+            if has_momentum_up:
+                return False, "position_high但伴随momentum_up_3pct,动能未衰竭"
+
+            # 检查2: 加载最近的K线,检查是否有顶部特征
+            klines_1h = self.brain.load_klines(symbol, '1h', 24)
+            if len(klines_1h) < 10:
+                return True, "K线数据不足,跳过验证"
+
+            # 计算最近10根K线的上影线比例
+            recent_10 = klines_1h[-10:]
+            upper_shadow_count = 0
+            for k in recent_10:
+                body_high = max(k['open'], k['close'])
+                upper_shadow = k['high'] - body_high
+                body_size = abs(k['close'] - k['open'])
+
+                # 上影线 > 实体的50% 认为是上影线K线
+                if body_size > 0 and upper_shadow / body_size > 0.5:
+                    upper_shadow_count += 1
+
+            upper_shadow_ratio = upper_shadow_count / 10
+
+            # 如果最近10根K线上影线<30%,说明买盘还很强,不适合做空
+            if upper_shadow_ratio < 0.3:
+                return False, f"position_high但上影线比例仅{upper_shadow_ratio*100:.0f}%,买盘未衰竭"
+
+            # 缺陷4修复: 检查成交量是否萎缩(顶部特征)
+            recent_5 = klines_1h[-5:]
+            earlier_5 = klines_1h[-10:-5]
+
+            recent_volume = sum([float(k.get('volume', 0)) for k in recent_5])
+            earlier_volume = sum([float(k.get('volume', 0)) for k in earlier_5])
+
+            if recent_volume > 0 and earlier_volume > 0:
+                volume_ratio = recent_volume / earlier_volume
+
+                # 如果最近5根K线成交量 > 之前5根的1.2倍,说明成交量在放大,不是顶部
+                if volume_ratio > 1.2:
+                    return False, f"position_high但成交量放大{volume_ratio:.2f}倍,非顶部特征"
+
+                logger.info(f"[VOLUME_CHECK] {symbol} 成交量比例{volume_ratio:.2f},符合顶部萎缩特征")
+
+            logger.info(f"[POSITION_HIGH_VALID] {symbol} 上影线{upper_shadow_ratio*100:.0f}%,顶部特征明显")
+            return True, "position_high验证通过"
+
+        except Exception as e:
+            logger.warning(f"[POSITION_HIGH_CHECK] {symbol} 验证失败: {e},默认通过")
+            return True, "验证异常,默认通过"
+
+    def open_position(self, opp: dict):
+        """开仓 - 支持做多和做空，支持分批建仓，使用 WebSocket 实时价格"""
+        symbol = opp['symbol']
+        side = opp['side']  # 'LONG' 或 'SHORT'
+
+        # ========== 第一步：验证信号（无论用哪种开仓方式都要验证） ==========
+        signal_components = opp.get('signal_components', {})
+
+        # 缺陷1修复: 验证时间框架一致性
+        is_valid, reason = self.validate_signal_timeframe(signal_components, side, symbol)
+        if not is_valid:
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
+            return False
+
+        # 缺陷2修复: position_high信号额外验证
+        is_valid, reason = self.validate_position_high_signal(symbol, signal_components, side)
+        if not is_valid:
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
+            return False
+
+        # 新增验证: 检查是否在平仓后冷却期内(1小时)
+        if self.check_recent_close(symbol, side, cooldown_minutes=60):
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后1小时冷却期内")
+            return False
+
+        # 新增验证: 防追高/追跌过滤
+        current_price = self.ws_service.get_price(symbol)
+        if current_price:
+            pass_filter, filter_reason = self.brain.check_anti_fomo_filter(symbol, current_price, side)
+            if not pass_filter:
+                logger.warning(f"[ANTI-FOMO] {symbol} {side} - {filter_reason}")
+                return False
+            else:
+                logger.info(f"[ANTI-FOMO] {symbol} {side} 通过防追高检查: {filter_reason}")
+
+        # ========== 第二步：决定使用分批建仓还是一次性开仓 ==========
+        # 检查是否启用分批建仓
+        if self.smart_entry_executor and self.batch_entry_config.get('enabled'):
+            # 检查是否在白名单中（如果白名单为空，则对所有币种启用）
+            whitelist = self.batch_entry_config.get('whitelist_symbols', [])
+            should_use_batch = (not whitelist) or (symbol in whitelist)
+
+            # 反转开仓不使用分批建仓（直接一次性开仓）
+            is_reversal = 'reversal_from' in opp
+
+            if should_use_batch and not is_reversal:
+                logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓（后台异步执行）")
+                # 在后台异步执行分批建仓，不阻塞主循环
+                import asyncio
+                try:
+                    # 使用保存的事件循环引用
+                    if self.event_loop:
+                        # 在后台创建任务，不等待完成
+                        asyncio.run_coroutine_threadsafe(
+                            self._open_position_with_batch(opp),
+                            self.event_loop
+                        )
+                        logger.info(f"[BATCH_ENTRY] {symbol} {side} 分批建仓任务已启动（后台运行60分钟）")
+                        return True  # 立即返回，不阻塞
+                    else:
+                        logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 事件循环未初始化，降级到一次性开仓")
+                except Exception as e:
+                    logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 分批建仓启动失败: {e}，降级到一次性开仓")
+                    # 降级到原有一次性开仓逻辑
+
+        # ========== 第三步：一次性开仓逻辑 ==========
+        try:
+
+            # 优先从 WebSocket 获取实时价格
+            current_price = self.ws_service.get_price(symbol)
+
+            # 如果 WebSocket 价格不可用，回退到数据库价格
+            if not current_price or current_price <= 0:
+                logger.warning(f"[WS_FALLBACK] {symbol} WebSocket价格不可用，回退到数据库价格")
+                current_price = self.get_current_price(symbol)
+                if not current_price:
+                    logger.error(f"{symbol} 无法获取价格")
+                    return False
+                price_source = "DB"
+            else:
+                price_source = "WS"
+
+            # 检查是否为反转开仓(使用原仓位保证金)
+            is_reversal = 'reversal_from' in opp
+            rating_level = 0  # 默认白名单
+            is_hedge = False  # 默认非对冲
+            adjusted_position_size = None  # 初始化变量,避免UnboundLocalError
+
+            if is_reversal and 'original_margin' in opp:
+                # 反转开仓: 使用原仓位相同的保证金
+                adjusted_position_size = opp['original_margin']
+                logger.info(f"[REVERSAL_MARGIN] {symbol} 反转开仓, 使用原仓位保证金: ${adjusted_position_size:.2f}")
+
+                # 仍需获取自适应参数用于止损止盈
+                if side == 'LONG':
+                    adaptive_params = self.brain.adaptive_long
+                else:  # SHORT
+                    adaptive_params = self.brain.adaptive_short
+
+                # 反转开仓也需要检查评级(用于日志显示)
+                rating_level = self.opt_config.get_symbol_rating_level(symbol)
+
+            if not is_reversal or 'original_margin' not in opp:
+                # 正常开仓流程
+                # 问题2优化: 使用3级评级制度替代简单黑名单
+                rating_level = self.opt_config.get_symbol_rating_level(symbol)
+                rating_config = self.opt_config.get_blacklist_config(rating_level)
+
+                # Level 3 = 永久禁止
+                if rating_level == 3:
+                    logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
+                    return False
+
+                # 获取评级对应的保证金倍数
+                rating_margin_multiplier = rating_config['margin_multiplier']
+                base_position_size = self.position_size_usdt * rating_margin_multiplier
+
+                # 记录评级信息
+                rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
+                logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
+
+                # 根据Big4市场信号动态调整仓位倍数
+                try:
+                    big4_result = self.big4_detector.detect_market_trend()
+                    market_signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+                    # 根据市场信号决定仓位倍数
+                    if market_signal == 'BULLISH' and side == 'LONG':
+                        position_multiplier = 1.2  # 市场看多,做多加仓
+                        logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
+                    elif market_signal == 'BEARISH' and side == 'SHORT':
+                        position_multiplier = 1.2  # 市场看空,做空加仓
+                        logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
+                    else:
+                        position_multiplier = 1.0  # 其他情况正常仓位
+                        if market_signal != 'NEUTRAL':
+                            logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
+                except Exception as e:
+                    logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                    position_multiplier = 1.0
+
+                # 获取自适应参数
+                if side == 'LONG':
+                    adaptive_params = self.brain.adaptive_long
+                else:  # SHORT
+                    adaptive_params = self.brain.adaptive_short
+
+                # 应用仓位倍数
+                adjusted_position_size = base_position_size * position_multiplier
+
+            quantity = adjusted_position_size * self.leverage / current_price
+            notional_value = quantity * current_price
+            margin = adjusted_position_size
+
+            # 使用自适应参数计算止损
+            base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
+
+            # 缺陷5修复: 波动率自适应止损
+            stop_loss_pct = self.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
+
+            # 问题4优化: 使用波动率配置计算动态止盈
+            volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
+            if volatility_profile:
+                # 根据方向使用对应的止盈配置
+                if side == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
+                    take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
+                    logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
+                elif side == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
+                    take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
+                    logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
+                else:
+                    # 回退到自适应参数
+                    take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+                    logger.debug(f"[TP_FALLBACK] {symbol} {side} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
+            else:
+                # 回退到自适应参数
+                take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+                logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
+
+            if side == 'LONG':
+                stop_loss = current_price * (1 - stop_loss_pct)    # 止损
+                take_profit = current_price * (1 + take_profit_pct) # 止盈
+            else:  # SHORT
+                stop_loss = current_price * (1 + stop_loss_pct)    # 止损
+                take_profit = current_price * (1 - take_profit_pct) # 止盈
+
+            logger.info(f"[OPEN] {symbol} {side} | 价格: ${current_price:.4f} ({price_source}) | 数量: {quantity:.2f}")
+
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 准备信号组成数据
+            import json
+            signal_components = opp.get('signal_components', {})
+            logger.info(f"[DEBUG] signal_components: {signal_components}, has key: {'signal_components' in opp}")
+            signal_components_json = json.dumps(signal_components) if signal_components else None
+            entry_score = opp.get('score', 0)
+
+            # 生成信号组合键 (按字母顺序排序信号名称)
+            if signal_components:
+                sorted_signals = sorted(signal_components.keys())
+                signal_combination_key = " + ".join(sorted_signals)
+            else:
+                signal_combination_key = "unknown"
+
+            # 检查是否为反转信号
+            if is_reversal:
+                signal_combination_key = f"REVERSAL_{opp.get('reversal_from', 'unknown')}"
+
+            logger.info(f"[SIGNAL_COMBO] {symbol} {side} 信号组合: {signal_combination_key} (评分: {entry_score})")
+
+            # Big4 信号记录
+            if opp.get('big4_adjusted'):
+                big4_signal = opp.get('big4_signal', 'NEUTRAL')
+                big4_strength = opp.get('big4_strength', 0)
+                logger.info(f"[BIG4-APPLIED] {symbol} Big4趋势: {big4_signal} (强度: {big4_strength})")
+
+            # 问题1优化: 计算动态超时时间
+            base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
+            # 计算超时时间点 (UTC时间)
+            from datetime import datetime, timedelta
+            timeout_at = datetime.utcnow() + timedelta(minutes=base_timeout_minutes)
+
+            # 插入持仓记录 (包含动态超时字段)
+            cursor.execute("""
+                INSERT INTO futures_positions
+                (account_id, symbol, position_side, quantity, entry_price,
+                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
+                 entry_signal_type, entry_score, signal_components, max_hold_minutes, timeout_at,
+                 source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+            """, (
+                self.account_id, symbol, side, quantity, current_price, self.leverage,
+                notional_value, margin, stop_loss, take_profit,
+                signal_combination_key, entry_score, signal_components_json,
+                base_timeout_minutes, timeout_at
+            ))
+
+            # 冻结资金 (开仓时扣除可用余额，增加冻结余额)
+            cursor.execute("""
+                UPDATE futures_trading_accounts
+                SET current_balance = current_balance - %s,
+                    frozen_balance = frozen_balance + %s,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (margin, margin, self.account_id))
+
+            cursor.close()
+
+            # 显示实际使用的止损止盈百分比
+            sl_pct = f"-{stop_loss_pct*100:.1f}%" if side == 'LONG' else f"+{stop_loss_pct*100:.1f}%"
+            tp_pct = f"+{take_profit_pct*100:.1f}%" if side == 'LONG' else f"-{take_profit_pct*100:.1f}%"
+
+            # 显示评级和对冲标签
+            if rating_level == 0:
+                rating_tag = ""
+            elif rating_level == 1:
+                rating_tag = " [黑名单L1-25%]"
+            elif rating_level == 2:
+                rating_tag = " [黑名单L2-12.5%]"
+            else:
+                rating_tag = " [黑名单L3-禁止]"
+
+            hedge_tag = " [对冲]" if is_hedge else ""
+
+            # 格式化信号组合显示(显示各信号的分数)
+            if signal_components:
+                signal_details = ", ".join([f"{k}:{v}" for k, v in sorted(signal_components.items(), key=lambda x: x[1], reverse=True)])
+            else:
+                signal_details = "无"
+
+            logger.info(
+                f"[SUCCESS] {symbol} {side}开仓成功{rating_tag}{hedge_tag} | "
+                f"信号: [{signal_combination_key}] | "
+                f"止损: ${stop_loss:.4f} ({sl_pct}) | 止盈: ${take_profit:.4f} ({tp_pct}) | "
+                f"仓位: ${margin:.0f} | 超时: {base_timeout_minutes}分钟"
+            )
+            logger.info(f"[SIGNAL_DETAIL] {symbol} 信号详情: {signal_details}")
+
+            # 启动智能平仓监控（统一平仓入口）
+            if self.smart_exit_optimizer and self.event_loop:
+                try:
+                    import asyncio
+                    asyncio.run_coroutine_threadsafe(
+                        self.smart_exit_optimizer.start_monitoring_position(position_id),
+                        self.event_loop
+                    )
+                    logger.info(f"✅ 持仓{position_id}已加入智能平仓监控")
+                except Exception as e:
+                    logger.error(f"❌ 持仓{position_id}启动监控失败: {e}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"[ERROR] {symbol} 开仓失败: {e}")
+            return False
+
+    async def _open_position_with_batch(self, opp: dict):
+        """使用智能分批建仓执行器开仓（信号已在调用前验证）"""
+        symbol = opp['symbol']
+        side = opp['side']
+
+        try:
+            # 注意：信号验证已在 open_position() 中完成，这里直接计算保证金
+            signal_components = opp.get('signal_components', {})
+
+            # 计算保证金（复用原有逻辑）
+            rating_level = self.opt_config.get_symbol_rating_level(symbol)
+            rating_config = self.opt_config.get_blacklist_config(rating_level)
+
+            if rating_level == 3:
+                logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
+                return False
+
+            rating_margin_multiplier = rating_config['margin_multiplier']
+            base_position_size = self.position_size_usdt * rating_margin_multiplier
+
+            # 根据Big4市场信号动态调整仓位倍数
+            try:
+                big4_result = self.big4_detector.detect_market_trend()
+                market_signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+                # 根据市场信号决定仓位倍数
+                if market_signal == 'BULLISH' and side == 'LONG':
+                    position_multiplier = 1.2  # 市场看多,做多加仓
+                    logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
+                elif market_signal == 'BEARISH' and side == 'SHORT':
+                    position_multiplier = 1.2  # 市场看空,做空加仓
+                    logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
+                else:
+                    position_multiplier = 1.0  # 其他情况正常仓位
+                    if market_signal != 'NEUTRAL':
+                        logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
+            except Exception as e:
+                logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                position_multiplier = 1.0
+
+            # 获取自适应参数
+            if side == 'LONG':
+                adaptive_params = self.brain.adaptive_long
+            else:
+                adaptive_params = self.brain.adaptive_short
+
+            adjusted_position_size = base_position_size * position_multiplier
+
+            # 调用智能建仓执行器（作为后台任务，避免阻塞主循环）
+            entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
+                'symbol': symbol,
+                'direction': side,
+                'total_margin': adjusted_position_size,
+                'leverage': self.leverage,
+                'strategy_id': 'smart_trader',
+                'trade_params': {
+                    'entry_score': opp.get('score', 0),
+                    'signal_components': signal_components,
+                    'adaptive_params': adaptive_params,
+                    'signal_combination_key': self._generate_signal_combination_key(signal_components)
+                }
+            }))
+
+            # 添加完成回调来启动智能平仓监控
+            def on_entry_complete(task):
+                try:
+                    entry_result = task.result()
+                    if entry_result['success']:
+                        position_id = entry_result['position_id']
+                        logger.info(
+                            f"✅ [BATCH_ENTRY_COMPLETE] {symbol} {side} | "
+                            f"持仓ID: {position_id} | "
+                            f"平均价格: ${entry_result['avg_price']:.4f} | "
+                            f"总数量: {entry_result['total_quantity']:.2f}"
+                        )
+
+                        # 启动智能平仓监控（如果启用）
+                        if self.smart_exit_optimizer:
+                            try:
+                                loop = asyncio.get_event_loop()
+                                if loop.is_closed():
+                                    logger.warning(f"⚠️ 事件循环已关闭，无法启动智能平仓监控: 持仓{position_id}")
+                                else:
+                                    asyncio.create_task(self.smart_exit_optimizer.start_monitoring_position(position_id))
+                                    logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
+                            except RuntimeError as e:
+                                logger.warning(f"⚠️ 无法启动智能平仓监控: {e}")
+                    else:
+                        logger.error(f"❌ [BATCH_ENTRY_FAILED] {symbol} {side} | {entry_result.get('error')}")
+                except Exception as e:
+                    logger.error(f"❌ [BATCH_ENTRY_CALLBACK_ERROR] {symbol} {side} | {e}")
+
+            entry_task.add_done_callback(on_entry_complete)
+            logger.info(f"🚀 [BATCH_ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行60分钟）")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ [BATCH_ENTRY_ERROR] {symbol} {side} | {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+
+    def _generate_signal_combination_key(self, signal_components: dict) -> str:
+        """生成信号组合键"""
+        if signal_components:
+            sorted_signals = sorted(signal_components.keys())
+            return " + ".join(sorted_signals)
+        else:
+            return "unknown"
+
+    def check_top_bottom(self, symbol: str, position_side: str, entry_price: float):
+        """智能识别顶部和底部 - 使用1h K线更稳健的判断"""
+        try:
+            # 使用1小时K线分析（更稳健，减少假信号）
+            klines_1h = self.brain.load_klines(symbol, '1h', 48)
+            if len(klines_1h) < 24:
+                return False, None
+
+            current = klines_1h[-1]
+            recent_24 = klines_1h[-24:]  # 最近24小时
+            recent_12 = klines_1h[-12:]  # 最近12小时
+
+            if position_side == 'LONG':
+                # 做多持仓 - 寻找顶部信号
+
+                # 1. 价格在最近12小时创新高后回落
+                max_high = max(k['high'] for k in recent_12)
+                max_high_idx = len(recent_12) - 1 - [k['high'] for k in reversed(recent_12)].index(max_high)
+                is_peak = max_high_idx < 10  # 高点在前10根K线，现在回落
+
+                # 2. 当前价格已经从高点回落（1h级别阈值提高到1.5%）
+                current_price = current['close']
+                pullback_pct = (max_high - current_price) / max_high * 100
+
+                # 3. 最近4根1h K线趋势确认：至少3根收阴或长上影线
+                recent_4 = klines_1h[-4:]
+                bearish_count = sum(1 for k in recent_4 if k['close'] < k['open'])
+                long_upper_shadow = sum(1 for k in recent_4 if (k['high'] - max(k['open'], k['close'])) > abs(k['close'] - k['open']) * 1.5)
+
+                # 4. 成交量确认：最近3根K线成交量放大
+                if len(recent_24) >= 24:
+                    avg_volume_24h = sum(k['volume'] for k in recent_24[:21]) / 21
+                    recent_3_volume = sum(k['volume'] for k in klines_1h[-3:]) / 3
+                    volume_surge = recent_3_volume > avg_volume_24h * 1.2
+                else:
+                    volume_surge = True  # 数据不足时忽略成交量确认
+
+                # 见顶判断条件（更严格）
+                if is_peak and pullback_pct >= 1.5 and (bearish_count >= 3 or long_upper_shadow >= 2):
+                    # 计算当前盈利
+                    profit_pct = (current_price - entry_price) / entry_price * 100
+                    return True, f"TOP_DETECTED(高点回落{pullback_pct:.1f}%,盈利{profit_pct:+.1f}%)"
+
+            elif position_side == 'SHORT':
+                # 做空持仓 - 寻找底部信号
+
+                # 1. 价格在最近12小时创新低后反弹
+                min_low = min(k['low'] for k in recent_12)
+                min_low_idx = len(recent_12) - 1 - [k['low'] for k in reversed(recent_12)].index(min_low)
+                is_bottom = min_low_idx < 10  # 低点在前10根K线，现在反弹
+
+                # 2. 当前价格已经从低点反弹（1h级别阈值提高到1.5%）
+                current_price = current['close']
+                bounce_pct = (current_price - min_low) / min_low * 100
+
+                # 3. 最近4根1h K线趋势确认：至少3根收阳或长下影线
+                recent_4 = klines_1h[-4:]
+                bullish_count = sum(1 for k in recent_4 if k['close'] > k['open'])
+                long_lower_shadow = sum(1 for k in recent_4 if (min(k['open'], k['close']) - k['low']) > abs(k['close'] - k['open']) * 1.5)
+
+                # 4. 成交量确认：最近3根K线成交量放大
+                if len(recent_24) >= 24:
+                    avg_volume_24h = sum(k['volume'] for k in recent_24[:21]) / 21
+                    recent_3_volume = sum(k['volume'] for k in klines_1h[-3:]) / 3
+                    volume_surge = recent_3_volume > avg_volume_24h * 1.2
+                else:
+                    volume_surge = True  # 数据不足时忽略成交量确认
+
+                # 见底判断条件（更严格）
+                if is_bottom and bounce_pct >= 1.5 and (bullish_count >= 3 or long_lower_shadow >= 2):
+                    # 计算当前盈利
+                    profit_pct = (entry_price - current_price) / entry_price * 100
+                    return True, f"BOTTOM_DETECTED(低点反弹{bounce_pct:.1f}%,盈利{profit_pct:+.1f}%)"
+
+            return False, None
+
+        except Exception as e:
+            logger.error(f"[ERROR] {symbol} 顶底识别失败: {e}")
+            return False, None
+
+    # ========== 以下方法已废弃，平仓逻辑已统一到SmartExitOptimizer ==========
+    # check_stop_loss_take_profit() 和 close_old_positions() 已被移除
+    # 所有平仓逻辑现在由 SmartExitOptimizer 统一处理
+
+
+    def check_hedge_positions(self):
+        """检查并处理对冲持仓 - 平掉亏损方向"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
+
+            # 1. 找出所有存在对冲的交易对
+            cursor.execute("""
+                SELECT
+                    symbol,
+                    SUM(CASE WHEN position_side = 'LONG' THEN 1 ELSE 0 END) as long_count,
+                    SUM(CASE WHEN position_side = 'SHORT' THEN 1 ELSE 0 END) as short_count
+                FROM futures_positions
+                WHERE status = 'open' AND account_id = %s
+                GROUP BY symbol
+                HAVING long_count > 0 AND short_count > 0
+            """, (self.account_id,))
+
+            hedge_pairs = cursor.fetchall()
+
+            if not hedge_pairs:
+                return
+
+            logger.info(f"[HEDGE] 发现 {len(hedge_pairs)} 个对冲交易对")
+
+            # 2. 处理每个对冲交易对
+            for pair in hedge_pairs:
+                symbol = pair['symbol']
+
+                # 获取该交易对的所有持仓
+                cursor.execute("""
+                    SELECT id, position_side, entry_price, quantity, open_time
+                    FROM futures_positions
+                    WHERE symbol = %s AND status = 'open' AND account_id = %s
+                    ORDER BY position_side, open_time
+                """, (symbol, self.account_id))
+
+                positions = cursor.fetchall()
+
+                if len(positions) < 2:
+                    continue
+
+                # 获取当前价格
+                current_price = self.get_current_price(symbol)
+                if not current_price:
+                    continue
+
+                # 计算每个持仓的盈亏
+                long_positions = []
+                short_positions = []
+
+                for pos in positions:
+                    entry_price = float(pos['entry_price'])
+                    quantity = float(pos['quantity'])
+
+                    if pos['position_side'] == 'LONG':
+                        pnl_pct = (current_price - entry_price) / entry_price * 100
+                        realized_pnl = (current_price - entry_price) * quantity
+                        long_positions.append({
+                            'id': pos['id'],
+                            'entry_price': entry_price,
+                            'quantity': quantity,
+                            'pnl_pct': pnl_pct,
+                            'realized_pnl': realized_pnl,
+                            'open_time': pos['open_time']
+                        })
+                    else:  # SHORT
+                        pnl_pct = (entry_price - current_price) / entry_price * 100
+                        realized_pnl = (entry_price - current_price) * quantity
+                        short_positions.append({
+                            'id': pos['id'],
+                            'entry_price': entry_price,
+                            'quantity': quantity,
+                            'pnl_pct': pnl_pct,
+                            'realized_pnl': realized_pnl,
+                            'open_time': pos['open_time']
+                        })
+
+                # 策略1: 如果一方亏损>1%且另一方盈利,平掉亏损方
+                for long_pos in long_positions:
+                    for short_pos in short_positions:
+                        # LONG亏损>1%, SHORT盈利 -> 平掉LONG
+                        if long_pos['pnl_pct'] < -1 and short_pos['pnl_pct'] > 0:
+                            logger.info(
+                                f"[HEDGE_CLOSE] {symbol} LONG亏损{long_pos['pnl_pct']:.2f}% ({long_pos['realized_pnl']:+.2f} USDT), "
+                                f"SHORT盈利{short_pos['pnl_pct']:.2f}% -> 平掉LONG"
+                            )
+
+                            # Get leverage and margin
+                            cursor.execute("""
+                                SELECT leverage, margin FROM futures_positions WHERE id = %s
+                            """, (long_pos['id'],))
+                            pos_detail = cursor.fetchone()
+                            leverage = pos_detail['leverage'] if pos_detail else 1
+                            margin = float(pos_detail['margin']) if pos_detail else 0.0
+                            roi = (long_pos['realized_pnl'] / margin) * 100 if margin > 0 else 0
+
+                            cursor.execute("""
+                                UPDATE futures_positions
+                                SET status = 'closed', mark_price = %s,
+                                    realized_pnl = %s,
+                                    close_time = NOW(), updated_at = NOW(),
+                                    notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
+                                WHERE id = %s
+                            """, (current_price, long_pos['realized_pnl'], long_pos['id']))
+
+                            # Calculate values for orders and trades
+                            import uuid
+                            notional_value = current_price * long_pos['quantity']
+                            fee = notional_value * 0.0004
+                            order_id = f"HEDGE-{long_pos['id']}"
+                            trade_id = str(uuid.uuid4())
+
+                            # Create futures_orders record for close reason
+                            cursor.execute("""
+                                INSERT INTO futures_orders (
+                                    account_id, order_id, position_id, symbol,
+                                    side, order_type, leverage,
+                                    price, quantity, executed_quantity,
+                                    total_value, executed_value,
+                                    fee, fee_rate, status,
+                                    avg_fill_price, fill_time,
+                                    realized_pnl, pnl_pct,
+                                    order_source, notes
+                                ) VALUES (
+                                    %s, %s, %s, %s,
+                                    %s, 'MARKET', %s,
+                                    %s, %s, %s,
+                                    %s, %s,
+                                    %s, %s, 'FILLED',
+                                    %s, %s,
+                                    %s, %s,
+                                    'smart_trader', %s
+                                )
+                            """, (
+                                self.account_id, order_id, long_pos['id'], symbol,
+                                'CLOSE_LONG', leverage,
+                                current_price, long_pos['quantity'], long_pos['quantity'],
+                                notional_value, notional_value,
+                                fee, 0.0004,
+                                current_price, datetime.utcnow(),
+                                long_pos['realized_pnl'], long_pos['pnl_pct'], '对冲止损平仓'
+                            ))
+
+                            # Create futures_trades record for frontend display
+                            cursor.execute("""
+                                INSERT INTO futures_trades (
+                                    trade_id, position_id, account_id, symbol, side,
+                                    price, quantity, notional_value, leverage, margin,
+                                    fee, realized_pnl, pnl_pct, roi, entry_price,
+                                    close_price, order_id, trade_time, created_at
+                                ) VALUES (
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s
+                                )
+                            """, (
+                                trade_id, long_pos['id'], self.account_id, symbol, 'CLOSE_LONG',
+                                current_price, long_pos['quantity'], notional_value, leverage, margin,
+                                fee, long_pos['realized_pnl'], long_pos['pnl_pct'], roi, long_pos['entry_price'],
+                                current_price, f"HEDGE-{long_pos['id']}", datetime.utcnow(), datetime.utcnow()
+                            ))
+
+                            # Update account balance
+                            cursor.execute("""
+                                UPDATE futures_trading_accounts
+                                SET current_balance = current_balance + %s + %s,
+                                    frozen_balance = frozen_balance - %s,
+                                    realized_pnl = realized_pnl + %s,
+                                    total_trades = total_trades + 1,
+                                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                                WHERE id = %s
+                            """, (
+                                float(margin), float(long_pos['realized_pnl']), float(margin),
+                                float(long_pos['realized_pnl']), float(long_pos['realized_pnl']), float(long_pos['realized_pnl']),
+                                self.account_id
+                            ))
+
+                            cursor.execute("""
+                                UPDATE futures_trading_accounts
+                                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                                WHERE id = %s
+                            """, (self.account_id,))
+
+                        # SHORT亏损>1%, LONG盈利 -> 平掉SHORT
+                        elif short_pos['pnl_pct'] < -1 and long_pos['pnl_pct'] > 0:
+                            logger.info(
+                                f"[HEDGE_CLOSE] {symbol} SHORT亏损{short_pos['pnl_pct']:.2f}% ({short_pos['realized_pnl']:+.2f} USDT), "
+                                f"LONG盈利{long_pos['pnl_pct']:.2f}% -> 平掉SHORT"
+                            )
+
+                            # Get leverage and margin
+                            cursor.execute("""
+                                SELECT leverage, margin FROM futures_positions WHERE id = %s
+                            """, (short_pos['id'],))
+                            pos_detail = cursor.fetchone()
+                            leverage = pos_detail['leverage'] if pos_detail else 1
+                            margin = float(pos_detail['margin']) if pos_detail else 0.0
+                            roi = (short_pos['realized_pnl'] / margin) * 100 if margin > 0 else 0
+
+                            cursor.execute("""
+                                UPDATE futures_positions
+                                SET status = 'closed', mark_price = %s,
+                                    realized_pnl = %s,
+                                    close_time = NOW(), updated_at = NOW(),
+                                    notes = CONCAT(IFNULL(notes, ''), '|hedge_loss_cut')
+                                WHERE id = %s
+                            """, (current_price, short_pos['realized_pnl'], short_pos['id']))
+
+                            # Calculate values for orders and trades
+                            import uuid
+                            notional_value = current_price * short_pos['quantity']
+                            fee = notional_value * 0.0004
+                            order_id = f"HEDGE-{short_pos['id']}"
+                            trade_id = str(uuid.uuid4())
+
+                            # Create futures_orders record for close reason
+                            cursor.execute("""
+                                INSERT INTO futures_orders (
+                                    account_id, order_id, position_id, symbol,
+                                    side, order_type, leverage,
+                                    price, quantity, executed_quantity,
+                                    total_value, executed_value,
+                                    fee, fee_rate, status,
+                                    avg_fill_price, fill_time,
+                                    realized_pnl, pnl_pct,
+                                    order_source, notes
+                                ) VALUES (
+                                    %s, %s, %s, %s,
+                                    %s, 'MARKET', %s,
+                                    %s, %s, %s,
+                                    %s, %s,
+                                    %s, %s, 'FILLED',
+                                    %s, %s,
+                                    %s, %s,
+                                    'smart_trader', %s
+                                )
+                            """, (
+                                self.account_id, order_id, short_pos['id'], symbol,
+                                'CLOSE_SHORT', leverage,
+                                current_price, short_pos['quantity'], short_pos['quantity'],
+                                notional_value, notional_value,
+                                fee, 0.0004,
+                                current_price, datetime.utcnow(),
+                                short_pos['realized_pnl'], short_pos['pnl_pct']
+                            ))
+
+                            # Create futures_trades record for frontend display
+                            cursor.execute("""
+                                INSERT INTO futures_trades (
+                                    trade_id, position_id, account_id, symbol, side,
+                                    price, quantity, notional_value, leverage, margin,
+                                    fee, realized_pnl, pnl_pct, roi, entry_price,
+                                    close_price, order_id, trade_time, created_at
+                                ) VALUES (
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s, %s,
+                                    %s, %s, %s, %s
+                                )
+                            """, (
+                                trade_id, short_pos['id'], self.account_id, symbol, 'CLOSE_SHORT',
+                                current_price, short_pos['quantity'], notional_value, leverage, margin,
+                                fee, short_pos['realized_pnl'], short_pos['pnl_pct'], roi, short_pos['entry_price'],
+                                current_price, order_id, datetime.utcnow(), datetime.utcnow()
+                            ))
+
+                            # Update account balance
+                            cursor.execute("""
+                                UPDATE futures_trading_accounts
+                                SET current_balance = current_balance + %s + %s,
+                                    frozen_balance = frozen_balance - %s,
+                                    realized_pnl = realized_pnl + %s,
+                                    total_trades = total_trades + 1,
+                                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                                WHERE id = %s
+                            """, (
+                                float(margin), float(short_pos['realized_pnl']), float(margin),
+                                float(short_pos['realized_pnl']), float(short_pos['realized_pnl']), float(short_pos['realized_pnl']),
+                                self.account_id
+                            ))
+
+                            cursor.execute("""
+                                UPDATE futures_trading_accounts
+                                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                                WHERE id = %s
+                            """, (self.account_id,))
+
+            cursor.close()
+
+        except Exception as e:
+            logger.error(f"[ERROR] 检查对冲持仓失败: {e}")
+
+    def get_position_score(self, symbol: str, side: str):
+        """获取持仓的开仓得分"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
+
+            cursor.execute("""
+                SELECT entry_signal_type FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
+                LIMIT 1
+            """, (symbol, side, self.account_id))
+
+            result = cursor.fetchone()
+            cursor.close()
+
+            if result and result['entry_signal_type']:
+                # entry_signal_type 格式: SMART_BRAIN_30
+                signal_type = result['entry_signal_type']
+                if 'SMART_BRAIN_' in signal_type:
+                    score = int(signal_type.split('_')[-1])
+                    return score
+
+            return 0
+        except:
+            return 0
+
+    def check_recent_close(self, symbol: str, side: str, cooldown_minutes: int = 60):
+        """
+        检查指定交易对和方向是否在冷却期内(刚刚平仓)
+        返回True表示在冷却期,不应该开仓
+        默认冷却期1小时,避免反复开平造成频繁交易
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT COUNT(*) FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND status = 'closed'
+                  AND account_id = %s
+                  AND close_time >= DATE_SUB(NOW(), INTERVAL %s MINUTE)
+            """, (symbol, side, self.account_id, cooldown_minutes))
+
+            result = cursor.fetchone()
+            cursor.close()
+
+            # 如果最近X分钟内有平仓记录,返回True(冷却中)
+            return result[0] > 0 if result else False
+        except:
+            return False
+
+    def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
+        """关闭指定交易对和方向的持仓"""
+        try:
+            current_price = self.get_current_price(symbol)
+            if not current_price:
+                return False
+
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
+
+            # 获取持仓信息用于日志和计算盈亏
+            cursor.execute("""
+                SELECT id, entry_price, quantity, leverage, margin FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
+            """, (symbol, side, self.account_id))
+
+            positions = cursor.fetchall()
+
+            for pos in positions:
+                entry_price = float(pos['entry_price'])
+                quantity = float(pos['quantity'])
+                leverage = pos['leverage'] if pos.get('leverage') else 1
+                margin = float(pos['margin']) if pos.get('margin') else 0.0
+                pnl_pct = (current_price - entry_price) / entry_price * 100
+
+                # Calculate realized PnL
+                if side == 'LONG':
+                    realized_pnl = (current_price - entry_price) * quantity
+                    pnl_pct = (current_price - entry_price) / entry_price * 100
+                else:  # SHORT
+                    realized_pnl = (entry_price - current_price) * quantity
+                    pnl_pct = (entry_price - current_price) / entry_price * 100
+
+                roi = (realized_pnl / margin) * 100 if margin > 0 else 0
+
+                logger.info(
+                    f"[REVERSE_CLOSE] {symbol} {side} | "
+                    f"开仓: ${entry_price:.4f} | 平仓: ${current_price:.4f} | "
+                    f"盈亏: {pnl_pct:+.2f}% ({realized_pnl:+.2f} USDT) | 原因: {reason}"
+                )
+
+                cursor.execute("""
+                    UPDATE futures_positions
+                    SET status = 'closed', mark_price = %s,
+                        realized_pnl = %s,
+                        close_time = NOW(), updated_at = NOW(),
+                        notes = CONCAT(IFNULL(notes, ''), '|', %s)
+                    WHERE id = %s
+                """, (current_price, realized_pnl, reason, pos['id']))
+
+                # Calculate values for orders and trades
+                import uuid
+                close_side = 'CLOSE_LONG' if side == 'LONG' else 'CLOSE_SHORT'
+                notional_value = current_price * quantity
+                fee = notional_value * 0.0004
+                order_id = f"REVERSE-{pos['id']}"
+                trade_id = str(uuid.uuid4())
+
+                # Create futures_orders record for close reason
+                cursor.execute("""
+                    INSERT INTO futures_orders (
+                        account_id, order_id, position_id, symbol,
+                        side, order_type, leverage,
+                        price, quantity, executed_quantity,
+                        total_value, executed_value,
+                        fee, fee_rate, status,
+                        avg_fill_price, fill_time,
+                        realized_pnl, pnl_pct,
+                        order_source, notes
+                    ) VALUES (
+                        %s, %s, %s, %s,
+                        %s, 'MARKET', %s,
+                        %s, %s, %s,
+                        %s, %s,
+                        %s, %s, 'FILLED',
+                        %s, %s,
+                        %s, %s,
+                        'smart_trader', %s
+                    )
+                """, (
+                    self.account_id, order_id, pos['id'], symbol,
+                    close_side, leverage,
+                    current_price, quantity, quantity,
+                    notional_value, notional_value,
+                    fee, 0.0004,
+                    current_price, datetime.utcnow(),
+                    realized_pnl, pnl_pct, reason
+                ))
+
+                # Create futures_trades record for frontend display
+                cursor.execute("""
+                    INSERT INTO futures_trades (
+                        trade_id, position_id, account_id, symbol, side,
+                        price, quantity, notional_value, leverage, margin,
+                        fee, realized_pnl, pnl_pct, roi, entry_price,
+                        close_price, order_id, trade_time, created_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s
+                    )
+                """, (
+                    trade_id, pos['id'], self.account_id, symbol, close_side,
+                    current_price, quantity, notional_value, leverage, margin,
+                    fee, realized_pnl, pnl_pct, roi, entry_price,
+                    current_price, order_id, datetime.utcnow(), datetime.utcnow()
+                ))
+
+                # Update account balance
+                cursor.execute("""
+                    UPDATE futures_trading_accounts
+                    SET current_balance = current_balance + %s + %s,
+                        frozen_balance = frozen_balance - %s,
+                        realized_pnl = realized_pnl + %s,
+                        total_trades = total_trades + 1,
+                        winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                        losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                    WHERE id = %s
+                """, (
+                    float(margin), float(realized_pnl), float(margin),
+                    float(realized_pnl), float(realized_pnl), float(realized_pnl),
+                    self.account_id
+                ))
+
+                cursor.execute("""
+                    UPDATE futures_trading_accounts
+                    SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                    WHERE id = %s
+                """, (self.account_id,))
+
+            cursor.close()
+            return True
+
+        except Exception as e:
+            logger.error(f"[ERROR] 关闭{symbol} {side}持仓失败: {e}")
+            return False
+
+    async def close_position(self, symbol: str, direction: str, position_size: float, reason: str = "smart_exit"):
+        """
+        异步平仓方法（供SmartExitOptimizer调用）
+
+        Args:
+            symbol: 交易对
+            direction: 方向 (LONG/SHORT)
+            position_size: 持仓数量
+            reason: 平仓原因
+
+        Returns:
+            dict: {'success': bool, 'error': str}
+        """
+        try:
+            # 调用同步方法执行平仓
+            success = self.close_position_by_side(symbol, direction, reason)
+
+            if success:
+                return {'success': True}
+            else:
+                return {'success': False, 'error': 'close_position_by_side returned False'}
+
+        except Exception as e:
+            logger.error(f"异步平仓失败: {symbol} {direction} | {e}")
+            return {'success': False, 'error': str(e)}
+
+    async def close_position_partial(self, position_id: int, close_ratio: float, reason: str):
+        """
+        部分平仓方法（供SmartExitOptimizer调用）
+
+        Args:
+            position_id: 持仓ID
+            close_ratio: 平仓比例 (0.0-1.0)
+            reason: 平仓原因
+
+        Returns:
+            dict: {'success': bool, 'position_id': int, 'closed_quantity': float}
+        """
+        conn = None
+        cursor = None
+        try:
+            # 创建独立连接，避免与其他异步操作冲突（重要！）
+            # SmartExitOptimizer异步调用此方法时，共享连接会导致竞态条件
+            conn = pymysql.connect(
+                **self.db_config,
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=False  # 使用事务确保数据一致性
+            )
+            cursor = conn.cursor()
+
+            # 获取持仓信息
+            cursor.execute("""
+                SELECT id, symbol, position_side, quantity, entry_price, avg_entry_price,
+                       leverage, margin, status
+                FROM futures_positions
+                WHERE id = %s AND status = 'open' AND account_id = %s
+            """, (position_id, self.account_id))
+
+            position = cursor.fetchone()
+
+            if not position:
+                cursor.close()
+                conn.close()
+                logger.error(f"持仓 {position_id} 不存在或已关闭")
+                return {'success': False, 'error': 'Position not found or already closed'}
+
+            symbol = position['symbol']
+            side = position['position_side']
+            total_quantity = float(position['quantity'])
+            entry_price = float(position['avg_entry_price'])
+            leverage = position['leverage'] if position.get('leverage') else 1
+            total_margin = float(position['margin']) if position.get('margin') else 0.0
+
+            # 计算平仓数量和保证金
+            close_quantity = total_quantity * close_ratio
+            close_margin = total_margin * close_ratio
+            remaining_quantity = total_quantity - close_quantity
+            remaining_margin = total_margin - close_margin
+
+            # 如果剩余保证金太小(<10 USDT),直接全部平仓避免垃圾仓位
+            MIN_MARGIN_THRESHOLD = 10.0
+            if remaining_margin < MIN_MARGIN_THRESHOLD and remaining_margin > 0:
+                logger.warning(
+                    f"⚠️ 剩余保证金太小(${remaining_margin:.2f} < ${MIN_MARGIN_THRESHOLD}), "
+                    f"改为全部平仓避免垃圾仓位"
+                )
+                close_quantity = total_quantity
+                close_margin = total_margin
+                remaining_quantity = 0
+                remaining_margin = 0
+                close_ratio = 1.0
+
+            # 获取当前价格
+            current_price = self.get_current_price(symbol)
+            if not current_price:
+                cursor.close()
+                conn.close()
+                logger.error(f"无法获取 {symbol} 当前价格")
+                return {'success': False, 'error': 'Failed to get current price'}
+
+            # 计算盈亏
+            if side == 'LONG':
+                realized_pnl = (current_price - entry_price) * close_quantity
+                pnl_pct = (current_price - entry_price) / entry_price * 100
+            else:  # SHORT
+                realized_pnl = (entry_price - current_price) * close_quantity
+                pnl_pct = (entry_price - current_price) / entry_price * 100
+
+            roi = (realized_pnl / close_margin) * 100 if close_margin > 0 else 0
+
+            logger.info(
+                f"[PARTIAL_CLOSE] {symbol} {side} | 持仓{position_id} | "
+                f"平仓比例: {close_ratio*100:.0f}% | 数量: {close_quantity:.4f}/{total_quantity:.4f} | "
+                f"盈亏: {pnl_pct:+.2f}% ({realized_pnl:+.2f} USDT) | 原因: {reason}"
+            )
+
+            # 更新持仓记录
+            if remaining_quantity <= 0.0001:  # 全部平仓
+                cursor.execute("""
+                    UPDATE futures_positions
+                    SET quantity = 0,
+                        margin = 0,
+                        notional_value = 0,
+                        status = 'closed',
+                        close_price = %s,
+                        close_time = NOW(),
+                        realized_pnl = IFNULL(realized_pnl, 0) + %s,
+                        updated_at = NOW(),
+                        notes = CONCAT(IFNULL(notes, ''), '|full_close:', %s, ' (from partial_close due to small remaining)')
+                    WHERE id = %s
+                """, (
+                    current_price,
+                    realized_pnl,
+                    reason,
+                    position_id
+                ))
+                logger.info(f"✅ 持仓{position_id}已全部平仓(剩余保证金太小)")
+            else:  # 部分平仓
+                cursor.execute("""
+                    UPDATE futures_positions
+                    SET quantity = %s,
+                        margin = %s,
+                        notional_value = %s,
+                        realized_pnl = IFNULL(realized_pnl, 0) + %s,
+                        updated_at = NOW(),
+                        notes = CONCAT(IFNULL(notes, ''), '|partial_close:', %s, ',ratio:', %s)
+                    WHERE id = %s
+                """, (
+                    remaining_quantity,
+                    remaining_margin,
+                    remaining_quantity * entry_price,
+                    realized_pnl,
+                    reason,
+                    f"{close_ratio:.2f}",
+                    position_id
+                ))
+
+            # 创建平仓订单记录
+            import uuid
+            from datetime import datetime
+            close_side = 'CLOSE_LONG' if side == 'LONG' else 'CLOSE_SHORT'
+            notional_value = current_price * close_quantity
+            fee = notional_value * 0.0004
+            # 使用时间戳确保order_id唯一性，避免重复触发时主键冲突
+            timestamp = datetime.now().strftime('%H%M%S%f')[:9]  # HHMMSSMMM (毫秒)
+            order_id = f"PARTIAL-{position_id}-{int(close_ratio*100)}-{timestamp}"
+            trade_id = str(uuid.uuid4())
+
+            cursor.execute("""
+                INSERT INTO futures_orders (
+                    account_id, order_id, position_id, symbol,
+                    side, order_type, leverage,
+                    price, quantity, executed_quantity,
+                    total_value, executed_value,
+                    fee, fee_rate, status,
+                    avg_fill_price, fill_time,
+                    realized_pnl, pnl_pct,
+                    order_source, notes
+                ) VALUES (
+                    %s, %s, %s, %s,
+                    %s, 'MARKET', %s,
+                    %s, %s, %s,
+                    %s, %s,
+                    %s, %s, 'FILLED',
+                    %s, %s,
+                    %s, %s,
+                    'smart_exit', %s
+                )
+            """, (
+                self.account_id, order_id, position_id, symbol,
+                close_side, leverage,
+                current_price, close_quantity, close_quantity,
+                notional_value, notional_value,
+                fee, 0.0004,
+                current_price, datetime.utcnow(),
+                realized_pnl, pnl_pct,
+                f"partial_close_{close_ratio:.0%}:{reason}"
+            ))
+
+            # 创建交易记录
+            cursor.execute("""
+                INSERT INTO futures_trades (
+                    trade_id, position_id, account_id, symbol, side,
+                    price, quantity, notional_value, leverage, margin,
+                    fee, realized_pnl, pnl_pct, roi, entry_price,
+                    close_price, order_id, trade_time, created_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s
+                )
+            """, (
+                trade_id, position_id, self.account_id, symbol, close_side,
+                current_price, close_quantity, notional_value, leverage, close_margin,
+                fee, realized_pnl, pnl_pct, roi, entry_price,
+                current_price, order_id, datetime.utcnow(), datetime.utcnow()
+            ))
+
+            # 更新账户余额
+            cursor.execute("""
+                UPDATE futures_trading_accounts
+                SET current_balance = current_balance + %s + %s,
+                    frozen_balance = frozen_balance - %s,
+                    realized_pnl = realized_pnl + %s,
+                    total_trades = total_trades + 1,
+                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
+                WHERE id = %s
+            """, (
+                float(close_margin), float(realized_pnl), float(close_margin),
+                float(realized_pnl), float(realized_pnl), float(realized_pnl),
+                self.account_id
+            ))
+
+            cursor.execute("""
+                UPDATE futures_trading_accounts
+                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                WHERE id = %s
+            """, (self.account_id,))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            logger.info(f"✅ 部分平仓成功: 持仓{position_id} | 剩余数量: {remaining_quantity:.4f}")
+
+            return {
+                'success': True,
+                'position_id': position_id,
+                'closed_quantity': close_quantity,
+                'remaining_quantity': remaining_quantity,
+                'realized_pnl': realized_pnl
+            }
+
+        except Exception as e:
+            logger.error(f"部分平仓失败: 持仓{position_id} | {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+            # 确保回滚事务并关闭连接
+            try:
+                if conn:
+                    conn.rollback()
+                if cursor:
+                    cursor.close()
+                if conn:
+                    conn.close()
+            except Exception as cleanup_error:
+                logger.error(f"清理连接时出错: {cleanup_error}")
+
+            return {'success': False, 'error': str(e)}
+
+    def run_adaptive_optimization(self):
+        """运行自适应优化 - 每日定时任务"""
+        try:
+            logger.info("=" * 80)
+            logger.info("🧠 开始运行自适应优化...")
+            logger.info("=" * 80)
+
+            # 生成24小时优化报告
+            report = self.optimizer.generate_optimization_report(hours=24)
+
+            # 打印报告
+            self.optimizer.print_report(report)
+
+            # 检查是否有高严重性问题
+            high_severity_count = report['summary']['high_severity_issues']
+
+            if high_severity_count > 0:
+                logger.warning(f"🔴 发现 {high_severity_count} 个高严重性问题!")
+                # TODO: 发送Telegram通知 (需要集成telegram bot)
+
+            # 自动应用优化 (黑名单 + 参数调整)
+            if report['blacklist_candidates'] or report['problematic_signals']:
+                logger.info(f"📝 准备应用优化:")
+                if report['blacklist_candidates']:
+                    logger.info(f"   🚫 黑名单候选: {len(report['blacklist_candidates'])} 个")
+                if report['problematic_signals']:
+                    logger.info(f"   ⚙️  问题信号: {len(report['problematic_signals'])} 个")
+
+                # 自动应用优化 (包括参数调整和权重调整)
+                results = self.optimizer.apply_optimizations(report, auto_apply=True, apply_params=True, apply_weights=True)
+
+                if results['blacklist_added']:
+                    logger.info(f"✅ 自动添加 {len(results['blacklist_added'])} 个交易对到黑名单")
+                    for item in results['blacklist_added']:
+                        logger.info(f"   ➕ {item['symbol']} - {item['reason']}")
+
+                if results['params_updated']:
+                    logger.info(f"✅ 自动调整 {len(results['params_updated'])} 个参数")
+                    for update in results['params_updated']:
+                        logger.info(f"   📊 {update}")
+
+                if results.get('weights_adjusted'):
+                    logger.info(f"✅ 自动调整 {len(results['weights_adjusted'])} 个评分权重")
+
+                # 重新加载配置以应用所有更新
+                if results['blacklist_added'] or results['params_updated'] or results.get('weights_adjusted'):
+                    whitelist_count = self.brain.reload_config()
+                    logger.info(f"🔄 配置已重新加载，当前可交易: {whitelist_count} 个币种")
+
+                if results['warnings']:
+                    logger.warning("⚠️ 优化警告:")
+                    for warning in results['warnings']:
+                        logger.warning(f"   {warning}")
+            else:
+                logger.info("✅ 无需加入黑名单的交易对")
+
+            logger.info("=" * 80)
+            logger.info("🧠 自适应优化完成")
+            logger.info("=" * 80)
+
+        except Exception as e:
+            logger.error(f"❌ 自适应优化失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    def check_and_run_daily_optimization(self):
+        """检查是否需要运行每日优化 (凌晨2点)"""
+        try:
+            now = datetime.utcnow()
+            current_date = now.date()
+
+            # 检查是否是凌晨2点且今天还没运行过
+            if now.hour == 2 and self.last_optimization_date != current_date:
+                logger.info(f"⏰ 触发每日自适应优化 (时间: {now.strftime('%Y-%m-%d %H:%M:%S')})")
+
+                # 1. 运行原有的自适应优化 (参数调整)
+                self.run_adaptive_optimization()
+
+                # 2. 问题2优化: 更新交易对评级
+                logger.info("=" * 80)
+                logger.info("🏆 开始更新交易对评级 (3级黑名单制度)")
+                logger.info("=" * 80)
+                rating_results = self.rating_manager.update_all_symbol_ratings()
+                self.rating_manager.print_rating_report(rating_results)
+
+                # 3. 问题4优化: 更新波动率配置 (15M K线动态止盈)
+                logger.info("=" * 80)
+                logger.info("📊 开始更新波动率配置 (15M K线动态止盈)")
+                logger.info("=" * 80)
+                volatility_results = self.volatility_updater.update_all_symbols_volatility(self.brain.whitelist)
+                self.volatility_updater.print_volatility_report(volatility_results)
+
+                self.last_optimization_date = current_date
+
+        except Exception as e:
+            logger.error(f"检查每日优化失败: {e}")
+
+    async def init_ws_service(self):
+        """初始化 WebSocket 价格服务"""
+        try:
+            # 启动 WebSocket 服务并订阅所有白名单币种
+            if not self.ws_service.is_running():
+                logger.info(f"🚀 初始化 WebSocket 价格服务，订阅 {len(self.brain.whitelist)} 个币种")
+                asyncio.create_task(self.ws_service.start(self.brain.whitelist))
+                await asyncio.sleep(3)  # 等待连接建立
+
+                # 检查连接状态
+                if self.ws_service.is_running():
+                    logger.info("✅ WebSocket 价格服务已启动")
+                else:
+                    logger.warning("⚠️ WebSocket 价格服务启动失败，将使用数据库价格")
+        except Exception as e:
+            logger.error(f"WebSocket 服务初始化失败: {e}，将使用数据库价格")
+
+    async def _start_smart_exit_monitoring(self):
+        """为所有已开仓的持仓启动统一智能平仓监控（包括普通持仓和分批建仓持仓）"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 查询所有开仓持仓（不再区分是否分批建仓，统一由SmartExitOptimizer管理）
+            cursor.execute("""
+                SELECT id, symbol, position_side
+                FROM futures_positions
+                WHERE status = 'open'
+                AND account_id = %s
+            """, (self.account_id,))
+
+            positions = cursor.fetchall()
+            cursor.close()
+
+            for pos in positions:
+                position_id, symbol, side = pos
+                await self.smart_exit_optimizer.start_monitoring_position(position_id)
+                logger.info(f"✅ 启动智能平仓监控: 持仓{position_id} {symbol} {side}")
+
+            logger.info(f"✅ 智能平仓监控已启动，统一监控 {len(positions)} 个持仓")
+
+        except Exception as e:
+            logger.error(f"❌ 启动智能平仓监控失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    def run(self):
+        """主循环"""
+        while self.running:
+            try:
+                # 0. 检查是否需要运行每日自适应优化 (凌晨2点)
+                self.check_and_run_daily_optimization()
+
+                # 注意：止盈止损、超时检查已统一迁移到SmartExitOptimizer
+                # 1. [已停用] 检查止盈止损 -> 由SmartExitOptimizer处理
+                # self.check_stop_loss_take_profit()
+
+                # 2. 检查对冲持仓(平掉亏损方向)
+                self.check_hedge_positions()
+
+                # 3. [已停用] 关闭超时持仓 -> 由SmartExitOptimizer处理
+                # self.close_old_positions()
+
+                # 4. 检查持仓
+                current_positions = self.get_open_positions_count()
+                logger.info(f"[STATUS] 持仓: {current_positions}/{self.max_positions}")
+
+                if current_positions >= self.max_positions:
+                    logger.info("[SKIP] 已达最大持仓,跳过扫描")
+                    time.sleep(self.scan_interval)
+                    continue
+
+                # 5. 扫描机会
+                logger.info(f"[SCAN] 扫描 {len(self.brain.whitelist)} 个币种...")
+                opportunities = self.brain.scan_all()
+
+                if not opportunities:
+                    logger.info("[SCAN] 无交易机会")
+                    time.sleep(self.scan_interval)
+                    continue
+
+                # 6. 执行交易
+                logger.info(f"[EXECUTE] 找到 {len(opportunities)} 个机会")
+
+                for opp in opportunities:
+                    if self.get_open_positions_count() >= self.max_positions:
+                        break
+
+                    symbol = opp['symbol']
+                    new_side = opp['side']
+                    new_score = opp['score']
+                    opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
+
+                    # Big4 趋势检测 - 应用到所有币种
+                    try:
+                        big4_result = self.big4_detector.detect_market_trend()
+
+                        # 如果是四大天王本身,使用该币种的专属信号
+                        if symbol in self.big4_symbols:
+                            symbol_detail = big4_result['details'].get(symbol, {})
+                            symbol_signal = symbol_detail.get('signal', 'NEUTRAL')
+                            signal_strength = symbol_detail.get('strength', 0)
+                            logger.info(f"[BIG4-SELF] {symbol} 自身趋势: {symbol_signal} (强度: {signal_strength})")
+                        else:
+                            # 对其他币种,使用Big4整体趋势信号
+                            symbol_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                            signal_strength = big4_result.get('signal_strength', 0)
+                            logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
+
+                        # 如果信号方向与交易方向冲突,降低评分或跳过
+                        if symbol_signal == 'BEARISH' and new_side == 'LONG':
+                            if signal_strength >= 60:  # 强烈看空信号
+                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
+                                continue
+                            else:
+                                penalty = int(signal_strength * 0.5)  # 根据强度降低评分
+                                new_score = new_score - penalty
+                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看空, LONG评分降低: {opp['score']} -> {new_score} (-{penalty})")
+                                if new_score < 20:  # 评分太低则跳过
+                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
+                                    continue
+
+                        elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
+                            if signal_strength >= 60:  # 强烈看多信号
+                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看多 (强度{signal_strength}), 跳过SHORT信号 (原评分{new_score})")
+                                continue
+                            else:
+                                penalty = int(signal_strength * 0.5)  # 根据强度降低评分
+                                new_score = new_score - penalty
+                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看多, SHORT评分降低: {opp['score']} -> {new_score} (-{penalty})")
+                                if new_score < 20:  # 评分太低则跳过
+                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
+                                    continue
+
+                        # 如果信号方向一致,提升评分
+                        elif symbol_signal == 'BULLISH' and new_side == 'LONG':
+                            boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
+                            new_score = new_score + boost
+                            logger.info(f"[BIG4-BOOST] {symbol} 市场看多与LONG方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+
+                        elif symbol_signal == 'BEARISH' and new_side == 'SHORT':
+                            boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
+                            new_score = new_score + boost
+                            logger.info(f"[BIG4-BOOST] {symbol} 市场看空与SHORT方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+
+                        # 更新机会评分 (用于后续记录)
+                        opp['score'] = new_score
+                        opp['big4_adjusted'] = True
+                        opp['big4_signal'] = symbol_signal
+                        opp['big4_strength'] = signal_strength
+
+                    except Exception as e:
+                        logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
+                        # 失败不影响正常交易流程
+
+                    # 检查同方向是否已有持仓
+                    if self.has_position(symbol, new_side):
+                        logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
+                        continue
+
+                    # 检查是否刚刚平仓(1小时冷却期)
+                    if self.check_recent_close(symbol, new_side, cooldown_minutes=60):
+                        logger.info(f"[SKIP] {symbol} {new_side}方向1小时内刚平仓,冷却中")
+                        continue
+
+                    # 检查是否有反向持仓 - 如果有则跳过,不做对冲
+                    if self.has_position(symbol, opposite_side):
+                        logger.info(f"[SKIP] {symbol} 已有{opposite_side}持仓,跳过{new_side}信号(不做对冲)")
+                        continue
+
+                    # 正常开仓
+                    self.open_position(opp)
+                    time.sleep(2)
+
+                # 7. 等待
+                logger.info(f"[WAIT] {self.scan_interval}秒后下一轮...")
+                time.sleep(self.scan_interval)
+
+            except KeyboardInterrupt:
+                logger.info("[EXIT] 收到停止信号")
+                self.running = False
+                break
+            except Exception as e:
+                logger.error(f"[ERROR] 主循环异常: {e}")
+                time.sleep(60)
+
+        logger.info("[STOP] 服务已停止")
+
+
+async def async_main():
+    """异步主函数"""
+    service = CoinFuturesTraderService()
+
+    # 保存事件循环引用，供分批建仓使用
+    service.event_loop = asyncio.get_event_loop()
+
+    # 初始化 WebSocket 服务
+    await service.init_ws_service()
+
+    # 恢复未完成的分批建仓任务（系统重启后）
+    if service.smart_entry_executor:
+        logger.info("🔄 检查并恢复未完成的分批建仓任务...")
+        await service.smart_entry_executor.recover_building_positions()
+
+    # 初始化智能平仓监控（为所有已开仓的分批建仓持仓启动监控）
+    if service.smart_exit_optimizer:
+        await service._start_smart_exit_monitoring()
+
+    # 在事件循环中运行同步的主循环
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, service.run)
+
+
+if __name__ == '__main__':
+    try:
+        # 运行异步主函数
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        logger.info("币本位合约服务已停止")
