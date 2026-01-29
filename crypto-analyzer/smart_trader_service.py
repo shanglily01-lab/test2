@@ -342,13 +342,29 @@ class SmartDecisionBrain:
             else:
                 position_pct = (current - low_72h) / (high_72h - low_72h) * 100
 
+            # 提前计算1H量能（在位置判断之前）
+            volumes_1h = [k['volume'] for k in klines_1h[-24:]]
+            avg_volume_1h = sum(volumes_1h) / len(volumes_1h) if volumes_1h else 1
+
+            strong_bull_1h = 0  # 有力量的阳线
+            strong_bear_1h = 0  # 有力量的阴线
+
+            for k in klines_1h[-24:]:
+                is_bull = k['close'] > k['open']
+                is_high_volume = k['volume'] > avg_volume_1h * 1.2  # 成交量 > 1.2倍平均量
+
+                if is_bull and is_high_volume:
+                    strong_bull_1h += 1
+                elif not is_bull and is_high_volume:
+                    strong_bear_1h += 1
+
+            net_power_1h = strong_bull_1h - strong_bear_1h
+
             # 低位做多，高位做空 (但要检查量能,避免在破位时做多)
             if position_pct < 30:
                 # 检查是否有强空头量能 (破位信号)
-                net_power_1h_check = (bullish_vol_1h - bearish_vol_1h) / total_vol_1h if total_vol_1h > 0 else 0
-
                 # 如果有强空头量能,不做多 (避免破位时抄底)
-                if net_power_1h_check > -2:  # 没有强空头量能,可以考虑做多
+                if net_power_1h > -2:  # 没有强空头量能,可以考虑做多
                     weight = self.scoring_weights.get('position_low', {'long': 20, 'short': 0})
                     long_score += weight['long']
                     if weight['long'] > 0:
@@ -433,23 +449,7 @@ class SmartDecisionBrain:
 
             # ========== 量能加权K线分析 (核心趋势判断) ==========
 
-            # 6. 1小时K线量能分析 - 最近24根(1天)
-            volumes_1h = [k['volume'] for k in klines_1h[-24:]]
-            avg_volume_1h = sum(volumes_1h) / len(volumes_1h) if volumes_1h else 1
-
-            strong_bull_1h = 0  # 有力量的阳线
-            strong_bear_1h = 0  # 有力量的阴线
-
-            for k in klines_1h[-24:]:
-                is_bull = k['close'] > k['open']
-                is_high_volume = k['volume'] > avg_volume_1h * 1.2  # 成交量 > 1.2倍平均量
-
-                if is_bull and is_high_volume:
-                    strong_bull_1h += 1
-                elif not is_bull and is_high_volume:
-                    strong_bear_1h += 1
-
-            net_power_1h = strong_bull_1h - strong_bear_1h
+            # 6. 1小时K线量能分析已在前面计算（提前用于位置判断）
 
             # 7. 15分钟K线量能分析 - 最近24根(6小时)
             volumes_15m = [k['volume'] for k in klines_15m[-24:]]
