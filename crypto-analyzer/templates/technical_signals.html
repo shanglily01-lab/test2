@@ -158,8 +158,8 @@
             </div>
         </header>
 
-        <div class="nav-container">
-            <nav class="nav-links">
+        <nav class="nav-container">
+            <div class="nav-links">
                 <a href="/" class="nav-link">
                     <i class="bi bi-house"></i> 首页
                 </a>
@@ -175,11 +175,32 @@
                 <a href="/futures_trading" class="nav-link">
                     <i class="bi bi-graph-up-arrow"></i> U本位合约
                 </a>
+                <a href="/coin_futures_trading" class="nav-link">
+                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
+                </a>
+                <a href="/live_trading" class="nav-link">
+                    <i class="bi bi-currency-exchange"></i> 实盘合约
+                </a>
+                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault();">
+                    <i class="bi bi-cart-check"></i> 实盘现货
+                </a>
                 <a href="/futures_review" class="nav-link">
                     <i class="bi bi-journal-check"></i> 复盘(24H)
                 </a>
-            </nav>
-        </div>
+                <a href="/etf_data" class="nav-link">
+                    <i class="bi bi-pie-chart"></i> ETF 数据
+                </a>
+                <a href="/corporate_treasury" class="nav-link">
+                    <i class="bi bi-building"></i> 企业金库
+                </a>
+                <a href="/blockchain_gas" class="nav-link">
+                    <i class="bi bi-lightning-charge"></i> Gas统计
+                </a>
+                <a href="/data_management" class="nav-link">
+                    <i class="bi bi-database"></i> 数据管理
+                </a>
+            </div>
+        </nav>
 
         <!-- 技术信号面板 -->
         <div class="card">
@@ -328,8 +349,17 @@
             const bullishPct = data.bullish_pct || 0;
             const bearishPct = data.bearish_pct || 0;
             const trend = data.trend || '震荡';
+            const avgBullishStrength = data.avg_bullish_strength || 0;
+            const avgBearishStrength = data.avg_bearish_strength || 0;
 
             const trendClass = trend.includes('上涨') ? 'trend-up' : trend.includes('下跌') ? 'trend-down' : 'trend-neutral';
+
+            // 格式化力度显示
+            const strengthInfo = avgBullishStrength > 0 || avgBearishStrength > 0
+                ? `<span style="font-size: 10px; color: var(--text-tertiary); margin-left: 4px;" title="阳线力度: ${avgBullishStrength.toFixed(2)} | 阴线力度: ${avgBearishStrength.toFixed(2)}">
+                     (↑${avgBullishStrength.toFixed(2)} ↓${avgBearishStrength.toFixed(2)})
+                   </span>`
+                : '';
 
             return `
                 <div class="kline-bar">
@@ -339,6 +369,7 @@
                     </div>
                     <div class="kline-bar-value ${trendClass}">
                         ${data.bullish_count}/${data.total_klines}
+                        ${strengthInfo}
                     </div>
                 </div>
             `;
