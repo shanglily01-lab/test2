@@ -207,15 +207,29 @@ print("=" * 100)
 # 保存优化建议
 if optimization_actions:
     import json
-    with open('optimization_actions.json', 'w', encoding='utf-8') as f:
-        json.dump({
-            'timestamp': now_utc.isoformat(),
-            'analysis_period': '24h',
-            'actions': optimization_actions
-        }, f, indent=2, ensure_ascii=False)
+    import os
 
-    print()
-    print(f"优化建议已保存到: optimization_actions.json")
+    # 使用脚本所在目录
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    output_file = os.path.join(script_dir, 'optimization_actions.json')
+
+    try:
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                'timestamp': now_utc.isoformat(),
+                'analysis_period': '24h',
+                'actions': optimization_actions
+            }, f, indent=2, ensure_ascii=False)
+
+        print()
+        print(f"✓ 优化建议已保存到: {output_file}")
+    except PermissionError:
+        print()
+        print(f"⚠️ 无法写入文件(权限不足): {output_file}")
+        print(f"优化建议数量: {len(optimization_actions)}")
+    except Exception as e:
+        print()
+        print(f"⚠️ 保存失败: {e}")
 
 cursor.close()
 conn.close()
