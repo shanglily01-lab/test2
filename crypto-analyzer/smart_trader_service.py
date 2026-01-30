@@ -572,6 +572,31 @@ class SmartDecisionBrain:
                     side = 'SHORT'
                     score = short_score
 
+                # 🔥 关键修复: 清理signal_components,只保留与最终方向一致的信号
+                # 定义多头和空头信号
+                bullish_signals = {
+                    'position_high', 'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
+                    'trend_1h_bull', 'trend_1d_bull', 'momentum_up_3pct', 'consecutive_bull'
+                }
+                bearish_signals = {
+                    'position_low', 'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
+                    'trend_1h_bear', 'trend_1d_bear', 'momentum_down_3pct', 'consecutive_bear'
+                }
+                neutral_signals = {'position_mid', 'volatility_high'}  # 中性信号可以在任何方向
+
+                # 过滤掉与方向相反的信号
+                cleaned_components = {}
+                for sig, val in signal_components.items():
+                    if sig in neutral_signals:
+                        cleaned_components[sig] = val  # 中性信号保留
+                    elif side == 'LONG' and sig in bullish_signals:
+                        cleaned_components[sig] = val  # 做多保留多头信号
+                    elif side == 'SHORT' and sig in bearish_signals:
+                        cleaned_components[sig] = val  # 做空保留空头信号
+                    # 其他信号(方向不一致的)丢弃
+
+                signal_components = cleaned_components  # 替换为清理后的信号
+
                 # 生成信号组合键用于黑名单检查
                 if signal_components:
                     sorted_signals = sorted(signal_components.keys())
