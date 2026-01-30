@@ -238,25 +238,25 @@
             <div class="card-header">
                 <h2 class="card-title">
                     <i class="bi bi-star"></i>
-                    核心功能
+                    核心功能 - 数据分析
                 </h2>
             </div>
             <div class="card-body">
                 <div class="features-grid">
                     <a href="/dashboard" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">📊</div>
-                        <h3 class="feature-title">实时数据分析</h3>
-                        <p class="feature-description">多维度数据采集与分析，覆盖主流交易所，提供毫秒级市场数据更新。支持K线、价格、交易量等多维度数据实时监控。</p>
-                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                        <h3 class="feature-title">Dashboard</h3>
+                        <p class="feature-description">实时数据仪表盘,多维度数据采集与分析,覆盖主流交易所,提供毫秒级市场数据更新。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
                             <span>立即查看</span>
                             <i class="bi bi-arrow-right"></i>
                         </div>
                     </a>
-                    <a href="/futures_trading" class="feature-card" style="text-decoration: none; color: inherit;">
-                        <div class="feature-icon">📈</div>
-                        <h3 class="feature-title">合约交易监控</h3>
-                        <p class="feature-description">永续合约、交割合约全方位监控，资金费率、持仓分析、多空比等关键指标一目了然，助力合约交易决策。</p>
-                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                    <a href="/technical-signals" class="feature-card" style="text-decoration: none; color: inherit;">
+                        <div class="feature-icon">📉</div>
+                        <h3 class="feature-title">技术信号</h3>
+                        <p class="feature-description">基于K线统计的实时市场分析,24H/4H/1H多维度K线统计,阳阴线力度评估,智能趋势判断。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
                             <span>立即查看</span>
                             <i class="bi bi-arrow-right"></i>
                         </div>
@@ -264,35 +264,85 @@
                     <a href="/etf_data" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">💼</div>
                         <h3 class="feature-title">ETF数据追踪</h3>
-                        <p class="feature-description">全球加密货币ETF实时监控，资金流向、机构持仓变化、净流入流出等数据尽在掌握，把握机构资金动向。</p>
-                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                        <p class="feature-description">全球加密货币ETF实时监控,资金流向、机构持仓变化、净流入流出等数据尽在掌握。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
                             <span>立即查看</span>
                             <i class="bi bi-arrow-right"></i>
                         </div>
                     </a>
                     <a href="/corporate_treasury" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">🏢</div>
-                        <h3 class="feature-title">企业金库分析</h3>
-                        <p class="feature-description">追踪上市公司加密资产配置，洞察机构投资趋势与持仓动向。监控MicroStrategy、Tesla等知名企业持仓变化。</p>
-                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                        <h3 class="feature-title">企业金库</h3>
+                        <p class="feature-description">追踪上市公司加密资产配置,洞察机构投资趋势。监控MicroStrategy、Tesla等知名企业持仓。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
                             <span>立即查看</span>
                             <i class="bi bi-arrow-right"></i>
                         </div>
                     </a>
                     <a href="/blockchain_gas" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">⚡</div>
-                        <h3 class="feature-title">区块链Gas统计</h3>
-                        <p class="feature-description">追踪六大主链每日Gas消耗量与价值。监控Ethereum、BSC、Polygon、Arbitrum、Optimism、Avalanche等链上活动与费用趋势。</p>
-                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                        <h3 class="feature-title">Gas统计</h3>
+                        <p class="feature-description">追踪六大主链每日Gas消耗量与价值。监控Ethereum、BSC、Polygon、Arbitrum等链上费用。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
                             <span>立即查看</span>
                             <i class="bi bi-arrow-right"></i>
                         </div>
                     </a>
                     <a href="/data_management" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon">💾</div>
-                        <h3 class="feature-title">智能数据管理</h3>
-                        <p class="feature-description">数据采集、存储、分析一体化管理。支持历史数据导入、实时数据采集、数据质量监控等功能。</p>
-                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; gap: 4px;">
+                        <h3 class="feature-title">数据管理</h3>
+                        <p class="feature-description">数据采集、存储、分析一体化管理。支持历史数据导入、实时数据采集、数据质量监控。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trading Section -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="bi bi-currency-exchange"></i>
+                    交易系统
+                </h2>
+            </div>
+            <div class="card-body">
+                <div class="features-grid">
+                    <a href="/paper_trading" class="feature-card" style="text-decoration: none; color: inherit;">
+                        <div class="feature-icon">📝</div>
+                        <h3 class="feature-title">现货交易</h3>
+                        <p class="feature-description">现货交易管理系统,实时持仓监控,交易记录查询,盈亏分析统计,支持多币种交易对。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                    <a href="/futures_trading" class="feature-card" style="text-decoration: none; color: inherit;">
+                        <div class="feature-icon">📈</div>
+                        <h3 class="feature-title">U本位合约</h3>
+                        <p class="feature-description">U本位永续合约交易系统,智能开平仓,风险控制,资金费率监控,多空信号分析。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                    <a href="/live_trading" class="feature-card" style="text-decoration: none; color: inherit;">
+                        <div class="feature-icon">🔴</div>
+                        <h3 class="feature-title">实盘合约</h3>
+                        <p class="feature-description">实盘合约交易系统,连接真实交易所API,实时交易执行,风控管理,止盈止损自动化。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
+                            <span>立即查看</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </div>
+                    </a>
+                    <a href="/futures_review" class="feature-card" style="text-decoration: none; color: inherit;">
+                        <div class="feature-icon">🔍</div>
+                        <h3 class="feature-title">复盘(24H)</h3>
+                        <p class="feature-description">24小时交易复盘系统,交易记录回顾,盈亏分析,信号评估,策略优化建议。</p>
+                        <div style="margin-top: var(--spacing-md); font-size: 12px; color: var(--primary-blue); display: flex; align-items: center; justify-content: center; gap: 4px;">
                             <span>立即查看</span>
                             <i class="bi bi-arrow-right"></i>
                         </div>
