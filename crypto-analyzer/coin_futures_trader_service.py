@@ -502,13 +502,43 @@ class CoinFuturesDecisionBrain:
 
             # 8. 突破追涨信号: position_high + 强力量能多头 → 可以做多
             # 用户反馈: "不适合做空，那就适合做多啊", "K线多空比，还要结合量能一起看"
+            # 🔥 新增: 增强追高过滤，防止买在顶部
             if position_pct > 70 and (net_power_1h >= 2 or (net_power_1h >= 2 and net_power_15m >= 2)):
-                # position_high时有强力量能支撑,可以追涨做多
-                weight = self.scoring_weights.get('breakout_long', {'long': 20, 'short': 0})
-                long_score += weight['long']
-                if weight['long'] > 0:
-                    signal_components['breakout_long'] = weight['long']
-                    logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
+                # 额外过滤条件: 防止追高
+                can_breakout = True
+                breakout_warnings = []
+
+                # 过滤1: 检查最近3根1H K线是否有长上影线（抛压）
+                recent_3_klines = klines_1h[-3:]
+                for k in recent_3_klines:
+                    upper_shadow_pct = (k['high'] - max(k['open'], k['close'])) / k['close'] if k['close'] > 0 else 0
+                    if upper_shadow_pct > 0.015:  # 上影线>1.5%
+                        can_breakout = False
+                        breakout_warnings.append(f"长上影线{upper_shadow_pct*100:.1f}%")
+                        break
+
+                # 过滤2: 检查是否连续上涨太多天（追高风险）
+                recent_5d_gains = sum(1 for k in klines_1d[-5:] if k['close'] > k['open'])
+                if recent_5d_gains >= 4:  # 连续4天以上上涨
+                    can_breakout = False
+                    breakout_warnings.append(f"连续{recent_5d_gains}天上涨")
+
+                # 过滤3: 检查30天趋势是否明确看涨
+                bullish_1d_count = sum(1 for k in klines_1d[-30:] if k['close'] > k['open'])
+                if bullish_1d_count < 18:  # 30天内阳线<18根
+                    breakout_warnings.append(f"1D趋势不明确(阳{bullish_1d_count}/30)")
+
+                # position_high时有强力量能支撑,且通过过滤,可以追涨做多
+                if can_breakout:
+                    weight = self.scoring_weights.get('breakout_long', {'long': 20, 'short': 0})
+                    long_score += weight['long']
+                    if weight['long'] > 0:
+                        signal_components['breakout_long'] = weight['long']
+                        logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
+                        if breakout_warnings:
+                            logger.warning(f"{symbol} 突破追涨警告: {', '.join(breakout_warnings)}")
+                else:
+                    logger.warning(f"{symbol} 追高风险过滤: {', '.join(breakout_warnings)}, 跳过突破信号")
 
             # 9. 破位追空信号: position_low + 强力量能空头 → 可以做空
             elif position_pct < 30 and (net_power_1h <= -2 or (net_power_1h <= -2 and net_power_15m <= -2)):
@@ -556,6 +586,12 @@ class CoinFuturesDecisionBrain:
                 blacklist_key = f"{signal_combination_key}_{side}"
                 if blacklist_key in self.signal_blacklist:
                     logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（历史表现差）")
+                    return None
+
+                # 🔥 新增: 检查信号方向矛盾（防止逻辑错误）
+                is_valid, contradiction_reason = self._validate_signal_direction(signal_components, side)
+                if not is_valid:
+                    logger.error(f"🚫 {symbol} 信号方向矛盾: {contradiction_reason} | 信号:{signal_combination_key} | 方向:{side}")
                     return None
 
                 return {
@@ -803,6 +839,50 @@ class CoinFuturesTraderService:
             return False, "时间框架冲突: 做空但1D看涨"
 
         return True, "时间框架一致"
+
+    def _validate_signal_direction(self, signal_components: dict, side: str) -> tuple:
+        """
+        验证信号方向一致性,防止矛盾信号
+
+        Args:
+            signal_components: 信号组件字典
+            side: 交易方向 (LONG/SHORT)
+
+        Returns:
+            (is_valid, reason) - 是否有效,原因描述
+        """
+        if not signal_components:
+            return True, "无信号组件"
+
+        # 定义空头信号（不应该出现在做多信号中）
+        bearish_signals = {
+            'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
+            'trend_1h_bear', 'trend_1d_bear', 'momentum_up_3pct', 'consecutive_bear'
+        }
+
+        # 定义多头信号（不应该出现在做空信号中）
+        bullish_signals = {
+            'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
+            'trend_1h_bull', 'trend_1d_bull', 'momentum_down_3pct', 'consecutive_bull'
+        }
+
+        signal_set = set(signal_components.keys())
+
+        if side == 'LONG':
+            conflicts = bearish_signals & signal_set
+            if conflicts:
+                if conflicts == {'momentum_up_3pct'} and 'position_low' in signal_set:
+                    return True, "超跌反弹允许"
+                return False, f"做多但包含空头信号: {', '.join(conflicts)}"
+
+        elif side == 'SHORT':
+            conflicts = bullish_signals & signal_set
+            if conflicts:
+                if conflicts == {'momentum_down_3pct'} and 'position_high' in signal_set:
+                    return True, "超涨回调允许"
+                return False, f"做空但包含多头信号: {', '.join(conflicts)}"
+
+        return True, "信号方向一致"
 
     def calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """
