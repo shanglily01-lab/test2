@@ -975,6 +975,16 @@ class SmartTraderService:
         symbol = opp['symbol']
         side = opp['side']  # 'LONG' 或 'SHORT'
 
+        # ========== 第零步：验证symbol格式 ==========
+        # U本位服务只应该交易 /USDT 交易对
+        if symbol.endswith('/USD') and not symbol.endswith('/USDT'):
+            logger.error(f"[SYMBOL_ERROR] {symbol} 是币本位交易对(/USD),不应在U本位服务开仓,已拒绝")
+            return False
+
+        if not symbol.endswith('/USDT'):
+            logger.error(f"[SYMBOL_ERROR] {symbol} 格式错误,U本位服务只支持/USDT交易对,已拒绝")
+            return False
+
         # ========== 第一步：验证信号（无论用哪种开仓方式都要验证） ==========
         signal_components = opp.get('signal_components', {})
 

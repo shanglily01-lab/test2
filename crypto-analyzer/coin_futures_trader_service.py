@@ -980,6 +980,16 @@ class CoinFuturesTraderService:
         symbol = opp['symbol']
         side = opp['side']  # 'LONG' 或 'SHORT'
 
+        # ========== 第零步：验证symbol格式 ==========
+        # 币本位服务只应该交易 /USD 交易对
+        if symbol.endswith('/USDT'):
+            logger.error(f"[SYMBOL_ERROR] {symbol} 是U本位交易对(/USDT),不应在币本位服务开仓,已拒绝")
+            return False
+
+        if not symbol.endswith('/USD'):
+            logger.error(f"[SYMBOL_ERROR] {symbol} 格式错误,币本位服务只支持/USD交易对,已拒绝")
+            return False
+
         # ========== 第一步：验证信号（无论用哪种开仓方式都要验证） ==========
         signal_components = opp.get('signal_components', {})
 
