@@ -614,6 +614,50 @@ class SmartDecisionBrain:
                 opportunities.append(result)
         return opportunities
 
+    def _validate_signal_direction(self, signal_components: dict, side: str) -> tuple:
+        """
+        验证信号方向一致性,防止矛盾信号
+
+        Args:
+            signal_components: 信号组件字典
+            side: 交易方向 (LONG/SHORT)
+
+        Returns:
+            (is_valid, reason) - 是否有效,原因描述
+        """
+        if not signal_components:
+            return True, "无信号组件"
+
+        # 定义空头信号（不应该出现在做多信号中）
+        bearish_signals = {
+            'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
+            'trend_1h_bear', 'trend_1d_bear', 'momentum_up_3pct', 'consecutive_bear'
+        }
+
+        # 定义多头信号（不应该出现在做空信号中）
+        bullish_signals = {
+            'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
+            'trend_1h_bull', 'trend_1d_bull', 'momentum_down_3pct', 'consecutive_bull'
+        }
+
+        signal_set = set(signal_components.keys())
+
+        if side == 'LONG':
+            conflicts = bearish_signals & signal_set
+            if conflicts:
+                if conflicts == {'momentum_up_3pct'} and 'position_low' in signal_set:
+                    return True, "超跌反弹允许"
+                return False, f"做多但包含空头信号: {', '.join(conflicts)}"
+
+        elif side == 'SHORT':
+            conflicts = bullish_signals & signal_set
+            if conflicts:
+                if conflicts == {'momentum_down_3pct'} and 'position_high' in signal_set:
+                    return True, "超涨回调允许"
+                return False, f"做空但包含多头信号: {', '.join(conflicts)}"
+
+        return True, "信号方向一致"
+
 
 class SmartTraderService:
     """智能交易服务"""
@@ -834,64 +878,6 @@ class SmartTraderService:
             return False, "时间框架冲突: 做空但1D看涨"
 
         return True, "时间框架一致"
-
-    def _validate_signal_direction(self, signal_components: dict, side: str) -> tuple:
-        """
-        🔥 新增: 验证信号方向一致性,防止矛盾信号
-
-        Args:
-            signal_components: 信号组件字典
-            side: 交易方向 (LONG/SHORT)
-
-        Returns:
-            (is_valid, reason) - 是否有效,原因描述
-        """
-        if not signal_components:
-            return True, "无信号组件"
-
-        # 定义空头信号（不应该出现在做多信号中）
-        bearish_signals = {
-            'breakdown_short',        # 破位做空
-            'volume_power_bear',      # 1H+15M空头量能
-            'volume_power_1h_bear',   # 1H空头量能
-            'trend_1h_bear',          # 1H趋势看跌
-            'trend_1d_bear',          # 1D趋势看跌
-            'momentum_up_3pct',       # 上涨3%（可能是顶部反转）
-            'consecutive_bear'        # 连续阴线
-        }
-
-        # 定义多头信号（不应该出现在做空信号中）
-        bullish_signals = {
-            'breakout_long',          # 突破做多
-            'volume_power_bull',      # 1H+15M多头量能
-            'volume_power_1h_bull',   # 1H多头量能
-            'trend_1h_bull',          # 1H趋势看涨
-            'trend_1d_bull',          # 1D趋势看涨
-            'momentum_down_3pct',     # 下跌3%（可能是底部反转）
-            'consecutive_bull'        # 连续阳线
-        }
-
-        signal_set = set(signal_components.keys())
-
-        # 检查做多信号中的矛盾
-        if side == 'LONG':
-            conflicts = bearish_signals & signal_set
-            if conflicts:
-                # 特殊情况：如果只有momentum_up_3pct，可能是超跌反弹，允许
-                if conflicts == {'momentum_up_3pct'} and 'position_low' in signal_set:
-                    return True, "超跌反弹允许"
-                return False, f"做多但包含空头信号: {', '.join(conflicts)}"
-
-        # 检查做空信号中的矛盾
-        elif side == 'SHORT':
-            conflicts = bullish_signals & signal_set
-            if conflicts:
-                # 特殊情况：如果只有momentum_down_3pct，可能是超涨回调，允许
-                if conflicts == {'momentum_down_3pct'} and 'position_high' in signal_set:
-                    return True, "超涨回调允许"
-                return False, f"做空但包含多头信号: {', '.join(conflicts)}"
-
-        return True, "信号方向一致"
 
     def calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """
