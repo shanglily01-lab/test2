@@ -1,0 +1,78 @@
+{
+  "analysis_time": "2026-01-30 19:40:39",
+  "period": "24 hours",
+  "summary": {
+    "total_signals": 50,
+    "total_trades": 169,
+    "overall_winrate": 58.58,
+    "total_pnl": 2510.54,
+    "profitable_signals": 36,
+    "losing_signals": 14
+  },
+  "add_to_blacklist": [
+    {
+      "signal_type": "breakout_long + momentum_up_3pct + position_high + trend_1d_bull + volatility_high + volume_power_1h_bull",
+      "position_side": "LONG",
+      "trades": 1,
+      "win_rate": 0.0,
+      "total_pnl": -45.42,
+      "reason": "胜率0.0%, 亏损$-45.42"
+    },
+    {
+      "signal_type": "momentum_down_3pct + position_low + volatility_high",
+      "position_side": "SHORT",
+      "trades": 2,
+      "win_rate": 0.0,
+      "total_pnl": -45.36,
+      "reason": "胜率0.0%, 亏损$-45.36"
+    },
+    {
+      "signal_type": "momentum_up_3pct + position_low + volatility_high + volume_power_bull",
+      "position_side": "LONG",
+      "trades": 1,
+      "win_rate": 0.0,
+      "total_pnl": -42.65,
+      "reason": "胜率0.0%, 亏损$-42.65"
+    },
+    {
+      "signal_type": "breakdown_short + volatility_high",
+      "position_side": "SHORT",
+      "trades": 3,
+      "win_rate": 0.0,
+      "total_pnl": -41.36,
+      "reason": "胜率0.0%, 亏损$-41.36"
+    },
+    {
+      "signal_type": "breakdown_short + momentum_down_3pct + trend_1h_bear + volatility_high + volume_power_1h_bear",
+      "position_side": "SHORT",
+      "trades": 11,
+      "win_rate": 54.5,
+      "total_pnl": -37.58,
+      "reason": "胜率54.5%, 亏损$-37.58"
+    },
+    {
+      "signal_type": "position_low + trend_1h_bear + volatility_high",
+      "position_side": "SHORT",
+      "trades": 2,
+      "win_rate": 0.0,
+      "total_pnl": -35.6,
+      "reason": "胜率0.0%, 亏损$-35.60"
+    }
+  ],
+  "remove_from_blacklist": [
+    {
+      "signal_type": "momentum_down_3pct + position_low + trend_1d_bear + volatility_high",
+      "position_side": "SHORT",
+      "trades": 8,
+      "win_rate": 50.0,
+      "total_pnl": 24.1
+    },
+    {
+      "signal_type": "breakdown_short + momentum_down_3pct + position_low + volatility_high + volume_power_bear",
+      "position_side": "SHORT",
+      "trades": 1,
+      "win_rate": 100.0,
+      "total_pnl": 21.03
+    }
+  ]
+}
