@@ -311,12 +311,12 @@ signals:
   smart_exit:
     enabled: true
     extension_minutes: 30
-    high_profit_drawback: 0.5
-    high_profit_threshold: 3.0
-    low_profit_target: 1.0
-    micro_loss_threshold: -0.5
-    mid_profit_drawback: 0.4
-    mid_profit_threshold: 1.0
+    high_profit_drawback: 0.5       # 高盈利(>3%)回撤50%止盈
+    high_profit_threshold: 3.0      # 高盈利阈值3%
+    low_profit_target: 1.0          # 低盈利目标1%
+    micro_loss_threshold: -0.5      # 微亏损-0.5%
+    mid_profit_drawback: 0.5        # 🔥优化: 中等盈利(>2%)回撤50%止盈(原0.4)
+    mid_profit_threshold: 2.0       # 🔥优化: 中等盈利阈值降至2%(原1.0),更早启用trailing stop
   weights:
     news: 0.3
     social: 0.1

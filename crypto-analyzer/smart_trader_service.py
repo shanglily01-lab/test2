@@ -616,6 +616,15 @@ class SmartDecisionBrain:
                     logger.error(f"🚫 {symbol} 信号方向矛盾: {contradiction_reason} | 信号:{signal_combination_key} | 方向:{side}")
                     return None
 
+                # 🔥 新增: 禁止高风险位置交易（代码层面强制）
+                if side == 'LONG' and 'position_high' in signal_components:
+                    logger.warning(f"🚫 {symbol} 拒绝高位做多: position_high在{position_pct:.1f}%位置,容易买在顶部")
+                    return None
+
+                if side == 'SHORT' and 'position_low' in signal_components:
+                    logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
+                    return None
+
                 return {
                     'symbol': symbol,
                     'side': side,
