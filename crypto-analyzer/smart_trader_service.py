@@ -631,13 +631,13 @@ class SmartDecisionBrain:
         # 定义空头信号（不应该出现在做多信号中）
         bearish_signals = {
             'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
-            'trend_1h_bear', 'trend_1d_bear', 'momentum_up_3pct', 'consecutive_bear'
+            'trend_1h_bear', 'trend_1d_bear', 'momentum_down_3pct', 'consecutive_bear'  # momentum_down_3pct=下跌=空头
         }
 
         # 定义多头信号（不应该出现在做空信号中）
         bullish_signals = {
             'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
-            'trend_1h_bull', 'trend_1d_bull', 'momentum_down_3pct', 'consecutive_bull'
+            'trend_1h_bull', 'trend_1d_bull', 'momentum_up_3pct', 'consecutive_bull'  # momentum_up_3pct=上涨=多头
         }
 
         signal_set = set(signal_components.keys())
@@ -645,14 +645,16 @@ class SmartDecisionBrain:
         if side == 'LONG':
             conflicts = bearish_signals & signal_set
             if conflicts:
-                if conflicts == {'momentum_up_3pct'} and 'position_low' in signal_set:
+                # 特殊情况：低位下跌3%可能是超跌反弹机会,允许做多
+                if conflicts == {'momentum_down_3pct'} and 'position_low' in signal_set:
                     return True, "超跌反弹允许"
                 return False, f"做多但包含空头信号: {', '.join(conflicts)}"
 
         elif side == 'SHORT':
             conflicts = bullish_signals & signal_set
             if conflicts:
-                if conflicts == {'momentum_down_3pct'} and 'position_high' in signal_set:
+                # 特殊情况：高位上涨3%可能是超涨回调机会,允许做空
+                if conflicts == {'momentum_up_3pct'} and 'position_high' in signal_set:
                     return True, "超涨回调允许"
                 return False, f"做空但包含多头信号: {', '.join(conflicts)}"
 
