@@ -140,21 +140,32 @@ class BinanceWSPriceService:
             return f"{stream_symbol}@markPrice@1s"  # 每秒更新
         elif self.market_type == 'coin_futures':
             # 币本位合约: BTC/USD -> btcusd_perp@markPrice@1s
-            if symbol.endswith('/USD'):
-                stream_symbol = symbol.replace('/', '').lower() + '_perp'
+            # 🔥 修复: 确保所有币本位交易对都添加 _perp 后缀
+            if not stream_symbol.endswith('_perp'):
+                stream_symbol = stream_symbol + '_perp'
             return f"{stream_symbol}@markPrice@1s"  # 每秒更新
         else:
             # 现货: 使用 ticker 流获取实时价格
             return f"{stream_symbol}@ticker"  # 实时推送
 
     def _stream_to_symbol(self, stream: str) -> str:
-        """转换流名称回交易对格式：btcusdt -> BTC/USDT"""
+        """转换流名称回交易对格式：btcusdt -> BTC/USDT, btcusd_perp -> BTC/USD"""
         # 从 btcusdt@markPrice 或 btcusdt@ticker 提取 btcusdt
         base = stream.split('@')[0].upper()
-        # 假设都是 USDT 交易对
-        if base.endswith('USDT'):
+
+        # 🔥 修复: 添加币本位合约符号转换
+        if self.market_type == 'coin_futures':
+            # 币本位: BTCUSD_PERP -> BTC/USD
+            if base.endswith('_PERP'):
+                base = base[:-5]  # 移除 _PERP
+            if base.endswith('USD'):
+                return base[:-3] + '/USD'
+            return base
+        elif base.endswith('USDT'):
+            # U本位/现货: BTCUSDT -> BTC/USDT
             return base[:-4] + '/USDT'
-        return base
+        else:
+            return base
 
     async def subscribe(self, symbols: List[str]):
         """订阅交易对的价格"""
@@ -244,10 +255,11 @@ class BinanceWSPriceService:
             if 'result' in data or 'id' in data:
                 return
 
-            if self.market_type == 'futures':
-                # 处理合约 markPrice 消息
+            # 🔥 修复: 币本位合约也使用 markPriceUpdate 事件
+            if self.market_type in ('futures', 'coin_futures'):
+                # 处理 U本位/币本位合约 markPrice 消息
                 if 'e' in data and data['e'] == 'markPriceUpdate':
-                    stream_symbol = data['s'].lower()  # BTCUSDT -> btcusdt
+                    stream_symbol = data['s'].lower()  # BTCUSDT or BTCUSD_PERP -> btcusdt or btcusd_perp
                     symbol = self._stream_to_symbol(stream_symbol)
                     price = float(data['p'])  # 标记价格
                     self._on_price_update(symbol, price)
