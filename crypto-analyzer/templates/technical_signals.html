@@ -354,10 +354,29 @@
 
             const trendClass = trend.includes('上涨') ? 'trend-up' : trend.includes('下跌') ? 'trend-down' : 'trend-neutral';
 
-            // 格式化力度显示
+            // 格式化力度显示 - 使用K格式简化大数值
+            function formatStrength(value) {
+                if (value >= 1000000) {
+                    return (value / 1000000).toFixed(1) + 'M';
+                } else if (value >= 1000) {
+                    return (value / 1000).toFixed(1) + 'K';
+                } else {
+                    return value.toFixed(1);
+                }
+            }
+
+            const bullishStr = formatStrength(avgBullishStrength);
+            const bearishStr = formatStrength(avgBearishStrength);
+
+            // 力度对比：阳线力度 vs 阴线力度
+            const strengthRatio = avgBearishStrength > 0
+                ? (avgBullishStrength / avgBearishStrength).toFixed(2)
+                : '∞';
+
             const strengthInfo = avgBullishStrength > 0 || avgBearishStrength > 0
-                ? `<span style="font-size: 10px; color: var(--text-tertiary); margin-left: 4px;" title="阳线力度: ${avgBullishStrength.toFixed(2)} | 阴线力度: ${avgBearishStrength.toFixed(2)}">
-                     (↑${avgBullishStrength.toFixed(2)} ↓${avgBearishStrength.toFixed(2)})
+                ? `<span style="font-size: 10px; color: var(--text-tertiary); margin-left: 4px;"
+                         title="阳线平均力度: ${avgBullishStrength.toFixed(2)}&#10;阴线平均力度: ${avgBearishStrength.toFixed(2)}&#10;力度比: ${strengthRatio} (阳/阴)">
+                     [↑${bullishStr} ↓${bearishStr}]
                    </span>`
                 : '';
 
