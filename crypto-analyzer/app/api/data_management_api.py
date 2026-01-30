@@ -365,25 +365,78 @@ async def get_data_statistics():
             # - Binance数据（price_data, kline_data, funding_rate_data等）：UTC时间（UTC+0）
             # - 其他数据（ETF、企业金库、新闻、信号等）：本地时间（UTC+8）
             tables = [
-            {'name': 'price_data', 'label': '实时价格数据', 'description': '存储各交易所的实时价格数据', 'time_field': 'timestamp', 'is_binance': True},
-            {'name': 'kline_data', 'label': 'K线数据', 'description': '存储不同时间周期的K线数据', 'time_field': 'open_time', 'is_timestamp_ms': True, 'is_binance': True},
-            {'name': 'news_data', 'label': '新闻数据', 'description': '存储加密货币相关新闻', 'time_field': 'created_at', 'is_binance': False},
-            {'name': 'funding_rate_data', 'label': '资金费率数据', 'description': '存储合约资金费率数据', 'time_field': 'timestamp', 'is_binance': True},
-            {'name': 'futures_open_interest', 'label': '持仓量数据', 'description': '存储合约持仓量数据', 'time_field': 'timestamp', 'is_binance': True},
-            {'name': 'futures_long_short_ratio', 'label': '多空比数据', 'description': '存储合约多空比数据', 'time_field': 'timestamp', 'is_binance': True},
-            {'name': 'smart_money_transactions', 'label': '聪明钱交易', 'description': '存储聪明钱包的交易记录', 'time_field': 'timestamp', 'is_binance': False},
-            {'name': 'smart_money_signals', 'label': '聪明钱信号', 'description': '存储聪明钱交易信号', 'time_field': 'created_at', 'is_binance': False},
-            {'name': 'ema_signals', 'label': 'EMA信号', 'description': '存储EMA技术指标信号', 'time_field': 'timestamp', 'is_binance': False},
-            {'name': 'investment_recommendations', 'label': '投资建议', 'description': '存储AI生成的投资建议', 'time_field': 'created_at', 'is_binance': False},
-            {'name': 'futures_positions', 'label': '合约持仓', 'description': '存储合约交易持仓记录', 'time_field': 'created_at', 'is_binance': False},
-            {'name': 'futures_orders', 'label': '合约订单', 'description': '存储合约交易订单记录', 'time_field': 'created_at', 'is_binance': False},
-            {'name': 'futures_trades', 'label': '合约交易', 'description': '存储合约交易记录', 'time_field': 'timestamp', 'is_binance': False},
-            {'name': 'futures_trading_accounts', 'label': '合约账户', 'description': '存储合约模拟交易账户信息', 'time_field': 'created_at', 'is_binance': False},
-            {'name': 'paper_trading_accounts', 'label': '现货账户', 'description': '存储现货模拟交易账户信息', 'time_field': 'created_at', 'is_binance': False},
-            {'name': 'paper_trading_orders', 'label': '模拟订单', 'description': '存储模拟交易订单记录', 'time_field': 'created_at', 'is_binance': False},
-            {'name': 'paper_trading_positions', 'label': '模拟持仓', 'description': '存储模拟交易持仓记录', 'time_field': 'created_at', 'is_binance': False},
-            {'name': 'crypto_etf_flows', 'label': 'ETF数据', 'description': '存储加密货币ETF资金流向数据', 'time_field': 'date', 'is_binance': False},
-            {'name': 'corporate_treasury_financing', 'label': '企业融资', 'description': '存储企业金库融资数据', 'time_field': 'date', 'is_binance': False},
+            # 基础市场数据
+            {'name': 'price_data', 'label': '实时价格', 'description': '交易所实时价格数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '市场数据'},
+            {'name': 'kline_data', 'label': 'K线数据', 'description': '多周期K线数据', 'time_field': 'open_time', 'is_timestamp_ms': True, 'is_binance': True, 'category': '市场数据'},
+            {'name': 'orderbook_data', 'label': '订单簿', 'description': '订单簿深度数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '市场数据'},
+            {'name': 'trade_data', 'label': '成交记录', 'description': '历史成交数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '市场数据'},
+
+            # 合约数据
+            {'name': 'funding_rate_data', 'label': '资金费率', 'description': '合约资金费率数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '合约数据'},
+            {'name': 'futures_open_interest', 'label': '持仓量', 'description': '合约持仓量数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '合约数据'},
+            {'name': 'futures_long_short_ratio', 'label': '多空比', 'description': '合约多空比数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '合约数据'},
+            {'name': 'futures_liquidations', 'label': '清算数据', 'description': '合约清算记录', 'time_field': 'timestamp', 'is_binance': True, 'category': '合约数据'},
+
+            # U本位合约交易
+            {'name': 'futures_positions', 'label': '合约持仓', 'description': 'U本位合约持仓记录', 'time_field': 'created_at', 'is_binance': False, 'category': 'U本位合约'},
+            {'name': 'futures_orders', 'label': '合约订单', 'description': 'U本位合约订单记录', 'time_field': 'created_at', 'is_binance': False, 'category': 'U本位合约'},
+            {'name': 'futures_trades', 'label': '合约成交', 'description': 'U本位合约成交记录', 'time_field': 'timestamp', 'is_binance': False, 'category': 'U本位合约'},
+            {'name': 'futures_trading_accounts', 'label': '合约账户', 'description': 'U本位合约账户信息', 'time_field': 'created_at', 'is_binance': False, 'category': 'U本位合约'},
+
+            # 实盘合约交易
+            {'name': 'live_futures_positions', 'label': '实盘持仓', 'description': '实盘合约持仓记录', 'time_field': 'created_at', 'is_binance': False, 'category': '实盘合约'},
+            {'name': 'live_futures_orders', 'label': '实盘订单', 'description': '实盘合约订单记录', 'time_field': 'created_at', 'is_binance': False, 'category': '实盘合约'},
+            {'name': 'live_futures_trades', 'label': '实盘成交', 'description': '实盘合约成交记录', 'time_field': 'timestamp', 'is_binance': False, 'category': '实盘合约'},
+            {'name': 'live_trading_accounts', 'label': '实盘账户', 'description': '实盘合约账户信息', 'time_field': 'created_at', 'is_binance': False, 'category': '实盘合约'},
+            {'name': 'live_trading_logs', 'label': '实盘日志', 'description': '实盘交易日志', 'time_field': 'created_at', 'is_binance': False, 'category': '实盘合约'},
+
+            # 现货交易
+            {'name': 'paper_trading_positions', 'label': '现货持仓', 'description': '现货持仓记录', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
+            {'name': 'paper_trading_orders', 'label': '现货订单', 'description': '现货订单记录', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
+            {'name': 'paper_trading_trades', 'label': '现货成交', 'description': '现货成交记录', 'time_field': 'timestamp', 'is_binance': False, 'category': '现货交易'},
+            {'name': 'paper_trading_accounts', 'label': '现货账户', 'description': '现货账户信息', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
+            {'name': 'spot_positions', 'label': '现货持仓v1', 'description': '现货持仓记录v1', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
+            {'name': 'spot_positions_v2', 'label': '现货持仓v2', 'description': '现货持仓记录v2', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
+
+            # 信号与分析
+            {'name': 'ema_signals', 'label': 'EMA信号', 'description': 'EMA技术指标信号', 'time_field': 'timestamp', 'is_binance': False, 'category': '信号分析'},
+            {'name': 'signal_blacklist', 'label': '信号黑名单', 'description': '失败信号黑名单', 'time_field': 'created_at', 'is_binance': False, 'category': '信号分析'},
+            {'name': 'signal_component_performance', 'label': '信号组件性能', 'description': '信号组件统计', 'time_field': 'updated_at', 'is_binance': False, 'category': '信号分析'},
+            {'name': 'investment_recommendations', 'label': '投资建议', 'description': 'AI投资建议', 'time_field': 'created_at', 'is_binance': False, 'category': '信号分析'},
+            {'name': 'trading_symbol_rating', 'label': '币种评级', 'description': '交易对评分', 'time_field': 'updated_at', 'is_binance': False, 'category': '信号分析'},
+
+            # ETF数据
+            {'name': 'crypto_etf_flows', 'label': 'ETF流向', 'description': '加密货币ETF资金流向', 'time_field': 'date', 'is_binance': False, 'category': 'ETF数据'},
+            {'name': 'crypto_etf_products', 'label': 'ETF产品', 'description': 'ETF产品信息', 'time_field': 'updated_at', 'is_binance': False, 'category': 'ETF数据'},
+            {'name': 'crypto_etf_events', 'label': 'ETF事件', 'description': 'ETF重要事件', 'time_field': 'event_date', 'is_binance': False, 'category': 'ETF数据'},
+            {'name': 'crypto_etf_daily_summary', 'label': 'ETF日度汇总', 'description': 'ETF每日统计', 'time_field': 'date', 'is_binance': False, 'category': 'ETF数据'},
+
+            # 企业金库
+            {'name': 'corporate_treasury_companies', 'label': '企业信息', 'description': '持有加密货币的企业', 'time_field': 'updated_at', 'is_binance': False, 'category': '企业金库'},
+            {'name': 'corporate_treasury_purchases', 'label': '企业买入', 'description': '企业加密资产买入记录', 'time_field': 'date', 'is_binance': False, 'category': '企业金库'},
+            {'name': 'corporate_treasury_financing', 'label': '企业融资', 'description': '企业融资数据', 'time_field': 'date', 'is_binance': False, 'category': '企业金库'},
+            {'name': 'corporate_treasury_summary', 'label': '企业汇总', 'description': '企业持仓汇总', 'time_field': 'updated_at', 'is_binance': False, 'category': '企业金库'},
+
+            # Gas数据
+            {'name': 'blockchain_gas_daily', 'label': 'Gas日度', 'description': '区块链Gas每日统计', 'time_field': 'date', 'is_binance': False, 'category': 'Gas数据'},
+            {'name': 'blockchain_gas_daily_summary', 'label': 'Gas汇总', 'description': 'Gas数据日度汇总', 'time_field': 'date', 'is_binance': False, 'category': 'Gas数据'},
+
+            # Hyperliquid数据
+            {'name': 'hyperliquid_traders', 'label': 'HL交易员', 'description': 'Hyperliquid交易员', 'time_field': 'updated_at', 'is_binance': False, 'category': 'Hyperliquid'},
+            {'name': 'hyperliquid_wallet_positions', 'label': 'HL持仓', 'description': 'HL钱包持仓', 'time_field': 'timestamp', 'is_binance': False, 'category': 'Hyperliquid'},
+            {'name': 'hyperliquid_wallet_trades', 'label': 'HL交易', 'description': 'HL钱包交易', 'time_field': 'timestamp', 'is_binance': False, 'category': 'Hyperliquid'},
+            {'name': 'hyperliquid_monthly_performance', 'label': 'HL月度', 'description': 'HL月度表现', 'time_field': 'month', 'is_binance': False, 'category': 'Hyperliquid'},
+
+            # 市场观察
+            {'name': 'market_regime', 'label': '市场状态', 'description': '市场行情状态', 'time_field': 'timestamp', 'is_binance': False, 'category': '市场分析'},
+            {'name': 'market_observations', 'label': '市场观察', 'description': '市场观察记录', 'time_field': 'created_at', 'is_binance': False, 'category': '市场分析'},
+            {'name': 'news_data', 'label': '新闻数据', 'description': '加密货币新闻', 'time_field': 'created_at', 'is_binance': False, 'category': '市场分析'},
+
+            # 系统配置
+            {'name': 'adaptive_params', 'label': '自适应参数', 'description': '策略自适应参数', 'time_field': 'updated_at', 'is_binance': False, 'category': '系统配置'},
+            {'name': 'trading_blacklist', 'label': '交易黑名单', 'description': '禁止交易币种', 'time_field': 'created_at', 'is_binance': False, 'category': '系统配置'},
+            {'name': 'symbol_volatility_profile', 'label': '波动率配置', 'description': '币种波动率', 'time_field': 'updated_at', 'is_binance': False, 'category': '系统配置'},
+            {'name': 'users', 'label': '用户表', 'description': '系统用户信息', 'time_field': 'created_at', 'is_binance': False, 'category': '系统管理'},
         ]
         
         # 先一次性获取所有表的大小和行数估算（从 information_schema）
@@ -621,12 +674,31 @@ async def get_table_sample(table_name: str, limit: int = 10):
             
             # 安全检查：只允许查询白名单中的表
             allowed_tables = [
-                'price_data', 'kline_data', 'news_data', 'funding_rate_data',
-            'futures_open_interest', 'futures_long_short_ratio',
-            'smart_money_transactions', 'smart_money_signals', 'ema_signals',
-            'investment_recommendations', 'futures_positions', 'futures_orders',
-            'futures_trades', 'futures_trading_accounts', 'paper_trading_accounts', 'paper_trading_orders',
-            'paper_trading_positions', 'crypto_etf_flows', 'corporate_treasury_financing'
+                # 市场数据
+                'price_data', 'kline_data', 'orderbook_data', 'trade_data',
+                # 合约数据
+                'funding_rate_data', 'futures_open_interest', 'futures_long_short_ratio', 'futures_liquidations',
+                # U本位合约
+                'futures_positions', 'futures_orders', 'futures_trades', 'futures_trading_accounts',
+                # 实盘合约
+                'live_futures_positions', 'live_futures_orders', 'live_futures_trades', 'live_trading_accounts', 'live_trading_logs',
+                # 现货交易
+                'paper_trading_positions', 'paper_trading_orders', 'paper_trading_trades', 'paper_trading_accounts',
+                'spot_positions', 'spot_positions_v2',
+                # 信号分析
+                'ema_signals', 'signal_blacklist', 'signal_component_performance', 'investment_recommendations', 'trading_symbol_rating',
+                # ETF数据
+                'crypto_etf_flows', 'crypto_etf_products', 'crypto_etf_events', 'crypto_etf_daily_summary',
+                # 企业金库
+                'corporate_treasury_companies', 'corporate_treasury_purchases', 'corporate_treasury_financing', 'corporate_treasury_summary',
+                # Gas数据
+                'blockchain_gas_daily', 'blockchain_gas_daily_summary',
+                # Hyperliquid
+                'hyperliquid_traders', 'hyperliquid_wallet_positions', 'hyperliquid_wallet_trades', 'hyperliquid_monthly_performance',
+                # 市场分析
+                'market_regime', 'market_observations', 'news_data',
+                # 系统配置
+                'adaptive_params', 'trading_blacklist', 'symbol_volatility_profile', 'users'
         ]
         
         if table_name not in allowed_tables:
