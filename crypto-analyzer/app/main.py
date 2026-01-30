@@ -706,6 +706,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 技术信号API路由
+try:
+    from app.api.technical_signals_api import router as technical_signals_router
+    app.include_router(technical_signals_router)
+    logger.info("✅ 技术信号API路由已注册（/api/technical-signals）")
+except Exception as e:
+    logger.warning(f"⚠️  技术信号API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # ==================== API路由 ====================
 
 @app.get("/")

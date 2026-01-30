@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>技术信号 - AlphaFlow</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
         :root {
@@ -41,14 +40,6 @@
         .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
         .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
         .card-body { padding: 0; }
-        .filters { display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); flex-wrap: wrap; }
-        .select-input { padding: var(--spacing-md) var(--spacing-lg); border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-tertiary); color: var(--text-primary); font-size: 14px; }
-        .tabs { display: flex; gap: var(--spacing-sm); border-bottom: 2px solid var(--border-default); margin-bottom: var(--spacing-lg); }
-        .tab { padding: var(--spacing-md) var(--spacing-xl); background: transparent; color: var(--text-secondary); border: none; border-bottom: 2px solid transparent; cursor: pointer; font-size: 14px; font-weight: 600; transition: all var(--transition-base); position: relative; top: 2px; }
-        .tab:hover { color: var(--text-primary); background: var(--bg-hover); }
-        .tab.active { color: var(--primary-blue); border-bottom-color: var(--primary-blue); background: transparent; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
         .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
         table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
         thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
@@ -61,260 +52,23 @@
         .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
         .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
         .badge-warning { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
-        .indicator-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--spacing-lg); }
-        .indicator-card { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); }
-        .indicator-name { font-size: 14px; color: var(--text-secondary); margin-bottom: var(--spacing-sm); }
-        .indicator-value { font-size: 24px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
         .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
         .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); }
-        .btn-primary { background: var(--primary-blue); color: white; }
-        .btn-primary:hover { background: var(--primary-blue-hover); }
-        .btn-info-beautiful { background: var(--primary-blue); color: white; border: none; }
-        .btn-info-beautiful:hover { background: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-detail {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            padding: 0;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-md);
-            color: var(--text-secondary);
-            font-size: 14px;
-            cursor: pointer;
-            transition: all var(--transition-base);
-        }
-        .btn-detail:hover {
-            background: var(--primary-blue);
-            border-color: var(--primary-blue);
-            color: white;
-        }
-        .signal-strong-buy { color: var(--success-green); }
-        .signal-buy { color: #4ADE80; }
-        .signal-hold { color: var(--text-secondary); }
-        .signal-sell { color: #FB7185; }
-        .signal-strong-sell { color: var(--danger-red); }
-        
-        /* 趋势样式 */
-        .trend-strong-up { background: #065F46; color: #10B981; }
-        .trend-up { background: #047857; color: #34D399; }
-        .trend-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
-        .trend-down { background: #7F1D1D; color: #FB7185; }
-        .trend-strong-down { background: #991B1B; color: var(--danger-red); }
-        
-        /* 实时价格样式 - 优化显示，无边框 */
-        .realtime-price {
-            margin-top: 6px;
-            transition: all 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-        .realtime-price strong {
-            font-family: var(--font-mono);
-            font-size: 15px;
-            font-weight: 600;
-            color: var(--text-primary);
-            letter-spacing: 0.3px;
-        }
-        .realtime-price small {
-            font-size: 12px;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .realtime-price.price-updated {
-            animation: priceFlash 0.6s ease;
-        }
-        @keyframes priceFlash {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
-        
-        /* 模态框样式 */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(8px);
-            z-index: 9999;
-            animation: fadeIn var(--transition-base) ease-in;
-            padding: var(--spacing-xl);
-            align-items: center;
-            justify-content: center;
-            overflow-y: auto;
-        }
-        .modal-overlay.active {
-            display: flex;
-        }
-        .modal-container {
-            background: var(--bg-card);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-lg);
-            max-width: 900px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: var(--shadow-xl);
-            animation: slideUp var(--transition-slow) ease-out;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .modal-header {
-            padding: var(--spacing-xl);
-            border-bottom: 1px solid var(--border-default);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            background: var(--bg-card);
-            z-index: 10;
-        }
-        .modal-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-md);
-        }
-        .modal-body {
-            padding: var(--spacing-xl);
-        }
-        .modal-close {
-            background: transparent;
-            border: none;
-            color: var(--text-secondary);
-            font-size: 24px;
-            cursor: pointer;
-            padding: var(--spacing-sm);
-            border-radius: var(--radius-md);
-            transition: all var(--transition-base);
-        }
-        .modal-close:hover {
-            background: var(--bg-hover);
-            color: var(--text-primary);
-        }
-        .analysis-section {
-            margin-bottom: var(--spacing-xl);
-        }
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-bottom: var(--spacing-md);
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-sm);
-            padding-bottom: var(--spacing-sm);
-            border-bottom: 2px solid var(--border-default);
-        }
-        .score-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: var(--spacing-md);
-            margin-bottom: var(--spacing-lg);
-        }
-        .score-item {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-md);
-            padding: var(--spacing-lg);
-            text-align: center;
-        }
-        .score-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: var(--spacing-xs);
-        }
-        .score-value {
-            font-size: 28px;
-            font-weight: 700;
-            font-family: var(--font-mono);
-            color: var(--text-primary);
-        }
-        .price-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: var(--spacing-md);
-            margin-bottom: var(--spacing-lg);
-        }
-        .price-item {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-md);
-            padding: var(--spacing-md);
-        }
-        .price-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: var(--spacing-xs);
-        }
-        .price-value {
-            font-size: 18px;
-            font-weight: 600;
-            font-family: var(--font-mono);
-            color: var(--text-primary);
-        }
-        .reasons-list, .risks-list {
-            list-style: none;
-            padding: 0;
-        }
-        .reasons-list li, .risks-list li {
-            padding: var(--spacing-md);
-            margin-bottom: var(--spacing-sm);
-            background: var(--bg-tertiary);
-            border-left: 3px solid var(--primary-blue);
-            border-radius: var(--radius-sm);
-        }
-        .risks-list li {
-            border-left-color: var(--warning-yellow);
-        }
-        .indicator-detail {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: var(--spacing-md);
-        }
-        .indicator-detail-item {
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-md);
-            padding: var(--spacing-md);
-        }
-        .indicator-detail-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: var(--spacing-xs);
-        }
-        .indicator-detail-value {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-primary);
-            font-family: var(--font-mono);
-        }
-        .action-buttons {
-            display: flex;
-            gap: var(--spacing-md);
-            margin-top: var(--spacing-xl);
-            flex-wrap: wrap;
-        }
-        /* 已移除：旧的带蓝色边框的realtime-price样式（用于模态框中的价格显示，已不再使用） */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-md); margin-top: var(--spacing-md); }
+        .stat-card { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); }
+        .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: var(--spacing-xs); text-transform: uppercase; }
+        .stat-value { font-size: 20px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
+        .trend-up { color: var(--success-green); }
+        .trend-down { color: var(--danger-red); }
+        .trend-neutral { color: var(--text-secondary); }
+        .kline-stats { margin-top: var(--spacing-sm); }
+        .kline-bar { display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-xs); }
+        .kline-bar-label { min-width: 80px; font-size: 12px; color: var(--text-secondary); }
+        .kline-bar-visual { flex: 1; height: 20px; background: var(--bg-tertiary); border-radius: var(--radius-sm); overflow: hidden; position: relative; }
+        .kline-bar-fill { height: 100%; transition: width 0.3s ease; }
+        .kline-bar-fill.bullish { background: linear-gradient(90deg, var(--success-green), #34D399); }
+        .kline-bar-fill.bearish { background: linear-gradient(90deg, var(--danger-red), #FB7185); }
+        .kline-bar-value { min-width: 60px; text-align: right; font-size: 12px; font-weight: 600; font-family: var(--font-mono); }
     </style>
 </head>
 <body>
@@ -324,7 +78,7 @@
                 <i class="bi bi-graph-up-arrow"></i>
                 技术信号分析
             </h1>
-            <p class="header-subtitle">实时监控技术指标，捕捉交易信号</p>
+            <p class="header-subtitle">实时监控K线数据，捕捉市场趋势</p>
         </div>
 
         <div class="nav-container">
@@ -344,2021 +98,237 @@
                 <a href="/futures_trading" class="nav-link">
                     <i class="bi bi-graph-up-arrow"></i> U本位合约
                 </a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-                <a href="/live_trading" class="nav-link">
-                    <i class="bi bi-currency-exchange"></i> 实盘合约
-                </a>
-                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault(); showToast('实盘现货功能开发中...', 'info')">
-                    <i class="bi bi-cart-check"></i> 实盘现货
-                </a>
                 <a href="/futures_review" class="nav-link">
                     <i class="bi bi-journal-check"></i> 复盘(24H)
-                </a>
-<a href="/etf_data" class="nav-link">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/blockchain_gas" class="nav-link">
-                    <i class="bi bi-lightning-charge"></i> Gas统计
-                </a>
-                <a href="/data_management" class="nav-link">
-                    <i class="bi bi-database"></i> 数据管理
                 </a>
             </nav>
         </div>
 
-        <!-- 技术指标概览 -->
-        <div class="card" id="indicatorsCard" style="display: none;">
+        <!-- 技术信号面板 -->
+        <div class="card">
             <div class="card-header">
                 <h2 class="card-title">
-                    <i class="bi bi-bar-chart"></i>
-                    <span id="selectedSymbol">技术指标详情</span>
+                    <i class="bi bi-bar-chart-line"></i>
+                    技术信号
                 </h2>
-            </div>
-            <div class="card-body">
-                <div class="indicator-grid" id="indicatorsGrid"></div>
-            </div>
-        </div>
-
-        <!-- 交易信号列表和超卖超买信号 -->
-        <div class="card">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <h2 class="card-title">
-                    <i class="bi bi-bell"></i>
-                    交易信号
-                </h2>
-                <button class="btn btn-info-beautiful" onclick="showTabExplanation()" id="tabExplanationBtn" style="padding: 6px 12px; font-size: 13px;">
-                    <i class="bi bi-info-circle"></i> 详情说明
-                </button>
-            </div>
-            <div class="card-body">
-                <!-- 标签页 -->
-                <div class="tabs">
-                    <button class="tab active" onclick="switchTab('trend')" id="tabTrend">
-                        <i class="bi bi-graph-up-arrow"></i> 趋势判断
-                    </button>
-                    <button class="tab" onclick="switchTab('technical')" id="tabTechnical">
-                        <i class="bi bi-bar-chart"></i> 技术信号
-                    </button>
-                    <button class="tab" onclick="switchTab('futures')" id="tabFutures">
-                        <i class="bi bi-currency-exchange"></i> 合约信号
-                        </button>
-                    </div>
-                
-                <!-- 趋势判断标签页内容 -->
-                <div id="tabContentTrend" class="tab-content active">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>交易对</th>
-                                    <th>5分钟</th>
-                                    <th>15分钟</th>
-                                    <th>1小时</th>
-                                    <th>1天</th>
-                                    <th>综合评估</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="trendAnalysisTableBody">
-                                <tr>
-                                    <td colspan="7" class="loading">加载中...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                <div style="color: var(--text-secondary); font-size: 12px;">
+                    更新时间: <span id="updateTime">--</span>
                 </div>
-                
-                <!-- 技术信号标签页内容 -->
-                <div id="tabContentTechnical" class="tab-content">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>交易对</th>
-                                    <th>价格</th>
-                                    <th>15分钟</th>
-                                    <th>1小时</th>
-                                    <th>1天</th>
-                                    <th>综合评分</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="technicalSignalsTableBody">
-                                <tr>
-                                    <td colspan="7" class="loading">加载中...</td>
-                                </tr>
-                            </tbody>
-                        </table>
             </div>
-        </div>
-
-                <!-- 合约信号标签页内容 -->
-                <div id="tabContentFutures" class="tab-content">
+            <div class="card-body">
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
                                 <th>交易对</th>
-                                <th>价格</th>
-                                <th>信号</th>
-                                <th>信号评分</th>
-                                <th>资金费率</th>
-                                <th>多空比</th>
-                                <th>持仓量变化</th>
-                                <th>5分钟技术指标</th>
-                                <th>15分钟技术指标</th>
-                                <th>1小时技术指标</th>
-                                <th>操作</th>
+                                <th>24H统计</th>
+                                <th>4H统计</th>
+                                <th>1H统计</th>
+                                <th>综合趋势</th>
                             </tr>
                         </thead>
-                        <tbody id="futuresSignalsTableBody">
+                        <tbody id="technicalSignalsTableBody">
                             <tr>
-                                <td colspan="11" class="loading">加载中...</td>
+                                <td colspan="5" class="loading">
+                                    <i class="bi bi-hourglass-split"></i> 加载中...
+                                </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                </div>
             </div>
         </div>
-    </div>
 
-    <!-- 详细分析模态框 -->
-    <div id="detailedAnalysisModal" class="modal-overlay" onclick="if(event.target === this) closeDetailedAnalysis()">
-        <div class="modal-container" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <h2 class="modal-title">
-                    <i class="bi bi-graph-up-arrow"></i>
-                    <span id="modalSymbolTitle">详细分析</span>
-                </h2>
-                <button class="modal-close" onclick="closeDetailedAnalysis()">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-            <div class="modal-body" id="detailedAnalysisContent">
-                <div class="loading">加载中...</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 标签页详情说明模态框 -->
-    <div id="tabExplanationModal" class="modal-overlay" onclick="if(event.target === this) closeTabExplanation()">
-        <div class="modal-container" onclick="event.stopPropagation()" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
-            <div class="modal-header">
-                <h2 class="modal-title">
-                    <i class="bi bi-info-circle"></i>
-                    <span id="tabExplanationTitle">详情说明</span>
-                </h2>
-                <button class="modal-close" onclick="closeTabExplanation()">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-            <div class="modal-body" id="tabExplanationContent" style="padding: var(--spacing-xl);">
-                <!-- 内容将通过 JavaScript 动态填充 -->
-            </div>
-        </div>
     </div>
 
     <script>
-        let currentSymbol = '';
-        let currentTimeframe = '1h';
-        
-        // 当前激活的标签页
-        let currentActiveTab = 'trend';
-        
-        // 切换标签页
-        function switchTab(tabName) {
-            currentActiveTab = tabName;
-            // 隐藏所有标签页内容
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            
-            // 移除所有标签的active状态
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // 显示选中的标签页内容
-            if (tabName === 'trend') {
-                document.getElementById('tabContentTrend').classList.add('active');
-                document.getElementById('tabTrend').classList.add('active');
-                // 切换到趋势判断时自动加载数据
-                loadTrendAnalysis();
-            } else if (tabName === 'technical') {
-                document.getElementById('tabContentTechnical').classList.add('active');
-                document.getElementById('tabTechnical').classList.add('active');
-                // 切换到技术信号时自动加载数据
-                console.log('切换到技术信号TAB，开始加载数据...');
-                loadTechnicalSignals().catch(error => {
-                    console.error('加载技术信号数据失败:', error);
-                });
-            } else if (tabName === 'futures') {
-                document.getElementById('tabContentFutures').classList.add('active');
-                document.getElementById('tabFutures').classList.add('active');
-                // 切换到合约信号时自动加载数据
-                loadFuturesSignals();
-            }
-        }
-
-        // 显示标签页详情说明
-        function showTabExplanation() {
-            const modal = document.getElementById('tabExplanationModal');
-            const title = document.getElementById('tabExplanationTitle');
-            const content = document.getElementById('tabExplanationContent');
-            
-            let explanationHtml = '';
-            
-            if (currentActiveTab === 'trend') {
-                title.textContent = '趋势判断 - 详情说明';
-                explanationHtml = `
-                    <div style="line-height: 1.8; color: var(--text-primary);">
-                        <h3 style="color: var(--primary-blue); margin-bottom: var(--spacing-lg); font-size: 20px;">
-                            <i class="bi bi-graph-up-arrow"></i> 趋势判断分析说明
-                        </h3>
-                        
-                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 功能概述</h4>
-                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
-                                趋势判断页面综合分析多个时间周期（5分钟、15分钟、1小时、1天）的技术指标、价格变化和成交量变化，为每个交易对提供趋势评估。
-                            </p>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">⏱️ 时间周期说明</h4>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
-                                <li><strong>5分钟：</strong>基于2小时内的价格和成交量数据，适合短期交易信号</li>
-                                <li><strong>15分钟：</strong>基于2小时内的价格和成交量数据，适合短期趋势判断</li>
-                                <li><strong>1小时：</strong>基于24小时内的价格和成交量变化，适合中期趋势分析</li>
-                                <li><strong>1天：</strong>基于30天的价格和成交量数据，适合长期趋势判断</li>
-                            </ul>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📈 趋势判断标准</h4>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--success-green); font-weight: 600; margin-bottom: 4px;">强烈上涨 (STRONG_UPTREND)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 ≥ 60，多个技术指标强烈看多，价格和成交量同步上涨</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--success-green); font-weight: 600; margin-bottom: 4px;">上涨 (UPTREND)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 ≥ 45，技术指标整体看多，价格呈上升趋势</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">震荡 (SIDEWAYS)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 30-45，多空力量平衡，价格在区间内波动</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--danger-red); font-weight: 600; margin-bottom: 4px;">下跌 (DOWNTREND)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 15-30，技术指标整体看空，价格呈下降趋势</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
-                                <p style="color: var(--danger-red); font-weight: 600; margin-bottom: 4px;">强烈下跌 (STRONG_DOWNTREND)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">趋势评分 < 15，多个技术指标强烈看空，价格和成交量同步下跌</p>
-                            </div>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">🔍 评估维度</h4>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
-                                <li><strong>技术指标：</strong>RSI、MACD、EMA、布林带等指标的综合评分</li>
-                                <li><strong>价格变化：</strong>基于时间周期内的价格涨跌幅</li>
-                                <li><strong>成交量变化：</strong>成交量的增减趋势，配合价格判断趋势强度</li>
-                                <li><strong>线性回归：</strong>价格和成交量的斜率分析，判断趋势方向</li>
-                            </ul>
-                        </div>
-
-                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--primary-blue);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-sm); font-size: 16px;">💡 使用建议</h4>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2; margin: 0;">
-                                <li>结合多个时间周期综合判断，避免单一周期误导</li>
-                                <li>长期趋势（1天）适合判断大方向，短期趋势（5分钟、15分钟）适合寻找入场时机</li>
-                                <li>当多个时间周期趋势一致时，信号更可靠</li>
-                                <li>注意价格和成交量的配合，量价齐升/齐跌的信号更强烈</li>
-                            </ul>
-                        </div>
-                    </div>
-                `;
-            } else if (currentActiveTab === 'technical') {
-                title.textContent = '技术信号 - 详情说明';
-                explanationHtml = `
-                    <div style="line-height: 1.8; color: var(--text-primary);">
-                        <h3 style="color: var(--primary-blue); margin-bottom: var(--spacing-lg); font-size: 20px;">
-                            <i class="bi bi-bar-chart"></i> 技术信号分析说明
-                        </h3>
-                        
-                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 功能概述</h4>
-                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
-                                技术信号页面综合评估15分钟、1小时、1天三个时间周期的技术指标（EMA、MACD、RSI、BOLL等），为每个交易对生成技术评分和交易信号。
-                            </p>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">⏱️ 时间周期说明</h4>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
-                                <li><strong>15分钟：</strong>短期技术指标，适合捕捉短期交易机会</li>
-                                <li><strong>1小时：</strong>中期技术指标，适合判断中期趋势</li>
-                                <li><strong>1天：</strong>长期技术指标，适合判断长期趋势方向</li>
-                            </ul>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📈 技术指标说明</h4>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">EMA (指数移动平均线)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">短期EMA上穿长期EMA为看涨信号，下穿为看跌信号</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">MACD (指数平滑移动平均线)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">MACD线上穿信号线为金叉（看涨），下穿为死叉（看跌）</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">RSI (相对强弱指标)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">RSI < 30为超卖（看涨），RSI > 70为超买（看跌）</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
-                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">BOLL (布林带)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">价格触及下轨可能反弹，触及上轨可能回调</p>
-                            </div>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">🎯 综合评分说明</h4>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
-                                <li><strong>0-40分：</strong>技术面偏弱，建议观望或做空</li>
-                                <li><strong>40-60分：</strong>技术面中性，多空平衡</li>
-                                <li><strong>60-100分：</strong>技术面偏强，建议做多</li>
-                                <li>综合评分 = (15分钟评分 + 1小时评分 + 1天评分) / 3</li>
-                            </ul>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 信号类型</h4>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--success-green); font-weight: 600; margin-bottom: 4px;">强烈买入 (STRONG_BUY)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">多个时间周期技术指标强烈看多，综合评分高</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--success-green); font-weight: 600; margin-bottom: 4px;">买入 (BUY)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">技术指标整体看多，适合做多</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">持有 (HOLD)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">技术指标中性，建议观望</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--danger-red); font-weight: 600; margin-bottom: 4px;">卖出 (SELL)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">技术指标整体看空，适合做空</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
-                                <p style="color: var(--danger-red); font-weight: 600; margin-bottom: 4px;">强烈卖出 (STRONG_SELL)</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">多个时间周期技术指标强烈看空，综合评分低</p>
-                            </div>
-                        </div>
-
-                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--primary-blue);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-sm); font-size: 16px;">💡 使用建议</h4>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2; margin: 0;">
-                                <li>结合多个时间周期的技术指标，避免单一周期误导</li>
-                                <li>当多个指标（EMA、MACD、RSI、BOLL）方向一致时，信号更可靠</li>
-                                <li>注意RSI的超买超卖区域，结合其他指标综合判断</li>
-                                <li>长期趋势（1天）决定大方向，短期趋势（15分钟）寻找入场时机</li>
-                            </ul>
-                        </div>
-                    </div>
-                `;
-            } else if (currentActiveTab === 'futures') {
-                title.textContent = '合约信号 - 详情说明';
-                explanationHtml = `
-                    <div style="line-height: 1.8; color: var(--text-primary);">
-                        <h3 style="color: var(--primary-blue); margin-bottom: var(--spacing-lg); font-size: 20px;">
-                            <i class="bi bi-currency-exchange"></i> 合约信号分析说明
-                        </h3>
-                        
-                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 功能概述</h4>
-                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
-                                合约信号页面综合分析资金费率、持仓量变化、多时间周期技术指标（5分钟、15分钟、1小时）和价格趋势，为合约交易提供做多/做空信号和凯利公式仓位建议。
-                            </p>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📈 评估维度（4个维度）</h4>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">1. 资金费率（权重35%）</p>
-                                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 4px;">反映市场情绪，费率极高（>0.1%）说明多头过度拥挤，做空机会；费率极低（<-0.1%）说明空头过度拥挤，做多机会</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">2. 持仓量变化（权重20%）</p>
-                                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 4px;">持仓量增加+价格上涨=趋势延续（看多）；持仓量增加+价格下跌=趋势延续（看空）；持仓量减少=可能反转</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);">
-                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">3. 技术指标（权重35%）</p>
-                                <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 4px;">综合分析5分钟、15分钟、1小时三个时间周期的RSI、EMA、MACD、BOLL等技术指标</p>
-                            </div>
-                            <div style="background: var(--bg-tertiary); padding: var(--spacing-md); border-radius: var(--radius-md);">
-                                <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">4. 价格趋势（权重10%）</p>
-                                <p style="color: var(--text-secondary); font-size: 13px;">24小时涨跌幅作为确认信号，涨幅>3%看多，跌幅>3%看空</p>
-                            </div>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">🎯 信号评分与方向</h4>
-                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
-                                信号评分范围：-100 到 +100（正数=做多，负数=做空）
-                            </p>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
-                                <li><strong>≥ 60分：</strong>强烈做多</li>
-                                <li><strong>30-60分：</strong>做多</li>
-                                <li><strong>-30 到 30分：</strong>观望</li>
-                                <li><strong>-60 到 -30分：</strong>做空</li>
-                                <li><strong>≤ -60分：</strong>强烈做空</li>
-                            </ul>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">💰 凯利公式仓位建议</h4>
-                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
-                                基于信号强度、RSI、价格趋势等因素，使用凯利公式计算建议仓位比例、入场价、止损价和止盈价。
-                            </p>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
-                                <li><strong>建议仓位：</strong>基于胜率和盈亏比计算的最优仓位比例</li>
-                                <li><strong>入场价：</strong>建议的建仓价格</li>
-                                <li><strong>止损价：</strong>风险控制，跌破此价格应止损离场</li>
-                                <li><strong>止盈价：</strong>目标收益，达到此价格可考虑止盈</li>
-                            </ul>
-                        </div>
-
-                        <div style="margin-bottom: var(--spacing-lg);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md); font-size: 16px;">📊 技术指标方向说明</h4>
-                            <p style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
-                                每个时间周期（5分钟、15分钟、1小时）显示：
-                            </p>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2;">
-                                <li><strong>RSI：</strong>显示数值和方向（↑看涨、↓看跌、→中性）</li>
-                                <li><strong>EMA：</strong>显示方向（↑看涨、↓看跌、→中性）</li>
-                                <li><strong>MACD：</strong>显示方向（↑金叉看涨、↓死叉看跌、→中性）</li>
-                                <li><strong>BOLL：</strong>显示方向（↑价格在下轨看涨、↓价格在上轨看跌、→中性）</li>
-                                <li><strong>综合评估：</strong>基于多数指标方向判断整体趋势</li>
-                            </ul>
-                        </div>
-
-                        <div style="background: var(--bg-tertiary); padding: var(--spacing-lg); border-radius: var(--radius-md); border-left: 4px solid var(--primary-blue);">
-                            <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-sm); font-size: 16px;">💡 使用建议</h4>
-                            <ul style="color: var(--text-secondary); padding-left: 20px; line-height: 2; margin: 0;">
-                                <li>资金费率是重要的反向指标，费率极高时往往是做空机会</li>
-                                <li>持仓量变化配合价格趋势，可以判断趋势的延续性</li>
-                                <li>多个时间周期的技术指标方向一致时，信号更可靠</li>
-                                <li>严格按照凯利公式建议的止损价设置止损，控制风险</li>
-                                <li>信号评分在-30到30之间时，建议观望，等待更明确的信号</li>
-                                <li>多空比仅供参考（用户数多空比），不参与评分计算</li>
-                            </ul>
-                        </div>
-
-                        <div style="background: var(--warning-yellow-bg); padding: var(--spacing-md); border-radius: var(--radius-md); margin-top: var(--spacing-lg); border-left: 4px solid var(--warning-yellow);">
-                            <p style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">⚠️ 风险提示</p>
-                            <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
-                                合约交易风险较高，请务必设置止损，控制仓位，不要过度杠杆。所有信号仅供参考，不构成投资建议。
-                            </p>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            content.innerHTML = explanationHtml;
-            modal.style.display = 'flex';
-            setTimeout(() => {
-                modal.classList.add('active');
-            }, 10);
-        }
-
-        // 关闭标签页详情说明
-        function closeTabExplanation() {
-            const modal = document.getElementById('tabExplanationModal');
-            modal.classList.remove('active');
-            setTimeout(() => {
-                modal.style.display = 'none';
-            }, 300);
-        }
-
-        // 格式化数字
-        function formatNumber(num, decimals = 2) {
-            if (num === null || num === undefined) return '-';
-            return Number(num).toFixed(decimals);
-        }
-        
-        // 格式化价格（针对不同交易对使用不同小数位数）
-        function formatPrice(price, symbol) {
-            if (price === null || price === undefined) return '-';
-            if (symbol) {
-                const symbolUpper = symbol.toUpperCase();
-                // PUMP保留5位小数（支持多种格式：PUMP/USDT, PUMPUSDT, PUMP等）
-                if (symbolUpper.includes('PUMP')) {
-                    return Number(price).toFixed(5);
-                }
-                // DOGE保留4位小数（支持多种格式：DOGE/USDT, DOGEUSDT, DOGE等）
-                if (symbolUpper.includes('DOGE')) {
-                    return Number(price).toFixed(4);
-                }
-            }
-            // 其他币种默认2位小数
-            return Number(price).toFixed(2);
-        }
-
-        // 格式化信号
-        function formatSignal(signal) {
-            const signals = {
-                'STRONG_BUY': { text: '强烈买入', class: 'signal-strong-buy' },
-                'BUY': { text: '买入', class: 'signal-buy' },
-                'HOLD': { text: '持有', class: 'signal-hold' },
-                'SELL': { text: '卖出', class: 'signal-sell' },
-                'STRONG_SELL': { text: '强烈卖出', class: 'signal-strong-sell' }
-            };
-            const s = signals[signal] || { text: signal, class: 'signal-hold' };
-            return `<span class="${s.class}">${s.text}</span>`;
-        }
-
-        // 格式化时间
-        function formatTime(timeStr) {
-            if (!timeStr) return '-';
-            const date = new Date(timeStr);
-            return date.toLocaleString('zh-CN');
-        }
-        
-        // 格式化大数字
-        function formatLargeNumber(num) {
-            if (num === null || num === undefined) return '-';
-            if (num >= 1e9) {
-                return (num / 1e9).toFixed(2) + 'B';
-            } else if (num >= 1e6) {
-                return (num / 1e6).toFixed(2) + 'M';
-            } else if (num >= 1e3) {
-                return (num / 1e3).toFixed(2) + 'K';
-            }
-            return formatNumber(num, 2);
-        }
-
-        // 加载技术指标数据
-        // 显示技术指标详情
-        function displayIndicatorDetails(data) {
-            document.getElementById('selectedSymbol').textContent = `${data.symbol} - 技术指标详情`;
-            document.getElementById('indicatorsCard').style.display = 'block';
-            
-            const grid = document.getElementById('indicatorsGrid');
-            grid.innerHTML = `
-                <div class="indicator-card">
-                    <div class="indicator-name">技术评分</div>
-                    <div class="indicator-value">${formatNumber(data.technical_score)}</div>
-                    <div>${formatSignal(data.technical_signal)}</div>
-                </div>
-                <div class="indicator-card">
-                    <div class="indicator-name">RSI</div>
-                    <div class="indicator-value">${formatNumber(data.rsi?.value)}</div>
-                    <div>${data.rsi?.signal || '-'}</div>
-                </div>
-                <div class="indicator-card">
-                    <div class="indicator-name">MACD</div>
-                    <div class="indicator-value">${formatNumber(data.macd?.value)}</div>
-                    <div>${data.macd?.trend || '-'}</div>
-                </div>
-                <div class="indicator-card">
-                    <div class="indicator-name">布林带位置</div>
-                    <div class="indicator-value">${data.bollinger_bands?.position || '-'}</div>
-                    <div>宽度: ${formatNumber(data.bollinger_bands?.width)}%</div>
-                </div>
-                <div class="indicator-card">
-                    <div class="indicator-name">EMA趋势</div>
-                    <div class="indicator-value">${data.ema?.trend || '-'}</div>
-                    <div>短期: ${formatNumber(data.ema?.short)} | 长期: ${formatNumber(data.ema?.long)}</div>
-                </div>
-                <div class="indicator-card">
-                    <div class="indicator-name">KDJ</div>
-                    <div class="indicator-value">K:${formatNumber(data.kdj?.k)} D:${formatNumber(data.kdj?.d)} J:${formatNumber(data.kdj?.j)}</div>
-                    <div>${data.kdj?.signal || '-'}</div>
-                </div>
-                <div class="indicator-card">
-                    <div class="indicator-name">成交量</div>
-                    <div class="indicator-value">${formatNumber(data.volume?.volume_ratio, 2)}x</div>
-                    <div>${data.volume?.signal || '-'}</div>
-                </div>
-                <div class="indicator-card">
-                    <div class="indicator-name">更新时间</div>
-                    <div class="indicator-value" style="font-size: 14px;">${formatTime(data.updated_at)}</div>
-                </div>
-            `;
-        }
-
-        // 加载单个交易对的指标详情
-        async function loadIndicatorDetails(symbol) {
-            // 使用默认timeframe（1h），因为信号列表TAB已删除
-            const timeframe = '1h';
-            currentSymbol = symbol;
-            
-            try {
-                // 同时获取技术指标和综合交易信号
-                // 对symbol进行URL编码，处理斜杠
-                const encodedSymbol = encodeURIComponent(symbol);
-                const [indicatorsResponse, signalResponse] = await Promise.all([
-                    fetch(`/api/technical-indicators?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}`),
-                    fetch(`/api/signals/${encodedSymbol}?timeframe=${timeframe}`).catch(() => null)
-                ]);
-                
-                const indicatorsData = await indicatorsResponse.json();
-                let signalData = null;
-                if (signalResponse) {
-                    try {
-                        signalData = await signalResponse.json();
-                    } catch (e) {
-                        console.warn('获取综合信号失败:', e);
-                    }
-                }
-                
-                displayIndicatorDetails(indicatorsData, signalData);
-            } catch (error) {
-                console.error('加载指标详情失败:', error);
-                alert('加载详情失败: ' + error.message);
-            }
-        }
-        
-        // 显示详细分析模态框
-        function showDetailedAnalysis(symbol, indicatorsData, signalData, priceData) {
-            const modal = document.getElementById('detailedAnalysisModal');
-            const modalContent = document.getElementById('detailedAnalysisContent');
-            
-            // 获取实时价格
-            let currentPrice = null;
-            let maxPrice = null;
-            let minPrice = null;
-            let spreadPct = null;
-            let totalVolume = null;
-            let exchangesCount = null;
-            let change24h = null;
-            let change24hAbs = null;
-            let high24h = null;
-            let low24h = null;
-            let volume24h = null;
-            
-            if (priceData && priceData.price) {
-                currentPrice = parseFloat(priceData.price);
-                maxPrice = priceData.max_price ? parseFloat(priceData.max_price) : null;
-                minPrice = priceData.min_price ? parseFloat(priceData.min_price) : null;
-                spreadPct = priceData.spread_pct ? parseFloat(priceData.spread_pct) : null;
-                totalVolume = priceData.total_volume ? parseFloat(priceData.total_volume) : null;
-                exchangesCount = priceData.exchanges || null;
-                
-                // 从details中获取24小时数据
-                if (priceData.details && priceData.details.length > 0) {
-                    const firstDetail = priceData.details[0];
-                    change24h = firstDetail.change_24h !== undefined ? parseFloat(firstDetail.change_24h) : null;
-                    high24h = firstDetail.high_24h !== undefined ? parseFloat(firstDetail.high_24h) : null;
-                    low24h = firstDetail.low_24h !== undefined ? parseFloat(firstDetail.low_24h) : null;
-                    volume24h = firstDetail.volume_24h !== undefined ? parseFloat(firstDetail.volume_24h) : null;
-                }
-                
-                // 如果没有details，尝试直接从priceData获取
-                if (change24h === null && priceData.change_24h !== undefined) {
-                    change24h = parseFloat(priceData.change_24h);
-                }
-                if (high24h === null && priceData.high_24h !== undefined) {
-                    high24h = parseFloat(priceData.high_24h);
-                }
-                if (low24h === null && priceData.low_24h !== undefined) {
-                    low24h = parseFloat(priceData.low_24h);
-                }
-                if (volume24h === null && priceData.volume_24h !== undefined) {
-                    volume24h = parseFloat(priceData.volume_24h);
-                }
-                
-                // 计算24小时涨跌绝对值
-                if (change24h !== null && currentPrice !== null) {
-                    change24hAbs = (currentPrice * change24h / 100);
-                }
-            } else if (signalData && signalData.price && signalData.price.current) {
-                currentPrice = parseFloat(signalData.price.current);
-            }
-            
-            let html = `
-                <div class="analysis-section">
-                    <h3 class="section-title">
-                        <i class="bi bi-currency-dollar"></i>
-                        实时价格
-                    </h3>
-                    <div class="realtime-price">
-                        <div class="realtime-price-label">
-                            <i class="bi bi-circle-fill price-update-indicator"></i>
-                            实时价格（每5秒更新）
-                        </div>
-                        <div class="realtime-price-value" id="realtime-price-value" data-old-price="${currentPrice || 0}" data-symbol="${symbol || ''}">
-                            ${currentPrice ? formatPrice(currentPrice, symbol || '') + ' USDT' : '加载中...'}
-                        </div>
-                        <div class="realtime-price-change" id="realtime-price-change" style="margin-top: var(--spacing-sm);">
-                            <span style="color: var(--text-secondary); font-size: 12px;">
-                                价格变动: <span id="price-change-text">-</span>
-                            </span>
-                        </div>
-                        <div style="margin-top: var(--spacing-md); padding-top: var(--spacing-md); border-top: 1px solid var(--border-default);">
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--spacing-md); font-size: 12px;">
-                                ${change24h !== null ? `
-                                <div>
-                                    <div style="color: var(--text-secondary); margin-bottom: 4px;">24小时涨跌</div>
-                                    <div style="color: ${change24h >= 0 ? 'var(--success-green)' : 'var(--danger-red)'}; font-weight: 600; font-size: 14px;">
-                                        ${change24h >= 0 ? '+' : ''}${formatNumber(change24h)}%
-                                    </div>
-                                    ${change24hAbs !== null ? `
-                                    <div style="color: var(--text-secondary); font-size: 11px; margin-top: 2px;">
-                                        ${change24hAbs >= 0 ? '+' : ''}${formatNumber(change24hAbs)} USDT
-                                    </div>
-                                    ` : ''}
-                                </div>
-                                ` : ''}
-                                ${high24h !== null ? `
-                                <div>
-                                    <div style="color: var(--text-secondary); margin-bottom: 4px;">24小时最高</div>
-                                    <div style="color: var(--success-green); font-weight: 600;">${formatNumber(high24h)}</div>
-                                </div>
-                                ` : ''}
-                                ${low24h !== null ? `
-                                <div>
-                                    <div style="color: var(--text-secondary); margin-bottom: 4px;">24小时最低</div>
-                                    <div style="color: var(--danger-red); font-weight: 600;">${formatNumber(low24h)}</div>
-                                </div>
-                                ` : ''}
-                                ${volume24h !== null ? `
-                                <div>
-                                    <div style="color: var(--text-secondary); margin-bottom: 4px;">24小时成交量</div>
-                                    <div style="color: var(--text-primary); font-weight: 600;">${formatLargeNumber(volume24h)}</div>
-                                </div>
-                                ` : ''}
-                                ${maxPrice && minPrice ? `
-                                <div>
-                                    <div style="color: var(--text-secondary); margin-bottom: 4px;">跨交易所价差</div>
-                                    <div style="color: var(--text-primary); font-weight: 600;">${spreadPct ? formatNumber(spreadPct, 3) + '%' : '-'}</div>
-                                </div>
-                                ` : ''}
-                            </div>
-                            ${exchangesCount ? `
-                                <div style="margin-top: var(--spacing-sm); color: var(--text-secondary); font-size: 11px;">
-                                    数据来源: ${exchangesCount} 个交易所
-                                    ${totalVolume ? ` | 总成交量: ${formatLargeNumber(totalVolume)}` : ''}
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="analysis-section">
-                    <h3 class="section-title">
-                        <i class="bi bi-graph-up"></i>
-                        综合评分
-                    </h3>
-                    <div class="score-grid">
-            `;
-            
-            if (signalData && signalData.score) {
-                html += `
-                    <div class="score-item">
-                        <div class="score-label">综合评分</div>
-                        <div class="score-value" style="color: ${signalData.score.total >= 0 ? 'var(--success-green)' : 'var(--danger-red)'}">
-                            ${signalData.score.total >= 0 ? '+' : ''}${formatNumber(signalData.score.total)}
-                        </div>
-                    </div>
-                    <div class="score-item">
-                        <div class="score-label">技术指标评分</div>
-                        <div class="score-value">${formatNumber(signalData.score.technical)}</div>
-                    </div>
-                    <div class="score-item">
-                        <div class="score-label">新闻情绪评分</div>
-                        <div class="score-value">${formatNumber(signalData.score.news)}</div>
-                    </div>
-                    <div class="score-item">
-                        <div class="score-label">置信度</div>
-                        <div class="score-value" style="color: ${signalData.confidence >= 70 ? 'var(--success-green)' : signalData.confidence >= 50 ? 'var(--warning-yellow)' : 'var(--text-secondary)'}">
-                            ${formatNumber(signalData.confidence)}%
-                        </div>
-                    </div>
-                `;
-            } else {
-                html += `
-                    <div class="score-item">
-                        <div class="score-label">技术评分</div>
-                        <div class="score-value">${formatNumber(indicatorsData.technical_score)}</div>
-                    </div>
-                    <div class="score-item">
-                        <div class="score-label">信号</div>
-                        <div class="score-value">${formatSignal(indicatorsData.technical_signal)}</div>
-                    </div>
-                `;
-            }
-            
-            html += `
-                    </div>
-                </div>
-                
-                <div class="analysis-section">
-                    <h3 class="section-title">
-                        <i class="bi bi-currency-dollar"></i>
-                        价格建议
-                    </h3>
-                    <div class="price-info">
-            `;
-            
-            // 获取信号方向（做多/做空）
-            let directionText = '';
-            let directionClass = '';
-            if (signalData && signalData.signal_direction) {
-                const direction = signalData.signal_direction;
-                if (direction === 'STRONG_LONG' || direction === 'LONG') {
-                    directionText = '做多';
-                    directionClass = 'signal-buy';
-                } else if (direction === 'STRONG_SHORT' || direction === 'SHORT') {
-                    directionText = '做空';
-                    directionClass = 'signal-sell';
-                } else {
-                    directionText = '观望';
-                    directionClass = 'signal-hold';
-                }
-            } else if (signalData && signalData.signal_text) {
-                // 从signal_text中提取方向
-                const text = signalData.signal_text;
-                if (text.includes('做多') || text.includes('买入')) {
-                    directionText = '做多';
-                    directionClass = 'signal-buy';
-                } else if (text.includes('做空') || text.includes('卖出')) {
-                    directionText = '做空';
-                    directionClass = 'signal-sell';
-                } else {
-                    directionText = '观望';
-                    directionClass = 'signal-hold';
-                }
-            }
-            
-            // 优先使用凯利公式建议（如果合约信号数据中有）
-            const kellyAdvice = signalData?.kelly_advice || (indicatorsData?.kelly_advice ? indicatorsData.kelly_advice : null);
-            
-            // 如果有凯利公式建议，优先使用（即使仓位为0也显示，因为包含了止损止盈价格）
-            if (kellyAdvice && kellyAdvice.entry_price && kellyAdvice.stop_loss && kellyAdvice.take_profit) {
-                // 使用凯利公式建议
-                const displayPrice = currentPrice || kellyAdvice.entry_price;
-                html += `
-                    ${directionText ? `
-                    <div class="price-item">
-                        <div class="price-label">交易方向</div>
-                        <div class="price-value ${directionClass}" style="font-size: 18px; font-weight: 700;">
-                            ${directionText === '做多' ? '📈 做多' : directionText === '做空' ? '📉 做空' : '⏸️ 观望'}
-                        </div>
-                    </div>
-                    ` : ''}
-                    <div class="price-item">
-                        <div class="price-label">当前价格</div>
-                        <div class="price-value">${formatPrice(displayPrice, symbol)} USDT</div>
-                    </div>
-                    ${kellyAdvice.position_pct > 0 ? `
-                    <div class="price-item">
-                        <div class="price-label">建议仓位（凯利公式）</div>
-                        <div class="price-value" style="color: var(--primary-blue); font-size: 20px;">${formatNumber(kellyAdvice.position_pct)}%</div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                            胜率: ${formatNumber(kellyAdvice.win_rate)}% | 盈亏比: ${formatNumber(kellyAdvice.profit_loss_ratio)}:1
-                        </div>
-                    </div>
-                    ` : `
-                    <div class="price-item">
-                        <div class="price-label">凯利公式评估</div>
-                        <div class="price-value" style="color: var(--text-secondary); font-size: 14px;">${kellyAdvice.recommendation || '不建议开仓'}</div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                            胜率: ${formatNumber(kellyAdvice.win_rate)}% | 盈亏比: ${formatNumber(kellyAdvice.profit_loss_ratio)}:1
-                        </div>
-                    </div>
-                    `}
-                    <div class="price-item">
-                        <div class="price-label">建议入场价</div>
-                        <div class="price-value" style="color: var(--primary-blue)">${formatPrice(kellyAdvice.entry_price, symbol)} USDT</div>
-                    </div>
-                    <div class="price-item">
-                        <div class="price-label">止损价</div>
-                        <div class="price-value" style="color: var(--danger-red)">${formatPrice(kellyAdvice.stop_loss, symbol)} USDT</div>
-                        ${displayPrice && kellyAdvice.stop_loss ? `
-                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                                距离: ${formatNumber(Math.abs((displayPrice - kellyAdvice.stop_loss) / displayPrice * 100))}%
-                            </div>
-                        ` : ''}
-                    </div>
-                    <div class="price-item">
-                        <div class="price-label">止盈价</div>
-                        <div class="price-value" style="color: var(--success-green)">${formatPrice(kellyAdvice.take_profit, symbol)} USDT</div>
-                        ${displayPrice && kellyAdvice.take_profit ? `
-                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                                距离: ${formatNumber(Math.abs((kellyAdvice.take_profit - displayPrice) / displayPrice * 100))}%
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            } else if (signalData && signalData.price) {
-                // 使用实时价格或信号中的价格
-                const displayPrice = currentPrice || signalData.price.current;
-                // 获取信号方向（如果还没有获取）
-                if (!directionText && signalData.signal_direction) {
-                    const direction = signalData.signal_direction;
-                    if (direction === 'STRONG_LONG' || direction === 'LONG') {
-                        directionText = '做多';
-                        directionClass = 'signal-buy';
-                    } else if (direction === 'STRONG_SHORT' || direction === 'SHORT') {
-                        directionText = '做空';
-                        directionClass = 'signal-sell';
-                    } else {
-                        directionText = '观望';
-                        directionClass = 'signal-hold';
-                    }
-                } else if (!directionText && signalData.signal_text) {
-                    const text = signalData.signal_text;
-                    if (text.includes('做多') || text.includes('买入')) {
-                        directionText = '做多';
-                        directionClass = 'signal-buy';
-                    } else if (text.includes('做空') || text.includes('卖出')) {
-                        directionText = '做空';
-                        directionClass = 'signal-sell';
-                    } else {
-                        directionText = '观望';
-                        directionClass = 'signal-hold';
-                    }
-                }
-                html += `
-                    ${directionText ? `
-                    <div class="price-item">
-                        <div class="price-label">交易方向</div>
-                        <div class="price-value ${directionClass}" style="font-size: 18px; font-weight: 700;">
-                            ${directionText === '做多' ? '📈 做多' : directionText === '做空' ? '📉 做空' : '⏸️ 观望'}
-                        </div>
-                    </div>
-                    ` : ''}
-                    <div class="price-item">
-                        <div class="price-label">当前价格</div>
-                        <div class="price-value">${formatPrice(displayPrice, symbol)} USDT</div>
-                    </div>
-                    <div class="price-item">
-                        <div class="price-label">建议入场价</div>
-                        <div class="price-value" style="color: var(--primary-blue)">${formatPrice(signalData.price.entry, symbol)} USDT</div>
-                    </div>
-                    <div class="price-item">
-                        <div class="price-label">止损价</div>
-                        <div class="price-value" style="color: var(--danger-red)">${formatPrice(signalData.price.stop_loss, symbol)} USDT</div>
-                        ${displayPrice && signalData.price.stop_loss ? `
-                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                                距离: ${formatNumber(Math.abs((displayPrice - signalData.price.stop_loss) / displayPrice * 100))}%
-                            </div>
-                        ` : ''}
-                    </div>
-                    <div class="price-item">
-                        <div class="price-label">止盈价</div>
-                        <div class="price-value" style="color: var(--success-green)">${formatPrice(signalData.price.take_profit, symbol)} USDT</div>
-                        ${displayPrice && signalData.price.take_profit ? `
-                            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
-                                距离: ${formatNumber(Math.abs((signalData.price.take_profit - displayPrice) / displayPrice * 100))}%
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-            } else if (currentPrice) {
-                html += `
-                    <div class="price-item">
-                        <div class="price-label">当前价格</div>
-                        <div class="price-value">${formatPrice(currentPrice, symbol)} USDT</div>
-                    </div>
-                `;
-            } else {
-                html += `
-                    <div class="price-item">
-                        <div class="price-label">当前价格</div>
-                        <div class="price-value">-</div>
-                    </div>
-                `;
-            }
-            
-            html += `
-                    </div>
-                </div>
-                
-                <div class="analysis-section">
-                    <h3 class="section-title">
-                        <i class="bi bi-bar-chart"></i>
-                        技术指标详细分析
-                    </h3>
-                    <div class="indicator-detail">
-                        <div class="indicator-detail-item">
-                            <div class="indicator-detail-label">RSI (相对强弱指标)</div>
-                            <div class="indicator-detail-value">${formatNumber(indicatorsData.rsi?.value)}</div>
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                                ${indicatorsData.rsi?.signal === 'oversold' ? '超卖，可能反弹' : 
-                                  indicatorsData.rsi?.signal === 'overbought' ? '超买，可能回调' : 
-                                  '中性区域'}
-                            </div>
-                        </div>
-                        <div class="indicator-detail-item">
-                            <div class="indicator-detail-label">MACD</div>
-                            <div class="indicator-detail-value">${indicatorsData.macd?.trend || '-'}</div>
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                                ${indicatorsData.macd?.trend === 'bullish_cross' ? '金叉，看涨信号' : 
-                                  indicatorsData.macd?.trend === 'bearish_cross' ? '死叉，看跌信号' : 
-                                  '中性'}
-                            </div>
-                        </div>
-                        <div class="indicator-detail-item">
-                            <div class="indicator-detail-label">布林带位置</div>
-                            <div class="indicator-detail-value">${indicatorsData.bollinger_bands?.position || '-'}</div>
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                                上轨: ${formatNumber(indicatorsData.bollinger_bands?.upper)} | 
-                                下轨: ${formatNumber(indicatorsData.bollinger_bands?.lower)}
-                            </div>
-                        </div>
-                        <div class="indicator-detail-item">
-                            <div class="indicator-detail-label">EMA趋势</div>
-                            <div class="indicator-detail-value">${indicatorsData.ema?.trend || '-'}</div>
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                                短期: ${formatNumber(indicatorsData.ema?.short)} | 
-                                长期: ${formatNumber(indicatorsData.ema?.long)}
-                            </div>
-                        </div>
-                        <div class="indicator-detail-item">
-                            <div class="indicator-detail-label">KDJ指标</div>
-                            <div class="indicator-detail-value">
-                                K:${formatNumber(indicatorsData.kdj?.k)} 
-                                D:${formatNumber(indicatorsData.kdj?.d)} 
-                                J:${formatNumber(indicatorsData.kdj?.j)}
-                            </div>
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                                ${indicatorsData.kdj?.signal || '-'}
-                            </div>
-                        </div>
-                        <div class="indicator-detail-item">
-                            <div class="indicator-detail-label">成交量</div>
-                            <div class="indicator-detail-value">${formatNumber(indicatorsData.volume?.volume_ratio, 2)}x</div>
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
-                                ${indicatorsData.volume?.signal === 'high' ? '成交量放大' : '正常'}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            if (signalData && signalData.reasons && signalData.reasons.length > 0) {
-                html += `
-                    <div class="analysis-section">
-                        <h3 class="section-title">
-                            <i class="bi bi-lightbulb"></i>
-                            推荐理由
-                        </h3>
-                        <ul class="reasons-list">
-                `;
-                signalData.reasons.forEach(reason => {
-                    html += `<li>${reason}</li>`;
-                });
-                html += `
-                        </ul>
-                    </div>
-                `;
-            }
-            
-            if (signalData && signalData.risks && signalData.risks.length > 0) {
-                html += `
-                    <div class="analysis-section">
-                        <h3 class="section-title">
-                            <i class="bi bi-exclamation-triangle"></i>
-                            风险提示
-                        </h3>
-                        <ul class="risks-list">
-                `;
-                signalData.risks.forEach(risk => {
-                    html += `<li>${risk}</li>`;
-                });
-                html += `
-                        </ul>
-                    </div>
-                `;
-            }
-            
-            if (signalData && signalData.action) {
-                html += `
-                    <div class="analysis-section">
-                        <h3 class="section-title">
-                            <i class="bi bi-arrow-right-circle"></i>
-                            操作建议
-                        </h3>
-                        <div style="background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg);">
-                            <div style="font-size: 24px; font-weight: 700; margin-bottom: var(--spacing-md);">
-                                ${formatSignal(signalData.action)}
-                            </div>
-                            <div style="color: var(--text-secondary); margin-bottom: var(--spacing-md);">
-                                置信度: ${formatNumber(signalData.confidence)}%
-                            </div>
-                            ${signalData.position ? `
-                                <div style="color: var(--text-secondary); font-size: 13px;">
-                                    <div>建议仓位: ${formatNumber(signalData.position.recommended_size * 100)}%</div>
-                                    <div>最大亏损: ${formatNumber(signalData.position.max_loss_pct)}%</div>
-                                    <div>目标收益: ${formatNumber(signalData.position.max_profit_pct)}%</div>
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
-            }
-            
-            modalContent.innerHTML = html;
-            modal.classList.add('active');
-        }
-        
-
-        // 加载EMA信号
-        // 加载超卖超买信号
-        // 加载技术信号
+        // 加载技术信号数据
         async function loadTechnicalSignals() {
             try {
-                const tbody = document.getElementById('technicalSignalsTableBody');
-                if (!tbody) {
-                    console.error('找不到 technicalSignalsTableBody 元素');
-                    return;
-                }
-                
-                // 每次刷新都更新表格内容，确保价格等数据能及时更新
-                // 不显示"加载中"提示，直接更新数据，避免闪烁
-                console.log('开始加载技术信号数据...');
-                
                 const response = await fetch('/api/technical-signals');
-                
-                // 检查 HTTP 响应状态
-                if (!response.ok) {
-                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-                    try {
-                        const errorData = await response.json();
-                        errorMessage = errorData.detail || errorData.message || errorMessage;
-                    } catch (e) {
-                        // 如果无法解析 JSON，使用默认错误信息
-                    }
-                    throw new Error(errorMessage);
-                }
-                
-                const data = await response.json();
-                console.log('API返回数据:', data); // 调试日志
-                
-                // 检查数据格式
-                if (!data || typeof data !== 'object') {
-                    throw new Error('API返回数据格式错误：不是有效的JSON对象');
-                }
-                
-                // 更宽松的数据检查：success 可以是 true 或 "true"，data 必须是数组
-                const isSuccess = data.success === true || data.success === 'true' || data.success === 1;
-                const hasData = data.data && Array.isArray(data.data);
-                const hasItems = hasData && data.data.length > 0;
-                
-                console.log('数据格式检查:', {
-                    success: data.success,
-                    successType: typeof data.success,
-                    isSuccess: isSuccess,
-                    hasData: hasData,
-                    dataType: typeof data.data,
-                    isArray: Array.isArray(data.data),
-                    dataLength: hasData ? data.data.length : 0,
-                    hasItems: hasItems
-                });
-                
-                if (isSuccess && hasItems) {
-                    console.log(`开始处理 ${data.data.length} 条数据...`);
+                const result = await response.json();
 
-                    try {
-                        // 性能优化：使用DocumentFragment批量插入DOM
-                        const fragment = document.createDocumentFragment();
-
-                        data.data.forEach((item, index) => {
-                            try {
-                        const indicators15m = item['15m'];
-                        const indicators1h = item['1h'];
-                        const indicators1d = item['1d'];
-
-                        // 计算综合评分（15m、1h和1d的平均值）
-                        let overallScore = 0;
-                        let count = 0;
-                        if (indicators15m && indicators15m.technical_score !== null) {
-                            overallScore += indicators15m.technical_score;
-                            count++;
-                        }
-                        if (indicators1h && indicators1h.technical_score !== null) {
-                            overallScore += indicators1h.technical_score;
-                            count++;
-                        }
-                        if (indicators1d && indicators1d.technical_score !== null) {
-                            overallScore += indicators1d.technical_score;
-                            count++;
-                        }
-                        const avgScore = count > 0 ? overallScore / count : 0;
-                        
-                        // 格式化价格显示
-                        let priceHtml = '<span class="text-muted" style="font-size: 13px;">-</span>';
-                        if (item.current_price !== null && item.current_price !== undefined) {
-                            const priceClass = item.change_24h >= 0 ? 'signal-buy' : 'signal-sell';
-                            const changeIcon = item.change_24h >= 0 ? '▲' : '▼';
-                            priceHtml = `
-                                <strong>${formatPrice(item.current_price, item.symbol)}</strong>
-                                ${item.change_24h !== null && item.change_24h !== undefined 
-                                    ? `<small class="${priceClass}">${changeIcon} ${item.change_24h >= 0 ? '+' : ''}${formatNumber(item.change_24h, 2)}%</small>`
-                                    : ''}
-                            `;
-                        }
-                        
-                        // 格式化15分钟指标
-                        const formatIndicators = (ind) => {
-                            if (!ind) return '<span class="text-muted">-</span>';
-                            
-                            let html = '<div style="font-size: 12px; line-height: 1.6;">';
-                            
-                            // RSI
-                            if (ind.rsi_value !== null) {
-                                const rsiClass = ind.rsi_value > 70 ? 'signal-sell' : ind.rsi_value < 30 ? 'signal-buy' : '';
-                                html += `<div>RSI: <span class="${rsiClass}">${formatNumber(ind.rsi_value, 1)}</span></div>`;
-                            }
-                            
-                            // MACD
-                            if (ind.macd_trend) {
-                                const macdClass = ind.macd_trend === 'bullish_cross' ? 'signal-buy' : ind.macd_trend === 'bearish_cross' ? 'signal-sell' : '';
-                                const macdText = ind.macd_trend === 'bullish_cross' ? '金叉' : ind.macd_trend === 'bearish_cross' ? '死叉' : '中性';
-                                html += `<div>MACD: <span class="${macdClass}">${macdText}</span></div>`;
-                            }
-                            
-                            // EMA
-                            if (ind.ema_trend) {
-                                const emaClass = ind.ema_trend === 'bullish' ? 'signal-buy' : ind.ema_trend === 'bearish' ? 'signal-sell' : '';
-                                const emaText = ind.ema_trend === 'bullish' ? '看涨' : ind.ema_trend === 'bearish' ? '看跌' : '中性';
-                                html += `<div>EMA: <span class="${emaClass}">${emaText}</span></div>`;
-                            }
-                            
-                            // BOLL
-                            if (ind.bb_position) {
-                                const bbText = {
-                                    'above_upper': '上轨',
-                                    'middle': '中轨',
-                                    'below_lower': '下轨'
-                                }[ind.bb_position] || ind.bb_position;
-                                const bbClass = ind.bb_position === 'below_lower' ? 'signal-buy' : ind.bb_position === 'above_upper' ? 'signal-sell' : '';
-                                html += `<div>BOLL: <span class="${bbClass}">${bbText}</span></div>`;
-                            }
-                            
-                            // 技术评分
-                            if (ind.technical_score !== null) {
-                                const scoreClass = ind.technical_score >= 60 ? 'signal-buy' : ind.technical_score <= 40 ? 'signal-sell' : '';
-                                html += `<div style="margin-top: 4px; font-weight: 600;">评分: <span class="${scoreClass}">${formatNumber(ind.technical_score, 1)}</span></div>`;
-                            }
-                            
-                            html += '</div>';
-                            return html;
-                        };
-                        
-                        // 综合评分样式
-                        let scoreClass = '';
-                        let scoreText = '';
-                        if (avgScore >= 75) {
-                            scoreClass = 'signal-strong-buy';
-                            scoreText = '强烈买入';
-                        } else if (avgScore >= 60) {
-                            scoreClass = 'signal-buy';
-                            scoreText = '买入';
-                        } else if (avgScore >= 40) {
-                            scoreClass = 'signal-hold';
-                            scoreText = '持有';
-                        } else if (avgScore >= 25) {
-                            scoreClass = 'signal-sell';
-                            scoreText = '卖出';
-                        } else {
-                            scoreClass = 'signal-strong-sell';
-                            scoreText = '强烈卖出';
-                        }
-                        
-                        // 性能优化：创建tr元素而不是字符串拼接
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td><strong>${item.symbol}</strong></td>
-                            <td>
-                                <div class="realtime-price">
-                                    ${priceHtml}
-                                </div>
-                            </td>
-                            <td>${formatIndicators(indicators15m)}</td>
-                            <td>${formatIndicators(indicators1h)}</td>
-                            <td>${formatIndicators(indicators1d)}</td>
-                            <td>
-                                <div style="text-align: center;">
-                                    <div class="${scoreClass}" style="font-weight: 600; font-size: 13px; margin-bottom: 4px;">${scoreText}</div>
-                                    <div style="font-size: 12px; color: var(--text-secondary);">${formatNumber(avgScore, 1)}</div>
-                                </div>
-                            </td>
-                            <td>
-                                <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${item.symbol}')" title="查看详情">
-                                    <i class="bi bi-eye"></i>
-                                </button>
-                            </td>
-                        `;
-                        fragment.appendChild(tr);
-                            } catch (itemError) {
-                                console.error(`处理第 ${index + 1} 条数据时出错:`, itemError, item);
-                                // 跳过这条数据，继续处理下一条
-                            }
-                        });
-
-                        console.log(`成功加载 ${data.data.length} 条技术信号数据`);
-                        // 性能优化：一次性插入所有DOM节点
-                        tbody.innerHTML = '';
-                        tbody.appendChild(fragment);
-                    } catch (processError) {
-                        console.error('处理数据时出错:', processError);
-                        throw processError;
-                    }
+                if (result.success && result.data) {
+                    renderTechnicalSignals(result.data);
+                    document.getElementById('updateTime').textContent = new Date().toLocaleString('zh-CN');
                 } else {
-                    // 显示更详细的提示信息
-                    let emptyMessage = '暂无技术信号数据';
-                    console.log('API返回数据（进入else分支）:', data); // 调试日志
-                    console.log('数据检查:', {
-                        success: data?.success,
-                        hasData: !!data?.data,
-                        isArray: Array.isArray(data?.data),
-                        dataLength: data?.data?.length,
-                        dataType: typeof data?.data
-                    });
-                    
-                    // 检查数据格式
-                    if (data === null || data === undefined) {
-                        emptyMessage = '加载失败: API返回数据为空';
-                    } else if (data.success === false || (data.success !== true && data.detail)) {
-                        // API明确返回失败，或者有错误详情
-                        emptyMessage = `加载失败: ${data.detail || data.message || '未知错误'}`;
-                    } else if ((data.success === true || data.success === 'true' || data.success === 1) && data.data && Array.isArray(data.data) && data.data.length === 0) {
-                        // 成功但数据为空
-                        emptyMessage = '暂无技术信号数据（可能15m、1h或1d时间周期的数据尚未生成，请等待缓存更新）';
-                        console.log('数据为空，但API返回成功');
-                    } else if (data.success !== true && (!data.data || !Array.isArray(data.data))) {
-                        // 如果返回的数据格式不对，可能是API返回格式改变了
-                        emptyMessage = `加载失败: API返回格式异常（期望包含success:true和data数组字段，实际返回: ${JSON.stringify(data).substring(0, 200)}）`;
-                        console.error('API返回格式异常:', data);
-                    } else {
-                        // 其他情况
-                        emptyMessage = `暂无技术信号数据（success=${data?.success}, data类型=${typeof data?.data}, 是否为数组=${Array.isArray(data?.data)}, 长度=${data?.data?.length || 0}）`;
-                        console.warn('未匹配到任何条件，使用默认提示:', data);
-                    }
-                    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${emptyMessage}</td></tr>`;
+                    showError('加载失败');
                 }
             } catch (error) {
                 console.error('加载技术信号失败:', error);
-                console.error('错误详情:', error.stack);
-                const errorMessage = error.message || '请稍后重试';
-                document.getElementById('technicalSignalsTableBody').innerHTML = 
-                    `<tr><td colspan="7" class="empty-state">加载失败: ${errorMessage}</td></tr>`;
+                showError(error.message);
             }
         }
 
-        // 已移除：loadOversoldOverboughtSignals 函数（超买超卖信号功能已移除）
+        // 渲染技术信号表格
+        function renderTechnicalSignals(data) {
+            const tbody = document.getElementById('technicalSignalsTableBody');
 
-        // 加载趋势分析数据
-        async function loadTrendAnalysis() {
-            try {
-                const tbody = document.getElementById('trendAnalysisTableBody');
-                if (!tbody) return;
-
-                const response = await fetchWithTimeout('/api/trend-analysis', 10000);
-                const data = await response.json();
-
-                if (data.success && data.data && data.data.length > 0) {
-                    // 性能优化：使用DocumentFragment
-                    const fragment = document.createDocumentFragment();
-
-                    data.data.forEach(item => {
-                        const trend5m = item['5m'];
-                        const trend15m = item['15m'];
-                        const trend1h = item['1h'];
-                        const trend1d = item['1d'];
-                        
-                        // 计算综合评估（包含5m）
-                        let overallScore = 0;
-                        let count = 0;
-                        if (trend5m) { overallScore += trend5m.trend_score; count++; }
-                        if (trend15m) { overallScore += trend15m.trend_score; count++; }
-                        if (trend1h) { overallScore += trend1h.trend_score; count++; }
-                        if (trend1d) { overallScore += trend1d.trend_score; count++; }
-                        const avgScore = count > 0 ? overallScore / count : 50;
-                        
-                        let overallTrend = 'SIDEWAYS';
-                        let overallText = '震荡';
-                        let overallClass = 'trend-neutral';
-                        if (avgScore >= 75) {
-                            overallTrend = 'STRONG_UPTREND';
-                            overallText = '强烈上涨';
-                            overallClass = 'trend-strong-up';
-                        } else if (avgScore >= 60) {
-                            overallTrend = 'UPTREND';
-                            overallText = '上涨';
-                            overallClass = 'trend-up';
-                        } else if (avgScore >= 45) {
-                            overallTrend = 'SIDEWAYS';
-                            overallText = '震荡';
-                            overallClass = 'trend-neutral';
-                        } else if (avgScore >= 30) {
-                            overallTrend = 'DOWNTREND';
-                            overallText = '下跌';
-                            overallClass = 'trend-down';
-                        } else {
-                            overallTrend = 'STRONG_DOWNTREND';
-                            overallText = '强烈下跌';
-                            overallClass = 'trend-strong-down';
-                        }
-                        
-                        // 格式化价格显示（优化样式，无边框）
-                        let priceHtml = '<span class="text-muted" style="font-size: 13px;">-</span>';
-                        if (item.current_price !== null && item.current_price !== undefined) {
-                            const priceClass = item.change_24h >= 0 ? 'signal-buy' : 'signal-sell';
-                            const changeIcon = item.change_24h >= 0 ? '▲' : '▼';
-                            priceHtml = `
-                                <strong>${formatPrice(item.current_price, item.symbol)}</strong>
-                                ${item.change_24h !== null && item.change_24h !== undefined 
-                                    ? `<small class="${priceClass}">${changeIcon} ${item.change_24h >= 0 ? '+' : ''}${formatNumber(item.change_24h, 2)}%</small>`
-                                    : ''}
-                            `;
-                        }
-                        
-                        // 性能优化：创建tr元素
-                        const tr = document.createElement('tr');
-                        tr.dataset.symbol = item.symbol;
-                        tr.innerHTML = `
-                            <td>
-                                <strong>${item.symbol}</strong>
-                                <div id="price-${item.symbol.replace('/', '-')}" class="realtime-price">
-                                    ${priceHtml}
-                                </div>
-                            </td>
-                            <td>${formatTrendCell(trend5m)}</td>
-                            <td>${formatTrendCell(trend15m)}</td>
-                            <td>${formatTrendCell(trend1h)}</td>
-                            <td>${formatTrendCell(trend1d)}</td>
-                            <td>
-                                <span class="badge ${overallClass}">${overallText}</span>
-                                <br><small style="color: #666;">评分: ${avgScore.toFixed(1)}</small>
-                            </td>
-                            <td>
-                                <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${item.symbol}')" title="查看详情">
-                                    <i class="bi bi-eye"></i>
-                                </button>
-                            </td>
-                        `;
-                        fragment.appendChild(tr);
-                    });
-
-                    // 性能优化：一次性插入DOM
-                    tbody.innerHTML = '';
-                    tbody.appendChild(fragment);
-                        } else {
-                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无数据</td></tr>';
-                }
-            } catch (error) {
-                console.error('加载趋势分析失败:', error);
-                document.getElementById('trendAnalysisTableBody').innerHTML = 
-                    '<tr><td colspan="7" class="empty-state">加载失败，请稍后重试</td></tr>';
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无数据</td></tr>';
+                return;
             }
+
+            tbody.innerHTML = data.map(item => {
+                const stats24h = item.stats_24h || {};
+                const stats4h = item.stats_4h || {};
+                const stats1h = item.stats_1h || {};
+
+                // 综合趋势判断
+                const overallTrend = calculateOverallTrend(stats24h, stats4h, stats1h);
+
+                return `
+                    <tr>
+                        <td style="font-weight: 600; font-family: var(--font-mono);">${item.symbol}</td>
+                        <td>${render24HStats(stats24h)}</td>
+                        <td>${render4HStats(stats4h)}</td>
+                        <td>${render1HStats(stats1h)}</td>
+                        <td>${renderOverallTrend(overallTrend)}</td>
+                    </tr>
+                `;
+            }).join('');
         }
-        
-        // 格式化趋势单元格
-        function formatTrendCell(trend) {
-            if (!trend) {
-                return '<span class="text-muted">-</span>';
+
+        // 渲染24H统计
+        function render24HStats(stats) {
+            if (!stats || !stats['1h']) {
+                return '<span class="badge badge-neutral">无数据</span>';
             }
-            
-            let priceInfo = '';
-            if (trend.price_change_pct !== undefined && trend.price_change_pct !== null) {
-                const priceClass = trend.price_change_pct >= 0 ? 'signal-buy' : 'signal-sell';
-                priceInfo = `<br><small style="color: #666;">价格变化: <span class="${priceClass}">${trend.price_change_pct >= 0 ? '+' : ''}${formatNumber(trend.price_change_pct, 2)}%</span>`;
-                if (trend.volume_change_pct !== undefined && trend.volume_change_pct !== null) {
-                    const volumeClass = trend.volume_change_pct >= 0 ? 'signal-buy' : 'signal-sell';
-                    priceInfo += ` | 成交量变化: <span class="${volumeClass}">${trend.volume_change_pct >= 0 ? '+' : ''}${formatNumber(trend.volume_change_pct, 2)}%</span>`;
-                }
-                priceInfo += '</small>';
-            }
-            
-            // EMA金叉/死叉信息（仅对5m、15m、1h显示）
-            let emaCrossInfo = '';
-            // 检查 ema_cross 字段是否存在且不为 null
-            if (trend.ema_cross && typeof trend.ema_cross === 'object') {
-                if (trend.ema_cross.is_golden_cross) {
-                    emaCrossInfo = '<br><small style="color: var(--success-green); font-weight: 600;">✨ EMA金叉</small>';
-                } else if (trend.ema_cross.is_death_cross) {
-                    emaCrossInfo = '<br><small style="color: var(--danger-red); font-weight: 600;">⚠️ EMA死叉</small>';
-                } else if (trend.ema_cross.is_bullish) {
-                    // 当前多头排列（短期在长期之上），但没有刚刚发生金叉
-                    emaCrossInfo = '<br><small style="color: var(--success-green);">↑ EMA多头</small>';
-                } else if (trend.ema_cross.is_bearish) {
-                    // 当前空头排列（短期在长期之下），但没有刚刚发生死叉
-                    emaCrossInfo = '<br><small style="color: var(--danger-red);">↓ EMA空头</small>';
-                }
-            }
-            // 如果 ema_cross 不存在或为 null，不显示任何信息（这是正常的，特别是对于1d时间周期）
-            
+
+            const h1 = stats['1h'];
+            const m15 = stats['15m'];
+            const m5 = stats['5m'];
+
             return `
-                <div>
-                    <span class="badge ${trend.trend_class}">${trend.trend_text}</span>
-                    ${emaCrossInfo}
-                    <br><small style="color: #666;">
-                        评分: ${trend.trend_score} | 
-                        RSI: ${formatNumber(trend.rsi_value, 1)} | 
-                        置信度: ${trend.confidence}%
-                    </small>
-                    ${priceInfo}
+                <div class="kline-stats">
+                    ${renderKlineBar('1H', h1)}
+                    ${renderKlineBar('15M', m15)}
+                    ${renderKlineBar('5M', m5)}
                 </div>
             `;
         }
 
-        // 格式化技术指标显示（带方向箭头）
-        function formatIndicatorCell(indicators) {
-            if (!indicators || !indicators.directions) {
-                return '<span class="text-muted">-</span>';
+        // 渲染4H统计
+        function render4HStats(stats) {
+            if (!stats || !stats['15m']) {
+                return '<span class="badge badge-neutral">无数据</span>';
             }
-            
-            const dirs = indicators.directions;
-            const vals = indicators.values;
-            
-            // 方向箭头
-            const getDirectionIcon = (direction) => {
-                if (direction === 'up') return '<span class="signal-buy">↑</span>';
-                if (direction === 'down') return '<span class="signal-sell">↓</span>';
-                if (direction === 'neutral') return '<span class="text-muted">→</span>';
-                return '<span class="text-muted">-</span>';
-            };
-            
-            // 综合评估
-            const overall = dirs.overall || 'neutral';
-            const overallText = overall === 'up' ? '看涨' : overall === 'down' ? '看跌' : '中性';
-            const overallClass = overall === 'up' ? 'signal-buy' : overall === 'down' ? 'signal-sell' : 'text-muted';
-            
-            let html = '<div style="font-size: 12px; line-height: 1.6;">';
-            let hasAnyIndicator = false;
-            
-            // RSI
-            if (dirs.rsi && dirs.rsi.direction) {
-                const rsiValue = (vals && vals.rsi_value !== null && vals.rsi_value !== undefined) 
-                    ? formatNumber(vals.rsi_value, 1) 
-                    : '-';
-                html += `<div>RSI: ${rsiValue} ${getDirectionIcon(dirs.rsi.direction)}</div>`;
-                hasAnyIndicator = true;
-            }
-            
-            // EMA
-            if (dirs.ema && dirs.ema.direction) {
-                html += `<div>EMA: ${getDirectionIcon(dirs.ema.direction)}</div>`;
-                hasAnyIndicator = true;
-            }
-            
-            // MACD
-            if (dirs.macd && dirs.macd.direction) {
-                html += `<div>MACD: ${getDirectionIcon(dirs.macd.direction)}</div>`;
-                hasAnyIndicator = true;
-            }
-            
-            // BOLL
-            if (dirs.boll && dirs.boll.direction) {
-                html += `<div>BOLL: ${getDirectionIcon(dirs.boll.direction)}</div>`;
-                hasAnyIndicator = true;
-            }
-            
-            // 如果没有显示任何指标，返回默认值
-            if (!hasAnyIndicator) {
-                return '<span class="text-muted">-</span>';
-            }
-            
-            // 综合评估
-            html += `<div style="margin-top: 4px; font-weight: 600; border-top: 1px solid #eee; padding-top: 4px;">
-                <span class="${overallClass}">${overallText}</span>
-            </div>`;
-            
-            html += '</div>';
-            return html;
-        }
-        
-        // 加载合约信号
-        async function loadFuturesSignals() {
-            try {
-                const tbody = document.getElementById('futuresSignalsTableBody');
-                if (!tbody) return;
 
-                const response = await fetchWithTimeout('/api/futures-signals', 10000);
-                const data = await response.json();
+            const m15 = stats['15m'];
+            const m5 = stats['5m'];
+            const m1 = stats['1m'];
 
-                if (data.success && data.data && data.data.length > 0) {
-                    // 性能优化：使用DocumentFragment
-                    const fragment = document.createDocumentFragment();
-
-                    data.data.forEach(signal => {
-                        // 格式化价格显示
-                        let priceHtml = '<span class="text-muted">-</span>';
-                        if (signal.current_price !== null && signal.current_price !== undefined) {
-                            const priceClass = signal.price_change_24h >= 0 ? 'signal-buy' : 'signal-sell';
-                            priceHtml = `
-                                <div class="realtime-price" id="price-${signal.symbol.replace('/', '-')}">
-                                    <strong style="font-size: 16px;">${formatPrice(signal.current_price, signal.symbol)}</strong>
-                                    ${signal.price_change_24h !== null && signal.price_change_24h !== undefined 
-                                        ? `<br><small class="${priceClass}">${signal.price_change_24h >= 0 ? '+' : ''}${formatNumber(signal.price_change_24h, 2)}%</small>`
-                                        : ''}
-                                </div>
-                            `;
-                        }
-                            
-                        // 性能优化：创建tr元素
-                        const tr = document.createElement('tr');
-                        tr.dataset.symbol = signal.symbol;
-                        tr.innerHTML = `
-                            <td><strong>${signal.symbol}</strong></td>
-                            <td>${priceHtml}</td>
-                            <td>
-                                <span class="badge ${signal.signal_class}">${signal.signal_text}</span>
-                                </td>
-                            <td class="${signal.signal_score >= 0 ? 'signal-buy' : 'signal-sell'}" style="font-weight: 600;">
-                                ${signal.signal_score >= 0 ? '+' : ''}${formatNumber(signal.signal_score, 1)}
-                            </td>
-                            <td>
-                                ${signal.funding_rate !== null && signal.funding_rate !== undefined
-                                    ? `<span class="${signal.funding_rate > 0 ? 'signal-buy' : signal.funding_rate < 0 ? 'signal-sell' : ''}">${formatNumber(signal.funding_rate, 4)}%</span>`
-                                    : '<span class="text-muted">-</span>'}
-                            </td>
-                            <td>
-                                ${signal.long_short_ratio !== null && signal.long_short_ratio !== undefined
-                                    ? `${formatNumber(signal.long_short_ratio, 2)}`
-                                    : '<span class="text-muted">-</span>'}
-                            </td>
-                            <td>
-                                ${signal.oi_change_pct !== null && signal.oi_change_pct !== undefined
-                                    ? `<span class="${signal.oi_change_pct >= 0 ? 'signal-buy' : 'signal-sell'}">${signal.oi_change_pct >= 0 ? '+' : ''}${formatNumber(signal.oi_change_pct, 2)}%</span>`
-                                    : '<span class="text-muted">-</span>'}
-                            </td>
-                            <td style="min-width: 120px;">${formatIndicatorCell(signal.indicators_5m)}</td>
-                            <td style="min-width: 120px;">${formatIndicatorCell(signal.indicators_15m)}</td>
-                            <td style="min-width: 120px;">${formatIndicatorCell(signal.indicators_1h)}</td>
-                            <td>
-                                <button class="btn-detail" onclick="event.stopPropagation(); showDetailedAnalysisModal('${signal.symbol}')" title="查看详情">
-                                    <i class="bi bi-eye"></i>
-                                    </button>
-                                </td>
-                        `;
-                        fragment.appendChild(tr);
-                    });
-
-                    // 性能优化：一次性插入DOM
-                    tbody.innerHTML = '';
-                    tbody.appendChild(fragment);
-                    } else {
-                    tbody.innerHTML = '<tr><td colspan="12" class="empty-state">暂无合约信号数据</td></tr>';
-                }
-            } catch (error) {
-                console.error('加载合约信号失败:', error);
-                document.getElementById('futuresSignalsTableBody').innerHTML = 
-                    '<tr><td colspan="12" class="empty-state">加载失败，请稍后重试</td></tr>';
-            }
-        }
-        
-        // 更新合约信号的实时价格
-        async function updateFuturesPrices() {
-            try {
-                const tbody = document.getElementById('futuresSignalsTableBody');
-                const rows = tbody.querySelectorAll('tr[data-symbol]');
-                
-                if (rows.length === 0) return;
-                
-                // 收集所有交易对
-                const symbols = Array.from(rows).map(row => row.getAttribute('data-symbol'));
-                
-                // 批量获取价格
-                const response = await fetch(`/api/realtime-prices?symbols=${symbols.join(',')}`);
-                const data = await response.json();
-                
-                if (data.success && data.data) {
-                    // 更新每个交易对的价格
-                    rows.forEach(row => {
-                        const symbol = row.getAttribute('data-symbol');
-                        const priceInfo = data.data[symbol];
-                        const priceCell = row.querySelector(`#price-${symbol.replace('/', '-')}`);
-                        
-                        if (priceInfo && priceCell) {
-                            const oldPrice = parseFloat(priceCell.querySelector('strong')?.textContent.replace(/,/g, '') || '0');
-                            const newPrice = priceInfo.price;
-                            
-                            if (oldPrice > 0 && newPrice !== oldPrice) {
-                                // 价格变化，添加动画效果
-                                priceCell.classList.add('price-updated');
-                                setTimeout(() => priceCell.classList.remove('price-updated'), 500);
-                            }
-                            
-                            const priceClass = priceInfo.change_24h >= 0 ? 'signal-buy' : 'signal-sell';
-                            // 从row中获取symbol
-                            const symbol = row.getAttribute('data-symbol');
-                            priceCell.innerHTML = `
-                                <strong style="font-size: 16px;">${formatPrice(newPrice, symbol)}</strong>
-                                ${priceInfo.change_24h !== null && priceInfo.change_24h !== undefined 
-                                    ? `<br><small class="${priceClass}">${priceInfo.change_24h >= 0 ? '+' : ''}${formatNumber(priceInfo.change_24h, 2)}%</small>`
-                                    : ''}
-                            `;
-                        }
-                    });
-                }
-            } catch (error) {
-                // 静默失败，不影响主功能
-            }
+            return `
+                <div class="kline-stats">
+                    ${renderKlineBar('15M', m15)}
+                    ${renderKlineBar('5M', m5)}
+                    ${m1 ? renderKlineBar('1M', m1) : ''}
+                </div>
+            `;
         }
 
-        // 已移除：实时价格更新功能（不再需要，定时刷新会更新所有数据包括价格）
-
-        // 性能优化：防抖函数
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
-
-        // 性能优化：节流函数
-        function throttle(func, limit) {
-            let inThrottle;
-            return function(...args) {
-                if (!inThrottle) {
-                    func.apply(this, args);
-                    inThrottle = true;
-                    setTimeout(() => inThrottle = false, limit);
-                }
-            };
-        }
-
-        // 全局定时器管理
-        const timers = {
-            dataRefresh: null,
-            priceUpdate: null
-        };
-
-        // 统一的数据刷新函数（根据当前激活的tab刷新对应数据）
-        async function refreshCurrentTabData() {
-            const activeTab = document.querySelector('.tab-button.active');
-            if (!activeTab) return;
-
-            const tabName = activeTab.textContent.trim();
-
-            try {
-                if (tabName.includes('趋势判断')) {
-                    await loadTrendAnalysis();
-                } else if (tabName.includes('技术信号')) {
-                    await loadTechnicalSignals();
-                } else if (tabName.includes('合约信号')) {
-                    await loadFuturesSignals();
-                    await updateFuturesPrices();
-                }
-            } catch (error) {
-                console.error('刷新数据失败:', error);
+        // 渲染1H统计
+        function render1HStats(stats) {
+            if (!stats || !stats['5m']) {
+                return '<span class="badge badge-neutral">无数据</span>';
             }
+
+            const m5 = stats['5m'];
+            const m1 = stats['1m'];
+
+            return `
+                <div class="kline-stats">
+                    ${renderKlineBar('5M', m5)}
+                    ${m1 ? renderKlineBar('1M', m1) : ''}
+                </div>
+            `;
         }
 
-        // 初始化
-        async function init() {
-            // 加载初始数据（趋势判断作为默认TAB）
-            await loadTrendAnalysis();
+        // 渲染K线条
+        function renderKlineBar(label, data) {
+            if (!data) return '';
 
-            // 清除旧定时器
-            if (timers.dataRefresh) clearInterval(timers.dataRefresh);
-            if (timers.priceUpdate) clearInterval(timers.priceUpdate);
+            const bullishPct = data.bullish_pct || 0;
+            const bearishPct = data.bearish_pct || 0;
+            const trend = data.trend || '震荡';
 
-            // 统一的数据刷新定时器（每5分钟，只刷新当前激活的tab）
-            timers.dataRefresh = setInterval(() => {
-                refreshCurrentTabData();
-            }, 300000); // 5分钟
+            const trendClass = trend.includes('上涨') ? 'trend-up' : trend.includes('下跌') ? 'trend-down' : 'trend-neutral';
 
-            // 价格更新定时器（仅在合约信号tab时更新）
-            timers.priceUpdate = setInterval(() => {
-                const activeTab = document.querySelector('.tab-button.active');
-                if (activeTab && activeTab.textContent.includes('合约信号')) {
-                    updateFuturesPrices();
-                }
-            }, 10000); // 改为10秒，减少请求频率
+            return `
+                <div class="kline-bar">
+                    <div class="kline-bar-label">${label}</div>
+                    <div class="kline-bar-visual">
+                        <div class="kline-bar-fill bullish" style="width: ${bullishPct}%"></div>
+                    </div>
+                    <div class="kline-bar-value ${trendClass}">
+                        ${data.bullish_count}/${data.total_klines}
+                    </div>
+                </div>
+            `;
         }
 
-        // 带超时的fetch请求
-        async function fetchWithTimeout(url, timeout = 5000) {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeout);
-            try {
-                const response = await fetch(url, { signal: controller.signal });
-                clearTimeout(timeoutId);
-                return response;
-            } catch (error) {
-                clearTimeout(timeoutId);
-                if (error.name === 'AbortError') {
-                    throw new Error('请求超时');
-                }
-                throw error;
+        // 计算综合趋势
+        function calculateOverallTrend(stats24h, stats4h, stats1h) {
+            // 优先看短期趋势(1H),结合4H和24H
+            let score = 0;
+            let count = 0;
+
+            // 1H趋势权重最高
+            if (stats1h && stats1h['5m']) {
+                const trend = stats1h['5m'].trend;
+                if (trend.includes('强势上涨')) score += 2;
+                else if (trend.includes('上涨')) score += 1;
+                else if (trend.includes('强势下跌')) score -= 2;
+                else if (trend.includes('下跌')) score -= 1;
+                count++;
             }
+
+            // 4H趋势
+            if (stats4h && stats4h['15m']) {
+                const trend = stats4h['15m'].trend;
+                if (trend.includes('强势上涨')) score += 1.5;
+                else if (trend.includes('上涨')) score += 0.75;
+                else if (trend.includes('强势下跌')) score -= 1.5;
+                else if (trend.includes('下跌')) score -= 0.75;
+                count++;
+            }
+
+            // 24H趋势
+            if (stats24h && stats24h['1h']) {
+                const trend = stats24h['1h'].trend;
+                if (trend.includes('强势上涨')) score += 1;
+                else if (trend.includes('上涨')) score += 0.5;
+                else if (trend.includes('强势下跌')) score -= 1;
+                else if (trend.includes('下跌')) score -= 0.5;
+                count++;
+            }
+
+            const avgScore = count > 0 ? score / count : 0;
+
+            if (avgScore >= 1.5) return { text: '强势上涨', class: 'trend-up', badge: 'success' };
+            if (avgScore >= 0.5) return { text: '上涨', class: 'trend-up', badge: 'success' };
+            if (avgScore <= -1.5) return { text: '强势下跌', class: 'trend-down', badge: 'danger' };
+            if (avgScore <= -0.5) return { text: '下跌', class: 'trend-down', badge: 'danger' };
+            return { text: '震荡', class: 'trend-neutral', badge: 'neutral' };
         }
 
-        // 显示详细分析模态框
-        async function showDetailedAnalysisModal(symbol) {
-            const modal = document.getElementById('detailedAnalysisModal');
-            const modalTitle = document.getElementById('modalSymbolTitle');
-            const modalContent = document.getElementById('detailedAnalysisContent');
-            // 使用默认timeframe（1h），因为信号列表TAB已删除
-            const timeframe = '1h';
-            
-            modalTitle.textContent = `${symbol} - 详细分析`;
-            modalContent.innerHTML = '<div class="loading">加载中...</div>';
-            modal.classList.add('active');
-            
-            try {
-                // 对symbol进行URL编码，处理斜杠
-                const encodedSymbol = encodeURIComponent(symbol);
-                
-                // 第一步：快速加载技术指标（从缓存读取，很快）
-                let indicatorsData = null;
-                try {
-                    const indicatorsResponse = await fetchWithTimeout(
-                        `/api/technical-indicators?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}`,
-                        3000
-                    );
-                    if (indicatorsResponse.ok) {
-                        indicatorsData = await indicatorsResponse.json();
-                        // 先显示技术指标数据，让用户看到内容
-                        showDetailedAnalysis(symbol, indicatorsData, null, null);
-                    }
-                } catch (e) {
-                    console.warn('获取技术指标失败:', e);
-                    modalContent.innerHTML = `<div class="empty-state">加载技术指标失败: ${e.message}</div>`;
-                    return;
-                }
-                
-                // 第二步：异步加载信号和价格数据（这些可能较慢，但不阻塞显示）
-                let signalData = null;
-                let priceData = null;
-                let futuresSignalData = null;  // 合约信号数据（包含凯利公式建议）
-                
-                // 并行加载信号和价格，设置合理的超时时间
-                // 使用 Promise.allSettled 确保即使某个请求失败也不影响其他请求
-                const loadPromises = [
-                    fetchWithTimeout(`/api/signals/${encodedSymbol}?timeframe=${timeframe}`, 15000)
-                        .then(res => {
-                            if (res.ok) {
-                                return res.json();
-                            }
-                            return null;
-                        })
-                        .then(data => {
-                            if (data) {
-                                signalData = data;
-                            }
-                        })
-                        .catch(e => {
-                            console.warn('获取综合信号失败（已超时或出错）:', e.message);
-                            // 不抛出错误，继续执行
-                        }),
-                    
-                    // 获取合约信号数据（包含凯利公式建议）
-                    fetchWithTimeout(`/api/futures-signals`, 10000)
-                        .then(res => {
-                            if (res.ok) {
-                                return res.json();
-                            }
-                            return null;
-                        })
-                        .then(data => {
-                            if (data && data.success && data.data) {
-                                // 找到对应交易对的合约信号数据
-                                const futuresSignal = data.data.find(item => item.symbol === symbol);
-                                if (futuresSignal) {
-                                    futuresSignalData = futuresSignal;
-                                }
-                            }
-                        })
-                        .catch(e => {
-                            console.warn('获取合约信号失败（已超时或出错）:', e.message);
-                            // 不抛出错误，继续执行
-                        }),
-                    
-                    fetchWithTimeout(`/api/price/${encodedSymbol}`, 8000)
-                        .then(res => {
-                            if (res.ok) {
-                                return res.json();
-                            }
-                            return null;
-                        })
-                        .then(data => {
-                            if (data) {
-                                priceData = data;
-                            }
-                        })
-                        .catch(e => {
-                            console.warn('获取实时价格失败（已超时或出错）:', e.message);
-                            // 不抛出错误，继续执行
-                        })
-                ];
-                
-                // 使用 allSettled 等待所有请求完成（无论成功或失败）
-                await Promise.allSettled(loadPromises);
-                
-                // 如果合约信号数据中有凯利公式建议，将其合并到signalData中
-                if (futuresSignalData && futuresSignalData.kelly_advice) {
-                    if (!signalData) {
-                        signalData = {};
-                    }
-                    signalData.kelly_advice = futuresSignalData.kelly_advice;
-                    // 如果有价格数据，也合并进去
-                    if (futuresSignalData.current_price) {
-                        if (!signalData.price) {
-                            signalData.price = {};
-                        }
-                        signalData.price.current = futuresSignalData.current_price;
-                    }
-                    // 合并信号方向信息（用于显示做多/做空）
-                    if (futuresSignalData.signal_direction) {
-                        signalData.signal_direction = futuresSignalData.signal_direction;
-                    }
-                    if (futuresSignalData.signal_text) {
-                        signalData.signal_text = futuresSignalData.signal_text;
-                    }
-                    if (futuresSignalData.signal_class) {
-                        signalData.signal_class = futuresSignalData.signal_class;
-                    }
-                }
-                
-                // 更新显示，包含所有已加载的数据（即使某些数据缺失）
-                showDetailedAnalysis(symbol, indicatorsData, signalData, priceData);
-                
-                // 启动实时价格更新（每5秒更新一次）
-                if (window.priceUpdateInterval) {
-                    clearInterval(window.priceUpdateInterval);
-                }
-                window.priceUpdateInterval = setInterval(async () => {
-                    try {
-                        const encodedSymbol = encodeURIComponent(symbol);
-                        const priceRes = await fetchWithTimeout(`/api/price/${encodedSymbol}`, 3000);
-                        if (priceRes && priceRes.ok) {
-                            const newPriceData = await priceRes.json();
-                            updateRealTimePrice(newPriceData);
-                        }
-                    } catch (e) {
-                        console.warn('更新实时价格失败:', e);
-                    }
-                }, 5000);
-            } catch (error) {
-                console.error('加载详情失败:', error);
-                modalContent.innerHTML = `<div class="empty-state">加载失败: ${error.message}</div>`;
-            }
+        // 渲染综合趋势
+        function renderOverallTrend(trend) {
+            return `<span class="badge badge-${trend.badge} ${trend.class}">${trend.text}</span>`;
         }
-        
-        // 更新实时价格
-        function updateRealTimePrice(priceData) {
-            const priceElement = document.getElementById('realtime-price-value');
-            const changeElement = document.getElementById('realtime-price-change');
-            if (priceElement && priceData && priceData.price) {
-                const currentPrice = parseFloat(priceData.price);
-                const oldPrice = parseFloat(priceElement.dataset.oldPrice || currentPrice);
-                const change = currentPrice - oldPrice;
-                const changePct = oldPrice > 0 ? (change / oldPrice * 100) : 0;
-                
-                const symbol = priceElement.dataset.symbol || '';
-                priceElement.textContent = formatPrice(currentPrice, symbol) + ' USDT';
-                priceElement.dataset.oldPrice = currentPrice;
-                
-                if (changeElement) {
-                    const changeClass = change >= 0 ? 'signal-buy' : 'signal-sell';
-                    changeElement.innerHTML = `
-                        <span class="${changeClass}">
-                            ${change >= 0 ? '+' : ''}${formatNumber(change)} 
-                            (${change >= 0 ? '+' : ''}${formatNumber(changePct)}%)
-                        </span>
-                    `;
-                }
-                
-                // 添加闪烁效果提示价格更新
-                priceElement.style.animation = 'none';
-                setTimeout(() => {
-                    priceElement.style.animation = 'priceUpdate 0.5s ease-out';
-                }, 10);
-            }
+
+        // 显示错误
+        function showError(message) {
+            const tbody = document.getElementById('technicalSignalsTableBody');
+            tbody.innerHTML = `<tr><td colspan="5" class="empty-state">❌ ${message}</td></tr>`;
         }
-        
-        // 关闭模态框时清除价格更新定时器
-        function closeDetailedAnalysis() {
-            const modal = document.getElementById('detailedAnalysisModal');
-            modal.classList.remove('active');
-            if (window.priceUpdateInterval) {
-                clearInterval(window.priceUpdateInterval);
-                window.priceUpdateInterval = null;
-            }
-        }
-        
-        // 页面加载完成后初始化
-        document.addEventListener('DOMContentLoaded', init);
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTechnicalSignals();
+            // 每30秒刷新一次数据
+            setInterval(loadTechnicalSignals, 30000);
+        });
     </script>
 </body>
 </html>
-
