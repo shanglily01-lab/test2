@@ -1041,8 +1041,8 @@ class CoinFuturesTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
             return False
 
-        # 新增验证: 检查是否在平仓后冷却期内(1小时)
-        if self.check_recent_close(symbol, side, cooldown_minutes=60):
+        # 新增验证: 检查是否在平仓后冷却期内(15分钟)
+        if self.check_recent_close(symbol, side, cooldown_minutes=15):
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后1小时冷却期内")
             return False
 
@@ -1836,11 +1836,11 @@ class CoinFuturesTraderService:
         except:
             return 0
 
-    def check_recent_close(self, symbol: str, side: str, cooldown_minutes: int = 60):
+    def check_recent_close(self, symbol: str, side: str, cooldown_minutes: int = 15):
         """
         检查指定交易对和方向是否在冷却期内(刚刚平仓)
         返回True表示在冷却期,不应该开仓
-        默认冷却期1小时,避免反复开平造成频繁交易
+        默认冷却期15分钟,避免反复开平造成频繁交易
         """
         try:
             conn = self._get_connection()
@@ -2531,7 +2531,7 @@ class CoinFuturesTraderService:
                         continue
 
                     # 检查是否刚刚平仓(1小时冷却期)
-                    if self.check_recent_close(symbol, new_side, cooldown_minutes=60):
+                    if self.check_recent_close(symbol, new_side, cooldown_minutes=15):
                         logger.info(f"[SKIP] {symbol} {new_side}方向1小时内刚平仓,冷却中")
                         continue
 
