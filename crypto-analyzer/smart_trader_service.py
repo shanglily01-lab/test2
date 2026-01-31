@@ -2411,8 +2411,200 @@ class SmartTraderService:
             import traceback
             logger.error(traceback.format_exc())
 
+    def _check_and_restart_smart_exit_optimizer(self):
+        """检查SmartExitOptimizer健康状态，发现问题立即重启"""
+        try:
+            if not self.smart_exit_optimizer or not self.event_loop:
+                logger.warning("⚠️ SmartExitOptimizer未初始化")
+                return
+
+            # ========== 检查1: 监控任务数量是否匹配 ==========
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # 获取数据库中的开仓持仓数量
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM futures_positions
+                WHERE status = 'open'
+                AND account_id = %s
+            """, (self.account_id,))
+
+            db_count = cursor.fetchone()[0]
+
+            # 获取SmartExitOptimizer中的监控任务数量
+            monitoring_count = len(self.smart_exit_optimizer.monitoring_tasks)
+
+            # ========== 检查2: 是否有超时未平仓的持仓 ==========
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM futures_positions
+                WHERE status = 'open'
+                AND account_id = %s
+                AND planned_close_time IS NOT NULL
+                AND NOW() > planned_close_time
+            """, (self.account_id,))
+
+            timeout_count = cursor.fetchone()[0]
+
+            cursor.close()
+
+            # ========== 判断是否需要重启 ==========
+            need_restart = False
+            restart_reason = ""
+
+            # 情况1: 监控任务数量不匹配
+            if db_count != monitoring_count:
+                need_restart = True
+                restart_reason = (
+                    f"监控任务数量不匹配 (数据库{db_count}个持仓, "
+                    f"SmartExitOptimizer监控{monitoring_count}个)"
+                )
+
+            # 情况2: 有超时持仓（说明SmartExitOptimizer没有正常工作）
+            if timeout_count > 0:
+                need_restart = True
+                if restart_reason:
+                    restart_reason += f"; 发现{timeout_count}个超时未平仓持仓"
+                else:
+                    restart_reason = f"发现{timeout_count}个超时未平仓持仓"
+
+            # ========== 执行重启 ==========
+            if need_restart:
+                logger.error(
+                    f"❌ SmartExitOptimizer异常: {restart_reason}\n"
+                    f"   立即重启SmartExitOptimizer..."
+                )
+
+                # 发送告警
+                if hasattr(self, 'telegram_notifier') and self.telegram_notifier:
+                    try:
+                        self.telegram_notifier.send_message(
+                            f"⚠️ SmartExitOptimizer自动重启\n\n"
+                            f"原因: {restart_reason}\n"
+                            f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            f"操作: 正在重启监控..."
+                        )
+                    except Exception as e:
+                        logger.warning(f"发送Telegram告警失败: {e}")
+
+                # 重启SmartExitOptimizer的监控
+                asyncio.run_coroutine_threadsafe(
+                    self._restart_smart_exit_monitoring(),
+                    self.event_loop
+                )
+
+                logger.info("✅ SmartExitOptimizer重启完成")
+
+            else:
+                # 正常情况，偶尔打印健康状态
+                if datetime.now().minute % 10 == 0:  # 每10分钟打印一次
+                    logger.debug(
+                        f"💓 SmartExitOptimizer健康检查: "
+                        f"{monitoring_count}个持仓监控中, "
+                        f"{timeout_count}个超时持仓"
+                    )
+
+        except Exception as e:
+            logger.error(f"SmartExitOptimizer健康检查失败: {e}")
+
+    async def _restart_smart_exit_monitoring(self):
+        """重启SmartExitOptimizer监控"""
+        try:
+            logger.info("========== 重启SmartExitOptimizer监控 ==========")
+
+            # 1. 取消所有现有监控任务
+            if self.smart_exit_optimizer and self.smart_exit_optimizer.monitoring_tasks:
+                logger.info(f"取消 {len(self.smart_exit_optimizer.monitoring_tasks)} 个现有监控任务...")
+
+                for position_id, task in list(self.smart_exit_optimizer.monitoring_tasks.items()):
+                    try:
+                        task.cancel()
+                        logger.debug(f"  取消监控任务: 持仓{position_id}")
+                    except Exception as e:
+                        logger.warning(f"  取消任务失败: 持仓{position_id} | {e}")
+
+                # 等待任务取消
+                await asyncio.sleep(1)
+
+                # 清空监控任务字典
+                self.smart_exit_optimizer.monitoring_tasks.clear()
+                logger.info("✅ 已清空所有监控任务")
+
+            # 2. 重新启动所有持仓的监控
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT id, symbol, position_side, planned_close_time
+                FROM futures_positions
+                WHERE status = 'open'
+                AND account_id = %s
+                ORDER BY id ASC
+            """, (self.account_id,))
+
+            positions = cursor.fetchall()
+            cursor.close()
+
+            logger.info(f"发现 {len(positions)} 个开仓持仓需要监控")
+
+            success_count = 0
+            fail_count = 0
+
+            for pos in positions:
+                position_id, symbol, side, planned_close = pos
+                try:
+                    await self.smart_exit_optimizer.start_monitoring_position(position_id)
+
+                    planned_str = planned_close.strftime('%H:%M') if planned_close else 'None'
+                    logger.info(
+                        f"✅ [{success_count+1}/{len(positions)}] 重启监控: "
+                        f"持仓{position_id} {symbol} {side} | "
+                        f"计划平仓: {planned_str}"
+                    )
+                    success_count += 1
+
+                except Exception as e:
+                    logger.error(f"❌ 重启监控失败: 持仓{position_id} {symbol} | {e}")
+                    fail_count += 1
+
+            logger.info(
+                f"========== 监控重启完成: 成功{success_count}, 失败{fail_count} =========="
+            )
+
+            # 3. 发送完成通知
+            if hasattr(self, 'telegram_notifier') and self.telegram_notifier:
+                try:
+                    self.telegram_notifier.send_message(
+                        f"✅ SmartExitOptimizer重启完成\n\n"
+                        f"成功: {success_count}个持仓\n"
+                        f"失败: {fail_count}个持仓\n"
+                        f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    )
+                except Exception as e:
+                    logger.warning(f"发送Telegram通知失败: {e}")
+
+        except Exception as e:
+            logger.error(f"❌ 重启SmartExitOptimizer失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+            # 发送失败告警
+            if hasattr(self, 'telegram_notifier') and self.telegram_notifier:
+                try:
+                    self.telegram_notifier.send_message(
+                        f"❌ SmartExitOptimizer重启失败\n\n"
+                        f"错误: {str(e)}\n"
+                        f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        f"请手动检查服务状态"
+                    )
+                except Exception as e:
+                    logger.warning(f"发送Telegram失败告警失败: {e}")
+
     def run(self):
         """主循环"""
+        last_smart_exit_check = datetime.now()
+
         while self.running:
             try:
                 # 0. 检查是否需要运行每日自适应优化 (凌晨2点)
@@ -2427,6 +2619,12 @@ class SmartTraderService:
 
                 # 3. [已停用] 关闭超时持仓 -> 由SmartExitOptimizer处理
                 # self.close_old_positions()
+
+                # 3.5. SmartExitOptimizer健康检查和自动重启（每分钟检查）
+                now = datetime.now()
+                if (now - last_smart_exit_check).total_seconds() >= 60:
+                    self._check_and_restart_smart_exit_optimizer()
+                    last_smart_exit_check = now
 
                 # 4. 检查持仓
                 current_positions = self.get_open_positions_count()
