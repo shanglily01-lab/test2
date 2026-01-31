@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>合约复盘(24H) - AlphaFlow</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <style>
         /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
         :root {
@@ -266,6 +267,9 @@
                 </button>
                 <button class="tab-btn" onclick="switchTab('opportunities')">
                     <i class="bi bi-graph-up"></i> 机会分析
+                </button>
+                <button class="tab-btn" onclick="switchTab('daily-pnl')">
+                    <i class="bi bi-calendar3"></i> 每日盈亏统计
                 </button>
             </div>
 
@@ -577,6 +581,99 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Daily PnL Statistics Tab -->
+            <div id="daily-pnl-tab" class="tab-content">
+                <div id="dailyPnlLoading" class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+                <div id="dailyPnlContent" style="display: none;">
+                    <!-- 月份选择器 -->
+                    <div class="d-flex justify-between align-center mb-sm" style="margin-bottom: 24px;">
+                        <div class="filter-group">
+                            <select id="monthSelector" onchange="loadDailyPnl()" class="btn btn-secondary">
+                                <!-- 动态生成月份选项 -->
+                            </select>
+                        </div>
+                        <div class="text-secondary text-sm">
+                            <i class="bi bi-info-circle"></i> 统计每日平仓的盈亏情况
+                        </div>
+                    </div>
+
+                    <!-- 月度统计概览 -->
+                    <div class="stats-grid" style="margin-bottom: 24px;">
+                        <div class="stat-card">
+                            <div class="stat-label">本月总盈亏</div>
+                            <div class="stat-value" id="monthTotalPnl">-</div>
+                            <div class="stat-change" id="monthTotalPnlChange">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">盈利天数</div>
+                            <div class="stat-value" id="profitDays">-</div>
+                            <div class="stat-change" id="profitDaysRatio">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">日均盈亏</div>
+                            <div class="stat-value" id="avgDailyPnl">-</div>
+                            <div class="stat-change" id="avgDailyPnlChange">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">最大单日盈亏</div>
+                            <div class="stat-value" id="maxDailyPnl">-</div>
+                            <div class="stat-change" id="maxDailyPnlDate">-</div>
+                        </div>
+                    </div>
+
+                    <!-- 盈亏趋势图 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="bi bi-graph-up"></i> 每日盈亏趋势
+                            </h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="dailyPnlChart" style="max-height: 400px;"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- 每日盈亏明细表 -->
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                <i class="bi bi-table"></i> 每日盈亏明细
+                            </h3>
+                            <div class="filter-group">
+                                <button class="filter-btn active" onclick="filterDailyPnl('all')">全部</button>
+                                <button class="filter-btn" onclick="filterDailyPnl('profit')">盈利日</button>
+                                <button class="filter-btn" onclick="filterDailyPnl('loss')">亏损日</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>日期</th>
+                                            <th>交易笔数</th>
+                                            <th>盈利笔数</th>
+                                            <th>亏损笔数</th>
+                                            <th>胜率</th>
+                                            <th>总盈亏</th>
+                                            <th>盈利金额</th>
+                                            <th>亏损金额</th>
+                                            <th>盈亏比</th>
+                                            <th>ROI</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="daily-pnl-table-body">
+                                        <tr><td colspan="10" class="empty-state">暂无数据</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -692,6 +789,14 @@
 
             event.target.classList.add('active');
             document.getElementById(`${tabName}-tab`).classList.add('active');
+
+            // 切换到每日盈亏统计时加载数据
+            if (tabName === 'daily-pnl') {
+                if (!document.getElementById('monthSelector').options.length) {
+                    initMonthSelector();
+                }
+                loadDailyPnl();
+            }
         }
 
         // Filter and sort
@@ -1297,6 +1402,226 @@
 
             document.getElementById('opportunitiesLoading').style.display = 'none';
             document.getElementById('opportunitiesContent').style.display = 'block';
+        }
+
+        // Daily PnL Statistics
+        let dailyPnlChart = null;
+        let currentPnlFilter = 'all';
+
+        function initMonthSelector() {
+            const selector = document.getElementById('monthSelector');
+            const now = new Date();
+            const months = [];
+
+            // 生成最近12个月
+            for (let i = 0; i < 12; i++) {
+                const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                const label = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+                months.push({value, label, isCurrentMonth: i === 0});
+            }
+
+            selector.innerHTML = months.map(m =>
+                `<option value="${m.value}" ${m.isCurrentMonth ? 'selected' : ''}>${m.label}</option>`
+            ).join('');
+        }
+
+        async function loadDailyPnl() {
+            const selectedMonth = document.getElementById('monthSelector').value;
+            document.getElementById('dailyPnlLoading').style.display = 'flex';
+            document.getElementById('dailyPnlContent').style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/futures/review/daily-pnl?month=${selectedMonth}&margin_type=${currentMarginType}`);
+                const result = await response.json();
+
+                if (result.success && result.data) {
+                    renderDailyPnlStats(result.data.summary);
+                    renderDailyPnlChart(result.data.daily_data);
+                    renderDailyPnlTable(result.data.daily_data);
+                } else {
+                    showDailyPnlError(result.message || '加载失败');
+                }
+            } catch (error) {
+                console.error('加载每日盈亏失败:', error);
+                showDailyPnlError('加载失败，请稍后重试');
+            }
+
+            document.getElementById('dailyPnlLoading').style.display = 'none';
+            document.getElementById('dailyPnlContent').style.display = 'block';
+        }
+
+        function renderDailyPnlStats(summary) {
+            // 本月总盈亏
+            const totalPnl = summary.total_pnl || 0;
+            document.getElementById('monthTotalPnl').textContent = `$${totalPnl.toFixed(2)}`;
+            document.getElementById('monthTotalPnl').className = `stat-value ${totalPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
+            document.getElementById('monthTotalPnlChange').textContent = `${summary.total_trades || 0}笔交易`;
+
+            // 盈利天数
+            const profitDays = summary.profit_days || 0;
+            const totalDays = summary.total_days || 0;
+            const profitRatio = totalDays > 0 ? (profitDays / totalDays * 100).toFixed(1) : 0;
+            document.getElementById('profitDays').textContent = profitDays;
+            document.getElementById('profitDaysRatio').textContent = `${profitRatio}% (${profitDays}/${totalDays}天)`;
+            document.getElementById('profitDaysRatio').className = profitRatio >= 50 ? 'stat-change positive' : 'stat-change negative';
+
+            // 日均盈亏
+            const avgPnl = summary.avg_daily_pnl || 0;
+            document.getElementById('avgDailyPnl').textContent = `$${avgPnl.toFixed(2)}`;
+            document.getElementById('avgDailyPnl').className = `stat-value ${avgPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
+            document.getElementById('avgDailyPnlChange').textContent = `基于${totalDays}个交易日`;
+
+            // 最大单日盈亏
+            const maxPnl = summary.max_daily_pnl || 0;
+            const maxPnlDate = summary.max_daily_pnl_date || '-';
+            document.getElementById('maxDailyPnl').textContent = `$${maxPnl.toFixed(2)}`;
+            document.getElementById('maxDailyPnl').className = `stat-value ${maxPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
+            document.getElementById('maxDailyPnlDate').textContent = maxPnlDate;
+        }
+
+        function renderDailyPnlChart(dailyData) {
+            const ctx = document.getElementById('dailyPnlChart');
+
+            // 销毁旧图表
+            if (dailyPnlChart) {
+                dailyPnlChart.destroy();
+            }
+
+            // 准备数据
+            const labels = dailyData.map(d => d.date.substring(5)); // MM-DD
+            const pnlData = dailyData.map(d => d.total_pnl);
+            const colors = pnlData.map(p => p >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)');
+
+            dailyPnlChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '每日盈亏 (USDT)',
+                        data: pnlData,
+                        backgroundColor: colors,
+                        borderColor: colors.map(c => c.replace('0.8', '1')),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                color: '#8B949E'
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.y;
+                                    const data = dailyData[context.dataIndex];
+                                    return [
+                                        `盈亏: $${value.toFixed(2)}`,
+                                        `交易: ${data.total_trades}笔`,
+                                        `胜率: ${data.win_rate.toFixed(1)}%`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: '#30363D'
+                            },
+                            ticks: {
+                                color: '#8B949E',
+                                callback: function(value) {
+                                    return '$' + value.toFixed(0);
+                                }
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#8B949E'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderDailyPnlTable(dailyData) {
+            const tbody = document.getElementById('daily-pnl-table-body');
+
+            if (!dailyData || dailyData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无数据</td></tr>';
+                return;
+            }
+
+            // 应用过滤
+            let filteredData = dailyData;
+            if (currentPnlFilter === 'profit') {
+                filteredData = dailyData.filter(d => d.total_pnl > 0);
+            } else if (currentPnlFilter === 'loss') {
+                filteredData = dailyData.filter(d => d.total_pnl < 0);
+            }
+
+            if (filteredData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无数据</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filteredData.map(day => {
+                const pnlClass = day.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                const profitLoss = day.profit_loss_ratio > 0 ? day.profit_loss_ratio.toFixed(2) : '-';
+
+                return `
+                    <tr>
+                        <td><strong>${day.date}</strong></td>
+                        <td>${day.total_trades}</td>
+                        <td class="pnl-positive">${day.profit_trades}</td>
+                        <td class="pnl-negative">${day.loss_trades}</td>
+                        <td>
+                            <span class="badge ${day.win_rate >= 50 ? 'badge-success' : 'badge-danger'}">
+                                ${day.win_rate.toFixed(1)}%
+                            </span>
+                        </td>
+                        <td class="${pnlClass}"><strong>$${day.total_pnl.toFixed(2)}</strong></td>
+                        <td class="pnl-positive">$${day.profit_amount.toFixed(2)}</td>
+                        <td class="pnl-negative">$${Math.abs(day.loss_amount).toFixed(2)}</td>
+                        <td>${profitLoss}</td>
+                        <td class="${pnlClass}">${day.roi.toFixed(2)}%</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterDailyPnl(filter) {
+            currentPnlFilter = filter;
+
+            // 更新按钮状态
+            document.querySelectorAll('#daily-pnl-tab .filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // 重新渲染表格
+            const selectedMonth = document.getElementById('monthSelector').value;
+            loadDailyPnl();
+        }
+
+        function showDailyPnlError(message) {
+            document.getElementById('dailyPnlContent').innerHTML = `
+                <div class="empty-state" style="padding: 40px;">
+                    <div class="empty-state-icon"><i class="bi bi-exclamation-triangle"></i></div>
+                    <div class="empty-state-text">${message}</div>
+                </div>
+            `;
         }
 
         function refreshAll() {

@@ -1858,3 +1858,151 @@ async def get_realtime_opportunity_analysis(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/daily-pnl')
+async def get_daily_pnl_stats(
+    month: str = Query(..., description="月份，格式: YYYY-MM"),
+    margin_type: str = Query('usdt', description="合约类型: usdt=U本位, coin=币本位")
+):
+    """
+    获取每日盈亏统计
+
+    按月度统计每日的盈亏情况，包括:
+    - 月度总览统计
+    - 每日盈亏明细
+    - 盈亏趋势图数据
+    """
+    try:
+        # 验证月份格式
+        try:
+            year, month_num = month.split('-')
+            year = int(year)
+            month_num = int(month_num)
+            if month_num < 1 or month_num > 12:
+                raise ValueError("月份必须在1-12之间")
+        except:
+            raise HTTPException(status_code=400, detail="月份格式错误，应为 YYYY-MM")
+
+        # 计算月份的开始和结束日期
+        from datetime import date
+        import calendar
+
+        month_start = date(year, month_num, 1)
+        last_day = calendar.monthrange(year, month_num)[1]
+        month_end = date(year, month_num, last_day)
+
+        # 确定account_id
+        account_id = 2 if margin_type == 'usdt' else 3
+
+        conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor)
+        cursor = conn.cursor()
+
+        # 查询每日盈亏数据
+        cursor.execute("""
+            SELECT
+                DATE(close_time) as trade_date,
+                COUNT(*) as total_trades,
+                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as profit_trades,
+                SUM(CASE WHEN realized_pnl <= 0 THEN 1 ELSE 0 END) as loss_trades,
+                SUM(realized_pnl) as total_pnl,
+                SUM(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE 0 END) as profit_amount,
+                SUM(CASE WHEN realized_pnl <= 0 THEN realized_pnl ELSE 0 END) as loss_amount,
+                SUM(margin) as total_margin,
+                AVG(unrealized_pnl_pct) as avg_pnl_pct
+            FROM futures_positions
+            WHERE status = 'closed'
+            AND account_id = %s
+            AND DATE(close_time) >= %s
+            AND DATE(close_time) <= %s
+            GROUP BY DATE(close_time)
+            ORDER BY trade_date ASC
+        """, (account_id, month_start, month_end))
+
+        daily_records = cursor.fetchall()
+
+        # 构建每日数据
+        daily_data = []
+        total_pnl = 0
+        total_trades = 0
+        profit_days = 0
+        max_daily_pnl = 0
+        max_daily_pnl_date = None
+
+        for record in daily_records:
+            trade_date = record['trade_date']
+            total_trades_day = record['total_trades']
+            profit_trades_day = record['profit_trades']
+            loss_trades_day = record['loss_trades']
+            pnl = float(record['total_pnl']) if record['total_pnl'] else 0
+            profit_amt = float(record['profit_amount']) if record['profit_amount'] else 0
+            loss_amt = float(record['loss_amount']) if record['loss_amount'] else 0
+            total_margin_day = float(record['total_margin']) if record['total_margin'] else 0
+
+            # 计算胜率
+            win_rate = (profit_trades_day / total_trades_day * 100) if total_trades_day > 0 else 0
+
+            # 计算盈亏比
+            profit_loss_ratio = (profit_amt / abs(loss_amt)) if loss_amt != 0 else 0
+
+            # 计算ROI
+            roi = (pnl / total_margin_day * 100) if total_margin_day > 0 else 0
+
+            daily_data.append({
+                'date': trade_date.strftime('%Y-%m-%d'),
+                'total_trades': total_trades_day,
+                'profit_trades': profit_trades_day,
+                'loss_trades': loss_trades_day,
+                'win_rate': round(win_rate, 2),
+                'total_pnl': round(pnl, 2),
+                'profit_amount': round(profit_amt, 2),
+                'loss_amount': round(loss_amt, 2),
+                'profit_loss_ratio': round(profit_loss_ratio, 2),
+                'roi': round(roi, 2)
+            })
+
+            # 累计统计
+            total_pnl += pnl
+            total_trades += total_trades_day
+            if pnl > 0:
+                profit_days += 1
+
+            # 记录最大单日盈亏
+            if abs(pnl) > abs(max_daily_pnl):
+                max_daily_pnl = pnl
+                max_daily_pnl_date = trade_date.strftime('%Y-%m-%d')
+
+        cursor.close()
+        conn.close()
+
+        # 计算月度统计
+        total_days = len(daily_data)
+        avg_daily_pnl = (total_pnl / total_days) if total_days > 0 else 0
+
+        summary = {
+            'total_pnl': round(total_pnl, 2),
+            'total_trades': total_trades,
+            'profit_days': profit_days,
+            'loss_days': total_days - profit_days,
+            'total_days': total_days,
+            'avg_daily_pnl': round(avg_daily_pnl, 2),
+            'max_daily_pnl': round(max_daily_pnl, 2),
+            'max_daily_pnl_date': max_daily_pnl_date or '-',
+            'month': f"{year}年{month_num}月"
+        }
+
+        return {
+            "success": True,
+            "data": {
+                "summary": summary,
+                "daily_data": daily_data
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取每日盈亏统计失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
