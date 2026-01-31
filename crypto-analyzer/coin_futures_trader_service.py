@@ -2124,14 +2124,12 @@ class CoinFuturesTraderService:
                         margin = 0,
                         notional_value = 0,
                         status = 'closed',
-                        close_price = %s,
                         close_time = NOW(),
                         realized_pnl = IFNULL(realized_pnl, 0) + %s,
                         updated_at = NOW(),
                         notes = CONCAT(IFNULL(notes, ''), '|full_close:', %s, ' (from partial_close due to small remaining)')
                     WHERE id = %s
                 """, (
-                    current_price,
                     realized_pnl,
                     reason,
                     position_id
