@@ -377,16 +377,16 @@ class Big4TrendDetector:
             cursor.execute("""
                 INSERT INTO big4_trend_history (
                     overall_signal, signal_strength, bullish_count, bearish_count, recommendation,
-                    btc_signal, btc_strength, btc_reason,
-                    eth_signal, eth_strength, eth_reason,
-                    bnb_signal, bnb_strength, bnb_reason,
-                    sol_signal, sol_strength, sol_reason
+                    btc_signal, btc_strength, btc_reason, btc_1h_dominant, btc_15m_dominant,
+                    eth_signal, eth_strength, eth_reason, eth_1h_dominant, eth_15m_dominant,
+                    bnb_signal, bnb_strength, bnb_reason, bnb_1h_dominant, bnb_15m_dominant,
+                    sol_signal, sol_strength, sol_reason, sol_1h_dominant, sol_15m_dominant
                 ) VALUES (
                     %s, %s, %s, %s, %s,
-                    %s, %s, %s,
-                    %s, %s, %s,
-                    %s, %s, %s,
-                    %s, %s, %s
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s
                 )
             """, (
                 result['overall_signal'],
@@ -398,18 +398,26 @@ class Big4TrendDetector:
                 details['BTC/USDT']['signal'],
                 details['BTC/USDT']['strength'],
                 details['BTC/USDT']['reason'],
+                details['BTC/USDT']['1h_analysis']['dominant'],
+                details['BTC/USDT']['15m_analysis']['dominant'],
                 # ETH
                 details['ETH/USDT']['signal'],
                 details['ETH/USDT']['strength'],
                 details['ETH/USDT']['reason'],
+                details['ETH/USDT']['1h_analysis']['dominant'],
+                details['ETH/USDT']['15m_analysis']['dominant'],
                 # BNB
                 details['BNB/USDT']['signal'],
                 details['BNB/USDT']['strength'],
                 details['BNB/USDT']['reason'],
+                details['BNB/USDT']['1h_analysis']['dominant'],
+                details['BNB/USDT']['15m_analysis']['dominant'],
                 # SOL
                 details['SOL/USDT']['signal'],
                 details['SOL/USDT']['strength'],
-                details['SOL/USDT']['reason']
+                details['SOL/USDT']['reason'],
+                details['SOL/USDT']['1h_analysis']['dominant'],
+                details['SOL/USDT']['15m_analysis']['dominant']
             ))
 
             conn.commit()
