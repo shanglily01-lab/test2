@@ -1373,6 +1373,104 @@
         // ========== 交易控制功能 ==========
         let currentTradingEnabled = true; // 当前交易状态
 
+        // 自定义确认对话框
+        function showConfirmDialog(message, onConfirm) {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000; animation: fadeIn 0.2s;';
+
+            const dialog = document.createElement('div');
+            dialog.className = 'modal-dialog';
+            dialog.style.cssText = 'background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); max-width: 500px; width: 90%; box-shadow: var(--shadow-xl); animation: slideUp 0.3s;';
+
+            const lines = message.split('\n\n');
+            const title = lines[0];
+            const desc = lines[1] || '';
+
+            dialog.innerHTML = `
+                <div style="margin-bottom: var(--spacing-xl);">
+                    <div style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-md); display: flex; align-items: center; gap: var(--spacing-md);">
+                        <i class="bi bi-question-circle" style="color: var(--warning-yellow);"></i>
+                        ${title}
+                    </div>
+                    ${desc ? `<div style="color: var(--text-secondary); line-height: 1.6;">${desc}</div>` : ''}
+                </div>
+                <div style="display: flex; gap: var(--spacing-md); justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+                        取消
+                    </button>
+                    <button class="btn btn-primary" id="confirmBtn">
+                        确定
+                    </button>
+                </div>
+            `;
+
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+
+            document.getElementById('confirmBtn').onclick = () => {
+                overlay.remove();
+                onConfirm();
+            };
+
+            overlay.onclick = (e) => {
+                if (e.target === overlay) {
+                    overlay.remove();
+                }
+            };
+        }
+
+        // 自定义提示对话框
+        function showAlertDialog(message, type = 'success') {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000; animation: fadeIn 0.2s;';
+
+            const dialog = document.createElement('div');
+            dialog.className = 'modal-dialog';
+            dialog.style.cssText = 'background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); max-width: 400px; width: 90%; box-shadow: var(--shadow-xl); animation: slideUp 0.3s;';
+
+            const iconMap = {
+                'success': { icon: 'check-circle-fill', color: 'var(--success-green)' },
+                'error': { icon: 'x-circle-fill', color: 'var(--danger-red)' },
+                'warning': { icon: 'exclamation-circle-fill', color: 'var(--warning-yellow)' }
+            };
+
+            const iconInfo = iconMap[type] || iconMap['success'];
+
+            dialog.innerHTML = `
+                <div style="text-align: center; margin-bottom: var(--spacing-xl);">
+                    <div style="font-size: 48px; color: ${iconInfo.color}; margin-bottom: var(--spacing-md);">
+                        <i class="bi bi-${iconInfo.icon}"></i>
+                    </div>
+                    <div style="font-size: 18px; color: var(--text-primary); font-weight: 500;">
+                        ${message}
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: center;">
+                    <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">
+                        确定
+                    </button>
+                </div>
+            `;
+
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+
+            overlay.onclick = (e) => {
+                if (e.target === overlay) {
+                    overlay.remove();
+                }
+            };
+
+            // 3秒后自动关闭
+            setTimeout(() => {
+                if (overlay.parentNode) {
+                    overlay.remove();
+                }
+            }, 3000);
+        }
+
         // 加载交易状态
         async function loadTradingStatus() {
             try {
@@ -1413,38 +1511,36 @@
                 '确定要启动币本位合约交易吗？\n\n系统将开始根据信号自动开仓。' :
                 '确定要停止币本位合约交易吗？\n\n系统将停止自动开仓，但不影响已有持仓。';
 
-            if (!confirm(confirmMsg)) {
-                return;
-            }
+            showConfirmDialog(confirmMsg, async () => {
+                try {
+                    const response = await fetch('/api/trading-control/toggle', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            account_id: 3,
+                            trading_type: 'coin_futures',
+                            trading_enabled: newStatus,
+                            updated_by: 'web_user'
+                        })
+                    });
 
-            try {
-                const response = await fetch('/api/trading-control/toggle', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        account_id: 3,
-                        trading_type: 'coin_futures',
-                        trading_enabled: newStatus,
-                        updated_by: 'web_user'
-                    })
-                });
+                    if (!response.ok) {
+                        throw new Error('切换交易状态失败');
+                    }
 
-                if (!response.ok) {
-                    throw new Error('切换交易状态失败');
+                    const data = await response.json();
+                    currentTradingEnabled = data.trading_enabled;
+                    updateTradingButton(currentTradingEnabled);
+
+                    const statusMsg = currentTradingEnabled ? '交易已启动' : '交易已停止';
+                    showAlertDialog(statusMsg, 'success');
+                } catch (error) {
+                    console.error('切换交易状态失败:', error);
+                    showAlertDialog('操作失败: ' + error.message, 'error');
                 }
-
-                const data = await response.json();
-                currentTradingEnabled = data.trading_enabled;
-                updateTradingButton(currentTradingEnabled);
-
-                const statusMsg = currentTradingEnabled ? '✅ 交易已启动' : '⏸️ 交易已停止';
-                alert(statusMsg);
-            } catch (error) {
-                console.error('切换交易状态失败:', error);
-                alert('操作失败: ' + error.message);
-            }
+            });
         }
         // ========== 交易控制功能结束 ==========
 
