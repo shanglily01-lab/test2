@@ -174,8 +174,8 @@ class CoinFuturesDecisionBrain:
                     'position_low': {'long': 20, 'short': 0},
                     'position_mid': {'long': 5, 'short': 5},
                     'position_high': {'long': 0, 'short': 20},
-                    'momentum_down_3pct': {'long': 15, 'short': 0},
-                    'momentum_up_3pct': {'long': 0, 'short': 15},
+                    'momentum_down_3pct': {'long': 0, 'short': 15},       # 修正: 下跌应该SHORT
+                    'momentum_up_3pct': {'long': 15, 'short': 0},         # 修正: 上涨应该LONG
                     'trend_1h_bull': {'long': 20, 'short': 0},
                     'trend_1h_bear': {'long': 0, 'short': 20},
                     'volatility_high': {'long': 10, 'short': 10},
@@ -187,8 +187,8 @@ class CoinFuturesDecisionBrain:
                     'volume_power_1h_bear': {'long': 0, 'short': 15},     # 仅1H量能空头
                     'breakout_long': {'long': 20, 'short': 0},            # 高位突破追涨
                     'breakdown_short': {'long': 0, 'short': 20},          # 低位破位追空
-                    'trend_1d_bull': {'long': 10, 'short': 0},
-                    'trend_1d_bear': {'long': 0, 'short': 10}
+                    'ema_bull': {'long': 15, 'short': 0},                 # EMA多头排列
+                    'ema_bear': {'long': 0, 'short': 15}                  # EMA空头排列
                 }
                 logger.info(f"   📊 评分权重: 使用默认权重")
 
@@ -549,22 +549,52 @@ class CoinFuturesDecisionBrain:
                     signal_components['breakdown_short'] = weight['short']
                     logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
 
-            # ========== 1天K线确认 (辅助) ==========
+            # ========== EMA四大天王评分 (EMA9/21/60/120 on 1h) ==========
 
-            # 大趋势确认: 如果30天趋势与1小时趋势一致，加分
-            bullish_1d = sum(1 for k in klines_1d[-30:] if k['close'] > k['open'])
-            bearish_1d = 30 - bullish_1d
+            # 计算EMA (使用1H K线最近120根)
+            if len(klines_1h) >= 120:
+                closes = [k['close'] for k in klines_1h]
 
-            if bullish_1d > 18 and long_score > short_score:  # 大趋势上涨且1小时也看多
-                weight = self.scoring_weights.get('trend_1d_bull', {'long': 10, 'short': 0})
-                long_score += weight['long']
-                if weight['long'] > 0:
-                    signal_components['trend_1d_bull'] = weight['long']
-            elif bearish_1d > 18 and short_score > long_score:  # 大趋势下跌且1小时也看空
-                weight = self.scoring_weights.get('trend_1d_bear', {'long': 0, 'short': 10})
-                short_score += weight['short']
-                if weight['short'] > 0:
-                    signal_components['trend_1d_bear'] = weight['short']
+                # 计算EMA的辅助函数
+                def calculate_ema(prices, period):
+                    """计算指数移动平均线"""
+                    multiplier = 2 / (period + 1)
+                    ema = [sum(prices[:period]) / period]  # 第一个EMA用SMA
+                    for price in prices[period:]:
+                        ema.append((price - ema[-1]) * multiplier + ema[-1])
+                    return ema[-1]
+
+                ema9 = calculate_ema(closes, 9)
+                ema21 = calculate_ema(closes, 21)
+                ema60 = calculate_ema(closes, 60)
+                ema120 = calculate_ema(closes, 120)
+
+                # 判断EMA排列
+                is_bull_aligned = ema9 > ema21 > ema60 > ema120  # 多头排列
+                is_bear_aligned = ema9 < ema21 < ema60 < ema120  # 空头排列
+
+                # EMA多头排列 → 增加LONG评分
+                if is_bull_aligned:
+                    weight = self.scoring_weights.get('ema_bull', {'long': 15, 'short': 0})
+                    long_score += weight['long']
+                    if weight['long'] > 0:
+                        signal_components['ema_bull'] = weight['long']
+                        logger.info(f"{symbol} EMA多头排列: 9>{ema9:.2f} 21>{ema21:.2f} 60>{ema60:.2f} 120>{ema120:.2f}")
+
+                # EMA空头排列 → 增加SHORT评分
+                elif is_bear_aligned:
+                    weight = self.scoring_weights.get('ema_bear', {'long': 0, 'short': 15})
+                    short_score += weight['short']
+                    if weight['short'] > 0:
+                        signal_components['ema_bear'] = weight['short']
+                        logger.info(f"{symbol} EMA空头排列: 9<{ema9:.2f} 21<{ema21:.2f} 60<{ema60:.2f} 120<{ema120:.2f}")
+
+                # EMA混乱排列 → 不加分不减分
+                else:
+                    logger.debug(f"{symbol} EMA混乱排列,不加分")
+
+            # ========== 移除1D信号 (4小时持仓不需要1D趋势) ==========
+            # 已移除: trend_1d_bull, trend_1d_bear
 
             # 选择得分更高的方向 (只要达到阈值就可以)
             if long_score >= self.threshold or short_score >= self.threshold:
@@ -576,14 +606,14 @@ class CoinFuturesDecisionBrain:
                     score = short_score
 
                 # 🔥 关键修复: 清理signal_components,只保留与最终方向一致的信号
-                # 定义多头和空头信号
+                # 定义多头和空头信号 (已移除1D信号)
                 bullish_signals = {
                     'position_high', 'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
-                    'trend_1h_bull', 'trend_1d_bull', 'momentum_up_3pct', 'consecutive_bull'
+                    'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull', 'ema_bull'
                 }
                 bearish_signals = {
                     'position_low', 'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
-                    'trend_1h_bear', 'trend_1d_bear', 'momentum_down_3pct', 'consecutive_bear'
+                    'trend_1h_bear', 'momentum_down_3pct', 'consecutive_bear', 'ema_bear'
                 }
                 neutral_signals = {'position_mid', 'volatility_high'}  # 中性信号可以在任何方向
 
@@ -665,16 +695,16 @@ class CoinFuturesDecisionBrain:
         if not signal_components:
             return True, "无信号组件"
 
-        # 定义空头信号（不应该出现在做多信号中）
+        # 定义空头信号（不应该出现在做多信号中）- 已移除1D信号
         bearish_signals = {
             'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
-            'trend_1h_bear', 'trend_1d_bear', 'momentum_down_3pct', 'consecutive_bear'  # momentum_down_3pct=下跌=空头
+            'trend_1h_bear', 'momentum_down_3pct', 'consecutive_bear', 'ema_bear'
         }
 
-        # 定义多头信号（不应该出现在做空信号中）
+        # 定义多头信号（不应该出现在做空信号中）- 已移除1D信号
         bullish_signals = {
             'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
-            'trend_1h_bull', 'trend_1d_bull', 'momentum_up_3pct', 'consecutive_bull'  # momentum_up_3pct=上涨=多头
+            'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull', 'ema_bull'
         }
 
         signal_set = set(signal_components.keys())
@@ -896,11 +926,9 @@ class CoinFuturesTraderService:
         if not signal_components:
             return True, "无信号组件"
 
-        # 提取趋势信号
+        # 提取趋势信号 (已移除1D信号)
         has_1h_bull = 'trend_1h_bull' in signal_components
         has_1h_bear = 'trend_1h_bear' in signal_components
-        has_1d_bull = 'trend_1d_bull' in signal_components
-        has_1d_bear = 'trend_1d_bear' in signal_components
 
         # 规则1: 做多时,1小时必须不能看跌
         if side == 'LONG' and has_1h_bear:
@@ -910,13 +938,7 @@ class CoinFuturesTraderService:
         if side == 'SHORT' and has_1h_bull:
             return False, "时间框架冲突: 做空但1H看涨"
 
-        # 规则3: 多空方向的日线趋势不能相反
-        # 注意: 允许日线中性(既没有bull也没有bear)
-        if side == 'LONG' and has_1d_bear:
-            return False, "时间框架冲突: 做多但1D看跌"
-
-        if side == 'SHORT' and has_1d_bull:
-            return False, "时间框架冲突: 做空但1D看涨"
+        # 规则3: 已移除1D趋势检查 (4小时持仓不需要1D趋势)
 
         return True, "时间框架一致"
 
