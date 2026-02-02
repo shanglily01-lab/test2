@@ -1,66 +1,62 @@
 #!/usr/bin/env python3
 """
-四大天王趋势判断系统
-监控 BTC, ETH, BNB, SOL 的关键方向性变化，为整体市场提供先导信号
+四大天王趋势判断系统 (简化版)
+监控 BTC, ETH, BNB, SOL 的关键方向性变化
 
-核心逻辑:
-1. 盘整期判断 (6小时内涨跌幅<0.5%)
-2. 方向性K线力度分析 (阴阳线数量+成交量)
-3. 拐点捕获 (5M/15M突然出现强力度K线)
-4. 提前预警信号生成
+优化逻辑:
+1. 1H (30根K线): 主导方向判断 (阳阴线数量 + 力度)
+2. 15M (30根K线): 趋势确认 (阳阴线数量 + 力度)
+3. 5M (3根K线): 买卖时机判断 (突破检测)
 """
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-import mysql.connector
+import pymysql
 from dotenv import load_dotenv
 import os
 
 # 加载环境变量
 load_dotenv()
 
-from collections import defaultdict
-
 logger = logging.getLogger(__name__)
-
-# 数据库配置
-DB_CONFIG = {
-    'host': '13.212.252.171',
-    'port': 3306,
-    'user': 'admin',
-    'password': 'Tonny@1000',
-    'database': 'binance-data'
-}
 
 # 四大天王
 BIG4_SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
 
 
 class Big4TrendDetector:
-    """四大天王趋势检测器"""
+    """四大天王趋势检测器 (简化版)"""
 
     def __init__(self):
-        self.consolidation_threshold = 0.5  # 盘整阈值 0.5%
-        self.consolidation_hours = 6        # 盘整观察期 6小时
-        self.breakout_volume_multiplier = 1.5  # 突破成交量倍数
+        self.db_config = {
+            'host': os.getenv('DB_HOST', '13.212.252.171'),
+            'port': int(os.getenv('DB_PORT', 3306)),
+            'user': os.getenv('DB_USER', 'admin'),
+            'password': os.getenv('DB_PASSWORD', 'Tonny@1000'),
+            'database': os.getenv('DB_NAME', 'binance-data'),
+            'charset': 'utf8mb4'
+        }
 
     def detect_market_trend(self) -> Dict:
         """
-        检测四大天王的市场趋势
+        检测四大天王的市场趋势 (简化版)
 
         返回:
         {
             'overall_signal': 'BULLISH' | 'BEARISH' | 'NEUTRAL',
             'signal_strength': 0-100,
+            'bullish_count': int,
+            'bearish_count': int,
             'details': {
                 'BTC/USDT': {...},
                 'ETH/USDT': {...},
                 ...
             },
-            'recommendation': str
+            'recommendation': str,
+            'timestamp': datetime
         }
         """
-        conn = mysql.connector.connect(**DB_CONFIG)
+        conn = pymysql.connect(**self.db_config)
         results = {}
 
         bullish_count = 0
@@ -93,7 +89,6 @@ class Big4TrendDetector:
 
         avg_strength = total_strength / len(BIG4_SYMBOLS) if BIG4_SYMBOLS else 0
 
-
         result = {
             'overall_signal': overall_signal,
             'signal_strength': avg_strength,
@@ -109,175 +104,102 @@ class Big4TrendDetector:
 
         return result
 
-
     def _analyze_symbol(self, conn, symbol: str) -> Dict:
         """
-        分析单个天王的趋势
+        分析单个币种的趋势 (简化版)
 
         步骤:
-        1. 检查6小时内是否在盘整 (涨跌幅<0.5%)
-        2. 分析1H/15M K线的阴阳线力度
-        3. 检测5M/15M的突破信号
-        4. 生成预警信号
+        1. 1H (30根): 主导方向判断
+        2. 15M (30根): 趋势确认
+        3. 5M (3根): 买卖时机
         """
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 1. 检查6小时盘整
-        is_consolidating, price_change_pct = self._check_consolidation(cursor, symbol)
+        # 1. 分析1H K线 (30根) - 主导方向
+        kline_1h = self._analyze_kline_power(cursor, symbol, '1h', 30)
 
-        # 2. 分析K线力度 (1H, 15M)
-        kline_analysis_1h = self._analyze_kline_strength(cursor, symbol, '1h', hours=6)
-        kline_analysis_15m = self._analyze_kline_strength(cursor, symbol, '15m', hours=2)
+        # 2. 分析15M K线 (30根) - 趋势确认
+        kline_15m = self._analyze_kline_power(cursor, symbol, '15m', 30)
 
-        # 3. 检测突破信号 (5M, 15M)
-        breakout_5m = self._detect_breakout(cursor, symbol, '5m', candles=10)
-        breakout_15m = self._detect_breakout(cursor, symbol, '15m', candles=5)
+        # 3. 分析5M K线 (3根) - 买卖时机
+        kline_5m = self._detect_5m_signal(cursor, symbol)
 
         cursor.close()
 
         # 4. 综合判断
-        signal, strength, reason = self._generate_signal(
-            is_consolidating, price_change_pct,
-            kline_analysis_1h, kline_analysis_15m,
-            breakout_5m, breakout_15m
-        )
+        signal, strength, reason = self._generate_signal(kline_1h, kline_15m, kline_5m)
 
         return {
             'signal': signal,
             'strength': strength,
             'reason': reason,
-            'is_consolidating': is_consolidating,
-            'price_change_6h': price_change_pct,
-            '1h_analysis': kline_analysis_1h,
-            '15m_analysis': kline_analysis_15m,
-            '5m_breakout': breakout_5m,
-            '15m_breakout': breakout_15m
+            '1h_analysis': kline_1h,
+            '15m_analysis': kline_15m,
+            '5m_signal': kline_5m
         }
 
-    def _check_consolidation(self, cursor, symbol: str) -> Tuple[bool, float]:
+    def _analyze_kline_power(self, cursor, symbol: str, timeframe: str, count: int) -> Dict:
         """
-        检查6小时内是否在盘整
+        分析K线力度 (简化版)
 
-        返回: (是否盘整, 涨跌幅百分比)
-        """
-        cursor.execute("""
-            SELECT
-                open_price as first_open,
-                close_price as last_close
-            FROM kline_data
-            WHERE symbol = %s
-            AND timeframe = '1h'
-            AND timestamp >= DATE_SUB(NOW(), INTERVAL 6 HOUR)
-            ORDER BY timestamp ASC
-            LIMIT 1
-        """, (symbol,))
-
-        first = cursor.fetchone()
-
-        if not first:
-            return False, 0.0
-
-        cursor.execute("""
-            SELECT close_price as last_close
-            FROM kline_data
-            WHERE symbol = %s
-            AND timeframe = '1h'
-            AND timestamp >= DATE_SUB(NOW(), INTERVAL 6 HOUR)
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """, (symbol,))
-
-        last = cursor.fetchone()
-
-        if not last:
-            return False, 0.0
-
-        first_price = float(first['first_open'])
-        last_price = float(last['last_close'])
-
-        price_change_pct = ((last_price - first_price) / first_price) * 100
-        is_consolidating = abs(price_change_pct) < self.consolidation_threshold
-
-        return is_consolidating, price_change_pct
-
-    def _analyze_kline_strength(self, cursor, symbol: str, timeframe: str, hours: int) -> Dict:
-        """
-        分析K线的阴阳线力度
+        力度 = 价格变化幅度 × 成交量
 
         返回:
         {
-            'bullish_count': int,    # 阳线数量
-            'bearish_count': int,    # 阴线数量
-            'bullish_volume': float, # 阳线总成交量
-            'bearish_volume': float, # 阴线总成交量
-            'avg_bullish_size': float,  # 阳线平均实体大小
-            'avg_bearish_size': float,  # 阴线平均实体大小
-            'dominant': 'BULL' | 'BEAR' | 'NEUTRAL'  # 主导方向
+            'bullish_count': int,       # 阳线数量
+            'bearish_count': int,       # 阴线数量
+            'bullish_power': float,     # 阳线力度总和
+            'bearish_power': float,     # 阴线力度总和
+            'dominant': 'BULL'|'BEAR'|'NEUTRAL'  # 主导方向
         }
         """
-        cursor.execute("""
-            SELECT
-                open_price, close_price, high_price, low_price, volume
+        query = """
+            SELECT open_price, close_price, volume
             FROM kline_data
             WHERE symbol = %s
             AND timeframe = %s
-            AND timestamp >= DATE_SUB(NOW(), INTERVAL %s HOUR)
-            ORDER BY timestamp ASC
-        """, (symbol, timeframe, hours))
+            AND exchange = 'binance_futures'
+            ORDER BY open_time DESC
+            LIMIT %s
+        """
 
+        cursor.execute(query, (symbol, timeframe, count))
         klines = cursor.fetchall()
 
-        if not klines:
+        if not klines or len(klines) < count:
             return {
                 'bullish_count': 0,
                 'bearish_count': 0,
-                'bullish_volume': 0,
-                'bearish_volume': 0,
-                'avg_bullish_size': 0,
-                'avg_bearish_size': 0,
+                'bullish_power': 0,
+                'bearish_power': 0,
                 'dominant': 'NEUTRAL'
             }
 
         bullish_count = 0
         bearish_count = 0
-        bullish_volume = 0
-        bearish_volume = 0
-        bullish_sizes = []
-        bearish_sizes = []
+        bullish_power = 0  # 阳线力度 = Σ(涨幅% × 成交量)
+        bearish_power = 0  # 阴线力度 = Σ(跌幅% × 成交量)
 
         for k in klines:
             open_p = float(k['open_price'])
             close_p = float(k['close_price'])
             volume = float(k['volume']) if k['volume'] else 0
 
-            # 实体大小 (%)
-            body_size = abs(close_p - open_p) / open_p * 100
-
             if close_p > open_p:
                 # 阳线
                 bullish_count += 1
-                bullish_volume += volume
-                bullish_sizes.append(body_size)
+                price_change_pct = (close_p - open_p) / open_p * 100
+                bullish_power += price_change_pct * volume
             else:
                 # 阴线
                 bearish_count += 1
-                bearish_volume += volume
-                bearish_sizes.append(body_size)
-
-        avg_bullish_size = sum(bullish_sizes) / len(bullish_sizes) if bullish_sizes else 0
-        avg_bearish_size = sum(bearish_sizes) / len(bearish_sizes) if bearish_sizes else 0
+                price_change_pct = (open_p - close_p) / open_p * 100
+                bearish_power += price_change_pct * volume
 
         # 判断主导方向
-        # 条件: 数量优势 + 成交量优势 + 实体大小优势
-        count_score = (bullish_count - bearish_count) / len(klines) if klines else 0
-        volume_score = (bullish_volume - bearish_volume) / (bullish_volume + bearish_volume) if (bullish_volume + bearish_volume) > 0 else 0
-        size_score = (avg_bullish_size - avg_bearish_size) / max(avg_bullish_size, avg_bearish_size, 0.01)
-
-        overall_score = (count_score + volume_score + size_score) / 3
-
-        if overall_score > 0.2:
+        if bullish_count > bearish_count and bullish_power > bearish_power:
             dominant = 'BULL'
-        elif overall_score < -0.2:
+        elif bearish_count > bullish_count and bearish_power > bullish_power:
             dominant = 'BEAR'
         else:
             dominant = 'NEUTRAL'
@@ -285,33 +207,29 @@ class Big4TrendDetector:
         return {
             'bullish_count': bullish_count,
             'bearish_count': bearish_count,
-            'bullish_volume': bullish_volume,
-            'bearish_volume': bearish_volume,
-            'avg_bullish_size': avg_bullish_size,
-            'avg_bearish_size': avg_bearish_size,
-            'dominant': dominant,
-            'score': overall_score
+            'bullish_power': bullish_power,
+            'bearish_power': bearish_power,
+            'dominant': dominant
         }
 
-    def _detect_breakout(self, cursor, symbol: str, timeframe: str, candles: int) -> Dict:
+    def _detect_5m_signal(self, cursor, symbol: str) -> Dict:
         """
-        检测突破信号
+        检测5M买卖时机 (最近3根K线)
 
-        检查最近的K线是否出现强力度突破:
-        - 成交量 > 平均成交量 * 1.5
-        - 实体大小 > 平均实体大小 * 1.5
-        - 方向明确 (上涨或下跌)
+        检测突破:
+        - 价格变化 × 成交量 > 阈值 → 买入/卖出信号
         """
-        cursor.execute("""
-            SELECT
-                open_price, close_price, high_price, low_price, volume, timestamp
+        query = """
+            SELECT open_price, close_price, high_price, low_price, volume
             FROM kline_data
             WHERE symbol = %s
-            AND timeframe = %s
-            ORDER BY timestamp DESC
-            LIMIT %s
-        """, (symbol, timeframe, candles))
+            AND timeframe = '5m'
+            AND exchange = 'binance_futures'
+            ORDER BY open_time DESC
+            LIMIT 3
+        """
 
+        cursor.execute(query, (symbol,))
         klines = cursor.fetchall()
 
         if not klines or len(klines) < 3:
@@ -322,128 +240,93 @@ class Big4TrendDetector:
                 'reason': '数据不足'
             }
 
-        # 最新K线
-        latest = klines[0]
-        # 之前的K线 (用于计算平均)
-        previous = klines[1:]
+        # 分析最近3根K线
+        total_bull_power = 0
+        total_bear_power = 0
 
-        # 计算平均成交量和实体大小
-        avg_volume = sum(float(k['volume'] or 0) for k in previous) / len(previous)
-
-        avg_body_sizes = []
-        for k in previous:
+        for k in klines:
             open_p = float(k['open_price'])
             close_p = float(k['close_price'])
-            body_size = abs(close_p - open_p) / open_p * 100
-            avg_body_sizes.append(body_size)
+            volume = float(k['volume']) if k['volume'] else 0
 
-        avg_body_size = sum(avg_body_sizes) / len(avg_body_sizes) if avg_body_sizes else 0
+            if close_p > open_p:
+                # 阳线力度
+                price_change_pct = (close_p - open_p) / open_p * 100
+                total_bull_power += price_change_pct * volume
+            else:
+                # 阴线力度
+                price_change_pct = (open_p - close_p) / open_p * 100
+                total_bear_power += price_change_pct * volume
 
-        # 分析最新K线
-        latest_open = float(latest['open_price'])
-        latest_close = float(latest['close_price'])
-        latest_volume = float(latest['volume']) if latest['volume'] else 0
-        latest_body_size = abs(latest_close - latest_open) / latest_open * 100
-
-        # 判断是否为突破
-        volume_breakout = latest_volume > (avg_volume * self.breakout_volume_multiplier)
-        size_breakout = latest_body_size > (avg_body_size * self.breakout_volume_multiplier)
-
-        if volume_breakout and size_breakout:
+        # 判断突破方向
+        if total_bull_power > total_bear_power * 1.5:  # 多头力度明显强于空头
             detected = True
-            direction = 'BULLISH' if latest_close > latest_open else 'BEARISH'
-
-            # 计算强度 (0-100)
-            volume_ratio = latest_volume / avg_volume if avg_volume > 0 else 1
-            size_ratio = latest_body_size / avg_body_size if avg_body_size > 0 else 1
-            strength = min(((volume_ratio + size_ratio) / 2 - 1) * 50, 100)
-
-            reason = f"{timeframe}突破: 成交量{volume_ratio:.1f}x, 实体{size_ratio:.1f}x"
+            direction = 'BULLISH'
+            strength = min(total_bull_power / max(total_bear_power, 1), 100)
+            reason = f"5M多头突破(力度比{total_bull_power/max(total_bear_power, 1):.1f}:1)"
+        elif total_bear_power > total_bull_power * 1.5:  # 空头力度明显强于多头
+            detected = True
+            direction = 'BEARISH'
+            strength = min(total_bear_power / max(total_bull_power, 1), 100)
+            reason = f"5M空头突破(力度比{total_bear_power/max(total_bull_power, 1):.1f}:1)"
         else:
             detected = False
             direction = 'NEUTRAL'
             strength = 0
-            reason = '未检测到突破'
+            reason = '5M无明显突破'
 
         return {
             'detected': detected,
             'direction': direction,
             'strength': strength,
-            'reason': reason,
-            'latest_volume': latest_volume,
-            'avg_volume': avg_volume,
-            'latest_body_size': latest_body_size,
-            'avg_body_size': avg_body_size
+            'reason': reason
         }
 
     def _generate_signal(
         self,
-        is_consolidating: bool,
-        price_change_pct: float,
         kline_1h: Dict,
         kline_15m: Dict,
-        breakout_5m: Dict,
-        breakout_15m: Dict
+        kline_5m: Dict
     ) -> Tuple[str, int, str]:
         """
-        综合生成信号
+        综合生成信号 (简化版)
+
+        权重分配:
+        - 1H主导方向: 60分
+        - 15M趋势确认: 30分
+        - 5M买卖时机: 10分
 
         返回: (信号方向, 强度0-100, 原因)
         """
-        reasons = []
         signal_score = 0  # -100 to +100
+        reasons = []
 
-        # 1. 盘整期判断 (权重: 20)
-        if is_consolidating:
-            reasons.append(f"6H盘整({price_change_pct:+.2f}%)")
+        # 1. 1H主导方向 (权重: 60)
+        if kline_1h['dominant'] == 'BULL':
+            signal_score += 60
+            reasons.append(f"1H多头主导({kline_1h['bullish_count']}阳:{kline_1h['bearish_count']}阴)")
+        elif kline_1h['dominant'] == 'BEAR':
+            signal_score -= 60
+            reasons.append(f"1H空头主导({kline_1h['bearish_count']}阴:{kline_1h['bullish_count']}阳)")
+        else:
+            reasons.append("1H方向中性")
 
-            # 盘整中，重点看突破
-            if breakout_5m['detected']:
-                if breakout_5m['direction'] == 'BEARISH':
-                    signal_score -= 30
-                    reasons.append(f"5M向下突破({breakout_5m['strength']:.0f}分)")
-                else:
-                    signal_score += 30
-                    reasons.append(f"5M向上突破({breakout_5m['strength']:.0f}分)")
+        # 2. 15M趋势确认 (权重: 30)
+        if kline_15m['dominant'] == 'BULL':
+            signal_score += 30
+            reasons.append(f"15M多头确认({kline_15m['bullish_count']}阳:{kline_15m['bearish_count']}阴)")
+        elif kline_15m['dominant'] == 'BEAR':
+            signal_score -= 30
+            reasons.append(f"15M空头确认({kline_15m['bearish_count']}阴:{kline_15m['bullish_count']}阳)")
 
-            if breakout_15m['detected']:
-                if breakout_15m['direction'] == 'BEARISH':
-                    signal_score -= 25
-                    reasons.append(f"15M向下突破({breakout_15m['strength']:.0f}分)")
-                else:
-                    signal_score += 25
-                    reasons.append(f"15M向上突破({breakout_15m['strength']:.0f}分)")
-
-        # 2. K线力度分析 (权重: 40)
-        if kline_1h['dominant'] == 'BEAR':
-            signal_score -= 20
-            reasons.append(f"1H阴线主导(阴{kline_1h['bearish_count']}:阳{kline_1h['bullish_count']})")
-        elif kline_1h['dominant'] == 'BULL':
-            signal_score += 20
-            reasons.append(f"1H阳线主导(阳{kline_1h['bullish_count']}:阴{kline_1h['bearish_count']})")
-
-        if kline_15m['dominant'] == 'BEAR':
-            signal_score -= 20
-            reasons.append(f"15M阴线主导")
-        elif kline_15m['dominant'] == 'BULL':
-            signal_score += 20
-            reasons.append(f"15M阳线主导")
-
-        # 3. 非盘整期的突破 (权重: 40)
-        if not is_consolidating:
-            if breakout_5m['detected']:
-                weight = 20
-                if breakout_5m['direction'] == 'BEARISH':
-                    signal_score -= weight
-                else:
-                    signal_score += weight
-
-            if breakout_15m['detected']:
-                weight = 20
-                if breakout_15m['direction'] == 'BEARISH':
-                    signal_score -= weight
-                else:
-                    signal_score += weight
+        # 3. 5M买卖时机 (权重: 10)
+        if kline_5m['detected']:
+            if kline_5m['direction'] == 'BULLISH':
+                signal_score += 10
+                reasons.append(kline_5m['reason'])
+            elif kline_5m['direction'] == 'BEARISH':
+                signal_score -= 10
+                reasons.append(kline_5m['reason'])
 
         # 生成最终信号
         if signal_score > 30:
@@ -461,16 +344,7 @@ class Big4TrendDetector:
     def _save_to_database(self, result: Dict):
         """保存检测结果到数据库"""
         try:
-            db_config = {
-                'host': os.getenv('DB_HOST'),
-                'port': int(os.getenv('DB_PORT', 3306)),
-                'user': os.getenv('DB_USER'),
-                'password': os.getenv('DB_PASSWORD'),
-                'database': os.getenv('DB_NAME')
-            }
-
-            import pymysql
-            conn = pymysql.connect(**db_config)
+            conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
 
             details = result['details']
@@ -478,20 +352,16 @@ class Big4TrendDetector:
             cursor.execute("""
                 INSERT INTO big4_trend_history (
                     overall_signal, signal_strength, bullish_count, bearish_count, recommendation,
-                    btc_signal, btc_strength, btc_reason, btc_is_consolidating, btc_price_change_6h,
-                    btc_1h_dominant, btc_15m_dominant,
-                    eth_signal, eth_strength, eth_reason, eth_is_consolidating, eth_price_change_6h,
-                    eth_1h_dominant, eth_15m_dominant,
-                    bnb_signal, bnb_strength, bnb_reason, bnb_is_consolidating, bnb_price_change_6h,
-                    bnb_1h_dominant, bnb_15m_dominant,
-                    sol_signal, sol_strength, sol_reason, sol_is_consolidating, sol_price_change_6h,
-                    sol_1h_dominant, sol_15m_dominant
+                    btc_signal, btc_strength, btc_reason,
+                    eth_signal, eth_strength, eth_reason,
+                    bnb_signal, bnb_strength, bnb_reason,
+                    sol_signal, sol_strength, sol_reason
                 ) VALUES (
                     %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s
                 )
             """, (
                 result['overall_signal'],
@@ -503,79 +373,42 @@ class Big4TrendDetector:
                 details['BTC/USDT']['signal'],
                 details['BTC/USDT']['strength'],
                 details['BTC/USDT']['reason'],
-                details['BTC/USDT']['is_consolidating'],
-                details['BTC/USDT']['price_change_6h'],
-                details['BTC/USDT']['1h_analysis']['dominant'],
-                details['BTC/USDT']['15m_analysis']['dominant'],
                 # ETH
                 details['ETH/USDT']['signal'],
                 details['ETH/USDT']['strength'],
                 details['ETH/USDT']['reason'],
-                details['ETH/USDT']['is_consolidating'],
-                details['ETH/USDT']['price_change_6h'],
-                details['ETH/USDT']['1h_analysis']['dominant'],
-                details['ETH/USDT']['15m_analysis']['dominant'],
                 # BNB
                 details['BNB/USDT']['signal'],
                 details['BNB/USDT']['strength'],
                 details['BNB/USDT']['reason'],
-                details['BNB/USDT']['is_consolidating'],
-                details['BNB/USDT']['price_change_6h'],
-                details['BNB/USDT']['1h_analysis']['dominant'],
-                details['BNB/USDT']['15m_analysis']['dominant'],
                 # SOL
                 details['SOL/USDT']['signal'],
                 details['SOL/USDT']['strength'],
-                details['SOL/USDT']['reason'],
-                details['SOL/USDT']['is_consolidating'],
-                details['SOL/USDT']['price_change_6h'],
-                details['SOL/USDT']['1h_analysis']['dominant'],
-                details['SOL/USDT']['15m_analysis']['dominant']
+                details['SOL/USDT']['reason']
             ))
 
             conn.commit()
             cursor.close()
             conn.close()
 
-            logger.debug(f"Big4趋势检测结果已保存到数据库: {result['overall_signal']}")
+            logger.info(f"✅ Big4趋势已保存: {result['overall_signal']} (强度: {result['signal_strength']:.0f})")
 
         except Exception as e:
-            logger.warning(f"保存Big4趋势检测结果失败: {e}")
-
-
-
-def get_big4_detector() -> Big4TrendDetector:
-    """获取四大天王检测器单例"""
-    global _detector_instance
-    if '_detector_instance' not in globals():
-        _detector_instance = Big4TrendDetector()
-    return _detector_instance
+            logger.error(f"❌ 保存Big4趋势失败: {e}")
 
 
 if __name__ == '__main__':
-    # 测试
+    # 测试代码
+    logging.basicConfig(level=logging.INFO)
     detector = Big4TrendDetector()
     result = detector.detect_market_trend()
 
-    print("=" * 100)
-    print("四大天王趋势分析")
-    print("=" * 100)
-    print()
-    print(f"整体信号: {result['overall_signal']}")
-    print(f"信号强度: {result['signal_strength']:.0f}/100")
-    print(f"看涨数量: {result['bullish_count']}/4")
-    print(f"看跌数量: {result['bearish_count']}/4")
+    print("\n" + "=" * 80)
+    print(f"Big4市场趋势: {result['overall_signal']} (强度: {result['signal_strength']:.0f})")
     print(f"建议: {result['recommendation']}")
-    print()
+    print("=" * 80)
 
     for symbol, detail in result['details'].items():
-        print(f"\n{'='*100}")
-        print(f"{symbol}: {detail['signal']} (强度: {detail['strength']}/100)")
-        print(f"原因: {detail['reason']}")
-        print(f"6H盘整: {'是' if detail['is_consolidating'] else '否'} ({detail['price_change_6h']:+.2f}%)")
-        print(f"1H主导: {detail['1h_analysis']['dominant']}")
-        print(f"15M主导: {detail['15m_analysis']['dominant']}")
-        if detail['5m_breakout']['detected']:
-            print(f"5M突破: {detail['5m_breakout']['direction']} - {detail['5m_breakout']['reason']}")
-        if detail['15m_breakout']['detected']:
-            print(f"15M突破: {detail['15m_breakout']['direction']} - {detail['15m_breakout']['reason']}")
+        print(f"\n{symbol}:")
+        print(f"  信号: {detail['signal']} (强度: {detail['strength']:.0f})")
+        print(f"  原因: {detail['reason']}")

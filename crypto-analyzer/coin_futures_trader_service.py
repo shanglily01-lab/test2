@@ -549,7 +549,7 @@ class CoinFuturesDecisionBrain:
                     signal_components['breakdown_short'] = weight['short']
                     logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
 
-            # ========== EMA四大天王评分 (EMA9/21/60/120 on 1h) ==========
+            # ========== EMA均线评分 (EMA9/21/60/120 on 1h) ==========
 
             # 计算EMA (使用1H K线最近120根)
             if len(klines_1h) >= 120:
@@ -804,7 +804,15 @@ class CoinFuturesTraderService:
         # 初始化Big4趋势检测器 (四大天王: BTC/ETH/BNB/SOL)
         self.big4_detector = Big4TrendDetector()
         self.big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
-        logger.info("🔱 Big4趋势检测器已启动 (仅应用于四大天王)")
+
+        # Big4缓存机制: 15分钟检测一次, 1小时缓存有效期
+        self.cached_big4_result = None
+        self.big4_cache_time = None
+        self.big4_cache_duration = 3600  # 1小时缓存
+        self.big4_detection_interval = 900  # 15分钟检测间隔
+        self.last_big4_detection_time = None
+
+        logger.info("🔱 Big4趋势检测器已启动 (15分钟检测, 1小时缓存)")
 
         logger.info("=" * 60)
         logger.info("币本位合约智能自动交易服务已启动")
@@ -824,6 +832,55 @@ class CoinFuturesTraderService:
             except:
                 self.connection = pymysql.connect(**self.db_config, autocommit=True)
         return self.connection
+
+    def get_big4_result(self):
+        """
+        获取Big4趋势结果 (带缓存机制)
+
+        缓存策略:
+        - 检测间隔: 15分钟
+        - 缓存有效期: 1小时
+        - 如果缓存过期或不存在，触发新检测
+        """
+        now = datetime.now()
+
+        # 检查是否需要重新检测 (15分钟间隔)
+        should_detect = (
+            self.last_big4_detection_time is None or
+            (now - self.last_big4_detection_time).total_seconds() >= self.big4_detection_interval
+        )
+
+        # 检查缓存是否有效 (1小时)
+        cache_valid = (
+            self.cached_big4_result is not None and
+            self.big4_cache_time is not None and
+            (now - self.big4_cache_time).total_seconds() < self.big4_cache_duration
+        )
+
+        # 如果需要检测且缓存无效，执行新检测
+        if should_detect and not cache_valid:
+            try:
+                self.cached_big4_result = self.big4_detector.detect_market_trend()
+                self.big4_cache_time = now
+                self.last_big4_detection_time = now
+                logger.info(f"🔱 Big4趋势已更新缓存 | {self.cached_big4_result['overall_signal']} (强度: {self.cached_big4_result['signal_strength']:.0f})")
+            except Exception as e:
+                logger.error(f"❌ Big4趋势检测失败: {e}")
+                # 检测失败时，如果有旧缓存就继续用，否则返回空结果
+                if self.cached_big4_result is None:
+                    return {
+                        'overall_signal': 'NEUTRAL',
+                        'signal_strength': 0,
+                        'details': {},
+                        'timestamp': now
+                    }
+
+        # 如果需要检测但缓存仍有效，只更新检测时间（实际不检测）
+        elif should_detect and cache_valid:
+            self.last_big4_detection_time = now
+            logger.debug(f"🔱 Big4缓存仍有效，跳过检测")
+
+        return self.cached_big4_result
 
     def get_current_price(self, symbol: str):
         """获取当前价格 - 优先WebSocket实时价,回退到5m K线"""
@@ -1166,7 +1223,7 @@ class CoinFuturesTraderService:
 
                 # 根据Big4市场信号动态调整仓位倍数
                 try:
-                    big4_result = self.big4_detector.detect_market_trend()
+                    big4_result = self.get_big4_result()
                     market_signal = big4_result.get('overall_signal', 'NEUTRAL')
 
                     # 根据市场信号决定仓位倍数
@@ -1362,7 +1419,7 @@ class CoinFuturesTraderService:
 
             # 根据Big4市场信号动态调整仓位倍数
             try:
-                big4_result = self.big4_detector.detect_market_trend()
+                big4_result = self.get_big4_result()
                 market_signal = big4_result.get('overall_signal', 'NEUTRAL')
 
                 # 根据市场信号决定仓位倍数
@@ -2683,7 +2740,7 @@ class CoinFuturesTraderService:
 
                     # Big4 趋势检测 - 应用到所有币种
                     try:
-                        big4_result = self.big4_detector.detect_market_trend()
+                        big4_result = self.get_big4_result()
 
                         # 如果是四大天王本身,使用该币种的专属信号
                         if symbol in self.big4_symbols:
