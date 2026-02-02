@@ -60,7 +60,7 @@ async def get_trading_status(account_id: int, trading_type: str):
 
         cursor.execute("""
             SELECT account_id, trading_type, trading_enabled, updated_by,
-                   DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') as updated_at
+                   DATE_FORMAT(updated_at, '%%Y-%%m-%%d %%H:%%i:%%s') as updated_at
             FROM trading_control
             WHERE account_id = %s AND trading_type = %s
         """, (account_id, trading_type))
@@ -116,7 +116,7 @@ async def toggle_trading_status(data: TradingControlUpdate):
         # 获取更新后的状态
         cursor.execute("""
             SELECT account_id, trading_type, trading_enabled, updated_by,
-                   DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') as updated_at
+                   DATE_FORMAT(updated_at, '%%Y-%%m-%%d %%H:%%i:%%s') as updated_at
             FROM trading_control
             WHERE account_id = %s AND trading_type = %s
         """, (data.account_id, data.trading_type))
@@ -150,7 +150,7 @@ async def get_all_trading_status():
 
         cursor.execute("""
             SELECT account_id, trading_type, trading_enabled, updated_by,
-                   DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') as updated_at
+                   DATE_FORMAT(updated_at, '%%Y-%%m-%%d %%H:%%i:%%s') as updated_at
             FROM trading_control
             ORDER BY account_id, trading_type
         """)
