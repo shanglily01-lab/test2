@@ -399,6 +399,9 @@
                     </div>
                 </div>
                 <div class="header-actions">
+                    <button id="tradingToggleBtn" class="btn btn-success" onclick="toggleTrading()">
+                        <i class="bi bi-pause-circle"></i> <span id="tradingStatusText">停止交易</span>
+                    </button>
                     <button class="btn btn-secondary" onclick="refreshData()">
                         <i class="bi bi-arrow-clockwise"></i> 刷新
                     </button>
@@ -1366,6 +1369,84 @@
             if (absNum >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
             return `$${num.toFixed(2)}`;
         }
+
+        // ========== 交易控制功能 ==========
+        let currentTradingEnabled = true; // 当前交易状态
+
+        // 加载交易状态
+        async function loadTradingStatus() {
+            try {
+                const response = await fetch('/api/trading-control/status/3/coin_futures');
+                const data = await response.json();
+                currentTradingEnabled = data.trading_enabled;
+                updateTradingButton(currentTradingEnabled);
+            } catch (error) {
+                console.error('加载交易状态失败:', error);
+                // 默认启用
+                currentTradingEnabled = true;
+                updateTradingButton(true);
+            }
+        }
+
+        // 更新交易按钮状态
+        function updateTradingButton(enabled) {
+            const btn = document.getElementById('tradingToggleBtn');
+            const statusText = document.getElementById('tradingStatusText');
+
+            if (enabled) {
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-danger');
+                btn.innerHTML = '<i class="bi bi-pause-circle"></i> <span id="tradingStatusText">停止交易</span>';
+                statusText.textContent = '停止交易';
+            } else {
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-success');
+                btn.innerHTML = '<i class="bi bi-play-circle"></i> <span id="tradingStatusText">启动交易</span>';
+                statusText.textContent = '启动交易';
+            }
+        }
+
+        // 切换交易状态
+        async function toggleTrading() {
+            const newStatus = !currentTradingEnabled;
+            const confirmMsg = newStatus ?
+                '确定要启动币本位合约交易吗？\n\n系统将开始根据信号自动开仓。' :
+                '确定要停止币本位合约交易吗？\n\n系统将停止自动开仓，但不影响已有持仓。';
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/trading-control/toggle', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        account_id: 3,
+                        trading_type: 'coin_futures',
+                        trading_enabled: newStatus,
+                        updated_by: 'web_user'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('切换交易状态失败');
+                }
+
+                const data = await response.json();
+                currentTradingEnabled = data.trading_enabled;
+                updateTradingButton(currentTradingEnabled);
+
+                const statusMsg = currentTradingEnabled ? '✅ 交易已启动' : '⏸️ 交易已停止';
+                alert(statusMsg);
+            } catch (error) {
+                console.error('切换交易状态失败:', error);
+                alert('操作失败: ' + error.message);
+            }
+        }
+        // ========== 交易控制功能结束 ==========
 
 
         // 加载所有数据
@@ -3223,7 +3304,8 @@
         // 初始加载
         document.addEventListener('DOMContentLoaded', function() {
             loadSymbols();
-            
+            loadTradingStatus(); // 加载交易控制状态
+
             // 先加载数据（只加载一次，不自动刷新）
             loadData().then(() => {
                 // 延迟1秒后开始第一次价格和盈亏更新，确保持仓数据已完全渲染

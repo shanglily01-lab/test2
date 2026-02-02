@@ -620,6 +620,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册交易控制API路由
+try:
+    from app.api.trading_control_api import router as trading_control_router
+    app.include_router(trading_control_router)
+    logger.info("✅ 交易控制API路由已注册 (/api/trading-control)")
+except Exception as e:
+    logger.warning(f"⚠️  交易控制API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册实盘交易API路由
 try:
     from app.api.live_trading_api import router as live_trading_router
