@@ -282,8 +282,8 @@ signals:
     - 0.4
     enabled: true
     sampling_interval_seconds: 10
-    sampling_window_seconds: 300
-    time_window_minutes: 30
+    sampling_window_seconds: 180      # 从300秒(5分钟)降至180秒(3分钟)
+    time_window_minutes: 10           # 从30分钟降至10分钟，加快建仓速度
     whitelist_symbols: []
   blacklist:
   - IP/USDT
