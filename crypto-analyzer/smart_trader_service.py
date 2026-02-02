@@ -171,8 +171,8 @@ class SmartDecisionBrain:
                     'position_low': {'long': 20, 'short': 0},
                     'position_mid': {'long': 5, 'short': 5},
                     'position_high': {'long': 0, 'short': 20},
-                    'momentum_down_3pct': {'long': 0, 'short': 15},       # 修正: 下跌应该SHORT
-                    'momentum_up_3pct': {'long': 15, 'short': 0},         # 修正: 上涨应该LONG
+                    'momentum_down_3pct': {'long': 0, 'short': 10},       # 震荡市优化: 从15降到10,需要更多信号配合
+                    'momentum_up_3pct': {'long': 10, 'short': 0},         # 震荡市优化: 从15降到10,避免追涨杀跌
                     'trend_1h_bull': {'long': 20, 'short': 0},
                     'trend_1h_bear': {'long': 0, 'short': 20},
                     'volatility_high': {'long': 10, 'short': 10},
@@ -2716,8 +2716,21 @@ class SmartTraderService:
                             signal_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
+                        # ========== 震荡市过滤: NEUTRAL时提高门槛 ==========
+                        if symbol_signal == 'NEUTRAL':
+                            if signal_strength < 30:  # 弱信号,震荡市
+                                threshold_boost = 15  # 需要额外15分
+                                if new_score < 35 + threshold_boost:  # 原阈值35 + 15 = 50分
+                                    logger.warning(f"[BIG4-NEUTRAL-SKIP] {symbol} 震荡市且评分不足 ({new_score} < 50), 跳过")
+                                    continue
+                                else:
+                                    logger.info(f"[BIG4-NEUTRAL-OK] {symbol} 震荡市但评分足够 ({new_score} >= 50), 允许开仓")
+                            else:
+                                logger.info(f"[BIG4-NEUTRAL] {symbol} 市场中性(强度{signal_strength:.1f}),正常开仓")
+                        # ========== NEUTRAL 处理结束 ==========
+
                         # 如果信号方向与交易方向冲突,降低评分或跳过
-                        if symbol_signal == 'BEARISH' and new_side == 'LONG':
+                        elif symbol_signal == 'BEARISH' and new_side == 'LONG':
                             if signal_strength >= 60:  # 强烈看空信号
                                 logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
                                 continue
