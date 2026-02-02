@@ -6,11 +6,23 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 import pymysql
-from app.core.database import get_db_connection
-from app.core.logger import setup_logger
+import os
+from loguru import logger
 
-logger = setup_logger(__name__)
 router = APIRouter(prefix="/api/trading-control", tags=["trading-control"])
+
+# 数据库配置
+def get_db_connection():
+    """获取数据库连接"""
+    db_config = {
+        'host': os.getenv('DB_HOST', 'localhost'),
+        'port': int(os.getenv('DB_PORT', '3306')),
+        'user': os.getenv('DB_USER', 'root'),
+        'password': os.getenv('DB_PASSWORD', ''),
+        'database': os.getenv('DB_NAME', 'binance-data'),
+        'charset': 'utf8mb4'
+    }
+    return pymysql.connect(**db_config)
 
 
 class TradingControlUpdate(BaseModel):
