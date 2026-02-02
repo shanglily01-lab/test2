@@ -792,6 +792,39 @@ class CoinFuturesTraderService:
                 self.connection = pymysql.connect(**self.db_config, autocommit=True)
         return self.connection
 
+    def check_trading_enabled(self) -> bool:
+        """
+        检查交易是否启用
+
+        Returns:
+            bool: True=交易启用, False=交易停止
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # account_id=3 对应 币本位合约
+            cursor.execute("""
+                SELECT trading_enabled
+                FROM trading_control
+                WHERE account_id = %s AND trading_type = 'coin_futures'
+            """, (self.account_id,))
+
+            result = cursor.fetchone()
+            cursor.close()
+
+            if result:
+                return result['trading_enabled']
+            else:
+                # 如果数据库中没有记录，默认启用
+                logger.warning(f"[TRADING-CONTROL] 未找到交易控制记录(account_id={self.account_id}), 默认启用")
+                return True
+
+        except Exception as e:
+            # 出错时默认启用，避免影响交易
+            logger.error(f"[TRADING-CONTROL] 检查交易状态失败: {e}, 默认启用")
+            return True
+
     def get_big4_result(self):
         """
         获取Big4趋势结果 (带缓存机制)
@@ -2682,6 +2715,12 @@ class CoinFuturesTraderService:
 
                 if not opportunities:
                     logger.info("[SCAN] 无交易机会")
+                    time.sleep(self.scan_interval)
+                    continue
+
+                # 5.5. 检查交易控制开关
+                if not self.check_trading_enabled():
+                    logger.info("[TRADING-DISABLED] ⏸️ 币本位合约交易已停止，跳过开仓（不影响已有持仓）")
                     time.sleep(self.scan_interval)
                     continue
 
