@@ -25,6 +25,9 @@ from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
+from app.strategies.range_market_detector import RangeMarketDetector
+from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
+from app.strategies.mode_switcher import TradingModeSwitcher
 
 # 加载环境变量
 load_dotenv()
@@ -764,6 +767,12 @@ class SmartTraderService:
         self.big4_cache_time = None
         self.big4_cache_duration = 3600  # 1小时缓存
         self.big4_detection_interval = 900  # 15分钟检测间隔
+
+        # ========== 震荡市交易策略模块 ==========
+        self.range_detector = RangeMarketDetector(self.db_config)
+        self.bollinger_strategy = BollingerMeanReversionStrategy(self.db_config)
+        self.mode_switcher = TradingModeSwitcher(self.db_config)
+        logger.info("✅ 震荡市交易策略模块已初始化")
         self.last_big4_detection_time = None
 
         logger.info("🔱 Big4趋势检测器已启动 (15分钟检测, 1小时缓存)")
@@ -1089,6 +1098,7 @@ class SmartTraderService:
         """开仓 - 支持做多和做空，支持分批建仓，使用 WebSocket 实时价格"""
         symbol = opp['symbol']
         side = opp['side']  # 'LONG' 或 'SHORT'
+        strategy = opp.get('strategy', 'default')  # 获取策略类型
 
         # ========== 第零步：验证symbol格式 ==========
         # U本位服务只应该交易 /USDT 交易对
@@ -1208,33 +1218,56 @@ class SmartTraderService:
                     logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
                     return False
 
+                # ========== 检查是否为震荡市策略 ==========
+                mode_config = None
+                if strategy == 'bollinger_mean_reversion':
+                    try:
+                        mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
+                        if mode_config:
+                            logger.info(f"[RANGE_MODE] {symbol} 使用震荡市交易参数")
+                    except Exception as e:
+                        logger.error(f"[MODE_ERROR] 获取模式配置失败: {e}")
+
                 # 获取评级对应的保证金倍数
                 rating_margin_multiplier = rating_config['margin_multiplier']
-                base_position_size = self.position_size_usdt * rating_margin_multiplier
+
+                # ========== 根据策略类型确定基础仓位大小 ==========
+                if strategy == 'bollinger_mean_reversion' and mode_config:
+                    # 震荡市模式: 使用range_position_size (默认3%)
+                    range_position_pct = mode_config['range_position_size']
+                    base_position_size = self.position_size_usdt * (range_position_pct / 5.0) * rating_margin_multiplier
+                    logger.info(f"[RANGE_POSITION] {symbol} 震荡市仓位: {range_position_pct}% × {rating_margin_multiplier:.2f} = ${base_position_size:.2f}")
+                else:
+                    # 趋势模式: 使用默认仓位(5%)
+                    base_position_size = self.position_size_usdt * rating_margin_multiplier
 
                 # 记录评级信息
                 rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
                 logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
 
-                # 根据Big4市场信号动态调整仓位倍数
-                try:
-                    big4_result = self.get_big4_result()
-                    market_signal = big4_result.get('overall_signal', 'NEUTRAL')
-
-                    # 根据市场信号决定仓位倍数
-                    if market_signal == 'BULLISH' and side == 'LONG':
-                        position_multiplier = 1.2  # 市场看多,做多加仓
-                        logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
-                    elif market_signal == 'BEARISH' and side == 'SHORT':
-                        position_multiplier = 1.2  # 市场看空,做空加仓
-                        logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
-                    else:
-                        position_multiplier = 1.0  # 其他情况正常仓位
-                        if market_signal != 'NEUTRAL':
-                            logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
-                except Exception as e:
-                    logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                # 根据Big4市场信号动态调整仓位倍数 (震荡市策略不调整仓位)
+                if strategy == 'bollinger_mean_reversion':
                     position_multiplier = 1.0
+                    logger.info(f"[RANGE_MODE] {symbol} 震荡市策略不使用Big4仓位调整")
+                else:
+                    try:
+                        big4_result = self.get_big4_result()
+                        market_signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+                        # 根据市场信号决定仓位倍数
+                        if market_signal == 'BULLISH' and side == 'LONG':
+                            position_multiplier = 1.2  # 市场看多,做多加仓
+                            logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
+                        elif market_signal == 'BEARISH' and side == 'SHORT':
+                            position_multiplier = 1.2  # 市场看空,做空加仓
+                            logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
+                        else:
+                            position_multiplier = 1.0  # 其他情况正常仓位
+                            if market_signal != 'NEUTRAL':
+                                logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
+                    except Exception as e:
+                        logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                        position_multiplier = 1.0
 
                 # 获取自适应参数
                 if side == 'LONG':
@@ -1249,37 +1282,55 @@ class SmartTraderService:
             notional_value = quantity * current_price
             margin = adjusted_position_size
 
-            # 使用自适应参数计算止损
-            base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
+            # ========== 根据策略类型确定止损止盈 ==========
+            if strategy == 'bollinger_mean_reversion' and 'take_profit_price' in opp and 'stop_loss_price' in opp:
+                # 震荡市策略: 使用策略提供的具体价格
+                stop_loss = opp['stop_loss_price']
+                take_profit = opp['take_profit_price']
 
-            # 缺陷5修复: 波动率自适应止损
-            stop_loss_pct = self.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
+                # 计算实际百分比用于日志
+                if side == 'LONG':
+                    stop_loss_pct = (current_price - stop_loss) / current_price
+                    take_profit_pct = (take_profit - current_price) / current_price
+                else:  # SHORT
+                    stop_loss_pct = (stop_loss - current_price) / current_price
+                    take_profit_pct = (current_price - take_profit) / current_price
 
-            # 问题4优化: 使用波动率配置计算动态止盈
-            volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
-            if volatility_profile:
-                # 根据方向使用对应的止盈配置
-                if side == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
-                    take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
-                    logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
-                elif side == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
-                    take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
-                    logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
+                logger.info(f"[RANGE_TP_SL] {symbol} 使用布林带策略止盈止损: TP=${take_profit:.4f}({take_profit_pct*100:.2f}%), SL=${stop_loss:.4f}({stop_loss_pct*100:.2f}%)")
+
+            else:
+                # 趋势模式: 使用原有逻辑
+                # 使用自适应参数计算止损
+                base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
+
+                # 缺陷5修复: 波动率自适应止损
+                stop_loss_pct = self.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
+
+                # 问题4优化: 使用波动率配置计算动态止盈
+                volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
+                if volatility_profile:
+                    # 根据方向使用对应的止盈配置
+                    if side == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
+                        take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
+                        logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
+                    elif side == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
+                        take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
+                        logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
+                    else:
+                        # 回退到自适应参数
+                        take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+                        logger.debug(f"[TP_FALLBACK] {symbol} {side} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
                 else:
                     # 回退到自适应参数
                     take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
-                    logger.debug(f"[TP_FALLBACK] {symbol} {side} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
-            else:
-                # 回退到自适应参数
-                take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
-                logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
+                    logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
 
-            if side == 'LONG':
-                stop_loss = current_price * (1 - stop_loss_pct)    # 止损
-                take_profit = current_price * (1 + take_profit_pct) # 止盈
-            else:  # SHORT
-                stop_loss = current_price * (1 + stop_loss_pct)    # 止损
-                take_profit = current_price * (1 - take_profit_pct) # 止盈
+                if side == 'LONG':
+                    stop_loss = current_price * (1 - stop_loss_pct)    # 止损
+                    take_profit = current_price * (1 + take_profit_pct) # 止盈
+                else:  # SHORT
+                    stop_loss = current_price * (1 + stop_loss_pct)    # 止损
+                    take_profit = current_price * (1 - take_profit_pct) # 止盈
 
             logger.info(f"[OPEN] {symbol} {side} | 价格: ${current_price:.4f} ({price_source}) | 数量: {quantity:.2f}")
 
@@ -1304,7 +1355,11 @@ class SmartTraderService:
             if is_reversal:
                 signal_combination_key = f"REVERSAL_{opp.get('reversal_from', 'unknown')}"
 
-            logger.info(f"[SIGNAL_COMBO] {symbol} {side} 信号组合: {signal_combination_key} (评分: {entry_score})")
+            # 震荡市策略特殊标记
+            if strategy == 'bollinger_mean_reversion':
+                signal_combination_key = f"RANGE_{signal_combination_key}"
+
+            logger.info(f"[SIGNAL_COMBO] {symbol} {side} 信号组合: {signal_combination_key} (评分: {entry_score}) 策略: {strategy}")
 
             # Big4 信号记录
             if opp.get('big4_adjusted'):
@@ -1312,26 +1367,41 @@ class SmartTraderService:
                 big4_strength = opp.get('big4_strength', 0)
                 logger.info(f"[BIG4-APPLIED] {symbol} Big4趋势: {big4_signal} (强度: {big4_strength})")
 
-            # 问题1优化: 计算动态超时时间
-            base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
+            # ========== 根据策略类型确定超时时间 ==========
+            if strategy == 'bollinger_mean_reversion' and mode_config:
+                # 震荡市策略: 使用range_max_hold_hours (默认4小时)
+                base_timeout_minutes = mode_config.get('range_max_hold_hours', 4) * 60
+                logger.info(f"[RANGE_TIMEOUT] {symbol} 震荡市最大持仓时间: {base_timeout_minutes}分钟")
+            else:
+                # 趋势模式: 使用动态超时时间
+                base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
+
             # 计算超时时间点 (UTC时间)
             from datetime import datetime, timedelta
             timeout_at = datetime.utcnow() + timedelta(minutes=base_timeout_minutes)
+
+            # 准备entry_reason
+            entry_reason = opp.get('reason', '')
+            if strategy == 'bollinger_mean_reversion':
+                entry_reason = f"[震荡市] {entry_reason}"
 
             # 插入持仓记录 (包含动态超时字段)
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 entry_signal_type, entry_score, signal_components, max_hold_minutes, timeout_at,
+                 entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, side, quantity, current_price, self.leverage,
                 notional_value, margin, stop_loss, take_profit,
-                signal_combination_key, entry_score, signal_components_json,
+                signal_combination_key, entry_reason, entry_score, signal_components_json,
                 base_timeout_minutes, timeout_at
             ))
+
+            # 获取持仓ID
+            position_id = cursor.lastrowid
 
             # 冻结资金 (开仓时扣除可用余额，增加冻结余额)
             cursor.execute("""
@@ -2712,9 +2782,50 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5. 扫描机会
-                logger.info(f"[SCAN] 扫描 {len(self.brain.whitelist)} 个币种...")
-                opportunities = self.brain.scan_all()
+                # 5. 获取当前交易模式并扫描机会
+                try:
+                    mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
+                    current_mode = mode_config['mode_type'] if mode_config else 'trend'
+                except Exception as e:
+                    logger.error(f"[MODE-ERROR] 获取交易模式失败: {e}, 使用默认趋势模式")
+                    current_mode = 'trend'
+
+                logger.info(f"[SCAN] 模式:{current_mode} | 扫描 {len(self.brain.whitelist)} 个币种...")
+
+                # 根据模式选择策略
+                if current_mode == 'range':
+                    # 震荡模式: 使用布林带均值回归策略
+                    opportunities = []
+                    big4_result = self.get_big4_result()
+                    big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+                    for symbol in self.brain.whitelist:
+                        try:
+                            signal = self.bollinger_strategy.generate_signal(
+                                symbol=symbol,
+                                big4_signal=big4_signal,
+                                timeframe='15m'
+                            )
+
+                            if signal and signal['score'] >= mode_config.get('range_min_score', 50):
+                                opportunities.append({
+                                    'symbol': signal['symbol'],
+                                    'side': signal['signal'],
+                                    'score': signal['score'],
+                                    'strategy': 'bollinger_mean_reversion',
+                                    'reason': signal['reason'],
+                                    'take_profit_price': signal.get('take_profit_price'),
+                                    'stop_loss_price': signal.get('stop_loss_price')
+                                })
+                                logger.info(f"[RANGE-SIGNAL] {symbol} {signal['signal']} 分数:{signal['score']} | {signal['reason']}")
+                        except Exception as e:
+                            logger.error(f"[RANGE-ERROR] {symbol} 震荡市信号生成失败: {e}")
+
+                    logger.info(f"[RANGE-SCAN] 震荡模式扫描完成, 找到 {len(opportunities)} 个机会")
+                else:
+                    # 趋势模式: 使用原有策略
+                    opportunities = self.brain.scan_all()
+                    logger.info(f"[TREND-SCAN] 趋势模式扫描完成, 找到 {len(opportunities)} 个机会")
 
                 if not opportunities:
                     logger.info("[SCAN] 无交易机会")
@@ -2739,10 +2850,46 @@ class SmartTraderService:
                     new_score = opp['score']
                     opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
 
-                    # Big4 趋势检测 - 应用到所有币种
+                    # ========== 交易模式检查和自动切换 ==========
                     try:
                         big4_result = self.get_big4_result()
+                        big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                        big4_strength = big4_result.get('signal_strength', 0)
 
+                        # 检查是否需要自动切换模式
+                        suggested_mode = self.mode_switcher.auto_switch_check(
+                            account_id=self.account_id,
+                            trading_type='usdt_futures',
+                            big4_signal=big4_signal,
+                            big4_strength=big4_strength
+                        )
+
+                        if suggested_mode:
+                            logger.info(f"🔄 [MODE-AUTO-SWITCH] Big4={big4_signal}({big4_strength:.1f}), 建议切换到{suggested_mode}模式")
+                            self.mode_switcher.switch_mode(
+                                account_id=self.account_id,
+                                trading_type='usdt_futures',
+                                new_mode=suggested_mode,
+                                trigger='auto',
+                                reason=f'Big4: {big4_signal} 强度:{big4_strength:.1f}',
+                                big4_signal=big4_signal,
+                                big4_strength=big4_strength,
+                                switched_by='smart_trader_service'
+                            )
+
+                        # 获取当前交易模式
+                        current_mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
+                        current_mode = current_mode_config['mode_type'] if current_mode_config else 'trend'
+
+                        logger.info(f"📊 [TRADING-MODE] 当前模式: {current_mode} | Big4: {big4_signal}({big4_strength:.1f})")
+
+                    except Exception as e:
+                        logger.error(f"[MODE-CHECK-ERROR] 模式检查失败: {e}")
+                        current_mode = 'trend'  # 默认趋势模式
+                    # ========== 模式检查结束 ==========
+
+                    # Big4 趋势检测 - 应用到所有币种
+                    try:
                         # 如果是四大天王本身,使用该币种的专属信号
                         if symbol in self.big4_symbols:
                             symbol_detail = big4_result['details'].get(symbol, {})
