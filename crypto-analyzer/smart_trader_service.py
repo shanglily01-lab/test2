@@ -1238,7 +1238,7 @@ class SmartTraderService:
                 # ========== 根据策略类型确定基础仓位大小 ==========
                 if strategy == 'bollinger_mean_reversion' and mode_config:
                     # 震荡市模式: 使用range_position_size (默认3%)
-                    range_position_pct = mode_config['range_position_size']
+                    range_position_pct = float(mode_config['range_position_size'])  # 转换Decimal为float
                     base_position_size = self.position_size_usdt * (range_position_pct / 5.0) * rating_margin_multiplier
                     logger.info(f"[RANGE_POSITION] {symbol} 震荡市仓位: {range_position_pct}% × {rating_margin_multiplier:.2f} = ${base_position_size:.2f}")
                 else:
