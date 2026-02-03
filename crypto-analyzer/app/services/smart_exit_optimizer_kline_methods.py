@@ -102,20 +102,19 @@ async def _check_kline_strength_decay(
             if is_strong_reversal:
                 return ('15M连续强力反转', 1.0)  # 全部平仓
 
-        # === 检测3: 持仓时长到期 + 强度衰减 ===
-        # 获取最大持仓时长 (4小时强制平仓)
+        # === 检测3: 持仓时长到期 (强制平仓) ===
+        # 获取最大持仓时长 (震荡市4小时强制平仓,避免隔夜风险)
         max_hold_minutes = position.get('max_hold_minutes') or 240
 
         if hold_minutes >= max_hold_minutes:
-            # 检查K线强度是否明显衰减
-            if current_kline['total_score'] < 15:
-                # 强度不足15分
-                if profit_info['profit_pct'] >= 4.0:
-                    return ('持仓时长到期+强度衰减+盈利>=4%', 1.0)  # 全部平仓
-                elif profit_info['profit_pct'] >= 2.0:
-                    return ('持仓时长到期+强度衰减+盈利>=2%', 0.7)  # 平仓70%
-                else:
-                    return ('持仓时长到期+强度衰减', 0.5)  # 平仓50%
+            # 4小时到期强制平仓,无论盈亏和K线强度
+            # 震荡市策略的核心是快进快出,避免隔夜风险
+            if profit_info['profit_pct'] >= 1.0:
+                return ('持仓时长到期(盈利)', 1.0)  # 全部平仓
+            elif profit_info['profit_pct'] >= -1.0:
+                return ('持仓时长到期(平盘)', 1.0)  # 全部平仓
+            else:
+                return ('持仓时长到期(亏损)', 1.0)  # 全部平仓,止损
 
         # === 检测4: 盈利+强度衰减 ===
         if profit_info['profit_pct'] >= 4.0:
