@@ -22,8 +22,16 @@ class BollingerMeanReversionStrategy:
         self.bb_period = 20  # 布林带周期
         self.bb_std = 2.0    # 标准差倍数
         self.rsi_period = 14  # RSI周期
-        self.rsi_oversold = 30  # RSI超卖线
-        self.rsi_overbought = 70  # RSI超买线
+        self.rsi_oversold = 25  # RSI超卖线（收紧：30→25）
+        self.rsi_overbought = 75  # RSI超买线（收紧：70→75）
+
+        # 布林带位置要求（收紧：0.15→0.10, 0.85→0.90）
+        self.bb_lower_threshold = 0.10  # 做多：价格必须在下轨10%范围内
+        self.bb_upper_threshold = 0.90  # 做空：价格必须在上轨10%范围内
+
+        # 波动率和成交量要求
+        self.min_bb_width_pct = 2.0  # 布林带最小宽度（上轨-下轨）占价格的百分比
+        self.require_volume_surge = True  # 成交量必须放大（改为必要条件）
 
         # 趋势过滤参数
         self.ema_fast = 9    # 快速EMA周期
@@ -219,12 +227,23 @@ class BollingerMeanReversionStrategy:
         if not indicators:
             return None
 
+        # === 波动率过滤: 检查布林带宽度 ===
+        bb_width_pct = ((indicators['bb_upper'] - indicators['bb_lower']) / indicators['current_price']) * 100
+        if bb_width_pct < self.min_bb_width_pct:
+            logger.debug(f"[BB_WIDTH_FILTER] {symbol} 布林带宽度不足: {bb_width_pct:.2f}% < {self.min_bb_width_pct}%")
+            return None
+
+        # === 成交量过滤: 必须有成交量放大 ===
+        if self.require_volume_surge and not indicators['volume_surge']:
+            logger.debug(f"[VOLUME_FILTER] {symbol} 成交量未放大，拒绝信号 (当前:{indicators['current_volume']:.0f} vs 均量:{indicators['avg_volume']:.0f})")
+            return None
+
         signal = None
         score = 0
         reason_parts = []
 
         # === 做多信号: 价格触及下轨 + RSI超卖 ===
-        if indicators['bb_position'] < 0.15:  # 接近或突破下轨
+        if indicators['bb_position'] < self.bb_lower_threshold:  # 接近或突破下轨
             if indicators['rsi'] < self.rsi_oversold:  # RSI超卖
 
                 # ⚠️ 趋势过滤: 不在明显下跌趋势中做多
@@ -236,19 +255,20 @@ class BollingerMeanReversionStrategy:
                 score = 60
                 reason_parts.append('价格触及布林带下轨')
                 reason_parts.append(f"RSI超卖({indicators['rsi']:.1f})")
-
-                # 成交量放大加分
-                if indicators['volume_surge']:
-                    score += 15
-                    reason_parts.append('成交量放大')
+                reason_parts.append('成交量放大')  # 已经是必要条件,确保记录
 
                 # 价格越接近下轨,分数越高
                 if indicators['bb_position'] < 0.05:
+                    score += 15
+                    reason_parts.append('紧贴下轨')
+
+                # 布林带宽度足够,加分
+                if bb_width_pct >= 4.0:
                     score += 10
-                    reason_parts.append('触及下轨')
+                    reason_parts.append(f'波动率充足({bb_width_pct:.1f}%)')
 
         # === 做空信号: 价格触及上轨 + RSI超买 ===
-        elif indicators['bb_position'] > 0.85:  # 接近或突破上轨
+        elif indicators['bb_position'] > self.bb_upper_threshold:  # 接近或突破上轨
             if indicators['rsi'] > self.rsi_overbought:  # RSI超买
 
                 # ⚠️ 趋势过滤: 不在明显上涨趋势中做空
@@ -260,16 +280,17 @@ class BollingerMeanReversionStrategy:
                 score = 60
                 reason_parts.append('价格触及布林带上轨')
                 reason_parts.append(f"RSI超买({indicators['rsi']:.1f})")
-
-                # 成交量放大加分
-                if indicators['volume_surge']:
-                    score += 15
-                    reason_parts.append('成交量放大')
+                reason_parts.append('成交量放大')  # 已经是必要条件,确保记录
 
                 # 价格越接近上轨,分数越高
                 if indicators['bb_position'] > 0.95:
+                    score += 15
+                    reason_parts.append('紧贴上轨')
+
+                # 布林带宽度足够,加分
+                if bb_width_pct >= 4.0:
                     score += 10
-                    reason_parts.append('触及上轨')
+                    reason_parts.append(f'波动率充足({bb_width_pct:.1f}%)')
 
         if signal:
             # 计算止盈止损价格
