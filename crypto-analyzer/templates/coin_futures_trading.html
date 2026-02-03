@@ -3757,7 +3757,8 @@
                 document.getElementById(`level${level}Container`).style.display = 'none';
             }
             try {
-                const response = await fetch('/api/rating/current');
+                // 币本位页面只显示USD结尾的交易对(排除USDT)
+                const response = await fetch('/api/rating/current?trading_type=coin_futures');
                 const data = await response.json();
                 if (data.success) {
                     const ratings = data.ratings;

@@ -1894,7 +1894,8 @@
             }
 
             try {
-                const response = await fetch('/api/rating/current');
+                // U本位页面只显示USDT结尾的交易对
+                const response = await fetch('/api/rating/current?trading_type=usdt_futures');
                 const data = await response.json();
 
                 if (data.success) {

@@ -87,8 +87,16 @@ async def get_rating_config():
 
 
 @router.get("/api/rating/current")
-async def get_current_ratings():
-    """获取当前所有评级"""
+async def get_current_ratings(trading_type: Optional[str] = None):
+    """
+    获取当前所有评级
+
+    Args:
+        trading_type: 可选的交易类型过滤 ('usdt_futures' 或 'coin_futures')
+                     usdt_futures: 只返回USDT结尾的交易对
+                     coin_futures: 只返回USD结尾的交易对
+                     None: 返回所有交易对
+    """
     try:
         opt_config = OptimizationConfig(DB_CONFIG)
 
@@ -104,9 +112,21 @@ async def get_current_ratings():
         }
 
         for rating in ratings:
+            symbol = rating['symbol']
+
+            # 根据 trading_type 过滤
+            if trading_type == 'usdt_futures':
+                # U本位: 只显示USDT结尾的交易对
+                if not symbol.endswith('USDT'):
+                    continue
+            elif trading_type == 'coin_futures':
+                # 币本位: 只显示USD结尾的交易对(排除USDT)
+                if not symbol.endswith('USD') or symbol.endswith('USDT'):
+                    continue
+
             level = rating['rating_level']
             grouped[f"level{level}"].append({
-                "symbol": rating['symbol'],
+                "symbol": symbol,
                 "rating_level": level,
                 "reason": rating.get('level_change_reason', '') or '',
                 "hard_stop_loss_count": rating.get('hard_stop_loss_count', 0),
@@ -117,10 +137,12 @@ async def get_current_ratings():
                 "updated_at": rating.get('updated_at').isoformat() if rating.get('updated_at') else None
             })
 
+        total_count = sum(len(grouped[f"level{i}"]) for i in range(4))
+
         return {
             "success": True,
             "ratings": grouped,
-            "total_count": len(ratings)
+            "total_count": total_count
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
