@@ -726,6 +726,84 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Rating Management Panel (币本位合约同样包含评级管理) -->
+            <div class="card slide-up" style="margin-top: var(--spacing-xl);">
+                <div class="card-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <h2 class="card-title">
+                            <i class="bi bi-trophy"></i>
+                            交易对评级管理 (U本位和币本位共享)
+                        </h2>
+                        <button class="btn btn-primary btn-sm" onclick="triggerRatingUpdate()" id="updateRatingBtn">
+                            <i class="bi bi-arrow-clockwise"></i> 更新评级
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div style="background: var(--bg-secondary); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg);">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-lg);">
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">升级条件</div>
+                                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);" id="upgradeConfig">加载中...</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">观察天数</div>
+                                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);" id="observationDays">-</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">总评级数量</div>
+                                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);" id="totalRatings">-</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="ratingsContainer">
+                        <div id="ratingsLoading" class="loading-overlay" style="min-height: 200px;">
+                            <div class="spinner"></div>
+                        </div>
+                        <div id="level0Container" style="display: none; margin-bottom: var(--spacing-lg);">
+                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
+                                <div style="width: 4px; height: 20px; background: var(--success-green); border-radius: 2px;"></div>
+                                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                                    Level 0 - 白名单 <span id="level0Count" class="badge badge-success" style="margin-left: 8px;">0</span>
+                                </h3>
+                            </div>
+                            <div id="level0List" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--spacing-sm);"></div>
+                        </div>
+                        <div id="level1Container" style="display: none; margin-bottom: var(--spacing-lg);">
+                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
+                                <div style="width: 4px; height: 20px; background: var(--warning-yellow); border-radius: 2px;"></div>
+                                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                                    Level 1 - 黑名单一级 <span id="level1Count" class="badge badge-warning" style="margin-left: 8px;">0</span>
+                                </h3>
+                            </div>
+                            <div id="level1List" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--spacing-sm);"></div>
+                        </div>
+                        <div id="level2Container" style="display: none; margin-bottom: var(--spacing-lg);">
+                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
+                                <div style="width: 4px; height: 20px; background: var(--error-red); border-radius: 2px;"></div>
+                                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                                    Level 2 - 黑名单二级 <span id="level2Count" class="badge badge-danger" style="margin-left: 8px;">0</span>
+                                </h3>
+                            </div>
+                            <div id="level2List" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--spacing-sm);"></div>
+                        </div>
+                        <div id="level3Container" style="display: none; margin-bottom: var(--spacing-lg);">
+                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
+                                <div style="width: 4px; height: 20px; background: #6b7280; border-radius: 2px;"></div>
+                                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
+                                    Level 3 - 永久禁止 <span id="level3Count" class="badge" style="margin-left: 8px; background: #6b7280;">0</span>
+                                </h3>
+                            </div>
+                            <div id="level3List" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--spacing-sm);"></div>
+                        </div>
+                        <div id="ratingsEmpty" style="display: none; text-align: center; padding: var(--spacing-xl); color: var(--text-secondary);">
+                            <div class="empty-state-icon">📊</div>
+                            <div class="empty-state-text">暂无评级数据</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
     <script>
@@ -3650,6 +3728,130 @@
             }, 10);
         }
         // ========== 交易模式功能结束 ==========
+
+
+        // ========== 评级管理功能 (复用U本位的API) ==========
+        async function loadRatingConfig() {
+            try {
+                const response = await fetch('/api/rating/config');
+                const data = await response.json();
+                if (data.success) {
+                    const upgradeConfig = data.upgrade_config;
+                    document.getElementById('upgradeConfig').textContent = `盈利≥$${upgradeConfig.profit_amount} 且 胜率≥${(upgradeConfig.win_rate * 100).toFixed(0)}%`;
+                    document.getElementById('observationDays').textContent = `${upgradeConfig.observation_days}天`;
+                }
+            } catch (error) {
+                console.error('加载评级配置失败:', error);
+            }
+        }
+
+        async function loadRatings() {
+            const loading = document.getElementById('ratingsLoading');
+            const empty = document.getElementById('ratingsEmpty');
+            loading.style.display = 'flex';
+            empty.style.display = 'none';
+            for (let level = 0; level <= 3; level++) {
+                document.getElementById(`level${level}Container`).style.display = 'none';
+            }
+            try {
+                const response = await fetch('/api/rating/current');
+                const data = await response.json();
+                if (data.success) {
+                    const ratings = data.ratings;
+                    let totalCount = 0;
+                    for (let level = 0; level <= 3; level++) {
+                        const levelData = ratings[`level${level}`] || [];
+                        totalCount += levelData.length;
+                        if (levelData.length > 0) {
+                            document.getElementById(`level${level}Container`).style.display = 'block';
+                            document.getElementById(`level${level}Count`).textContent = levelData.length;
+                            const listContainer = document.getElementById(`level${level}List`);
+                            listContainer.innerHTML = levelData.map(item => `
+                                <div class="rating-symbol-badge" onclick="showSymbolRatingDetail('${item.symbol}')" title="点击查看详情">
+                                    <span class="symbol-name">${item.symbol}</span>
+                                    <i class="bi bi-info-circle rating-icon"></i>
+                                </div>
+                            `).join('');
+                        }
+                    }
+                    document.getElementById('totalRatings').textContent = totalCount;
+                    if (totalCount === 0) empty.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('加载评级数据失败:', error);
+                showToast('加载评级数据失败', 'error');
+                empty.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        async function triggerRatingUpdate() {
+            const btn = document.getElementById('updateRatingBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 更新中...';
+            try {
+                const response = await fetch('/api/rating/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({})
+                });
+                const data = await response.json();
+                if (data.success) {
+                    const results = data.results;
+                    const upgraded = results.upgraded.length;
+                    const downgraded = results.downgraded.length;
+                    const newRated = results.new_rated.length;
+                    let message = `评级更新完成: `;
+                    let parts = [];
+                    if (upgraded > 0) parts.push(`${upgraded}个降级`);
+                    if (downgraded > 0) parts.push(`${downgraded}个升级`);
+                    if (newRated > 0) parts.push(`${newRated}个新增`);
+                    showToast(parts.length === 0 ? message + '无变化' : message + parts.join(', '), 'success');
+                    await loadRatings();
+                } else {
+                    throw new Error(data.message || '更新失败');
+                }
+            } catch (error) {
+                console.error('评级更新失败:', error);
+                showToast('评级更新失败: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+
+        async function showSymbolRatingDetail(symbol) {
+            try {
+                const response = await fetch(`/api/rating/symbol/${encodeURIComponent(symbol)}`);
+                const data = await response.json();
+                if (data.success) {
+                    const rating = data.current_rating;
+                    const stats = data.performance_stats;
+                    const potential = data.potential_change;
+                    const levelLabels = {0: 'Level 0 - 白名单', 1: 'Level 1 - 黑名单一级', 2: 'Level 2 - 黑名单二级', 3: 'Level 3 - 永久禁止'};
+                    const levelColors = {0: '#10b981', 1: '#f59e0b', 2: '#ef4444', 3: '#6b7280'};
+                    const overlay = document.createElement('div');
+                    overlay.className = 'modal-overlay';
+                    overlay.innerHTML = `<div class="modal-dialog" style="max-width: 550px;"><div class="modal-header" style="background: linear-gradient(135deg, ${levelColors[rating.level]}15 0%, transparent 100%);"><div class="modal-title"><div class="modal-icon" style="background: linear-gradient(135deg, ${levelColors[rating.level]}20 0%, ${levelColors[rating.level]}10 100%); border-color: ${levelColors[rating.level]}30; font-size: 24px;">${rating.level === 0 ? '✅' : rating.level === 3 ? '🚫' : '⚠️'}</div><div><div style="font-size: 18px; font-weight: 700;">${symbol}</div><div style="font-size: 13px; font-weight: 400; color: var(--text-secondary); margin-top: 4px;">${levelLabels[rating.level]}</div></div></div></div><div class="modal-body"><div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); margin-bottom: var(--spacing-md);"><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">交易次数</div><div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">${stats.total_trades}</div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">胜率</div><div style="font-size: 20px; font-weight: 700; color: ${stats.win_rate >= 0.6 ? 'var(--success-green)' : 'var(--error-red)'};">${(stats.win_rate * 100).toFixed(1)}%</div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">盈利金额</div><div style="font-size: 20px; font-weight: 700; color: var(--success-green);">$${stats.total_profit_amount.toFixed(2)}</div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">亏损金额</div><div style="font-size: 20px; font-weight: 700; color: var(--error-red);">$${stats.total_loss_amount.toFixed(2)}</div></div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">净盈亏</div><div style="font-size: 24px; font-weight: 700; color: ${stats.net_pnl >= 0 ? 'var(--success-green)' : 'var(--error-red)'};">$${stats.net_pnl.toFixed(2)}</div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Hard Stop Loss次数</div><div style="font-size: 18px; font-weight: 700; color: ${stats.hard_stop_loss_count > 0 ? 'var(--error-red)' : 'var(--text-primary)'};">${stats.hard_stop_loss_count}</div></div>${potential.would_change ? `<div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: linear-gradient(135deg, ${levelColors[potential.new_level]}15 0%, transparent 100%); border-radius: var(--radius-md); border-left: 3px solid ${levelColors[potential.new_level]};"><div style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;"><i class="bi bi-info-circle"></i> 潜在变化</div><div style="font-size: 13px; color: var(--text-secondary);">${potential.reason}</div></div>` : ''}</div><div class="modal-footer"><button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()"><i class="bi bi-x-lg"></i> 关闭</button></div></div>`;
+                    document.body.appendChild(overlay);
+                    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+                    const handleEsc = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handleEsc); } };
+                    document.addEventListener('keydown', handleEsc);
+                }
+            } catch (error) {
+                console.error('加载交易对详情失败:', error);
+                showToast('加载详情失败', 'error');
+            }
+        }
+
+        // 页面加载时初始化评级数据
+        if (typeof loadRatingConfig === 'function') {
+            loadRatingConfig();
+            loadRatings();
+        }
+        // ========== 评级管理功能结束 ==========
 </script>
 </body>
 </html>
