@@ -1472,6 +1472,28 @@
             return `$${num.toFixed(2)}`;
         }
 
+        // 格式化开仓原因
+        function formatEntryReason(reason) {
+            if (!reason) return '';
+
+            // 震荡市开仓原因格式化
+            if (reason.includes('[震荡市]')) {
+                let formatted = reason.replace('[震荡市]', '<span class="badge" style="background: var(--warning-yellow); color: var(--bg-primary); font-size: 11px; padding: 2px 6px; border-radius: 3px; margin-right: 6px;">震荡市</span>');
+
+                // 高亮关键信息
+                formatted = formatted.replace(/布林带下轨/g, '<strong style="color: var(--success-green);">布林带下轨</strong>');
+                formatted = formatted.replace(/布林带上轨/g, '<strong style="color: var(--danger-red);">布林带上轨</strong>');
+                formatted = formatted.replace(/RSI超卖/g, '<strong style="color: var(--success-green);">RSI超卖</strong>');
+                formatted = formatted.replace(/RSI超买/g, '<strong style="color: var(--danger-red);">RSI超买</strong>');
+                formatted = formatted.replace(/成交量放大/g, '<strong style="color: var(--primary-blue);">成交量放大</strong>');
+
+                return formatted;
+            }
+
+            // 其他开仓原因保持原样
+            return reason;
+        }
+
         // ========== 交易控制功能 ==========
         let currentTradingEnabled = true; // 当前交易状态
 
@@ -1962,7 +1984,7 @@
                                         </div>
                                         ${pos.entry_reason ? `
                                         <div class="text-sm" style="margin-bottom: 6px; color: var(--text-tertiary);">
-                                            <i class="bi bi-info-circle"></i> ${pos.entry_reason}
+                                            <i class="bi bi-info-circle"></i> ${formatEntryReason(pos.entry_reason)}
                                         </div>
                                         ` : ''}
                                         ${(pos.stop_loss_price !== null && pos.stop_loss_price !== undefined && pos.stop_loss_price > 0) || (pos.take_profit_price !== null && pos.take_profit_price !== undefined && pos.take_profit_price > 0) ? `
