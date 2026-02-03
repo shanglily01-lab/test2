@@ -95,6 +95,10 @@ class SymbolRatingManager:
 
         win_rate = result['wins'] / result['total_trades'] if result['total_trades'] > 0 else 0
 
+        # 安全转换float,避免None导致错误
+        def safe_float(val):
+            return float(val) if val is not None else 0.0
+
         return {
             'symbol': symbol,
             'total_trades': result['total_trades'],
@@ -102,9 +106,9 @@ class SymbolRatingManager:
             'losses': result['losses'],
             'win_rate': win_rate,
             'hard_stop_loss_count': result['hard_stop_loss_count'],
-            'total_loss_amount': float(result['total_loss']),
-            'total_profit_amount': float(result['total_profit']),
-            'net_pnl': float(result['total_pnl'])
+            'total_loss_amount': safe_float(result['total_loss']),
+            'total_profit_amount': safe_float(result['total_profit']),
+            'net_pnl': safe_float(result['total_pnl'])
         }
 
     def calculate_new_rating_level(self, stats: Dict, current_level: int) -> tuple:

@@ -10,12 +10,24 @@ from pydantic import BaseModel
 from typing import Optional, Dict, List
 import sys
 import os
+import math
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.optimization_config import OptimizationConfig
+
+
+def safe_float(value, default=0.0):
+    """安全转换float,避免inf和nan"""
+    try:
+        f = float(value)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return f
+    except (ValueError, TypeError):
+        return default
 
 router = APIRouter()
 
@@ -92,9 +104,9 @@ async def get_current_ratings():
                 "rating_level": level,
                 "reason": rating['reason'],
                 "hard_stop_loss_count": rating.get('hard_stop_loss_count', 0),
-                "total_loss_amount": float(rating.get('total_loss_amount', 0)),
-                "total_profit_amount": float(rating.get('total_profit_amount', 0)),
-                "win_rate": float(rating.get('win_rate', 0)),
+                "total_loss_amount": safe_float(rating.get('total_loss_amount', 0)),
+                "total_profit_amount": safe_float(rating.get('total_profit_amount', 0)),
+                "win_rate": safe_float(rating.get('win_rate', 0)),
                 "total_trades": rating.get('total_trades', 0),
                 "updated_at": rating.get('updated_at').isoformat() if rating.get('updated_at') else None
             })
