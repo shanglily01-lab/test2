@@ -1140,7 +1140,13 @@ class SmartTraderService:
             else:
                 logger.info(f"[ANTI-FOMO] {symbol} {side} 通过防追高检查: {filter_reason}")
 
-        # ========== 第二步：决定使用分批建仓还是一次性开仓 ==========
+        # ========== 第二步：提前检查黑名单（分批建仓也要检查）==========
+        rating_level = self.opt_config.get_symbol_rating_level(symbol)
+        if rating_level == 3:
+            logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
+            return False
+
+        # ========== 第三步：决定使用分批建仓还是一次性开仓 ==========
         # 检查是否启用分批建仓
         if self.smart_entry_executor and self.batch_entry_config.get('enabled'):
             # 检查是否在白名单中（如果白名单为空，则对所有币种启用）
@@ -1150,7 +1156,10 @@ class SmartTraderService:
             # 反转开仓不使用分批建仓（直接一次性开仓）
             is_reversal = 'reversal_from' in opp
 
-            if should_use_batch and not is_reversal:
+            # 震荡市策略不使用分批建仓（使用固定2%止损，与分批建仓的波动率止损不兼容）
+            is_range_strategy = strategy == 'bollinger_mean_reversion'
+
+            if should_use_batch and not is_reversal and not is_range_strategy:
                 logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓（后台异步执行）")
                 # 在后台异步执行分批建仓，不阻塞主循环
                 import asyncio
@@ -1210,13 +1219,8 @@ class SmartTraderService:
             if not is_reversal or 'original_margin' not in opp:
                 # 正常开仓流程
                 # 问题2优化: 使用3级评级制度替代简单黑名单
-                rating_level = self.opt_config.get_symbol_rating_level(symbol)
+                # 注意: rating_level已在函数开头检查过了
                 rating_config = self.opt_config.get_blacklist_config(rating_level)
-
-                # Level 3 = 永久禁止
-                if rating_level == 3:
-                    logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
-                    return False
 
                 # ========== 检查是否为震荡市策略 ==========
                 mode_config = None
