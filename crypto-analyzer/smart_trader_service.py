@@ -1374,7 +1374,8 @@ class SmartTraderService:
             # ========== 根据策略类型确定超时时间 ==========
             if strategy == 'bollinger_mean_reversion' and mode_config:
                 # 震荡市策略: 使用range_max_hold_hours (默认4小时)
-                base_timeout_minutes = mode_config.get('range_max_hold_hours', 4) * 60
+                range_max_hold_hours = int(mode_config.get('range_max_hold_hours', 4))  # 转换Decimal为int
+                base_timeout_minutes = range_max_hold_hours * 60
                 logger.info(f"[RANGE_TIMEOUT] {symbol} 震荡市最大持仓时间: {base_timeout_minutes}分钟")
             else:
                 # 趋势模式: 使用动态超时时间
@@ -2811,7 +2812,7 @@ class SmartTraderService:
                                 timeframe='15m'
                             )
 
-                            if signal and signal['score'] >= mode_config.get('range_min_score', 50):
+                            if signal and signal['score'] >= int(mode_config.get('range_min_score', 50)):
                                 opportunities.append({
                                     'symbol': signal['symbol'],
                                     'side': signal['signal'],
