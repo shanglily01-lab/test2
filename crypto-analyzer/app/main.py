@@ -726,6 +726,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 交易模式API路由
+try:
+    from app.api.trading_mode_api import router as trading_mode_router
+    app.include_router(trading_mode_router)
+    logger.info("✅ 交易模式API路由已注册（/api/trading-mode）")
+except Exception as e:
+    logger.warning(f"⚠️  交易模式API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # ==================== API路由 ====================
 
 @app.get("/")
