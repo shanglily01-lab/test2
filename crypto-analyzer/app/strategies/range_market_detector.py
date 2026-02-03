@@ -63,7 +63,7 @@ class RangeMarketDetector:
             # 获取历史K线数据
             cursor.execute("""
                 SELECT
-                    high, low, close, volume,
+                    high_price, low_price, close_price, volume,
                     open_time
                 FROM kline_data
                 WHERE symbol = %s
@@ -85,9 +85,9 @@ class RangeMarketDetector:
                 return None
 
             # 提取高低点
-            highs = np.array([float(k['high']) for k in klines])
-            lows = np.array([float(k['low']) for k in klines])
-            closes = np.array([float(k['close']) for k in klines])
+            highs = np.array([float(k['high_price']) for k in klines])
+            lows = np.array([float(k['low_price']) for k in klines])
+            closes = np.array([float(k['close_price']) for k in klines])
 
             # 计算关键价位
             recent_high = np.max(highs[-20:])  # 最近20根K线最高价

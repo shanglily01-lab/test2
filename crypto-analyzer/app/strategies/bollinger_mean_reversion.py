@@ -44,7 +44,7 @@ class BollingerMeanReversionStrategy:
             lookback = max(self.bb_period, self.rsi_period) + 50
             cursor.execute("""
                 SELECT
-                    open_time, close, high, low, volume
+                    open_time, close_price, high_price, low_price, volume
                 FROM kline_data
                 WHERE symbol = %s
                 AND timeframe = %s
@@ -64,9 +64,9 @@ class BollingerMeanReversionStrategy:
             klines = klines[::-1]
 
             # 提取收盘价
-            closes = np.array([float(k['close']) for k in klines])
-            highs = np.array([float(k['high']) for k in klines])
-            lows = np.array([float(k['low']) for k in klines])
+            closes = np.array([float(k['close_price']) for k in klines])
+            highs = np.array([float(k['high_price']) for k in klines])
+            lows = np.array([float(k['low_price']) for k in klines])
             volumes = np.array([float(k['volume']) for k in klines])
 
             # 计算布林带
