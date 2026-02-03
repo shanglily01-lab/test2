@@ -1332,8 +1332,8 @@
         // ========== 交易控制功能 ==========
         let currentTradingEnabled = true; // 当前交易状态
 
-        // 自定义确认对话框
-        function showConfirmDialog(message, onConfirm) {
+        // 自定义确认对话框 (用于交易控制)
+        function showTradingControlDialog(message, onConfirm) {
             const overlay = document.createElement('div');
             overlay.className = 'modal-overlay';
             overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000; animation: fadeIn 0.2s;';
@@ -1470,7 +1470,7 @@
                 '确定要启动U本位合约交易吗？\n\n系统将开始根据信号自动开仓。' :
                 '确定要停止U本位合约交易吗？\n\n系统将停止自动开仓，但不影响已有持仓。';
 
-            showConfirmDialog(confirmMsg, async () => {
+            showTradingControlDialog(confirmMsg, async () => {
                 try {
                     const response = await fetch('/api/trading-control/toggle', {
                         method: 'POST',
