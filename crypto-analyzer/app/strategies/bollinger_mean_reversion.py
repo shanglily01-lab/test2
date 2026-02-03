@@ -25,6 +25,11 @@ class BollingerMeanReversionStrategy:
         self.rsi_oversold = 30  # RSI超卖线
         self.rsi_overbought = 70  # RSI超买线
 
+        # 趋势过滤参数
+        self.ema_fast = 9    # 快速EMA周期
+        self.ema_slow = 26   # 慢速EMA周期
+        self.trend_strength_threshold = 0.5  # 趋势强度阈值(%)
+
     def calculate_indicators(self, symbol: str, timeframe: str = '15m') -> Optional[Dict]:
         """
         计算技术指标
@@ -75,17 +80,36 @@ class BollingerMeanReversionStrategy:
             # 计算RSI
             rsi = self._calculate_rsi(closes)
 
+            # 计算EMA (用于趋势判断)
+            ema_fast = self._calculate_ema(closes, self.ema_fast)
+            ema_slow = self._calculate_ema(closes, self.ema_slow)
+
             # 当前值
             current_price = closes[-1]
             current_rsi = rsi[-1]
             current_volume = volumes[-1]
             avg_volume = np.mean(volumes[-20:])
+            current_ema_fast = ema_fast[-1]
+            current_ema_slow = ema_slow[-1]
 
             # 计算价格相对于布林带的位置 (0-1之间)
             bb_position = (current_price - bb_lower[-1]) / (bb_upper[-1] - bb_lower[-1])
 
             # 判断成交量是否放大
             volume_surge = current_volume > avg_volume * 1.2
+
+            # === 趋势判断 ===
+            # 1. EMA趋势方向
+            ema_diff_pct = ((current_ema_fast - current_ema_slow) / current_ema_slow) * 100
+
+            # 2. 最近N根K线的连续性
+            recent_closes = closes[-5:]  # 最近5根K线
+            uptrend_bars = sum(1 for i in range(1, len(recent_closes)) if recent_closes[i] > recent_closes[i-1])
+            downtrend_bars = sum(1 for i in range(1, len(recent_closes)) if recent_closes[i] < recent_closes[i-1])
+
+            # 3. 判断是否有明显趋势
+            has_uptrend = (ema_diff_pct > self.trend_strength_threshold) and (uptrend_bars >= 3)
+            has_downtrend = (ema_diff_pct < -self.trend_strength_threshold) and (downtrend_bars >= 3)
 
             return {
                 'symbol': symbol,
@@ -97,7 +121,14 @@ class BollingerMeanReversionStrategy:
                 'rsi': current_rsi,
                 'volume_surge': volume_surge,
                 'avg_volume': avg_volume,
-                'current_volume': current_volume
+                'current_volume': current_volume,
+                'ema_fast': current_ema_fast,
+                'ema_slow': current_ema_slow,
+                'ema_diff_pct': ema_diff_pct,
+                'has_uptrend': has_uptrend,
+                'has_downtrend': has_downtrend,
+                'uptrend_bars': uptrend_bars,
+                'downtrend_bars': downtrend_bars
             }
 
         except Exception as e:
@@ -143,6 +174,26 @@ class BollingerMeanReversionStrategy:
 
         return rsi
 
+    def _calculate_ema(self, closes: np.ndarray, period: int) -> np.ndarray:
+        """
+        计算指数移动平均线(EMA)
+
+        Args:
+            closes: 收盘价数组
+            period: EMA周期
+
+        Returns:
+            EMA数组
+        """
+        ema = np.zeros_like(closes)
+        ema[0] = closes[0]
+        multiplier = 2.0 / (period + 1)
+
+        for i in range(1, len(closes)):
+            ema[i] = (closes[i] * multiplier) + (ema[i-1] * (1 - multiplier))
+
+        return ema
+
     def generate_signal(
         self,
         symbol: str,
@@ -175,6 +226,12 @@ class BollingerMeanReversionStrategy:
         # === 做多信号: 价格触及下轨 + RSI超卖 ===
         if indicators['bb_position'] < 0.15:  # 接近或突破下轨
             if indicators['rsi'] < self.rsi_oversold:  # RSI超卖
+
+                # ⚠️ 趋势过滤: 不在明显下跌趋势中做多
+                if indicators['has_downtrend']:
+                    logger.debug(f"[TREND_FILTER] {symbol} LONG被过滤: 存在下跌趋势 (EMA差:{indicators['ema_diff_pct']:.2f}%, 连续阴线:{indicators['downtrend_bars']})")
+                    return None
+
                 signal = 'LONG'
                 score = 60
                 reason_parts.append('价格触及布林带下轨')
@@ -193,6 +250,12 @@ class BollingerMeanReversionStrategy:
         # === 做空信号: 价格触及上轨 + RSI超买 ===
         elif indicators['bb_position'] > 0.85:  # 接近或突破上轨
             if indicators['rsi'] > self.rsi_overbought:  # RSI超买
+
+                # ⚠️ 趋势过滤: 不在明显上涨趋势中做空
+                if indicators['has_uptrend']:
+                    logger.debug(f"[TREND_FILTER] {symbol} SHORT被过滤: 存在上涨趋势 (EMA差:{indicators['ema_diff_pct']:.2f}%, 连续阳线:{indicators['uptrend_bars']})")
+                    return None
+
                 signal = 'SHORT'
                 score = 60
                 reason_parts.append('价格触及布林带上轨')
