@@ -108,7 +108,7 @@ async def get_current_ratings():
             grouped[f"level{level}"].append({
                 "symbol": rating['symbol'],
                 "rating_level": level,
-                "reason": rating['reason'],
+                "reason": rating.get('level_change_reason', '') or '',
                 "hard_stop_loss_count": rating.get('hard_stop_loss_count', 0),
                 "total_loss_amount": safe_float(rating.get('total_loss_amount', 0)),
                 "total_profit_amount": safe_float(rating.get('total_profit_amount', 0)),
@@ -210,7 +210,7 @@ async def get_symbol_rating(symbol: str, days: int = 7):
             "symbol": symbol,
             "current_rating": {
                 "level": current_level,
-                "reason": current_rating['reason'] if current_rating else "无评级",
+                "reason": current_rating.get('level_change_reason', '无评级') if current_rating else "无评级",
                 "updated_at": current_rating['updated_at'].isoformat() if current_rating and current_rating.get('updated_at') else None
             },
             "performance_stats": stats,

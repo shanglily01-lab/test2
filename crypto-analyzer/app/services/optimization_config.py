@@ -5,7 +5,7 @@
 支持所有4个优化问题的参数读取和自动调整
 """
 
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from datetime import datetime, timedelta
 from loguru import logger
 import pymysql
@@ -316,6 +316,26 @@ class OptimizationConfig:
         cursor.close()
 
         return result
+
+    def get_all_symbol_ratings(self) -> List[Dict[str, Any]]:
+        """
+        获取所有交易对的评级信息
+
+        Returns:
+            评级信息列表
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM trading_symbol_rating
+            ORDER BY rating_level DESC, updated_at DESC
+        """)
+
+        results = cursor.fetchall()
+        cursor.close()
+
+        return results if results else []
 
     def get_symbol_rating_level(self, symbol: str) -> int:
         """
