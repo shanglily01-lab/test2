@@ -273,6 +273,20 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
     if entry_reason:
         reason = entry_reason.strip()
 
+        # 震荡市策略
+        if '[震荡市]' in reason or '震荡市' in reason:
+            # 提取关键信息
+            if '布林带下轨' in reason and 'RSI超卖' in reason:
+                return 'range_bollinger_lower_rsi', '震荡市-布林下轨+RSI超卖'
+            elif '布林带上轨' in reason and 'RSI超买' in reason:
+                return 'range_bollinger_upper_rsi', '震荡市-布林上轨+RSI超买'
+            elif '布林带下轨' in reason:
+                return 'range_bollinger_lower', '震荡市-布林下轨反弹'
+            elif '布林带上轨' in reason:
+                return 'range_bollinger_upper', '震荡市-布林上轨反弹'
+            else:
+                return 'range_trading', '震荡市策略'
+
         if '金叉' in reason:
             return 'golden_cross', '金叉信号'
         if '死叉' in reason:
