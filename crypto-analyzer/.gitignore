@@ -70,3 +70,7 @@ debug_*.py
 ema_alerts.txt
 !requirements.txt
 !table_schemas.txt
+
+# 心理学手册（与交易无关）
+心理学手册/
+心理学深度解析手册.md
