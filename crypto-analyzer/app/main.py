@@ -736,6 +736,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 评级管理API路由
+try:
+    from app.api.rating_api import router as rating_router
+    app.include_router(rating_router)
+    logger.info("✅ 评级管理API路由已注册（/api/rating）")
+except Exception as e:
+    logger.warning(f"⚠️  评级管理API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # ==================== API路由 ====================
 
 @app.get("/")
