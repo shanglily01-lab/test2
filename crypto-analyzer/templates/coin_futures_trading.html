@@ -3514,47 +3514,140 @@
                 'auto': '根据Big4信号自动在趋势和震荡模式间切换'
             };
 
-            const confirmMsg = `确定要切换到${modeLabels[newMode]}吗?\n\n${modeDescriptions[newMode]}`;
+            const modeIcons = {
+                'trend': '📈',
+                'range': '↔️',
+                'auto': '🤖'
+            };
 
-            const confirmed = confirm(confirmMsg);
-            if (!confirmed) {
+            const modeColors = {
+                'trend': '#3b82f6',
+                'range': '#f59e0b',
+                'auto': '#8b5cf6'
+            };
+
+            // 使用自定义模态框替代原生confirm
+            showModeSwitchDialog(newMode, modeLabels[newMode], modeDescriptions[newMode], modeIcons[newMode], modeColors[newMode], async () => {
+                try {
+                    const response = await fetch('/api/trading-mode/switch', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            account_id: 3,
+                            trading_type: 'coin_futures',
+                            new_mode: newMode,
+                            trigger: 'manual',
+                            reason: `前端手动切换到${modeLabels[newMode]}`,
+                            switched_by: 'web_user'
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        currentTradingModeType = newMode;
+                        updateModeUI(newMode);
+                        showToast(`已切换到${modeLabels[newMode]}`, 'success');
+                    } else {
+                        throw new Error(data.message || '切换失败');
+                    }
+                } catch (error) {
+                    console.error('切换交易模式失败:', error);
+                    showToast('模式切换失败: ' + error.message, 'error');
+                    // 恢复原值
+                    select.value = currentTradingModeType;
+                    updateModeUI(currentTradingModeType);
+                }
+            }, () => {
                 // 用户取消,恢复原值
                 select.value = currentTradingModeType;
-                return;
-            }
+            });
+        }
 
-            try {
-                const response = await fetch('/api/trading-mode/switch', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        account_id: 3,
-                        trading_type: 'coin_futures',
-                        new_mode: newMode,
-                        trigger: 'manual',
-                        reason: `前端手动切换到${modeLabels[newMode]}`,
-                        switched_by: 'web_user'
-                    })
-                });
+        // 显示模式切换确认对话框
+        function showModeSwitchDialog(mode, modeLabel, description, icon, color, onConfirm, onCancel) {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.innerHTML = `
+                <div class="modal-dialog" style="max-width: 450px;">
+                    <div class="modal-header" style="background: linear-gradient(135deg, ${color}15 0%, transparent 100%);">
+                        <div class="modal-title">
+                            <div class="modal-icon" style="background: linear-gradient(135deg, ${color}20 0%, ${color}10 100%); border-color: ${color}30; font-size: 24px;">
+                                ${icon}
+                            </div>
+                            <div>
+                                <div style="font-size: 18px; font-weight: 700;">切换交易模式</div>
+                                <div style="font-size: 13px; font-weight: 400; color: var(--text-secondary); margin-top: 4px;">确认要切换到 ${modeLabel} 吗?</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-body">
+                        <div style="background: var(--bg-secondary); border-radius: var(--radius-lg); padding: var(--spacing-lg); border-left: 3px solid ${color};">
+                            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                <i class="bi bi-info-circle" style="color: ${color}; font-size: 16px;"></i>
+                                <span style="font-weight: 600; color: var(--text-primary);">模式说明</span>
+                            </div>
+                            <div style="color: var(--text-secondary); line-height: 1.6;">
+                                ${description}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" id="modeSwitchCancel">
+                            <i class="bi bi-x-lg"></i> 取消
+                        </button>
+                        <button class="btn btn-primary" id="modeSwitchConfirm" style="background: ${color}; border-color: ${color};">
+                            <i class="bi bi-check-lg"></i> 确认切换
+                        </button>
+                    </div>
+                </div>
+            `;
 
-                const data = await response.json();
+            document.body.appendChild(overlay);
 
-                if (data.success) {
-                    currentTradingModeType = newMode;
-                    updateModeUI(newMode);
-                    showToast(`✅ 已切换到${modeLabels[newMode]}`, 'success');
-                } else {
-                    throw new Error(data.message || '切换失败');
+            // 绑定按钮事件
+            const cancelBtn = overlay.querySelector('#modeSwitchCancel');
+            const confirmBtn = overlay.querySelector('#modeSwitchConfirm');
+
+            const closeDialog = () => {
+                overlay.remove();
+                document.removeEventListener('keydown', handleEsc);
+            };
+
+            cancelBtn.addEventListener('click', () => {
+                closeDialog();
+                if (onCancel) onCancel();
+            });
+
+            confirmBtn.addEventListener('click', () => {
+                closeDialog();
+                if (onConfirm) onConfirm();
+            });
+
+            // 点击遮罩层关闭
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    closeDialog();
+                    if (onCancel) onCancel();
                 }
-            } catch (error) {
-                console.error('切换交易模式失败:', error);
-                showToast('❌ 模式切换失败: ' + error.message, 'error');
-                // 恢复原值
-                select.value = currentTradingModeType;
-                updateModeUI(currentTradingModeType);
-            }
+            });
+
+            // ESC键关闭
+            const handleEsc = (e) => {
+                if (e.key === 'Escape') {
+                    closeDialog();
+                    if (onCancel) onCancel();
+                }
+            };
+            document.addEventListener('keydown', handleEsc);
+
+            // 动画效果
+            const dialog = overlay.querySelector('.modal-dialog');
+            setTimeout(() => {
+                dialog.style.animation = 'slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
+            }, 10);
         }
         // ========== 交易模式功能结束 ==========
 </script>
