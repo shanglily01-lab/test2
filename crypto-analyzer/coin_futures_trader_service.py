@@ -522,10 +522,7 @@ class CoinFuturesDecisionBrain:
                     can_breakout = False
                     breakout_warnings.append(f"连续{recent_5d_gains}天上涨")
 
-                # 过滤3: 检查30天趋势是否明确看涨
-                bullish_1d_count = sum(1 for k in klines_1d[-30:] if k['close'] > k['open'])
-                if bullish_1d_count < 18:  # 30天内阳线<18根
-                    breakout_warnings.append(f"1D趋势不明确(阳{bullish_1d_count}/30)")
+                # 移除过滤3: Big4市场趋势判断已足够,1D趋势检查多余且过于严格
 
                 # position_high时有强力量能支撑,且通过过滤,可以追涨做多
                 if can_breakout:
