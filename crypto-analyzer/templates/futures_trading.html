@@ -74,6 +74,16 @@
         .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
         .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
         .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
+        /* 交易模式选择器样式 */
+        .mode-selector { display: flex; align-items: center; gap: var(--spacing-sm); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-sm) var(--spacing-md); }
+        .mode-selector label { font-size: 12px; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
+        .mode-selector select { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: var(--spacing-sm) var(--spacing-md); font-size: 13px; cursor: pointer; transition: all var(--transition-base); }
+        .mode-selector select:hover { border-color: var(--primary-blue); }
+        .mode-selector select:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(43, 111, 237, 0.1); }
+        .mode-indicator { display: inline-flex; align-items: center; gap: var(--spacing-xs); padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
+        .mode-indicator.trend { background: rgba(43, 111, 237, 0.15); color: var(--primary-blue); border: 1px solid rgba(43, 111, 237, 0.3); }
+        .mode-indicator.range { background: rgba(245, 158, 11, 0.15); color: var(--warning-yellow); border: 1px solid rgba(245, 158, 11, 0.3); }
+        .mode-indicator.auto { background: rgba(16, 185, 129, 0.15); color: var(--success-green); border: 1px solid rgba(16, 185, 129, 0.3); }
         .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
         .badge-success { background: var(--success-green-bg); color: var(--success-green); }
         .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
@@ -399,6 +409,17 @@
                     </div>
                 </div>
                 <div class="header-actions">
+                    <!-- 交易模式选择器 -->
+                    <div class="mode-selector">
+                        <label><i class="bi bi-arrow-left-right"></i> 模式</label>
+                        <select id="tradingModeSelect" onchange="switchTradingMode()">
+                            <option value="trend">趋势模式</option>
+                            <option value="range">震荡模式</option>
+                            <option value="auto">自动模式</option>
+                        </select>
+                        <span id="modeIndicator" class="mode-indicator trend">趋势</span>
+                    </div>
+
                     <button id="tradingToggleBtn" class="btn btn-success" onclick="toggleTrading()">
                         <i class="bi bi-pause-circle"></i> <span id="tradingStatusText">停止交易</span>
                     </button>
@@ -1502,6 +1523,108 @@
             });
         }
         // ========== 交易控制功能结束 ==========
+
+        // ========== 交易模式功能 ==========
+        let currentTradingModeType = 'trend'; // trend / range / auto
+
+        // 加载交易模式状态
+        async function loadTradingMode() {
+            try {
+                const response = await fetch('/api/trading-mode/status/2/usdt_futures');
+                const data = await response.json();
+                currentTradingModeType = data.mode_type;
+                updateModeUI(data.mode_type);
+            } catch (error) {
+                console.error('加载交易模式失败:', error);
+                // 默认趋势模式
+                currentTradingModeType = 'trend';
+                updateModeUI('trend');
+            }
+        }
+
+        // 更新模式UI
+        function updateModeUI(mode) {
+            const select = document.getElementById('tradingModeSelect');
+            const indicator = document.getElementById('modeIndicator');
+
+            if (select) select.value = mode;
+
+            const modeLabels = {
+                'trend': '趋势',
+                'range': '震荡',
+                'auto': '自动'
+            };
+
+            if (indicator) {
+                indicator.textContent = modeLabels[mode] || '未知';
+                indicator.className = `mode-indicator ${mode}`;
+            }
+        }
+
+        // 切换交易模式
+        async function switchTradingMode() {
+            const select = document.getElementById('tradingModeSelect');
+            const newMode = select.value;
+
+            if (newMode === currentTradingModeType) {
+                return; // 相同模式,无需切换
+            }
+
+            const modeLabels = {
+                'trend': '趋势模式',
+                'range': '震荡模式',
+                'auto': '自动模式'
+            };
+
+            const modeDescriptions = {
+                'trend': '适用于明确趋势行情,追随趋势方向交易',
+                'range': '适用于震荡行情,在支撑阻力区间内高抛低吸',
+                'auto': '根据Big4信号自动在趋势和震荡模式间切换'
+            };
+
+            const confirmMsg = `确定要切换到${modeLabels[newMode]}吗?\n\n${modeDescriptions[newMode]}`;
+
+            const confirmed = confirm(confirmMsg);
+            if (!confirmed) {
+                // 用户取消,恢复原值
+                select.value = currentTradingModeType;
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/trading-mode/switch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        account_id: 2,
+                        trading_type: 'usdt_futures',
+                        new_mode: newMode,
+                        trigger: 'manual',
+                        reason: `前端手动切换到${modeLabels[newMode]}`,
+                        switched_by: 'web_user'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentTradingModeType = newMode;
+                    updateModeUI(newMode);
+                    showToast(`✅ 已切换到${modeLabels[newMode]}`, 'success');
+                } else {
+                    throw new Error(data.message || '切换失败');
+                }
+            } catch (error) {
+                console.error('切换交易模式失败:', error);
+                showToast('❌ 模式切换失败: ' + error.message, 'error');
+                // 恢复原值
+                select.value = currentTradingModeType;
+                updateModeUI(currentTradingModeType);
+            }
+        }
+        // ========== 交易模式功能结束 ==========
 
 
         // 加载所有数据
@@ -3360,6 +3483,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadSymbols();
             loadTradingStatus(); // 加载交易控制状态
+            loadTradingMode(); // 加载交易模式状态
 
             // 先加载数据（只加载一次，不自动刷新）
             loadData().then(() => {
