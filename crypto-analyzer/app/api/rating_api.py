@@ -60,11 +60,17 @@ async def get_rating_config():
         for level in [1, 2, 3]:
             trigger = opt_config.get_blacklist_trigger_config(level)
             blacklist_cfg = opt_config.get_blacklist_config(level)
+
+            # Level 3的reversal_threshold是inf,需要特殊处理
+            reversal_threshold = blacklist_cfg['reversal_threshold']
+            if level == 3:
+                reversal_threshold = 999999  # 用一个大数字代替inf
+
             trigger_configs[f"level{level}"] = {
                 "trigger_stop_loss_count": trigger['stop_loss_count'],
                 "trigger_loss_amount": trigger['loss_amount'],
-                "margin_multiplier": blacklist_cfg['margin_multiplier'],
-                "reversal_threshold": blacklist_cfg['reversal_threshold']
+                "margin_multiplier": safe_float(blacklist_cfg['margin_multiplier']),
+                "reversal_threshold": safe_float(reversal_threshold)
             }
 
         return {
