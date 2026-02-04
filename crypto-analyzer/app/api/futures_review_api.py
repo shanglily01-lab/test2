@@ -201,9 +201,19 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
 
     优先使用 entry_signal_type 字段，如果为空则解析 entry_reason
     """
-    # 优先使用 entry_signal_type
-    if entry_signal_type:
+    # 优先使用 entry_signal_type (跳过 "unknown" 字符串)
+    if entry_signal_type and entry_signal_type.strip().lower() != 'unknown':
         signal_type = entry_signal_type.strip()
+
+        # 处理震荡市信号 (RANGE_range_trading, RANGE_unknown 等)
+        if signal_type.startswith('RANGE_'):
+            range_subtype = signal_type.replace('RANGE_', '')
+            if range_subtype == 'range_trading':
+                return 'range_trading', '震荡市策略'
+            elif range_subtype == 'unknown':
+                return 'range_unknown', '震荡市策略(旧格式)'
+            else:
+                return signal_type, f'震荡市-{range_subtype}'
 
         # 处理反转信号
         if signal_type.startswith('REVERSAL_'):
@@ -213,6 +223,19 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
                 return 'reversal_bottom', '底部反转做多'
             else:
                 return 'reversal', '反转信号'
+
+        # 处理投资建议信号 (RECOMMENDATION_强烈买入, RECOMMENDATION_买入 等)
+        if signal_type.startswith('RECOMMENDATION_'):
+            rec_type = signal_type.replace('RECOMMENDATION_', '')
+            rec_map = {
+                '强烈买入': '强烈看多',
+                '买入': '看多',
+                '强烈卖出': '强烈看空',
+                '卖出': '看空',
+                '持有': '观望'
+            }
+            display_name = rec_map.get(rec_type, rec_type)
+            return signal_type, f'投资建议({display_name})'
 
         # 信号名称映射(用于单信号和组合)
         signal_map = {

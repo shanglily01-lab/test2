@@ -239,6 +239,10 @@ class AutoFuturesTrader:
         logger.info(f"   Quantity: {quantity}, Leverage: {leverage}x")
         logger.info(f"   Stop-loss: {stop_loss_pct}%, Take-profit: {take_profit_pct}%")
 
+        # 构建开仓信号类型和原因
+        entry_signal_type = f"RECOMMENDATION_{rec_type}"  # e.g., RECOMMENDATION_强烈买入
+        entry_reason = recommendation.get('reasoning', '') or f"{rec_type} (置信度: {confidence:.1f}%)"
+
         result = self.engine.open_position(
             account_id=self.account_id,
             symbol=symbol,
@@ -247,7 +251,9 @@ class AutoFuturesTrader:
             leverage=leverage,
             stop_loss_pct=stop_loss_pct,
             take_profit_pct=take_profit_pct,
-            source='auto_signal'
+            source='auto_signal',
+            entry_signal_type=entry_signal_type,
+            entry_reason=entry_reason
         )
 
         if result['success']:

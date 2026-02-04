@@ -1350,14 +1350,18 @@ class SmartTraderService:
                 sorted_signals = sorted(signal_components.keys())
                 signal_combination_key = " + ".join(sorted_signals)
             else:
-                signal_combination_key = "unknown"
+                # 如果是震荡市策略但缺少signal_components（兼容旧版本）
+                if strategy == 'bollinger_mean_reversion':
+                    signal_combination_key = "range_trading"
+                else:
+                    signal_combination_key = "unknown"
 
             # 检查是否为反转信号
             if is_reversal:
                 signal_combination_key = f"REVERSAL_{opp.get('reversal_from', 'unknown')}"
 
-            # 震荡市策略特殊标记
-            if strategy == 'bollinger_mean_reversion':
+            # 震荡市策略特殊标记（如果还没有RANGE前缀）
+            if strategy == 'bollinger_mean_reversion' and not signal_combination_key.startswith('RANGE_'):
                 signal_combination_key = f"RANGE_{signal_combination_key}"
 
             logger.info(f"[SIGNAL_COMBO] {symbol} {side} 信号组合: {signal_combination_key} (评分: {entry_score}) 策略: {strategy}")
@@ -2817,7 +2821,8 @@ class SmartTraderService:
                                     'strategy': 'bollinger_mean_reversion',
                                     'reason': signal['reason'],
                                     'take_profit_price': signal.get('take_profit_price'),
-                                    'stop_loss_price': signal.get('stop_loss_price')
+                                    'stop_loss_price': signal.get('stop_loss_price'),
+                                    'signal_components': {'range_trading': signal['score']}  # 添加信号组件标识
                                 })
                                 logger.info(f"[RANGE-SIGNAL] {symbol} {signal['signal']} 分数:{signal['score']} | {signal['reason']}")
                         except Exception as e:
@@ -2889,6 +2894,25 @@ class SmartTraderService:
                         logger.error(f"[MODE-CHECK-ERROR] 模式检查失败: {e}")
                         current_mode = 'trend'  # 默认趋势模式
                     # ========== 模式检查结束 ==========
+
+                    # ========== 模式筛选: 只接受匹配当前模式的信号 ==========
+                    signal_type = opp.get('signal_type', '')
+
+                    if current_mode == 'trend':
+                        # 趋势模式: 只接受TREND类型信号
+                        if 'TREND' not in signal_type:
+                            logger.info(f"[MODE-FILTER] {symbol} 当前trend模式,跳过非TREND信号 (信号类型: {signal_type[:40]})")
+                            continue
+                        logger.info(f"[MODE-MATCH] {symbol} TREND信号匹配当前模式")
+
+                    elif current_mode == 'range':
+                        # 震荡模式: 只接受RANGE类型信号
+                        if 'RANGE' not in signal_type:
+                            logger.info(f"[MODE-FILTER] {symbol} 当前range模式,跳过非RANGE信号 (信号类型: {signal_type[:40]})")
+                            continue
+                        logger.info(f"[MODE-MATCH] {symbol} RANGE信号匹配当前模式")
+
+                    # ========== 模式筛选结束 ==========
 
                     # Big4 趋势检测 - 应用到所有币种
                     try:
