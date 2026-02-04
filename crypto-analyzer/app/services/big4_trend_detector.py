@@ -210,10 +210,13 @@ class Big4TrendDetector:
                 power = price_change_pct * 0.8 + volume_normalized * 0.2
                 bearish_power += power
 
-        # 判断主导方向
-        if bullish_count > bearish_count and bullish_power > bearish_power:
+        # 判断主导方向 (更严格的标准)
+        # 上涨趋势: 阳线 >= 17根 (30根K线中占57%)
+        # 下跌趋势: 阴线 >= 17根 (30根K线中占57%)
+        # 其他情况: 震荡行情
+        if bullish_count >= 17:
             dominant = 'BULL'
-        elif bearish_count > bullish_count and bearish_power > bullish_power:
+        elif bearish_count >= 17:
             dominant = 'BEAR'
         else:
             dominant = 'NEUTRAL'

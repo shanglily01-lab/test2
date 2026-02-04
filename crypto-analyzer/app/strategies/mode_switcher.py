@@ -167,10 +167,7 @@ class TradingModeSwitcher:
         if not current_config:
             return None
 
-        # 只有设置为auto模式才自动切换
-        if current_config['mode_type'] != 'auto':
-            return None
-
+        # 只有启用自动切换才进行检查
         if not current_config['auto_switch_enabled']:
             return None
 
@@ -180,6 +177,7 @@ class TradingModeSwitcher:
         # 趋势市判断: BULLISH或BEARISH且强度>=60
         is_trending = (big4_signal in ['BULLISH', 'BEARISH'] and big4_strength >= 60)
 
+        # mode_type存储当前实际运行的模式 ('trend' 或 'range')
         current_mode = current_config['mode_type']
 
         if is_ranging and current_mode != 'range':
