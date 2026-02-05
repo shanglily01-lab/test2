@@ -859,7 +859,9 @@ class SmartTraderService:
                 self.last_big4_detection_time = now
                 logger.info(f"🔱 Big4趋势已更新缓存 | {self.cached_big4_result['overall_signal']} (强度: {self.cached_big4_result['signal_strength']:.0f})")
             except Exception as e:
+                import traceback
                 logger.error(f"❌ Big4趋势检测失败: {e}")
+                logger.error(f"完整错误堆栈:\n{traceback.format_exc()}")
                 # 检测失败时，如果有旧缓存就继续用，否则返回空结果
                 if self.cached_big4_result is None:
                     return {
