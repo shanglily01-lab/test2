@@ -263,21 +263,22 @@ class CoinFuturesDecisionBrain:
             else:
                 position_pct = 50  # 无波动时默认中间位置
 
-            # 做多防追高: 不在高于80%位置开多
-            if side == 'LONG' and position_pct > 80:
-                return False, f"防追高-价格位于24H区间{position_pct:.1f}%位置,距最高仅{(high_24h-current_price)/current_price*100:.2f}%"
+            # 防FOMO过滤器已全部禁用（用户要求：市场本来就是要追涨杀跌的）
+            # 做多防追高: 已禁用
+            # if side == 'LONG' and position_pct > 80:
+            #     return False, f"防追高-价格位于24H区间{position_pct:.1f}%位置,距最高仅{(high_24h-current_price)/current_price*100:.2f}%"
 
-            # 做空防杀跌: 不在低于20%位置开空
-            if side == 'SHORT' and position_pct < 20:
-                return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%位置,距最低仅{(current_price-low_24h)/current_price*100:.2f}%"
+            # 做空防杀跌: 已禁用
+            # if side == 'SHORT' and position_pct < 20:
+            #     return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%位置,距最低仅{(current_price-low_24h)/current_price*100:.2f}%"
 
-            # 额外检查: 24H大涨且在高位 → 更严格
-            if side == 'LONG' and change_24h > 15 and position_pct > 70:
-                return False, f"防追高-24H涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
+            # 额外检查: 24H大涨且在高位 → 已禁用
+            # if side == 'LONG' and change_24h > 15 and position_pct > 70:
+            #     return False, f"防追高-24H涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
 
-            # 额外检查: 24H大跌且在低位 → 更严格
-            if side == 'SHORT' and change_24h < -15 and position_pct < 30:
-                return False, f"防杀跌-24H跌{change_24h:+.2f}%且位于{position_pct:.1f}%低位"
+            # 额外检查: 24H大跌且在低位 → 已禁用
+            # if side == 'SHORT' and change_24h < -15 and position_pct < 30:
+            #     return False, f"防杀跌-24H跌{change_24h:+.2f}%且位于{position_pct:.1f}%低位"
 
             return True, f"位置{position_pct:.1f}%,24H{change_24h:+.2f}%"
 
@@ -1302,6 +1303,9 @@ class CoinFuturesTraderService:
             # 检查是否为反转信号
             if is_reversal:
                 signal_combination_key = f"REVERSAL_{opp.get('reversal_from', 'unknown')}"
+            # 趋势策略特殊标记：如果不是REVERSAL，就是TREND策略
+            elif not signal_combination_key.startswith(('REVERSAL_', 'TREND_')):
+                signal_combination_key = f"TREND_{signal_combination_key}"
 
             logger.info(f"[SIGNAL_COMBO] {symbol} {side} 信号组合: {signal_combination_key} (评分: {entry_score})")
 
