@@ -81,7 +81,7 @@ class CoinFuturesDecisionBrain:
                 SELECT symbol, rating_level, margin_multiplier
                 FROM trading_symbol_rating
                 WHERE rating_level >= 1
-                ORDER BY rating_level DESC, updated_at DESC
+                ORDER BY rating_level DESC, created_at DESC
             """)
             blacklist_rows = cursor.fetchall()
             # Level 3 完全禁止交易
