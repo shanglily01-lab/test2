@@ -268,13 +268,13 @@ signals:
     long:
       min_holding_minutes: 60
       position_size_multiplier: 1.0
-      stop_loss_pct: 0.03
-      take_profit_pct: 0.02
+      stop_loss_pct: 0.02
+      take_profit_pct: 0.03
     short:
       min_holding_minutes: 60
       position_size_multiplier: 1.0
-      stop_loss_pct: 0.03
-      take_profit_pct: 0.02
+      stop_loss_pct: 0.02
+      take_profit_pct: 0.03
   batch_entry:
     batch_ratios:
     - 0.3
@@ -311,12 +311,12 @@ signals:
   smart_exit:
     enabled: true
     extension_minutes: 30
-    high_profit_drawback: 0.5       # 高盈利(>3%)回撤50%止盈
+    high_profit_drawback: 0.1       # 高盈利(>3%)回撤10%止盈
     high_profit_threshold: 3.0      # 高盈利阈值3%
     low_profit_target: 1.0          # 低盈利目标1%
     micro_loss_threshold: -0.5      # 微亏损-0.5%
-    mid_profit_drawback: 0.5        # 🔥优化: 中等盈利(>2%)回撤50%止盈(原0.4)
-    mid_profit_threshold: 2.0       # 🔥优化: 中等盈利阈值降至2%(原1.0),更早启用trailing stop
+    mid_profit_drawback: 0.2        # 中等盈利(>2%)回撤20%止盈
+    mid_profit_threshold: 2.0       # 中等盈利阈值2%
   weights:
     news: 0.3
     social: 0.1
