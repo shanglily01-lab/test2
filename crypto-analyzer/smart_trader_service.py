@@ -2895,22 +2895,20 @@ class SmartTraderService:
                         current_mode = 'trend'  # 默认趋势模式
                     # ========== 模式检查结束 ==========
 
-                    # ========== 模式筛选: 只接受匹配当前模式的信号 ==========
-                    signal_type = opp.get('signal_type', '')
+                    # ========== 模式筛选: TREND模式接受所有brain.scan_all()的信号 ==========
+                    # brain.scan_all()返回的信号就是趋势策略信号，不需要额外检查
+                    # RANGE模式的信号已经在2802行单独生成，带有'strategy': 'bollinger_mean_reversion'标记
 
-                    if current_mode == 'trend':
-                        # 趋势模式: 只接受TREND类型信号
-                        if 'TREND' not in signal_type:
-                            logger.info(f"[MODE-FILTER] {symbol} 当前trend模式,跳过非TREND信号 (信号类型: {signal_type[:40]})")
-                            continue
-                        logger.info(f"[MODE-MATCH] {symbol} TREND信号匹配当前模式")
-
-                    elif current_mode == 'range':
-                        # 震荡模式: 只接受RANGE类型信号
-                        if 'RANGE' not in signal_type:
-                            logger.info(f"[MODE-FILTER] {symbol} 当前range模式,跳过非RANGE信号 (信号类型: {signal_type[:40]})")
+                    # 只检查RANGE模式的信号是否匹配
+                    if current_mode == 'range':
+                        # 如果当前是range模式，但信号不是从bollinger生成的，跳过
+                        if opp.get('strategy') != 'bollinger_mean_reversion':
+                            logger.info(f"[MODE-FILTER] {symbol} 当前range模式,跳过非range策略信号")
                             continue
                         logger.info(f"[MODE-MATCH] {symbol} RANGE信号匹配当前模式")
+                    elif current_mode == 'trend':
+                        # TREND模式：接受所有brain.scan_all()的信号（这些就是趋势信号）
+                        logger.info(f"[MODE-MATCH] {symbol} TREND模式,使用brain.scan_all()信号")
 
                     # ========== 模式筛选结束 ==========
 
