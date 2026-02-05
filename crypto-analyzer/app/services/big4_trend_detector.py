@@ -187,6 +187,20 @@ class Big4TrendDetector:
         bullish_power = 0  # 阳线力度 = Σ(价格变化% × 0.8 + 成交量归一化 × 0.2)
         bearish_power = 0  # 阴线力度 = Σ(价格变化% × 0.8 + 成交量归一化 × 0.2)
 
+        # 记录首尾价格,用于计算总体波动
+        first_open = float(klines[-1]['open_price'])  # 最早的K线开盘价
+        last_close = float(klines[0]['close_price'])   # 最新的K线收盘价
+
+        # 记录最高最低价,用于计算波动幅度
+        all_highs = [float(k['high_price']) for k in klines]
+        all_lows = [float(k['low_price']) for k in klines]
+        period_high = max(all_highs)
+        period_low = min(all_lows)
+
+        # 记录大波动K线数量(单根涨跌>3%)
+        big_bullish_candles = 0
+        big_bearish_candles = 0
+
         for k in klines:
             open_p = float(k['open_price'])
             close_p = float(k['close_price'])
@@ -202,6 +216,10 @@ class Big4TrendDetector:
                 # 力度 = 价格变化%(80%) + 成交量归一化(20%)
                 power = price_change_pct * 0.8 + volume_normalized * 0.2
                 bullish_power += power
+
+                # 检测大阳线(单根涨幅>3%)
+                if price_change_pct > 3:
+                    big_bullish_candles += 1
             else:
                 # 阴线
                 bearish_count += 1
@@ -210,16 +228,47 @@ class Big4TrendDetector:
                 power = price_change_pct * 0.8 + volume_normalized * 0.2
                 bearish_power += power
 
-        # 判断主导方向 (更严格的标准)
-        # 上涨趋势: 阳线 >= 17根 (30根K线中占57%)
-        # 下跌趋势: 阴线 >= 17根 (30根K线中占57%)
-        # 其他情况: 震荡行情
-        if bullish_count >= 17:
-            dominant = 'BULL'
-        elif bearish_count >= 17:
-            dominant = 'BEAR'
-        else:
+                # 检测大阴线(单根跌幅>3%)
+                if price_change_pct > 3:
+                    big_bearish_candles += 1
+
+        # 计算总体价格变化
+        total_change_pct = (last_close - first_open) / first_open * 100
+
+        # 计算波动幅度 (high-low)/low
+        volatility_pct = (period_high - period_low) / period_low * 100 if period_low > 0 else 0
+
+        # 判断主导方向 (综合多个因素)
+        # 1. 如果波动率<3%, 无论如何都是震荡市
+        if volatility_pct < 3:
             dominant = 'NEUTRAL'
+        # 2. 如果总体涨跌幅很小(<2%), 也是震荡市
+        elif abs(total_change_pct) < 2:
+            dominant = 'NEUTRAL'
+        # 3. 否则综合判断: 阴阳比例 + 力度对比
+        else:
+            # 基础判断: 阳线>=17 或 阴线>=17
+            count_bullish = bullish_count >= 17
+            count_bearish = bearish_count >= 17
+
+            # 力度判断: bullish_power明显大于bearish_power (差距>20%)
+            power_bullish = bullish_power > bearish_power * 1.2 if bearish_power > 0 else bullish_power > 0
+            power_bearish = bearish_power > bullish_power * 1.2 if bullish_power > 0 else bearish_power > 0
+
+            # 大波动K线数量
+            big_candle_bullish = big_bullish_candles >= 2
+            big_candle_bearish = big_bearish_candles >= 2
+
+            # 综合判断 (3个条件满足2个即可)
+            bullish_signals = sum([count_bullish, power_bullish, big_candle_bullish])
+            bearish_signals = sum([count_bearish, power_bearish, big_candle_bearish])
+
+            if bullish_signals >= 2:
+                dominant = 'BULL'
+            elif bearish_signals >= 2:
+                dominant = 'BEAR'
+            else:
+                dominant = 'NEUTRAL'
 
         return {
             'bullish_count': bullish_count,
