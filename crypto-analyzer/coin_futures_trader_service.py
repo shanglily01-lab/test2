@@ -2776,23 +2776,6 @@ class CoinFuturesTraderService:
                         current_mode = 'trend'  # 默认趋势模式
                     # ========== 模式检查结束 ==========
 
-                    # ========== 模式筛选: TREND模式接受所有brain.scan_all()的信号 ==========
-                    # brain.scan_all()返回的信号就是趋势策略信号，不需要额外检查
-                    # RANGE模式的信号已经在扫描阶段单独生成
-
-                    # 只检查RANGE模式的信号是否匹配
-                    if current_mode == 'range':
-                        # 如果当前是range模式，但信号不是从bollinger生成的，跳过
-                        if opp.get('strategy') != 'bollinger_mean_reversion':
-                            logger.info(f"[MODE-FILTER] {symbol} 当前range模式,跳过非range策略信号")
-                            continue
-                        logger.info(f"[MODE-MATCH] {symbol} RANGE信号匹配当前模式")
-                    elif current_mode == 'trend':
-                        # TREND模式：接受所有brain.scan_all()的信号（这些就是趋势信号）
-                        logger.info(f"[MODE-MATCH] {symbol} TREND模式,使用brain.scan_all()信号")
-
-                    # ========== 模式筛选结束 ==========
-
                     # Big4 趋势检测 - 应用到所有币种
                     try:
                         big4_result = self.get_big4_result()
