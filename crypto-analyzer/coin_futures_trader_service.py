@@ -75,13 +75,17 @@ class CoinFuturesDecisionBrain:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # 从 trading_symbol_rating 加载黑名单
+            # Level 3 = 永久禁止交易
             cursor.execute("""
-                SELECT symbol FROM trading_blacklist
-                WHERE is_active = TRUE
-                ORDER BY created_at DESC
+                SELECT symbol, rating_level, margin_multiplier
+                FROM trading_symbol_rating
+                WHERE rating_level >= 1
+                ORDER BY rating_level DESC, updated_at DESC
             """)
             blacklist_rows = cursor.fetchall()
-            self.blacklist = [row['symbol'] for row in blacklist_rows] if blacklist_rows else []
+            # Level 3 完全禁止交易
+            self.blacklist = [row['symbol'] for row in blacklist_rows if row['rating_level'] == 3]
 
             # 3. 从数据库加载自适应参数
             cursor.execute("""

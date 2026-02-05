@@ -1718,13 +1718,21 @@ async def get_realtime_opportunity_analysis(
         current_positions = cursor.fetchall()
         position_symbols = {pos['symbol']: pos for pos in current_positions}
 
-        # 3. 获取交易黑名单
+        # 3. 获取交易黑名单 (从 trading_symbol_rating)
         cursor.execute("""
-            SELECT symbol, reason, created_at
-            FROM trading_blacklist
-            WHERE is_active = 1
+            SELECT symbol, level_change_reason, rating_level, margin_multiplier, created_at
+            FROM trading_symbol_rating
+            WHERE rating_level >= 1
+            ORDER BY rating_level DESC
         """)
-        blacklist = {row['symbol']: row['reason'] for row in cursor.fetchall()}
+        blacklist = {
+            row['symbol']: {
+                'reason': row['level_change_reason'],
+                'level': row['rating_level'],
+                'margin_multiplier': row['margin_multiplier']
+            }
+            for row in cursor.fetchall()
+        }
 
         # 4. 获取账户余额
         cursor.execute("""
@@ -1817,7 +1825,8 @@ async def get_realtime_opportunity_analysis(
                     miss_reasons = []
 
                     if symbol in blacklist:
-                        miss_reasons.append(f'黑名单: {blacklist[symbol]}')
+                        bl_info = blacklist[symbol]
+                        miss_reasons.append(f'黑名单Level{bl_info["level"]}: {bl_info["reason"]}')
 
                     if signal_quality == "弱":
                         miss_reasons.append('信号强度不足')
