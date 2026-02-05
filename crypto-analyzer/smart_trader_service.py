@@ -1577,12 +1577,18 @@ class SmartTraderService:
             return False
 
     def _generate_signal_combination_key(self, signal_components: dict) -> str:
-        """生成信号组合键"""
+        """
+        生成信号组合键
+        注意: 此方法仅用于分批建仓,而分批建仓仅用于TREND策略
+        因此直接添加TREND_前缀
+        """
         if signal_components:
             sorted_signals = sorted(signal_components.keys())
-            return " + ".join(sorted_signals)
+            signal_key = " + ".join(sorted_signals)
+            # 分批建仓只用于TREND策略,直接添加TREND_前缀
+            return f"TREND_{signal_key}"
         else:
-            return "unknown"
+            return "TREND_unknown"
 
     def check_top_bottom(self, symbol: str, position_side: str, entry_price: float):
         """智能识别顶部和底部 - 使用1h K线更稳健的判断"""
