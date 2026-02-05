@@ -197,10 +197,16 @@ class Big4TrendDetector:
         last_close = float(klines[0]['close_price'])   # 最新的K线收盘价
 
         # 记录最高最低价,用于计算波动幅度
-        all_highs = [float(k['high_price']) for k in klines]
-        all_lows = [float(k['low_price']) for k in klines]
-        period_high = max(all_highs)
-        period_low = min(all_lows)
+        try:
+            all_highs = [float(k['high_price']) for k in klines]
+            all_lows = [float(k['low_price']) for k in klines]
+            period_high = max(all_highs)
+            period_low = min(all_lows)
+        except KeyError as e:
+            # 如果缺少high_price或low_price字段，记录详细信息
+            logger.error(f"K线数据缺少字段 {e}, symbol={symbol}, timeframe={timeframe}, count={count}")
+            logger.error(f"第一条K线的keys: {list(klines[0].keys()) if klines else 'empty'}")
+            raise
 
         # 记录大波动K线数量(单根涨跌>3%)
         big_bullish_candles = 0
