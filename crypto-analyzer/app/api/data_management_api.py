@@ -434,7 +434,7 @@ async def get_data_statistics():
 
             # 系统配置
             {'name': 'adaptive_params', 'label': '自适应参数', 'description': '策略自适应参数', 'time_field': 'updated_at', 'is_binance': False, 'category': '系统配置'},
-            {'name': 'trading_blacklist', 'label': '交易黑名单', 'description': '禁止交易币种', 'time_field': 'created_at', 'is_binance': False, 'category': '系统配置'},
+            {'name': 'trading_symbol_rating', 'label': '交易对评级', 'description': '交易对黑白名单评级', 'time_field': 'created_at', 'is_binance': False, 'category': '系统配置'},
             {'name': 'symbol_volatility_profile', 'label': '波动率配置', 'description': '币种波动率', 'time_field': 'updated_at', 'is_binance': False, 'category': '系统配置'},
             {'name': 'users', 'label': '用户表', 'description': '系统用户信息', 'time_field': 'created_at', 'is_binance': False, 'category': '系统管理'},
         ]
@@ -698,7 +698,7 @@ async def get_table_sample(table_name: str, limit: int = 10):
                 # 市场分析
                 'market_regime', 'market_observations', 'news_data',
                 # 系统配置
-                'adaptive_params', 'trading_blacklist', 'symbol_volatility_profile', 'users'
+                'adaptive_params', 'trading_symbol_rating', 'symbol_volatility_profile', 'users'
         ]
         
         if table_name not in allowed_tables:
