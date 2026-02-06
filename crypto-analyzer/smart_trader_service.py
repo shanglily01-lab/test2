@@ -3762,29 +3762,15 @@ class SmartTraderService:
                         # 如果走到这里,说明当前是趋势模式,允许正常交易
 
                         # 如果信号方向与交易方向冲突,降低评分或跳过
+                        # 🔥 修复BUG: 任何方向冲突都应该直接跳过,不管强度高低
+                        # 原因: 市场看多时开空单/市场看空时开多单都是反市场行为,风险极高
                         elif symbol_signal == 'BEARISH' and new_side == 'LONG':
-                            if signal_strength >= 60:  # 强烈看空信号
-                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
-                                continue
-                            else:
-                                penalty = int(signal_strength * 0.5)  # 根据强度降低评分
-                                new_score = new_score - penalty
-                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看空, LONG评分降低: {opp['score']} -> {new_score} (-{penalty})")
-                                if new_score < 20:  # 评分太低则跳过
-                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
-                                    continue
+                            logger.info(f"[BIG4-SKIP] {symbol} 市场看空(强度{signal_strength:.1f}), 跳过LONG信号 (原评分{new_score})")
+                            continue
 
                         elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
-                            if signal_strength >= 60:  # 强烈看多信号
-                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看多 (强度{signal_strength}), 跳过SHORT信号 (原评分{new_score})")
-                                continue
-                            else:
-                                penalty = int(signal_strength * 0.5)  # 根据强度降低评分
-                                new_score = new_score - penalty
-                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看多, SHORT评分降低: {opp['score']} -> {new_score} (-{penalty})")
-                                if new_score < 20:  # 评分太低则跳过
-                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
-                                    continue
+                            logger.info(f"[BIG4-SKIP] {symbol} 市场看多(强度{signal_strength:.1f}), 跳过SHORT信号 (原评分{new_score})")
+                            continue
 
                         # 如果信号方向一致,提升评分
                         elif symbol_signal == 'BULLISH' and new_side == 'LONG':
