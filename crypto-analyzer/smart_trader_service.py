@@ -195,10 +195,10 @@ class SmartDecisionBrain:
                 # 如果表不存在，使用默认权重（硬编码）
                 self.scoring_weights = {
                     'position_low': {'long': 20, 'short': 0},
-                    'position_mid': {'long': 5, 'short': 5},
+                    'position_mid': {'long': 10, 'short': 5},             # 提高LONG评分，中位上涨是好信号
                     'position_high': {'long': 0, 'short': 20},
-                    'momentum_down_3pct': {'long': 0, 'short': 10},       # 震荡市优化: 从15降到10,需要更多信号配合
-                    'momentum_up_3pct': {'long': 10, 'short': 0},         # 震荡市优化: 从15降到10,避免追涨杀跌
+                    'momentum_down_3pct': {'long': 0, 'short': 15},       # 恢复: 24H跌>3%是强信号
+                    'momentum_up_3pct': {'long': 15, 'short': 0},         # 恢复: 24H涨>3%是强信号
                     'trend_1h_bull': {'long': 20, 'short': 0},
                     'trend_1h_bear': {'long': 0, 'short': 20},
                     'volatility_high': {'long': 10, 'short': 10},
