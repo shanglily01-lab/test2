@@ -22,10 +22,6 @@ def analyze_disaster():
     db_config = config.get('database', {}).get('mysql', {})
 
     try:
-        # 修正数据库名
-        if 'database' in db_config and db_config['database'] == 'binance-data':
-            db_config['database'] = 'crypto_trading'
-
         conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor)
         cursor = conn.cursor()
 

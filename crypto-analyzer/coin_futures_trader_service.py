@@ -50,9 +50,10 @@ logger.add(
 class CoinFuturesDecisionBrain:
     """币本位合约智能决策大脑 - 内嵌版本"""
 
-    def __init__(self, db_config: dict):
+    def __init__(self, db_config: dict, trader_service=None):
         self.db_config = db_config
         self.connection = None
+        self.trader_service = trader_service  # 🔥 持有trader_service引用用于紧急平仓
 
         # 从config.yaml加载配置
         self._load_config()
@@ -403,11 +404,13 @@ class CoinFuturesDecisionBrain:
                 logger.warning(f"🚫 [BIG4-BOTTOM] {reason}, 阻止做空")
 
                 # 🔥 紧急干预: 立即平掉所有空单
-                self._emergency_close_all_positions('SHORT', reason)
-
-                # 🔥 设置紧急干预标志,2小时内禁止开空单
-                import time
-                self.emergency_bottom_reversal_time = time.time()
+                if self.trader_service:
+                    self.trader_service._emergency_close_all_positions('SHORT', reason)
+                    # 🔥 设置紧急干预标志,4小时内禁止开空单
+                    import time
+                    self.trader_service.emergency_bottom_reversal_time = time.time()
+                else:
+                    logger.error("❌ 无法执行紧急平仓: trader_service未设置")
 
                 return True, reason
 
@@ -530,11 +533,13 @@ class CoinFuturesDecisionBrain:
                 logger.warning(f"🚫 [BIG4-TOP] {reason}, 阻止做多")
 
                 # 🔥 紧急干预: 立即平掉所有多单
-                self._emergency_close_all_positions('LONG', reason)
-
-                # 🔥 设置紧急干预标志,2小时内禁止开多单
-                import time
-                self.emergency_top_reversal_time = time.time()
+                if self.trader_service:
+                    self.trader_service._emergency_close_all_positions('LONG', reason)
+                    # 🔥 设置紧急干预标志,4小时内禁止开多单
+                    import time
+                    self.trader_service.emergency_top_reversal_time = time.time()
+                else:
+                    logger.error("❌ 无法执行紧急平仓: trader_service未设置")
 
                 return True, reason
 
@@ -998,7 +1003,7 @@ class CoinFuturesTraderService:
         self.leverage = 5
         self.scan_interval = 300
 
-        self.brain = CoinFuturesDecisionBrain(self.db_config)
+        self.brain = CoinFuturesDecisionBrain(self.db_config, trader_service=self)  # 🔥 传入self用于紧急平仓
         self.connection = None
         self.running = True
         self.event_loop = None  # 事件循环引用，在async_main中设置
