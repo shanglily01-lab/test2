@@ -56,8 +56,8 @@ class SmartEntryExecutor:
             # 获取最新Big4信号
             cursor.execute("""
                 SELECT overall_signal, signal_strength
-                FROM big4_trend_signals
-                ORDER BY checked_at DESC
+                FROM big4_trend_history
+                ORDER BY created_at DESC
                 LIMIT 1
             """)
 

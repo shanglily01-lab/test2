@@ -96,9 +96,9 @@ class SafeModeSwitcher:
                 SELECT
                     overall_signal,
                     signal_strength,
-                    checked_at
-                FROM big4_trend_signals
-                ORDER BY checked_at DESC
+                    created_at
+                FROM big4_trend_history
+                ORDER BY created_at DESC
                 LIMIT %s
             """, (count,))
 
@@ -131,7 +131,7 @@ class SafeModeSwitcher:
 
         # 检查时间间隔（确保是独立的检测，而不是同一次检测）
         for i in range(len(recent_signals) - 1):
-            time_diff = (recent_signals[i]['checked_at'] - recent_signals[i+1]['checked_at']).total_seconds() / 60
+            time_diff = (recent_signals[i]['created_at'] - recent_signals[i+1]['created_at']).total_seconds() / 60
             if time_diff < self.CONFIRMATION_INTERVAL_MINUTES - 2:  # 允许2分钟误差
                 logger.warning(f"Big4检测时间间隔过短({time_diff:.1f}分钟)，可能是重复检测")
                 return False
