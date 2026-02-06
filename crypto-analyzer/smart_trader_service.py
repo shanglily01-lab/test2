@@ -316,7 +316,7 @@ class SmartDecisionBrain:
         检测逻辑:
         1. 最近2-4小时内价格创新低
         2. 从低点快速反弹 >= 1.0%
-        3. 短期趋势反转: 最近2-3小时内60%以上为阳线
+        3. 短期趋势反转: 最近5根15M K线中≥3根为阳线(60%)
         4. 量能确认: 反弹过程成交量放大
 
         Args:
@@ -378,30 +378,29 @@ class SmartDecisionBrain:
             if bounce_pct < 1.0:
                 return False, None
 
-            # 5. 检查短期趋势: 最近8根15M K线 (2小时) 中阳线占比
-            recent_8 = klines_15m[-8:]
-            bullish_count = sum(1 for k in recent_8 if k['close'] > k['open'])
-            bullish_ratio = bullish_count / len(recent_8)
+            # 5. 检查短期趋势: 最近5根15M K线 (1小时15分) 中阳线数量
+            recent_5 = klines_15m[-5:]
+            bullish_count = sum(1 for k in recent_5 if k['close'] > k['open'])
 
-            # 6. 成交量确认: 最近4根K线成交量 vs 之前8根
-            if len(klines_15m) >= 12:
-                recent_4_volume = sum(k['volume'] for k in klines_15m[-4:]) / 4
-                earlier_8_volume = sum(k['volume'] for k in klines_15m[-12:-4]) / 8
-                volume_surge = recent_4_volume > earlier_8_volume * 1.2
+            # 6. 成交量确认: 最近3根K线成交量 vs 之前6根
+            if len(klines_15m) >= 9:
+                recent_3_volume = sum(k['volume'] for k in klines_15m[-3:]) / 3
+                earlier_6_volume = sum(k['volume'] for k in klines_15m[-9:-3]) / 6
+                volume_surge = recent_3_volume > earlier_6_volume * 1.2
             else:
                 volume_surge = False
 
-            # 7. 综合判断: 反弹 + 短期多头趋势 + 量能确认
-            if bounce_pct >= 1.0 and bullish_ratio >= 0.6:
-                reason = f"V型反转-从低点反弹{bounce_pct:.1f}%, 2H内{bullish_ratio*100:.0f}%阳线"
+            # 7. 综合判断: 反弹 + 短期多头趋势 (5根中≥3根阳线)
+            if bounce_pct >= 1.0 and bullish_count >= 3:
+                reason = f"V型反转-从低点反弹{bounce_pct:.1f}%, 1.25H内{bullish_count}/5根阳线"
                 if volume_surge:
                     reason += ", 量能放大"
                 logger.warning(f"[V-REVERSAL] {symbol} {reason}, 阻止做空")
                 return True, reason
 
-            # 8. 较强反弹 (>2%) 即使阳线不足60%也阻止
-            if bounce_pct >= 2.0 and bullish_ratio >= 0.5:
-                reason = f"V型反转-强反弹{bounce_pct:.1f}%"
+            # 8. 较强反弹 (>2%) 降低阳线要求至2根 (40%)
+            if bounce_pct >= 2.0 and bullish_count >= 2:
+                reason = f"V型反转-强反弹{bounce_pct:.1f}%, {bullish_count}/5根阳线"
                 logger.warning(f"[V-REVERSAL] {symbol} {reason}, 阻止做空")
                 return True, reason
 
