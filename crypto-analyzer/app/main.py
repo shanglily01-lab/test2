@@ -4181,6 +4181,185 @@ async def get_futures_by_symbol(symbol: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/retrospective-analysis/latest")
+async def get_latest_retrospective_analysis():
+    """
+    获取最新的12小时复盘分析
+    """
+    try:
+        import pymysql
+        from datetime import datetime, timedelta
+        import json
+
+        # 读取数据库配置
+        env_path = project_root / '.env'
+        db_config = {}
+        if env_path.exists():
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        if key.startswith('DB_'):
+                            db_key = key.replace('DB_', '').lower()
+                            db_config[db_key] = value
+
+        # 连接数据库
+        conn = pymysql.connect(
+            host=db_config.get('host', 'localhost'),
+            port=int(db_config.get('port', 3306)),
+            user=db_config.get('user', 'root'),
+            password=db_config.get('password', ''),
+            database=db_config.get('name', 'binance-data'),
+            charset='utf8mb4'
+        )
+
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 查询最新的复盘分析记录
+        cursor.execute("""
+            SELECT * FROM retrospective_analysis
+            ORDER BY analysis_time DESC
+            LIMIT 1
+        """)
+
+        result = cursor.fetchone()
+
+        if not result:
+            # 如果数据库中没有记录，返回空数据结构
+            return {
+                "market_analysis": {
+                    "BTC/USDT": {"price_change_pct": 0, "volatility": 0, "direction": "暂无数据", "bullish_count": 0, "bearish_count": 0},
+                    "ETH/USDT": {"price_change_pct": 0, "volatility": 0, "direction": "暂无数据", "bullish_count": 0, "bearish_count": 0},
+                    "BNB/USDT": {"price_change_pct": 0, "volatility": 0, "direction": "暂无数据", "bullish_count": 0, "bearish_count": 0},
+                    "SOL/USDT": {"price_change_pct": 0, "volatility": 0, "direction": "暂无数据", "bullish_count": 0, "bearish_count": 0}
+                },
+                "big4_signals": {
+                    "total_count": 0,
+                    "bullish_count": 0,
+                    "bearish_count": 0,
+                    "neutral_count": 0
+                },
+                "performance": {
+                    "total_trades": 0,
+                    "profit_trades": 0,
+                    "loss_trades": 0,
+                    "win_rate": 0,
+                    "total_pnl": 0
+                },
+                "loss_analysis": {
+                    "loss_trades": []
+                },
+                "suggestions": []
+            }
+
+        # 解析JSON字段
+        market_analysis_json = json.loads(result.get('market_analysis_json', '{}')) if result.get('market_analysis_json') else {}
+        trading_analysis_json = json.loads(result.get('trading_analysis_json', '{}')) if result.get('trading_analysis_json') else {}
+        loss_analysis_json = json.loads(result.get('loss_analysis_json', '{}')) if result.get('loss_analysis_json') else {}
+
+        # 构建市场分析数据
+        market_analysis = {
+            "BTC/USDT": {
+                "price_change_pct": float(result.get('btc_price_change_pct', 0) or 0),
+                "volatility": float(result.get('btc_volatility_pct', 0) or 0),
+                "direction": result.get('btc_direction', '暂无数据'),
+                "bullish_count": market_analysis_json.get('BTC/USDT', {}).get('bullish_count', 0),
+                "bearish_count": market_analysis_json.get('BTC/USDT', {}).get('bearish_count', 0)
+            },
+            "ETH/USDT": {
+                "price_change_pct": float(result.get('eth_price_change_pct', 0) or 0),
+                "volatility": float(result.get('eth_volatility_pct', 0) or 0),
+                "direction": result.get('eth_direction', '暂无数据'),
+                "bullish_count": market_analysis_json.get('ETH/USDT', {}).get('bullish_count', 0),
+                "bearish_count": market_analysis_json.get('ETH/USDT', {}).get('bearish_count', 0)
+            },
+            "BNB/USDT": {
+                "price_change_pct": float(result.get('bnb_price_change_pct', 0) or 0),
+                "volatility": float(result.get('bnb_volatility_pct', 0) or 0),
+                "direction": result.get('bnb_direction', '暂无数据'),
+                "bullish_count": market_analysis_json.get('BNB/USDT', {}).get('bullish_count', 0),
+                "bearish_count": market_analysis_json.get('BNB/USDT', {}).get('bearish_count', 0)
+            },
+            "SOL/USDT": {
+                "price_change_pct": float(result.get('sol_price_change_pct', 0) or 0),
+                "volatility": float(result.get('sol_volatility_pct', 0) or 0),
+                "direction": result.get('sol_direction', '暂无数据'),
+                "bullish_count": market_analysis_json.get('SOL/USDT', {}).get('bullish_count', 0),
+                "bearish_count": market_analysis_json.get('SOL/USDT', {}).get('bearish_count', 0)
+            }
+        }
+
+        # 构建Big4信号数据
+        big4_signals = {
+            "total_count": result.get('big4_signal_count', 0) or 0,
+            "bullish_count": result.get('big4_bullish_count', 0) or 0,
+            "bearish_count": result.get('big4_bearish_count', 0) or 0,
+            "neutral_count": result.get('big4_neutral_count', 0) or 0
+        }
+
+        # 构建交易表现数据
+        performance = {
+            "total_trades": result.get('total_trades', 0) or 0,
+            "profit_trades": result.get('profit_trades', 0) or 0,
+            "loss_trades": result.get('loss_trades', 0) or 0,
+            "win_rate": float(result.get('win_rate', 0) or 0),
+            "total_pnl": float(result.get('total_pnl', 0) or 0)
+        }
+
+        # 构建亏损分析数据
+        loss_analysis = {
+            "loss_trades": loss_analysis_json.get('loss_trades', [])
+        }
+
+        # 构建改进建议
+        suggestions = []
+        if result.get('counter_trend_trades', 0) > 0:
+            suggestions.append({
+                "issue": "逆势交易",
+                "count": result.get('counter_trend_trades'),
+                "suggestion": "避免在明确趋势中逆势开仓，等待趋势转折信号"
+            })
+        if result.get('signal_mismatch_trades', 0) > 0:
+            suggestions.append({
+                "issue": "Big4信号不匹配",
+                "count": result.get('signal_mismatch_trades'),
+                "suggestion": "加强Big4信号与交易方向的一致性检查，避免信号矛盾时开仓"
+            })
+        if result.get('signal_lag_trades', 0) > 0:
+            suggestions.append({
+                "issue": "信号滞后",
+                "count": result.get('signal_lag_trades'),
+                "suggestion": "优化信号响应速度，考虑使用更短周期K线辅助判断"
+            })
+        if result.get('false_breakout_trades', 0) > 0:
+            suggestions.append({
+                "issue": "震荡市误判",
+                "count": result.get('false_breakout_trades'),
+                "suggestion": "增强震荡市识别能力，在波动率低时降低仓位或暂停交易"
+            })
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "market_analysis": market_analysis,
+            "big4_signals": big4_signals,
+            "performance": performance,
+            "loss_analysis": loss_analysis,
+            "suggestions": suggestions,
+            "analysis_time": result.get('analysis_time').strftime('%Y-%m-%d %H:%M:%S') if result.get('analysis_time') else None,
+            "period_start": result.get('period_start').strftime('%Y-%m-%d %H:%M:%S') if result.get('period_start') else None,
+            "period_end": result.get('period_end').strftime('%Y-%m-%d %H:%M:%S') if result.get('period_end') else None
+        }
+
+    except Exception as e:
+        logger.error(f"获取复盘分析失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== 错误处理 ====================
 
 @app.exception_handler(404)

@@ -473,7 +473,146 @@ class RetrospectiveAnalyzer:
 
         print("\n" + "=" * 100)
 
+        # 保存到数据库
+        self.save_to_database(market_analysis, big4_signals, performance, loss_analysis, overall_market_direction)
+
         return "Report generated successfully"
+
+    def save_to_database(self, market_analysis, big4_signals, performance, loss_analysis, overall_market_direction):
+        """保存分析结果到数据库"""
+        conn = None
+        try:
+            import json
+
+            # 计算时间区间
+            period_end = datetime.now()
+            period_start = period_end - timedelta(hours=12)
+
+            # 准备统计数据
+            counter_trend_count = 0
+            signal_mismatch_count = 0
+            signal_lag_count = 0
+            false_breakout_count = 0
+
+            for analysis in loss_analysis:
+                for issue in analysis['issues']:
+                    if '逆势' in issue:
+                        counter_trend_count += 1
+                    if 'Big4信号' in issue:
+                        signal_mismatch_count += 1
+                    if '滞后' in issue or '反弹' in issue:
+                        signal_lag_count += 1
+                    if '震荡' in issue or '假突破' in issue:
+                        false_breakout_count += 1
+
+            # 确定表现评级
+            if performance['win_rate'] >= 60:
+                performance_rating = "优秀"
+            elif performance['win_rate'] >= 40:
+                performance_rating = "良好"
+            elif performance['win_rate'] >= 20:
+                performance_rating = "一般"
+            else:
+                performance_rating = "较差"
+
+            # 准备JSON数据
+            market_analysis_json = json.dumps(market_analysis, ensure_ascii=False)
+            trading_analysis_json = json.dumps({
+                'profit_list': [{'symbol': t['symbol'], 'pnl': t['pnl'], 'side': t['side']}
+                               for t in performance.get('profit_list', [])[:20]],
+                'loss_list': [{'symbol': t['symbol'], 'pnl': t['pnl'], 'side': t['side']}
+                             for t in performance.get('loss_list', [])[:20]]
+            }, ensure_ascii=False)
+            loss_analysis_json = json.dumps({
+                'loss_trades': [{
+                    'symbol': a['trade']['symbol'],
+                    'side': a['trade']['side'],
+                    'pnl': a['trade']['pnl'],
+                    'pnl_pct': a['trade']['pnl_pct'],
+                    'issues': a['issues'],
+                    'recommendations': a['recommendations']
+                } for a in loss_analysis[:20]]
+            }, ensure_ascii=False)
+
+            # 插入数据库
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            sql = """
+                INSERT INTO retrospective_analysis (
+                    analysis_time, period_start, period_end,
+                    btc_price_change_pct, btc_volatility_pct, btc_direction,
+                    eth_price_change_pct, eth_volatility_pct, eth_direction,
+                    bnb_price_change_pct, bnb_volatility_pct, bnb_direction,
+                    sol_price_change_pct, sol_volatility_pct, sol_direction,
+                    overall_market_direction,
+                    big4_signal_count, big4_bullish_count, big4_bearish_count, big4_neutral_count,
+                    total_trades, profit_trades, loss_trades, win_rate, total_pnl,
+                    counter_trend_trades, signal_mismatch_trades, signal_lag_trades, false_breakout_trades,
+                    performance_rating,
+                    market_analysis_json, trading_analysis_json, loss_analysis_json
+                ) VALUES (
+                    NOW(), %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s,
+                    %s, %s, %s
+                )
+            """
+
+            cursor.execute(sql, (
+                period_start, period_end,
+                market_analysis['BTC/USDT']['price_change_pct'],
+                market_analysis['BTC/USDT']['volatility'],
+                market_analysis['BTC/USDT']['direction'],
+                market_analysis['ETH/USDT']['price_change_pct'],
+                market_analysis['ETH/USDT']['volatility'],
+                market_analysis['ETH/USDT']['direction'],
+                market_analysis['BNB/USDT']['price_change_pct'],
+                market_analysis['BNB/USDT']['volatility'],
+                market_analysis['BNB/USDT']['direction'],
+                market_analysis['SOL/USDT']['price_change_pct'],
+                market_analysis['SOL/USDT']['volatility'],
+                market_analysis['SOL/USDT']['direction'],
+                overall_market_direction,
+                len(big4_signals),
+                sum(1 for s in big4_signals if 'BULLISH' in s.get('overall_signal', '')),
+                sum(1 for s in big4_signals if 'BEARISH' in s.get('overall_signal', '')),
+                sum(1 for s in big4_signals if 'NEUTRAL' in s.get('overall_signal', '')),
+                performance['total_trades'],
+                performance['profit_trades'],
+                performance['loss_trades'],
+                performance['win_rate'],
+                performance['total_pnl'],
+                counter_trend_count,
+                signal_mismatch_count,
+                signal_lag_count,
+                false_breakout_count,
+                performance_rating,
+                market_analysis_json,
+                trading_analysis_json,
+                loss_analysis_json
+            ))
+
+            conn.commit()
+            cursor.close()
+            print("\nOK - Analysis saved to database")
+
+        except Exception as e:
+            print(f"\nWARNING - Failed to save to database: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except:
+                    pass
 
 
 def main():

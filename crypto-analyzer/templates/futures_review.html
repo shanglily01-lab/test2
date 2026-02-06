@@ -1712,6 +1712,188 @@
             `;
         }
 
+        // 加载12小时复盘分析
+        async function loadRetrospectiveAnalysis() {
+            const loading = document.getElementById('retrospectiveLoading');
+            const content = document.getElementById('retrospectiveContent');
+
+            loading.style.display = 'flex';
+            content.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/retrospective-analysis/latest');
+                const data = await response.json();
+
+                if (!data || !data.market_analysis) {
+                    throw new Error('暂无复盘分析数据');
+                }
+
+                renderMarketAnalysis(data.market_analysis);
+                renderBig4SignalAnalysis(data.big4_signals);
+                renderTradingPerformance(data.performance);
+                renderLossAnalysis(data.loss_analysis);
+                renderImprovementSuggestions(data.suggestions);
+
+                content.style.display = 'block';
+            } catch (error) {
+                console.error('加载复盘分析失败:', error);
+                content.innerHTML = `<div class="empty-state">${error.message}</div>`;
+                content.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function renderMarketAnalysis(marketData) {
+            const grid = document.getElementById('marketAnalysisGrid');
+            const symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT'];
+
+            grid.innerHTML = symbols.map(symbol => {
+                const data = marketData[symbol];
+                if (!data) return '';
+
+                const changeClass = data.price_change_pct >= 0 ? 'pnl-positive' : 'pnl-negative';
+
+                return `
+                    <div class="stat-card">
+                        <div class="stat-label">${symbol.split('/')[0]}</div>
+                        <div class="stat-value ${changeClass}">${formatNumber(data.price_change_pct, 2)}%</div>
+                        <div class="stat-label">波动率: ${formatNumber(data.volatility, 2)}%</div>
+                        <div class="stat-label">${data.direction}</div>
+                        <div class="stat-label">${data.bullish_count}阳 / ${data.bearish_count}阴</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderBig4SignalAnalysis(signalData) {
+            const container = document.getElementById('big4SignalAnalysis');
+
+            container.innerHTML = `
+                <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="stat-card">
+                        <div class="stat-label">总更新次数</div>
+                        <div class="stat-value">${signalData.total_count}次</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">BULLISH信号</div>
+                        <div class="stat-value pnl-positive">${signalData.bullish_count}次</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">BEARISH信号</div>
+                        <div class="stat-value pnl-negative">${signalData.bearish_count}次</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">NEUTRAL信号</div>
+                        <div class="stat-value">${signalData.neutral_count}次</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderTradingPerformance(performance) {
+            const grid = document.getElementById('tradingPerformanceStats');
+
+            const performanceRating = performance.win_rate >= 60 ? '优秀' :
+                                     performance.win_rate >= 40 ? '良好' :
+                                     performance.win_rate >= 20 ? '一般' : '较差';
+            const ratingClass = performance.win_rate >= 40 ? 'pnl-positive' : 'pnl-negative';
+
+            grid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">总交易数</div>
+                    <div class="stat-value">${performance.total_trades}笔</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">盈利交易</div>
+                    <div class="stat-value pnl-positive">${performance.profit_trades}笔</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">亏损交易</div>
+                    <div class="stat-value pnl-negative">${performance.loss_trades}笔</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">胜率</div>
+                    <div class="stat-value ${ratingClass}">${formatNumber(performance.win_rate, 1)}%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">总盈亏</div>
+                    <div class="stat-value ${performance.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
+                        ${formatNumber(performance.total_pnl, 2)} USDT
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">表现评级</div>
+                    <div class="stat-value ${ratingClass}">${performanceRating}</div>
+                </div>
+            `;
+        }
+
+        function renderLossAnalysis(lossData) {
+            const container = document.getElementById('lossAnalysis');
+
+            if (!lossData || !lossData.loss_trades || lossData.loss_trades.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无亏损交易</div>';
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>交易对</th>
+                                <th>方向</th>
+                                <th>亏损</th>
+                                <th>问题诊断</th>
+                                <th>改进建议</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${lossData.loss_trades.slice(0, 10).map(trade => `
+                                <tr>
+                                    <td>${trade.symbol}</td>
+                                    <td><span class="badge badge-${trade.side.toLowerCase()}">${trade.side}</span></td>
+                                    <td class="pnl-negative">${formatNumber(trade.pnl, 2)} USDT (${formatNumber(trade.pnl_pct, 2)}%)</td>
+                                    <td style="font-size: 12px;">${(trade.issues || []).join('; ')}</td>
+                                    <td style="font-size: 12px;">${(trade.recommendations || []).join('; ')}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function renderImprovementSuggestions(suggestions) {
+            const container = document.getElementById('improvementSuggestions');
+
+            if (!suggestions || suggestions.length === 0) {
+                container.innerHTML = '<div class="empty-state">暂无改进建议</div>';
+                return;
+            }
+
+            container.innerHTML = `
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    ${suggestions.map((item, index) => `
+                        <div class="card" style="border-left: 3px solid var(--warning-yellow);">
+                            <div style="padding: 16px;">
+                                <h5 style="margin-bottom: 8px;">
+                                    <i class="bi bi-exclamation-circle"></i> ${item.issue}
+                                </h5>
+                                <p style="color: var(--text-secondary); margin-bottom: 8px;">
+                                    出现次数: ${item.count}次
+                                </p>
+                                <p style="color: var(--text-secondary);">
+                                    <i class="bi bi-arrow-right"></i> ${item.suggestion}
+                                </p>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
         function refreshAll() {
             hours = parseInt(document.getElementById('hours-select').value);
             // Reset page numbers when time range changes
