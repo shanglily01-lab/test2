@@ -66,7 +66,7 @@ class SmartDecisionBrain:
         # 🔥 紧急干预标志 - 底部/顶部反转时触发
         self.emergency_bottom_reversal_time = None  # 底部反转触发时间
         self.emergency_top_reversal_time = None     # 顶部反转触发时间
-        self.emergency_block_duration_hours = 4     # 紧急干预持续时间(小时)
+        self.emergency_block_duration_hours = 2     # 紧急干预持续时间(小时)
 
         # 🔥 紧急干预标志 - 总亏损超过阈值时触发
         self.emergency_loss_limit_time = None       # 总亏损触发时间
@@ -1269,7 +1269,7 @@ class SmartTraderService:
         # 🔥 紧急干预标志 - 底部/顶部反转时触发
         self.emergency_bottom_reversal_time = None  # 底部反转触发时间
         self.emergency_top_reversal_time = None     # 顶部反转触发时间
-        self.emergency_block_duration_hours = 4     # 紧急干预持续时间(小时)
+        self.emergency_block_duration_hours = 2     # 紧急干预持续时间(小时)
 
         # 🔥 紧急干预标志 - 总亏损超过阈值时触发
         self.emergency_loss_limit_time = None       # 总亏损触发时间
