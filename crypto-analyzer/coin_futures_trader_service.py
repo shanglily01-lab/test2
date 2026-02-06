@@ -1042,15 +1042,15 @@ class CoinFuturesTraderService:
         self.emergency_top_reversal_time = None     # 顶部反转触发时间
         self.emergency_block_duration_hours = 4     # 紧急干预持续时间(小时)
 
-        # 🔥 紧急干预标志 - 总亏损超过阈值时触发
+        # 🔥 紧急干预标志 - 总亏损超过阈值时触发 (币本位更严格)
         self.emergency_loss_limit_time = None       # 总亏损触发时间
-        self.emergency_loss_threshold = 600         # 总亏损阈值(USDT)
+        self.emergency_loss_threshold = 200         # 总亏损阈值(USDT) - 币本位200U
         self.emergency_loss_block_hours = 2         # 总亏损干预持续时间(小时)
 
-        # 🔥 紧急熔断标志 - 连续止损过多时触发
+        # 🔥 紧急熔断标志 - 连续止损过多时触发 (币本位更严格)
         self.emergency_stop_loss_circuit_time = None  # 止损熔断触发时间
-        self.circuit_check_recent_trades = 10         # 检查最近N笔交易
-        self.circuit_stop_loss_threshold = 5          # 止损笔数阈值
+        self.circuit_check_recent_trades = 5          # 检查最近5笔交易
+        self.circuit_stop_loss_threshold = 3          # 止损笔数阈值(3笔)
         self.circuit_block_hours = 2                  # 熔断持续时间(小时)
 
         # 优化配置管理器 (支持自我优化的参数配置)
