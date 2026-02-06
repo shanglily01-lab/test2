@@ -1079,10 +1079,14 @@ class SmartDecisionBrain:
                     signal_combination_key = "unknown"
 
                 # 检查信号黑名单 (使用完整的信号组合键)
+                # 🔥 临时禁用LONG信号黑名单检查，诊断为什么没有LONG信号
                 blacklist_key = f"{signal_combination_key}_{side}"
                 if blacklist_key in self.signal_blacklist:
-                    logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（历史表现差）")
-                    return None
+                    if side == 'SHORT':  # 只检查SHORT黑名单
+                        logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（历史表现差）")
+                        return None
+                    else:  # LONG信号暂时忽略黑名单
+                        logger.warning(f"⚠️ {symbol} LONG信号 [{signal_combination_key}] 在黑名单中，但暂时放行（诊断模式）")
 
                 # 🔥 新增: 检查信号方向矛盾（防止逻辑错误）
                 is_valid, contradiction_reason = self._validate_signal_direction(signal_components, side)
