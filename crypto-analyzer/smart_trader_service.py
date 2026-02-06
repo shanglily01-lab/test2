@@ -391,23 +391,11 @@ class SmartDecisionBrain:
                 volume_surge = False
 
             # 7. 综合判断: 反弹 + 短期多头趋势
-            # 降低阈值: 0.5%反弹 + 3/5根阳线
-            if bounce_pct >= 0.5 and bullish_count >= 3:
+            # 反弹1%以上 + 5根K线中3根阳线(60%)
+            if bounce_pct >= 1.0 and bullish_count >= 3:
                 reason = f"V型反转-从低点反弹{bounce_pct:.1f}%, 1.25H内{bullish_count}/5根阳线"
                 if volume_surge:
                     reason += ", 量能放大"
-                logger.warning(f"[V-REVERSAL] {symbol} {reason}, 阻止做空")
-                return True, reason
-
-            # 8. 中等反弹 (>1%) 降低阳线要求至2根
-            if bounce_pct >= 1.0 and bullish_count >= 2:
-                reason = f"V型反转-反弹{bounce_pct:.1f}%, {bullish_count}/5根阳线"
-                logger.warning(f"[V-REVERSAL] {symbol} {reason}, 阻止做空")
-                return True, reason
-
-            # 9. 强反弹 (>1.5%) 即使只有1根阳线也阻止
-            if bounce_pct >= 1.5 and bullish_count >= 1:
-                reason = f"V型反转-强反弹{bounce_pct:.1f}%"
                 logger.warning(f"[V-REVERSAL] {symbol} {reason}, 阻止做空")
                 return True, reason
 
