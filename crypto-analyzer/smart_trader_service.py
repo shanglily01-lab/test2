@@ -1147,6 +1147,10 @@ class SmartDecisionBrain:
                 # 🔥 Big4反转检测已移至主循环统一处理，避免重复检测导致日志刷屏
                 # 这里不再单独检测，由主循环在扫描后统一过滤
 
+                # 🔥 调试日志：打印评分详情（帮助诊断为什么LONG信号变成SHORT）
+                if long_score >= 30 or short_score >= 30:  # 只打印接近阈值的信号
+                    logger.info(f"[SCORE] {symbol} {side}={score} | LONG={long_score} SHORT={short_score}")
+
                 return {
                     'symbol': symbol,
                     'side': side,
