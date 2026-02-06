@@ -174,9 +174,9 @@ class SmartEntryExecutor:
         try:
             while (datetime.now() - signal_time).total_seconds() < max_window_seconds:
                 # 🔥 每次建仓前检查Big4方向冲突
-                should_cancel, cancel_reason = self._check_big4_conflict(symbol, side)
+                should_cancel, cancel_reason = self._check_big4_conflict(symbol, direction)
                 if should_cancel:
-                    logger.critical(f"🚨 [BIG4-CONFLICT] {symbol} {side} {cancel_reason}, 终止分批建仓")
+                    logger.critical(f"🚨 [BIG4-CONFLICT] {symbol} {direction} {cancel_reason}, 终止分批建仓")
                     # 如果已有部分建仓,需要平掉
                     if plan.get('position_id'):
                         logger.critical(f"🚨 [BIG4-CONFLICT] 检测到已建仓,立即平掉持仓ID:{plan['position_id']}")
