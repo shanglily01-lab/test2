@@ -3650,44 +3650,19 @@ class SmartTraderService:
 
                 # 根据模式选择策略
                 if current_mode == 'range':
-                    # 震荡模式: 使用新版反转策略（优先）+ 布林带策略（备选）
+                    # 🔥 震荡模式: 完全停止交易,只做趋势
+                    logger.info(f"[RANGE-MODE] 🛑 震荡市场,停止开仓,只做趋势交易")
                     opportunities = []
-                    big4_result = self.get_big4_result()
-                    big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
 
-                    for symbol in self.brain.whitelist:
-                        try:
-                            # 🔥 优先使用新版反转策略（基于4H高低点+量能萎缩+引线）
-                            signal = self.range_reversal_strategy.generate_signal(
-                                symbol=symbol,
-                                big4_signal=big4_signal
-                            )
+                    # 注释掉原震荡策略,保留代码供未来参考
+                    # big4_result = self.get_big4_result()
+                    # big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                    # for symbol in self.brain.whitelist:
+                    #     signal = self.range_reversal_strategy.generate_signal(symbol, big4_signal)
+                    #     if not signal:
+                    #         signal = self.bollinger_strategy.generate_signal(symbol, big4_signal, '15m')
 
-                            # 如果新策略没有信号，尝试布林带策略作为备选
-                            if not signal:
-                                signal = self.bollinger_strategy.generate_signal(
-                                    symbol=symbol,
-                                    big4_signal=big4_signal,
-                                    timeframe='15m'
-                                )
-
-                            if signal and signal['score'] >= int(mode_config.get('range_min_score', 50)):
-                                opportunities.append({
-                                    'symbol': signal['symbol'],
-                                    'side': signal['signal'],
-                                    'score': signal['score'],
-                                    'strategy': signal.get('strategy', 'bollinger_mean_reversion'),
-                                    'reason': signal['reason'],
-                                    'take_profit_price': signal.get('take_profit_price'),
-                                    'stop_loss_price': signal.get('stop_loss_price'),
-                                    'signal_components': {'range_trading': signal['score']}
-                                })
-                                strategy_name = '反转策略' if signal.get('strategy') == 'range_reversal' else '布林带'
-                                logger.info(f"[RANGE-SIGNAL] {symbol} {signal['signal']} 分数:{signal['score']} | {strategy_name} | {signal['reason']}")
-                        except Exception as e:
-                            logger.error(f"[RANGE-ERROR] {symbol} 震荡市信号生成失败: {e}")
-
-                    logger.info(f"[RANGE-SCAN] 震荡模式扫描完成, 找到 {len(opportunities)} 个机会")
+                    logger.info(f"[RANGE-SCAN] 震荡模式,跳过扫描,等待趋势")
                 else:
                     # 趋势模式: 使用原有策略
                     opportunities = self.brain.scan_all()
@@ -3782,24 +3757,9 @@ class SmartTraderService:
                             signal_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                        # ========== 震荡市过滤: NEUTRAL时提高门槛 或 直接禁止 ==========
-                        if symbol_signal == 'NEUTRAL':
-                            if signal_strength < 30:  # 弱信号,真正的震荡市
-                                # 🔥 紧急修复: 震荡市直接禁止开仓,避免频繁打脸和手续费损失
-                                logger.warning(f"[震荡市-禁止] {symbol} 震荡市(强度{signal_strength:.1f}), 直接跳过 (原评分{new_score})")
-                                continue
-                            else:
-                                # 中性市场(强度30-60),允许开仓但提高要求
-                                threshold_boost = 10
-                                if new_score < 35 + threshold_boost:  # 原阈值35 + 10 = 45分
-                                    logger.warning(f"[中性市-跳过] {symbol} 中性市场评分不足 ({new_score} < 45), 跳过")
-                                    continue
-                                else:
-                                    # 🔥 紧急修复: 中性市场缩短持仓时间到2小时,禁用分批建仓
-                                    opp['max_hold_minutes'] = 120  # 2小时持仓
-                                    opp['disable_batch_entry'] = True  # 禁用分批建仓
-                                    logger.info(f"[中性市-OK] {symbol} 中性市场(强度{signal_strength:.1f}), 评分{new_score}, 2小时持仓+一次性开仓")
-                        # ========== NEUTRAL 处理结束 ==========
+                        # ========== 震荡市过滤: 已在模式选择处完全禁止,这里无需额外处理 ==========
+                        # 注: 震荡模式(range)下已经不会产生任何交易机会
+                        # 如果走到这里,说明当前是趋势模式,允许正常交易
 
                         # 如果信号方向与交易方向冲突,降低评分或跳过
                         elif symbol_signal == 'BEARISH' and new_side == 'LONG':
