@@ -224,22 +224,36 @@ class SmartDecisionBrain:
             self.adaptive_long = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
             self.adaptive_short = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
             self.scoring_weights = {
-                'position_low': {'long': 20, 'short': 0},
-                'position_mid': {'long': 5, 'short': 5},
-                'position_high': {'long': 0, 'short': 20},
-                'momentum_down_3pct': {'long': 0, 'short': 10},
-                'momentum_up_3pct': {'long': 10, 'short': 0},
-                'trend_1h_bull': {'long': 20, 'short': 0},
-                'trend_1h_bear': {'long': 0, 'short': 20},
-                'volatility_high': {'long': 10, 'short': 10},
+                # 🔥🔥🔥 强破位信号（最高优先级，单独触发）
+                'breakout_strong': {'long': 50, 'short': 50},         # 24H强破位，追涨杀跌
+
+                # 量能信号（辅助确认）
+                'volume_power_bull': {'long': 20, 'short': 0},        # 1H+15M量能多头（权重降低）
+                'volume_power_bear': {'long': 0, 'short': 20},        # 1H+15M量能空头（权重降低）
+                'volume_power_1h_bull': {'long': 15, 'short': 0},     # 仅1H量能多头
+                'volume_power_1h_bear': {'long': 0, 'short': 15},     # 仅1H量能空头
+
+                # 趋势信号
+                'trend_1h_bull': {'long': 15, 'short': 0},            # 权重降低
+                'trend_1h_bear': {'long': 0, 'short': 15},            # 权重降低
                 'consecutive_bull': {'long': 15, 'short': 0},
                 'consecutive_bear': {'long': 0, 'short': 15},
-                'volume_power_bull': {'long': 25, 'short': 0},
-                'volume_power_bear': {'long': 0, 'short': 25},
-                'volume_power_1h_bull': {'long': 15, 'short': 0},
-                'volume_power_1h_bear': {'long': 0, 'short': 15},
-                'breakout_long': {'long': 20, 'short': 0},
-                'breakdown_short': {'long': 0, 'short': 20}
+
+                # 位置信号（辅助）
+                'position_low': {'long': 15, 'short': 0},             # 权重降低
+                'position_mid': {'long': 5, 'short': 5},
+                'position_high': {'long': 0, 'short': 15},            # 权重降低
+
+                # 动量信号
+                'momentum_down_3pct': {'long': 0, 'short': 10},
+                'momentum_up_3pct': {'long': 10, 'short': 0},
+
+                # 其他
+                'volatility_high': {'long': 10, 'short': 10},
+
+                # 已废弃的信号（保留兼容性）
+                'breakout_long': {'long': 20, 'short': 0},            # 旧版突破信号
+                'breakdown_short': {'long': 0, 'short': 20}           # 旧版破位信号
             }
 
     def reload_config(self):
@@ -610,6 +624,142 @@ class SmartDecisionBrain:
 
         return klines
 
+    def detect_strong_breakout(self, symbol: str, klines_15m: list) -> dict:
+        """
+        🔥 强破位信号检测（24H区间）
+
+        核心策略：只做强破位，追涨杀跌
+
+        强破位三要素（全部满足）：
+        1. Big4天王确认方向
+        2. 15M短周期爆发突破（涨跌>0.5%，量能>2倍）
+        3. 突破24H新高/新低 > 0.5%
+
+        Args:
+            symbol: 交易对
+            klines_15m: 15分钟K线数据
+
+        Returns:
+            {
+                'is_breakout': True/False,
+                'direction': 'LONG'/'SHORT'/None,
+                'breakout_pct': 突破幅度%,
+                'volume_surge': 量能放大倍数,
+                'confidence': 置信度(0-100),
+                'price': 当前价格,
+                'stop_loss_price': 止损价格（破位点位）,
+                'reason': 触发原因
+            }
+        """
+        try:
+            # 1️⃣ 获取24H高低点
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT high_24h, low_24h, change_24h
+                FROM price_stats_24h
+                WHERE symbol = %s
+            """, (symbol,))
+
+            stats_24h = cursor.fetchone()
+            cursor.close()
+
+            if not stats_24h:
+                return {'is_breakout': False, 'reason': '无24H数据'}
+
+            high_24h = float(stats_24h['high_24h'])
+            low_24h = float(stats_24h['low_24h'])
+
+            # 2️⃣ 检查最近15M K线的爆发性突破
+            if len(klines_15m) < 20:
+                return {'is_breakout': False, 'reason': '15M数据不足'}
+
+            last_15m = klines_15m[-1]
+            prev_15m = klines_15m[-2]
+
+            current_price = last_15m['close']
+
+            # 计算15M涨跌幅
+            change_15m_pct = (last_15m['close'] - prev_15m['close']) / prev_15m['close'] * 100
+
+            # 计算量能放大倍数
+            recent_volumes = [k['volume'] for k in klines_15m[-20:]]
+            avg_volume = sum(recent_volumes) / len(recent_volumes)
+            volume_surge = last_15m['volume'] / avg_volume if avg_volume > 0 else 0
+
+            # 3️⃣ 判断是否满足强破位条件
+
+            # 向上强破位
+            if (change_15m_pct > 0.5 and                    # 15M涨幅>0.5%
+                volume_surge > 2.0 and                       # 量能放大>2倍
+                current_price > high_24h):                   # 突破24H新高
+
+                breakout_pct = (current_price - high_24h) / high_24h * 100
+
+                # 必须突破幅度>0.5%
+                if breakout_pct < 0.5:
+                    return {'is_breakout': False, 'reason': f'突破幅度不足{breakout_pct:.2f}%<0.5%'}
+
+                # 4️⃣ Big4方向确认（调用现有检测器）
+                should_block, block_reason = self.detect_big4_top_reversal('LONG')
+                if should_block:
+                    return {'is_breakout': False, 'reason': f'Big4见顶，拒绝做多'}
+
+                # 计算置信度
+                confidence = min(100, 80 + breakout_pct * 20 + (volume_surge - 2.0) * 5)
+
+                return {
+                    'is_breakout': True,
+                    'direction': 'LONG',
+                    'breakout_pct': breakout_pct,
+                    'volume_surge': volume_surge,
+                    'change_15m_pct': change_15m_pct,
+                    'confidence': confidence,
+                    'price': current_price,
+                    'stop_loss_price': high_24h,  # 止损设在24H高点
+                    'reason': (f'🔥强破位做多: 突破24H新高{breakout_pct:.2f}%, '
+                              f'15M涨{change_15m_pct:.2f}%, 量能{volume_surge:.1f}x')
+                }
+
+            # 向下强破位
+            elif (change_15m_pct < -0.5 and                 # 15M跌幅>0.5%
+                  volume_surge > 2.0 and                     # 量能放大>2倍
+                  current_price < low_24h):                  # 跌破24H新低
+
+                breakout_pct = (low_24h - current_price) / low_24h * 100
+
+                # 必须突破幅度>0.5%
+                if breakout_pct < 0.5:
+                    return {'is_breakout': False, 'reason': f'突破幅度不足{breakout_pct:.2f}%<0.5%'}
+
+                # 4️⃣ Big4方向确认
+                should_block, block_reason = self.detect_big4_bottom_reversal('SHORT')
+                if should_block:
+                    return {'is_breakout': False, 'reason': f'Big4触底，拒绝做空'}
+
+                # 计算置信度
+                confidence = min(100, 80 + breakout_pct * 20 + (volume_surge - 2.0) * 5)
+
+                return {
+                    'is_breakout': True,
+                    'direction': 'SHORT',
+                    'breakout_pct': breakout_pct,
+                    'volume_surge': volume_surge,
+                    'change_15m_pct': change_15m_pct,
+                    'confidence': confidence,
+                    'price': current_price,
+                    'stop_loss_price': low_24h,  # 止损设在24H低点
+                    'reason': (f'🔥强破位做空: 跌破24H新低{breakout_pct:.2f}%, '
+                              f'15M跌{change_15m_pct:.2f}%, 量能{volume_surge:.1f}x')
+                }
+
+            return {'is_breakout': False, 'reason': '未满足强破位条件'}
+
+        except Exception as e:
+            logger.error(f"{symbol} 强破位检测失败: {e}")
+            return {'is_breakout': False, 'reason': f'检测异常: {str(e)}'}
+
     def analyze(self, symbol: str):
         """分析并决策 - 支持做多和做空 (主要使用1小时K线)"""
         if symbol not in self.whitelist:
@@ -624,6 +774,41 @@ class SmartDecisionBrain:
                 return None
 
             current = klines_1h[-1]['close']
+
+            # 🔥🔥🔥 最高优先级：强破位信号检测 🔥🔥🔥
+            # 只做强破位，追涨杀跌
+            breakout_result = self.detect_strong_breakout(symbol, klines_15m)
+
+            if breakout_result['is_breakout']:
+                # 🔥 强破位信号触发！
+                logger.critical(f"🔥🔥🔥 {symbol} {breakout_result['reason']}")
+
+                # 🔥 检查是否有反向持仓需要平仓
+                if self.trader_service:
+                    reverse_side = 'SHORT' if breakout_result['direction'] == 'LONG' else 'LONG'
+                    self.trader_service._emergency_close_position_by_symbol_side(
+                        symbol=symbol,
+                        side=reverse_side,
+                        reason=f"BREAKOUT_REVERSE:{breakout_result['reason']}"
+                    )
+
+                # 🔥 立即返回强破位信号，权重50分（单独触发）
+                return {
+                    'symbol': symbol,
+                    'side': breakout_result['direction'],
+                    'score': 50,  # 强破位固定50分
+                    'current_price': breakout_result['price'],
+                    'signal_components': {
+                        'breakout_strong': 50  # 强破位信号
+                    },
+                    'breakout_info': {
+                        'breakout_pct': breakout_result['breakout_pct'],
+                        'volume_surge': breakout_result['volume_surge'],
+                        'change_15m_pct': breakout_result['change_15m_pct'],
+                        'confidence': breakout_result['confidence'],
+                        'stop_loss_price': breakout_result['stop_loss_price']
+                    }
+                }
 
             # 分别计算做多和做空得分
             long_score = 0
@@ -904,14 +1089,16 @@ class SmartDecisionBrain:
                     logger.error(f"🚫 {symbol} 信号方向矛盾: {contradiction_reason} | 信号:{signal_combination_key} | 方向:{side}")
                     return None
 
-                # 🔥 新增: 禁止高风险位置交易（代码层面强制）
-                if side == 'LONG' and 'position_high' in signal_components:
-                    logger.warning(f"🚫 {symbol} 拒绝高位做多: position_high在{position_pct:.1f}%位置,容易买在顶部")
-                    return None
-
-                if side == 'SHORT' and 'position_low' in signal_components:
-                    logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
-                    return None
+                # 🔥 已禁用: 位置限制（强破位信号需要追涨杀跌）
+                # 强破位信号已在前面单独处理,不会到达这里
+                # 其他信号保持位置限制以控制风险
+                # if side == 'LONG' and 'position_high' in signal_components:
+                #     logger.warning(f"🚫 {symbol} 拒绝高位做多: position_high在{position_pct:.1f}%位置,容易买在顶部")
+                #     return None
+                #
+                # if side == 'SHORT' and 'position_low' in signal_components:
+                #     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
+                #     return None
 
                 # 🔥 紧急干预检查: 如果处于紧急干预期,禁止开新仓
                 import time
@@ -2621,6 +2808,44 @@ class SmartTraderService:
         except Exception as e:
             logger.error(f"❌ [CIRCUIT-BREAKER] 检查止损熔断失败: {e}", exc_info=True)
             return False
+
+    def _emergency_close_position_by_symbol_side(self, symbol: str, side: str, reason: str):
+        """
+        🔥 紧急平仓：破位反手时平掉指定交易对的反向持仓
+
+        Args:
+            symbol: 交易对
+            side: 要平掉的持仓方向（'LONG' or 'SHORT'）
+            reason: 平仓原因
+        """
+        try:
+            # 检查是否有该方向的持仓
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            cursor.execute("""
+                SELECT id FROM futures_positions
+                WHERE symbol = %s
+                AND position_side = %s
+                AND status = 'open'
+                AND account_id = %s
+            """, (symbol, side, self.account_id))
+
+            position = cursor.fetchone()
+            cursor.close()
+
+            if position:
+                logger.critical(f"🔥 [BREAKOUT_REVERSE] {symbol} 检测到反向持仓{side}，立即平仓！原因: {reason}")
+                success = self.close_position_by_side(symbol, side, reason)
+                if success:
+                    logger.critical(f"✅ [BREAKOUT_REVERSE] {symbol} {side}持仓已平仓，准备反手")
+                else:
+                    logger.error(f"❌ [BREAKOUT_REVERSE] {symbol} {side}持仓平仓失败")
+            else:
+                logger.info(f"✅ [BREAKOUT_REVERSE] {symbol} 无{side}持仓，无需平仓")
+
+        except Exception as e:
+            logger.error(f"❌ [BREAKOUT_REVERSE] {symbol} 检查反向持仓失败: {e}")
 
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
         """关闭指定交易对和方向的持仓"""
