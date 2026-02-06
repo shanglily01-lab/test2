@@ -2881,8 +2881,8 @@ class SmartTraderService:
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
-                AND planned_close_time IS NOT NULL
-                AND NOW() > planned_close_time
+                AND timeout_at IS NOT NULL
+                AND NOW() > timeout_at
             """, (self.account_id,))
 
             timeout_count = cursor.fetchone()[0]

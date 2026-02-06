@@ -292,7 +292,13 @@ class SmartExitOptimizer:
         Returns:
             {'profit_pct': float, 'profit_usdt': float, 'current_price': float}
         """
-        avg_entry_price = Decimal(str(position['avg_entry_price']))
+        # avg_entry_price可能为None，使用entry_price作为fallback
+        entry_price_value = position['avg_entry_price'] or position['entry_price']
+        if not entry_price_value:
+            logger.error(f"持仓{position['id']}无有效的entry_price")
+            return {'profit_pct': 0, 'profit_usdt': 0, 'current_price': float(current_price)}
+
+        avg_entry_price = Decimal(str(entry_price_value))
         position_size = Decimal(str(position['position_size']))
         direction = position['direction']
 
