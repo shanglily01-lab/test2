@@ -148,7 +148,13 @@
       "Bash(D:\\\\python\\\\python.exe:*)",
       "Bash(tail:*)",
       "Bash(xargs ls:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" diff --cached --stat)",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" add smart_trader_service.py coin_futures_trader_service.py app/services/smart_exit_optimizer.py)",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" status --short)",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" commit -m \"$\\(cat <<''EOF''\nfix: 修复超时平仓机制的2个严重BUG\n\n问题1 - 健康检查查询错误字段:\n- SmartExitOptimizer健康检查使用planned_close_time字段检测超时\n- 但实际存储超时时间的字段是timeout_at\n- 导致已超时持仓\\(4小时+\\)无法被检测和平仓\n- 修复: smart_trader_service.py:2884 和 coin_futures_trader_service.py:2788\n  将 planned_close_time 改为 timeout_at\n\n问题2 - avg_entry_price为None导致Decimal转换异常:\n- SmartExitOptimizer._calculate_profit直接转换avg_entry_price\n- 当该字段为NULL时抛出decimal.ConversionSyntax错误\n- 导致监控任务崩溃,所有持仓无法正常平仓\n- 修复: smart_exit_optimizer.py:295-302\n  添加None检查,使用entry_price作为fallback\n\n影响范围:\n- 本次发现4个U本位持仓已超时未平仓\\(超时46-51分钟\\)\n- 重启后立即触发健康检查并修复监控\n\n附加清理:\n- 删除21个临时分析脚本\n- 删除8个临时markdown文档\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" add force_close_timeout_positions.py)",
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" commit -m \"feat: 添加强制平仓超时持仓的紧急脚本\")"
     ],
     "deny": [],
     "ask": []

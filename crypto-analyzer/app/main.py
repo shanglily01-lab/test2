@@ -399,7 +399,7 @@ async def lifespan(app: FastAPI):
                 # 1. 运行24小时信号分析
                 logger.info("📊 分析最近24小时信号盈亏...")
                 result = subprocess.run(
-                    ['python', 'analyze_24h_signals.py'],
+                    ['python', str(project_root / 'app' / 'analyze_24h_signals.py')],
                     capture_output=True,
                     text=True,
                     timeout=300  # 5分钟超时
@@ -431,7 +431,7 @@ async def lifespan(app: FastAPI):
                 # 3. 执行优化
                 logger.info("🔧 执行优化操作...")
                 result = subprocess.run(
-                    ['python', 'execute_brain_optimization.py'],
+                    ['python', str(project_root / 'app' / 'execute_brain_optimization.py')],
                     capture_output=True,
                     text=True,
                     timeout=300
@@ -473,7 +473,7 @@ async def lifespan(app: FastAPI):
                 logger.info("=" * 80)
 
                 result = subprocess.run(
-                    ['python', str(project_root / 'scripts' / '12h_retrospective_analysis.py')],
+                    ['python', str(project_root / 'app' / '12h_retrospective_analysis.py')],
                     capture_output=True,
                     text=True,
                     timeout=300,
