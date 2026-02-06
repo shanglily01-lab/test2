@@ -2320,7 +2320,7 @@ class CoinFuturesTraderService:
             # 查询所有指定方向的开仓持仓
             cursor.execute("""
                 SELECT id, symbol, position_side, quantity, entry_price
-                FROM coin_futures_positions
+                FROM futures_positions
                 WHERE status = 'open'
                 AND position_side = %s
                 AND account_id = %s
@@ -2383,7 +2383,7 @@ class CoinFuturesTraderService:
             # 查询所有开仓持仓
             cursor.execute("""
                 SELECT id, symbol, position_side, quantity, entry_price, avg_entry_price
-                FROM coin_futures_positions
+                FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
             """, (self.account_id,))
