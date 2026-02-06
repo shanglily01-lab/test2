@@ -37,6 +37,14 @@ class Big4TrendDetector:
             'charset': 'utf8mb4'
         }
 
+        # 🔥 Big4权重配置 - BTC和ETH权重更高
+        self.symbol_weights = {
+            'BTC/USDT': 0.40,  # BTC 40%
+            'ETH/USDT': 0.30,  # ETH 30%
+            'BNB/USDT': 0.15,  # BNB 15%
+            'SOL/USDT': 0.15   # SOL 15%
+        }
+
     def detect_market_trend(self) -> Dict:
         """
         检测四大天王的市场趋势 (简化版)
@@ -76,18 +84,35 @@ class Big4TrendDetector:
 
         conn.close()
 
-        # 综合判断
-        if bullish_count >= 3:
+        # 🔥 综合判断 - 使用加权平均而非简单计数
+        weighted_bullish_score = 0
+        weighted_bearish_score = 0
+        weighted_strength = 0
+
+        for symbol in BIG4_SYMBOLS:
+            analysis = results[symbol]
+            weight = self.symbol_weights[symbol]
+
+            if analysis['signal'] == 'BULLISH':
+                weighted_bullish_score += weight * analysis['strength']
+                weighted_strength += weight * analysis['strength']
+            elif analysis['signal'] == 'BEARISH':
+                weighted_bearish_score += weight * analysis['strength']
+                weighted_strength += weight * analysis['strength']
+
+        # 判断整体信号 (基于加权分数)
+        if weighted_bullish_score > weighted_bearish_score * 1.5:  # 看多分数>看空1.5倍
             overall_signal = 'BULLISH'
-            recommendation = "市场整体看涨，建议优先考虑多单机会"
-        elif bearish_count >= 3:
+            recommendation = f"市场整体看涨(权重分{weighted_bullish_score:.1f}),建议优先考虑多单机会"
+        elif weighted_bearish_score > weighted_bullish_score * 1.5:  # 看空分数>看多1.5倍
             overall_signal = 'BEARISH'
-            recommendation = "市场整体看跌，建议优先考虑空单机会"
+            recommendation = f"市场整体看跌(权重分{weighted_bearish_score:.1f}),建议优先考虑空单机会"
         else:
             overall_signal = 'NEUTRAL'
             recommendation = "市场方向不明确，建议观望或减少仓位"
 
-        avg_strength = total_strength / len(BIG4_SYMBOLS) if BIG4_SYMBOLS else 0
+        # 加权平均强度
+        avg_strength = weighted_strength if weighted_strength > 0 else 0
 
         result = {
             'overall_signal': overall_signal,
