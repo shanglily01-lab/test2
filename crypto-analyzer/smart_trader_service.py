@@ -315,7 +315,7 @@ class SmartDecisionBrain:
 
         检测逻辑:
         1. 最近2-4小时内价格创新低
-        2. 从低点快速反弹 >= 1.5%
+        2. 从低点快速反弹 >= 1.0%
         3. 短期趋势反转: 最近2-3小时内60%以上为阳线
         4. 量能确认: 反弹过程成交量放大
 
@@ -374,8 +374,8 @@ class SmartDecisionBrain:
             # 4. 计算从低点的反弹幅度
             bounce_pct = (current_price - min_low) / min_low * 100
 
-            # 反弹幅度阈值: >= 1.5%
-            if bounce_pct < 1.5:
+            # 反弹幅度阈值: >= 1.0%
+            if bounce_pct < 1.0:
                 return False, None
 
             # 5. 检查短期趋势: 最近8根15M K线 (2小时) 中阳线占比
@@ -392,15 +392,15 @@ class SmartDecisionBrain:
                 volume_surge = False
 
             # 7. 综合判断: 反弹 + 短期多头趋势 + 量能确认
-            if bounce_pct >= 1.5 and bullish_ratio >= 0.6:
+            if bounce_pct >= 1.0 and bullish_ratio >= 0.6:
                 reason = f"V型反转-从低点反弹{bounce_pct:.1f}%, 2H内{bullish_ratio*100:.0f}%阳线"
                 if volume_surge:
                     reason += ", 量能放大"
                 logger.warning(f"[V-REVERSAL] {symbol} {reason}, 阻止做空")
                 return True, reason
 
-            # 8. 较强反弹 (>2.5%) 即使阳线不足60%也阻止
-            if bounce_pct >= 2.5 and bullish_ratio >= 0.5:
+            # 8. 较强反弹 (>2%) 即使阳线不足60%也阻止
+            if bounce_pct >= 2.0 and bullish_ratio >= 0.5:
                 reason = f"V型反转-强反弹{bounce_pct:.1f}%"
                 logger.warning(f"[V-REVERSAL] {symbol} {reason}, 阻止做空")
                 return True, reason
