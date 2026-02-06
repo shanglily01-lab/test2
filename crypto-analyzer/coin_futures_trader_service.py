@@ -1813,33 +1813,38 @@ class CoinFuturesTraderService:
             }))
 
             # 添加完成回调来启动智能平仓监控
+            # 明确捕获闭包变量
+            _symbol = symbol
+            _side = side
+            _smart_exit_optimizer = self.smart_exit_optimizer
+
             def on_entry_complete(task):
                 try:
                     entry_result = task.result()
                     if entry_result['success']:
                         position_id = entry_result['position_id']
                         logger.info(
-                            f"✅ [BATCH_ENTRY_COMPLETE] {symbol} {side} | "
+                            f"✅ [BATCH_ENTRY_COMPLETE] {_symbol} {_side} | "
                             f"持仓ID: {position_id} | "
                             f"平均价格: ${entry_result['avg_price']:.4f} | "
                             f"总数量: {entry_result['total_quantity']:.2f}"
                         )
 
                         # 启动智能平仓监控（如果启用）
-                        if self.smart_exit_optimizer:
+                        if _smart_exit_optimizer:
                             try:
                                 loop = asyncio.get_event_loop()
                                 if loop.is_closed():
                                     logger.warning(f"⚠️ 事件循环已关闭，无法启动智能平仓监控: 持仓{position_id}")
                                 else:
-                                    asyncio.create_task(self.smart_exit_optimizer.start_monitoring_position(position_id))
+                                    asyncio.create_task(_smart_exit_optimizer.start_monitoring_position(position_id))
                                     logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
                             except RuntimeError as e:
                                 logger.warning(f"⚠️ 无法启动智能平仓监控: {e}")
                     else:
-                        logger.error(f"❌ [BATCH_ENTRY_FAILED] {symbol} {side} | {entry_result.get('error')}")
+                        logger.error(f"❌ [BATCH_ENTRY_FAILED] {_symbol} {_side} | {entry_result.get('error')}")
                 except Exception as e:
-                    logger.error(f"❌ [BATCH_ENTRY_CALLBACK_ERROR] {symbol} {side} | {e}")
+                    logger.error(f"❌ [BATCH_ENTRY_CALLBACK_ERROR] {_symbol} {_side} | {e}")
 
             entry_task.add_done_callback(on_entry_complete)
             logger.info(f"🚀 [BATCH_ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行60分钟）")
