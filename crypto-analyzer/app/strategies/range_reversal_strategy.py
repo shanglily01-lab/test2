@@ -188,7 +188,9 @@ class RangeReversalStrategy:
                                 'wick_length_pct': wick_pct * 100,
                                 'body_length_pct': (body_length / total_height) * 100,
                                 'wick_body_ratio': wick_body_ratio,
-                                'wick_bar_index': i - lookback  # 相对于最新K线的位置
+                                'wick_bar_index': i - lookback,  # 相对于最新K线的位置
+                                'open_price': open_price,
+                                'close_price': close_price
                             }
 
             else:  # LONG
@@ -214,7 +216,9 @@ class RangeReversalStrategy:
                                 'wick_length_pct': wick_pct * 100,
                                 'body_length_pct': (body_length / total_height) * 100,
                                 'wick_body_ratio': wick_body_ratio,
-                                'wick_bar_index': i - lookback
+                                'wick_bar_index': i - lookback,
+                                'open_price': open_price,
+                                'close_price': close_price
                             }
 
         return best_wick if best_wick else {'has_wick': False}
@@ -277,8 +281,10 @@ class RangeReversalStrategy:
         if wick_5m['has_wick'] and wick_15m['has_wick']:
             best_wick = wick_15m if wick_15m['wick_body_ratio'] > wick_5m['wick_body_ratio'] else wick_5m
 
-        # 计算开仓价格：上引线最高价的80%
-        entry_price = best_wick['wick_high'] * self.short_entry_from_wick_high
+        # 计算开仓价格：在上引线回撤80%的位置开空
+        # 例如: open=$50000, high=$50100 -> wick_length=$100 -> entry=$50000+$100*0.8=$50080
+        wick_length = best_wick['wick_high'] - best_wick['open_price']
+        entry_price = best_wick['open_price'] + wick_length * self.short_entry_from_wick_high
         stop_loss_price = best_wick['wick_high'] * 1.005  # 止损在引线高点上方0.5%
 
         # 计算评分
@@ -383,8 +389,10 @@ class RangeReversalStrategy:
         if wick_5m['has_wick'] and wick_15m['has_wick']:
             best_wick = wick_15m if wick_15m['wick_body_ratio'] > wick_5m['wick_body_ratio'] else wick_5m
 
-        # 计算开仓价格：下引线最低价的120%
-        entry_price = best_wick['wick_low'] * self.long_entry_from_wick_low
+        # 计算开仓价格：在下引线回撤80%的位置开多
+        # 例如: open=$50000, low=$49900 -> wick_length=$100 -> entry=$50000-$100*0.8=$49920
+        wick_length = best_wick['open_price'] - best_wick['wick_low']
+        entry_price = best_wick['open_price'] - wick_length * 0.8
         stop_loss_price = best_wick['wick_low'] * 0.995  # 止损在引线低点下方0.5%
 
         # 计算评分
