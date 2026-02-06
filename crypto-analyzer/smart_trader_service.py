@@ -317,11 +317,12 @@ class SmartDecisionBrain:
         利用Big4的同步性判断市场底部,而不是等Big4的滞后趋势信号
 
         检测逻辑:
-        1. 获取BTC/ETH/BNB/SOL最近8根15M K线 (2小时)
+        1. 获取BTC/ETH/BNB/SOL最近4小时的15M K线
         2. 找每个币种的最低点位置和反弹幅度
         3. 检查4个币种是否同步触底(时间偏差≤2根K线=30分钟)
         4. 检查至少3个币种反弹≥3%
-        5. 满足条件 → 阻止所有SHORT信号
+        5. 检查触底时间在4小时内
+        6. 满足条件 → 阻止所有SHORT信号
 
         Args:
             side: 交易方向 ('LONG' or 'SHORT')
@@ -340,14 +341,14 @@ class SmartDecisionBrain:
             big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
             bottom_info = {}
 
-            # 获取Big4每个币种的K线数据
+            # 获取Big4每个币种的K线数据 (4小时范围)
             for symbol in big4_symbols:
                 cursor.execute("""
-                    SELECT open_price, high_price, low_price, close_price
+                    SELECT open_time, open_price, high_price, low_price, close_price
                     FROM kline_data
                     WHERE symbol = %s AND timeframe = '15m'
-                    AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 2 HOUR)) * 1000
-                    ORDER BY open_time DESC LIMIT 8
+                    AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 4 HOUR)) * 1000
+                    ORDER BY open_time DESC LIMIT 16
                 """, (symbol,))
 
                 klines = list(cursor.fetchall())
@@ -357,6 +358,7 @@ class SmartDecisionBrain:
 
                 # 转换数据类型
                 for k in klines:
+                    k['open_time'] = int(k['open_time'])
                     k['low'] = float(k['low'])
                     k['close'] = float(k['close'])
 
@@ -365,6 +367,7 @@ class SmartDecisionBrain:
                 lows = [k['low'] for k in klines]
                 min_low = min(lows)
                 min_idx = lows.index(min_low)
+                bottom_time = klines[min_idx]['open_time']
                 current_price = klines[-1]['close']
 
                 # 计算反弹幅度
@@ -373,6 +376,7 @@ class SmartDecisionBrain:
                 bottom_info[symbol] = {
                     'min_idx': min_idx,  # 最低点在第几根K线(0=最早)
                     'min_low': min_low,
+                    'bottom_time': bottom_time,  # 触底时间戳(毫秒)
                     'current': current_price,
                     'bounce_pct': bounce_pct
                 }
@@ -386,6 +390,7 @@ class SmartDecisionBrain:
             # 检查Big4是否同步触底
             min_indices = [info['min_idx'] for info in bottom_info.values()]
             bounces = [info['bounce_pct'] for info in bottom_info.values()]
+            bottom_times = [info['bottom_time'] for info in bottom_info.values()]
 
             # 条件1: 最低点时间接近(最大差距≤2根K线=30分钟)
             time_spread = max(min_indices) - min(min_indices)
@@ -394,7 +399,14 @@ class SmartDecisionBrain:
             # 条件2: 至少3个币种反弹>=3%
             strong_bounce_count = sum(1 for b in bounces if b >= 3.0)
 
-            if time_sync and strong_bounce_count >= 3:
+            # 条件3: 触底时间在4小时内 (使用最早触底时间)
+            import time
+            earliest_bottom = min(bottom_times)
+            current_time_ms = int(time.time() * 1000)
+            hours_since_bottom = (current_time_ms - earliest_bottom) / 1000 / 3600
+            within_time_limit = hours_since_bottom <= 4.0
+
+            if time_sync and strong_bounce_count >= 3 and within_time_limit:
                 avg_bounce = sum(bounces) / len(bounces)
                 details = ', '.join([
                     f"{sym.split('/')[0]}:{info['bounce_pct']:.1f}%"
@@ -402,7 +414,8 @@ class SmartDecisionBrain:
                 ])
 
                 reason = (f"Big4同步触底反转: 时间偏差{time_spread}根K线(≤30分钟), "
-                         f"{strong_bounce_count}/4币种反弹≥3%, 平均反弹{avg_bounce:.1f}% ({details})")
+                         f"{strong_bounce_count}/4币种反弹≥3%, 平均反弹{avg_bounce:.1f}%, "
+                         f"触底{hours_since_bottom:.1f}小时内 ({details})")
 
                 logger.warning(f"🚫 [BIG4-BOTTOM] {reason}, 阻止做空")
                 return True, reason
