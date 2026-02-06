@@ -307,6 +307,110 @@ class SmartDecisionBrain:
             logger.error(f"防追高检查失败 {symbol}: {e}")
             return True, "检查失败,放行"
 
+    def detect_fast_reversal(self, symbol: str, side: str) -> tuple:
+        """
+        检测大跌后的快速反弹 (V型反转保护)
+
+        场景: 昨夜暴跌,Big4判断熊市,但早上快速反弹,系统仍继续做空导致亏损
+
+        检测逻辑:
+        1. 最近2-4小时内价格创新低
+        2. 从低点快速反弹 >= 1.5%
+        3. 短期趋势反转: 最近2-3小时内60%以上为阳线
+        4. 量能确认: 反弹过程成交量放大
+
+        Args:
+            symbol: 交易对
+            side: 交易方向 ('LONG' or 'SHORT')
+
+        Returns:
+            (should_block, reason) - 是否应该阻止开仓, 原因
+        """
+        # 只对做空方向检查 (做多不需要此保护)
+        if side != 'SHORT':
+            return False, None
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # 1. 加载15M K线 (最近16根 = 4小时)
+            cursor.execute("""
+                SELECT open_price as open, high_price as high,
+                       low_price as low, close_price as close,
+                       volume
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '15m'
+                AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 4 HOUR)) * 1000
+                ORDER BY open_time DESC LIMIT 16
+            """, (symbol,))
+
+            klines_15m = list(cursor.fetchall())
+            cursor.close()
+
+            if len(klines_15m) < 12:  # 至少需要3小时数据
+                return False, None
+
+            klines_15m.reverse()  # 时间从旧到新排序
+
+            # 转换数据类型
+            for k in klines_15m:
+                k['open'] = float(k['open'])
+                k['high'] = float(k['high'])
+                k['low'] = float(k['low'])
+                k['close'] = float(k['close'])
+                k['volume'] = float(k['volume'])
+
+            # 2. 查找最近4小时内的最低点
+            min_low = min(k['low'] for k in klines_15m)
+            min_low_idx = [k['low'] for k in klines_15m].index(min_low)
+            current_price = klines_15m[-1]['close']
+
+            # 3. 检查低点是否在前10根K线内 (不是最近的3根)
+            # 如果低点是最新的,说明还在下跌,不是反弹
+            if min_low_idx >= len(klines_15m) - 3:
+                return False, None
+
+            # 4. 计算从低点的反弹幅度
+            bounce_pct = (current_price - min_low) / min_low * 100
+
+            # 反弹幅度阈值: >= 1.5%
+            if bounce_pct < 1.5:
+                return False, None
+
+            # 5. 检查短期趋势: 最近8根15M K线 (2小时) 中阳线占比
+            recent_8 = klines_15m[-8:]
+            bullish_count = sum(1 for k in recent_8 if k['close'] > k['open'])
+            bullish_ratio = bullish_count / len(recent_8)
+
+            # 6. 成交量确认: 最近4根K线成交量 vs 之前8根
+            if len(klines_15m) >= 12:
+                recent_4_volume = sum(k['volume'] for k in klines_15m[-4:]) / 4
+                earlier_8_volume = sum(k['volume'] for k in klines_15m[-12:-4]) / 8
+                volume_surge = recent_4_volume > earlier_8_volume * 1.2
+            else:
+                volume_surge = False
+
+            # 7. 综合判断: 反弹 + 短期多头趋势 + 量能确认
+            if bounce_pct >= 1.5 and bullish_ratio >= 0.6:
+                reason = f"V型反转-从低点反弹{bounce_pct:.1f}%, 2H内{bullish_ratio*100:.0f}%阳线"
+                if volume_surge:
+                    reason += ", 量能放大"
+                logger.warning(f"[V-REVERSAL] {symbol} {reason}, 阻止做空")
+                return True, reason
+
+            # 8. 较强反弹 (>2.5%) 即使阳线不足60%也阻止
+            if bounce_pct >= 2.5 and bullish_ratio >= 0.5:
+                reason = f"V型反转-强反弹{bounce_pct:.1f}%"
+                logger.warning(f"[V-REVERSAL] {symbol} {reason}, 阻止做空")
+                return True, reason
+
+            return False, None
+
+        except Exception as e:
+            logger.error(f"[V-REVERSAL-ERROR] {symbol} 快速反转检测失败: {e}")
+            return False, None  # 检测失败时不阻止,避免影响正常交易
+
     def load_klines(self, symbol: str, timeframe: str, limit: int = 100):
         conn = self._get_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -636,6 +740,13 @@ class SmartDecisionBrain:
                 if side == 'SHORT' and 'position_low' in signal_components:
                     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
                     return None
+
+                # 🔥 新增: V型反转保护 - 大跌后快速反弹时阻止做空
+                if side == 'SHORT':
+                    should_block, reversal_reason = self.detect_fast_reversal(symbol, side)
+                    if should_block:
+                        logger.warning(f"🚫 {symbol} {reversal_reason}, 阻止做空")
+                        return None
 
                 return {
                     'symbol': symbol,
