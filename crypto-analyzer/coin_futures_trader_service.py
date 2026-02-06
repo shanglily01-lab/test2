@@ -3289,11 +3289,11 @@ class CoinFuturesTraderService:
                     self._check_and_restart_smart_exit_optimizer()
                     last_smart_exit_check = now
 
-                # 4. 🔥 紧急干预: 检查总亏损是否超过阈值
-                if self._check_total_loss_emergency():
-                    logger.critical(f"🚨 [EMERGENCY-LOSS] 总亏损超过{self.emergency_loss_threshold}U,暂停开仓{self.emergency_loss_block_hours}小时")
-                    time.sleep(self.scan_interval)
-                    continue
+                # 4. 🔥 紧急干预: 检查总亏损是否超过阈值 (已禁用)
+                # if self._check_total_loss_emergency():
+                #     logger.critical(f"🚨 [EMERGENCY-LOSS] 总亏损超过{self.emergency_loss_threshold}U,暂停开仓{self.emergency_loss_block_hours}小时")
+                #     time.sleep(self.scan_interval)
+                #     continue
 
                 # 4.5. 🔥 熔断机制: 检查最近交易止损是否过多
                 if self._check_stop_loss_circuit():
