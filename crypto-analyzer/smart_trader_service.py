@@ -1154,7 +1154,7 @@ class SmartDecisionBrain:
                     logger.info(f"[SCORE] {symbol} {side}={score} | LONG={long_score} SHORT={short_score} | 组件={signal_components}")
 
                 # 🔥 新增: 信号质量筛选（基于历史表现调整阈值，不修改权重）
-                if self.brain and hasattr(self.brain, 'quality_manager') and self.brain.enable_quality_filter:
+                if hasattr(self, 'brain') and hasattr(self.brain, 'quality_manager') and self.brain.enable_quality_filter:
                     signal_key = self._generate_signal_combination_key(signal_components)
                     passed, reason = self.brain.quality_manager.check_signal_quality_filter(
                         symbol, side, score, signal_key, base_threshold=self.threshold
