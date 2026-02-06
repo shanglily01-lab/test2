@@ -880,8 +880,20 @@ class CoinFuturesDecisionBrain:
                     return None
 
                 # 🔥 紧急干预检查: 如果处于紧急干预期,禁止开新仓
+                import time
+
+                # 检查总亏损干预
+                if self.emergency_loss_limit_time:
+                    hours_since_loss_emergency = (time.time() - self.emergency_loss_limit_time) / 3600
+                    if hours_since_loss_emergency <= self.emergency_loss_block_hours:
+                        logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 总亏损超限紧急干预中({hours_since_loss_emergency:.1f}h/{self.emergency_loss_block_hours}h),禁止开仓")
+                        return None
+                    else:
+                        # 超过干预时间,清除标志
+                        self.emergency_loss_limit_time = None
+
+                # 检查底部反转干预
                 if side == 'SHORT' and self.emergency_bottom_reversal_time:
-                    import time
                     hours_since_emergency = (time.time() - self.emergency_bottom_reversal_time) / 3600
                     if hours_since_emergency <= self.emergency_block_duration_hours:
                         logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 底部反转紧急干预中({hours_since_emergency:.1f}h/{self.emergency_block_duration_hours}h),禁止做空")
@@ -890,8 +902,8 @@ class CoinFuturesDecisionBrain:
                         # 超过干预时间,清除标志
                         self.emergency_bottom_reversal_time = None
 
+                # 检查顶部反转干预
                 if side == 'LONG' and self.emergency_top_reversal_time:
-                    import time
                     hours_since_emergency = (time.time() - self.emergency_top_reversal_time) / 3600
                     if hours_since_emergency <= self.emergency_block_duration_hours:
                         logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 顶部反转紧急干预中({hours_since_emergency:.1f}h/{self.emergency_block_duration_hours}h),禁止做多")
@@ -1019,6 +1031,11 @@ class CoinFuturesTraderService:
         self.emergency_bottom_reversal_time = None  # 底部反转触发时间
         self.emergency_top_reversal_time = None     # 顶部反转触发时间
         self.emergency_block_duration_hours = 4     # 紧急干预持续时间(小时)
+
+        # 🔥 紧急干预标志 - 总亏损超过阈值时触发
+        self.emergency_loss_limit_time = None       # 总亏损触发时间
+        self.emergency_loss_threshold = 600         # 总亏损阈值(USDT)
+        self.emergency_loss_block_hours = 2         # 总亏损干预持续时间(小时)
 
         # 优化配置管理器 (支持自我优化的参数配置)
         self.opt_config = OptimizationConfig(self.db_config)
@@ -2310,6 +2327,79 @@ class CoinFuturesTraderService:
         except Exception as e:
             logger.error(f"❌ [EMERGENCY] 紧急平仓流程失败: {e}", exc_info=True)
 
+    def _check_total_loss_emergency(self) -> bool:
+        """
+        🔥 检查总持仓亏损是否超过阈值,触发紧急干预
+
+        检查逻辑:
+        1. 计算所有开仓持仓的总浮亏
+        2. 如果总亏损 > 600 USDT,触发紧急干预
+        3. 设置emergency_loss_limit_time,2小时内禁止开新仓
+
+        返回:
+            bool: True表示触发了紧急干预,False表示正常
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # 查询所有开仓持仓
+            cursor.execute("""
+                SELECT id, symbol, position_side, quantity, entry_price, avg_entry_price
+                FROM coin_futures_positions
+                WHERE status = 'open'
+                AND account_id = %s
+            """, (self.account_id,))
+
+            positions = cursor.fetchall()
+            cursor.close()
+
+            if not positions:
+                return False
+
+            # 计算总浮动盈亏
+            total_pnl = 0.0
+
+            for pos in positions:
+                symbol = pos['symbol']
+                position_side = pos['position_side']
+                quantity = float(pos['quantity'])
+                entry_price = float(pos.get('avg_entry_price') or pos['entry_price'])
+
+                # 获取当前价格
+                current_price = self.get_current_price(symbol)
+                if not current_price:
+                    continue
+
+                # 计算浮动盈亏 (USDT) - 币本位需要特殊处理
+                if position_side == 'LONG':
+                    pnl = (current_price - entry_price) * quantity
+                else:  # SHORT
+                    pnl = (entry_price - current_price) * quantity
+
+                total_pnl += pnl
+
+            # 检查是否超过亏损阈值
+            if total_pnl < -self.emergency_loss_threshold:
+                logger.critical(
+                    f"🚨 [EMERGENCY-LOSS] 总持仓亏损超过阈值! "
+                    f"当前总浮亏: {total_pnl:.2f} USDT (阈值: -{self.emergency_loss_threshold} USDT) | "
+                    f"持仓数量: {len(positions)}个 | "
+                    f"触发紧急干预,暂停开仓{self.emergency_loss_block_hours}小时"
+                )
+
+                # 设置紧急干预标志
+                import time
+                self.emergency_loss_limit_time = time.time()
+
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"❌ [EMERGENCY-LOSS] 检查总亏损失败: {e}", exc_info=True)
+            return False
+
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
         """关闭指定交易对和方向的持仓"""
         try:
@@ -3078,7 +3168,13 @@ class CoinFuturesTraderService:
                     self._check_and_restart_smart_exit_optimizer()
                     last_smart_exit_check = now
 
-                # 4. 检查持仓
+                # 4. 🔥 紧急干预: 检查总亏损是否超过阈值
+                if self._check_total_loss_emergency():
+                    logger.critical(f"🚨 [EMERGENCY-LOSS] 总亏损超过{self.emergency_loss_threshold}U,暂停开仓{self.emergency_loss_block_hours}小时")
+                    time.sleep(self.scan_interval)
+                    continue
+
+                # 5. 检查持仓
                 current_positions = self.get_open_positions_count()
                 logger.info(f"[STATUS] 持仓: {current_positions}/{self.max_positions}")
 
