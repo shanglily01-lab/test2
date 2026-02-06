@@ -432,12 +432,12 @@ class SmartDecisionBrain:
             # 条件2: 至少3个币种反弹>=3%
             strong_bounce_count = sum(1 for b in bounces if b >= 3.0)
 
-            # 条件3: 触底时间在4小时内 (使用最早触底时间)
+            # 条件3: 触底时间在2小时内 (使用最早触底时间)
             import time
             earliest_bottom = min(bottom_times)
             current_time_ms = int(time.time() * 1000)
             hours_since_bottom = (current_time_ms - earliest_bottom) / 1000 / 3600
-            within_time_limit = hours_since_bottom <= 4.0
+            within_time_limit = hours_since_bottom <= 2.0
 
             if time_sync and strong_bounce_count >= 3 and within_time_limit:
                 avg_bounce = sum(bounces) / len(bounces)
@@ -455,7 +455,7 @@ class SmartDecisionBrain:
                 # 🔥 紧急干预: 立即平掉所有空单
                 if self.trader_service:
                     self.trader_service._emergency_close_all_positions('SHORT', reason)
-                    # 🔥 设置紧急干预标志,4小时内禁止开空单
+                    # 🔥 设置紧急干预标志,2小时内禁止开空单
                     import time
                     self.trader_service.emergency_bottom_reversal_time = time.time()
                 else:
@@ -735,9 +735,7 @@ class SmartDecisionBrain:
                     return {'is_breakout': False, 'reason': f'突破幅度不足{breakout_pct:.2f}%<0.5%'}
 
                 # 4️⃣ Big4方向确认
-                should_block, block_reason = self.detect_big4_bottom_reversal('SHORT')
-                if should_block:
-                    return {'is_breakout': False, 'reason': f'Big4触底，拒绝做空'}
+                # Big4反转检测已移至主循环统一处理，这里不再重复检测
 
                 # 计算置信度
                 confidence = min(100, 80 + breakout_pct * 20 + (volume_surge - 2.0) * 5)
@@ -1144,19 +1142,8 @@ class SmartDecisionBrain:
                         # 超过干预时间,清除标志
                         self.emergency_top_reversal_time = None
 
-                # 🔥 新增: Big4同步触底保护 - 检测Big4是否同步触底反转
-                if side == 'SHORT':
-                    should_block, reversal_reason = self.detect_big4_bottom_reversal(side)
-                    if should_block:
-                        logger.warning(f"🚫 {symbol} {reversal_reason}, 阻止做空")
-                        return None
-
-                # 🔥 新增: Big4同步见顶保护 - 检测Big4是否同步见顶反转
-                if side == 'LONG':
-                    should_block, reversal_reason = self.detect_big4_top_reversal(side)
-                    if should_block:
-                        logger.warning(f"🚫 {symbol} {reversal_reason}, 阻止做多")
-                        return None
+                # 🔥 Big4反转检测已移至主循环统一处理，避免重复检测导致日志刷屏
+                # 这里不再单独检测，由主循环在扫描后统一过滤
 
                 return {
                     'symbol': symbol,
@@ -3679,6 +3666,26 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
+                # 5.6. 🔥 统一检测Big4反转（避免重复检测）
+                big4_bottom_blocked = False
+                big4_top_blocked = False
+
+                # 检查是否有做空机会
+                has_short_opportunities = any(opp['side'] == 'SHORT' for opp in opportunities)
+                if has_short_opportunities:
+                    should_block, reversal_reason = self.brain.detect_big4_bottom_reversal('SHORT')
+                    if should_block:
+                        big4_bottom_blocked = True
+                        logger.warning(f"🚫 [BIG4-BOTTOM] {reversal_reason}, 过滤所有SHORT机会")
+
+                # 检查是否有做多机会
+                has_long_opportunities = any(opp['side'] == 'LONG' for opp in opportunities)
+                if has_long_opportunities:
+                    should_block, reversal_reason = self.brain.detect_big4_top_reversal('LONG')
+                    if should_block:
+                        big4_top_blocked = True
+                        logger.warning(f"🚫 [BIG4-TOP] {reversal_reason}, 过滤所有LONG机会")
+
                 # 6. 执行交易
                 logger.info(f"[EXECUTE] 找到 {len(opportunities)} 个机会")
 
@@ -3690,6 +3697,14 @@ class SmartTraderService:
                     new_side = opp['side']
                     new_score = opp['score']
                     opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
+
+                    # 🔥 Big4反转过滤: 统一检测结果
+                    if big4_bottom_blocked and new_side == 'SHORT':
+                        logger.info(f"[BIG4-FILTER] {symbol} SHORT被Big4底部反转阻止，跳过")
+                        continue
+                    if big4_top_blocked and new_side == 'LONG':
+                        logger.info(f"[BIG4-FILTER] {symbol} LONG被Big4顶部反转阻止，跳过")
+                        continue
 
                     # ========== 交易模式检查和自动切换（安全版） ==========
                     try:
