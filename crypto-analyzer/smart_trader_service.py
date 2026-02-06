@@ -28,6 +28,7 @@ from app.services.big4_trend_detector import Big4TrendDetector
 from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
+from app.strategies.safe_mode_switcher import SafeModeSwitcher
 
 # 加载环境变量
 load_dotenv()
@@ -1044,7 +1045,8 @@ class SmartTraderService:
         self.range_detector = RangeMarketDetector(self.db_config)
         self.bollinger_strategy = BollingerMeanReversionStrategy(self.db_config)
         self.mode_switcher = TradingModeSwitcher(self.db_config)
-        logger.info("✅ 震荡市交易策略模块已初始化")
+        self.safe_mode_switcher = SafeModeSwitcher(self.db_config)  # 安全模式切换器
+        logger.info("✅ 震荡市交易策略模块已初始化（含安全模式切换器）")
         self.last_big4_detection_time = None
 
         logger.info("🔱 Big4趋势检测器已启动 (15分钟检测, 1小时缓存)")
@@ -3152,42 +3154,56 @@ class SmartTraderService:
                     new_score = opp['score']
                     opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
 
-                    # ========== 交易模式检查和自动切换 ==========
+                    # ========== 交易模式检查和自动切换（安全版） ==========
                     try:
                         big4_result = self.get_big4_result()
                         big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                         big4_strength = big4_result.get('signal_strength', 0)
 
-                        # 检查是否需要自动切换模式
-                        suggested_mode = self.mode_switcher.auto_switch_check(
+                        # 使用安全模式切换器进行检查
+                        switch_result = self.safe_mode_switcher.safe_auto_switch_check(
                             account_id=self.account_id,
                             trading_type='usdt_futures',
                             big4_signal=big4_signal,
                             big4_strength=big4_strength
                         )
 
-                        if suggested_mode:
-                            logger.info(f"🔄 [MODE-AUTO-SWITCH] Big4={big4_signal}({big4_strength:.1f}), 建议切换到{suggested_mode}模式")
-                            self.mode_switcher.switch_mode(
+                        if switch_result:
+                            suggested_mode = switch_result['suggested_mode']
+                            reason = switch_result['reason']
+                            safety_checks = switch_result['safety_checks']
+
+                            logger.info(f"🔄 [SAFE-MODE-SWITCH] Big4={big4_signal}({big4_strength:.1f})")
+                            logger.info(f"   安全检查: 持仓={safety_checks['open_positions']}, "
+                                      f"冷却={safety_checks['cooldown_passed']}, "
+                                      f"确认={safety_checks['confirmation_passed']}")
+                            logger.info(f"   建议切换: {safety_checks['current_mode']} → {suggested_mode}")
+
+                            # 执行切换
+                            self.safe_mode_switcher.switch_mode(
                                 account_id=self.account_id,
                                 trading_type='usdt_futures',
                                 new_mode=suggested_mode,
                                 trigger='auto',
-                                reason=f'Big4: {big4_signal} 强度:{big4_strength:.1f}',
+                                reason=reason,
                                 big4_signal=big4_signal,
                                 big4_strength=big4_strength,
-                                switched_by='smart_trader_service'
+                                switched_by='safe_mode_switcher'
                             )
 
                         # 获取当前交易模式
-                        current_mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
+                        current_mode_config = self.safe_mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
                         current_mode = current_mode_config['mode_type'] if current_mode_config else 'trend'
 
                         logger.info(f"📊 [TRADING-MODE] 当前模式: {current_mode} | Big4: {big4_signal}({big4_strength:.1f})")
 
                     except Exception as e:
                         logger.error(f"[MODE-CHECK-ERROR] 模式检查失败: {e}")
-                        current_mode = 'trend'  # 默认趋势模式
+                        import traceback
+                        logger.error(traceback.format_exc())
+                        # 降级策略：保持当前模式，不强制切换
+                        current_mode_config = self.safe_mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
+                        current_mode = current_mode_config['mode_type'] if current_mode_config else 'trend'
                     # ========== 模式检查结束 ==========
 
                     # Big4 趋势检测 - 应用到所有币种

@@ -342,8 +342,8 @@ class CoinFuturesDecisionBrain:
                 # 转换数据类型
                 for k in klines:
                     k['open_time'] = int(k['open_time'])
-                    k['low'] = float(k['low'])
-                    k['close'] = float(k['close'])
+                    k['low'] = float(k['low_price'])
+                    k['close'] = float(k['close_price'])
 
                 # 找最低点 (从旧到新,索引0=最早)
                 klines.reverse()
