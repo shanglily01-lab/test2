@@ -409,6 +409,125 @@ class CoinFuturesDecisionBrain:
             logger.error(f"[BIG4-BOTTOM-ERROR] Big4触底检测失败: {e}")
             return False, None  # 检测失败时不阻止,避免影响正常交易
 
+    def detect_big4_top_reversal(self, side: str) -> tuple:
+        """
+        检测Big4同步见顶反转 (顶部反转保护)
+
+        场景: 暴涨后,Big4同步见顶,但Big4趋势判断滞后,系统继续做多导致亏损
+
+        核心逻辑:
+        利用Big4的同步性判断市场顶部,而不是等Big4的滞后趋势信号
+
+        检测逻辑:
+        1. 获取BTC/ETH/BNB/SOL最近4小时的15M K线
+        2. 找每个币种的最高点位置和回调幅度
+        3. 检查4个币种是否同步见顶(时间偏差≤2根K线=30分钟)
+        4. 检查至少3个币种回调≥3%
+        5. 检查见顶时间在4小时内
+        6. 满足条件 → 阻止所有LONG信号
+
+        Args:
+            side: 交易方向 ('LONG' or 'SHORT')
+
+        Returns:
+            (should_block, reason) - 是否应该阻止开仓, 原因
+        """
+        # 只对做多方向检查
+        if side != 'LONG':
+            return False, None
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+            top_info = {}
+
+            # 获取Big4每个币种的K线数据 (4小时范围)
+            for symbol in big4_symbols:
+                cursor.execute("""
+                    SELECT open_time, open_price, high_price, low_price, close_price
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = '15m'
+                    AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 4 HOUR)) * 1000
+                    ORDER BY open_time DESC LIMIT 16
+                """, (symbol,))
+
+                klines = list(cursor.fetchall())
+
+                if len(klines) < 6:  # 至少需要1.5小时数据
+                    continue
+
+                # 转换数据类型
+                for k in klines:
+                    k['open_time'] = int(k['open_time'])
+                    k['high'] = float(k['high_price'])
+                    k['close'] = float(k['close_price'])
+
+                # 找最高点 (从旧到新,索引0=最早)
+                klines.reverse()
+                highs = [k['high'] for k in klines]
+                max_high = max(highs)
+                max_idx = highs.index(max_high)
+                top_time = klines[max_idx]['open_time']
+                current_price = klines[-1]['close']
+
+                # 计算回调幅度
+                pullback_pct = (max_high - current_price) / max_high * 100
+
+                top_info[symbol] = {
+                    'max_idx': max_idx,  # 最高点在第几根K线(0=最早)
+                    'max_high': max_high,
+                    'top_time': top_time,  # 见顶时间戳(毫秒)
+                    'current': current_price,
+                    'pullback_pct': pullback_pct
+                }
+
+            cursor.close()
+
+            # 需要至少3个币种有数据
+            if len(top_info) < 3:
+                return False, None
+
+            # 检查Big4是否同步见顶
+            max_indices = [info['max_idx'] for info in top_info.values()]
+            pullbacks = [info['pullback_pct'] for info in top_info.values()]
+            top_times = [info['top_time'] for info in top_info.values()]
+
+            # 条件1: 最高点时间接近(最大差距≤2根K线=30分钟)
+            time_spread = max(max_indices) - min(max_indices)
+            time_sync = time_spread <= 2
+
+            # 条件2: 至少3个币种回调>=3%
+            strong_pullback_count = sum(1 for p in pullbacks if p >= 3.0)
+
+            # 条件3: 见顶时间在4小时内 (使用最早见顶时间)
+            import time
+            earliest_top = min(top_times)
+            current_time_ms = int(time.time() * 1000)
+            hours_since_top = (current_time_ms - earliest_top) / 1000 / 3600
+            within_time_limit = hours_since_top <= 4.0
+
+            if time_sync and strong_pullback_count >= 3 and within_time_limit:
+                avg_pullback = sum(pullbacks) / len(pullbacks)
+                details = ', '.join([
+                    f"{sym.split('/')[0]}:-{info['pullback_pct']:.1f}%"
+                    for sym, info in top_info.items()
+                ])
+
+                reason = (f"Big4同步见顶反转: 时间偏差{time_spread}根K线(≤30分钟), "
+                         f"{strong_pullback_count}/4币种回调≥3%, 平均回调{avg_pullback:.1f}%, "
+                         f"见顶{hours_since_top:.1f}小时内 ({details})")
+
+                logger.warning(f"🚫 [BIG4-TOP] {reason}, 阻止做多")
+                return True, reason
+
+            return False, None
+
+        except Exception as e:
+            logger.error(f"[BIG4-TOP-ERROR] Big4见顶检测失败: {e}")
+            return False, None  # 检测失败时不阻止,避免影响正常交易
+
     def load_klines(self, symbol: str, timeframe: str, limit: int = 100):
         conn = self._get_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -744,6 +863,13 @@ class CoinFuturesDecisionBrain:
                     should_block, reversal_reason = self.detect_big4_bottom_reversal(side)
                     if should_block:
                         logger.warning(f"🚫 {symbol} {reversal_reason}, 阻止做空")
+                        return None
+
+                # 🔥 新增: Big4同步见顶保护 - 检测Big4是否同步见顶反转
+                if side == 'LONG':
+                    should_block, reversal_reason = self.detect_big4_top_reversal(side)
+                    if should_block:
+                        logger.warning(f"🚫 {symbol} {reversal_reason}, 阻止做多")
                         return None
 
                 return {
