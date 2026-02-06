@@ -1049,11 +1049,11 @@ class SmartDecisionBrain:
                 # 🔥 关键修复: 清理signal_components,只保留与最终方向一致的信号
                 # 定义多头和空头信号 (已移除1D信号和EMA信号)
                 bullish_signals = {
-                    'position_high', 'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
+                    'position_low', 'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
                     'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull'
                 }
                 bearish_signals = {
-                    'position_low', 'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
+                    'position_high', 'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
                     'trend_1h_bear', 'momentum_down_3pct', 'consecutive_bear'
                 }
                 neutral_signals = {'position_mid', 'volatility_high'}  # 中性信号可以在任何方向
