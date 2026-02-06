@@ -898,17 +898,14 @@ class SmartDecisionBrain:
             recent_24h = klines_1h[-24:]
             volatility = (max(k['high'] for k in recent_24h) - min(k['low'] for k in recent_24h)) / current * 100
 
-            # 高波动率更适合交易
+            # 高波动率更适合交易 - 同时给LONG和SHORT加分（因为高波动适合双向交易）
             if volatility > 5:  # 波动超过5%
                 weight = self.scoring_weights.get('volatility_high', {'long': 10, 'short': 10})
-                if long_score > short_score:
-                    long_score += weight['long']
-                    if weight['long'] > 0:
-                        signal_components['volatility_high'] = weight['long']
-                else:
-                    short_score += weight['short']
-                    if weight['short'] > 0:
-                        signal_components['volatility_high'] = weight['short']
+                long_score += weight['long']
+                short_score += weight['short']
+                # 记录在组件中（取平均值）
+                if weight['long'] > 0 or weight['short'] > 0:
+                    signal_components['volatility_high'] = (weight['long'] + weight['short']) / 2
 
             # 5. 连续趋势强化信号 - 最近10根1小时K线
             recent_10h = klines_1h[-10:]
