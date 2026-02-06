@@ -984,8 +984,10 @@ class SmartDecisionBrain:
 
             # 8. 突破追涨信号: position_high + 强力量能多头 → 可以做多
             # 用户反馈: "不适合做空，那就适合做多啊", "K线多空比，还要结合量能一起看"
-            # 🔥 新增: 增强追高过滤，防止买在顶部
-            if position_pct > 70 and (net_power_1h >= 2 or (net_power_1h >= 2 and net_power_15m >= 2)):
+            # 🔥 修改: 放宽LONG信号条件，避免BULLISH市场下没有交易机会
+            # 原条件: position > 70 太严格
+            # 新条件: position > 50 且量能多头强势即可做多
+            if position_pct > 50 and (net_power_1h >= 2 or (net_power_1h >= 2 and net_power_15m >= 2)):
                 # 额外过滤条件: 防止追高
                 can_breakout = True
                 breakout_warnings = []
