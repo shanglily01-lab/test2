@@ -191,11 +191,35 @@ class SafeModeSwitcher:
 
         current_mode = current_config['mode_type']
 
-        # 检查2: 持仓检查 - 有持仓时禁止切换
+        # 检查2: 持仓检查 - 有持仓时的策略
         open_positions_count = self.check_open_positions(account_id)
+
+        # 🔥 修改: 允许在Big4明显变化时，即使有持仓也能切换
+        # 原因: 高位震荡时用趋势模式的3%止损非常危险
         if open_positions_count > 0:
-            logger.warning(f"🚫 [SAFE-MODE-SWITCH] 当前有{open_positions_count}个持仓，禁止自动切换")
-            return None
+            # 判断Big4是否发生显著变化（需要紧急切换）
+            needs_urgent_switch = False
+
+            # 情况1: 趋势市→中性市 (强度从>60降到<40)
+            if current_mode == 'trend' and big4_strength < self.RANGE_THRESHOLD:
+                needs_urgent_switch = True
+                logger.warning(
+                    f"⚠️ [SAFE-MODE-SWITCH] Big4转为震荡({big4_strength:.1f}), "
+                    f"虽有{open_positions_count}个持仓但允许切换(保护资金)"
+                )
+
+            # 情况2: 中性市→趋势市 (强度从<40升到>70)
+            elif current_mode == 'range' and big4_strength >= self.TREND_THRESHOLD:
+                needs_urgent_switch = True
+                logger.warning(
+                    f"⚠️ [SAFE-MODE-SWITCH] Big4转为趋势({big4_strength:.1f}), "
+                    f"虽有{open_positions_count}个持仓但允许切换(抓住机会)"
+                )
+
+            # 如果不是紧急切换，则禁止
+            if not needs_urgent_switch:
+                logger.info(f"📊 [SAFE-MODE-SWITCH] 有{open_positions_count}个持仓且无紧急切换需求，保持{current_mode}模式")
+                return None
 
         # 检查3: 冷却期检查
         if current_config.get('last_switch_time'):
