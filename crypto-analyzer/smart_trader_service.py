@@ -780,8 +780,8 @@ class SmartDecisionBrain:
             breakout_result = self.detect_strong_breakout(symbol, klines_15m)
 
             if breakout_result['is_breakout']:
-                # 🔥 强破位信号触发！
-                logger.critical(f"🔥🔥🔥 {symbol} {breakout_result['reason']}")
+                # 🔥 强破位信号触发！（只在趋势模式启用）
+                logger.critical(f"🔥🔥🔥 [TREND-MODE] {symbol} {breakout_result['reason']}")
 
                 # 🔥 检查是否有反向持仓需要平仓
                 if self.trader_service:
