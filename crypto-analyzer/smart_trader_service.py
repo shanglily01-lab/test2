@@ -2527,9 +2527,9 @@ class SmartTraderService:
         🔥 检查最近交易是否止损过多,触发熔断机制
 
         检查逻辑:
-        1. 查询最近N笔已平仓交易
-        2. 统计其中有多少笔是亏损平仓 (realized_pnl < -10)
-        3. 如果亏损笔数 >= 阈值,触发熔断
+        1. 查询最近N笔已平仓订单(futures_orders)
+        2. 从notes字段判断是否是止损平仓(包含"止损"关键字)
+        3. 如果止损笔数 >= 阈值,触发熔断
         4. 设置emergency_stop_loss_circuit_time,2小时内禁止开新仓
 
         返回:
@@ -2539,13 +2539,16 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 查询最近N笔已平仓交易
+            # 查询最近N笔平仓订单（从futures_orders查询，因为notes字段包含平仓原因）
             cursor.execute("""
-                SELECT id, symbol, position_side, realized_pnl, close_time, entry_reason
-                FROM futures_positions
-                WHERE status = 'closed'
-                AND account_id = %s
-                ORDER BY close_time DESC
+                SELECT
+                    o.order_id, o.symbol, o.side, o.realized_pnl,
+                    o.notes, o.fill_time
+                FROM futures_orders o
+                WHERE o.account_id = %s
+                AND o.side LIKE '%%CLOSE%%'
+                AND o.status = 'FILLED'
+                ORDER BY o.fill_time DESC
                 LIMIT %s
             """, (self.account_id, self.circuit_check_recent_trades))
 
@@ -2556,25 +2559,30 @@ class SmartTraderService:
                 # 交易笔数不足N笔,不触发熔断
                 return False
 
-            # 统计止损(亏损)笔数
+            # 统计止损笔数
             stop_loss_count = 0
             stop_loss_details = []
 
             for trade in recent_trades:
+                notes = trade.get('notes', '') or ''
                 realized_pnl = float(trade.get('realized_pnl', 0))
-                # 认为亏损超过10U的是止损单
-                if realized_pnl < -10:
+
+                # 判断是否是止损平仓（notes中包含"止损"）
+                is_stop_loss = '止损' in notes
+
+                if is_stop_loss:
                     stop_loss_count += 1
                     stop_loss_details.append({
                         'symbol': trade['symbol'],
-                        'side': trade['position_side'],
-                        'pnl': realized_pnl
+                        'side': trade['side'],
+                        'pnl': realized_pnl,
+                        'reason': notes[:50]  # 截取前50字符
                     })
 
             # 检查是否超过阈值
             if stop_loss_count >= self.circuit_stop_loss_threshold:
                 details_str = ', '.join([
-                    f"{d['symbol']}{d['side']}({d['pnl']:.1f}U)"
+                    f"{d['symbol']}({d['pnl']:.1f}U)"
                     for d in stop_loss_details[:5]  # 只显示前5笔
                 ])
 
