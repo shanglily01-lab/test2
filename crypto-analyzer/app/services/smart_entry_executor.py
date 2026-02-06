@@ -647,12 +647,14 @@ class SmartEntryExecutor:
             volatility_calc = get_volatility_calculator()
             entry_score = signal.get('trade_params', {}).get('entry_score', 30)
             signal_components = list(signal.get('trade_params', {}).get('signal_components', {}).keys())
+            max_hold_minutes = signal.get('max_hold_minutes', 240)  # 🔥 获取持仓时间
 
             stop_loss_pct, take_profit_pct, calc_reason = volatility_calc.get_sl_tp_for_position(
                 symbol=symbol,
                 position_side=direction,
                 entry_score=entry_score,
-                signal_components=signal_components
+                signal_components=signal_components,
+                max_hold_minutes=max_hold_minutes  # 🔥 传入持仓时间
             )
 
             logger.info(f"[{symbol}] {direction} 止损止盈计算: SL={stop_loss_pct}% TP={take_profit_pct}% | {calc_reason}")
@@ -760,12 +762,14 @@ class SmartEntryExecutor:
             volatility_calc = get_volatility_calculator()
             entry_score = signal.get('trade_params', {}).get('entry_score', 30)
             signal_components = list(signal.get('trade_params', {}).get('signal_components', {}).keys())
+            max_hold_minutes = signal.get('max_hold_minutes', 240)  # 🔥 获取持仓时间
 
             stop_loss_pct, take_profit_pct, calc_reason = volatility_calc.get_sl_tp_for_position(
                 symbol=plan['symbol'],
                 position_side=direction,
                 entry_score=entry_score,
-                signal_components=signal_components
+                signal_components=signal_components,
+                max_hold_minutes=max_hold_minutes  # 🔥 传入持仓时间
             )
 
             # 转换为小数
@@ -936,7 +940,7 @@ class SmartEntryExecutor:
             # 计算计划平仓时间（基于 entry_score）
             entry_score = signal.get('trade_params', {}).get('entry_score', 30)
             # 🔥 修改: 统一4小时强制平仓,移除6小时选项
-            max_hold_minutes = 240  # 4小时强制平仓
+            max_hold_minutes = signal.get('max_hold_minutes', 240)  # 🔥 从signal获取持仓时间(中性市120,趋势市240)
 
             from datetime import timedelta
             planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
@@ -949,7 +953,8 @@ class SmartEntryExecutor:
                 symbol=symbol,
                 position_side=direction,
                 entry_score=entry_score,
-                signal_components=signal_components
+                signal_components=signal_components,
+                max_hold_minutes=max_hold_minutes  # 🔥 传入持仓时间
             )
 
             logger.info(f"[{symbol}] {direction} 最终止损止盈: SL={stop_loss_pct}% TP={take_profit_pct}% | {calc_reason}")

@@ -1087,10 +1087,10 @@ class SmartExitOptimizer:
             current_stage = self.partial_close_stage.get(position_id, 0)
 
             # ============================================================
-            # === 优先级0: 最小持仓时间限制 (2小时) ===
+            # === 优先级0: 最小持仓时间限制 (30分钟) ===
             # ============================================================
-            # 开仓2小时内只允许止损和止盈,不允许其他原因平仓
-            MIN_HOLD_MINUTES = 120  # 2小时最小持仓时间
+            # 🔥 紧急修复: 从2小时缩短到30分钟,避免反转行情巨亏
+            MIN_HOLD_MINUTES = 30  # 30分钟最小持仓时间
 
             # ============================================================
             # === 优先级1: 固定止损检查（风控底线，无需等待最小持仓时间） ===
@@ -1143,17 +1143,47 @@ class SmartExitOptimizer:
                         return ('固定止盈', 1.0)
 
             # ============================================================
-            # === 在此之后的所有平仓检查都需要满足最小持仓时间(2小时) ===
+            # === 优先级3: 紧急反转检测 (30分钟后生效) ===
             # ============================================================
-            # 开仓2小时内不平仓(除了止损和止盈)
-            if hold_minutes < MIN_HOLD_MINUTES:
-                # 2小时内只允许止损和止盈,不进行其他平仓检查
-                return None
+            # 🔥 紧急修复: 在30分钟后,如果亏损>1.5%且K线强烈反转,立即止损
+            if hold_minutes >= 30:
+                if profit_info['profit_pct'] < -1.5:
+                    try:
+                        strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
+                        strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
+
+                        if strength_15m and strength_5m:
+                            net_power_15m = strength_15m.get('net_power', 0)
+                            net_power_5m = strength_5m.get('net_power', 0)
+
+                            # LONG持仓检查是否强烈反转为看空
+                            if position_side == 'LONG':
+                                if net_power_15m <= -6 and net_power_5m <= -6:
+                                    logger.warning(
+                                        f"🚨 紧急反转保护: 持仓{position_id} {symbol} LONG | "
+                                        f"亏损{profit_info['profit_pct']:.1f}% | "
+                                        f"15m净能量{net_power_15m}, 5m净能量{net_power_5m} (强烈看空) | "
+                                        f"持仓{hold_minutes:.0f}分钟"
+                                    )
+                                    return ('紧急反转止损(亏损+强烈反转)', 1.0)
+
+                            # SHORT持仓检查是否强烈反转为看多
+                            elif position_side == 'SHORT':
+                                if net_power_15m >= 6 and net_power_5m >= 6:
+                                    logger.warning(
+                                        f"🚨 紧急反转保护: 持仓{position_id} {symbol} SHORT | "
+                                        f"亏损{profit_info['profit_pct']:.1f}% | "
+                                        f"15m净能量{net_power_15m}, 5m净能量{net_power_5m} (强烈看多) | "
+                                        f"持仓{hold_minutes:.0f}分钟"
+                                    )
+                                    return ('紧急反转止损(亏损+强烈反转)', 1.0)
+                    except Exception as e:
+                        logger.debug(f"紧急反转检查失败: {e}")
 
             # ============================================================
-            # === 优先级4: 智能顶底识别 ===
+            # === 优先级4: 智能顶底识别 (立即生效,无需等待) ===
             # ============================================================
-            # 注: 已满足2小时最小持仓时间,现在可以检查顶底
+            # 🔥 紧急修复: 移除最小持仓时间限制,趋势策略30分钟后就能检查顶底
             is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price)
             if is_top_bottom:
                 logger.info(

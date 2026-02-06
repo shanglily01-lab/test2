@@ -1433,7 +1433,10 @@ class SmartTraderService:
             # 震荡市策略不使用分批建仓（使用固定2%止损，与分批建仓的波动率止损不兼容）
             is_range_strategy = strategy == 'bollinger_mean_reversion'
 
-            if should_use_batch and not is_reversal and not is_range_strategy:
+            # 🔥 紧急修复: 中性市场禁用分批建仓
+            disable_batch = opp.get('disable_batch_entry', False)
+
+            if should_use_batch and not is_reversal and not is_range_strategy and not disable_batch:
                 logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓（后台异步执行）")
                 # 在后台异步执行分批建仓，不阻塞主循环
                 import asyncio
@@ -1654,7 +1657,11 @@ class SmartTraderService:
                 logger.info(f"[BIG4-APPLIED] {symbol} Big4趋势: {big4_signal} (强度: {big4_strength})")
 
             # ========== 根据策略类型确定超时时间 ==========
-            if strategy == 'bollinger_mean_reversion' and mode_config:
+            # 🔥 紧急修复: 优先检查是否有中性市场指定的持仓时间
+            if 'max_hold_minutes' in opp:
+                base_timeout_minutes = opp['max_hold_minutes']
+                logger.info(f"[中性市-TIMEOUT] {symbol} 使用指定持仓时间: {base_timeout_minutes}分钟")
+            elif strategy == 'bollinger_mean_reversion' and mode_config:
                 # 震荡市策略: 使用range_max_hold_hours (默认4小时)
                 range_max_hold_hours = int(mode_config.get('range_max_hold_hours', 4))  # 转换Decimal为int
                 base_timeout_minutes = range_max_hold_hours * 60
@@ -1804,6 +1811,7 @@ class SmartTraderService:
                 'total_margin': adjusted_position_size,
                 'leverage': self.leverage,
                 'strategy_id': 'smart_trader',
+                'max_hold_minutes': opp.get('max_hold_minutes', 240),  # 🔥 传入持仓时间(中性市120,趋势市240)
                 'trade_params': {
                     'entry_score': opp.get('score', 0),
                     'signal_components': signal_components,
@@ -3196,17 +3204,23 @@ class SmartTraderService:
                             signal_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                        # ========== 震荡市过滤: NEUTRAL时提高门槛 ==========
+                        # ========== 震荡市过滤: NEUTRAL时提高门槛 或 直接禁止 ==========
                         if symbol_signal == 'NEUTRAL':
-                            if signal_strength < 30:  # 弱信号,震荡市
-                                threshold_boost = 15  # 需要额外15分
-                                if new_score < 35 + threshold_boost:  # 原阈值35 + 15 = 50分
-                                    logger.warning(f"[BIG4-NEUTRAL-SKIP] {symbol} 震荡市且评分不足 ({new_score} < 50), 跳过")
+                            if signal_strength < 30:  # 弱信号,真正的震荡市
+                                # 🔥 紧急修复: 震荡市直接禁止开仓,避免频繁打脸和手续费损失
+                                logger.warning(f"[震荡市-禁止] {symbol} 震荡市(强度{signal_strength:.1f}), 直接跳过 (原评分{new_score})")
+                                continue
+                            else:
+                                # 中性市场(强度30-60),允许开仓但提高要求
+                                threshold_boost = 10
+                                if new_score < 35 + threshold_boost:  # 原阈值35 + 10 = 45分
+                                    logger.warning(f"[中性市-跳过] {symbol} 中性市场评分不足 ({new_score} < 45), 跳过")
                                     continue
                                 else:
-                                    logger.info(f"[BIG4-NEUTRAL-OK] {symbol} 震荡市但评分足够 ({new_score} >= 50), 允许开仓")
-                            else:
-                                logger.info(f"[BIG4-NEUTRAL] {symbol} 市场中性(强度{signal_strength:.1f}),正常开仓")
+                                    # 🔥 紧急修复: 中性市场缩短持仓时间到2小时,禁用分批建仓
+                                    opp['max_hold_minutes'] = 120  # 2小时持仓
+                                    opp['disable_batch_entry'] = True  # 禁用分批建仓
+                                    logger.info(f"[中性市-OK] {symbol} 中性市场(强度{signal_strength:.1f}), 评分{new_score}, 2小时持仓+一次性开仓")
                         # ========== NEUTRAL 处理结束 ==========
 
                         # 如果信号方向与交易方向冲突,降低评分或跳过
