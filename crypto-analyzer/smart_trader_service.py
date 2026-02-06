@@ -1031,7 +1031,7 @@ class SmartTraderService:
         # 🔥 紧急干预标志 - 底部/顶部反转时触发
         self.emergency_bottom_reversal_time = None  # 底部反转触发时间
         self.emergency_top_reversal_time = None     # 顶部反转触发时间
-        self.emergency_block_duration_hours = 2     # 紧急干预持续时间(小时)
+        self.emergency_block_duration_hours = 4     # 紧急干预持续时间(小时)
 
         # 优化配置管理器 (支持自我优化的参数配置)
         self.opt_config = OptimizationConfig(self.db_config)
