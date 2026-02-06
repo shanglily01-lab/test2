@@ -38,6 +38,53 @@ class SmartEntryExecutor:
         self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40%
         self.time_window = 60  # 60分钟建仓窗口 (前15分钟采集样本,然后30/45/60分钟执行)
 
+    def _check_big4_conflict(self, symbol: str, side: str) -> tuple:
+        """
+        🔥 检查Big4方向冲突
+
+        场景: 分批建仓过程中Big4方向可能变化
+        例如: 开始做空时Big4是BEARISH,但建仓过程中变为BULLISH
+
+        Returns:
+            (should_cancel, reason) - 是否应该取消建仓, 原因
+        """
+        try:
+            import pymysql
+            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
+            cursor = conn.cursor()
+
+            # 获取最新Big4信号
+            cursor.execute("""
+                SELECT overall_signal, signal_strength
+                FROM big4_trend_signals
+                ORDER BY checked_at DESC
+                LIMIT 1
+            """)
+
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if not result:
+                return False, None
+
+            big4_signal = result['overall_signal']
+            big4_strength = float(result['signal_strength'])
+
+            # 🔥 检查方向冲突
+            if big4_signal == 'BULLISH' and side == 'SHORT' and big4_strength >= 60:
+                reason = f"Big4强烈看多(强度{big4_strength:.1f}),取消做空建仓"
+                return True, reason
+            elif big4_signal == 'BEARISH' and side == 'LONG' and big4_strength >= 60:
+                reason = f"Big4强烈看空(强度{big4_strength:.1f}),取消做多建仓"
+                return True, reason
+
+            return False, None
+
+        except Exception as e:
+            logger.error(f"检查Big4冲突失败: {e}")
+            return False, None  # 检查失败不影响建仓
+
     async def execute_entry(self, signal: Dict) -> Dict:
         """
         执行智能分批建仓
@@ -126,6 +173,20 @@ class SmartEntryExecutor:
 
         try:
             while (datetime.now() - signal_time).total_seconds() < max_window_seconds:
+                # 🔥 每次建仓前检查Big4方向冲突
+                should_cancel, cancel_reason = self._check_big4_conflict(symbol, side)
+                if should_cancel:
+                    logger.critical(f"🚨 [BIG4-CONFLICT] {symbol} {side} {cancel_reason}, 终止分批建仓")
+                    # 如果已有部分建仓,需要平掉
+                    if plan.get('position_id'):
+                        logger.critical(f"🚨 [BIG4-CONFLICT] 检测到已建仓,立即平掉持仓ID:{plan['position_id']}")
+                        # TODO: 调用平仓接口
+                    return {
+                        'success': False,
+                        'reason': f'BIG4_CONFLICT:{cancel_reason}',
+                        'cancelled': True
+                    }
+
                 current_price = await self._get_current_price(symbol)
                 elapsed_minutes = (datetime.now() - signal_time).total_seconds() / 60
 
