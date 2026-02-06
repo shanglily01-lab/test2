@@ -271,6 +271,9 @@
                 <button class="tab-btn" onclick="switchTab('daily-pnl')">
                     <i class="bi bi-calendar3"></i> 每日盈亏统计
                 </button>
+                <button class="tab-btn" onclick="switchTab('retrospective')">
+                    <i class="bi bi-clock-history"></i> 12H复盘分析
+                </button>
             </div>
 
             <!-- Trades Tab -->
@@ -674,6 +677,86 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Retrospective Analysis Tab -->
+            <div id="retrospective-tab" class="tab-content">
+                <div class="card" style="margin-top: 0;">
+                    <div class="card-header">
+                        <h3 class="card-title">
+                            <i class="bi bi-clock-history"></i> 12小时复盘分析
+                        </h3>
+                        <button class="btn btn-primary" onclick="loadRetrospectiveAnalysis()">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新分析
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="retrospectiveLoading" class="loading-overlay">
+                            <div class="spinner"></div>
+                        </div>
+                        <div id="retrospectiveContent" style="display: none;">
+                            <!-- 市场走势分析 -->
+                            <div class="card" style="margin-bottom: 24px;">
+                                <div class="card-header">
+                                    <h4 class="card-title">
+                                        <i class="bi bi-graph-up"></i> 市场走势分析
+                                    </h4>
+                                </div>
+                                <div class="card-body">
+                                    <div id="marketAnalysisGrid" class="stats-grid"></div>
+                                </div>
+                            </div>
+
+                            <!-- Big4信号分析 -->
+                            <div class="card" style="margin-bottom: 24px;">
+                                <div class="card-header">
+                                    <h4 class="card-title">
+                                        <i class="bi bi-broadcast"></i> Big4信号分析
+                                    </h4>
+                                </div>
+                                <div class="card-body">
+                                    <div id="big4SignalAnalysis"></div>
+                                </div>
+                            </div>
+
+                            <!-- 交易表现分析 -->
+                            <div class="card" style="margin-bottom: 24px;">
+                                <div class="card-header">
+                                    <h4 class="card-title">
+                                        <i class="bi bi-bar-chart-line"></i> 交易表现分析
+                                    </h4>
+                                </div>
+                                <div class="card-body">
+                                    <div id="tradingPerformanceStats" class="stats-grid"></div>
+                                </div>
+                            </div>
+
+                            <!-- 亏损分析 -->
+                            <div class="card" style="margin-bottom: 24px;">
+                                <div class="card-header">
+                                    <h4 class="card-title">
+                                        <i class="bi bi-exclamation-triangle"></i> 亏损深度分析
+                                    </h4>
+                                </div>
+                                <div class="card-body">
+                                    <div id="lossAnalysis"></div>
+                                </div>
+                            </div>
+
+                            <!-- 改进建议 -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h4 class="card-title">
+                                        <i class="bi bi-lightbulb"></i> 改进建议
+                                    </h4>
+                                </div>
+                                <div class="card-body">
+                                    <div id="improvementSuggestions"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -796,6 +879,11 @@
                     initMonthSelector();
                 }
                 loadDailyPnl();
+            }
+
+            // 切换到复盘分析时加载数据
+            if (tabName === 'retrospective') {
+                loadRetrospectiveAnalysis();
             }
         }
 

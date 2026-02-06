@@ -464,6 +464,51 @@ async def lifespan(app: FastAPI):
         # 配置定时任务：每4小时执行一次
         schedule.every(4).hours.do(run_daily_optimization)
 
+        # 定义12小时复盘分析任务
+        def run_12h_retrospective():
+            """执行12小时复盘分析"""
+            try:
+                logger.info("=" * 80)
+                logger.info("🔍 开始执行12小时复盘分析...")
+                logger.info("=" * 80)
+
+                result = subprocess.run(
+                    ['python', str(project_root / 'scripts' / '12h_retrospective_analysis.py')],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    encoding='utf-8',
+                    errors='ignore'
+                )
+
+                if result.returncode == 0:
+                    logger.info("✅ 12小时复盘分析完成")
+
+                    # 保存分析结果
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    report_dir = project_root / 'logs' / 'retrospective'
+                    report_dir.mkdir(parents=True, exist_ok=True)
+
+                    report_file = report_dir / f'analysis_{timestamp}.txt'
+                    with open(report_file, 'w', encoding='utf-8') as f:
+                        f.write(result.stdout)
+
+                    logger.info(f"分析报告已保存: {report_file}")
+                else:
+                    logger.error(f"❌ 12小时复盘分析失败: {result.stderr}")
+
+            except subprocess.TimeoutExpired:
+                logger.error("❌ 12小时复盘分析超时")
+            except Exception as e:
+                logger.error(f"❌ 12小时复盘分析失败: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+
+        # 配置12小时复盘分析：每天00:00和12:00执行
+        schedule.every().day.at("00:00").do(run_12h_retrospective)
+        schedule.every().day.at("12:00").do(run_12h_retrospective)
+
         # 创建后台任务运行调度器
         async def schedule_runner():
             """运行调度器"""
@@ -473,6 +518,7 @@ async def lifespan(app: FastAPI):
 
         daily_optimizer_task = asyncio.create_task(schedule_runner())
         logger.info("✅ 超级大脑自我优化服务已启动（每4小时执行一次）")
+        logger.info("✅ 12小时复盘分析服务已启动（每天00:00和12:00执行）")
 
     except Exception as e:
         logger.warning(f"⚠️  启动超级大脑优化服务失败: {e}")
