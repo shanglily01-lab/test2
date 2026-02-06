@@ -1153,7 +1153,8 @@ class SmartDecisionBrain:
 
                 # 🔥 调试日志：打印评分详情（帮助诊断为什么LONG信号变成SHORT）
                 if long_score >= 30 or short_score >= 30:  # 只打印接近阈值的信号
-                    logger.info(f"[SCORE] {symbol} {side}={score} | LONG={long_score} SHORT={short_score}")
+                    # 打印具体的信号组件，看看是什么贡献了分数
+                    logger.info(f"[SCORE] {symbol} {side}={score} | LONG={long_score} SHORT={short_score} | 组件={signal_components}")
 
                 return {
                     'symbol': symbol,
