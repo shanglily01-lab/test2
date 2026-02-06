@@ -3764,7 +3764,7 @@ class SmartTraderService:
                         # 如果信号方向与交易方向冲突,降低评分或跳过
                         # 🔥 修复BUG: 任何方向冲突都应该直接跳过,不管强度高低
                         # 原因: 市场看多时开空单/市场看空时开多单都是反市场行为,风险极高
-                        elif symbol_signal == 'BEARISH' and new_side == 'LONG':
+                        if symbol_signal == 'BEARISH' and new_side == 'LONG':
                             logger.info(f"[BIG4-SKIP] {symbol} 市场看空(强度{signal_strength:.1f}), 跳过LONG信号 (原评分{new_score})")
                             continue
 
