@@ -27,6 +27,7 @@ from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
+from app.strategies.range_reversal_strategy import RangeReversalStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
 from app.strategies.safe_mode_switcher import SafeModeSwitcher
 
@@ -1327,9 +1328,10 @@ class SmartTraderService:
         # ========== 震荡市交易策略模块 ==========
         self.range_detector = RangeMarketDetector(self.db_config)
         self.bollinger_strategy = BollingerMeanReversionStrategy(self.db_config)
+        self.range_reversal_strategy = RangeReversalStrategy(self.db_config)  # 新增震荡反转策略
         self.mode_switcher = TradingModeSwitcher(self.db_config)
         self.safe_mode_switcher = SafeModeSwitcher(self.db_config)  # 安全模式切换器
-        logger.info("✅ 震荡市交易策略模块已初始化（含安全模式切换器）")
+        logger.info("✅ 震荡市交易策略模块已初始化（布林带+反转策略+安全模式切换器）")
         self.last_big4_detection_time = None
 
         logger.info("🔱 Big4趋势检测器已启动 (15分钟检测, 1小时缓存)")
@@ -3648,31 +3650,40 @@ class SmartTraderService:
 
                 # 根据模式选择策略
                 if current_mode == 'range':
-                    # 震荡模式: 使用布林带均值回归策略
+                    # 震荡模式: 使用新版反转策略（优先）+ 布林带策略（备选）
                     opportunities = []
                     big4_result = self.get_big4_result()
                     big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
 
                     for symbol in self.brain.whitelist:
                         try:
-                            signal = self.bollinger_strategy.generate_signal(
+                            # 🔥 优先使用新版反转策略（基于4H高低点+量能萎缩+引线）
+                            signal = self.range_reversal_strategy.generate_signal(
                                 symbol=symbol,
-                                big4_signal=big4_signal,
-                                timeframe='15m'
+                                big4_signal=big4_signal
                             )
+
+                            # 如果新策略没有信号，尝试布林带策略作为备选
+                            if not signal:
+                                signal = self.bollinger_strategy.generate_signal(
+                                    symbol=symbol,
+                                    big4_signal=big4_signal,
+                                    timeframe='15m'
+                                )
 
                             if signal and signal['score'] >= int(mode_config.get('range_min_score', 50)):
                                 opportunities.append({
                                     'symbol': signal['symbol'],
                                     'side': signal['signal'],
                                     'score': signal['score'],
-                                    'strategy': 'bollinger_mean_reversion',
+                                    'strategy': signal.get('strategy', 'bollinger_mean_reversion'),
                                     'reason': signal['reason'],
                                     'take_profit_price': signal.get('take_profit_price'),
                                     'stop_loss_price': signal.get('stop_loss_price'),
-                                    'signal_components': {'range_trading': signal['score']}  # 添加信号组件标识
+                                    'signal_components': {'range_trading': signal['score']}
                                 })
-                                logger.info(f"[RANGE-SIGNAL] {symbol} {signal['signal']} 分数:{signal['score']} | {signal['reason']}")
+                                strategy_name = '反转策略' if signal.get('strategy') == 'range_reversal' else '布林带'
+                                logger.info(f"[RANGE-SIGNAL] {symbol} {signal['signal']} 分数:{signal['score']} | {strategy_name} | {signal['reason']}")
                         except Exception as e:
                             logger.error(f"[RANGE-ERROR] {symbol} 震荡市信号生成失败: {e}")
 
