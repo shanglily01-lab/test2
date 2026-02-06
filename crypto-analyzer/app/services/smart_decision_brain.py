@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from loguru import logger
 import pymysql
 
+from app.services.signal_quality_manager import SignalQualityManager
+
 
 class SmartDecisionBrain:
     """智能决策大脑"""
@@ -55,7 +57,12 @@ class SmartDecisionBrain:
         # 决策阈值
         self.threshold = 30  # 最低30分才开仓
 
+        # === 新增: 信号质量管理器 ===
+        self.quality_manager = SignalQualityManager(db_config)
+        self.enable_quality_filter = True  # 启用信号质量筛选
+
         logger.info(f"✅ 智能决策大脑已初始化 | 白名单币种: {len(self.whitelist_long)}个 | 黑名单币种: {len(self.blacklist)}个 | 阈值: {self.threshold}分")
+        logger.info(f"   信号质量筛选: {'启用' if self.enable_quality_filter else '禁用'} | 不修改权重，仅调整阈值")
 
     def _get_connection(self):
         """获取数据库连接"""

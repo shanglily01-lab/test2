@@ -1153,6 +1153,18 @@ class SmartDecisionBrain:
                     # 打印具体的信号组件，看看是什么贡献了分数
                     logger.info(f"[SCORE] {symbol} {side}={score} | LONG={long_score} SHORT={short_score} | 组件={signal_components}")
 
+                # 🔥 新增: 信号质量筛选（基于历史表现调整阈值，不修改权重）
+                if self.brain and hasattr(self.brain, 'quality_manager') and self.brain.enable_quality_filter:
+                    signal_key = self._generate_signal_combination_key(signal_components)
+                    passed, reason = self.brain.quality_manager.check_signal_quality_filter(
+                        symbol, side, score, signal_key, base_threshold=self.threshold
+                    )
+                    if not passed:
+                        logger.info(f"[QUALITY_FILTER] {symbol} {side} | {reason}")
+                        return None
+                    else:
+                        logger.info(f"[QUALITY_FILTER] {symbol} {side} | {reason}")
+
                 return {
                     'symbol': symbol,
                     'side': side,
@@ -2859,9 +2871,9 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
 
-            # 获取持仓信息用于日志和计算盈亏
+            # 获取持仓信息用于日志和计算盈亏（包含signal_type用于更新质量）
             cursor.execute("""
-                SELECT id, entry_price, quantity, leverage, margin FROM futures_positions
+                SELECT id, entry_price, quantity, leverage, margin, entry_signal_type FROM futures_positions
                 WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
             """, (symbol, side, self.account_id))
 
@@ -2898,6 +2910,11 @@ class SmartTraderService:
                         notes = CONCAT(IFNULL(notes, ''), '|', %s)
                     WHERE id = %s
                 """, (current_price, realized_pnl, reason, pos['id']))
+
+                # 🔥 新增: 更新信号质量统计（平仓后）
+                if self.brain and hasattr(self.brain, 'quality_manager') and pos.get('entry_signal_type'):
+                    signal_key = pos['entry_signal_type']
+                    self.brain.quality_manager.update_signal_quality(signal_key, side, realized_pnl)
 
                 # Calculate values for orders and trades
                 import uuid
