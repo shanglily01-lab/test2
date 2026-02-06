@@ -2421,9 +2421,9 @@ class CoinFuturesTraderService:
         🔥 检查最近交易是否止损过多,触发熔断机制
 
         检查逻辑:
-        1. 查询最近10笔已平仓交易
-        2. 统计其中有多少笔是止损平仓 (close_reason LIKE '%止损%')
-        3. 如果止损笔数 >= 5,触发熔断
+        1. 查询最近N笔已平仓交易
+        2. 统计其中有多少笔是亏损平仓 (realized_pnl < -10)
+        3. 如果亏损笔数 >= 阈值,触发熔断
         4. 设置emergency_stop_loss_circuit_time,2小时内禁止开新仓
 
         返回:
@@ -2435,7 +2435,7 @@ class CoinFuturesTraderService:
 
             # 查询最近N笔已平仓交易
             cursor.execute("""
-                SELECT id, symbol, position_side, close_reason, realized_pnl, close_time
+                SELECT id, symbol, position_side, realized_pnl, close_time, entry_reason
                 FROM coin_futures_positions
                 WHERE status = 'closed'
                 AND account_id = %s
@@ -2447,22 +2447,22 @@ class CoinFuturesTraderService:
             cursor.close()
 
             if len(recent_trades) < self.circuit_check_recent_trades:
-                # 交易笔数不足10笔,不触发熔断
+                # 交易笔数不足N笔,不触发熔断
                 return False
 
-            # 统计止损笔数
+            # 统计止损(亏损)笔数
             stop_loss_count = 0
             stop_loss_details = []
 
             for trade in recent_trades:
-                close_reason = trade.get('close_reason', '')
-                if close_reason and ('止损' in close_reason or 'stop_loss' in close_reason.lower() or '固定止损' in close_reason):
+                realized_pnl = float(trade.get('realized_pnl', 0))
+                # 认为亏损超过10U的是止损单
+                if realized_pnl < -10:
                     stop_loss_count += 1
                     stop_loss_details.append({
                         'symbol': trade['symbol'],
                         'side': trade['position_side'],
-                        'reason': close_reason,
-                        'pnl': float(trade.get('realized_pnl', 0))
+                        'pnl': realized_pnl
                     })
 
             # 检查是否超过阈值
