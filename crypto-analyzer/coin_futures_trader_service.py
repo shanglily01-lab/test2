@@ -882,6 +882,16 @@ class CoinFuturesDecisionBrain:
                 # 🔥 紧急干预检查: 如果处于紧急干预期,禁止开新仓
                 import time
 
+                # 检查止损熔断
+                if self.emergency_stop_loss_circuit_time:
+                    hours_since_circuit = (time.time() - self.emergency_stop_loss_circuit_time) / 3600
+                    if hours_since_circuit <= self.circuit_block_hours:
+                        logger.warning(f"🚨 [CIRCUIT-BREAKER] {symbol} 止损熔断中({hours_since_circuit:.1f}h/{self.circuit_block_hours}h),禁止开仓")
+                        return None
+                    else:
+                        # 超过干预时间,清除标志
+                        self.emergency_stop_loss_circuit_time = None
+
                 # 检查总亏损干预
                 if self.emergency_loss_limit_time:
                     hours_since_loss_emergency = (time.time() - self.emergency_loss_limit_time) / 3600
@@ -1036,6 +1046,12 @@ class CoinFuturesTraderService:
         self.emergency_loss_limit_time = None       # 总亏损触发时间
         self.emergency_loss_threshold = 600         # 总亏损阈值(USDT)
         self.emergency_loss_block_hours = 2         # 总亏损干预持续时间(小时)
+
+        # 🔥 紧急熔断标志 - 连续止损过多时触发
+        self.emergency_stop_loss_circuit_time = None  # 止损熔断触发时间
+        self.circuit_check_recent_trades = 10         # 检查最近N笔交易
+        self.circuit_stop_loss_threshold = 5          # 止损笔数阈值
+        self.circuit_block_hours = 2                  # 熔断持续时间(小时)
 
         # 优化配置管理器 (支持自我优化的参数配置)
         self.opt_config = OptimizationConfig(self.db_config)
@@ -2400,6 +2416,82 @@ class CoinFuturesTraderService:
             logger.error(f"❌ [EMERGENCY-LOSS] 检查总亏损失败: {e}", exc_info=True)
             return False
 
+    def _check_stop_loss_circuit(self) -> bool:
+        """
+        🔥 检查最近交易是否止损过多,触发熔断机制
+
+        检查逻辑:
+        1. 查询最近10笔已平仓交易
+        2. 统计其中有多少笔是止损平仓 (close_reason LIKE '%止损%')
+        3. 如果止损笔数 >= 5,触发熔断
+        4. 设置emergency_stop_loss_circuit_time,2小时内禁止开新仓
+
+        返回:
+            bool: True表示触发了熔断,False表示正常
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # 查询最近N笔已平仓交易
+            cursor.execute("""
+                SELECT id, symbol, position_side, close_reason, realized_pnl, close_time
+                FROM coin_futures_positions
+                WHERE status = 'closed'
+                AND account_id = %s
+                ORDER BY close_time DESC
+                LIMIT %s
+            """, (self.account_id, self.circuit_check_recent_trades))
+
+            recent_trades = cursor.fetchall()
+            cursor.close()
+
+            if len(recent_trades) < self.circuit_check_recent_trades:
+                # 交易笔数不足10笔,不触发熔断
+                return False
+
+            # 统计止损笔数
+            stop_loss_count = 0
+            stop_loss_details = []
+
+            for trade in recent_trades:
+                close_reason = trade.get('close_reason', '')
+                if close_reason and ('止损' in close_reason or 'stop_loss' in close_reason.lower() or '固定止损' in close_reason):
+                    stop_loss_count += 1
+                    stop_loss_details.append({
+                        'symbol': trade['symbol'],
+                        'side': trade['position_side'],
+                        'reason': close_reason,
+                        'pnl': float(trade.get('realized_pnl', 0))
+                    })
+
+            # 检查是否超过阈值
+            if stop_loss_count >= self.circuit_stop_loss_threshold:
+                details_str = ', '.join([
+                    f"{d['symbol']}{d['side']}({d['pnl']:.1f}U)"
+                    for d in stop_loss_details[:5]  # 只显示前5笔
+                ])
+
+                logger.critical(
+                    f"🚨 [CIRCUIT-BREAKER] 止损熔断触发! "
+                    f"最近{self.circuit_check_recent_trades}笔交易中有{stop_loss_count}笔止损 "
+                    f"(阈值: {self.circuit_stop_loss_threshold}笔) | "
+                    f"止损详情: {details_str} | "
+                    f"触发熔断,暂停开仓{self.circuit_block_hours}小时"
+                )
+
+                # 设置熔断标志
+                import time
+                self.emergency_stop_loss_circuit_time = time.time()
+
+                return True
+
+            return False
+
+        except Exception as e:
+            logger.error(f"❌ [CIRCUIT-BREAKER] 检查止损熔断失败: {e}", exc_info=True)
+            return False
+
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
         """关闭指定交易对和方向的持仓"""
         try:
@@ -3171,6 +3263,12 @@ class CoinFuturesTraderService:
                 # 4. 🔥 紧急干预: 检查总亏损是否超过阈值
                 if self._check_total_loss_emergency():
                     logger.critical(f"🚨 [EMERGENCY-LOSS] 总亏损超过{self.emergency_loss_threshold}U,暂停开仓{self.emergency_loss_block_hours}小时")
+                    time.sleep(self.scan_interval)
+                    continue
+
+                # 4.5. 🔥 熔断机制: 检查最近交易止损是否过多
+                if self._check_stop_loss_circuit():
+                    logger.critical(f"🚨 [CIRCUIT-BREAKER] 止损熔断触发,暂停开仓{self.circuit_block_hours}小时")
                     time.sleep(self.scan_interval)
                     continue
 
