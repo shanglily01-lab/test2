@@ -401,6 +401,14 @@ class CoinFuturesDecisionBrain:
                          f"触底{hours_since_bottom:.1f}小时内 ({details})")
 
                 logger.warning(f"🚫 [BIG4-BOTTOM] {reason}, 阻止做空")
+
+                # 🔥 紧急干预: 立即平掉所有空单
+                self._emergency_close_all_positions('SHORT', reason)
+
+                # 🔥 设置紧急干预标志,2小时内禁止开空单
+                import time
+                self.emergency_bottom_reversal_time = time.time()
+
                 return True, reason
 
             return False, None
@@ -520,6 +528,14 @@ class CoinFuturesDecisionBrain:
                          f"见顶{hours_since_top:.1f}小时内 ({details})")
 
                 logger.warning(f"🚫 [BIG4-TOP] {reason}, 阻止做多")
+
+                # 🔥 紧急干预: 立即平掉所有多单
+                self._emergency_close_all_positions('LONG', reason)
+
+                # 🔥 设置紧急干预标志,2小时内禁止开多单
+                import time
+                self.emergency_top_reversal_time = time.time()
+
                 return True, reason
 
             return False, None
@@ -858,6 +874,27 @@ class CoinFuturesDecisionBrain:
                     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
                     return None
 
+                # 🔥 紧急干预检查: 如果处于紧急干预期,禁止开新仓
+                if side == 'SHORT' and self.emergency_bottom_reversal_time:
+                    import time
+                    hours_since_emergency = (time.time() - self.emergency_bottom_reversal_time) / 3600
+                    if hours_since_emergency <= self.emergency_block_duration_hours:
+                        logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 底部反转紧急干预中({hours_since_emergency:.1f}h/{self.emergency_block_duration_hours}h),禁止做空")
+                        return None
+                    else:
+                        # 超过干预时间,清除标志
+                        self.emergency_bottom_reversal_time = None
+
+                if side == 'LONG' and self.emergency_top_reversal_time:
+                    import time
+                    hours_since_emergency = (time.time() - self.emergency_top_reversal_time) / 3600
+                    if hours_since_emergency <= self.emergency_block_duration_hours:
+                        logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 顶部反转紧急干预中({hours_since_emergency:.1f}h/{self.emergency_block_duration_hours}h),禁止做多")
+                        return None
+                    else:
+                        # 超过干预时间,清除标志
+                        self.emergency_top_reversal_time = None
+
                 # 🔥 新增: Big4同步触底保护 - 检测Big4是否同步触底反转
                 if side == 'SHORT':
                     should_block, reversal_reason = self.detect_big4_bottom_reversal(side)
@@ -972,6 +1009,11 @@ class CoinFuturesTraderService:
         # 自适应优化器
         self.optimizer = AdaptiveOptimizer(self.db_config)
         self.last_optimization_date = None  # 记录上次优化日期
+
+        # 🔥 紧急干预标志 - 底部/顶部反转时触发
+        self.emergency_bottom_reversal_time = None  # 底部反转触发时间
+        self.emergency_top_reversal_time = None     # 顶部反转触发时间
+        self.emergency_block_duration_hours = 2     # 紧急干预持续时间(小时)
 
         # 优化配置管理器 (支持自我优化的参数配置)
         self.opt_config = OptimizationConfig(self.db_config)
@@ -2201,6 +2243,67 @@ class CoinFuturesTraderService:
             return result[0] > 0 if result else False
         except:
             return False
+
+    def _emergency_close_all_positions(self, position_side: str, reason: str):
+        """
+        🔥 紧急干预: 立即平掉所有指定方向的持仓
+
+        场景: Big4同步反转时,立即平掉所有持仓,避免继续亏损
+
+        Args:
+            position_side: 'LONG' 或 'SHORT'
+            reason: 平仓原因
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # 查询所有指定方向的开仓持仓
+            cursor.execute("""
+                SELECT id, symbol, position_side, quantity, entry_price
+                FROM coin_futures_positions
+                WHERE status = 'open'
+                AND position_side = %s
+                AND account_id = %s
+            """, (position_side, self.account_id))
+
+            positions = cursor.fetchall()
+            cursor.close()
+
+            if not positions:
+                logger.info(f"🔥 [EMERGENCY] 无{position_side}持仓需要平仓")
+                return
+
+            logger.critical(f"🚨 [EMERGENCY] 检测到Big4反转,立即平掉所有{position_side}持仓! 数量:{len(positions)}个")
+
+            # 立即平掉所有持仓
+            closed_count = 0
+            failed_count = 0
+
+            for pos in positions:
+                symbol = pos['symbol']
+                try:
+                    success = self.close_position_by_side(
+                        symbol=symbol,
+                        side=position_side,
+                        reason=f"EMERGENCY:{reason}"
+                    )
+
+                    if success:
+                        closed_count += 1
+                        logger.critical(f"🚨 [EMERGENCY] {symbol} {position_side}持仓已紧急平仓")
+                    else:
+                        failed_count += 1
+                        logger.error(f"❌ [EMERGENCY] {symbol} {position_side}持仓紧急平仓失败")
+
+                except Exception as e:
+                    failed_count += 1
+                    logger.error(f"❌ [EMERGENCY] {symbol} {position_side}平仓异常: {e}")
+
+            logger.critical(f"🚨 [EMERGENCY] 紧急平仓完成! 成功:{closed_count}, 失败:{failed_count}")
+
+        except Exception as e:
+            logger.error(f"❌ [EMERGENCY] 紧急平仓流程失败: {e}", exc_info=True)
 
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
         """关闭指定交易对和方向的持仓"""
