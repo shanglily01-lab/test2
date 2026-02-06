@@ -62,6 +62,22 @@ class SmartDecisionBrain:
 
         self.threshold = 35  # 开仓阈值 (提高到35分,过滤低质量信号,防追高)
 
+        # 🔥 紧急干预标志 - 底部/顶部反转时触发
+        self.emergency_bottom_reversal_time = None  # 底部反转触发时间
+        self.emergency_top_reversal_time = None     # 顶部反转触发时间
+        self.emergency_block_duration_hours = 4     # 紧急干预持续时间(小时)
+
+        # 🔥 紧急干预标志 - 总亏损超过阈值时触发
+        self.emergency_loss_limit_time = None       # 总亏损触发时间
+        self.emergency_loss_threshold = 600         # 总亏损阈值(USDT)
+        self.emergency_loss_block_hours = 2         # 总亏损干预持续时间(小时)
+
+        # 🔥 紧急熔断标志 - 连续止损过多时触发
+        self.emergency_stop_loss_circuit_time = None  # 止损熔断触发时间
+        self.circuit_check_recent_trades = 10         # 检查最近N笔交易
+        self.circuit_stop_loss_threshold = 5          # 止损笔数阈值
+        self.circuit_block_hours = 2                  # 熔断持续时间(小时)
+
     def _load_config(self):
         """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
         try:
