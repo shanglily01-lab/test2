@@ -1399,6 +1399,9 @@ class SmartTraderService:
                 price_service=self.ws_service
             )
             logger.info("✅ 智能平仓优化器已启动")
+        else:
+            self.smart_exit_optimizer = None
+            logger.info("⚠️ 智能平仓优化器未启用")
 
         # 🚀 V3模式开关和初始化
         self.use_v3_mode = os.getenv('USE_V3_MODE', 'false').lower() == 'true'
@@ -1427,9 +1430,6 @@ class SmartTraderService:
             self.scorer_v3 = None
             self.entry_executor_v3 = None
             self.position_manager_v3 = None
-        else:
-            self.smart_exit_optimizer = None
-            logger.info("⚠️ 智能平仓优化器未启用")
 
         # 初始化Big4趋势检测器 (四大天王: BTC/ETH/BNB/SOL)
         self.big4_detector = Big4TrendDetector()
