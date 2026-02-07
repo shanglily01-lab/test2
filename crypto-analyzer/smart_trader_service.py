@@ -2201,54 +2201,110 @@ class SmartTraderService:
             return False
 
     async def _execute_v3_entry(self, opp: dict):
-        """🚀 V3精准入场执行"""
+        """🚀 V3精准入场执行 - 使用传统执行器"""
         symbol = opp['symbol']
         side = opp['side']
 
         try:
-            logger.info(f"[V3-ENTRY] {symbol} {side} 开始V3精准入场流程")
+            logger.info(f"[V3-ENTRY] {symbol} {side} 开始V3精准入场流程(使用传统分批执行器)")
 
-            # 获取保证金
+            # V3模式使用传统的分批建仓执行器
+            # V3评分只是用来判断是否开仓，真正的下单还是用原有逻辑
+            signal_components = opp.get('signal_components', {})
+
+            # 计算保证金（复用原有逻辑）
             rating_level = self.opt_config.get_symbol_rating_level(symbol)
-            if rating_level == 3:
-                logger.warning(f"[V3-ENTRY] {symbol} 黑名单3级，禁止交易")
-                return False
-
             rating_config = self.opt_config.get_blacklist_config(rating_level)
-            rating_margin_multiplier = rating_config['margin_multiplier']
-            total_margin = self.position_size_usdt * rating_margin_multiplier
 
-            # 执行V3入场 (5M等待 + 分批30/30/40)
-            entry_result = await self.entry_executor_v3.execute_entry(
-                signal=opp.get('v3_score_detail', {}),
-                symbol=symbol,
-                position_side=side,
-                total_margin=total_margin,
-                leverage=self.leverage
-            )
-
-            if not entry_result or not entry_result.get('success'):
-                logger.error(f"[V3-ENTRY] {symbol} {side} 入场失败")
+            if rating_level == 3:
+                logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
                 return False
 
-            position_id = entry_result.get('position_id')
-            logger.info(
-                f"[V3-ENTRY] {symbol} {side} 入场成功! "
-                f"持仓ID:{position_id}, "
-                f"平均价格:${entry_result.get('avg_price', 0):.4f}"
-            )
+            rating_margin_multiplier = rating_config['margin_multiplier']
+            base_position_size = self.position_size_usdt * rating_margin_multiplier
 
-            # 启动智能平仓监控 (保留现有的移动止盈和快速止损)
-            if self.smart_exit_optimizer and position_id:
-                asyncio.create_task(
-                    self.smart_exit_optimizer.start_monitoring_position(position_id)
-                )
-                logger.info(f"[V3-ENTRY] {symbol} 已启动智能平仓监控(移动止盈+快速止损)")
+            # 获取Big4市场信号动态调整仓位倍数
+            try:
+                big4_result = self.get_big4_result()
+                market_signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+                if market_signal == 'BULLISH' and side == 'LONG':
+                    position_multiplier = 1.2
+                    logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
+                elif market_signal == 'BEARISH' and side == 'SHORT':
+                    position_multiplier = 1.2
+                    logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
+                else:
+                    position_multiplier = 1.0
+            except Exception as e:
+                logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                position_multiplier = 1.0
+
+            # 获取自适应参数
+            if side == 'LONG':
+                adaptive_params = self.brain.adaptive_long
+            else:
+                adaptive_params = self.brain.adaptive_short
+
+            adjusted_position_size = base_position_size * position_multiplier
+
+            # 调用智能建仓执行器（V3模式也使用原有的分批建仓）
+            entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
+                'symbol': symbol,
+                'direction': side,
+                'total_margin': adjusted_position_size,
+                'leverage': self.leverage,
+                'strategy_id': 'smart_trader_v3',
+                'max_hold_minutes': opp.get('max_hold_minutes', 240),
+                'trade_params': {
+                    'entry_score': opp.get('score', 0),
+                    'signal_components': signal_components,
+                    'adaptive_params': adaptive_params,
+                    'signal_combination_key': self._generate_signal_combination_key(signal_components),
+                    'v3_mode': True  # 标记为V3模式
+                }
+            }))
+
+            # 添加完成回调来启动智能平仓监控
+            _symbol = symbol
+            _side = side
+            _smart_exit_optimizer = self.smart_exit_optimizer
+
+            def on_entry_complete(task):
+                try:
+                    entry_result = task.result()
+                    if entry_result['success']:
+                        position_id = entry_result['position_id']
+                        logger.info(
+                            f"✅ [V3-ENTRY_COMPLETE] {_symbol} {_side} | "
+                            f"持仓ID: {position_id} | "
+                            f"平均价格: ${entry_result['avg_price']:.4f} | "
+                            f"总数量: {entry_result['total_quantity']:.2f}"
+                        )
+
+                        # 启动智能平仓监控（如果启用）
+                        if _smart_exit_optimizer:
+                            try:
+                                loop = asyncio.get_event_loop()
+                                if loop.is_closed():
+                                    logger.warning(f"⚠️ 事件循环已关闭，无法启动智能平仓监控: 持仓{position_id}")
+                                else:
+                                    asyncio.create_task(_smart_exit_optimizer.start_monitoring_position(position_id))
+                                    logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
+                            except RuntimeError as e:
+                                logger.warning(f"⚠️ 无法启动智能平仓监控: {e}")
+                    else:
+                        logger.error(f"❌ [V3-ENTRY_FAILED] {_symbol} {_side} | {entry_result.get('error')}")
+                except Exception as e:
+                    logger.error(f"❌ [V3-ENTRY_CALLBACK_ERROR] {_symbol} {_side} | {e}")
+
+            entry_task.add_done_callback(on_entry_complete)
+            logger.info(f"🚀 [V3-ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行60分钟）")
 
             return True
 
         except Exception as e:
-            logger.error(f"[V3-ENTRY] {symbol} {side} V3入场异常: {e}")
+            logger.error(f"❌ [V3-ENTRY_ERROR] {symbol} {side} | {e}")
             import traceback
             logger.error(traceback.format_exc())
             return False
