@@ -363,8 +363,8 @@ class AdaptiveOptimizer:
                         cursor.execute("""
                             INSERT INTO trading_symbol_rating
                             (symbol, rating_level, margin_multiplier,
-                             score_bonus, level_change_reason, created_at, updated_at)
-                            VALUES (%s, 1, 0.25, 0, %s, NOW(), NOW())
+                             score_bonus, level_change_reason, stats_start_date, stats_end_date, created_at, updated_at)
+                            VALUES (%s, 1, 0.25, 0, %s, CURDATE(), CURDATE(), NOW(), NOW())
                         """, (symbol, reason))
 
                         results['blacklist_added'].append({
