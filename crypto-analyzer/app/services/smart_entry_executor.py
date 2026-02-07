@@ -740,7 +740,7 @@ class SmartEntryExecutor:
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
             """, (
                 self.account_id, symbol, direction, quantity, price, price,
                 plan['leverage'], quantity * price, margin,
@@ -750,7 +750,8 @@ class SmartEntryExecutor:
                 signal.get('trade_params', {}).get('entry_score', 30),
                 json.dumps(signal.get('trade_params', {}).get('signal_components', {})),
                 batch_plan_json, batch_filled_json,
-                plan['signal_time']
+                plan['signal_time'],
+                'smart_entry_executor'  # source
             ))
 
             position_id = cursor.lastrowid
@@ -1040,7 +1041,7 @@ class SmartEntryExecutor:
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time, planned_close_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'open', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'open', NOW(), NOW())
             """, (
                 self.account_id,
                 symbol,
@@ -1061,7 +1062,8 @@ class SmartEntryExecutor:
                 batch_plan_json,
                 batch_filled_json,
                 plan['signal_time'],
-                planned_close_time
+                planned_close_time,
+                'smart_entry_executor'  # source
             ))
 
             position_id = cursor.lastrowid
