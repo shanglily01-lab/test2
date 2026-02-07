@@ -22,16 +22,16 @@ class SignalScorerV3:
 
         # 评分权重配置
         self.score_weights = {
-            'big4': 5,          # Big4 (30H宏观趋势)
-            '5h_trend': 8,      # 5H趋势 (3根K线)
-            '15m_signal': 10,   # 2H内15M信号 (8根K线)
-            'volume_price': 7,  # 量价配合
+            'big4': 3,          # Big4 (30H宏观趋势) - 降低权重
+            '5h_trend': 7,      # 5H趋势 (3根K线) - 降低权重
+            '15m_signal': 12,   # 2H内15M信号 (8根K线) - 提升权重
+            'volume_price': 10, # 量价配合
             'technical': 10     # 技术指标
         }
 
         # 总分和阈值
-        self.max_score = 40
-        self.min_score_to_trade = 25  # 62.5%以上才开仓
+        self.max_score = 42  # 3+7+12+10+10
+        self.min_score_to_trade = 25  # 约60%以上才开仓
 
     def get_db_connection(self):
         """获取数据库连接"""
