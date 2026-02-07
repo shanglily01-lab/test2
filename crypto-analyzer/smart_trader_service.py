@@ -793,6 +793,10 @@ class SmartDecisionBrain:
 
             current = klines_1h[-1]['close']
 
+            # 🚀🚀🚀 V3模式: 使用多时间周期评分系统 🚀🚀🚀
+            if self.trader_service and hasattr(self.trader_service, 'use_v3_mode') and self.trader_service.use_v3_mode:
+                return self._analyze_with_v3(symbol, klines_1d, klines_1h, klines_15m, current)
+
             # 🔥🔥🔥 最高优先级：强破位信号检测 🔥🔥🔥
             # 只做强破位，追涨杀跌
             breakout_result = self.detect_strong_breakout(symbol, klines_15m)
@@ -1198,6 +1202,64 @@ class SmartDecisionBrain:
             logger.error(f"{symbol} 分析失败: {e}")
             return None
 
+    def _analyze_with_v3(self, symbol: str, klines_1d, klines_1h, klines_15m, current_price):
+        """🚀 V3评分系统: 多时间周期权重评分"""
+        try:
+            logger.info(f"[V3-SCORE] {symbol} 使用V3评分系统")
+
+            # 获取Big4信号
+            big4_result = self.trader_service.get_big4_result() if self.trader_service else None
+            big4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
+            big4_strength = big4_result.get('signal_strength', 50) if big4_result else 50
+
+            # 获取5H K线 (3根)
+            klines_5h = self.load_klines(symbol, '5h', 3)
+
+            # 尝试两个方向的评分
+            for position_side in ['LONG', 'SHORT']:
+                # 调用V3评分器
+                score_result = self.trader_service.scorer_v3.calculate_total_score(
+                    symbol=symbol,
+                    position_side=position_side,
+                    klines_5h=klines_5h,
+                    klines_15m=klines_15m,
+                    big4_signal=big4_signal,
+                    big4_strength=big4_strength
+                )
+
+                # 检查是否可以交易
+                if score_result['can_trade']:
+                    logger.info(
+                        f"[V3-SCORE] {symbol} {position_side} 评分达标: "
+                        f"{score_result['total_score']}/{score_result['max_score']} "
+                        f"(Big4:{score_result['scores']['big4_score']}, "
+                        f"5H:{score_result['scores']['trend_5h_score']}, "
+                        f"15M:{score_result['scores']['signal_15m_score']})"
+                    )
+
+                    # 返回机会，标记为V3模式
+                    return {
+                        'symbol': symbol,
+                        'side': position_side,
+                        'score': score_result['total_score'],
+                        'current_price': current_price,
+                        'signal_components': {
+                            'v3_big4': score_result['scores']['big4_score'],
+                            'v3_5h_trend': score_result['scores']['trend_5h_score'],
+                            'v3_15m_signal': score_result['scores']['signal_15m_score']
+                        },
+                        'v3_mode': True,  # 标记为V3模式
+                        'v3_score_detail': score_result
+                    }
+
+            # 没有方向达标
+            logger.debug(f"[V3-SCORE] {symbol} 两个方向评分均不达标")
+            return None
+
+        except Exception as e:
+            logger.error(f"[V3-SCORE] {symbol} V3评分失败: {e}, 回退到传统模式")
+            return None
+
     def scan_all(self):
         """扫描所有币种"""
         opportunities = []
@@ -1337,6 +1399,34 @@ class SmartTraderService:
                 price_service=self.ws_service
             )
             logger.info("✅ 智能平仓优化器已启动")
+
+        # 🚀 V3模式开关和初始化
+        self.use_v3_mode = os.getenv('USE_V3_MODE', 'false').lower() == 'true'
+
+        if self.use_v3_mode:
+            logger.info("🚀🚀🚀 V3模式已启用 🚀🚀🚀")
+
+            # 初始化V3评分系统
+            self.scorer_v3 = SignalScorerV3(self.db_config)
+            logger.info("✅ V3评分系统已初始化")
+
+            # 初始化V3入场执行器
+            self.entry_executor_v3 = SmartEntryExecutorV3(self.db_config)
+            logger.info("✅ V3入场执行器已初始化")
+
+            # 初始化V3持仓管理器
+            self.position_manager_v3 = PositionManagerV3(self.db_config)
+            logger.info("✅ V3持仓管理器已初始化")
+
+            logger.info("🎯 V3核心策略:")
+            logger.info("  - 多时间周期评分 (Big4:5分 + 5H:8分 + 15M:10分)")
+            logger.info("  - 5M精准入场 (等待确认 + 分批30/30/40)")
+            logger.info("  - 保留现有移动止盈和快速止损")
+        else:
+            logger.info("📊 使用传统模式")
+            self.scorer_v3 = None
+            self.entry_executor_v3 = None
+            self.position_manager_v3 = None
         else:
             self.smart_exit_optimizer = None
             logger.info("⚠️ 智能平仓优化器未启用")
@@ -2011,6 +2101,11 @@ class SmartTraderService:
         symbol = opp['symbol']
         side = opp['side']
 
+        # 🚀🚀🚀 V3模式: 使用5M精准入场执行器 🚀🚀🚀
+        if opp.get('v3_mode') and self.entry_executor_v3:
+            logger.info(f"[V3-ENTRY] {symbol} {side} 使用V3精准入场执行器")
+            return await self._execute_v3_entry(opp)
+
         try:
             # 注意：信号验证已在 open_position() 中完成，这里直接计算保证金
             signal_components = opp.get('signal_components', {})
@@ -2111,6 +2206,59 @@ class SmartTraderService:
 
         except Exception as e:
             logger.error(f"❌ [BATCH_ENTRY_ERROR] {symbol} {side} | {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+
+    async def _execute_v3_entry(self, opp: dict):
+        """🚀 V3精准入场执行"""
+        symbol = opp['symbol']
+        side = opp['side']
+
+        try:
+            logger.info(f"[V3-ENTRY] {symbol} {side} 开始V3精准入场流程")
+
+            # 获取保证金
+            rating_level = self.opt_config.get_symbol_rating_level(symbol)
+            if rating_level == 3:
+                logger.warning(f"[V3-ENTRY] {symbol} 黑名单3级，禁止交易")
+                return False
+
+            rating_config = self.opt_config.get_blacklist_config(rating_level)
+            rating_margin_multiplier = rating_config['margin_multiplier']
+            total_margin = self.position_size_usdt * rating_margin_multiplier
+
+            # 执行V3入场 (5M等待 + 分批30/30/40)
+            entry_result = await self.entry_executor_v3.execute_entry(
+                signal=opp.get('v3_score_detail', {}),
+                symbol=symbol,
+                position_side=side,
+                total_margin=total_margin,
+                leverage=self.leverage
+            )
+
+            if not entry_result or not entry_result.get('success'):
+                logger.error(f"[V3-ENTRY] {symbol} {side} 入场失败")
+                return False
+
+            position_id = entry_result.get('position_id')
+            logger.info(
+                f"[V3-ENTRY] {symbol} {side} 入场成功! "
+                f"持仓ID:{position_id}, "
+                f"平均价格:${entry_result.get('avg_price', 0):.4f}"
+            )
+
+            # 启动智能平仓监控 (保留现有的移动止盈和快速止损)
+            if self.smart_exit_optimizer and position_id:
+                asyncio.create_task(
+                    self.smart_exit_optimizer.start_monitoring_position(position_id)
+                )
+                logger.info(f"[V3-ENTRY] {symbol} 已启动智能平仓监控(移动止盈+快速止损)")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"[V3-ENTRY] {symbol} {side} V3入场异常: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return False
