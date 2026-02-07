@@ -1232,9 +1232,9 @@ class SmartDecisionBrain:
                     logger.info(
                         f"[V3-SCORE] {symbol} {position_side} 评分达标: "
                         f"{score_result['total_score']}/{score_result['max_score']} "
-                        f"(Big4:{score_result['scores']['big4_score']}, "
-                        f"5H:{score_result['scores']['trend_5h_score']}, "
-                        f"15M:{score_result['scores']['signal_15m_score']})"
+                        f"(Big4:{score_result['breakdown']['big4']:.1f}, "
+                        f"5H:{score_result['breakdown']['5h_trend']:.1f}, "
+                        f"15M:{score_result['breakdown']['15m_signal']:.1f})"
                     )
 
                     # 返回机会，标记为V3模式
@@ -1244,9 +1244,9 @@ class SmartDecisionBrain:
                         'score': score_result['total_score'],
                         'current_price': current_price,
                         'signal_components': {
-                            'v3_big4': score_result['scores']['big4_score'],
-                            'v3_5h_trend': score_result['scores']['trend_5h_score'],
-                            'v3_15m_signal': score_result['scores']['signal_15m_score']
+                            'v3_big4': score_result['breakdown']['big4'],
+                            'v3_5h_trend': score_result['breakdown']['5h_trend'],
+                            'v3_15m_signal': score_result['breakdown']['15m_signal']
                         },
                         'v3_mode': True,  # 标记为V3模式
                         'v3_score_detail': score_result
