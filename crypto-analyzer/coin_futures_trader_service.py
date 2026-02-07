@@ -25,7 +25,7 @@ from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
-from app.strategies.mode_switcher import TradingModeSwitcher
+from app.strategies.safe_mode_switcher import SafeModeSwitcher
 from app.trading.coin_futures_trading_engine import CoinFuturesTradingEngine
 
 # 加载环境变量
@@ -1124,9 +1124,9 @@ class CoinFuturesTraderService:
 
         logger.info("🔱 Big4趋势检测器已启动 (15分钟检测, 1小时缓存)")
 
-        # 初始化交易模式切换器
-        self.mode_switcher = TradingModeSwitcher(self.db_config)
-        logger.info("🔄 交易模式切换器已启动 (支持trend/range自动切换)")
+        # 初始化安全模式切换器
+        self.safe_mode_switcher = SafeModeSwitcher(self.db_config)
+        logger.info("🔄 安全模式切换器已启动")
 
         logger.info("=" * 60)
         logger.info("币本位合约智能自动交易服务已启动")
@@ -3357,28 +3357,30 @@ class CoinFuturesTraderService:
                         big4_strength = big4_result.get('signal_strength', 0)
 
                         # 检查是否需要自动切换模式
-                        suggested_mode = self.mode_switcher.auto_switch_check(
+                        switch_suggestion = self.safe_mode_switcher.safe_auto_switch_check(
                             account_id=self.account_id,
                             trading_type='coin_futures',
                             big4_signal=big4_signal,
                             big4_strength=big4_strength
                         )
 
-                        if suggested_mode:
-                            logger.info(f"🔄 [MODE-AUTO-SWITCH] Big4={big4_signal}({big4_strength:.1f}), 建议切换到{suggested_mode}模式")
-                            self.mode_switcher.switch_mode(
+                        if switch_suggestion:
+                            suggested_mode = switch_suggestion['suggested_mode']
+                            reason = switch_suggestion['reason']
+                            logger.info(f"🔄 [SAFE-MODE-SWITCH] Big4={big4_signal}({big4_strength:.1f}), 建议切换到{suggested_mode}模式")
+                            self.safe_mode_switcher.switch_mode(
                                 account_id=self.account_id,
                                 trading_type='coin_futures',
                                 new_mode=suggested_mode,
                                 trigger='auto',
-                                reason=f'Big4: {big4_signal} 强度:{big4_strength:.1f}',
+                                reason=reason,
                                 big4_signal=big4_signal,
                                 big4_strength=big4_strength,
                                 switched_by='coin_futures_trader_service'
                             )
 
                         # 获取当前交易模式
-                        current_mode_config = self.mode_switcher.get_current_mode(self.account_id, 'coin_futures')
+                        current_mode_config = self.safe_mode_switcher.get_current_mode(self.account_id, 'coin_futures')
                         current_mode = current_mode_config['mode_type'] if current_mode_config else 'trend'
 
                         logger.info(f"📊 [TRADING-MODE] 当前模式: {current_mode} | Big4: {big4_signal}({big4_strength:.1f})")

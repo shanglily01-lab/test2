@@ -25,10 +25,6 @@ from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
-from app.strategies.range_market_detector import RangeMarketDetector
-from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
-from app.strategies.range_reversal_strategy import RangeReversalStrategy
-from app.strategies.mode_switcher import TradingModeSwitcher
 from app.strategies.safe_mode_switcher import SafeModeSwitcher
 
 # 加载环境变量
@@ -1332,13 +1328,9 @@ class SmartTraderService:
         self.big4_cache_duration = 3600  # 1小时缓存
         self.big4_detection_interval = 900  # 15分钟检测间隔
 
-        # ========== 震荡市交易策略模块 ==========
-        self.range_detector = RangeMarketDetector(self.db_config)
-        self.bollinger_strategy = BollingerMeanReversionStrategy(self.db_config)
-        self.range_reversal_strategy = RangeReversalStrategy(self.db_config)  # 新增震荡反转策略
-        self.mode_switcher = TradingModeSwitcher(self.db_config)
-        self.safe_mode_switcher = SafeModeSwitcher(self.db_config)  # 安全模式切换器
-        logger.info("✅ 震荡市交易策略模块已初始化（布林带+反转策略+安全模式切换器）")
+        # ========== 模式切换器 ==========
+        self.safe_mode_switcher = SafeModeSwitcher(self.db_config)
+        logger.info("✅ 安全模式切换器已初始化")
         self.last_big4_detection_time = None
 
         logger.info("🔱 Big4趋势检测器已启动 (15分钟检测, 1小时缓存)")
@@ -1724,13 +1716,11 @@ class SmartTraderService:
             # 反转开仓不使用分批建仓（直接一次性开仓）
             is_reversal = 'reversal_from' in opp
 
-            # 震荡市策略不使用分批建仓（使用固定2%止损，与分批建仓的波动率止损不兼容）
-            is_range_strategy = strategy == 'bollinger_mean_reversion'
 
             # 🔥 紧急修复: 中性市场禁用分批建仓
             disable_batch = opp.get('disable_batch_entry', False)
 
-            if should_use_batch and not is_reversal and not is_range_strategy and not disable_batch:
+            if should_use_batch and not is_reversal and not disable_batch:
                 logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓（后台异步执行）")
                 # 在后台异步执行分批建仓，不阻塞主循环
                 import asyncio
@@ -1793,26 +1783,12 @@ class SmartTraderService:
                 # 注意: rating_level已在函数开头检查过了
                 rating_config = self.opt_config.get_blacklist_config(rating_level)
 
-                # ========== 检查是否为震荡市策略 ==========
-                mode_config = None
-                if strategy == 'bollinger_mean_reversion':
-                    try:
-                        mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
-                        if mode_config:
-                            logger.info(f"[RANGE_MODE] {symbol} 使用震荡市交易参数")
-                    except Exception as e:
                         logger.error(f"[MODE_ERROR] 获取模式配置失败: {e}")
 
                 # 获取评级对应的保证金倍数
                 rating_margin_multiplier = rating_config['margin_multiplier']
 
                 # ========== 根据策略类型确定基础仓位大小 ==========
-                if strategy == 'bollinger_mean_reversion' and mode_config:
-                    # 震荡市模式: 使用range_position_size (默认3%)
-                    range_position_pct = float(mode_config['range_position_size'])  # 转换Decimal为float
-                    base_position_size = self.position_size_usdt * (range_position_pct / 5.0) * rating_margin_multiplier
-                    logger.info(f"[RANGE_POSITION] {symbol} 震荡市仓位: {range_position_pct}% × {rating_margin_multiplier:.2f} = ${base_position_size:.2f}")
-                else:
                     # 趋势模式: 使用默认仓位(5%)
                     base_position_size = self.position_size_usdt * rating_margin_multiplier
 
@@ -1820,11 +1796,6 @@ class SmartTraderService:
                 rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
                 logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
 
-                # 根据Big4市场信号动态调整仓位倍数 (震荡市策略不调整仓位)
-                if strategy == 'bollinger_mean_reversion':
-                    position_multiplier = 1.0
-                    logger.info(f"[RANGE_MODE] {symbol} 震荡市策略不使用Big4仓位调整")
-                else:
                     try:
                         big4_result = self.get_big4_result()
                         market_signal = big4_result.get('overall_signal', 'NEUTRAL')
@@ -1858,9 +1829,6 @@ class SmartTraderService:
             margin = adjusted_position_size
 
             # ========== 根据策略类型确定止损止盈 ==========
-            if strategy == 'bollinger_mean_reversion' and 'take_profit_price' in opp and 'stop_loss_price' in opp:
-                # 震荡市策略: 使用策略提供的具体价格
-                stop_loss = opp['stop_loss_price']
                 take_profit = opp['take_profit_price']
 
                 # 计算实际百分比用于日志
@@ -1924,9 +1892,6 @@ class SmartTraderService:
                 sorted_signals = sorted(signal_components.keys())
                 signal_combination_key = " + ".join(sorted_signals)
             else:
-                # 如果是震荡市策略但缺少signal_components（兼容旧版本）
-                if strategy == 'bollinger_mean_reversion':
-                    signal_combination_key = "range_trading"
                 else:
                     signal_combination_key = "unknown"
 
@@ -1934,9 +1899,6 @@ class SmartTraderService:
             if is_reversal:
                 signal_combination_key = f"REVERSAL_{opp.get('reversal_from', 'unknown')}"
 
-            # 震荡市策略特殊标记（如果还没有RANGE前缀）
-            if strategy == 'bollinger_mean_reversion' and not signal_combination_key.startswith('RANGE_'):
-                signal_combination_key = f"RANGE_{signal_combination_key}"
 
             # 趋势策略特殊标记：如果不是RANGE也不是REVERSAL，就是TREND策略
             elif not signal_combination_key.startswith(('RANGE_', 'REVERSAL_', 'TREND_')):
@@ -1955,12 +1917,6 @@ class SmartTraderService:
             if 'max_hold_minutes' in opp:
                 base_timeout_minutes = opp['max_hold_minutes']
                 logger.info(f"[中性市-TIMEOUT] {symbol} 使用指定持仓时间: {base_timeout_minutes}分钟")
-            elif strategy == 'bollinger_mean_reversion' and mode_config:
-                # 震荡市策略: 使用range_max_hold_hours (默认4小时)
-                range_max_hold_hours = int(mode_config.get('range_max_hold_hours', 4))  # 转换Decimal为int
-                base_timeout_minutes = range_max_hold_hours * 60
-                logger.info(f"[RANGE_TIMEOUT] {symbol} 震荡市最大持仓时间: {base_timeout_minutes}分钟")
-            else:
                 # 趋势模式: 使用动态超时时间
                 base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
 
@@ -1970,9 +1926,6 @@ class SmartTraderService:
 
             # 准备entry_reason
             entry_reason = opp.get('reason', '')
-            if strategy == 'bollinger_mean_reversion':
-                entry_reason = f"[震荡市] {entry_reason}"
-
             # 插入持仓记录 (包含动态超时字段)
             cursor.execute("""
                 INSERT INTO futures_positions
@@ -3665,25 +3618,9 @@ class SmartTraderService:
 
                 logger.info(f"[SCAN] 模式:{current_mode} | 扫描 {len(self.brain.whitelist)} 个币种...")
 
-                # 根据模式选择策略
-                if current_mode == 'range':
-                    # 🔥 震荡模式: 完全停止交易,只做趋势
-                    logger.info(f"[RANGE-MODE] 🛑 震荡市场,停止开仓,只做趋势交易")
-                    opportunities = []
-
-                    # 注释掉原震荡策略,保留代码供未来参考
-                    # big4_result = self.get_big4_result()
-                    # big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
-                    # for symbol in self.brain.whitelist:
-                    #     signal = self.range_reversal_strategy.generate_signal(symbol, big4_signal)
-                    #     if not signal:
-                    #         signal = self.bollinger_strategy.generate_signal(symbol, big4_signal, '15m')
-
-                    logger.info(f"[RANGE-SCAN] 震荡模式,跳过扫描,等待趋势")
-                else:
-                    # 趋势模式: 使用原有策略
-                    opportunities = self.brain.scan_all()
-                    logger.info(f"[TREND-SCAN] 趋势模式扫描完成, 找到 {len(opportunities)} 个机会")
+                # 趋势模式扫描
+                opportunities = self.brain.scan_all()
+                logger.info(f"[TREND-SCAN] 扫描完成, 找到 {len(opportunities)} 个机会")
 
                 if not opportunities:
                     logger.info("[SCAN] 无交易机会")
@@ -3815,9 +3752,6 @@ class SmartTraderService:
                             signal_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                        # ========== 震荡市过滤: 已在模式选择处完全禁止,这里无需额外处理 ==========
-                        # 注: 震荡模式(range)下已经不会产生任何交易机会
-                        # 如果走到这里,说明当前是趋势模式,允许正常交易
 
                         # 如果信号方向与交易方向冲突,降低评分或跳过
                         # 🔥 修复BUG: 任何方向冲突都应该直接跳过,不管强度高低
