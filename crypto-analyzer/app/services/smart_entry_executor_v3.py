@@ -438,7 +438,8 @@ class SmartEntryExecutorV3:
                 json.dumps(signal.get('breakdown', {}) if signal else {}),  # signal_components
                 batch_plan_json,
                 batch_filled_json,
-                datetime.now()  # entry_signal_time
+                datetime.now(),  # entry_signal_time
+                'v3_executor'  # source
             ))
 
             position_id = cursor.lastrowid
