@@ -406,9 +406,16 @@ class SmartExitOptimizer:
         if self.trailing_stop_enabled and profit_pct > 0:
             position_id = position['id']
 
-            # 记录最高盈利
+            # 记录最高盈利 (BUG修复: 从数据库读取历史最高值)
             if position_id not in self.max_profit_tracker:
-                self.max_profit_tracker[position_id] = profit_pct
+                # 从数据库读取之前记录的max_profit_pct
+                db_max_pct = position.get('max_profit_pct', 0)
+                if db_max_pct:
+                    db_max_pct = float(db_max_pct)
+                else:
+                    db_max_pct = 0.0
+                # 使用数据库记录和当前盈利中的较大值
+                self.max_profit_tracker[position_id] = max(db_max_pct, profit_pct)
             elif profit_pct > self.max_profit_tracker[position_id]:
                 self.max_profit_tracker[position_id] = profit_pct
 

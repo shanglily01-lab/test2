@@ -3612,12 +3612,8 @@ class SmartTraderService:
                     continue
 
                 # 5. 获取当前交易模式并扫描机会
-                try:
-                    mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
-                    current_mode = mode_config['mode_type'] if mode_config else 'trend'
-                except Exception as e:
-                    logger.error(f"[MODE-ERROR] 获取交易模式失败: {e}, 使用默认趋势模式")
-                    current_mode = 'trend'
+                # 固定使用趋势模式 (mode_switcher已废弃)
+                current_mode = 'trend'
 
                 logger.info(f"[SCAN] 模式:{current_mode} | 扫描 {len(self.brain.whitelist)} 个币种...")
 
