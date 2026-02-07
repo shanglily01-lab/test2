@@ -355,16 +355,26 @@ class SmartEntryExecutorV3:
     ) -> Dict:
         """创建持仓结果"""
         if not batches:
-            return None
+            return {
+                'success': False,
+                'error': 'No batches filled'
+            }
 
         total_quantity = sum(b['quantity'] for b in batches)
         avg_price = sum(b['price'] * b['quantity'] for b in batches) / total_quantity
 
+        # TODO: 需要实际创建数据库持仓记录并获取position_id
+        # 目前返回模拟ID
+        position_id = None  # 实盘时这里应该是数据库返回的ID
+
         return {
+            'success': True,
+            'position_id': position_id,
             'symbol': symbol,
             'position_side': position_side,
             'batches': batches,
             'total_quantity': total_quantity,
+            'avg_price': avg_price,
             'avg_entry_price': avg_price,
             'batch_count': len(batches),
             'created_at': datetime.now()
