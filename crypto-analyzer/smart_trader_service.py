@@ -26,6 +26,11 @@ from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
 
+# 🚀 V3模块导入
+from app.services.smart_entry_executor_v3 import SmartEntryExecutorV3
+from app.services.position_manager_v3 import PositionManagerV3
+from app.strategies.signal_scorer_v3 import SignalScorerV3
+
 # 加载环境变量
 load_dotenv()
 
@@ -57,6 +62,16 @@ class SmartDecisionBrain:
         self._load_config()
 
         self.threshold = 35  # 开仓阈值 (提高到35分,过滤低质量信号,防追高)
+
+        # 🚀 V3模式开关
+        self.use_v3_mode = os.getenv('USE_V3_MODE', 'false').lower() == 'true'
+        if self.use_v3_mode:
+            logger.info("🚀🚀🚀 V3模式已启用 - 多时间周期+5M精准入场+移动止盈")
+            self.scorer_v3 = SignalScorerV3(db_config)
+            logger.info("✅ V3评分系统初始化完成")
+        else:
+            logger.info("📊 使用传统模式")
+            self.scorer_v3 = None
 
         # 🔥 紧急干预标志 - 底部/顶部反转时触发
         self.emergency_bottom_reversal_time = None  # 底部反转触发时间
