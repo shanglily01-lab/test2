@@ -118,12 +118,13 @@ class SignalScorerV3:
         big4_strength: Optional[int]
     ) -> float:
         """
-        Big4评分 (max 5分)
+        Big4评分 (max 3分)
 
         逻辑:
-        - 信号方向一致 + 强度>=80: 5分
-        - 信号方向一致 + 强度>=70: 4分
-        - 信号方向一致 + 强度>=60: 3分
+        - 信号方向一致 + 强度>=15: 3分
+        - 信号方向一致 + 强度>=10: 2.4分
+        - 信号方向一致 + 强度>=5: 1.8分
+        - 信号方向一致 + 强度>0: 1.2分
         - 其他: 0分
         """
         if not big4_signal or not big4_strength:
@@ -142,23 +143,23 @@ class SignalScorerV3:
 
             # 🔥 根据实际Big4强度范围调整阈值 (观察到强度通常在0-20之间)
             if big4_strength >= 15:
-                return 5.0  # 强势信号
+                return 3.0  # 强势信号 (满分)
             elif big4_strength >= 10:
-                return 4.0  # 中等信号
+                return 2.4  # 中等信号 (80%)
             elif big4_strength >= 5:
-                return 3.0  # 弱信号
+                return 1.8  # 弱信号 (60%)
             elif big4_strength > 0:
-                return 2.0  # 极弱但有效
+                return 1.2  # 极弱但有效 (40%)
 
         return 0.0
 
     def score_5h_trend(self, position_side: str, klines_5h: List[Dict]) -> float:
         """
-        5H趋势评分 (max 8分)
+        5H趋势评分 (max 7分)
 
         逻辑:
-        - 连续3根同向K线: 8分
-        - 2根同向K线: 5分
+        - 连续3根同向K线: 7分
+        - 2根同向K线: 4分
         - 其他: 0分
         """
         if len(klines_5h) < 3:
@@ -170,25 +171,25 @@ class SignalScorerV3:
 
         if position_side == 'LONG':
             if bull_count == 3:
-                return 8.0
+                return 7.0
             elif bull_count == 2:
-                return 5.0
+                return 4.0
         elif position_side == 'SHORT':
             if bear_count == 3:
-                return 8.0
+                return 7.0
             elif bear_count == 2:
-                return 5.0
+                return 4.0
 
         return 0.0
 
     def score_15m_signal(self, position_side: str, klines_15m: List[Dict]) -> float:
         """
-        15M信号评分 (max 10分)
+        15M信号评分 (max 12分)
 
         逻辑:
-        - 最近2小时(8根)中,同向K线>=6根: 10分
-        - 同向K线=5根: 7分
-        - 同向K线=4根: 3分
+        - 最近2小时(8根)中,同向K线>=6根: 12分
+        - 同向K线=5根: 8分
+        - 同向K线=4根: 4分
         - 其他: 0分
         """
         if len(klines_15m) < 8:
@@ -200,18 +201,18 @@ class SignalScorerV3:
 
         if position_side == 'LONG':
             if bull_count >= 6:
-                return 10.0
+                return 12.0
             elif bull_count >= 5:
-                return 7.0
+                return 8.0
             elif bull_count >= 4:
-                return 3.0
+                return 4.0
         elif position_side == 'SHORT':
             if bear_count >= 6:
-                return 10.0
+                return 12.0
             elif bear_count >= 5:
-                return 7.0
+                return 8.0
             elif bear_count >= 4:
-                return 3.0
+                return 4.0
 
         return 0.0
 
