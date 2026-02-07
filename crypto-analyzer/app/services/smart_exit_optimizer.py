@@ -63,6 +63,13 @@ class SmartExitOptimizer:
         # 部分平仓阶段跟踪（避免重复触发）
         self.partial_close_stage: Dict[int, int] = {}  # position_id -> stage (0=未平仓, 1=平50%, 2=平70%, 3=平100%)
 
+        # 🔥🔥🔥 重构: 移动止盈配置
+        self.trailing_stop_enabled = True  # 启用移动止盈
+        self.trailing_threshold_pct = 0.01  # 1%开启移动止盈
+        self.trailing_step_pct = 0.005  # 每0.5%移动一次
+        self.max_profit_tracker: Dict[int, float] = {}  # position_id -> max_profit_pct
+        logger.info("🚀 移动止盈已启用: 门槛1%, 步进0.5%")
+
     async def start_monitoring_position(self, position_id: int):
         """
         开始监控持仓（从开仓完成后立即开始）
@@ -394,6 +401,27 @@ class SmartExitOptimizer:
 
         # 计算当前回撤（从最高点）
         drawback = max_profit_pct - profit_pct
+
+        # 🔥🔥🔥 重构: 移动止盈逻辑 (优先级最高)
+        if self.trailing_stop_enabled and profit_pct > 0:
+            position_id = position['id']
+
+            # 记录最高盈利
+            if position_id not in self.max_profit_tracker:
+                self.max_profit_tracker[position_id] = profit_pct
+            elif profit_pct > self.max_profit_tracker[position_id]:
+                self.max_profit_tracker[position_id] = profit_pct
+
+            tracked_max = self.max_profit_tracker[position_id]
+
+            # 如果盈利超过门槛 (1%)
+            if tracked_max >= self.trailing_threshold_pct:
+                # 计算保护比例: 从最高点回撤超过0.5%就平仓
+                trailing_drawback = tracked_max - profit_pct
+
+                if trailing_drawback >= self.trailing_step_pct:
+                    protected_profit = profit_pct
+                    return True, f"移动止盈(最高{tracked_max*100:.2f}% → 当前{profit_pct*100:.2f}%, 保护{protected_profit*100:.2f}%利润)"
 
         # ========== 优先级最高：止损止盈检查（任何时候都检查） ==========
 

@@ -61,7 +61,7 @@ class SmartDecisionBrain:
         # 从config.yaml加载配置
         self._load_config()
 
-        self.threshold = 35  # 开仓阈值 (提高到35分,过滤低质量信号,防追高)
+        self.threshold = 50  # 🔥 重构: 开仓阈值提升到50分，只做精选交易 (目标日10-20笔，胜率>50%)
 
         # 🚀 V3模式开关
         self.use_v3_mode = os.getenv('USE_V3_MODE', 'false').lower() == 'true'
@@ -327,20 +327,31 @@ class SmartDecisionBrain:
             else:
                 position_pct = 50  # 无波动时默认中间位置
 
-            # 🔥 紧急启用防追高过滤器 - 基于今日数据分析
-            # 数据显示: 67%的大亏损来自在24H区间70%+高位入场
+            # 🔥🔥🔥 重构: 极严格的防追高/杀跌过滤器
+            # 目标: 只在价格30-70%区间开仓，实现低吸高抛
 
-            # 做多防追高: 禁止在75%以上高位开多
-            if side == 'LONG' and position_pct > 75:
-                return False, f"防追高-价格位于24H区间{position_pct:.1f}%高位(阈值75%)"
+            # 做多防追高: 禁止在60%以上高位开多 (从75%降到60%)
+            if side == 'LONG' and position_pct > 60:
+                return False, f"防追高-价格位于24H区间{position_pct:.1f}%高位(阈值60%)"
 
-            # 做空防杀跌: 禁止在25%以下低位开空
-            if side == 'SHORT' and position_pct < 25:
-                return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%低位(阈值25%)"
+            # 做空防杀跌: 禁止在40%以下低位开空 (从25%提到40%)
+            if side == 'SHORT' and position_pct < 40:
+                return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%低位(阈值40%)"
 
-            # 额外检查: 24H大涨>30%且在高位>70% → 禁止追高
-            if side == 'LONG' and change_24h > 30 and position_pct > 70:
-                return False, f"防追高-24H暴涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
+            # 最佳开仓区间: 做多在30-60%，做空在40-70%
+            if side == 'LONG' and position_pct < 30:
+                return False, f"价格过低-位于24H区间{position_pct:.1f}%，建议等待反弹到30%+"
+
+            if side == 'SHORT' and position_pct > 70:
+                return False, f"价格过高-位于24H区间{position_pct:.1f}%，建议等待回调到70%-"
+
+            # 额外检查: 24H大涨>20%且在高位>50% → 禁止追高
+            if side == 'LONG' and change_24h > 20 and position_pct > 50:
+                return False, f"防追高-24H涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
+
+            # 额外检查: 24H大跌>20%且在低位<50% → 禁止杀跌
+            if side == 'SHORT' and change_24h < -20 and position_pct < 50:
+                return False, f"防杀跌-24H跌{change_24h:+.2f}%且位于{position_pct:.1f}%低位"
 
             return True, f"位置{position_pct:.1f}%,24H{change_24h:+.2f}%"
 
