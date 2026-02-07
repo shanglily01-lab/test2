@@ -18,8 +18,9 @@ load_dotenv()
 class SmartEntryExecutorV3:
     """智能分批建仓执行器 V3.0"""
 
-    def __init__(self, db_config: dict):
+    def __init__(self, db_config: dict, account_id: int = 2):
         self.db_config = db_config
+        self.account_id = account_id
         self.entry_timeout = 60  # 1小时建仓时限 (分钟)
         self.batch_config = [
             {'ratio': 0.30, 'name': '第1批', 'wait_minutes': 0},
@@ -98,7 +99,7 @@ class SmartEntryExecutorV3:
 
         if not self._is_within_timeout(start_time):
             print(f"⏰ 建仓超时，仅持有第1批 (30%)")
-            return self._create_position_result(batches_filled, position_side, symbol)
+            return self._create_position_result(batches_filled, position_side, symbol, leverage, total_margin, signal)
 
         print(f"\n[第2批] 等待5M K线确认...")
         batch2_result = await self.wait_for_5m_confirmation_and_fill(
@@ -119,14 +120,14 @@ class SmartEntryExecutorV3:
             print(f"✅ 第2批入场完成: ${batch2_result['price']:.4f}, 数量: {batch2_result['quantity']:.4f}")
         else:
             print(f"⏰ 第2批条件不满足或超时，持有第1批 (30%)")
-            return self._create_position_result(batches_filled, position_side, symbol)
+            return self._create_position_result(batches_filled, position_side, symbol, leverage, total_margin, signal)
 
         # 再等待15分钟后尝试第3批
         await asyncio.sleep(15 * 60)
 
         if not self._is_within_timeout(start_time):
             print(f"⏰ 建仓超时，持有前2批 (60%)")
-            return self._create_position_result(batches_filled, position_side, symbol)
+            return self._create_position_result(batches_filled, position_side, symbol, leverage, total_margin, signal)
 
         print(f"\n[第3批] 等待5M K线确认...")
         batch3_result = await self.wait_for_5m_confirmation_and_fill(
@@ -148,7 +149,10 @@ class SmartEntryExecutorV3:
             print(f"⏰ 第3批条件不满足，持有前2批 (60%)")
 
         # 返回完整的持仓结果
-        result = self._create_position_result(batches_filled, position_side, symbol)
+        result = self._create_position_result(
+            batches_filled, position_side, symbol,
+            leverage=leverage, total_margin=total_margin, signal=signal
+        )
         print(f"\n{'='*80}")
         print(f"[建仓完成] {symbol} {position_side}")
         print(f"总批次: {len(batches_filled)}/3")
@@ -351,9 +355,14 @@ class SmartEntryExecutorV3:
         self,
         batches: List[Dict],
         position_side: str,
-        symbol: str
+        symbol: str,
+        leverage: int = 10,
+        total_margin: float = 0,
+        signal: dict = None
     ) -> Dict:
-        """创建持仓结果"""
+        """创建持仓结果并插入数据库"""
+        import json
+
         if not batches:
             return {
                 'success': False,
@@ -363,22 +372,116 @@ class SmartEntryExecutorV3:
         total_quantity = sum(b['quantity'] for b in batches)
         avg_price = sum(b['price'] * b['quantity'] for b in batches) / total_quantity
 
-        # TODO: 需要实际创建数据库持仓记录并获取position_id
-        # 目前返回模拟ID
-        position_id = None  # 实盘时这里应该是数据库返回的ID
+        # 创建数据库持仓记录
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
 
-        return {
-            'success': True,
-            'position_id': position_id,
-            'symbol': symbol,
-            'position_side': position_side,
-            'batches': batches,
-            'total_quantity': total_quantity,
-            'avg_price': avg_price,
-            'avg_entry_price': avg_price,
-            'batch_count': len(batches),
-            'created_at': datetime.now()
-        }
+            # 获取止盈止损参数（默认3%止损，6%止盈）
+            stop_loss_pct = 3.0
+            take_profit_pct = 6.0
+
+            if position_side == 'LONG':
+                stop_loss_price = avg_price * (1 - stop_loss_pct / 100)
+                take_profit_price = avg_price * (1 + take_profit_pct / 100)
+            else:  # SHORT
+                stop_loss_price = avg_price * (1 + stop_loss_pct / 100)
+                take_profit_price = avg_price * (1 - take_profit_pct / 100)
+
+            # 准备批次JSON
+            batch_plan_json = json.dumps({
+                'batches': [
+                    {'ratio': b['ratio'], 'timeout_minutes': b['wait_minutes']}
+                    for b in self.batch_config
+                ]
+            })
+
+            batch_filled_json = json.dumps({
+                'batches': [
+                    {
+                        'batch_num': i + 1,
+                        'ratio': self.batch_config[i]['ratio'],
+                        'price': float(b['price']),
+                        'quantity': float(b['quantity']),
+                        'filled_at': datetime.now().isoformat()
+                    }
+                    for i, b in enumerate(batches)
+                ]
+            })
+
+            # 插入持仓记录
+            cursor.execute("""
+                INSERT INTO futures_positions
+                (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
+                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
+                 stop_loss_pct, take_profit_pct,
+                 entry_signal_type, entry_score, signal_components,
+                 batch_plan, batch_filled, entry_signal_time,
+                 source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open', NOW(), NOW())
+            """, (
+                self.account_id,
+                symbol,
+                position_side,
+                total_quantity,
+                avg_price,  # entry_price
+                avg_price,  # avg_entry_price
+                leverage,
+                total_quantity * avg_price,  # notional_value
+                total_margin,
+                stop_loss_price,
+                take_profit_price,
+                stop_loss_pct,
+                take_profit_pct,
+                'v3_batch_entry',  # entry_signal_type
+                signal.get('total_score', 0) if signal else 0,  # entry_score
+                json.dumps(signal.get('breakdown', {}) if signal else {}),  # signal_components
+                batch_plan_json,
+                batch_filled_json,
+                datetime.now()  # entry_signal_time
+            ))
+
+            position_id = cursor.lastrowid
+
+            # 冻结保证金
+            cursor.execute("""
+                UPDATE futures_trading_accounts
+                SET current_balance = current_balance - %s,
+                    frozen_balance = frozen_balance + %s,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (total_margin, total_margin, self.account_id))
+
+            conn.commit()
+
+            print(f"[数据库] 持仓记录已创建: ID={position_id}")
+
+            return {
+                'success': True,
+                'position_id': position_id,
+                'symbol': symbol,
+                'position_side': position_side,
+                'batches': batches,
+                'total_quantity': total_quantity,
+                'avg_price': avg_price,
+                'avg_entry_price': avg_price,
+                'batch_count': len(batches),
+                'created_at': datetime.now()
+            }
+
+        except Exception as e:
+            if 'conn' in locals():
+                conn.rollback()
+            print(f"❌ 创建持仓记录失败: {e}")
+            return {
+                'success': False,
+                'error': f'Database error: {e}'
+            }
+        finally:
+            if 'cursor' in locals():
+                cursor.close()
+            if 'conn' in locals():
+                conn.close()
 
 
 # 测试代码
