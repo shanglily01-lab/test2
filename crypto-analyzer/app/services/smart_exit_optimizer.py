@@ -423,6 +423,25 @@ class SmartExitOptimizer:
                     protected_profit = profit_pct
                     return True, f"移动止盈(最高{tracked_max*100:.2f}% → 当前{profit_pct*100:.2f}%, 保护{protected_profit*100:.2f}%利润)"
 
+        # 🔥🔥🔥 重构: 快速止损逻辑 (30分钟快速认错)
+        if profit_pct < 0:
+            # 计算持仓时长
+            open_time = position.get('open_time') or position.get('created_at')
+            if open_time:
+                holding_minutes = (datetime.now() - open_time).total_seconds() / 60
+
+                # 30分钟内亏损超过1% → 立即止损
+                if holding_minutes <= 30 and profit_pct <= -0.01:
+                    return True, f"快速止损-30分钟(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
+
+                # 1小时内亏损超过1.5% → 立即止损
+                if holding_minutes <= 60 and profit_pct <= -0.015:
+                    return True, f"快速止损-1小时(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
+
+                # 2小时内亏损超过2% → 立即止损
+                if holding_minutes <= 120 and profit_pct <= -0.02:
+                    return True, f"快速止损-2小时(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
+
         # ========== 优先级最高：止损止盈检查（任何时候都检查） ==========
 
         # 检查止损价格
