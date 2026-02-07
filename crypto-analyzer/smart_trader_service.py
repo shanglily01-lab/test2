@@ -1783,37 +1783,35 @@ class SmartTraderService:
                 # 注意: rating_level已在函数开头检查过了
                 rating_config = self.opt_config.get_blacklist_config(rating_level)
 
-                        logger.error(f"[MODE_ERROR] 获取模式配置失败: {e}")
-
                 # 获取评级对应的保证金倍数
                 rating_margin_multiplier = rating_config['margin_multiplier']
 
                 # ========== 根据策略类型确定基础仓位大小 ==========
-                    # 趋势模式: 使用默认仓位(5%)
-                    base_position_size = self.position_size_usdt * rating_margin_multiplier
+                # 趋势模式: 使用默认仓位(5%)
+                base_position_size = self.position_size_usdt * rating_margin_multiplier
 
                 # 记录评级信息
                 rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
                 logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
 
-                    try:
-                        big4_result = self.get_big4_result()
-                        market_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                try:
+                    big4_result = self.get_big4_result()
+                    market_signal = big4_result.get('overall_signal', 'NEUTRAL')
 
-                        # 根据市场信号决定仓位倍数
-                        if market_signal == 'BULLISH' and side == 'LONG':
-                            position_multiplier = 1.2  # 市场看多,做多加仓
-                            logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
-                        elif market_signal == 'BEARISH' and side == 'SHORT':
-                            position_multiplier = 1.2  # 市场看空,做空加仓
-                            logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
-                        else:
-                            position_multiplier = 1.0  # 其他情况正常仓位
-                            if market_signal != 'NEUTRAL':
-                                logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
-                    except Exception as e:
-                        logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
-                        position_multiplier = 1.0
+                    # 根据市场信号决定仓位倍数
+                    if market_signal == 'BULLISH' and side == 'LONG':
+                        position_multiplier = 1.2  # 市场看多,做多加仓
+                        logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
+                    elif market_signal == 'BEARISH' and side == 'SHORT':
+                        position_multiplier = 1.2  # 市场看空,做空加仓
+                        logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
+                    else:
+                        position_multiplier = 1.0  # 其他情况正常仓位
+                        if market_signal != 'NEUTRAL':
+                            logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
+                except Exception as e:
+                    logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                    position_multiplier = 1.0
 
                 # 获取自适应参数
                 if side == 'LONG':
@@ -1828,52 +1826,38 @@ class SmartTraderService:
             notional_value = quantity * current_price
             margin = adjusted_position_size
 
-            # ========== 根据策略类型确定止损止盈 ==========
-                take_profit = opp['take_profit_price']
+            # ========== 趋势模式: 计算止损止盈 ==========
+            # 使用自适应参数计算止损
+            base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
 
-                # 计算实际百分比用于日志
-                if side == 'LONG':
-                    stop_loss_pct = (current_price - stop_loss) / current_price
-                    take_profit_pct = (take_profit - current_price) / current_price
-                else:  # SHORT
-                    stop_loss_pct = (stop_loss - current_price) / current_price
-                    take_profit_pct = (current_price - take_profit) / current_price
+            # 缺陷5修复: 波动率自适应止损
+            stop_loss_pct = self.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
 
-                logger.info(f"[RANGE_TP_SL] {symbol} 使用布林带策略止盈止损: TP=${take_profit:.4f}({take_profit_pct*100:.2f}%), SL=${stop_loss:.4f}({stop_loss_pct*100:.2f}%)")
-
-            else:
-                # 趋势模式: 使用原有逻辑
-                # 使用自适应参数计算止损
-                base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
-
-                # 缺陷5修复: 波动率自适应止损
-                stop_loss_pct = self.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
-
-                # 问题4优化: 使用波动率配置计算动态止盈
-                volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
-                if volatility_profile:
-                    # 根据方向使用对应的止盈配置
-                    if side == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
-                        take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
-                        logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
-                    elif side == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
-                        take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
-                        logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
-                    else:
-                        # 回退到自适应参数
-                        take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
-                        logger.debug(f"[TP_FALLBACK] {symbol} {side} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
+            # 问题4优化: 使用波动率配置计算动态止盈
+            volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
+            if volatility_profile:
+                # 根据方向使用对应的止盈配置
+                if side == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
+                    take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
+                    logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
+                elif side == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
+                    take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
+                    logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
                 else:
                     # 回退到自适应参数
                     take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
-                    logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
+                    logger.debug(f"[TP_FALLBACK] {symbol} {side} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
+            else:
+                # 回退到自适应参数
+                take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+                logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
 
-                if side == 'LONG':
-                    stop_loss = current_price * (1 - stop_loss_pct)    # 止损
-                    take_profit = current_price * (1 + take_profit_pct) # 止盈
-                else:  # SHORT
-                    stop_loss = current_price * (1 + stop_loss_pct)    # 止损
-                    take_profit = current_price * (1 - take_profit_pct) # 止盈
+            if side == 'LONG':
+                stop_loss = current_price * (1 - stop_loss_pct)    # 止损
+                take_profit = current_price * (1 + take_profit_pct) # 止盈
+            else:  # SHORT
+                stop_loss = current_price * (1 + stop_loss_pct)    # 止损
+                take_profit = current_price * (1 - take_profit_pct) # 止盈
 
             logger.info(f"[OPEN] {symbol} {side} | 价格: ${current_price:.4f} ({price_source}) | 数量: {quantity:.2f}")
 
@@ -1892,8 +1876,7 @@ class SmartTraderService:
                 sorted_signals = sorted(signal_components.keys())
                 signal_combination_key = " + ".join(sorted_signals)
             else:
-                else:
-                    signal_combination_key = "unknown"
+                signal_combination_key = "unknown"
 
             # 检查是否为反转信号
             if is_reversal:
