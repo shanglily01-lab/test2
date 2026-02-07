@@ -1800,16 +1800,6 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后15分钟冷却期内")
             return False
 
-        # 新增验证: 防追高/追跌过滤
-        current_price = self.ws_service.get_price(symbol)
-        if current_price:
-            pass_filter, filter_reason = self.brain.check_anti_fomo_filter(symbol, current_price, side)
-            if not pass_filter:
-                logger.warning(f"[ANTI-FOMO] {symbol} {side} - {filter_reason}")
-                return False
-            else:
-                logger.info(f"[ANTI-FOMO] {symbol} {side} 通过防追高检查: {filter_reason}")
-
         # ========== 第二步：提前检查黑名单（分批建仓也要检查）==========
         rating_level = self.opt_config.get_symbol_rating_level(symbol)
         if rating_level == 3:
