@@ -203,8 +203,8 @@ class SmartDecisionBrain:
                     'volume_power_bear': {'long': 0, 'short': 25},        # 1H+15M量能空头
                     'volume_power_1h_bull': {'long': 15, 'short': 0},     # 仅1H量能多头
                     'volume_power_1h_bear': {'long': 0, 'short': 15},     # 仅1H量能空头
-                    'breakout_long': {'long': 20, 'short': 0},            # 高位突破追涨
-                    'breakdown_short': {'long': 0, 'short': 20}           # 低位破位追空
+                    'breakout_long': {'long': 10, 'short': 0},            # 🔥 降低权重: 20→10 (追高风险)
+                    'breakdown_short': {'long': 0, 'short': 10}           # 🔥 降低权重: 20→10 (杀跌风险)
                     # 已移除: ema_bull, ema_bear (Big4市场趋势判断已足够)
                 }
                 logger.info(f"   📊 评分权重: 使用默认权重")
@@ -248,8 +248,8 @@ class SmartDecisionBrain:
                 'volatility_high': {'long': 10, 'short': 10},
 
                 # 已废弃的信号（保留兼容性）
-                'breakout_long': {'long': 20, 'short': 0},            # 旧版突破信号
-                'breakdown_short': {'long': 0, 'short': 20}           # 旧版破位信号
+                'breakout_long': {'long': 10, 'short': 0},            # 🔥 降低权重: 20→10
+                'breakdown_short': {'long': 0, 'short': 10}           # 🔥 降低权重: 20→10
             }
 
     def reload_config(self):
@@ -312,22 +312,20 @@ class SmartDecisionBrain:
             else:
                 position_pct = 50  # 无波动时默认中间位置
 
-            # 防FOMO过滤器已全部禁用（用户要求：市场本来就是要追涨杀跌的）
-            # 做多防追高: 已禁用
-            # if side == 'LONG' and position_pct > 80:
-            #     return False, f"防追高-价格位于24H区间{position_pct:.1f}%位置,距最高仅{(high_24h-current_price)/current_price*100:.2f}%"
+            # 🔥 紧急启用防追高过滤器 - 基于今日数据分析
+            # 数据显示: 67%的大亏损来自在24H区间70%+高位入场
 
-            # 做空防杀跌: 已禁用
-            # if side == 'SHORT' and position_pct < 20:
-            #     return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%位置,距最低仅{(current_price-low_24h)/current_price*100:.2f}%"
+            # 做多防追高: 禁止在75%以上高位开多
+            if side == 'LONG' and position_pct > 75:
+                return False, f"防追高-价格位于24H区间{position_pct:.1f}%高位(阈值75%)"
 
-            # 额外检查: 24H大涨且在高位 → 已禁用
-            # if side == 'LONG' and change_24h > 15 and position_pct > 70:
-            #     return False, f"防追高-24H涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
+            # 做空防杀跌: 禁止在25%以下低位开空
+            if side == 'SHORT' and position_pct < 25:
+                return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%低位(阈值25%)"
 
-            # 额外检查: 24H大跌且在低位 → 已禁用
-            # if side == 'SHORT' and change_24h < -15 and position_pct < 30:
-            #     return False, f"防杀跌-24H跌{change_24h:+.2f}%且位于{position_pct:.1f}%低位"
+            # 额外检查: 24H大涨>30%且在高位>70% → 禁止追高
+            if side == 'LONG' and change_24h > 30 and position_pct > 70:
+                return False, f"防追高-24H暴涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
 
             return True, f"位置{position_pct:.1f}%,24H{change_24h:+.2f}%"
 
@@ -1003,11 +1001,11 @@ class SmartDecisionBrain:
 
                 # position_high时有强力量能支撑,且通过过滤,可以追涨做多
                 if can_breakout:
-                    weight = self.scoring_weights.get('breakout_long', {'long': 20, 'short': 0})
+                    weight = self.scoring_weights.get('breakout_long', {'long': 10, 'short': 0})  # 🔥 权重已降低
                     long_score += weight['long']
                     if weight['long'] > 0:
                         signal_components['breakout_long'] = weight['long']
-                        logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
+                        logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h} (权重{weight['long']})")
                         if breakout_warnings:
                             logger.warning(f"{symbol} 突破追涨警告: {', '.join(breakout_warnings)}")
                 else:
@@ -3731,6 +3729,12 @@ class SmartTraderService:
                     except Exception as e:
                         logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
                         # 失败不影响正常交易流程
+
+                    # 🔥 紧急过滤: 禁用60+分的breakout_long信号 (今日数据: 胜率0%, 平均亏损-45.72U)
+                    signal_components_str = opp.get('signal_components', '')
+                    if new_score >= 60 and 'breakout_long' in signal_components_str:
+                        logger.warning(f"[FILTER-BREAKOUT] {symbol} {new_side} 分数{new_score} 包含breakout_long信号,禁止开仓(追高风险)")
+                        continue
 
                     # 检查同方向是否已有持仓
                     if self.has_position(symbol, new_side):

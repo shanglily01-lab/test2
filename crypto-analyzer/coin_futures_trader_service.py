@@ -283,22 +283,20 @@ class CoinFuturesDecisionBrain:
             else:
                 position_pct = 50  # 无波动时默认中间位置
 
-            # 防FOMO过滤器已全部禁用（用户要求：市场本来就是要追涨杀跌的）
-            # 做多防追高: 已禁用
-            # if side == 'LONG' and position_pct > 80:
-            #     return False, f"防追高-价格位于24H区间{position_pct:.1f}%位置,距最高仅{(high_24h-current_price)/current_price*100:.2f}%"
+            # 🔥 紧急启用防追高过滤器 - 基于今日数据分析
+            # 数据显示: 67%的大亏损来自在24H区间70%+高位入场
 
-            # 做空防杀跌: 已禁用
-            # if side == 'SHORT' and position_pct < 20:
-            #     return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%位置,距最低仅{(current_price-low_24h)/current_price*100:.2f}%"
+            # 做多防追高: 禁止在75%以上高位开多
+            if side == 'LONG' and position_pct > 75:
+                return False, f"防追高-价格位于24H区间{position_pct:.1f}%高位(阈值75%)"
 
-            # 额外检查: 24H大涨且在高位 → 已禁用
-            # if side == 'LONG' and change_24h > 15 and position_pct > 70:
-            #     return False, f"防追高-24H涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
+            # 做空防杀跌: 禁止在25%以下低位开空
+            if side == 'SHORT' and position_pct < 25:
+                return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%低位(阈值25%)"
 
-            # 额外检查: 24H大跌且在低位 → 已禁用
-            # if side == 'SHORT' and change_24h < -15 and position_pct < 30:
-            #     return False, f"防杀跌-24H跌{change_24h:+.2f}%且位于{position_pct:.1f}%低位"
+            # 额外检查: 24H大涨>30%且在高位>70% → 禁止追高
+            if side == 'LONG' and change_24h > 30 and position_pct > 70:
+                return False, f"防追高-24H暴涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
 
             return True, f"位置{position_pct:.1f}%,24H{change_24h:+.2f}%"
 
