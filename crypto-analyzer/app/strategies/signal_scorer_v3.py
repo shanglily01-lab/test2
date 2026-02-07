@@ -129,16 +129,26 @@ class SignalScorerV3:
         if not big4_signal or not big4_strength:
             return 0.0
 
-        # 检查方向是否一致
-        if (position_side == 'LONG' and big4_signal == 'BULL') or \
-           (position_side == 'SHORT' and big4_signal == 'BEAR'):
+        # 标准化Big4信号 (BULLISH -> BULL, BEARISH -> BEAR)
+        normalized_signal = big4_signal.upper()
+        if 'BULL' in normalized_signal:
+            normalized_signal = 'BULL'
+        elif 'BEAR' in normalized_signal:
+            normalized_signal = 'BEAR'
 
-            if big4_strength >= 80:
-                return 5.0
-            elif big4_strength >= 70:
-                return 4.0
-            elif big4_strength >= 60:
-                return 3.0
+        # 检查方向是否一致
+        if (position_side == 'LONG' and normalized_signal == 'BULL') or \
+           (position_side == 'SHORT' and normalized_signal == 'BEAR'):
+
+            # 🔥 根据实际Big4强度范围调整阈值 (观察到强度通常在0-20之间)
+            if big4_strength >= 15:
+                return 5.0  # 强势信号
+            elif big4_strength >= 10:
+                return 4.0  # 中等信号
+            elif big4_strength >= 5:
+                return 3.0  # 弱信号
+            elif big4_strength > 0:
+                return 2.0  # 极弱但有效
 
         return 0.0
 
