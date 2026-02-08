@@ -78,17 +78,6 @@ class SmartDecisionBrain:
         self.emergency_top_reversal_time = None     # 顶部反转触发时间
         self.emergency_block_duration_hours = 2     # 紧急干预持续时间(小时)
 
-        # 🔥 紧急干预标志 - 总亏损超过阈值时触发
-        self.emergency_loss_limit_time = None       # 总亏损触发时间
-        self.emergency_loss_threshold = 600         # 总亏损阈值(USDT)
-        self.emergency_loss_block_hours = 2         # 总亏损干预持续时间(小时)
-
-        # 🔥 紧急熔断标志 - 连续止损过多时触发
-        self.emergency_stop_loss_circuit_time = None  # 止损熔断触发时间
-        self.circuit_check_recent_trades = 10         # 检查最近N笔交易
-        self.circuit_stop_loss_threshold = 5          # 止损笔数阈值
-        self.circuit_block_hours = 2                  # 熔断持续时间(小时)
-
     def _load_config(self):
         """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
         try:
@@ -1128,26 +1117,6 @@ class SmartDecisionBrain:
                 # 🔥 紧急干预检查: 如果处于紧急干预期,禁止开新仓
                 import time
 
-                # 检查止损熔断
-                if self.emergency_stop_loss_circuit_time:
-                    hours_since_circuit = (time.time() - self.emergency_stop_loss_circuit_time) / 3600
-                    if hours_since_circuit <= self.circuit_block_hours:
-                        logger.warning(f"🚨 [CIRCUIT-BREAKER] {symbol} 止损熔断中({hours_since_circuit:.1f}h/{self.circuit_block_hours}h),禁止开仓")
-                        return None
-                    else:
-                        # 超过干预时间,清除标志
-                        self.emergency_stop_loss_circuit_time = None
-
-                # 检查总亏损干预
-                if self.emergency_loss_limit_time:
-                    hours_since_loss_emergency = (time.time() - self.emergency_loss_limit_time) / 3600
-                    if hours_since_loss_emergency <= self.emergency_loss_block_hours:
-                        logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 总亏损超限紧急干预中({hours_since_loss_emergency:.1f}h/{self.emergency_loss_block_hours}h),禁止开仓")
-                        return None
-                    else:
-                        # 超过干预时间,清除标志
-                        self.emergency_loss_limit_time = None
-
                 # 检查底部反转干预
                 if side == 'SHORT' and self.emergency_bottom_reversal_time:
                     hours_since_emergency = (time.time() - self.emergency_bottom_reversal_time) / 3600
@@ -1351,17 +1320,6 @@ class SmartTraderService:
         self.emergency_bottom_reversal_time = None  # 底部反转触发时间
         self.emergency_top_reversal_time = None     # 顶部反转触发时间
         self.emergency_block_duration_hours = 2     # 紧急干预持续时间(小时)
-
-        # 🔥 紧急干预标志 - 总亏损超过阈值时触发
-        self.emergency_loss_limit_time = None       # 总亏损触发时间
-        self.emergency_loss_threshold = 600         # 总亏损阈值(USDT)
-        self.emergency_loss_block_hours = 2         # 总亏损干预持续时间(小时)
-
-        # 🔥 紧急熔断标志 - 连续止损过多时触发
-        self.emergency_stop_loss_circuit_time = None  # 止损熔断触发时间
-        self.circuit_check_recent_trades = 10         # 检查最近N笔交易
-        self.circuit_stop_loss_threshold = 5          # 止损笔数阈值
-        self.circuit_block_hours = 2                  # 熔断持续时间(小时)
 
         # 优化配置管理器 (支持自我优化的参数配置)
         self.opt_config = OptimizationConfig(self.db_config)
@@ -2825,162 +2783,6 @@ class SmartTraderService:
         except Exception as e:
             logger.error(f"❌ [EMERGENCY] 紧急平仓流程失败: {e}", exc_info=True)
 
-    def _check_total_loss_emergency(self) -> bool:
-        """
-        🔥 检查总持仓亏损是否超过阈值,触发紧急干预
-
-        检查逻辑:
-        1. 计算所有开仓持仓的总浮亏
-        2. 如果总亏损 > 600 USDT,触发紧急干预
-        3. 设置emergency_loss_limit_time,2小时内禁止开新仓
-
-        返回:
-            bool: True表示触发了紧急干预,False表示正常
-        """
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-            # 查询所有开仓持仓
-            cursor.execute("""
-                SELECT id, symbol, position_side, quantity, entry_price, avg_entry_price
-                FROM futures_positions
-                WHERE status = 'open'
-                AND account_id = %s
-            """, (self.account_id,))
-
-            positions = cursor.fetchall()
-            cursor.close()
-
-            if not positions:
-                return False
-
-            # 计算总浮动盈亏
-            total_pnl = 0.0
-
-            for pos in positions:
-                symbol = pos['symbol']
-                position_side = pos['position_side']
-                quantity = float(pos['quantity'])
-                entry_price = float(pos.get('avg_entry_price') or pos['entry_price'])
-
-                # 获取当前价格
-                current_price = self.get_current_price(symbol)
-                if not current_price:
-                    continue
-
-                # 计算浮动盈亏 (USDT)
-                if position_side == 'LONG':
-                    pnl = (current_price - entry_price) * quantity
-                else:  # SHORT
-                    pnl = (entry_price - current_price) * quantity
-
-                total_pnl += pnl
-
-            # 检查是否超过亏损阈值
-            if total_pnl < -self.emergency_loss_threshold:
-                logger.critical(
-                    f"🚨 [EMERGENCY-LOSS] 总持仓亏损超过阈值! "
-                    f"当前总浮亏: {total_pnl:.2f} USDT (阈值: -{self.emergency_loss_threshold} USDT) | "
-                    f"持仓数量: {len(positions)}个 | "
-                    f"触发紧急干预,暂停开仓{self.emergency_loss_block_hours}小时"
-                )
-
-                # 设置紧急干预标志
-                import time
-                self.emergency_loss_limit_time = time.time()
-
-                return True
-
-            return False
-
-        except Exception as e:
-            logger.error(f"❌ [EMERGENCY-LOSS] 检查总亏损失败: {e}", exc_info=True)
-            return False
-
-    def _check_stop_loss_circuit(self) -> bool:
-        """
-        🔥 检查最近交易是否止损过多,触发熔断机制
-
-        检查逻辑:
-        1. 查询最近N笔已平仓订单(futures_orders)
-        2. 从notes字段判断是否是止损平仓(包含"止损"关键字)
-        3. 如果止损笔数 >= 阈值,触发熔断
-        4. 设置emergency_stop_loss_circuit_time,2小时内禁止开新仓
-
-        返回:
-            bool: True表示触发了熔断,False表示正常
-        """
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-            # 查询最近N笔平仓订单（从futures_orders查询，因为notes字段包含平仓原因）
-            cursor.execute("""
-                SELECT
-                    o.order_id, o.symbol, o.side, o.realized_pnl,
-                    o.notes, o.fill_time
-                FROM futures_orders o
-                WHERE o.account_id = %s
-                AND o.side LIKE '%%CLOSE%%'
-                AND o.status = 'FILLED'
-                ORDER BY o.fill_time DESC
-                LIMIT %s
-            """, (self.account_id, self.circuit_check_recent_trades))
-
-            recent_trades = cursor.fetchall()
-            cursor.close()
-
-            if len(recent_trades) < self.circuit_check_recent_trades:
-                # 交易笔数不足N笔,不触发熔断
-                return False
-
-            # 统计止损笔数
-            stop_loss_count = 0
-            stop_loss_details = []
-
-            for trade in recent_trades:
-                notes = trade.get('notes', '') or ''
-                realized_pnl = float(trade.get('realized_pnl', 0))
-
-                # 判断是否是止损平仓（notes中包含"止损"）
-                is_stop_loss = '止损' in notes
-
-                if is_stop_loss:
-                    stop_loss_count += 1
-                    stop_loss_details.append({
-                        'symbol': trade['symbol'],
-                        'side': trade['side'],
-                        'pnl': realized_pnl,
-                        'reason': notes[:50]  # 截取前50字符
-                    })
-
-            # 检查是否超过阈值
-            if stop_loss_count >= self.circuit_stop_loss_threshold:
-                details_str = ', '.join([
-                    f"{d['symbol']}({d['pnl']:.1f}U)"
-                    for d in stop_loss_details[:5]  # 只显示前5笔
-                ])
-
-                logger.critical(
-                    f"🚨 [CIRCUIT-BREAKER] 止损熔断触发! "
-                    f"最近{self.circuit_check_recent_trades}笔交易中有{stop_loss_count}笔止损 "
-                    f"(阈值: {self.circuit_stop_loss_threshold}笔) | "
-                    f"止损详情: {details_str} | "
-                    f"触发熔断,暂停开仓{self.circuit_block_hours}小时"
-                )
-
-                # 设置熔断标志
-                import time
-                self.emergency_stop_loss_circuit_time = time.time()
-
-                return True
-
-            return False
-
-        except Exception as e:
-            logger.error(f"❌ [CIRCUIT-BREAKER] 检查止损熔断失败: {e}", exc_info=True)
-            return False
 
     def _emergency_close_position_by_symbol_side(self, symbol: str, side: str, reason: str):
         """
@@ -3793,17 +3595,6 @@ class SmartTraderService:
                     self._check_and_restart_smart_exit_optimizer()
                     last_smart_exit_check = now
 
-                # 4. 🔥 紧急干预: 检查总亏损是否超过阈值 (已禁用)
-                # if self._check_total_loss_emergency():
-                #     logger.critical(f"🚨 [EMERGENCY-LOSS] 总亏损超过{self.emergency_loss_threshold}U,暂停开仓{self.emergency_loss_block_hours}小时")
-                #     time.sleep(self.scan_interval)
-                #     continue
-
-                # 4.5. 🔥 熔断机制: 检查最近交易止损是否过多
-                if self._check_stop_loss_circuit():
-                    logger.critical(f"🚨 [CIRCUIT-BREAKER] 止损熔断触发,暂停开仓{self.circuit_block_hours}小时")
-                    time.sleep(self.scan_interval)
-                    continue
 
                 # 5. 检查持仓
                 current_positions = self.get_open_positions_count()
