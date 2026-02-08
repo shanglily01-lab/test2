@@ -1600,24 +1600,34 @@ class SmartTraderService:
         except:
             return 0
 
-    def has_position(self, symbol: str, side: str = None):
+    def has_position(self, symbol: str, side: str = None, signal_version: str = None):
         """
         检查是否有持仓
         symbol: 交易对
         side: 方向(LONG/SHORT), None表示检查任意方向
+        signal_version: 信号版本(v2/v3/traditional), None表示不区分版本
+
+        🔥 V2/V3并行测试: 同一交易对同一方向可以有2个持仓(v2和v3各一个)
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            if side:
-                # 检查特定方向的持仓（包括正在建仓的持仓）
+            if side and signal_version:
+                # 检查特定方向和特定信号版本的持仓
+                cursor.execute("""
+                    SELECT COUNT(*) FROM futures_positions
+                    WHERE symbol = %s AND position_side = %s AND signal_version = %s
+                    AND status IN ('open', 'building') AND account_id = %s
+                """, (symbol, side, signal_version, self.account_id))
+            elif side:
+                # 检查特定方向的持仓（不区分版本）
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
                     WHERE symbol = %s AND position_side = %s AND status IN ('open', 'building') AND account_id = %s
                 """, (symbol, side, self.account_id))
             else:
-                # 检查任意方向的持仓（包括正在建仓的持仓）
+                # 检查任意方向的持仓（不区分版本）
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
                     WHERE symbol = %s AND status IN ('open', 'building') AND account_id = %s
@@ -3795,9 +3805,13 @@ class SmartTraderService:
                         logger.warning(f"[FILTER-BREAKOUT] {symbol} {new_side} 分数{new_score} 包含breakout_long信号,禁止开仓(追高风险)")
                         continue
 
-                    # 检查同方向是否已有持仓
-                    if self.has_position(symbol, new_side):
-                        logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
+                    # 检查同方向同版本是否已有持仓 (V2/V3并行测试: 允许同方向不同版本各开一单)
+                    signal_version = opp.get('signal_version', 'traditional')
+                    if opp.get('v3_mode'):
+                        signal_version = 'v3'
+
+                    if self.has_position(symbol, new_side, signal_version):
+                        logger.info(f"[SKIP] {symbol} {new_side}方向已有{signal_version}持仓")
                         continue
 
                     # 检查是否刚刚平仓(1小时冷却期)
