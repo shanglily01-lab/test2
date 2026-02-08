@@ -2201,15 +2201,14 @@ class SmartTraderService:
             return False
 
     async def _execute_v3_entry(self, opp: dict):
-        """🚀 V3精准入场执行 - 使用传统执行器"""
+        """🚀 V3精准入场执行 - 使用V3一次性精准入场"""
         symbol = opp['symbol']
         side = opp['side']
 
         try:
-            logger.info(f"[V3-ENTRY] {symbol} {side} 开始V3精准入场流程(使用传统分批执行器)")
+            logger.info(f"[V3-ENTRY] {symbol} {side} 开始V3精准入场流程（等待5M K线确认 → 一次性入场）")
 
-            # V3模式使用传统的分批建仓执行器
-            # V3评分只是用来判断是否开仓，真正的下单还是用原有逻辑
+            # V3模式使用SmartEntryExecutorV3（一次性精准入场，不再分批）
             signal_components = opp.get('signal_components', {})
 
             # 计算保证金（复用原有逻辑）
@@ -2248,58 +2247,68 @@ class SmartTraderService:
 
             adjusted_position_size = base_position_size * position_multiplier
 
-            # 调用智能建仓执行器（V3模式也使用原有的分批建仓）
-            entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
-                'symbol': symbol,
-                'direction': side,
-                'total_margin': adjusted_position_size,
-                'leverage': self.leverage,
-                'strategy_id': 'smart_trader_v3',
-                'max_hold_minutes': opp.get('max_hold_minutes', 240),
-                'trade_params': {
-                    'entry_score': opp.get('score', 0),
-                    'signal_components': signal_components,
-                    'adaptive_params': adaptive_params,
-                    'signal_combination_key': self._generate_signal_combination_key(signal_components),
-                    'v3_mode': True  # 标记为V3模式
-                }
-            }))
+            # 🚀 调用V3一次性精准入场执行器
+            logger.info(f"[V3-ENTRY] {symbol} {side} 保证金: ${adjusted_position_size:.2f}, 杠杆: {self.leverage}x")
 
-            # 添加完成回调来启动智能平仓监控
+            # 准备V3信号数据
+            signal_data = {
+                'total_score': opp.get('score', 0),
+                'max_score': 42,  # V3系统总分
+                'breakdown': signal_components
+            }
+
+            # 异步调用V3入场执行器
+            entry_task = asyncio.create_task(
+                self.entry_executor_v3.execute_entry(
+                    signal=signal_data,
+                    symbol=symbol,
+                    position_side=side,
+                    total_margin=adjusted_position_size,
+                    leverage=self.leverage
+                )
+            )
+
+            # 添加完成回调来启动V3持仓管理器
             _symbol = symbol
             _side = side
-            _smart_exit_optimizer = self.smart_exit_optimizer
+            _position_manager_v3 = self.position_manager_v3
 
             def on_entry_complete(task):
                 try:
                     entry_result = task.result()
-                    if entry_result['success']:
+                    if entry_result and entry_result.get('success'):
                         position_id = entry_result['position_id']
                         logger.info(
                             f"✅ [V3-ENTRY_COMPLETE] {_symbol} {_side} | "
                             f"持仓ID: {position_id} | "
-                            f"平均价格: ${entry_result['avg_price']:.4f} | "
-                            f"总数量: {entry_result['total_quantity']:.2f}"
+                            f"入场价: ${entry_result['entry_price']:.4f} | "
+                            f"数量: {entry_result['quantity']:.6f} | "
+                            f"保证金: ${entry_result['margin']:.2f}"
                         )
 
-                        # 启动智能平仓监控（如果启用）
-                        if _smart_exit_optimizer:
+                        # 🚀 启动V3持仓管理器（移动止盈+动态反转止损+Big4紧急干预）
+                        if _position_manager_v3:
                             try:
-                                loop = asyncio.get_event_loop()
-                                if loop.is_closed():
-                                    logger.warning(f"⚠️ 事件循环已关闭，无法启动智能平仓监控: 持仓{position_id}")
-                                else:
-                                    asyncio.create_task(_smart_exit_optimizer.start_monitoring_position(position_id))
-                                    logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
-                            except RuntimeError as e:
-                                logger.warning(f"⚠️ 无法启动智能平仓监控: {e}")
+                                position = {
+                                    'id': position_id,
+                                    'symbol': _symbol,
+                                    'position_side': _side,
+                                    'entry_price': entry_result['entry_price'],
+                                    'quantity': entry_result['quantity'],
+                                    'created_at': entry_result['created_at']
+                                }
+                                asyncio.create_task(_position_manager_v3.manage_position(position))
+                                logger.info(f"✅ [V3-POSITION_MANAGER] 已启动V3持仓管理: 持仓{position_id}")
+                            except Exception as e:
+                                logger.error(f"❌ 启动V3持仓管理器失败: {e}")
                     else:
-                        logger.error(f"❌ [V3-ENTRY_FAILED] {_symbol} {_side} | {entry_result.get('error')}")
+                        error_msg = entry_result.get('error') if entry_result else 'No result'
+                        logger.error(f"❌ [V3-ENTRY_FAILED] {_symbol} {_side} | {error_msg}")
                 except Exception as e:
                     logger.error(f"❌ [V3-ENTRY_CALLBACK_ERROR] {_symbol} {_side} | {e}")
 
             entry_task.add_done_callback(on_entry_complete)
-            logger.info(f"🚀 [V3-ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行60分钟）")
+            logger.info(f"🚀 [V3-ENTRY_STARTED] {symbol} {side} | 等待5M K线确认后一次性入场（15分钟超时）")
 
             return True
 
