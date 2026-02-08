@@ -172,26 +172,45 @@ class SmartEntryExecutorV3:
 
     async def get_latest_5m_kline(self, symbol: str) -> Optional[Dict]:
         """
-        获取最新5M K线
+        从数据库获取最新5M K线
 
-        TODO: 实盘需对接交易所WebSocket或REST API
-        这里返回模拟数据
+        Returns:
+            K线字典 {'open': float, 'close': float, 'high': float, 'low': float, 'volume': float}
+            如果获取失败返回None
         """
-        # 模拟K线数据
-        import random
-        base_price = 100.0
-        open_price = base_price + random.uniform(-1, 1)
-        close_price = open_price + random.uniform(-0.5, 0.5)
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
 
-        return {
-            'symbol': symbol,
-            'open': open_price,
-            'close': close_price,
-            'high': max(open_price, close_price) + random.uniform(0, 0.2),
-            'low': min(open_price, close_price) - random.uniform(0, 0.2),
-            'volume': random.uniform(1000, 10000),
-            'timestamp': datetime.now()
-        }
+            # 获取最新的5M K线
+            cursor.execute("""
+                SELECT open_price, close_price, high_price, low_price, volume, open_time
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '5m'
+                ORDER BY open_time DESC
+                LIMIT 1
+            """, (symbol,))
+
+            kline = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if not kline:
+                return None
+
+            return {
+                'symbol': symbol,
+                'open': float(kline['open_price']),
+                'close': float(kline['close_price']),
+                'high': float(kline['high_price']),
+                'low': float(kline['low_price']),
+                'volume': float(kline['volume']),
+                'timestamp': kline['open_time']
+            }
+
+        except Exception as e:
+            print(f"[错误] 获取5M K线失败: {e}")
+            return None
 
     async def place_market_order(
         self,

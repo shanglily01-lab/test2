@@ -247,40 +247,63 @@ class SmartTraderV3Controller:
         count: int
     ) -> Optional[List[Dict]]:
         """
-        获取K线数据
+        从数据库获取K线数据
 
-        TODO: 实盘需对接交易所API
-        这里返回模拟数据
+        Args:
+            symbol: 交易对
+            interval: 时间间隔 (5m, 15m, 5h等)
+            count: K线数量
+
+        Returns:
+            K线列表 (最新的在前面)，获取失败返回None
         """
-        import random
+        try:
+            conn = self.db_config
+            import pymysql
+            connection = pymysql.connect(
+                host=conn['host'],
+                user=conn['user'],
+                password=conn['password'],
+                database=conn['database'],
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            cursor = connection.cursor()
 
-        klines = []
-        base_price = 100.0
+            # 获取K线数据
+            cursor.execute("""
+                SELECT open_price, close_price, high_price, low_price, volume, open_time
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s
+                ORDER BY open_time DESC
+                LIMIT %s
+            """, (symbol, interval, count))
 
-        for i in range(count):
-            is_bullish = random.choice([True, False])
-            if is_bullish:
-                open_price = base_price + random.uniform(0, 0.5)
-                close_price = open_price + random.uniform(0, 1)
-            else:
-                open_price = base_price + random.uniform(0, 0.5)
-                close_price = open_price - random.uniform(0, 1)
+            rows = cursor.fetchall()
+            cursor.close()
+            connection.close()
 
-            klines.append({
-                'symbol': symbol,
-                'interval': interval,
-                'open': open_price,
-                'close': close_price,
-                'high': max(open_price, close_price) + random.uniform(0, 0.2),
-                'low': min(open_price, close_price) - random.uniform(0, 0.2),
-                'volume': random.uniform(1000, 10000),
-                'timestamp': datetime.now() - timedelta(minutes=i*5)
-            })
+            if not rows:
+                return None
 
-            base_price = close_price
+            # 转换为标准格式 (最新的在前面)
+            klines = []
+            for row in rows:
+                klines.append({
+                    'symbol': symbol,
+                    'interval': interval,
+                    'open': float(row['open_price']),
+                    'close': float(row['close_price']),
+                    'high': float(row['high_price']),
+                    'low': float(row['low_price']),
+                    'volume': float(row['volume']),
+                    'timestamp': row['open_time']
+                })
 
-        # 返回最新的在前面
-        return list(reversed(klines))
+            return klines
+
+        except Exception as e:
+            print(f"[错误] 获取K线失败 {symbol} {interval}: {e}")
+            return None
 
     async def _save_position_to_db(
         self,

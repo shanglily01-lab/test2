@@ -215,14 +215,36 @@ class PositionManagerV3:
 
     async def get_current_price(self, symbol: str) -> Optional[float]:
         """
-        获取当前价格
+        从数据库获取最新价格 (使用最新1M K线的收盘价)
 
-        TODO: 实盘需对接交易所WebSocket或REST API
+        Returns:
+            当前价格，如果获取失败返回None
         """
-        # 模拟价格波动
-        import random
-        base_price = 100.0
-        return base_price + random.uniform(-2, 2)
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            # 获取最新1M K线的收盘价
+            cursor.execute("""
+                SELECT close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '1m'
+                ORDER BY open_time DESC
+                LIMIT 1
+            """, (symbol,))
+
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if result:
+                return float(result['close_price'])
+            else:
+                return None
+
+        except Exception as e:
+            print(f"[错误] 获取价格失败: {e}")
+            return None
 
     async def close_position(
         self,
