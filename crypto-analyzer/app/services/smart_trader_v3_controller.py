@@ -86,6 +86,132 @@ class SmartTraderV3Controller:
             cursorclass=pymysql.cursors.DictCursor
         )
 
+    async def detect_sudden_move(
+        self,
+        symbol: str,
+        position_side: str,
+        klines_15m: List[Dict]
+    ) -> Dict:
+        """
+        🔥 突然拉升检测器 - 抓住价格突然拉起/下跌 + 放量
+
+        检测条件:
+        1. 最近5-15分钟价格变化 >= 1%
+        2. 量能 >= 平均量的1.5倍
+        3. 方向与position_side一致
+
+        Args:
+            symbol: 交易对
+            position_side: LONG/SHORT
+            klines_15m: 15M K线列表
+
+        Returns:
+            检测结果字典
+        """
+        if len(klines_15m) < 6:
+            return {'detected': False, 'reason': 'K线数据不足'}
+
+        # 获取最新K线和前5根的平均量
+        latest = klines_15m[0]
+        avg_volume = sum(k['volume'] for k in klines_15m[1:6]) / 5
+
+        # 计算价格变化百分比
+        price_change_pct = abs(latest['close'] - latest['open']) / latest['open']
+
+        # 检查量能放大
+        volume_ratio = latest['volume'] / avg_volume if avg_volume > 0 else 0
+
+        # LONG: 检测突然上涨
+        if position_side == 'LONG':
+            if latest['close'] > latest['open']:  # 阳线
+                if price_change_pct >= 0.01 and volume_ratio >= 1.5:
+                    return {
+                        'detected': True,
+                        'reason': f"突然拉升: 涨幅{price_change_pct*100:.2f}%, 量能{volume_ratio:.2f}x",
+                        'price_change_pct': price_change_pct,
+                        'volume_ratio': volume_ratio,
+                        'bypass_score': True  # 🔥 直接开仓，绕过评分
+                    }
+
+        # SHORT: 检测突然下跌
+        elif position_side == 'SHORT':
+            if latest['close'] < latest['open']:  # 阴线
+                if price_change_pct >= 0.01 and volume_ratio >= 1.5:
+                    return {
+                        'detected': True,
+                        'reason': f"突然下跌: 跌幅{price_change_pct*100:.2f}%, 量能{volume_ratio:.2f}x",
+                        'price_change_pct': price_change_pct,
+                        'volume_ratio': volume_ratio,
+                        'bypass_score': True
+                    }
+
+        return {'detected': False, 'reason': '无突然拉升信号'}
+
+    async def detect_pullback(
+        self,
+        symbol: str,
+        position_side: str,
+        klines_15m: List[Dict]
+    ) -> Dict:
+        """
+        🔥 回调买入检测器 - 已经涨起来的等回调再次买入
+
+        检测条件:
+        1. 最近2小时(8根K线)有明显上涨/下跌 (累计变化 >= 2%)
+        2. 最新K线出现回调 (1.5%-4%)
+        3. 回调后有反弹确认 (最新K线方向与趋势一致)
+
+        Args:
+            symbol: 交易对
+            position_side: LONG/SHORT
+            klines_15m: 15M K线列表
+
+        Returns:
+            检测结果字典
+        """
+        if len(klines_15m) < 8:
+            return {'detected': False, 'reason': 'K线数据不足'}
+
+        # 计算最近8根K线的累计涨跌幅
+        oldest_price = klines_15m[7]['open']
+        current_price = klines_15m[0]['close']
+        total_change_pct = (current_price - oldest_price) / oldest_price
+
+        # 计算回调幅度 (从最近8根的最高点/最低点)
+        if position_side == 'LONG':
+            # 找最近8根的最高点
+            highest_price = max(k['high'] for k in klines_15m[:8])
+            pullback_pct = (highest_price - current_price) / highest_price
+
+            # 检查: 1.整体上涨>=2% 2.回调1.5%-4% 3.最新K线是阳线(反弹确认)
+            if total_change_pct >= 0.02 and 0.015 <= pullback_pct <= 0.04:
+                if klines_15m[0]['close'] > klines_15m[0]['open']:  # 反弹确认
+                    return {
+                        'detected': True,
+                        'reason': f"上涨回调买入: 累计涨幅{total_change_pct*100:.2f}%, 回调{pullback_pct*100:.2f}%",
+                        'total_change_pct': total_change_pct,
+                        'pullback_pct': pullback_pct,
+                        'bypass_score': True
+                    }
+
+        elif position_side == 'SHORT':
+            # 找最近8根的最低点
+            lowest_price = min(k['low'] for k in klines_15m[:8])
+            pullback_pct = (current_price - lowest_price) / lowest_price
+
+            # 检查: 1.整体下跌>=2% 2.反弹1.5%-4% 3.最新K线是阴线(下跌确认)
+            if total_change_pct <= -0.02 and 0.015 <= pullback_pct <= 0.04:
+                if klines_15m[0]['close'] < klines_15m[0]['open']:  # 下跌确认
+                    return {
+                        'detected': True,
+                        'reason': f"下跌反弹做空: 累计跌幅{abs(total_change_pct)*100:.2f}%, 反弹{pullback_pct*100:.2f}%",
+                        'total_change_pct': total_change_pct,
+                        'pullback_pct': pullback_pct,
+                        'bypass_score': True
+                    }
+
+        return {'detected': False, 'reason': '无回调买入信号'}
+
     async def process_signal(
         self,
         symbol: str,
@@ -98,9 +224,10 @@ class SmartTraderV3Controller:
 
         流程:
         1. 获取K线数据
-        2. 计算信号评分
-        3. 如果评分达标，执行5M精准入场
-        4. 启动持仓管理
+        2. 🔥 优先检测突然拉升/回调买入 (直接开仓)
+        3. 如果没有特殊信号，计算常规信号评分
+        4. 如果评分达标，执行5M精准入场
+        5. 启动持仓管理
 
         Args:
             symbol: 交易对
@@ -136,7 +263,65 @@ class SmartTraderV3Controller:
             print(f"❌ 无法获取K线数据")
             return None
 
-        # 4. 计算信号评分
+        # 4. 🔥 优先检测突然拉升
+        sudden_move = await self.detect_sudden_move(symbol, position_side, klines_15m)
+        if sudden_move['detected']:
+            print(f"\n⚡ 检测到突然拉升信号!")
+            print(f"   {sudden_move['reason']}")
+            print(f"   🚀 直接开仓，绕过评分系统\n")
+
+            # 直接执行入场
+            entry_result = await self.entry_executor.execute_entry(
+                signal={'signal_type': 'SUDDEN_MOVE', 'score': 999},
+                symbol=symbol,
+                position_side=position_side,
+                total_margin=margin_amount,
+                leverage=10
+            )
+
+            if entry_result:
+                position = await self._save_position_to_db(
+                    entry_result=entry_result,
+                    score_result={'total_score': 999, 'breakdown': {'sudden_move': True}},
+                    big4_signal=big4_signal,
+                    big4_strength=big4_strength
+                )
+                await self._start_position_management(position)
+                return position
+
+        # 5. 🔥 检测回调买入
+        pullback = await self.detect_pullback(symbol, position_side, klines_15m)
+        if pullback['detected']:
+            print(f"\n📉 检测到回调买入信号!")
+            print(f"   {pullback['reason']}")
+            print(f"   🚀 直接开仓，绕过评分系统\n")
+
+            # 直接执行入场
+            entry_result = await self.entry_executor.execute_entry(
+                signal={'signal_type': 'PULLBACK', 'score': 999},
+                symbol=symbol,
+                position_side=position_side,
+                total_margin=margin_amount,
+                leverage=10
+            )
+
+            if entry_result:
+                position = await self._save_position_to_db(
+                    entry_result=entry_result,
+                    score_result={'total_score': 999, 'breakdown': {'pullback': True}},
+                    big4_signal=big4_signal,
+                    big4_strength=big4_strength
+                )
+                await self._start_position_management(position)
+                return position
+
+        # 6. 🔥 Big4否决权检查 - 逆势不开仓
+        if self._check_big4_veto(position_side, big4_signal, big4_strength):
+            print(f"\n🚫 Big4否决: {big4_signal} 强度{big4_strength} 与 {position_side} 方向相反")
+            print(f"   逆势风险过高，放弃开仓\n")
+            return None
+
+        # 7. 常规评分流程
         score_result = self.signal_scorer.calculate_total_score(
             symbol=symbol,
             position_side=position_side,
@@ -146,7 +331,7 @@ class SmartTraderV3Controller:
             big4_strength=big4_strength
         )
 
-        # 5. 检查评分是否达标
+        # 8. 检查评分是否达标
         if not score_result['can_trade']:
             print(f"❌ 评分{score_result['total_score']:.1f}不达标 (阈值{score_result['max_score']})")
             return None
@@ -183,6 +368,47 @@ class SmartTraderV3Controller:
         print(f"{'='*100}\n")
 
         return position
+
+    def _check_big4_veto(
+        self,
+        position_side: str,
+        big4_signal: str,
+        big4_strength: int
+    ) -> bool:
+        """
+        🔥 Big4否决权检查 - 逆势不开仓
+
+        规则:
+        1. LONG + Big4 BEAR强度>=10 → 否决
+        2. SHORT + Big4 BULL强度>=10 → 否决
+
+        Args:
+            position_side: LONG/SHORT
+            big4_signal: Big4信号
+            big4_strength: Big4强度
+
+        Returns:
+            True=否决, False=通过
+        """
+        if not big4_signal or not big4_strength:
+            return False
+
+        # 标准化Big4信号
+        normalized_signal = big4_signal.upper()
+        if 'BULL' in normalized_signal:
+            normalized_signal = 'BULL'
+        elif 'BEAR' in normalized_signal:
+            normalized_signal = 'BEAR'
+
+        # 检查是否逆势
+        if position_side == 'LONG' and normalized_signal == 'BEAR':
+            if big4_strength >= 10:
+                return True  # 否决LONG开仓
+        elif position_side == 'SHORT' and normalized_signal == 'BULL':
+            if big4_strength >= 10:
+                return True  # 否决SHORT开仓
+
+        return False
 
     async def _has_open_position(self, symbol: str, position_side: str) -> bool:
         """检查是否已有持仓"""

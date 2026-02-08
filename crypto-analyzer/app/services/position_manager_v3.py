@@ -29,8 +29,18 @@ class PositionManagerV3:
         self.fixed_stop_loss_pct = 0.03     # 固定止损3%
         self.fixed_take_profit_pct = 0.06   # 固定止盈6%
 
+        # 🔥 动态反转止损配置
+        self.reversal_stop_loss_pct = 0.01  # 反转止损-1%
+        self.reversal_volume_ratio = 1.3    # 反转量能阈值1.3x
+        self.reversal_price_change = 0.008  # 反转价格变化阈值0.8%
+        self.reversal_profit_threshold = 0.01  # 浮盈>1%时不启用反转止损
+
         # 持仓时间配置
-        self.max_holding_minutes = 240      # 最大持仓4小时
+        self.max_holding_minutes = 180      # 🔥 最大持仓3小时 (从240改为180)
+
+        # 🚨 Big4紧急干预配置
+        self.big4_emergency_enabled = True
+        self.big4_emergency_strength = 12   # Big4强度 >= 12触发紧急干预
 
         # 检查间隔
         self.check_interval_seconds = 30    # 每30秒检查一次
@@ -93,6 +103,22 @@ class PositionManagerV3:
         # 主循环
         while True:
             try:
+                # 🚨 优先检查Big4紧急干预
+                if self.big4_emergency_enabled:
+                    big4_emergency = await self.check_big4_emergency(symbol, position_side)
+                    if big4_emergency['should_close']:
+                        print(f"\n🚨🚨🚨 [BIG4紧急干预] {big4_emergency['reason']}")
+                        current_price = await self.get_current_price(symbol)
+                        unrealized_pnl_usd = self.calculate_unrealized_pnl_usd(
+                            entry_price, current_price, quantity, position_side
+                        )
+                        await self.close_position(
+                            position_id, current_price,
+                            f"Big4紧急干预: {big4_emergency['reason']}",
+                            unrealized_pnl_usd
+                        )
+                        break
+
                 # 获取当前价格
                 current_price = await self.get_current_price(symbol)
                 if not current_price:
@@ -148,6 +174,40 @@ class PositionManagerV3:
                                 print(f"  止损价: ${old_stop_loss:.4f} → ${stop_loss_price:.4f}")
                                 print(f"  保护利润: ${profit_to_protect:.2f}")
                                 print(f"  当前浮盈: ${unrealized_pnl_usd:.2f}\n")
+
+                # 🔥 检查反转止损（在固定止损之前）
+                reversal = await self.check_reversal_signal(
+                    symbol, position_side, entry_price, current_price
+                )
+
+                if reversal['detected'] and reversal['should_close']:
+                    # 计算反转止损价
+                    if position_side == 'LONG':
+                        reversal_stop_price = entry_price * (1 - self.reversal_stop_loss_pct)
+                        if current_price <= reversal_stop_price or unrealized_pnl_pct <= -self.reversal_stop_loss_pct * 100:
+                            print(f"\n[触发反转止损-1%] {reversal['reason']}")
+                            print(f"  当前价: ${current_price:.4f}")
+                            print(f"  反转止损价: ${reversal_stop_price:.4f}")
+                            print(f"  盈亏: ${unrealized_pnl_usd:.2f} ({unrealized_pnl_pct:.2f}%)")
+                            await self.close_position(
+                                position_id, current_price,
+                                f"反转止损-1%: {reversal['reason']}",
+                                unrealized_pnl_usd
+                            )
+                            break
+                    else:
+                        reversal_stop_price = entry_price * (1 + self.reversal_stop_loss_pct)
+                        if current_price >= reversal_stop_price or unrealized_pnl_pct <= -self.reversal_stop_loss_pct * 100:
+                            print(f"\n[触发反转止损-1%] {reversal['reason']}")
+                            print(f"  当前价: ${current_price:.4f}")
+                            print(f"  反转止损价: ${reversal_stop_price:.4f}")
+                            print(f"  盈亏: ${unrealized_pnl_usd:.2f} ({unrealized_pnl_pct:.2f}%)")
+                            await self.close_position(
+                                position_id, current_price,
+                                f"反转止损-1%: {reversal['reason']}",
+                                unrealized_pnl_usd
+                            )
+                            break
 
                 # 检查止损触发
                 if position_side == 'LONG' and current_price <= stop_loss_price:
@@ -293,6 +353,189 @@ class PositionManagerV3:
         finally:
             cursor.close()
             conn.close()
+
+    async def check_reversal_signal(
+        self,
+        symbol: str,
+        position_side: str,
+        entry_price: float,
+        current_price: float
+    ) -> Dict:
+        """
+        🔥 检测反转信号 - 防止"跟进去被反转"
+
+        检测条件:
+        1. 持仓LONG，但连续2根5M阴线 + 放量1.3x + 跌幅0.8%
+        2. 持仓SHORT，但连续2根5M阳线 + 放量1.3x + 涨幅0.8%
+        3. 当前浮盈 < 1%
+
+        Returns:
+            {
+                'detected': True/False,
+                'reason': '连续2根5M阴线+放量1.3x+跌幅0.85%',
+                'should_close': True/False
+            }
+        """
+        # 计算当前盈亏
+        if position_side == 'LONG':
+            pnl_pct = (current_price - entry_price) / entry_price
+        else:
+            pnl_pct = (entry_price - current_price) / entry_price
+
+        # 如果已经盈利>1%，不用反转止损（让利润奔跑）
+        if pnl_pct > self.reversal_profit_threshold:
+            return {'detected': False, 'reason': '浮盈>1%, 让利润奔跑'}
+
+        try:
+            # 获取最近5根5M K线
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT open_price, close_price, volume
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '5m'
+                ORDER BY open_time DESC
+                LIMIT 5
+            """, (symbol,))
+
+            klines = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            if len(klines) < 5:
+                return {'detected': False, 'reason': 'K线数据不足'}
+
+            # 最近2根K线
+            recent_2 = klines[:2]
+
+            # 计算量能比率
+            recent_volume = sum(k['volume'] for k in recent_2) / 2
+            baseline_volume = sum(k['volume'] for k in klines[2:5]) / 3
+            volume_ratio = float(recent_volume / baseline_volume) if baseline_volume > 0 else 0
+
+            # 做多场景：检测连续阴线
+            if position_side == 'LONG':
+                # 检查是否都是阴线
+                is_reversal = all(float(k['close_price']) < float(k['open_price']) for k in recent_2)
+
+                if is_reversal and volume_ratio >= self.reversal_volume_ratio:
+                    # 计算2根K线的跌幅
+                    price_drop = sum(
+                        (float(k['open_price']) - float(k['close_price'])) / float(k['open_price'])
+                        for k in recent_2
+                    )
+
+                    if price_drop >= self.reversal_price_change:
+                        return {
+                            'detected': True,
+                            'reason': f'连续2根5M阴线+放量{volume_ratio:.1f}x+跌幅{price_drop*100:.2f}%',
+                            'should_close': True,
+                            'volume_ratio': volume_ratio,
+                            'price_change': -price_drop
+                        }
+
+            # 做空场景：检测连续阳线
+            elif position_side == 'SHORT':
+                is_reversal = all(float(k['close_price']) > float(k['open_price']) for k in recent_2)
+
+                if is_reversal and volume_ratio >= self.reversal_volume_ratio:
+                    price_rise = sum(
+                        (float(k['close_price']) - float(k['open_price'])) / float(k['open_price'])
+                        for k in recent_2
+                    )
+
+                    if price_rise >= self.reversal_price_change:
+                        return {
+                            'detected': True,
+                            'reason': f'连续2根5M阳线+放量{volume_ratio:.1f}x+涨幅{price_rise*100:.2f}%',
+                            'should_close': True,
+                            'volume_ratio': volume_ratio,
+                            'price_change': price_rise
+                        }
+
+        except Exception as e:
+            print(f"[错误] 反转检测失败: {e}")
+
+        return {'detected': False}
+
+    async def check_big4_emergency(
+        self,
+        symbol: str,
+        position_side: str
+    ) -> Dict:
+        """
+        🚨 检测Big4紧急干预条件
+
+        触发条件:
+        1. Big4强度 >= 12 (强烈信号)
+        2. Big4方向与持仓方向相反
+
+        Returns:
+            {
+                'should_close': True/False,
+                'reason': 'Big4 BEAR(15) vs 持仓LONG',
+                'big4_signal': 'BEAR',
+                'big4_strength': 15
+            }
+        """
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            # 获取最新Big4信号
+            cursor.execute("""
+                SELECT signal, strength, created_at
+                FROM big4_signals
+                WHERE symbol = %s
+                AND created_at >= NOW() - INTERVAL 10 MINUTE
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (symbol,))
+
+            big4 = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if not big4:
+                return {'should_close': False, 'reason': '无Big4信号'}
+
+            big4_signal = big4['signal']
+            big4_strength = big4['strength']
+
+            # 检查强度是否达到阈值
+            if big4_strength < self.big4_emergency_strength:
+                return {
+                    'should_close': False,
+                    'reason': f'Big4强度{big4_strength}未达阈值{self.big4_emergency_strength}'
+                }
+
+            # 解析Big4方向
+            if 'BULL' in big4_signal.upper():
+                big4_direction = 'LONG'
+            elif 'BEAR' in big4_signal.upper():
+                big4_direction = 'SHORT'
+            else:
+                return {'should_close': False, 'reason': 'Big4方向NEUTRAL'}
+
+            # 检查方向是否相反
+            if big4_direction == position_side:
+                return {
+                    'should_close': False,
+                    'reason': f'Big4方向{big4_direction}与持仓{position_side}相同'
+                }
+
+            # 🚨 触发紧急干预
+            return {
+                'should_close': True,
+                'reason': f'Big4 {big4_signal}(强度{big4_strength}) vs 持仓{position_side}',
+                'big4_signal': big4_signal,
+                'big4_strength': big4_strength
+            }
+
+        except Exception as e:
+            print(f"[错误] Big4紧急检测失败: {e}")
+            return {'should_close': False, 'reason': f'检测异常: {e}'}
 
     def get_holding_minutes(self, position: Dict) -> int:
         """获取持仓时长 (分钟)"""

@@ -20,18 +20,18 @@ class SignalScorerV3:
     def __init__(self, db_config: dict):
         self.db_config = db_config
 
-        # 评分权重配置
+        # 🔥 评分权重配置 - 优化后
         self.score_weights = {
-            'big4': 3,          # Big4 (30H宏观趋势) - 降低权重
-            '5h_trend': 7,      # 5H趋势 (3根K线) - 降低权重
-            '15m_signal': 12,   # 2H内15M信号 (8根K线) - 提升权重
-            'volume_price': 10, # 量价配合
-            'technical': 10     # 技术指标
+            'big4': 5,          # Big4 (30H宏观趋势) - 提升到5分(否决权)
+            '5h_trend': 6,      # 5H趋势 (3根K线) - 降至6分
+            '15m_signal': 14,   # 2H内15M信号 (8根K线) - 提升到14分(主导)
+            'volume_price': 9,  # 量价配合 - 降至9分
+            'technical': 8      # 技术指标 - 降至8分
         }
 
         # 总分和阈值
-        self.max_score = 42  # 3+7+12+10+10
-        self.min_score_to_trade = 25  # 约60%以上才开仓
+        self.max_score = 42  # 5+6+14+9+8
+        self.min_score_to_trade = 26  # 🔥 提升到26分(62%)，筛除边缘信号
 
     def get_db_connection(self):
         """获取数据库连接"""
@@ -118,13 +118,13 @@ class SignalScorerV3:
         big4_strength: Optional[int]
     ) -> float:
         """
-        Big4评分 (max 3分)
+        🔥 Big4评分 (max 5分) - 否决权
 
         逻辑:
-        - 信号方向一致 + 强度>=15: 3分
-        - 信号方向一致 + 强度>=10: 2.4分
-        - 信号方向一致 + 强度>=5: 1.8分
-        - 信号方向一致 + 强度>0: 1.2分
+        - 信号方向一致 + 强度>=15: 5分
+        - 信号方向一致 + 强度>=10: 4分
+        - 信号方向一致 + 强度>=5: 3分
+        - 信号方向一致 + 强度>0: 2分
         - 其他: 0分
         """
         if not big4_signal or not big4_strength:
@@ -141,25 +141,25 @@ class SignalScorerV3:
         if (position_side == 'LONG' and normalized_signal == 'BULL') or \
            (position_side == 'SHORT' and normalized_signal == 'BEAR'):
 
-            # 🔥 根据实际Big4强度范围调整阈值 (观察到强度通常在0-20之间)
+            # 🔥 根据实际Big4强度范围调整阈值
             if big4_strength >= 15:
-                return 3.0  # 强势信号 (满分)
+                return 5.0  # 强势信号 (满分)
             elif big4_strength >= 10:
-                return 2.4  # 中等信号 (80%)
+                return 4.0  # 中等信号 (80%)
             elif big4_strength >= 5:
-                return 1.8  # 弱信号 (60%)
+                return 3.0  # 弱信号 (60%)
             elif big4_strength > 0:
-                return 1.2  # 极弱但有效 (40%)
+                return 2.0  # 极弱但有效 (40%)
 
         return 0.0
 
     def score_5h_trend(self, position_side: str, klines_5h: List[Dict]) -> float:
         """
-        5H趋势评分 (max 7分)
+        🔥 5H趋势评分 (max 6分)
 
         逻辑:
-        - 连续3根同向K线: 7分
-        - 2根同向K线: 4分
+        - 连续3根同向K线: 6分
+        - 2根同向K线: 3分
         - 其他: 0分
         """
         if len(klines_5h) < 3:
@@ -171,25 +171,25 @@ class SignalScorerV3:
 
         if position_side == 'LONG':
             if bull_count == 3:
-                return 7.0
+                return 6.0
             elif bull_count == 2:
-                return 4.0
+                return 3.0
         elif position_side == 'SHORT':
             if bear_count == 3:
-                return 7.0
+                return 6.0
             elif bear_count == 2:
-                return 4.0
+                return 3.0
 
         return 0.0
 
     def score_15m_signal(self, position_side: str, klines_15m: List[Dict]) -> float:
         """
-        15M信号评分 (max 12分)
+        🔥 15M信号评分 (max 14分) - 主导权重
 
         逻辑:
-        - 最近2小时(8根)中,同向K线>=6根: 12分
-        - 同向K线=5根: 8分
-        - 同向K线=4根: 4分
+        - 最近2小时(8根)中,同向K线>=6根: 14分
+        - 同向K线=5根: 9分
+        - 同向K线=4根: 5分
         - 其他: 0分
         """
         if len(klines_15m) < 8:
@@ -201,28 +201,28 @@ class SignalScorerV3:
 
         if position_side == 'LONG':
             if bull_count >= 6:
-                return 12.0
+                return 14.0
             elif bull_count >= 5:
-                return 8.0
+                return 9.0
             elif bull_count >= 4:
-                return 4.0
+                return 5.0
         elif position_side == 'SHORT':
             if bear_count >= 6:
-                return 12.0
+                return 14.0
             elif bear_count >= 5:
-                return 8.0
+                return 9.0
             elif bear_count >= 4:
-                return 4.0
+                return 5.0
 
         return 0.0
 
     def score_volume_price(self, position_side: str, klines_15m: List[Dict]) -> float:
         """
-        量价配合评分 (max 7分)
+        🔥 量价配合评分 (max 9分)
 
         逻辑:
-        - 最新K线量能>平均量1.5倍 + 方向一致: 7分
-        - 最新K线量能>平均量1.2倍 + 方向一致: 4分
+        - 最新K线量能>平均量1.5倍 + 方向一致: 9分
+        - 最新K线量能>平均量1.2倍 + 方向一致: 5分
         - 量能正常: 1分
         """
         if len(klines_15m) < 6:
@@ -239,17 +239,17 @@ class SignalScorerV3:
         # 检查方向是否一致
         if position_side == 'LONG' and latest_price_change > 0:
             if latest_volume > avg_volume * 1.5:
-                return 7.0  # 量价齐升
+                return 9.0  # 量价齐升
             elif latest_volume > avg_volume * 1.2:
-                return 4.0  # 量能温和放大
+                return 5.0  # 量能温和放大
             else:
                 return 1.0  # 量能一般
 
         elif position_side == 'SHORT' and latest_price_change < 0:
             if latest_volume > avg_volume * 1.5:
-                return 7.0  # 量价齐跌
+                return 9.0  # 量价齐跌
             elif latest_volume > avg_volume * 1.2:
-                return 4.0
+                return 5.0
             else:
                 return 1.0
 
@@ -261,47 +261,47 @@ class SignalScorerV3:
         klines_15m: List[Dict]
     ) -> float:
         """
-        技术指标评分 (max 10分)
+        🔥 技术指标评分 (max 8分)
 
         逻辑:
-        - RSI: max 3分
-        - MACD: max 4分
-        - 布林带: max 3分
+        - RSI: max 2.5分
+        - MACD: max 3分
+        - 布林带: max 2.5分
         """
         if len(klines_15m) < 20:
             return 0.0
 
         score = 0.0
 
-        # 1. RSI指标 (max 3分)
+        # 1. RSI指标 (max 2.5分)
         rsi = self.calculate_rsi(klines_15m, period=14)
         if rsi:
             if position_side == 'LONG':
                 if 30 <= rsi <= 50:
-                    score += 3.0  # 超卖区回升
+                    score += 2.5  # 超卖区回升
                 elif 50 < rsi <= 60:
-                    score += 2.0
+                    score += 1.5
             elif position_side == 'SHORT':
                 if 50 <= rsi <= 70:
-                    score += 3.0  # 超买区回落
+                    score += 2.5  # 超买区回落
                 elif 40 < rsi < 50:
-                    score += 2.0
+                    score += 1.5
 
-        # 2. MACD指标 (max 4分)
+        # 2. MACD指标 (max 3分)
         macd_signal = self.calculate_macd_signal(klines_15m)
         if macd_signal == position_side:
-            score += 4.0
+            score += 3.0
 
-        # 3. 布林带位置 (max 3分)
+        # 3. 布林带位置 (max 2.5分)
         bb_position = self.calculate_bollinger_position(klines_15m)
         if position_side == 'LONG' and bb_position == 'lower':
-            score += 3.0  # 价格在下轨附近
+            score += 2.5  # 价格在下轨附近
         elif position_side == 'LONG' and bb_position == 'middle':
-            score += 2.0
+            score += 1.5
         elif position_side == 'SHORT' and bb_position == 'upper':
-            score += 3.0
+            score += 2.5
         elif position_side == 'SHORT' and bb_position == 'middle':
-            score += 2.0
+            score += 1.5
 
         return score
 
