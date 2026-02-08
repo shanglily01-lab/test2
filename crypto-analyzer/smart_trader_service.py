@@ -1181,8 +1181,8 @@ class SmartDecisionBrain:
             big4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
             big4_strength = big4_result.get('signal_strength', 50) if big4_result else 50
 
-            # 获取5H K线 (3根)
-            klines_5h = self.load_klines(symbol, '5h', 3)
+            # 获取5H K线 (5根) - 优化: 3根改为5根
+            klines_5h = self.load_klines(symbol, '5h', 5)
 
             # 尝试两个方向的评分
             for position_side in ['LONG', 'SHORT']:

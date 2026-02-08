@@ -21,11 +21,11 @@
       "step_usd": 10.0,
       "description": "移动止盈: 40U门槛, 每10U移动一次"
     },
-    "fixed_stop_loss_pct": 0.03,
-    "fixed_take_profit_pct": 0.06,
+    "fixed_stop_loss_pct": 0.02,
+    "fixed_take_profit_pct": 0.03,
     "max_holding_minutes": 240,
     "check_interval_seconds": 30,
-    "description": "固定止损3%, 止盈6%, 最大持仓4小时"
+    "description": "固定止损2%, 止盈3%, 最大持仓4小时"
   },
 
   "scoring_system": {

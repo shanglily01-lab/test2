@@ -31,7 +31,7 @@ class SignalScorerV3:
 
         # 总分和阈值
         self.max_score = 42  # 5+6+14+9+8
-        self.min_score_to_trade = 26  # 🔥 提升到26分(62%)，筛除边缘信号
+        self.min_score_to_trade = 18  # 🔥 优化: 降至18分(43%)，提高开仓率（原26分太严格）
 
     def get_db_connection(self):
         """获取数据库连接"""
@@ -127,7 +127,7 @@ class SignalScorerV3:
         - 信号方向一致 + 强度>0: 2分
         - 其他: 0分
         """
-        if not big4_signal or not big4_strength:
+        if not big4_signal or big4_strength is None:
             return 0.0
 
         # 标准化Big4信号 (BULLISH -> BULL, BEARISH -> BEAR)
@@ -155,41 +155,47 @@ class SignalScorerV3:
 
     def score_5h_trend(self, position_side: str, klines_5h: List[Dict]) -> float:
         """
-        🔥 5H趋势评分 (max 6分)
+        🔥 5H趋势评分 (max 6分)（优化：5根中有N根同向）
 
         逻辑:
-        - 连续3根同向K线: 6分
-        - 2根同向K线: 3分
+        - 5根中≥4根同向: 6分
+        - 5根中≥3根同向: 4分
+        - 5根中≥2根同向: 2分
         - 其他: 0分
         """
-        if len(klines_5h) < 3:
+        if len(klines_5h) < 5:
             return 0.0
 
-        # 统计阳线和阴线数量
-        bull_count = sum(1 for k in klines_5h[:3] if k['close'] > k['open'])
-        bear_count = sum(1 for k in klines_5h[:3] if k['close'] < k['open'])
+        # 统计最近5根K线的阳线和阴线数量
+        bull_count = sum(1 for k in klines_5h[:5] if k['close'] > k['open'])
+        bear_count = sum(1 for k in klines_5h[:5] if k['close'] < k['open'])
 
         if position_side == 'LONG':
-            if bull_count == 3:
+            if bull_count >= 4:
                 return 6.0
-            elif bull_count == 2:
-                return 3.0
+            elif bull_count >= 3:
+                return 4.0
+            elif bull_count >= 2:
+                return 2.0
         elif position_side == 'SHORT':
-            if bear_count == 3:
+            if bear_count >= 4:
                 return 6.0
-            elif bear_count == 2:
-                return 3.0
+            elif bear_count >= 3:
+                return 4.0
+            elif bear_count >= 2:
+                return 2.0
 
         return 0.0
 
     def score_15m_signal(self, position_side: str, klines_15m: List[Dict]) -> float:
         """
-        🔥 15M信号评分 (max 14分) - 主导权重
+        🔥 15M信号评分 (max 14分) - 主导权重（优化：降低要求）
 
         逻辑:
         - 最近2小时(8根)中,同向K线>=6根: 14分
-        - 同向K线=5根: 9分
-        - 同向K线=4根: 5分
+        - 同向K线>=5根: 10分
+        - 同向K线>=4根: 7分
+        - 同向K线>=3根: 4分（新增）
         - 其他: 0分
         """
         if len(klines_15m) < 8:
@@ -203,16 +209,20 @@ class SignalScorerV3:
             if bull_count >= 6:
                 return 14.0
             elif bull_count >= 5:
-                return 9.0
+                return 10.0  # 优化: 9→10
             elif bull_count >= 4:
-                return 5.0
+                return 7.0   # 优化: 5→7
+            elif bull_count >= 3:
+                return 4.0   # 新增: 3根阳线也给分
         elif position_side == 'SHORT':
             if bear_count >= 6:
                 return 14.0
             elif bear_count >= 5:
-                return 9.0
+                return 10.0  # 优化: 9→10
             elif bear_count >= 4:
-                return 5.0
+                return 7.0   # 优化: 5→7
+            elif bear_count >= 3:
+                return 4.0   # 新增: 3根阴线也给分
 
         return 0.0
 
