@@ -3826,16 +3826,20 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5.6. 🔥 检查Big4市场信号 - NEUTRAL时停止开仓
+                # 5.6. 🔥 检查Big4市场信号 - V3模式下不阻止NEUTRAL，传统模式下NEUTRAL停止开仓
                 try:
                     big4_result = self.get_big4_result()
                     big4_market_signal = big4_result.get('overall_signal', 'NEUTRAL')
                     big4_market_strength = big4_result.get('signal_strength', 0)
 
-                    if big4_market_signal == 'NEUTRAL':
-                        logger.info(f"[BIG4-NEUTRAL] 🛑 市场中性(强度{big4_market_strength:.1f}),停止开仓,等待明确趋势")
+                    # V3模式: Big4只作为评分维度之一，NEUTRAL不阻止开仓
+                    # 传统模式: Big4 NEUTRAL时停止开仓
+                    if not self.use_v3_mode and big4_market_signal == 'NEUTRAL':
+                        logger.info(f"[BIG4-NEUTRAL] 🛑 市场中性(强度{big4_market_strength:.1f}),停止开仓,等待明确趋势（传统模式）")
                         time.sleep(self.scan_interval)
                         continue
+                    elif self.use_v3_mode and big4_market_signal == 'NEUTRAL':
+                        logger.info(f"[BIG4-NEUTRAL] ℹ️ 市场中性(强度{big4_market_strength:.1f}), V3模式继续评估（Big4占5/42分）")
                 except Exception as e:
                     logger.warning(f"[BIG4-CHECK] 获取Big4信号失败: {e}, 继续交易")
 

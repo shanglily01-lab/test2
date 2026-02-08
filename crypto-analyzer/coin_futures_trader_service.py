@@ -3319,14 +3319,14 @@ class CoinFuturesTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5.6. 🔥 检查Big4市场信号 - NEUTRAL时停止开仓
+                # 5.6. 🔥 检查Big4市场信号 - NEUTRAL时停止开仓（币本位合约使用传统模式）
                 try:
                     big4_result = self.get_big4_result()
                     big4_market_signal = big4_result.get('overall_signal', 'NEUTRAL')
                     big4_market_strength = big4_result.get('signal_strength', 0)
 
                     if big4_market_signal == 'NEUTRAL':
-                        logger.info(f"[BIG4-NEUTRAL] 🛑 市场中性(强度{big4_market_strength:.1f}),停止开仓,等待明确趋势")
+                        logger.info(f"[BIG4-NEUTRAL] 🛑 市场中性(强度{big4_market_strength:.1f}),停止开仓,等待明确趋势（币本位传统模式）")
                         time.sleep(self.scan_interval)
                         continue
                 except Exception as e:

@@ -49,6 +49,17 @@
     "min_strength": 60,
     "strong_strength": 70,
     "very_strong_strength": 80,
+    "emergency_monitor": {
+      "enabled": true,
+      "emergency_strength_threshold": 12,
+      "check_interval_seconds": 60,
+      "description": "Big4紧急干预: 强度>=12且方向相反时立即平仓"
+    },
+    "veto_power": {
+      "enabled": true,
+      "veto_strength_threshold": 12,
+      "description": "Big4否决权: 强度>=12且方向相反时拒绝开仓"
+    },
     "description": "Big4强度阈值: 60基础, 70强, 80很强"
   },
 

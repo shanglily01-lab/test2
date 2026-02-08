@@ -156,7 +156,10 @@
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" add force_close_timeout_positions.py)",
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" commit -m \"feat: 添加强制平仓超时持仓的紧急脚本\")",
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" diff app/strategies/range_reversal_strategy.py)",
-      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" log --oneline --all --since=\"2 days ago\")"
+      "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" log --oneline --all --since=\"2 days ago\")",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []
