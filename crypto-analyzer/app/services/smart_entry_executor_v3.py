@@ -105,6 +105,11 @@ class SmartEntryExecutorV3:
         """
         等待最佳5M K线确认后一次性入场
 
+        核心逻辑:
+        1. 做多 = 追涨: 等待阳线 (方向一致性)
+        2. 做空 = 追跌: 等待阴线 (方向一致性)
+        3. 过滤条件: K线实体>0.3% + 量能>1.2x平均
+
         Args:
             symbol: 交易对
             position_side: 仓位方向 (LONG/SHORT)
@@ -124,7 +129,7 @@ class SmartEntryExecutorV3:
                 print(f"⏰ 建仓超时 ({self.entry_timeout}分钟)")
                 return None
 
-            # 获取最新5M K线
+            # 获取最新5M K线和历史量能
             latest_5m = await self.get_latest_5m_kline(symbol)
             if not latest_5m:
                 await asyncio.sleep(self.check_interval)
@@ -132,20 +137,41 @@ class SmartEntryExecutorV3:
                 continue
 
             current_price = latest_5m['close']
-            is_bullish = latest_5m['close'] > latest_5m['open']
-            is_bearish = latest_5m['close'] < latest_5m['open']
+            open_price = latest_5m['open']
+            is_bullish = current_price > open_price
+            is_bearish = current_price < open_price
+
+            # 🔥 过滤1: K线实体强度（至少0.3%）
+            body_pct = abs(current_price - open_price) / open_price
+            if body_pct < 0.003:  # 0.3%
+                print(f"[5M-FILTER] K线实体太小 ({body_pct*100:.2f}%), 继续等待...")
+                await asyncio.sleep(self.check_interval)
+                elapsed_checks += 1
+                continue
+
+            # 🔥 过滤2: 量能确认（至少1.2x平均）
+            avg_volume = await self.get_avg_volume_5m(symbol, periods=3)
+            if avg_volume and latest_5m['volume'] > 0:
+                volume_ratio = latest_5m['volume'] / avg_volume
+                if volume_ratio < 1.2:
+                    print(f"[5M-FILTER] 量能不足 ({volume_ratio:.2f}x), 继续等待...")
+                    await asyncio.sleep(self.check_interval)
+                    elapsed_checks += 1
+                    continue
+            else:
+                volume_ratio = 0
 
             should_enter = False
 
-            # 做多: 等待阳线确认
+            # 做多: 追涨 = 等待阳线确认（方向一致性）
             if position_side == 'LONG' and is_bullish:
                 should_enter = True
-                print(f"✓ 出现5M阳线，确认做多入场")
+                print(f"✅ [确认入场] 5M阳线 | 实体:{body_pct*100:.2f}% | 量能:{volume_ratio:.2f}x")
 
-            # 做空: 等待阴线确认
+            # 做空: 追跌 = 等待阴线确认（方向一致性）
             elif position_side == 'SHORT' and is_bearish:
                 should_enter = True
-                print(f"✓ 出现5M阴线，确认做空入场")
+                print(f"✅ [确认入场] 5M阴线 | 实体:{body_pct*100:.2f}% | 量能:{volume_ratio:.2f}x")
 
             if should_enter:
                 # 下单
@@ -210,6 +236,46 @@ class SmartEntryExecutorV3:
 
         except Exception as e:
             print(f"[错误] 获取5M K线失败: {e}")
+            return None
+
+    async def get_avg_volume_5m(self, symbol: str, periods: int = 3) -> Optional[float]:
+        """
+        获取最近N根5M K线的平均量能
+
+        Args:
+            symbol: 交易对
+            periods: 周期数（默认3根K线）
+
+        Returns:
+            平均量能，如果获取失败返回None
+        """
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            # 获取最近N根5M K线（跳过最新的1根，因为它可能还没完成）
+            cursor.execute("""
+                SELECT volume
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '5m'
+                ORDER BY open_time DESC
+                LIMIT %s OFFSET 1
+            """, (symbol, periods))
+
+            klines = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            if not klines or len(klines) < periods:
+                return None
+
+            volumes = [float(k['volume']) for k in klines]
+            avg_volume = sum(volumes) / len(volumes)
+
+            return avg_volume
+
+        except Exception as e:
+            print(f"[错误] 获取平均量能失败: {e}")
             return None
 
     async def place_market_order(
