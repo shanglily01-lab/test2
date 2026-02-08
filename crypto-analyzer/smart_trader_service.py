@@ -1958,6 +1958,7 @@ class SmartTraderService:
             if 'max_hold_minutes' in opp:
                 base_timeout_minutes = opp['max_hold_minutes']
                 logger.info(f"[中性市-TIMEOUT] {symbol} 使用指定持仓时间: {base_timeout_minutes}分钟")
+            else:
                 # 趋势模式: 使用动态超时时间
                 base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
 
