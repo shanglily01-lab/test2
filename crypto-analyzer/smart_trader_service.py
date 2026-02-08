@@ -31,6 +31,9 @@ from app.services.smart_entry_executor_v3 import SmartEntryExecutorV3
 from app.services.position_manager_v3 import PositionManagerV3
 from app.strategies.signal_scorer_v3 import SignalScorerV3
 
+# 🔥 V2模块导入
+from app.strategies.signal_scorer_v2 import SignalScorerV2
+
 # 加载环境变量
 load_dotenv()
 
@@ -72,6 +75,15 @@ class SmartDecisionBrain:
         else:
             logger.info("📊 使用传统模式")
             self.scorer_v3 = None
+
+        # 🔥 V2模式开关 (可与V3并行)
+        self.use_v2_mode = os.getenv('USE_V2_MODE', 'false').lower() == 'true'
+        if self.use_v2_mode:
+            logger.info("🔥🔥🔥 V2模式已启用 - 1H K线多维度评分")
+            self.scorer_v2 = SignalScorerV2(db_config)
+            logger.info("✅ V2评分系统初始化完成")
+        else:
+            self.scorer_v2 = None
 
         # 🔥 紧急干预标志 - 底部/顶部反转时触发
         self.emergency_bottom_reversal_time = None  # 底部反转触发时间
@@ -1230,12 +1242,32 @@ class SmartDecisionBrain:
             return None
 
     def scan_all(self):
-        """扫描所有币种"""
+        """扫描所有币种 - 支持V2/V3并行"""
         opportunities = []
-        for symbol in self.whitelist:
-            result = self.analyze(symbol)
-            if result:
-                opportunities.append(result)
+
+        # V3信号扫描
+        if self.trader_service and hasattr(self.trader_service, 'use_v3_mode') and self.trader_service.use_v3_mode:
+            for symbol in self.whitelist:
+                result = self.analyze(symbol)
+                if result:
+                    opportunities.append(result)
+
+        # V2信号扫描 (可与V3并行)
+        if self.use_v2_mode and self.scorer_v2:
+            v2_results = self.scorer_v2.scan_all_symbols(self.whitelist)
+            for v2_result in v2_results:
+                # 标记为V2信号
+                v2_result['signal_version'] = 'v2'
+                v2_result['signal_components'] = v2_result['details']['components']
+                opportunities.append(v2_result)
+
+        # 传统模式扫描 (如果V2和V3都未启用)
+        if not self.use_v2_mode and not (self.trader_service and hasattr(self.trader_service, 'use_v3_mode') and self.trader_service.use_v3_mode):
+            for symbol in self.whitelist:
+                result = self.analyze(symbol)
+                if result:
+                    opportunities.append(result)
+
         return opportunities
 
     def _validate_signal_direction(self, signal_components: dict, side: str) -> tuple:
@@ -1929,6 +1961,12 @@ class SmartTraderService:
             signal_components_json = json.dumps(signal_components) if signal_components else None
             entry_score = opp.get('score', 0)
 
+            # 🔥 标识信号版本 (v2/v3/traditional)
+            signal_version = opp.get('signal_version', 'traditional')
+            if opp.get('v3_mode'):
+                signal_version = 'v3'
+            logger.info(f"[SIGNAL_VERSION] {symbol} 信号版本: {signal_version}")
+
             # 生成信号组合键 (按字母顺序排序信号名称)
             if signal_components:
                 sorted_signals = sorted(signal_components.keys())
@@ -1968,18 +2006,18 @@ class SmartTraderService:
 
             # 准备entry_reason
             entry_reason = opp.get('reason', '')
-            # 插入持仓记录 (包含动态超时字段)
+            # 插入持仓记录 (包含动态超时字段和信号版本)
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
+                 entry_signal_type, signal_version, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, side, quantity, current_price, self.leverage,
                 notional_value, margin, stop_loss, take_profit,
-                signal_combination_key, entry_reason, entry_score, signal_components_json,
+                signal_combination_key, signal_version, entry_reason, entry_score, signal_components_json,
                 base_timeout_minutes, timeout_at
             ))
 
