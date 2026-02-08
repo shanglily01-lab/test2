@@ -1765,8 +1765,8 @@ class SmartTraderService:
             return False
 
         # ========== 第三步：决定使用分批建仓还是一次性开仓 ==========
-        # 检查是否启用分批建仓
-        if self.smart_entry_executor and self.batch_entry_config.get('enabled'):
+        # 检查是否启用分批建仓（V3模式不使用分批建仓）
+        if self.smart_entry_executor and self.batch_entry_config.get('enabled') and not self.use_v3_mode:
             # 检查是否在白名单中（如果白名单为空，则对所有币种启用）
             whitelist = self.batch_entry_config.get('whitelist_symbols', [])
             should_use_batch = (not whitelist) or (symbol in whitelist)
