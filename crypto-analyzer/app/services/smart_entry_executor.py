@@ -740,7 +740,7 @@ class SmartEntryExecutor:
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             """, (
                 self.account_id, symbol, direction, quantity, price, price,
                 plan['leverage'], quantity * price, margin,
@@ -1042,7 +1042,7 @@ class SmartEntryExecutor:
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time, planned_close_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             """, (
                 self.account_id,
                 symbol,
