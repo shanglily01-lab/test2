@@ -59,10 +59,7 @@ class SmartTraderV3Controller:
         # 入场执行器配置
         if self.config['entry_config']['enabled']:
             self.entry_executor.entry_timeout = self.config['entry_config']['entry_timeout_minutes']
-            self.entry_executor.batch_config = [
-                {'ratio': r, 'name': f'第{i+1}批'}
-                for i, r in enumerate(self.config['entry_config']['batch_ratios'])
-            ]
+            self.entry_executor.check_interval = self.config['entry_config'].get('check_interval_seconds', 30)
 
         # 持仓管理器配置
         if self.config['position_management']['enabled']:

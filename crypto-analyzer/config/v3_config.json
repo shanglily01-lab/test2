@@ -4,14 +4,12 @@
   "description": "超级大脑V3.0配置文件",
 
   "entry_config": {
-    "description": "入场配置",
+    "description": "入场配置 - 一次性精准入场",
     "enabled": true,
-    "entry_timeout_minutes": 60,
-    "batch_ratios": [0.30, 0.30, 0.40],
-    "batch_intervals_minutes": [0, 15, 30],
+    "entry_timeout_minutes": 15,
     "wait_5m_confirmation": true,
-    "max_wait_per_batch_minutes": 15,
-    "check_interval_seconds": 30
+    "check_interval_seconds": 30,
+    "description_detail": "等待5M K线确认后一次性入场，15分钟超时"
   },
 
   "position_management": {

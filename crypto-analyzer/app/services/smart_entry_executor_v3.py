@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-智能分批建仓执行器 V3.0
-核心改进: 5M级别精准入场，等待价格确认后才建仓
+智能入场执行器 V3.0
+核心改进: 等待5M K线确认后一次性精准入场
 """
 
 import asyncio
@@ -16,7 +16,7 @@ load_dotenv()
 
 
 class SmartEntryExecutorV3:
-    """智能分批建仓执行器 V3.0"""
+    """智能入场执行器 V3.0 - 一次性精准入场"""
 
     def __init__(self, db_config: dict, account_id: int = 2):
         self.db_config = db_config
@@ -350,8 +350,13 @@ async def test_entry_executor():
 
     # 模拟信号
     signal = {
-        'signal_type': 'TREND_momentum_up + volume_surge',
-        'score': 28.5
+        'total_score': 28.5,
+        'max_score': 42,
+        'breakdown': {
+            'big4': 2.4,
+            '5h_trend': 7.0,
+            '15m_signal': 12.0
+        }
     }
 
     # 执行建仓
@@ -363,15 +368,16 @@ async def test_entry_executor():
         leverage=10
     )
 
-    if result:
+    if result and result.get('success'):
         print(f"\n建仓结果:")
+        print(f"  持仓ID: {result['position_id']}")
         print(f"  交易对: {result['symbol']}")
         print(f"  方向: {result['position_side']}")
-        print(f"  批次数: {result['batch_count']}/3")
-        print(f"  总数量: {result['total_quantity']:.4f}")
-        print(f"  平均价格: ${result['avg_entry_price']:.4f}")
+        print(f"  入场价: ${result['entry_price']:.4f}")
+        print(f"  数量: {result['quantity']:.4f}")
+        print(f"  保证金: ${result['margin']:.2f}")
     else:
-        print(f"\n建仓失败")
+        print(f"\n建仓失败: {result.get('error', 'Unknown') if result else 'No result'}")
 
 
 if __name__ == '__main__':
