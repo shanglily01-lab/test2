@@ -437,8 +437,8 @@ class SmartDecisionBrain:
             time_spread = max(min_indices) - min(min_indices)
             time_sync = time_spread <= 2
 
-            # 条件2: 至少3个币种反弹>=3%
-            strong_bounce_count = sum(1 for b in bounces if b >= 3.0)
+            # 条件2: 至少3个币种反弹>=5% (优化: 从3%提高到5%，避免过早触发)
+            strong_bounce_count = sum(1 for b in bounces if b >= 5.0)
 
             # 条件3: 触底时间在2小时内 (使用最早触底时间)
             import time
@@ -455,7 +455,7 @@ class SmartDecisionBrain:
                 ])
 
                 reason = (f"Big4同步触底反转: 时间偏差{time_spread}根K线(≤30分钟), "
-                         f"{strong_bounce_count}/4币种反弹≥3%, 平均反弹{avg_bounce:.1f}%, "
+                         f"{strong_bounce_count}/4币种反弹≥5%, 平均反弹{avg_bounce:.1f}%, "
                          f"触底{hours_since_bottom:.1f}小时内 ({details})")
 
                 logger.warning(f"🚫 [BIG4-BOTTOM] {reason}, 阻止做空")
@@ -566,8 +566,8 @@ class SmartDecisionBrain:
             time_spread = max(max_indices) - min(max_indices)
             time_sync = time_spread <= 2
 
-            # 条件2: 至少3个币种回调>=3%
-            strong_pullback_count = sum(1 for p in pullbacks if p >= 3.0)
+            # 条件2: 至少3个币种回调>=5% (优化: 从3%提高到5%，避免过早触发)
+            strong_pullback_count = sum(1 for p in pullbacks if p >= 5.0)
 
             # 条件3: 见顶时间在4小时内 (使用最早见顶时间)
             import time
@@ -584,7 +584,7 @@ class SmartDecisionBrain:
                 ])
 
                 reason = (f"Big4同步见顶反转: 时间偏差{time_spread}根K线(≤30分钟), "
-                         f"{strong_pullback_count}/4币种回调≥3%, 平均回调{avg_pullback:.1f}%, "
+                         f"{strong_pullback_count}/4币种回调≥5%, 平均回调{avg_pullback:.1f}%, "
                          f"见顶{hours_since_top:.1f}小时内 ({details})")
 
                 logger.warning(f"🚫 [BIG4-TOP] {reason}, 阻止做多")

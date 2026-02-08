@@ -21,9 +21,10 @@ class PositionManagerV3:
     def __init__(self, db_config: dict):
         self.db_config = db_config
 
-        # 移动止盈配置
+        # 移动止盈配置（阶梯式步进优化）
         self.trailing_threshold_usd = 40.0  # 40U开启移动止盈
-        self.trailing_step_usd = 10.0       # 每10U移动一次
+        self.trailing_step_usd = 10.0       # 基础步进（动态调整）
+        self.use_adaptive_step = True       # 启用自适应步进
 
         # 固定止盈止损配置
         self.fixed_stop_loss_pct = 0.03     # 固定止损3%
@@ -36,7 +37,7 @@ class PositionManagerV3:
         self.reversal_profit_threshold = 0.01  # 浮盈>1%时不启用反转止损
 
         # 持仓时间配置
-        self.max_holding_minutes = 180      # 🔥 最大持仓3小时 (从240改为180)
+        self.max_holding_minutes = 300      # 🔥 优化: 最大持仓5小时 (从3小时延长，给趋势更多时间)
 
         # 🚨 Big4紧急干预配置
         self.big4_emergency_enabled = True
@@ -54,6 +55,31 @@ class PositionManagerV3:
             database=self.db_config['database'],
             cursorclass=pymysql.cursors.DictCursor
         )
+
+    def get_adaptive_trailing_step(self, unrealized_pnl_usd: float) -> float:
+        """
+        🔥 优化: 根据盈利金额动态调整移动止盈步进
+
+        阶梯式步进策略:
+        - 浮盈 < 100U: 5U步进（避免小利润快速回撤）
+        - 浮盈 100-300U: 10U步进（平衡保护与盈利空间）
+        - 浮盈 > 300U: 20U步进（大盈利给予更多空间）
+
+        Args:
+            unrealized_pnl_usd: 当前未实现盈亏（USD）
+
+        Returns:
+            动态步进值（USD）
+        """
+        if not self.use_adaptive_step:
+            return self.trailing_step_usd
+
+        if unrealized_pnl_usd < 100:
+            return 5.0   # 小盈利时更保守，5U步进
+        elif unrealized_pnl_usd < 300:
+            return 10.0  # 中等盈利，标准10U步进
+        else:
+            return 20.0  # 大盈利时给予更多空间，20U步进
 
     async def manage_position(self, position: Dict) -> None:
         """
@@ -146,9 +172,10 @@ class PositionManagerV3:
 
                 # 执行移动止盈
                 if trailing_active:
-                    # 计算应该保护的利润 (向下取整到10的倍数)
-                    current_level = int(max_unrealized_pnl_usd // self.trailing_step_usd)
-                    profit_to_protect = current_level * self.trailing_step_usd
+                    # 🔥 优化: 使用动态步进（根据盈利大小调整）
+                    dynamic_step = self.get_adaptive_trailing_step(max_unrealized_pnl_usd)
+                    current_level = int(max_unrealized_pnl_usd // dynamic_step)
+                    profit_to_protect = current_level * dynamic_step
 
                     # 只有当档位提升时才移动止损
                     if current_level > last_trailing_level:
