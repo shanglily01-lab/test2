@@ -30,7 +30,7 @@ cursor.execute('''
         symbol,
         position_side,
         entry_price,
-        exit_price,
+        close_price,
         realized_pnl,
         open_time,
         close_time,
@@ -81,7 +81,7 @@ if orders:
     for i, o in enumerate(orders, 1):
         pnl = float(o['realized_pnl'])
         entry = float(o['entry_price'])
-        exit_price = float(o['exit_price'])
+        exit_price = float(o['close_price'])
 
         if o['position_side'] == 'LONG':
             pnl_pct = (exit_price - entry) / entry * 100

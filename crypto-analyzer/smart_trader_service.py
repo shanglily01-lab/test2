@@ -341,8 +341,13 @@ class SmartDecisionBrain:
 
         return klines
 
-    def analyze(self, symbol: str):
-        """分析并决策 - 支持做多和做空 (主要使用1小时K线)"""
+    def analyze(self, symbol: str, big4_result: dict = None):
+        """分析并决策 - 支持做多和做空 (主要使用1小时K线)
+
+        Args:
+            symbol: 交易对
+            big4_result: Big4趋势结果 (由SmartTraderService传入)
+        """
         if symbol not in self.whitelist:
             return None
 
@@ -557,7 +562,7 @@ class SmartDecisionBrain:
                 # 🔥 V5.1优化: 增加Big4强度过滤，震荡市禁用突破信号
                 if can_breakout:
                     # 检查Big4强度，震荡市(强度<70)禁用突破追涨
-                    big4_result = self.get_big4_result()
+                    # big4_result由外部传入
                     big4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
                     big4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
 
@@ -580,7 +585,7 @@ class SmartDecisionBrain:
             # 🔥 V5.1优化: 增加Big4强度过滤，震荡市禁用破位信号
             elif position_pct < 30 and (net_power_1h <= -2 or (net_power_1h <= -2 and net_power_15m <= -2)):
                 # 检查Big4强度，震荡市(强度<70)禁用破位追空
-                big4_result = self.get_big4_result()
+                # big4_result由外部传入
                 big4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
                 big4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
 
@@ -682,11 +687,15 @@ class SmartDecisionBrain:
             logger.error(f"{symbol} 分析失败: {e}")
             return None
 
-    def scan_all(self):
-        """扫描所有币种"""
+    def scan_all(self, big4_result: dict = None):
+        """扫描所有币种
+
+        Args:
+            big4_result: Big4趋势结果 (由SmartTraderService传入)
+        """
         opportunities = []
         for symbol in self.whitelist:
-            result = self.analyze(symbol)
+            result = self.analyze(symbol, big4_result=big4_result)
             if result:
                 opportunities.append(result)
         return opportunities
@@ -2880,7 +2889,8 @@ class SmartTraderService:
                     logger.info(f"[RANGE-SCAN] 震荡模式扫描完成, 找到 {len(opportunities)} 个机会")
                 else:
                     # 趋势模式: 使用原有策略
-                    opportunities = self.brain.scan_all()
+                    big4_result = self.get_big4_result()  # 获取Big4结果
+                    opportunities = self.brain.scan_all(big4_result=big4_result)
                     logger.info(f"[TREND-SCAN] 趋势模式扫描完成, 找到 {len(opportunities)} 个机会")
 
                 if not opportunities:
