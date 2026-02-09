@@ -536,7 +536,6 @@ class CoinFuturesTradingEngine:
                             all_recovered = True
                             for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
                                 # 转换时间戳
-                                from datetime import datetime, timedelta
                                 hours_ago_dt = datetime.now() - timedelta(hours=4)
                                 hours_ago_timestamp = int(hours_ago_dt.timestamp() * 1000)
 
@@ -576,7 +575,6 @@ class CoinFuturesTradingEngine:
                             all_recovered = True
                             for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
                                 # 转换时间戳
-                                from datetime import datetime, timedelta
                                 hours_ago_dt = datetime.now() - timedelta(hours=4)
                                 hours_ago_timestamp = int(hours_ago_dt.timestamp() * 1000)
 
