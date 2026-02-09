@@ -249,7 +249,16 @@ class SmartDecisionBrain:
 
     def check_anti_fomo_filter(self, symbol: str, current_price: float, side: str) -> tuple:
         """
+        🔥 已废弃 (V5.1优化 - 2026-02-09)
+
         防追高/追跌过滤器
+
+        废弃原因:
+        1. Big4触底检测已提供全局保护（禁止做空2小时）
+        2. 防杀跌过滤容易误杀破位追空信号
+        3. 与Big4紧急干预机制逻辑冲突
+
+        保留此方法仅供历史参考
 
         做多防追高: 不在24H区间80%以上位置开多
         做空防杀跌: 不在24H区间20%以下位置开空
@@ -1152,15 +1161,10 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后15分钟冷却期内")
             return False
 
-        # 新增验证: 防追高/追跌过滤
-        current_price = self.ws_service.get_price(symbol)
-        if current_price:
-            pass_filter, filter_reason = self.brain.check_anti_fomo_filter(symbol, current_price, side)
-            if not pass_filter:
-                logger.warning(f"[ANTI-FOMO] {symbol} {side} - {filter_reason}")
-                return False
-            else:
-                logger.info(f"[ANTI-FOMO] {symbol} {side} 通过防追高检查: {filter_reason}")
+        # 🔥 V5.1优化: 移除防追高/防杀跌过滤
+        # 原因: Big4触底检测已提供全局保护（禁止做空2小时）
+        # 防杀跌过滤容易误杀破位追空信号，与Big4机制冲突
+        # 移除日期: 2026-02-09
 
         # ========== 第二步：提前检查黑名单（分批建仓也要检查）==========
         rating_level = self.opt_config.get_symbol_rating_level(symbol)
