@@ -3120,8 +3120,8 @@ class SmartTraderService:
                         should_block_long = emergency.get('block_long', False)
                         should_block_short = emergency.get('block_short', False)
 
-                        # 如果有触底干预且要做空，实时检查是否已反弹3%+
-                        if should_block_short and new_side == 'SHORT' and emergency.get('bottom_detected'):
+                        # 如果有做空限制，实时检查是否已反弹3%+ (不依赖bottom_detected字段)
+                        if should_block_short and new_side == 'SHORT':
                             # 快速检查: 查询最近4根1H K线，判断是否已反弹
                             try:
                                 conn_check = self._get_connection()
@@ -3160,8 +3160,8 @@ class SmartTraderService:
                             except Exception as check_error:
                                 logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
 
-                        # 如果有触顶干预且要做多，实时检查是否已回调3%+
-                        if should_block_long and new_side == 'LONG' and emergency.get('top_detected'):
+                        # 如果有做多限制，实时检查是否已回调3%+ (不依赖top_detected字段)
+                        if should_block_long and new_side == 'LONG':
                             try:
                                 conn_check = self._get_connection()
                                 cursor_check = conn_check.cursor(pymysql.cursors.DictCursor)
