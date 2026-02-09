@@ -535,23 +535,18 @@ class SmartDecisionBrain:
                 if weight['short'] > 0:
                     signal_components['volume_power_1h_bear'] = weight['short']
 
-            # ========== 破位/突破信号已禁用 (2026-02-09) ==========
-            # 8. 突破追涨信号: position_high + 强力量能多头 → 已禁用
-            # 9. 破位追空信号: position_low + 强力量能空头 → 已禁用
-            #
-            # 禁用原因:
-            # 1. 用户反馈: "宁愿不开仓，也不乱开仓"
-            # 2. 今日数据: 22笔订单破位追空，1胜21负 (4.5%胜率)
-            # 3. 破位信号在震荡市容易被诱导，导致频繁止损
-            # 4. Big4强度>=70时，市场趋势已明确，不需要破位确认
-            # 5. Big4强度<70时，震荡市破位信号不可靠
-            #
-            # 结论: 完全禁用破位/突破信号，只依赖其他维度评分
-            #
-            # if position_pct > 70 and (net_power_1h >= 2 or ...):
-            #     [已注释掉的突破追涨代码]
-            # elif position_pct < 30 and (net_power_1h <= -2 or ...):
-            #     [已注释掉的破位追空代码]
+            # 8. 突破追涨信号: 已禁用 (历史数据: 85笔, 28.2%胜率, -$600亏损)
+            # 禁用原因: 追高风险大，胜率低，容易买在顶部
+
+            # 9. 破位追空信号: position_low + 强力量能空头 → 可以做空
+            # 历史数据验证: 643笔订单, 55.8%胜率, $5736盈利 (最赚钱的信号之一)
+            # 触发条件: 价格低位 + 强力空头量能
+            if position_pct < 30 and (net_power_1h <= -2 or (net_power_1h <= -2 and net_power_15m <= -2)):
+                weight = self.scoring_weights.get('breakdown_short', {'long': 0, 'short': 20})
+                short_score += weight['short']
+                if weight['short'] > 0:
+                    signal_components['breakdown_short'] = weight['short']
+                    logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
 
             # ========== 移除EMA评分 (已有Big4市场趋势判断) ==========
             # 已移除: ema_bull, ema_bear
