@@ -36,7 +36,7 @@ class SmartEntryExecutor:
 
         # 分批配置
         self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40%
-        self.time_window = 60  # 60分钟建仓窗口 (前15分钟采集样本,然后30/45/60分钟执行)
+        self.time_window = 30  # 30分钟建仓窗口 (配合K线强度评分: 15/30/45分钟)
 
     async def execute_entry(self, signal: Dict) -> Dict:
         """

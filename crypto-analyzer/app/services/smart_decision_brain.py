@@ -10,20 +10,31 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 from loguru import logger
 import pymysql
+from app.services.breakout_system import BreakoutSystem
 
 
 class SmartDecisionBrain:
     """智能决策大脑"""
 
-    def __init__(self, db_config: dict):
+    def __init__(self, db_config: dict, exchange=None):
         """
         初始化决策大脑
 
         Args:
             db_config: 数据库配置
+            exchange: 交易所接口（用于破位系统）
         """
         self.db_config = db_config
         self.connection = None
+        self.exchange = exchange
+
+        # 初始化破位系统
+        if exchange:
+            self.breakout_system = BreakoutSystem(exchange)
+            logger.info("✅ 破位系统已初始化")
+        else:
+            self.breakout_system = None
+            logger.warning("⚠️ 未提供exchange，破位系统未初始化")
 
         # 黑名单 - 表现较差不再交易的交易对 (2026-01-20更新)
         self.blacklist = [
@@ -283,12 +294,56 @@ class SmartDecisionBrain:
 
         return score, reasons, sr_data
 
-    def should_trade(self, symbol: str) -> Dict:
+    def check_breakout(self, current_positions: Dict = None) -> Dict:
         """
-        决策是否交易
+        检查Big4破位
+
+        Args:
+            current_positions: 当前持仓
+
+        Returns:
+            破位检测结果
+        """
+        if not self.breakout_system:
+            return {
+                'has_breakout': False,
+                'message': '破位系统未初始化'
+            }
+
+        try:
+            result = self.breakout_system.check_and_handle_breakout(current_positions)
+
+            if result['has_breakout']:
+                market = result['market']
+                logger.warning(f"🔥 Big4破位检测: {market['direction']} | "
+                             f"强度{market['strength']:.1f} | "
+                             f"置信度{market['confidence']:.2f}")
+
+                # 显示持仓处理结果
+                if result.get('position_result'):
+                    pos_result = result['position_result']
+                    if pos_result['closed']:
+                        logger.warning(f"⚠️ 已平仓 {len(pos_result['closed'])} 个反向仓位")
+                    if pos_result['adjusted']:
+                        logger.info(f"📊 已调整 {len(pos_result['adjusted'])} 个同向止损")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ 破位检测失败: {e}")
+            return {
+                'has_breakout': False,
+                'error': str(e)
+            }
+
+    def should_trade(self, symbol: str, base_score: int = None, signal_direction: str = None) -> Dict:
+        """
+        决策是否交易（含破位系统加权）
 
         Args:
             symbol: 交易对
+            base_score: 外部提供的基础评分（如果为None则进行完整分析）
+            signal_direction: 信号方向（'LONG' 或 'SHORT'，如果为None则只做LONG）
 
         Returns:
             决策结果字典
@@ -314,40 +369,105 @@ class SmartDecisionBrain:
             }
 
         try:
-            # 加载K线
-            klines_1d = self.load_klines(symbol, '1d', 50)
-            klines_1h = self.load_klines(symbol, '1h', 100)
+            # 如果没有提供基础评分，进行完整分析
+            if base_score is None:
+                # 加载K线
+                klines_1d = self.load_klines(symbol, '1d', 50)
+                klines_1h = self.load_klines(symbol, '1h', 100)
 
-            if len(klines_1d) < 30 or len(klines_1h) < 50:
-                return {
-                    'decision': False,
-                    'direction': None,
-                    'score': 0,
-                    'reasons': ['数据不足'],
-                    'trade_params': {}
-                }
+                if len(klines_1d) < 30 or len(klines_1h) < 50:
+                    return {
+                        'decision': False,
+                        'direction': None,
+                        'score': 0,
+                        'reasons': ['数据不足'],
+                        'trade_params': {}
+                    }
 
-            # 多维度分析
-            pos_score, pos_reasons = self.analyze_position(klines_1d)
-            trend_score, trend_reasons = self.analyze_trend(klines_1d, klines_1h)
-            sr_score, sr_reasons, sr_data = self.analyze_support_resistance(klines_1h)
+                # 多维度分析
+                pos_score, pos_reasons = self.analyze_position(klines_1d)
+                trend_score, trend_reasons = self.analyze_trend(klines_1d, klines_1h)
+                sr_score, sr_reasons, sr_data = self.analyze_support_resistance(klines_1h)
 
-            # 综合评分
-            total_score = pos_score + trend_score + sr_score
+                # 综合评分（基础分）
+                base_score = pos_score + trend_score + sr_score
+                signal_direction = 'LONG'  # 白名单只做LONG
+            else:
+                # 使用提供的评分，但仍需加载数据获取支撑阻力
+                klines_1h = self.load_klines(symbol, '1h', 100)
+                if len(klines_1h) < 50:
+                    return {
+                        'decision': False,
+                        'direction': None,
+                        'score': 0,
+                        'reasons': ['数据不足'],
+                        'trade_params': {}
+                    }
+
+                sr_score, sr_reasons, sr_data = self.analyze_support_resistance(klines_1h)
+                pos_reasons = []
+                trend_reasons = []
+
+            # 应用破位系统加权
+            total_score = base_score
+            breakout_boost = 0
+            breakout_reasons = []
+
+            if self.breakout_system:
+                current_price = klines_1h[-1]['close']
+                score_result = self.breakout_system.calculate_signal_score(
+                    symbol=symbol,
+                    base_score=base_score,
+                    signal_direction=signal_direction,
+                    current_price=current_price
+                )
+
+                breakout_boost = score_result.get('boost_score', 0)
+                total_score = score_result.get('total_score', base_score)
+
+                # 检查是否应该跳过（反向信号）
+                if score_result.get('should_skip'):
+                    return {
+                        'decision': False,
+                        'direction': None,
+                        'score': total_score,
+                        'reasons': [f"🚫 {score_result.get('skip_reason', '反向信号被过滤')}"],
+                        'trade_params': {}
+                    }
+
+                # 检查是否应该生成（同向信号）
+                if not score_result.get('should_generate'):
+                    return {
+                        'decision': False,
+                        'direction': None,
+                        'score': total_score,
+                        'reasons': [f"❌ {score_result.get('generate_reason', '不满足开仓条件')}"],
+                        'trade_params': {}
+                    }
+
+                # 添加破位加权说明
+                if breakout_boost != 0:
+                    breakout_reasons.append(
+                        f"🔥 破位加权: {breakout_boost:+d}分 "
+                        f"({score_result.get('generate_reason', '')})"
+                    )
 
             # 汇总理由
             all_reasons = []
             all_reasons.extend(pos_reasons)
             all_reasons.extend(trend_reasons)
             all_reasons.extend(sr_reasons)
+            all_reasons.extend(breakout_reasons)
 
             # 决策
             decision = total_score >= self.threshold
 
             result = {
                 'decision': decision,
-                'direction': 'LONG' if decision else None,
+                'direction': signal_direction if decision else None,
                 'score': total_score,
+                'base_score': base_score,
+                'breakout_boost': breakout_boost,
                 'threshold': self.threshold,
                 'reasons': all_reasons,
                 'trade_params': {}
@@ -355,9 +475,9 @@ class SmartDecisionBrain:
 
             if decision:
                 # 根据评分动态调整持仓时间
-                if score >= 45:
+                if total_score >= 45:
                     max_hold_minutes = 360  # 6小时 (高置信度，45+分)
-                elif score >= 30:
+                elif total_score >= 30:
                     max_hold_minutes = 240  # 4小时 (中等置信度，30-44分)
                 else:
                     max_hold_minutes = 120  # 2小时 (低置信度，<30分)
@@ -368,8 +488,13 @@ class SmartDecisionBrain:
                     'take_profit': sr_data['resistance'],
                     'risk_reward': sr_data['risk_reward'],
                     'max_hold_minutes': max_hold_minutes,
-                    'entry_score': score  # 存储开仓评分用于后续重评分
+                    'entry_score': total_score  # 存储开仓评分用于后续重评分
                 }
+
+                # 如果是破位信号生成，记录开仓
+                if self.breakout_system and breakout_boost > 0:
+                    self.breakout_system.record_opening(symbol)
+                    logger.info(f"📝 记录破位开仓: {symbol}")
 
             return result
 
@@ -381,6 +506,39 @@ class SmartDecisionBrain:
                 'score': 0,
                 'reasons': [f'分析失败: {str(e)}'],
                 'trade_params': {}
+            }
+
+    def get_breakout_status(self) -> Dict:
+        """
+        获取破位系统状态
+
+        Returns:
+            破位系统状态信息
+        """
+        if not self.breakout_system:
+            return {
+                'active': False,
+                'message': '破位系统未初始化'
+            }
+
+        try:
+            status = self.breakout_system.get_system_status()
+
+            # 添加active标志，基于booster和convergence状态
+            booster_status = status.get('booster', {})
+            convergence_status = status.get('convergence', {})
+
+            return {
+                'active': booster_status.get('active', False) and convergence_status.get('active', False),
+                'market': booster_status,
+                'convergence': convergence_status,
+                'last_detection': status.get('last_detection')
+            }
+        except Exception as e:
+            logger.error(f"❌ 获取破位状态失败: {e}")
+            return {
+                'active': False,
+                'error': str(e)
             }
 
     def scan_all_symbols(self) -> List[Dict]:
@@ -403,10 +561,15 @@ class SmartDecisionBrain:
                         'symbol': symbol,
                         'direction': result['direction'],
                         'score': result['score'],
+                        'base_score': result.get('base_score', result['score']),
+                        'breakout_boost': result.get('breakout_boost', 0),
                         'reasons': result['reasons'],
                         'trade_params': result['trade_params']
                     })
-                    logger.info(f"✅ {symbol} | 评分{result['score']} | 盈亏比{result['trade_params']['risk_reward']:.1f}:1")
+
+                    boost_info = f" (+{result.get('breakout_boost', 0)}破位加权)" if result.get('breakout_boost', 0) > 0 else ""
+                    logger.info(f"✅ {symbol} | 评分{result['score']}{boost_info} | "
+                              f"盈亏比{result['trade_params']['risk_reward']:.1f}:1")
 
             except Exception as e:
                 logger.error(f"❌ {symbol} 扫描失败: {e}")
