@@ -564,7 +564,8 @@ class Big4TrendDetector:
             }
 
         # 2. 双重检测: 1H级别 + 15M深V反转
-        hours_ago = datetime.now() - timedelta(hours=self.EMERGENCY_DETECTION_HOURS)
+        hours_ago_dt = datetime.now() - timedelta(hours=self.EMERGENCY_DETECTION_HOURS)
+        hours_ago_timestamp = int(hours_ago_dt.timestamp() * 1000)  # 🔥 修复: 转换为毫秒时间戳
 
         bottom_detected = False
         top_detected = False
@@ -588,7 +589,7 @@ class Big4TrendDetector:
                 AND exchange = 'binance_futures'
                 AND open_time >= %s
                 ORDER BY open_time ASC
-            """, (symbol, hours_ago))
+            """, (symbol, hours_ago_timestamp))
 
             klines = cursor.fetchall()
 
