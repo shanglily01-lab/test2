@@ -36,6 +36,11 @@ class Big4TrendDetector:
             'database': os.getenv('DB_NAME', 'binance-data'),
             'charset': 'utf8mb4'
         }
+        # 🔥 紧急干预配置
+        self.EMERGENCY_DETECTION_HOURS = 4  # 检测最近N小时的剧烈波动
+        self.BOTTOM_DROP_THRESHOLD = -5.0   # 底部判断: 跌幅超过5%
+        self.TOP_RISE_THRESHOLD = 5.0       # 顶部判断: 涨幅超过5%
+        self.BLOCK_DURATION_HOURS = 2       # 触发后阻止交易的时长
 
     def detect_market_trend(self) -> Dict:
         """
@@ -53,6 +58,13 @@ class Big4TrendDetector:
                 ...
             },
             'recommendation': str,
+            'emergency_intervention': {  # 🔥 新增: 紧急干预状态
+                'bottom_detected': bool,
+                'top_detected': bool,
+                'block_long': bool,
+                'block_short': bool,
+                'details': str
+            },
             'timestamp': datetime
         }
         """
@@ -74,6 +86,9 @@ class Big4TrendDetector:
                 bearish_count += 1
                 total_strength += analysis['strength']
 
+        # 🔥 紧急干预检测 (在分析完Big4后执行)
+        emergency_intervention = self._detect_emergency_reversal(conn)
+
         conn.close()
 
         # 综合判断
@@ -87,6 +102,12 @@ class Big4TrendDetector:
             overall_signal = 'NEUTRAL'
             recommendation = "市场方向不明确，建议观望或减少仓位"
 
+        # 🔥 如果紧急干预激活，覆盖recommendation
+        if emergency_intervention['block_long']:
+            recommendation = f"⚠️ 触顶反转风险 - 禁止做多 | {recommendation}"
+        if emergency_intervention['block_short']:
+            recommendation = f"⚠️ 触底反弹风险 - 禁止做空 | {recommendation}"
+
         avg_strength = total_strength / len(BIG4_SYMBOLS) if BIG4_SYMBOLS else 0
 
         result = {
@@ -96,6 +117,7 @@ class Big4TrendDetector:
             'bearish_count': bearish_count,
             'details': results,
             'recommendation': recommendation,
+            'emergency_intervention': emergency_intervention,  # 🔥 新增
             'timestamp': datetime.now()
         }
 
@@ -368,6 +390,161 @@ class Big4TrendDetector:
         reason = ' | '.join(reasons) if reasons else '无明显信号'
 
         return signal, strength, reason
+
+    def _detect_emergency_reversal(self, conn) -> Dict:
+        """
+        🔥 检测紧急底部/顶部反转 - 避免死猫跳陷阱
+
+        逻辑:
+        1. 检测最近N小时Big4的剧烈波动
+        2. 如果检测到触底 (跌幅>5%): 禁止做空2小时
+        3. 如果检测到触顶 (涨幅>5%): 禁止做多2小时
+
+        返回:
+        {
+            'bottom_detected': bool,      # 是否检测到触底
+            'top_detected': bool,         # 是否检测到触顶
+            'block_long': bool,           # 是否阻止做多
+            'block_short': bool,          # 是否阻止做空
+            'details': str,               # 详细原因
+            'expires_at': datetime | None # 干预失效时间
+        }
+        """
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 1. 检查数据库中是否有未过期的紧急干预记录
+        cursor.execute("""
+            SELECT intervention_type, expires_at, trigger_reason
+            FROM emergency_intervention
+            WHERE account_id = 2
+            AND trading_type = 'usdt_futures'
+            AND expires_at > NOW()
+            ORDER BY created_at DESC
+            LIMIT 1
+        """)
+
+        existing = cursor.fetchone()
+
+        if existing:
+            # 已有未过期的干预记录
+            intervention_type = existing['intervention_type']
+            expires_at = existing['expires_at']
+            reason = existing['trigger_reason']
+
+            cursor.close()
+
+            return {
+                'bottom_detected': intervention_type == 'BOTTOM_BOUNCE',
+                'top_detected': intervention_type == 'TOP_REVERSAL',
+                'block_long': intervention_type == 'TOP_REVERSAL',
+                'block_short': intervention_type == 'BOTTOM_BOUNCE',
+                'details': f"⚠️ 紧急干预中: {reason} (失效于 {expires_at.strftime('%H:%M')})",
+                'expires_at': expires_at
+            }
+
+        # 2. 分析最近N小时的Big4价格变化
+        hours_ago = datetime.now() - timedelta(hours=self.EMERGENCY_DETECTION_HOURS)
+
+        bottom_detected = False
+        top_detected = False
+        trigger_symbols = []
+        max_drop = 0
+        max_rise = 0
+
+        for symbol in BIG4_SYMBOLS:
+            # 获取N小时前和当前的价格
+            cursor.execute("""
+                SELECT open_price, close_price, low_price, high_price, open_time
+                FROM kline_data
+                WHERE symbol = %s
+                AND timeframe = '1h'
+                AND exchange = 'binance_futures'
+                AND open_time >= %s
+                ORDER BY open_time ASC
+            """, (symbol, hours_ago))
+
+            klines = cursor.fetchall()
+
+            if not klines or len(klines) < 2:
+                continue
+
+            # 计算期间的最高价和最低价
+            period_high = max([float(k['high_price']) for k in klines])
+            period_low = min([float(k['low_price']) for k in klines])
+            latest_close = float(klines[-1]['close_price'])
+
+            # 从最高点到最低点的跌幅
+            drop_pct = (period_low - period_high) / period_high * 100
+            # 从最低点到当前的涨幅
+            rise_from_low = (latest_close - period_low) / period_low * 100
+            # 从最高点的总跌幅
+            drop_from_high = (latest_close - period_high) / period_high * 100
+
+            # 判断触底 (剧烈下跌后可能反弹)
+            if drop_pct <= self.BOTTOM_DROP_THRESHOLD and rise_from_low > 0:
+                bottom_detected = True
+                trigger_symbols.append(f"{symbol.split('/')[0]}触底({drop_pct:.1f}%→+{rise_from_low:.1f}%)")
+                max_drop = min(max_drop, drop_pct)
+
+            # 判断触顶 (剧烈上涨后可能回调)
+            rise_pct = (period_high - period_low) / period_low * 100
+            if rise_pct >= self.TOP_RISE_THRESHOLD and drop_from_high < 0:
+                top_detected = True
+                trigger_symbols.append(f"{symbol.split('/')[0]}触顶(+{rise_pct:.1f}%→{drop_from_high:.1f}%)")
+                max_rise = max(max_rise, rise_pct)
+
+        cursor.close()
+
+        # 3. 如果检测到新的反转，保存到数据库
+        if bottom_detected or top_detected:
+            intervention_type = 'BOTTOM_BOUNCE' if bottom_detected else 'TOP_REVERSAL'
+            block_long = top_detected
+            block_short = bottom_detected
+            details = f"{'触底反弹' if bottom_detected else '触顶回调'}: {', '.join(trigger_symbols)}"
+            expires_at = datetime.now() + timedelta(hours=self.BLOCK_DURATION_HOURS)
+
+            # 保存到数据库
+            try:
+                conn_write = pymysql.connect(**self.db_config)
+                cursor_write = conn_write.cursor()
+
+                cursor_write.execute("""
+                    INSERT INTO emergency_intervention
+                    (account_id, trading_type, intervention_type, block_long, block_short,
+                     trigger_reason, expires_at, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                """, (
+                    2, 'usdt_futures', intervention_type, block_long, block_short,
+                    details, expires_at
+                ))
+
+                conn_write.commit()
+                cursor_write.close()
+                conn_write.close()
+
+                logger.warning(f"🚨 紧急干预已激活: {details} (持续{self.BLOCK_DURATION_HOURS}小时)")
+
+            except Exception as e:
+                logger.error(f"❌ 保存紧急干预失败: {e}")
+
+            return {
+                'bottom_detected': bottom_detected,
+                'top_detected': top_detected,
+                'block_long': block_long,
+                'block_short': block_short,
+                'details': f"⚠️ {details} (阻止{self.BLOCK_DURATION_HOURS}小时)",
+                'expires_at': expires_at
+            }
+
+        # 无紧急情况
+        return {
+            'bottom_detected': False,
+            'top_detected': False,
+            'block_long': False,
+            'block_short': False,
+            'details': '无紧急干预',
+            'expires_at': None
+        }
 
     def _save_to_database(self, result: Dict):
         """保存检测结果到数据库"""

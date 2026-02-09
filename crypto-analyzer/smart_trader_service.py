@@ -3008,6 +3008,19 @@ class SmartTraderService:
                         logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
                         # 失败不影响正常交易流程
 
+                    # 🔥 紧急干预检查: 触底/触顶反转保护
+                    try:
+                        emergency = big4_result.get('emergency_intervention', {})
+                        if emergency.get('block_long') and new_side == 'LONG':
+                            logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触顶反转风险,禁止做多 | {emergency.get('details', '')}")
+                            continue
+                        if emergency.get('block_short') and new_side == 'SHORT':
+                            logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触底反弹风险,禁止做空 | {emergency.get('details', '')}")
+                            continue
+                    except Exception as e:
+                        logger.error(f"[EMERGENCY-ERROR] {symbol} 紧急干预检查失败: {e}")
+                        # 检查失败不影响正常交易
+
                     # 检查同方向是否已有持仓
                     if self.has_position(symbol, new_side):
                         logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
