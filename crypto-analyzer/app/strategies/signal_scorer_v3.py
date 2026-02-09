@@ -31,7 +31,13 @@ class SignalScorerV3:
 
         # 总分和阈值
         self.max_score = 42  # 5+6+14+9+8
-        self.min_score_to_trade = 18  # 🔥 优化: 降至18分(43%)，提高开仓率（原26分太严格）
+        self.min_score_to_trade = 18  # 默认阈值18分(43%)
+
+        # 🔥🔥🔥 差异化阈值 (2026-02-09优化)
+        # 原因: LONG方向低分段(20-25分)亏损严重(-487U), 评分区分度低(仅0.18分差异)
+        # SHORT方向表现良好,保持18分阈值
+        self.min_score_long = 28   # LONG要求28分以上(临时措施,观察1-2天)
+        self.min_score_short = 22  # SHORT保持22分
 
     def get_db_connection(self):
         """获取数据库连接"""
@@ -97,17 +103,30 @@ class SignalScorerV3:
         total_score = sum(scores.values())
         score_pct = (total_score / self.max_score) * 100
 
+        # 🔥 差异化阈值判断 (2026-02-09优化)
+        if position_side == 'LONG':
+            threshold = self.min_score_long
+            threshold_name = f"LONG阈值({threshold}分)"
+        else:  # SHORT
+            threshold = self.min_score_short
+            threshold_name = f"SHORT阈值({threshold}分)"
+
+        can_trade = total_score >= threshold
+
         print(f"\n{'='*80}")
         print(f"[总分] {total_score:.1f}/{self.max_score} ({score_pct:.1f}%)")
-        print(f"[阈值] {self.min_score_to_trade}/{self.max_score} ({self.min_score_to_trade/self.max_score*100:.1f}%)")
-        print(f"[结果] {'✅ 可开仓' if total_score >= self.min_score_to_trade else '❌ 不可开仓'}")
+        print(f"[阈值] {threshold_name}")
+        print(f"[结果] {'✅ 可开仓' if can_trade else f'❌ 不可开仓 (需要>={threshold}分)'}")
+        if not can_trade and position_side == 'LONG':
+            print(f"[提示] LONG方向要求更高评分(>=28分),当前{total_score:.1f}分不足")
         print(f"{'='*80}\n")
 
         return {
             'total_score': total_score,
             'max_score': self.max_score,
             'score_pct': score_pct,
-            'can_trade': total_score >= self.min_score_to_trade,
+            'can_trade': can_trade,
+            'threshold': threshold,
             'breakdown': scores
         }
 
