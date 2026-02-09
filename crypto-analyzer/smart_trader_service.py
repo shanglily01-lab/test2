@@ -70,14 +70,15 @@ class SmartDecisionBrain:
                 config = yaml.safe_load(f)
                 all_symbols = config.get('symbols', [])
 
-            # 2. 从数据库加载黑名单
+            # 2. 从数据库加载黑名单（从 trading_symbol_rating 表读取）
+            # rating_level: 0=白名单, 1=黑名单1级, 2=黑名单2级, 3=黑名单3级(永久禁止)
             conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT symbol FROM trading_blacklist
-                WHERE is_active = TRUE
-                ORDER BY created_at DESC
+                SELECT symbol FROM trading_symbol_rating
+                WHERE rating_level >= 1
+                ORDER BY rating_level DESC, updated_at DESC
             """)
             blacklist_rows = cursor.fetchall()
             self.blacklist = [row['symbol'] for row in blacklist_rows] if blacklist_rows else []
