@@ -1972,8 +1972,9 @@ class SmartTraderService:
             entry_score = opp.get('score', 0)
 
             # 🔥 标识信号版本 (v2/v3/traditional)
+            # 🔥 优化: 优先使用已设置的signal_version，避免V2被误判为V3
             signal_version = opp.get('signal_version', 'traditional')
-            if opp.get('v3_mode'):
+            if signal_version == 'traditional' and opp.get('v3_mode'):
                 signal_version = 'v3'
             logger.info(f"[SIGNAL_VERSION] {symbol} 信号版本: {signal_version}")
 
@@ -3806,8 +3807,9 @@ class SmartTraderService:
                         continue
 
                     # 检查同方向同版本是否已有持仓 (V2/V3并行测试: 允许同方向不同版本各开一单)
+                    # 🔥 优化: 优先使用已设置的signal_version，避免V2被误判为V3
                     signal_version = opp.get('signal_version', 'traditional')
-                    if opp.get('v3_mode'):
+                    if signal_version == 'traditional' and opp.get('v3_mode'):
                         signal_version = 'v3'
 
                     if self.has_position(symbol, new_side, signal_version):
