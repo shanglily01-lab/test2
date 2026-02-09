@@ -42,6 +42,11 @@ class Big4TrendDetector:
         self.TOP_RISE_THRESHOLD = 5.0       # 顶部判断: 涨幅超过5%
         self.BLOCK_DURATION_HOURS = 2       # 触发后阻止交易的时长
 
+        # 🔥 15M深V反转检测配置
+        self.LOWER_SHADOW_THRESHOLD = 3.0   # 1H长下影线阈值: 3%
+        self.CONSECUTIVE_GREEN_15M = 3      # 15M连续阳线数量: 3根
+        self.CHECK_15M_CANDLES = 8          # 检查后续8根15M K线
+
     def detect_market_trend(self) -> Dict:
         """
         检测四大天王的市场趋势 (简化版)
@@ -395,10 +400,15 @@ class Big4TrendDetector:
         """
         🔥 检测紧急底部/顶部反转 - 避免死猫跳陷阱
 
-        逻辑:
-        1. 检测最近N小时Big4的剧烈波动
-        2. 如果检测到触底 (跌幅>5%): 禁止做空2小时
-        3. 如果检测到触顶 (涨幅>5%): 禁止做多2小时
+        双重检测逻辑:
+        【方法1】1H级别检测 (长周期):
+        - 检测最近4小时的剧烈波动 (跌幅>5% 或 涨幅>5%)
+        - 适合捕捉较大级别的反转
+
+        【方法2】15M级别检测 (短周期深V反转):
+        - 检测1H K线的长下影线 (>3%)
+        - 检测后续15M连续3根阳线
+        - 适合捕捉快速触底反弹
 
         返回:
         {
@@ -442,7 +452,7 @@ class Big4TrendDetector:
                 'expires_at': expires_at
             }
 
-        # 2. 分析最近N小时的Big4价格变化
+        # 2. 双重检测: 1H级别 + 15M深V反转
         hours_ago = datetime.now() - timedelta(hours=self.EMERGENCY_DETECTION_HOURS)
 
         bottom_detected = False
@@ -452,6 +462,7 @@ class Big4TrendDetector:
         max_rise = 0
 
         for symbol in BIG4_SYMBOLS:
+            # ========== 方法1: 1H级别长周期检测 ==========
             # 获取N小时前和当前的价格
             cursor.execute("""
                 SELECT open_price, close_price, low_price, high_price, open_time
@@ -492,6 +503,74 @@ class Big4TrendDetector:
                 top_detected = True
                 trigger_symbols.append(f"{symbol.split('/')[0]}触顶(+{rise_pct:.1f}%→{drop_from_high:.1f}%)")
                 max_rise = max(max_rise, rise_pct)
+
+            # ========== 方法2: 15M深V反转检测 ==========
+            # 检测最近2根1H K线的长下影线 + 后续15M连续阳线
+            cursor.execute("""
+                SELECT open_price, close_price, low_price, high_price, open_time
+                FROM kline_data
+                WHERE symbol = %s
+                AND timeframe = '1h'
+                AND exchange = 'binance_futures'
+                ORDER BY open_time DESC
+                LIMIT 2
+            """, (symbol,))
+
+            recent_1h = cursor.fetchall()
+
+            for h1_candle in recent_1h:
+                open_p = float(h1_candle['open_price'])
+                close_p = float(h1_candle['close_price'])
+                high_p = float(h1_candle['high_price'])
+                low_p = float(h1_candle['low_price'])
+
+                # 计算下影线长度
+                body_low = min(open_p, close_p)
+                lower_shadow_pct = (body_low - low_p) / low_p * 100 if low_p > 0 else 0
+
+                # 检测长下影线 (锤子线)
+                if lower_shadow_pct >= self.LOWER_SHADOW_THRESHOLD:
+                    # 查看该1H K线后的15M K线
+                    h1_start_time = h1_candle['open_time']
+                    h1_end_time = h1_start_time + 3600000 * 2  # 后2小时的15M
+
+                    cursor.execute("""
+                        SELECT open_price, close_price, open_time
+                        FROM kline_data
+                        WHERE symbol = %s
+                        AND timeframe = '15m'
+                        AND exchange = 'binance_futures'
+                        AND open_time >= %s
+                        AND open_time <= %s
+                        ORDER BY open_time ASC
+                        LIMIT %s
+                    """, (symbol, h1_start_time, h1_end_time, self.CHECK_15M_CANDLES))
+
+                    m15_candles = cursor.fetchall()
+
+                    # 检测连续阳线
+                    if m15_candles and len(m15_candles) >= self.CONSECUTIVE_GREEN_15M:
+                        consecutive_green = 0
+                        max_consecutive = 0
+
+                        for m15 in m15_candles:
+                            m15_open = float(m15['open_price'])
+                            m15_close = float(m15['close_price'])
+
+                            if m15_close > m15_open:  # 阳线
+                                consecutive_green += 1
+                                max_consecutive = max(max_consecutive, consecutive_green)
+                            else:
+                                consecutive_green = 0
+
+                        # 如果检测到连续N根阳线 = 深V反转
+                        if max_consecutive >= self.CONSECUTIVE_GREEN_15M:
+                            bottom_detected = True
+                            trigger_symbols.append(
+                                f"{symbol.split('/')[0]}深V反转(1H下影{lower_shadow_pct:.1f}%+15M连续{max_consecutive}阳)"
+                            )
+                            logger.info(f"🔥 检测到{symbol}深V反转: 1H下影线{lower_shadow_pct:.1f}%, 15M连续{max_consecutive}根阳线")
+                            break  # 检测到就不再检查这个币种的其他1H K线
 
         cursor.close()
 
