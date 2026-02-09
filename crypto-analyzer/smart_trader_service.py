@@ -554,26 +554,46 @@ class SmartDecisionBrain:
 
                 # 移除过滤3: Big4市场趋势判断已足够,1D趋势检查多余且过于严格
 
-                # position_high时有强力量能支撑,且通过过滤,可以追涨做多
+                # 🔥 V5.1优化: 增加Big4强度过滤，震荡市禁用突破信号
                 if can_breakout:
-                    weight = self.scoring_weights.get('breakout_long', {'long': 20, 'short': 0})
-                    long_score += weight['long']
-                    if weight['long'] > 0:
-                        signal_components['breakout_long'] = weight['long']
-                        logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
-                        if breakout_warnings:
-                            logger.warning(f"{symbol} 突破追涨警告: {', '.join(breakout_warnings)}")
+                    # 检查Big4强度，震荡市(强度<70)禁用突破追涨
+                    big4_result = self.get_big4_result()
+                    big4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
+                    big4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
+
+                    if big4_strength >= 70 and big4_signal == 'BULLISH':
+                        # 强趋势上涨(70+)，允许突破追涨
+                        weight = self.scoring_weights.get('breakout_long', {'long': 20, 'short': 0})
+                        long_score += weight['long']
+                        if weight['long'] > 0:
+                            signal_components['breakout_long'] = weight['long']
+                            logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h}, Big4={big4_strength:.0f}")
+                            if breakout_warnings:
+                                logger.warning(f"{symbol} 突破追涨警告: {', '.join(breakout_warnings)}")
+                    else:
+                        # 震荡市或非BULLISH，禁用突破追涨
+                        logger.debug(f"{symbol} 突破追涨被过滤: Big4强度{big4_strength:.0f}<70或非BULLISH，震荡市不追涨")
                 else:
                     logger.warning(f"{symbol} 追高风险过滤: {', '.join(breakout_warnings)}, 跳过突破信号")
 
             # 9. 破位追空信号: position_low + 强力量能空头 → 可以做空
+            # 🔥 V5.1优化: 增加Big4强度过滤，震荡市禁用破位信号
             elif position_pct < 30 and (net_power_1h <= -2 or (net_power_1h <= -2 and net_power_15m <= -2)):
-                # position_low时有强力量能压制,可以追空做空
-                weight = self.scoring_weights.get('breakdown_short', {'long': 0, 'short': 20})
-                short_score += weight['short']
-                if weight['short'] > 0:
-                    signal_components['breakdown_short'] = weight['short']
-                    logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
+                # 检查Big4强度，震荡市(强度<70)禁用破位追空
+                big4_result = self.get_big4_result()
+                big4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
+                big4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
+
+                if big4_strength >= 70 and big4_signal == 'BEARISH':
+                    # 强趋势下跌(70+)，允许破位追空
+                    weight = self.scoring_weights.get('breakdown_short', {'long': 0, 'short': 20})
+                    short_score += weight['short']
+                    if weight['short'] > 0:
+                        signal_components['breakdown_short'] = weight['short']
+                        logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}, Big4={big4_strength:.0f}")
+                else:
+                    # 震荡市或非BEARISH，禁用破位追空
+                    logger.debug(f"{symbol} 破位追空被过滤: Big4强度{big4_strength:.0f}<70或非BEARISH，震荡市不追空")
 
             # ========== 移除EMA评分 (已有Big4市场趋势判断) ==========
             # 已移除: ema_bull, ema_bear
