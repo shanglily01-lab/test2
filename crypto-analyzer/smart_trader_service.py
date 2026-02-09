@@ -25,6 +25,7 @@ from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
+from app.services.breakout_signal_booster import BreakoutSignalBooster
 from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
@@ -776,6 +777,10 @@ class SmartTraderService:
         self.big4_cache_duration = 3600  # 1小时缓存
         self.big4_detection_interval = 900  # 15分钟检测间隔
 
+        # ========== 破位信号加权系统 ==========
+        self.breakout_booster = BreakoutSignalBooster(expiry_hours=4)
+        logger.info("✅ 破位信号加权系统已初始化 (4小时有效期)")
+
         # ========== 震荡市交易策略模块 ==========
         self.range_detector = RangeMarketDetector(self.db_config)
         self.bollinger_strategy = BollingerMeanReversionStrategy(self.db_config)
@@ -868,6 +873,16 @@ class SmartTraderService:
                 self.big4_cache_time = now
                 self.last_big4_detection_time = now
                 logger.info(f"🔱 Big4趋势已更新缓存 | {self.cached_big4_result['overall_signal']} (强度: {self.cached_big4_result['signal_strength']:.0f})")
+
+                # 更新破位信号加权系统
+                direction_map = {'BULLISH': 'UP', 'BEARISH': 'DOWN', 'NEUTRAL': 'NEUTRAL'}
+                direction = direction_map.get(self.cached_big4_result['overall_signal'], 'NEUTRAL')
+                if direction != 'NEUTRAL':
+                    self.breakout_booster.update_big4_breakout(
+                        direction,
+                        self.cached_big4_result['signal_strength']
+                    )
+                    logger.info(f"💥 破位系统已更新: {direction} 强度{self.cached_big4_result['signal_strength']:.0f}")
             except Exception as e:
                 logger.error(f"❌ Big4趋势检测失败: {e}")
                 # 检测失败时，如果有旧缓存就继续用，否则返回空结果
@@ -3047,6 +3062,17 @@ class SmartTraderService:
                             else:
                                 logger.info(f"[BIG4-NEUTRAL] {symbol} 市场中性(强度{signal_strength:.1f}),正常开仓")
                         # ========== NEUTRAL 处理结束 ==========
+
+                        # ========== 破位否决检查 ==========
+                        # Big4强度>=12时，完全禁止逆向开仓
+                        should_skip, veto_reason = self.breakout_booster.should_skip_opposite_signal(
+                            new_side,
+                            new_score
+                        )
+                        if should_skip:
+                            logger.warning(f"💥 [BREAKOUT-VETO] {symbol} {veto_reason}")
+                            continue
+                        # ========== 破位否决结束 ==========
 
                         # 如果信号方向与交易方向冲突,降低评分或跳过
                         elif symbol_signal == 'BEARISH' and new_side == 'LONG':
