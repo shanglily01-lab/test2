@@ -37,14 +37,6 @@ class Big4TrendDetector:
             'charset': 'utf8mb4'
         }
 
-        # 🔥 Big4权重配置 - BTC和ETH权重更高
-        self.symbol_weights = {
-            'BTC/USDT': 0.40,  # BTC 40%
-            'ETH/USDT': 0.30,  # ETH 30%
-            'BNB/USDT': 0.15,  # BNB 15%
-            'SOL/USDT': 0.15   # SOL 15%
-        }
-
     def detect_market_trend(self) -> Dict:
         """
         检测四大天王的市场趋势 (简化版)
@@ -84,35 +76,18 @@ class Big4TrendDetector:
 
         conn.close()
 
-        # 🔥 综合判断 - 使用加权平均而非简单计数
-        weighted_bullish_score = 0
-        weighted_bearish_score = 0
-        weighted_strength = 0
-
-        for symbol in BIG4_SYMBOLS:
-            analysis = results[symbol]
-            weight = self.symbol_weights[symbol]
-
-            if analysis['signal'] == 'BULLISH':
-                weighted_bullish_score += weight * analysis['strength']
-                weighted_strength += weight * analysis['strength']
-            elif analysis['signal'] == 'BEARISH':
-                weighted_bearish_score += weight * analysis['strength']
-                weighted_strength += weight * analysis['strength']
-
-        # 判断整体信号 (基于加权分数)
-        if weighted_bullish_score > weighted_bearish_score * 1.5:  # 看多分数>看空1.5倍
+        # 综合判断
+        if bullish_count >= 3:
             overall_signal = 'BULLISH'
-            recommendation = f"市场整体看涨(权重分{weighted_bullish_score:.1f}),建议优先考虑多单机会"
-        elif weighted_bearish_score > weighted_bullish_score * 1.5:  # 看空分数>看多1.5倍
+            recommendation = "市场整体看涨，建议优先考虑多单机会"
+        elif bearish_count >= 3:
             overall_signal = 'BEARISH'
-            recommendation = f"市场整体看跌(权重分{weighted_bearish_score:.1f}),建议优先考虑空单机会"
+            recommendation = "市场整体看跌，建议优先考虑空单机会"
         else:
             overall_signal = 'NEUTRAL'
             recommendation = "市场方向不明确，建议观望或减少仓位"
 
-        # 加权平均强度
-        avg_strength = weighted_strength if weighted_strength > 0 else 0
+        avg_strength = total_strength / len(BIG4_SYMBOLS) if BIG4_SYMBOLS else 0
 
         result = {
             'overall_signal': overall_signal,
@@ -134,36 +109,31 @@ class Big4TrendDetector:
         分析单个币种的趋势 (简化版)
 
         步骤:
-        1. 1H (30根): 大趋势判断
-        2. 1H (5根): 小趋势判断 (用于修正大趋势)
-        3. 15M (30根): 趋势确认
-        4. 5M (3根): 买卖时机
+        1. 1H (30根): 主导方向判断
+        2. 15M (30根): 趋势确认
+        3. 5M (3根): 买卖时机
         """
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 1. 分析1H K线 (30根) - 大趋势
-        kline_1h_30 = self._analyze_kline_power(cursor, symbol, '1h', 30)
+        # 1. 分析1H K线 (30根) - 主导方向
+        kline_1h = self._analyze_kline_power(cursor, symbol, '1h', 30)
 
-        # 2. 分析1H K线 (5根) - 小趋势 (用于修正)
-        kline_1h_5 = self._analyze_kline_power(cursor, symbol, '1h', 5)
-
-        # 3. 分析15M K线 (30根) - 趋势确认
+        # 2. 分析15M K线 (30根) - 趋势确认
         kline_15m = self._analyze_kline_power(cursor, symbol, '15m', 30)
 
-        # 4. 分析5M K线 (3根) - 买卖时机
+        # 3. 分析5M K线 (3根) - 买卖时机
         kline_5m = self._detect_5m_signal(cursor, symbol)
 
         cursor.close()
 
-        # 5. 综合判断
-        signal, strength, reason = self._generate_signal(kline_1h_30, kline_1h_5, kline_15m, kline_5m)
+        # 4. 综合判断
+        signal, strength, reason = self._generate_signal(kline_1h, kline_15m, kline_5m)
 
         return {
             'signal': signal,
             'strength': strength,
             'reason': reason,
-            '1h_30_analysis': kline_1h_30,
-            '1h_5_analysis': kline_1h_5,
+            '1h_analysis': kline_1h,
             '15m_analysis': kline_15m,
             '5m_signal': kline_5m
         }
@@ -185,7 +155,7 @@ class Big4TrendDetector:
         }
         """
         query = """
-            SELECT open_price, close_price, high_price, low_price, volume
+            SELECT open_price, close_price, volume
             FROM kline_data
             WHERE symbol = %s
             AND timeframe = %s
@@ -217,26 +187,6 @@ class Big4TrendDetector:
         bullish_power = 0  # 阳线力度 = Σ(价格变化% × 0.8 + 成交量归一化 × 0.2)
         bearish_power = 0  # 阴线力度 = Σ(价格变化% × 0.8 + 成交量归一化 × 0.2)
 
-        # 记录首尾价格,用于计算总体波动
-        first_open = float(klines[-1]['open_price'])  # 最早的K线开盘价
-        last_close = float(klines[0]['close_price'])   # 最新的K线收盘价
-
-        # 记录最高最低价,用于计算波动幅度
-        try:
-            all_highs = [float(k['high_price']) for k in klines]
-            all_lows = [float(k['low_price']) for k in klines]
-            period_high = max(all_highs)
-            period_low = min(all_lows)
-        except KeyError as e:
-            # 如果缺少high_price或low_price字段，记录详细信息
-            logger.error(f"K线数据缺少字段 {e}, symbol={symbol}, timeframe={timeframe}, count={count}")
-            logger.error(f"第一条K线的keys: {list(klines[0].keys()) if klines else 'empty'}")
-            raise
-
-        # 记录大波动K线数量(单根涨跌>3%)
-        big_bullish_candles = 0
-        big_bearish_candles = 0
-
         for k in klines:
             open_p = float(k['open_price'])
             close_p = float(k['close_price'])
@@ -252,10 +202,6 @@ class Big4TrendDetector:
                 # 力度 = 价格变化%(80%) + 成交量归一化(20%)
                 power = price_change_pct * 0.8 + volume_normalized * 0.2
                 bullish_power += power
-
-                # 检测大阳线(单根涨幅>3%)
-                if price_change_pct > 3:
-                    big_bullish_candles += 1
             else:
                 # 阴线
                 bearish_count += 1
@@ -264,55 +210,16 @@ class Big4TrendDetector:
                 power = price_change_pct * 0.8 + volume_normalized * 0.2
                 bearish_power += power
 
-                # 检测大阴线(单根跌幅>3%)
-                if price_change_pct > 3:
-                    big_bearish_candles += 1
-
-        # 计算总体价格变化
-        total_change_pct = (last_close - first_open) / first_open * 100
-
-        # 计算波动幅度 (high-low)/low
-        volatility_pct = (period_high - period_low) / period_low * 100 if period_low > 0 else 0
-
-        # 判断主导方向 (综合多个因素)
-        # 动态阈值: 根据K线数量自适应
-        # - 30根K线: 17/30 = 56.7% → 阳线/阴线>=17
-        # - 5根K线: 3/5 = 60% → 阳线/阴线>=3
-        threshold_ratio = 0.6  # 60%占比
-        count_threshold = int(count * threshold_ratio)  # 30根→18, 5根→3
-
-        # 1. 如果波动率<3%, 无论如何都是震荡市
-        if volatility_pct < 3:
-            dominant = 'NEUTRAL'
-        # 2. 如果总体涨跌幅很小(<2%), 也是震荡市
-        elif abs(total_change_pct) < 2:
-            dominant = 'NEUTRAL'
-        # 3. 否则综合判断: 阴阳比例 + 力度对比
+        # 判断主导方向 (更严格的标准)
+        # 上涨趋势: 阳线 >= 17根 (30根K线中占57%)
+        # 下跌趋势: 阴线 >= 17根 (30根K线中占57%)
+        # 其他情况: 震荡行情
+        if bullish_count >= 17:
+            dominant = 'BULL'
+        elif bearish_count >= 17:
+            dominant = 'BEAR'
         else:
-            # 基础判断: 阳线/阴线数量>=阈值
-            count_bullish = bullish_count >= count_threshold
-            count_bearish = bearish_count >= count_threshold
-
-            # 力度判断: bullish_power明显大于bearish_power (差距>20%)
-            power_bullish = bullish_power > bearish_power * 1.2 if bearish_power > 0 else bullish_power > 0
-            power_bearish = bearish_power > bullish_power * 1.2 if bullish_power > 0 else bearish_power > 0
-
-            # 大波动K线数量 (根据总数量调整阈值)
-            # 30根K线→2根大K线, 5根K线→1根大K线
-            big_candle_threshold = max(1, int(count * 0.067))  # 30根→2, 5根→1
-            big_candle_bullish = big_bullish_candles >= big_candle_threshold
-            big_candle_bearish = big_bearish_candles >= big_candle_threshold
-
-            # 综合判断 (3个条件满足2个即可)
-            bullish_signals = sum([count_bullish, power_bullish, big_candle_bullish])
-            bearish_signals = sum([count_bearish, power_bearish, big_candle_bearish])
-
-            if bullish_signals >= 2:
-                dominant = 'BULL'
-            elif bearish_signals >= 2:
-                dominant = 'BEAR'
-            else:
-                dominant = 'NEUTRAL'
+            dominant = 'NEUTRAL'
 
         return {
             'bullish_count': bullish_count,
@@ -405,22 +312,15 @@ class Big4TrendDetector:
 
     def _generate_signal(
         self,
-        kline_1h_30: Dict,
-        kline_1h_5: Dict,
+        kline_1h: Dict,
         kline_15m: Dict,
         kline_5m: Dict
     ) -> Tuple[str, int, str]:
         """
-        综合生成信号 (简化版 + 趋势修正)
-
-        趋势修正规则:
-        1. 如果30H大趋势BEAR + 5H小趋势BULL → 修正为NEUTRAL (不做空)
-        2. 如果30H大趋势BULL + 5H小趋势BEAR → 修正为NEUTRAL (不做多)
-        3. 如果30H大趋势和5H小趋势一致 → 保持大趋势方向
-        4. 如果30H大趋势NEUTRAL → 跟随5H小趋势
+        综合生成信号 (简化版)
 
         权重分配:
-        - 修正后的1H方向: 60分
+        - 1H主导方向: 60分
         - 15M趋势确认: 30分
         - 5M买卖时机: 10分
 
@@ -429,42 +329,15 @@ class Big4TrendDetector:
         signal_score = 0  # -100 to +100
         reasons = []
 
-        # === 步骤1: 趋势修正逻辑 ===
-        big_trend = kline_1h_30['dominant']  # 30H大趋势
-        small_trend = kline_1h_5['dominant']  # 5H小趋势
-
-        # 趋势修正
-        if big_trend == 'BEAR' and small_trend == 'BULL':
-            # 大趋势下跌但小趋势上涨 → 修正为震荡
-            corrected_trend = 'NEUTRAL'
-            reasons.append(f"⚠️趋势修正: 30H下跌({kline_1h_30['bearish_count']}阴)但5H反弹({kline_1h_5['bullish_count']}阳) → 震荡")
-        elif big_trend == 'BULL' and small_trend == 'BEAR':
-            # 大趋势上涨但小趋势下跌 → 修正为震荡
-            corrected_trend = 'NEUTRAL'
-            reasons.append(f"⚠️趋势修正: 30H上涨({kline_1h_30['bullish_count']}阳)但5H回调({kline_1h_5['bearish_count']}阴) → 震荡")
-        elif big_trend == 'NEUTRAL':
-            # 大趋势震荡 → 跟随小趋势
-            corrected_trend = small_trend
-            if small_trend == 'BULL':
-                reasons.append(f"30H震荡,跟随5H上涨({kline_1h_5['bullish_count']}阳:{kline_1h_5['bearish_count']}阴)")
-            elif small_trend == 'BEAR':
-                reasons.append(f"30H震荡,跟随5H下跌({kline_1h_5['bearish_count']}阴:{kline_1h_5['bullish_count']}阳)")
-            else:
-                reasons.append("30H震荡,5H无明确方向")
-        else:
-            # 大小趋势一致 → 保持大趋势
-            corrected_trend = big_trend
-            if big_trend == 'BULL':
-                reasons.append(f"1H多头({kline_1h_30['bullish_count']}阳,5H确认{kline_1h_5['bullish_count']}阳)")
-            elif big_trend == 'BEAR':
-                reasons.append(f"1H空头({kline_1h_30['bearish_count']}阴,5H确认{kline_1h_5['bearish_count']}阴)")
-
-        # === 步骤2: 基于修正后的趋势打分 ===
-        # 1. 修正后的1H方向 (权重: 60)
-        if corrected_trend == 'BULL':
+        # 1. 1H主导方向 (权重: 60)
+        if kline_1h['dominant'] == 'BULL':
             signal_score += 60
-        elif corrected_trend == 'BEAR':
+            reasons.append(f"1H多头主导({kline_1h['bullish_count']}阳:{kline_1h['bearish_count']}阴)")
+        elif kline_1h['dominant'] == 'BEAR':
             signal_score -= 60
+            reasons.append(f"1H空头主导({kline_1h['bearish_count']}阴:{kline_1h['bullish_count']}阳)")
+        else:
+            reasons.append("1H方向中性")
 
         # 2. 15M趋势确认 (权重: 30)
         if kline_15m['dominant'] == 'BULL':
@@ -483,7 +356,7 @@ class Big4TrendDetector:
                 signal_score -= 10
                 reasons.append(kline_5m['reason'])
 
-        # === 步骤3: 生成最终信号 ===
+        # 生成最终信号
         if signal_score > 30:
             signal = 'BULLISH'
         elif signal_score < -30:
@@ -528,25 +401,25 @@ class Big4TrendDetector:
                 details['BTC/USDT']['signal'],
                 details['BTC/USDT']['strength'],
                 details['BTC/USDT']['reason'],
-                details['BTC/USDT']['1h_30_analysis']['dominant'],
+                details['BTC/USDT']['1h_analysis']['dominant'],
                 details['BTC/USDT']['15m_analysis']['dominant'],
                 # ETH
                 details['ETH/USDT']['signal'],
                 details['ETH/USDT']['strength'],
                 details['ETH/USDT']['reason'],
-                details['ETH/USDT']['1h_30_analysis']['dominant'],
+                details['ETH/USDT']['1h_analysis']['dominant'],
                 details['ETH/USDT']['15m_analysis']['dominant'],
                 # BNB
                 details['BNB/USDT']['signal'],
                 details['BNB/USDT']['strength'],
                 details['BNB/USDT']['reason'],
-                details['BNB/USDT']['1h_30_analysis']['dominant'],
+                details['BNB/USDT']['1h_analysis']['dominant'],
                 details['BNB/USDT']['15m_analysis']['dominant'],
                 # SOL
                 details['SOL/USDT']['signal'],
                 details['SOL/USDT']['strength'],
                 details['SOL/USDT']['reason'],
-                details['SOL/USDT']['1h_30_analysis']['dominant'],
+                details['SOL/USDT']['1h_analysis']['dominant'],
                 details['SOL/USDT']['15m_analysis']['dominant']
             ))
 

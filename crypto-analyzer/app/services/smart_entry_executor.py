@@ -38,53 +38,6 @@ class SmartEntryExecutor:
         self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40%
         self.time_window = 60  # 60分钟建仓窗口 (前15分钟采集样本,然后30/45/60分钟执行)
 
-    def _check_big4_conflict(self, symbol: str, side: str) -> tuple:
-        """
-        🔥 检查Big4方向冲突
-
-        场景: 分批建仓过程中Big4方向可能变化
-        例如: 开始做空时Big4是BEARISH,但建仓过程中变为BULLISH
-
-        Returns:
-            (should_cancel, reason) - 是否应该取消建仓, 原因
-        """
-        try:
-            import pymysql
-            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
-            cursor = conn.cursor()
-
-            # 获取最新Big4信号
-            cursor.execute("""
-                SELECT overall_signal, signal_strength
-                FROM big4_trend_history
-                ORDER BY created_at DESC
-                LIMIT 1
-            """)
-
-            result = cursor.fetchone()
-            cursor.close()
-            conn.close()
-
-            if not result:
-                return False, None
-
-            big4_signal = result['overall_signal']
-            big4_strength = float(result['signal_strength'])
-
-            # 🔥 检查方向冲突
-            if big4_signal == 'BULLISH' and side == 'SHORT' and big4_strength >= 60:
-                reason = f"Big4强烈看多(强度{big4_strength:.1f}),取消做空建仓"
-                return True, reason
-            elif big4_signal == 'BEARISH' and side == 'LONG' and big4_strength >= 60:
-                reason = f"Big4强烈看空(强度{big4_strength:.1f}),取消做多建仓"
-                return True, reason
-
-            return False, None
-
-        except Exception as e:
-            logger.error(f"检查Big4冲突失败: {e}")
-            return False, None  # 检查失败不影响建仓
-
     async def execute_entry(self, signal: Dict) -> Dict:
         """
         执行智能分批建仓
@@ -173,20 +126,6 @@ class SmartEntryExecutor:
 
         try:
             while (datetime.now() - signal_time).total_seconds() < max_window_seconds:
-                # 🔥 每次建仓前检查Big4方向冲突
-                should_cancel, cancel_reason = self._check_big4_conflict(symbol, direction)
-                if should_cancel:
-                    logger.critical(f"🚨 [BIG4-CONFLICT] {symbol} {direction} {cancel_reason}, 终止分批建仓")
-                    # 如果已有部分建仓,需要平掉
-                    if plan.get('position_id'):
-                        logger.critical(f"🚨 [BIG4-CONFLICT] 检测到已建仓,立即平掉持仓ID:{plan['position_id']}")
-                        # TODO: 调用平仓接口
-                    return {
-                        'success': False,
-                        'reason': f'BIG4_CONFLICT:{cancel_reason}',
-                        'cancelled': True
-                    }
-
                 current_price = await self._get_current_price(symbol)
                 elapsed_minutes = (datetime.now() - signal_time).total_seconds() / 60
 
@@ -708,14 +647,12 @@ class SmartEntryExecutor:
             volatility_calc = get_volatility_calculator()
             entry_score = signal.get('trade_params', {}).get('entry_score', 30)
             signal_components = list(signal.get('trade_params', {}).get('signal_components', {}).keys())
-            max_hold_minutes = signal.get('max_hold_minutes', 240)  # 🔥 获取持仓时间
 
             stop_loss_pct, take_profit_pct, calc_reason = volatility_calc.get_sl_tp_for_position(
                 symbol=symbol,
                 position_side=direction,
                 entry_score=entry_score,
-                signal_components=signal_components,
-                max_hold_minutes=max_hold_minutes  # 🔥 传入持仓时间
+                signal_components=signal_components
             )
 
             logger.info(f"[{symbol}] {direction} 止损止盈计算: SL={stop_loss_pct}% TP={take_profit_pct}% | {calc_reason}")
@@ -740,7 +677,7 @@ class SmartEntryExecutor:
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
             """, (
                 self.account_id, symbol, direction, quantity, price, price,
                 plan['leverage'], quantity * price, margin,
@@ -750,9 +687,7 @@ class SmartEntryExecutor:
                 signal.get('trade_params', {}).get('entry_score', 30),
                 json.dumps(signal.get('trade_params', {}).get('signal_components', {})),
                 batch_plan_json, batch_filled_json,
-                plan['signal_time'],
-                'smart_entry_executor',  # source
-                'building'  # status
+                plan['signal_time']
             ))
 
             position_id = cursor.lastrowid
@@ -825,14 +760,12 @@ class SmartEntryExecutor:
             volatility_calc = get_volatility_calculator()
             entry_score = signal.get('trade_params', {}).get('entry_score', 30)
             signal_components = list(signal.get('trade_params', {}).get('signal_components', {}).keys())
-            max_hold_minutes = signal.get('max_hold_minutes', 240)  # 🔥 获取持仓时间
 
             stop_loss_pct, take_profit_pct, calc_reason = volatility_calc.get_sl_tp_for_position(
                 symbol=plan['symbol'],
                 position_side=direction,
                 entry_score=entry_score,
-                signal_components=signal_components,
-                max_hold_minutes=max_hold_minutes  # 🔥 传入持仓时间
+                signal_components=signal_components
             )
 
             # 转换为小数
@@ -1003,7 +936,7 @@ class SmartEntryExecutor:
             # 计算计划平仓时间（基于 entry_score）
             entry_score = signal.get('trade_params', {}).get('entry_score', 30)
             # 🔥 修改: 统一4小时强制平仓,移除6小时选项
-            max_hold_minutes = signal.get('max_hold_minutes', 240)  # 🔥 从signal获取持仓时间(中性市120,趋势市240)
+            max_hold_minutes = 240  # 4小时强制平仓
 
             from datetime import timedelta
             planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
@@ -1016,8 +949,7 @@ class SmartEntryExecutor:
                 symbol=symbol,
                 position_side=direction,
                 entry_score=entry_score,
-                signal_components=signal_components,
-                max_hold_minutes=max_hold_minutes  # 🔥 传入持仓时间
+                signal_components=signal_components
             )
 
             logger.info(f"[{symbol}] {direction} 最终止损止盈: SL={stop_loss_pct}% TP={take_profit_pct}% | {calc_reason}")
@@ -1042,7 +974,7 @@ class SmartEntryExecutor:
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time, planned_close_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'open', NOW(), NOW())
             """, (
                 self.account_id,
                 symbol,
@@ -1063,9 +995,7 @@ class SmartEntryExecutor:
                 batch_plan_json,
                 batch_filled_json,
                 plan['signal_time'],
-                planned_close_time,
-                'smart_entry_executor',  # source
-                'open'  # status
+                planned_close_time
             ))
 
             position_id = cursor.lastrowid

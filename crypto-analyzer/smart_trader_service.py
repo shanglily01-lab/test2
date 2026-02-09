@@ -25,14 +25,9 @@ from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
-
-# 🚀 V3模块导入
-from app.services.smart_entry_executor_v3 import SmartEntryExecutorV3
-from app.services.position_manager_v3 import PositionManagerV3
-from app.strategies.signal_scorer_v3 import SignalScorerV3
-
-# 🔥 V2模块导入
-from app.strategies.signal_scorer_v2 import SignalScorerV2
+from app.strategies.range_market_detector import RangeMarketDetector
+from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
+from app.strategies.mode_switcher import TradingModeSwitcher
 
 # 加载环境变量
 load_dotenv()
@@ -56,39 +51,14 @@ logger.add(
 class SmartDecisionBrain:
     """智能决策大脑 - 内嵌版本"""
 
-    def __init__(self, db_config: dict, trader_service=None):
+    def __init__(self, db_config: dict):
         self.db_config = db_config
         self.connection = None
-        self.trader_service = trader_service  # 🔥 持有trader_service引用用于紧急平仓
 
         # 从config.yaml加载配置
         self._load_config()
 
-        self.threshold = 50  # 🔥 重构: 开仓阈值提升到50分，只做精选交易 (目标日10-20笔，胜率>50%)
-
-        # 🚀 V3模式开关
-        self.use_v3_mode = os.getenv('USE_V3_MODE', 'false').lower() == 'true'
-        if self.use_v3_mode:
-            logger.info("🚀🚀🚀 V3模式已启用 - 多时间周期+5M精准入场+移动止盈")
-            self.scorer_v3 = SignalScorerV3(db_config)
-            logger.info("✅ V3评分系统初始化完成")
-        else:
-            logger.info("📊 使用传统模式")
-            self.scorer_v3 = None
-
-        # 🔥 V2模式开关 (可与V3并行)
-        self.use_v2_mode = os.getenv('USE_V2_MODE', 'false').lower() == 'true'
-        if self.use_v2_mode:
-            logger.info("🔥🔥🔥 V2模式已启用 - 1H K线多维度评分")
-            self.scorer_v2 = SignalScorerV2(db_config)
-            logger.info("✅ V2评分系统初始化完成")
-        else:
-            self.scorer_v2 = None
-
-        # 🔥 紧急干预标志 - 底部/顶部反转时触发
-        self.emergency_bottom_reversal_time = None  # 底部反转触发时间
-        self.emergency_top_reversal_time = None     # 顶部反转触发时间
-        self.emergency_block_duration_hours = 2     # 紧急干预持续时间(小时)
+        self.threshold = 35  # 开仓阈值 (提高到35分,过滤低质量信号,防追高)
 
     def _load_config(self):
         """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
@@ -104,17 +74,13 @@ class SmartDecisionBrain:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 从 trading_symbol_rating 加载黑名单
-            # Level 3 = 永久禁止交易
             cursor.execute("""
-                SELECT symbol, rating_level, margin_multiplier
-                FROM trading_symbol_rating
-                WHERE rating_level >= 1
-                ORDER BY rating_level DESC, created_at DESC
+                SELECT symbol FROM trading_blacklist
+                WHERE is_active = TRUE
+                ORDER BY created_at DESC
             """)
             blacklist_rows = cursor.fetchall()
-            # Level 3 完全禁止交易
-            self.blacklist = [row['symbol'] for row in blacklist_rows if row['rating_level'] == 3]
+            self.blacklist = [row['symbol'] for row in blacklist_rows] if blacklist_rows else []
 
             # 3. 从数据库加载自适应参数
             cursor.execute("""
@@ -206,10 +172,10 @@ class SmartDecisionBrain:
                 # 如果表不存在，使用默认权重（硬编码）
                 self.scoring_weights = {
                     'position_low': {'long': 20, 'short': 0},
-                    'position_mid': {'long': 10, 'short': 5},             # 提高LONG评分，中位上涨是好信号
+                    'position_mid': {'long': 5, 'short': 5},
                     'position_high': {'long': 0, 'short': 20},
-                    'momentum_down_3pct': {'long': 0, 'short': 15},       # 恢复: 24H跌>3%是强信号
-                    'momentum_up_3pct': {'long': 15, 'short': 0},         # 恢复: 24H涨>3%是强信号
+                    'momentum_down_3pct': {'long': 0, 'short': 10},       # 震荡市优化: 从15降到10,需要更多信号配合
+                    'momentum_up_3pct': {'long': 10, 'short': 0},         # 震荡市优化: 从15降到10,避免追涨杀跌
                     'trend_1h_bull': {'long': 20, 'short': 0},
                     'trend_1h_bear': {'long': 0, 'short': 20},
                     'volatility_high': {'long': 10, 'short': 10},
@@ -219,8 +185,8 @@ class SmartDecisionBrain:
                     'volume_power_bear': {'long': 0, 'short': 25},        # 1H+15M量能空头
                     'volume_power_1h_bull': {'long': 15, 'short': 0},     # 仅1H量能多头
                     'volume_power_1h_bear': {'long': 0, 'short': 15},     # 仅1H量能空头
-                    'breakout_long': {'long': 10, 'short': 0},            # 🔥 降低权重: 20→10 (追高风险)
-                    'breakdown_short': {'long': 0, 'short': 10}           # 🔥 降低权重: 20→10 (杀跌风险)
+                    'breakout_long': {'long': 20, 'short': 0},            # 高位突破追涨
+                    'breakdown_short': {'long': 0, 'short': 20}           # 低位破位追空
                     # 已移除: ema_bull, ema_bear (Big4市场趋势判断已足够)
                 }
                 logger.info(f"   📊 评分权重: 使用默认权重")
@@ -235,38 +201,6 @@ class SmartDecisionBrain:
             self.blacklist = []
             self.adaptive_long = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
             self.adaptive_short = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
-            self.scoring_weights = {
-                # 🔥🔥🔥 强破位信号（最高优先级，单独触发）
-                'breakout_strong': {'long': 50, 'short': 50},         # 24H强破位，追涨杀跌
-
-                # 量能信号（辅助确认）
-                'volume_power_bull': {'long': 20, 'short': 0},        # 1H+15M量能多头（权重降低）
-                'volume_power_bear': {'long': 0, 'short': 20},        # 1H+15M量能空头（权重降低）
-                'volume_power_1h_bull': {'long': 15, 'short': 0},     # 仅1H量能多头
-                'volume_power_1h_bear': {'long': 0, 'short': 15},     # 仅1H量能空头
-
-                # 趋势信号
-                'trend_1h_bull': {'long': 15, 'short': 0},            # 权重降低
-                'trend_1h_bear': {'long': 0, 'short': 15},            # 权重降低
-                'consecutive_bull': {'long': 15, 'short': 0},
-                'consecutive_bear': {'long': 0, 'short': 15},
-
-                # 位置信号（辅助）
-                'position_low': {'long': 15, 'short': 0},             # 权重降低
-                'position_mid': {'long': 5, 'short': 5},
-                'position_high': {'long': 0, 'short': 15},            # 权重降低
-
-                # 动量信号
-                'momentum_down_3pct': {'long': 0, 'short': 10},
-                'momentum_up_3pct': {'long': 10, 'short': 0},
-
-                # 其他
-                'volatility_high': {'long': 10, 'short': 10},
-
-                # 已废弃的信号（保留兼容性）
-                'breakout_long': {'long': 10, 'short': 0},            # 🔥 降低权重: 20→10
-                'breakdown_short': {'long': 0, 'short': 10}           # 🔥 降低权重: 20→10
-            }
 
     def reload_config(self):
         """重新加载配置 - 供外部调用"""
@@ -328,30 +262,20 @@ class SmartDecisionBrain:
             else:
                 position_pct = 50  # 无波动时默认中间位置
 
-            # 🔥🔥🔥 重构: 极严格的防追高/杀跌过滤器
-            # 目标: 只在价格30-70%区间开仓，实现低吸高抛
+            # 做多防追高: 不在高于80%位置开多
+            if side == 'LONG' and position_pct > 80:
+                return False, f"防追高-价格位于24H区间{position_pct:.1f}%位置,距最高仅{(high_24h-current_price)/current_price*100:.2f}%"
 
-            # 做多防追高: 禁止在60%以上高位开多 (从75%降到60%)
-            if side == 'LONG' and position_pct > 60:
-                return False, f"防追高-价格位于24H区间{position_pct:.1f}%高位(阈值60%)"
+            # 做空防杀跌: 不在低于20%位置开空
+            if side == 'SHORT' and position_pct < 20:
+                return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%位置,距最低仅{(current_price-low_24h)/current_price*100:.2f}%"
 
-            # 做空防杀跌: 禁止在40%以下低位开空 (从25%提到40%)
-            if side == 'SHORT' and position_pct < 40:
-                return False, f"防杀跌-价格位于24H区间{position_pct:.1f}%低位(阈值40%)"
-
-            # 最佳开仓区间: 做多在30-60%，做空在40-70%
-            if side == 'LONG' and position_pct < 30:
-                return False, f"价格过低-位于24H区间{position_pct:.1f}%，建议等待反弹到30%+"
-
-            if side == 'SHORT' and position_pct > 70:
-                return False, f"价格过高-位于24H区间{position_pct:.1f}%，建议等待回调到70%-"
-
-            # 额外检查: 24H大涨>20%且在高位>50% → 禁止追高
-            if side == 'LONG' and change_24h > 20 and position_pct > 50:
+            # 额外检查: 24H大涨且在高位 → 更严格
+            if side == 'LONG' and change_24h > 15 and position_pct > 70:
                 return False, f"防追高-24H涨{change_24h:+.2f}%且位于{position_pct:.1f}%高位"
 
-            # 额外检查: 24H大跌>20%且在低位<50% → 禁止杀跌
-            if side == 'SHORT' and change_24h < -20 and position_pct < 50:
+            # 额外检查: 24H大跌且在低位 → 更严格
+            if side == 'SHORT' and change_24h < -15 and position_pct < 30:
                 return False, f"防杀跌-24H跌{change_24h:+.2f}%且位于{position_pct:.1f}%低位"
 
             return True, f"位置{position_pct:.1f}%,24H{change_24h:+.2f}%"
@@ -359,264 +283,6 @@ class SmartDecisionBrain:
         except Exception as e:
             logger.error(f"防追高检查失败 {symbol}: {e}")
             return True, "检查失败,放行"
-
-    def detect_big4_bottom_reversal(self, side: str) -> tuple:
-        """
-        检测Big4同步触底反转 (底部反转保护)
-
-        场景: 昨夜暴跌,Big4同步触底,但Big4趋势判断滞后,系统继续做空导致亏损
-
-        核心逻辑:
-        利用Big4的同步性判断市场底部,而不是等Big4的滞后趋势信号
-
-        检测逻辑:
-        1. 获取BTC/ETH/BNB/SOL最近4小时的15M K线
-        2. 找每个币种的最低点位置和反弹幅度
-        3. 检查4个币种是否同步触底(时间偏差≤2根K线=30分钟)
-        4. 检查至少3个币种反弹≥3%
-        5. 检查触底时间在4小时内
-        6. 满足条件 → 阻止所有SHORT信号
-
-        Args:
-            side: 交易方向 ('LONG' or 'SHORT')
-
-        Returns:
-            (should_block, reason) - 是否应该阻止开仓, 原因
-        """
-        # 只对做空方向检查
-        if side != 'SHORT':
-            return False, None
-
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-            big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
-            bottom_info = {}
-
-            # 获取Big4每个币种的K线数据 (4小时范围)
-            for symbol in big4_symbols:
-                cursor.execute("""
-                    SELECT open_time, open_price, high_price, low_price, close_price
-                    FROM kline_data
-                    WHERE symbol = %s AND timeframe = '15m'
-                    AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 4 HOUR)) * 1000
-                    ORDER BY open_time DESC LIMIT 16
-                """, (symbol,))
-
-                klines = list(cursor.fetchall())
-
-                if len(klines) < 6:  # 至少需要1.5小时数据
-                    continue
-
-                # 转换数据类型
-                for k in klines:
-                    k['open_time'] = int(k['open_time'])
-                    k['low'] = float(k['low_price'])  # 🔥 修复: 数据库字段是low_price
-                    k['close'] = float(k['close_price'])  # 🔥 修复: 数据库字段是close_price
-
-                # 找最低点 (从旧到新,索引0=最早)
-                klines.reverse()
-                lows = [k['low'] for k in klines]
-                min_low = min(lows)
-                min_idx = lows.index(min_low)
-                bottom_time = klines[min_idx]['open_time']
-                current_price = klines[-1]['close']
-
-                # 计算反弹幅度
-                bounce_pct = (current_price - min_low) / min_low * 100
-
-                bottom_info[symbol] = {
-                    'min_idx': min_idx,  # 最低点在第几根K线(0=最早)
-                    'min_low': min_low,
-                    'bottom_time': bottom_time,  # 触底时间戳(毫秒)
-                    'current': current_price,
-                    'bounce_pct': bounce_pct
-                }
-
-            cursor.close()
-
-            # 需要至少3个币种有数据
-            if len(bottom_info) < 3:
-                return False, None
-
-            # 检查Big4是否同步触底
-            min_indices = [info['min_idx'] for info in bottom_info.values()]
-            bounces = [info['bounce_pct'] for info in bottom_info.values()]
-            bottom_times = [info['bottom_time'] for info in bottom_info.values()]
-
-            # 条件1: 最低点时间接近(最大差距≤2根K线=30分钟)
-            time_spread = max(min_indices) - min(min_indices)
-            time_sync = time_spread <= 2
-
-            # 条件2: 至少3个币种反弹>=5% (优化: 从3%提高到5%，避免过早触发)
-            strong_bounce_count = sum(1 for b in bounces if b >= 5.0)
-
-            # 条件3: 触底时间在2小时内 (使用最早触底时间)
-            import time
-            earliest_bottom = min(bottom_times)
-            current_time_ms = int(time.time() * 1000)
-            hours_since_bottom = (current_time_ms - earliest_bottom) / 1000 / 3600
-            within_time_limit = hours_since_bottom <= 2.0
-
-            if time_sync and strong_bounce_count >= 3 and within_time_limit:
-                avg_bounce = sum(bounces) / len(bounces)
-                details = ', '.join([
-                    f"{sym.split('/')[0]}:{info['bounce_pct']:.1f}%"
-                    for sym, info in bottom_info.items()
-                ])
-
-                reason = (f"Big4同步触底反转: 时间偏差{time_spread}根K线(≤30分钟), "
-                         f"{strong_bounce_count}/4币种反弹≥5%, 平均反弹{avg_bounce:.1f}%, "
-                         f"触底{hours_since_bottom:.1f}小时内 ({details})")
-
-                logger.warning(f"🚫 [BIG4-BOTTOM] {reason}, 阻止做空")
-
-                # 🔥 紧急干预: 立即平掉所有空单
-                if self.trader_service:
-                    self.trader_service._emergency_close_all_positions('SHORT', reason)
-                    # 🔥 设置紧急干预标志,2小时内禁止开空单
-                    import time
-                    self.trader_service.emergency_bottom_reversal_time = time.time()
-                else:
-                    logger.error("❌ 无法执行紧急平仓: trader_service未设置")
-
-                return True, reason
-
-            return False, None
-
-        except Exception as e:
-            logger.error(f"[BIG4-BOTTOM-ERROR] Big4触底检测失败: {e}")
-            return False, None  # 检测失败时不阻止,避免影响正常交易
-
-    def detect_big4_top_reversal(self, side: str) -> tuple:
-        """
-        检测Big4同步见顶反转 (顶部反转保护)
-
-        场景: 暴涨后,Big4同步见顶,但Big4趋势判断滞后,系统继续做多导致亏损
-
-        核心逻辑:
-        利用Big4的同步性判断市场顶部,而不是等Big4的滞后趋势信号
-
-        检测逻辑:
-        1. 获取BTC/ETH/BNB/SOL最近4小时的15M K线
-        2. 找每个币种的最高点位置和回调幅度
-        3. 检查4个币种是否同步见顶(时间偏差≤2根K线=30分钟)
-        4. 检查至少3个币种回调≥3%
-        5. 检查见顶时间在4小时内
-        6. 满足条件 → 阻止所有LONG信号
-
-        Args:
-            side: 交易方向 ('LONG' or 'SHORT')
-
-        Returns:
-            (should_block, reason) - 是否应该阻止开仓, 原因
-        """
-        # 只对做多方向检查
-        if side != 'LONG':
-            return False, None
-
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-            big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
-            top_info = {}
-
-            # 获取Big4每个币种的K线数据 (4小时范围)
-            for symbol in big4_symbols:
-                cursor.execute("""
-                    SELECT open_time, open_price, high_price, low_price, close_price
-                    FROM kline_data
-                    WHERE symbol = %s AND timeframe = '15m'
-                    AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 4 HOUR)) * 1000
-                    ORDER BY open_time DESC LIMIT 16
-                """, (symbol,))
-
-                klines = list(cursor.fetchall())
-
-                if len(klines) < 6:  # 至少需要1.5小时数据
-                    continue
-
-                # 转换数据类型
-                for k in klines:
-                    k['open_time'] = int(k['open_time'])
-                    k['high'] = float(k['high_price'])
-                    k['close'] = float(k['close_price'])
-
-                # 找最高点 (从旧到新,索引0=最早)
-                klines.reverse()
-                highs = [k['high'] for k in klines]
-                max_high = max(highs)
-                max_idx = highs.index(max_high)
-                top_time = klines[max_idx]['open_time']
-                current_price = klines[-1]['close']
-
-                # 计算回调幅度
-                pullback_pct = (max_high - current_price) / max_high * 100
-
-                top_info[symbol] = {
-                    'max_idx': max_idx,  # 最高点在第几根K线(0=最早)
-                    'max_high': max_high,
-                    'top_time': top_time,  # 见顶时间戳(毫秒)
-                    'current': current_price,
-                    'pullback_pct': pullback_pct
-                }
-
-            cursor.close()
-
-            # 需要至少3个币种有数据
-            if len(top_info) < 3:
-                return False, None
-
-            # 检查Big4是否同步见顶
-            max_indices = [info['max_idx'] for info in top_info.values()]
-            pullbacks = [info['pullback_pct'] for info in top_info.values()]
-            top_times = [info['top_time'] for info in top_info.values()]
-
-            # 条件1: 最高点时间接近(最大差距≤2根K线=30分钟)
-            time_spread = max(max_indices) - min(max_indices)
-            time_sync = time_spread <= 2
-
-            # 条件2: 至少3个币种回调>=5% (优化: 从3%提高到5%，避免过早触发)
-            strong_pullback_count = sum(1 for p in pullbacks if p >= 5.0)
-
-            # 条件3: 见顶时间在4小时内 (使用最早见顶时间)
-            import time
-            earliest_top = min(top_times)
-            current_time_ms = int(time.time() * 1000)
-            hours_since_top = (current_time_ms - earliest_top) / 1000 / 3600
-            within_time_limit = hours_since_top <= 4.0
-
-            if time_sync and strong_pullback_count >= 3 and within_time_limit:
-                avg_pullback = sum(pullbacks) / len(pullbacks)
-                details = ', '.join([
-                    f"{sym.split('/')[0]}:-{info['pullback_pct']:.1f}%"
-                    for sym, info in top_info.items()
-                ])
-
-                reason = (f"Big4同步见顶反转: 时间偏差{time_spread}根K线(≤30分钟), "
-                         f"{strong_pullback_count}/4币种回调≥5%, 平均回调{avg_pullback:.1f}%, "
-                         f"见顶{hours_since_top:.1f}小时内 ({details})")
-
-                logger.warning(f"🚫 [BIG4-TOP] {reason}, 阻止做多")
-
-                # 🔥 紧急干预: 立即平掉所有多单
-                if self.trader_service:
-                    self.trader_service._emergency_close_all_positions('LONG', reason)
-                    # 🔥 设置紧急干预标志,4小时内禁止开多单
-                    import time
-                    self.trader_service.emergency_top_reversal_time = time.time()
-                else:
-                    logger.error("❌ 无法执行紧急平仓: trader_service未设置")
-
-                return True, reason
-
-            return False, None
-
-        except Exception as e:
-            logger.error(f"[BIG4-TOP-ERROR] Big4见顶检测失败: {e}")
-            return False, None  # 检测失败时不阻止,避免影响正常交易
 
     def load_klines(self, symbol: str, timeframe: str, limit: int = 100):
         conn = self._get_connection()
@@ -645,140 +311,6 @@ class SmartDecisionBrain:
 
         return klines
 
-    def detect_strong_breakout(self, symbol: str, klines_15m: list) -> dict:
-        """
-        🔥 强破位信号检测（24H区间）
-
-        核心策略：只做强破位，追涨杀跌
-
-        强破位三要素（全部满足）：
-        1. Big4天王确认方向
-        2. 15M短周期爆发突破（涨跌>0.5%，量能>2倍）
-        3. 突破24H新高/新低 > 0.5%
-
-        Args:
-            symbol: 交易对
-            klines_15m: 15分钟K线数据
-
-        Returns:
-            {
-                'is_breakout': True/False,
-                'direction': 'LONG'/'SHORT'/None,
-                'breakout_pct': 突破幅度%,
-                'volume_surge': 量能放大倍数,
-                'confidence': 置信度(0-100),
-                'price': 当前价格,
-                'stop_loss_price': 止损价格（破位点位）,
-                'reason': 触发原因
-            }
-        """
-        try:
-            # 1️⃣ 获取24H高低点
-            conn = self._get_connection()
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                SELECT high_24h, low_24h, change_24h
-                FROM price_stats_24h
-                WHERE symbol = %s
-            """, (symbol,))
-
-            stats_24h = cursor.fetchone()
-            cursor.close()
-
-            if not stats_24h:
-                return {'is_breakout': False, 'reason': '无24H数据'}
-
-            high_24h = float(stats_24h['high_24h'])
-            low_24h = float(stats_24h['low_24h'])
-
-            # 2️⃣ 检查最近15M K线的爆发性突破
-            if len(klines_15m) < 20:
-                return {'is_breakout': False, 'reason': '15M数据不足'}
-
-            last_15m = klines_15m[-1]
-            prev_15m = klines_15m[-2]
-
-            current_price = last_15m['close']
-
-            # 计算15M涨跌幅
-            change_15m_pct = (last_15m['close'] - prev_15m['close']) / prev_15m['close'] * 100
-
-            # 计算量能放大倍数
-            recent_volumes = [k['volume'] for k in klines_15m[-20:]]
-            avg_volume = sum(recent_volumes) / len(recent_volumes)
-            volume_surge = last_15m['volume'] / avg_volume if avg_volume > 0 else 0
-
-            # 3️⃣ 判断是否满足强破位条件
-
-            # 向上强破位
-            if (change_15m_pct > 0.5 and                    # 15M涨幅>0.5%
-                volume_surge > 2.0 and                       # 量能放大>2倍
-                current_price > high_24h):                   # 突破24H新高
-
-                breakout_pct = (current_price - high_24h) / high_24h * 100
-
-                # 必须突破幅度>0.5%
-                if breakout_pct < 0.5:
-                    return {'is_breakout': False, 'reason': f'突破幅度不足{breakout_pct:.2f}%<0.5%'}
-
-                # 4️⃣ Big4方向确认（调用现有检测器）
-                should_block, block_reason = self.detect_big4_top_reversal('LONG')
-                if should_block:
-                    return {'is_breakout': False, 'reason': f'Big4见顶，拒绝做多'}
-
-                # 计算置信度
-                confidence = min(100, 80 + breakout_pct * 20 + (volume_surge - 2.0) * 5)
-
-                return {
-                    'is_breakout': True,
-                    'direction': 'LONG',
-                    'breakout_pct': breakout_pct,
-                    'volume_surge': volume_surge,
-                    'change_15m_pct': change_15m_pct,
-                    'confidence': confidence,
-                    'price': current_price,
-                    'stop_loss_price': high_24h,  # 止损设在24H高点
-                    'reason': (f'🔥强破位做多: 突破24H新高{breakout_pct:.2f}%, '
-                              f'15M涨{change_15m_pct:.2f}%, 量能{volume_surge:.1f}x')
-                }
-
-            # 向下强破位
-            elif (change_15m_pct < -0.5 and                 # 15M跌幅>0.5%
-                  volume_surge > 2.0 and                     # 量能放大>2倍
-                  current_price < low_24h):                  # 跌破24H新低
-
-                breakout_pct = (low_24h - current_price) / low_24h * 100
-
-                # 必须突破幅度>0.5%
-                if breakout_pct < 0.5:
-                    return {'is_breakout': False, 'reason': f'突破幅度不足{breakout_pct:.2f}%<0.5%'}
-
-                # 4️⃣ Big4方向确认
-                # Big4反转检测已移至主循环统一处理，这里不再重复检测
-
-                # 计算置信度
-                confidence = min(100, 80 + breakout_pct * 20 + (volume_surge - 2.0) * 5)
-
-                return {
-                    'is_breakout': True,
-                    'direction': 'SHORT',
-                    'breakout_pct': breakout_pct,
-                    'volume_surge': volume_surge,
-                    'change_15m_pct': change_15m_pct,
-                    'confidence': confidence,
-                    'price': current_price,
-                    'stop_loss_price': low_24h,  # 止损设在24H低点
-                    'reason': (f'🔥强破位做空: 跌破24H新低{breakout_pct:.2f}%, '
-                              f'15M跌{change_15m_pct:.2f}%, 量能{volume_surge:.1f}x')
-                }
-
-            return {'is_breakout': False, 'reason': '未满足强破位条件'}
-
-        except Exception as e:
-            logger.error(f"{symbol} 强破位检测失败: {e}")
-            return {'is_breakout': False, 'reason': f'检测异常: {str(e)}'}
-
     def analyze(self, symbol: str):
         """分析并决策 - 支持做多和做空 (主要使用1小时K线)"""
         if symbol not in self.whitelist:
@@ -793,45 +325,6 @@ class SmartDecisionBrain:
                 return None
 
             current = klines_1h[-1]['close']
-
-            # 🚀🚀🚀 V3模式: 使用多时间周期评分系统 🚀🚀🚀
-            if self.trader_service and hasattr(self.trader_service, 'use_v3_mode') and self.trader_service.use_v3_mode:
-                return self._analyze_with_v3(symbol, klines_1d, klines_1h, klines_15m, current)
-
-            # 🔥🔥🔥 最高优先级：强破位信号检测 🔥🔥🔥
-            # 只做强破位，追涨杀跌
-            breakout_result = self.detect_strong_breakout(symbol, klines_15m)
-
-            if breakout_result['is_breakout']:
-                # 🔥 强破位信号触发！（只在趋势模式启用）
-                logger.critical(f"🔥🔥🔥 [TREND-MODE] {symbol} {breakout_result['reason']}")
-
-                # 🔥 检查是否有反向持仓需要平仓
-                if self.trader_service:
-                    reverse_side = 'SHORT' if breakout_result['direction'] == 'LONG' else 'LONG'
-                    self.trader_service._emergency_close_position_by_symbol_side(
-                        symbol=symbol,
-                        side=reverse_side,
-                        reason=f"BREAKOUT_REVERSE:{breakout_result['reason']}"
-                    )
-
-                # 🔥 立即返回强破位信号，权重50分（单独触发）
-                return {
-                    'symbol': symbol,
-                    'side': breakout_result['direction'],
-                    'score': 50,  # 强破位固定50分
-                    'current_price': breakout_result['price'],
-                    'signal_components': {
-                        'breakout_strong': 50  # 强破位信号
-                    },
-                    'breakout_info': {
-                        'breakout_pct': breakout_result['breakout_pct'],
-                        'volume_surge': breakout_result['volume_surge'],
-                        'change_15m_pct': breakout_result['change_15m_pct'],
-                        'confidence': breakout_result['confidence'],
-                        'stop_loss_price': breakout_result['stop_loss_price']
-                    }
-                }
 
             # 分别计算做多和做空得分
             long_score = 0
@@ -922,14 +415,17 @@ class SmartDecisionBrain:
             recent_24h = klines_1h[-24:]
             volatility = (max(k['high'] for k in recent_24h) - min(k['low'] for k in recent_24h)) / current * 100
 
-            # 高波动率更适合交易 - 同时给LONG和SHORT加分（因为高波动适合双向交易）
+            # 高波动率更适合交易
             if volatility > 5:  # 波动超过5%
                 weight = self.scoring_weights.get('volatility_high', {'long': 10, 'short': 10})
-                long_score += weight['long']
-                short_score += weight['short']
-                # 记录在组件中（取平均值）
-                if weight['long'] > 0 or weight['short'] > 0:
-                    signal_components['volatility_high'] = (weight['long'] + weight['short']) / 2
+                if long_score > short_score:
+                    long_score += weight['long']
+                    if weight['long'] > 0:
+                        signal_components['volatility_high'] = weight['long']
+                else:
+                    short_score += weight['short']
+                    if weight['short'] > 0:
+                        signal_components['volatility_high'] = weight['short']
 
             # 5. 连续趋势强化信号 - 最近10根1小时K线
             recent_10h = klines_1h[-10:]
@@ -1005,10 +501,8 @@ class SmartDecisionBrain:
 
             # 8. 突破追涨信号: position_high + 强力量能多头 → 可以做多
             # 用户反馈: "不适合做空，那就适合做多啊", "K线多空比，还要结合量能一起看"
-            # 🔥 修改: 放宽LONG信号条件，避免BULLISH市场下没有交易机会
-            # 原条件: position > 70 太严格
-            # 新条件: position > 50 且量能多头强势即可做多
-            if position_pct > 50 and (net_power_1h >= 2 or (net_power_1h >= 2 and net_power_15m >= 2)):
+            # 🔥 新增: 增强追高过滤，防止买在顶部
+            if position_pct > 70 and (net_power_1h >= 2 or (net_power_1h >= 2 and net_power_15m >= 2)):
                 # 额外过滤条件: 防止追高
                 can_breakout = True
                 breakout_warnings = []
@@ -1032,11 +526,11 @@ class SmartDecisionBrain:
 
                 # position_high时有强力量能支撑,且通过过滤,可以追涨做多
                 if can_breakout:
-                    weight = self.scoring_weights.get('breakout_long', {'long': 10, 'short': 0})  # 🔥 权重已降低
+                    weight = self.scoring_weights.get('breakout_long', {'long': 20, 'short': 0})
                     long_score += weight['long']
                     if weight['long'] > 0:
                         signal_components['breakout_long'] = weight['long']
-                        logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h} (权重{weight['long']})")
+                        logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
                         if breakout_warnings:
                             logger.warning(f"{symbol} 突破追涨警告: {', '.join(breakout_warnings)}")
                 else:
@@ -1070,11 +564,11 @@ class SmartDecisionBrain:
                 # 🔥 关键修复: 清理signal_components,只保留与最终方向一致的信号
                 # 定义多头和空头信号 (已移除1D信号和EMA信号)
                 bullish_signals = {
-                    'position_low', 'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
+                    'position_high', 'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
                     'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull'
                 }
                 bearish_signals = {
-                    'position_high', 'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
+                    'position_low', 'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
                     'trend_1h_bear', 'momentum_down_3pct', 'consecutive_bear'
                 }
                 neutral_signals = {'position_mid', 'volatility_high'}  # 中性信号可以在任何方向
@@ -1100,14 +594,10 @@ class SmartDecisionBrain:
                     signal_combination_key = "unknown"
 
                 # 检查信号黑名单 (使用完整的信号组合键)
-                # 🔥 临时禁用LONG信号黑名单检查，诊断为什么没有LONG信号
                 blacklist_key = f"{signal_combination_key}_{side}"
                 if blacklist_key in self.signal_blacklist:
-                    if side == 'SHORT':  # 只检查SHORT黑名单
-                        logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（历史表现差）")
-                        return None
-                    else:  # LONG信号暂时忽略黑名单
-                        logger.warning(f"⚠️ {symbol} LONG信号 [{signal_combination_key}] 在黑名单中，但暂时放行（诊断模式）")
+                    logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（历史表现差）")
+                    return None
 
                 # 🔥 新增: 检查信号方向矛盾（防止逻辑错误）
                 is_valid, contradiction_reason = self._validate_signal_direction(signal_components, side)
@@ -1115,59 +605,14 @@ class SmartDecisionBrain:
                     logger.error(f"🚫 {symbol} 信号方向矛盾: {contradiction_reason} | 信号:{signal_combination_key} | 方向:{side}")
                     return None
 
-                # 🔥 已禁用: 位置限制（强破位信号需要追涨杀跌）
-                # 强破位信号已在前面单独处理,不会到达这里
-                # 其他信号保持位置限制以控制风险
-                # if side == 'LONG' and 'position_high' in signal_components:
-                #     logger.warning(f"🚫 {symbol} 拒绝高位做多: position_high在{position_pct:.1f}%位置,容易买在顶部")
-                #     return None
-                #
-                # if side == 'SHORT' and 'position_low' in signal_components:
-                #     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
-                #     return None
+                # 🔥 新增: 禁止高风险位置交易（代码层面强制）
+                if side == 'LONG' and 'position_high' in signal_components:
+                    logger.warning(f"🚫 {symbol} 拒绝高位做多: position_high在{position_pct:.1f}%位置,容易买在顶部")
+                    return None
 
-                # 🔥 紧急干预检查: 如果处于紧急干预期,禁止开新仓
-                import time
-
-                # 检查底部反转干预
-                if side == 'SHORT' and self.emergency_bottom_reversal_time:
-                    hours_since_emergency = (time.time() - self.emergency_bottom_reversal_time) / 3600
-                    if hours_since_emergency <= self.emergency_block_duration_hours:
-                        logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 底部反转紧急干预中({hours_since_emergency:.1f}h/{self.emergency_block_duration_hours}h),禁止做空")
-                        return None
-                    else:
-                        # 超过干预时间,清除标志
-                        self.emergency_bottom_reversal_time = None
-
-                # 检查顶部反转干预
-                if side == 'LONG' and self.emergency_top_reversal_time:
-                    hours_since_emergency = (time.time() - self.emergency_top_reversal_time) / 3600
-                    if hours_since_emergency <= self.emergency_block_duration_hours:
-                        logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 顶部反转紧急干预中({hours_since_emergency:.1f}h/{self.emergency_block_duration_hours}h),禁止做多")
-                        return None
-                    else:
-                        # 超过干预时间,清除标志
-                        self.emergency_top_reversal_time = None
-
-                # 🔥 Big4反转检测已移至主循环统一处理，避免重复检测导致日志刷屏
-                # 这里不再单独检测，由主循环在扫描后统一过滤
-
-                # 🔥 调试日志：打印评分详情（帮助诊断为什么LONG信号变成SHORT）
-                if long_score >= 30 or short_score >= 30:  # 只打印接近阈值的信号
-                    # 打印具体的信号组件，看看是什么贡献了分数
-                    logger.info(f"[SCORE] {symbol} {side}={score} | LONG={long_score} SHORT={short_score} | 组件={signal_components}")
-
-                # 🔥 新增: 信号质量筛选（基于历史表现调整阈值，不修改权重）
-                if hasattr(self, 'brain') and hasattr(self.brain, 'quality_manager') and self.brain.enable_quality_filter:
-                    signal_key = self._generate_signal_combination_key(signal_components)
-                    passed, reason = self.brain.quality_manager.check_signal_quality_filter(
-                        symbol, side, score, signal_key, base_threshold=self.threshold
-                    )
-                    if not passed:
-                        logger.info(f"[QUALITY_FILTER] {symbol} {side} | {reason}")
-                        return None
-                    else:
-                        logger.info(f"[QUALITY_FILTER] {symbol} {side} | {reason}")
+                if side == 'SHORT' and 'position_low' in signal_components:
+                    logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
+                    return None
 
                 return {
                     'symbol': symbol,
@@ -1183,91 +628,13 @@ class SmartDecisionBrain:
             logger.error(f"{symbol} 分析失败: {e}")
             return None
 
-    def _analyze_with_v3(self, symbol: str, klines_1d, klines_1h, klines_15m, current_price):
-        """🚀 V3评分系统: 多时间周期权重评分"""
-        try:
-            logger.info(f"[V3-SCORE] {symbol} 使用V3评分系统")
-
-            # 获取Big4信号
-            big4_result = self.trader_service.get_big4_result() if self.trader_service else None
-            big4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
-            big4_strength = big4_result.get('signal_strength', 50) if big4_result else 50
-
-            # 获取5H K线 (5根) - 优化: 3根改为5根
-            klines_5h = self.load_klines(symbol, '5h', 5)
-
-            # 尝试两个方向的评分
-            for position_side in ['LONG', 'SHORT']:
-                # 调用V3评分器
-                score_result = self.trader_service.scorer_v3.calculate_total_score(
-                    symbol=symbol,
-                    position_side=position_side,
-                    klines_5h=klines_5h,
-                    klines_15m=klines_15m,
-                    big4_signal=big4_signal,
-                    big4_strength=big4_strength
-                )
-
-                # 检查是否可以交易
-                if score_result['can_trade']:
-                    logger.info(
-                        f"[V3-SCORE] {symbol} {position_side} 评分达标: "
-                        f"{score_result['total_score']}/{score_result['max_score']} "
-                        f"(Big4:{score_result['breakdown']['big4']:.1f}, "
-                        f"5H:{score_result['breakdown']['5h_trend']:.1f}, "
-                        f"15M:{score_result['breakdown']['15m_signal']:.1f})"
-                    )
-
-                    # 返回机会，标记为V3模式
-                    return {
-                        'symbol': symbol,
-                        'side': position_side,
-                        'score': score_result['total_score'],
-                        'current_price': current_price,
-                        'signal_components': {
-                            'v3_big4': score_result['breakdown']['big4'],
-                            'v3_5h_trend': score_result['breakdown']['5h_trend'],
-                            'v3_15m_signal': score_result['breakdown']['15m_signal']
-                        },
-                        'v3_mode': True,  # 标记为V3模式
-                        'v3_score_detail': score_result
-                    }
-
-            # 没有方向达标
-            logger.debug(f"[V3-SCORE] {symbol} 两个方向评分均不达标")
-            return None
-
-        except Exception as e:
-            logger.error(f"[V3-SCORE] {symbol} V3评分失败: {e}, 回退到传统模式")
-            return None
-
     def scan_all(self):
-        """扫描所有币种 - 支持V2/V3并行"""
+        """扫描所有币种"""
         opportunities = []
-
-        # V3信号扫描
-        if self.trader_service and hasattr(self.trader_service, 'use_v3_mode') and self.trader_service.use_v3_mode:
-            for symbol in self.whitelist:
-                result = self.analyze(symbol)
-                if result:
-                    opportunities.append(result)
-
-        # V2信号扫描 (可与V3并行)
-        if self.use_v2_mode and self.scorer_v2:
-            v2_results = self.scorer_v2.scan_all_symbols(self.whitelist)
-            for v2_result in v2_results:
-                # 标记为V2信号
-                v2_result['signal_version'] = 'v2'
-                v2_result['signal_components'] = v2_result['details']['components']
-                opportunities.append(v2_result)
-
-        # 传统模式扫描 (如果V2和V3都未启用)
-        if not self.use_v2_mode and not (self.trader_service and hasattr(self.trader_service, 'use_v3_mode') and self.trader_service.use_v3_mode):
-            for symbol in self.whitelist:
-                result = self.analyze(symbol)
-                if result:
-                    opportunities.append(result)
-
+        for symbol in self.whitelist:
+            result = self.analyze(symbol)
+            if result:
+                opportunities.append(result)
         return opportunities
 
     def _validate_signal_direction(self, signal_components: dict, side: str) -> tuple:
@@ -1336,7 +703,7 @@ class SmartTraderService:
         self.leverage = 5
         self.scan_interval = 300
 
-        self.brain = SmartDecisionBrain(self.db_config, trader_service=self)  # 🔥 传入self用于紧急平仓
+        self.brain = SmartDecisionBrain(self.db_config)
         self.connection = None
         self.running = True
         self.event_loop = None  # 事件循环引用，在async_main中设置
@@ -1347,11 +714,6 @@ class SmartTraderService:
         # 自适应优化器
         self.optimizer = AdaptiveOptimizer(self.db_config)
         self.last_optimization_date = None  # 记录上次优化日期
-
-        # 🔥 紧急干预标志 - 底部/顶部反转时触发
-        self.emergency_bottom_reversal_time = None  # 底部反转触发时间
-        self.emergency_top_reversal_time = None     # 顶部反转触发时间
-        self.emergency_block_duration_hours = 2     # 紧急干预持续时间(小时)
 
         # 优化配置管理器 (支持自我优化的参数配置)
         self.opt_config = OptimizationConfig(self.db_config)
@@ -1393,34 +755,6 @@ class SmartTraderService:
             self.smart_exit_optimizer = None
             logger.info("⚠️ 智能平仓优化器未启用")
 
-        # 🚀 V3模式开关和初始化
-        self.use_v3_mode = os.getenv('USE_V3_MODE', 'false').lower() == 'true'
-
-        if self.use_v3_mode:
-            logger.info("🚀🚀🚀 V3模式已启用 🚀🚀🚀")
-
-            # 初始化V3评分系统
-            self.scorer_v3 = SignalScorerV3(self.db_config)
-            logger.info("✅ V3评分系统已初始化")
-
-            # 初始化V3入场执行器
-            self.entry_executor_v3 = SmartEntryExecutorV3(self.db_config)
-            logger.info("✅ V3入场执行器已初始化")
-
-            # 初始化V3持仓管理器
-            self.position_manager_v3 = PositionManagerV3(self.db_config)
-            logger.info("✅ V3持仓管理器已初始化")
-
-            logger.info("🎯 V3核心策略:")
-            logger.info("  - 多时间周期评分 (Big4:5分 + 5H:8分 + 15M:10分)")
-            logger.info("  - 5M精准入场 (等待确认 + 分批30/30/40)")
-            logger.info("  - 保留现有移动止盈和快速止损")
-        else:
-            logger.info("📊 使用传统模式")
-            self.scorer_v3 = None
-            self.entry_executor_v3 = None
-            self.position_manager_v3 = None
-
         # 初始化Big4趋势检测器 (四大天王: BTC/ETH/BNB/SOL)
         self.big4_detector = Big4TrendDetector()
         self.big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
@@ -1430,10 +764,15 @@ class SmartTraderService:
         self.big4_cache_time = None
         self.big4_cache_duration = 3600  # 1小时缓存
         self.big4_detection_interval = 900  # 15分钟检测间隔
+
+        # ========== 震荡市交易策略模块 ==========
+        self.range_detector = RangeMarketDetector(self.db_config)
+        self.bollinger_strategy = BollingerMeanReversionStrategy(self.db_config)
+        self.mode_switcher = TradingModeSwitcher(self.db_config)
+        logger.info("✅ 震荡市交易策略模块已初始化")
         self.last_big4_detection_time = None
 
         logger.info("🔱 Big4趋势检测器已启动 (15分钟检测, 1小时缓存)")
-        logger.info("📊 交易模式: 固定趋势模式 (已禁用自动切换)")
 
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
@@ -1519,9 +858,7 @@ class SmartTraderService:
                 self.last_big4_detection_time = now
                 logger.info(f"🔱 Big4趋势已更新缓存 | {self.cached_big4_result['overall_signal']} (强度: {self.cached_big4_result['signal_strength']:.0f})")
             except Exception as e:
-                import traceback
                 logger.error(f"❌ Big4趋势检测失败: {e}")
-                logger.error(f"完整错误堆栈:\n{traceback.format_exc()}")
                 # 检测失败时，如果有旧缓存就继续用，否则返回空结果
                 if self.cached_big4_result is None:
                     return {
@@ -1600,34 +937,24 @@ class SmartTraderService:
         except:
             return 0
 
-    def has_position(self, symbol: str, side: str = None, signal_version: str = None):
+    def has_position(self, symbol: str, side: str = None):
         """
         检查是否有持仓
         symbol: 交易对
         side: 方向(LONG/SHORT), None表示检查任意方向
-        signal_version: 信号版本(v2/v3/traditional), None表示不区分版本
-
-        🔥 V2/V3并行测试: 同一交易对同一方向可以有2个持仓(v2和v3各一个)
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            if side and signal_version:
-                # 检查特定方向和特定信号版本的持仓
-                cursor.execute("""
-                    SELECT COUNT(*) FROM futures_positions
-                    WHERE symbol = %s AND position_side = %s AND signal_version = %s
-                    AND status IN ('open', 'building') AND account_id = %s
-                """, (symbol, side, signal_version, self.account_id))
-            elif side:
-                # 检查特定方向的持仓（不区分版本）
+            if side:
+                # 检查特定方向的持仓（包括正在建仓的持仓）
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
                     WHERE symbol = %s AND position_side = %s AND status IN ('open', 'building') AND account_id = %s
                 """, (symbol, side, self.account_id))
             else:
-                # 检查任意方向的持仓（不区分版本）
+                # 检查任意方向的持仓（包括正在建仓的持仓）
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
                     WHERE symbol = %s AND status IN ('open', 'building') AND account_id = %s
@@ -1800,6 +1127,16 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后15分钟冷却期内")
             return False
 
+        # 新增验证: 防追高/追跌过滤
+        current_price = self.ws_service.get_price(symbol)
+        if current_price:
+            pass_filter, filter_reason = self.brain.check_anti_fomo_filter(symbol, current_price, side)
+            if not pass_filter:
+                logger.warning(f"[ANTI-FOMO] {symbol} {side} - {filter_reason}")
+                return False
+            else:
+                logger.info(f"[ANTI-FOMO] {symbol} {side} 通过防追高检查: {filter_reason}")
+
         # ========== 第二步：提前检查黑名单（分批建仓也要检查）==========
         rating_level = self.opt_config.get_symbol_rating_level(symbol)
         if rating_level == 3:
@@ -1807,8 +1144,8 @@ class SmartTraderService:
             return False
 
         # ========== 第三步：决定使用分批建仓还是一次性开仓 ==========
-        # 检查是否启用分批建仓（V3模式不使用分批建仓）
-        if self.smart_entry_executor and self.batch_entry_config.get('enabled') and not self.use_v3_mode:
+        # 检查是否启用分批建仓
+        if self.smart_entry_executor and self.batch_entry_config.get('enabled'):
             # 检查是否在白名单中（如果白名单为空，则对所有币种启用）
             whitelist = self.batch_entry_config.get('whitelist_symbols', [])
             should_use_batch = (not whitelist) or (symbol in whitelist)
@@ -1816,11 +1153,10 @@ class SmartTraderService:
             # 反转开仓不使用分批建仓（直接一次性开仓）
             is_reversal = 'reversal_from' in opp
 
+            # 震荡市策略不使用分批建仓（使用固定2%止损，与分批建仓的波动率止损不兼容）
+            is_range_strategy = strategy == 'bollinger_mean_reversion'
 
-            # 🔥 紧急修复: 中性市场禁用分批建仓
-            disable_batch = opp.get('disable_batch_entry', False)
-
-            if should_use_batch and not is_reversal and not disable_batch:
+            if should_use_batch and not is_reversal and not is_range_strategy:
                 logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓（后台异步执行）")
                 # 在后台异步执行分批建仓，不阻塞主循环
                 import asyncio
@@ -1883,35 +1219,56 @@ class SmartTraderService:
                 # 注意: rating_level已在函数开头检查过了
                 rating_config = self.opt_config.get_blacklist_config(rating_level)
 
+                # ========== 检查是否为震荡市策略 ==========
+                mode_config = None
+                if strategy == 'bollinger_mean_reversion':
+                    try:
+                        mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
+                        if mode_config:
+                            logger.info(f"[RANGE_MODE] {symbol} 使用震荡市交易参数")
+                    except Exception as e:
+                        logger.error(f"[MODE_ERROR] 获取模式配置失败: {e}")
+
                 # 获取评级对应的保证金倍数
                 rating_margin_multiplier = rating_config['margin_multiplier']
 
                 # ========== 根据策略类型确定基础仓位大小 ==========
-                # 趋势模式: 使用默认仓位(5%)
-                base_position_size = self.position_size_usdt * rating_margin_multiplier
+                if strategy == 'bollinger_mean_reversion' and mode_config:
+                    # 震荡市模式: 使用range_position_size (默认3%)
+                    range_position_pct = float(mode_config['range_position_size'])  # 转换Decimal为float
+                    base_position_size = self.position_size_usdt * (range_position_pct / 5.0) * rating_margin_multiplier
+                    logger.info(f"[RANGE_POSITION] {symbol} 震荡市仓位: {range_position_pct}% × {rating_margin_multiplier:.2f} = ${base_position_size:.2f}")
+                else:
+                    # 趋势模式: 使用默认仓位(5%)
+                    base_position_size = self.position_size_usdt * rating_margin_multiplier
 
                 # 记录评级信息
                 rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
                 logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
 
-                try:
-                    big4_result = self.get_big4_result()
-                    market_signal = big4_result.get('overall_signal', 'NEUTRAL')
-
-                    # 根据市场信号决定仓位倍数
-                    if market_signal == 'BULLISH' and side == 'LONG':
-                        position_multiplier = 1.2  # 市场看多,做多加仓
-                        logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
-                    elif market_signal == 'BEARISH' and side == 'SHORT':
-                        position_multiplier = 1.2  # 市场看空,做空加仓
-                        logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
-                    else:
-                        position_multiplier = 1.0  # 其他情况正常仓位
-                        if market_signal != 'NEUTRAL':
-                            logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
-                except Exception as e:
-                    logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                # 根据Big4市场信号动态调整仓位倍数 (震荡市策略不调整仓位)
+                if strategy == 'bollinger_mean_reversion':
                     position_multiplier = 1.0
+                    logger.info(f"[RANGE_MODE] {symbol} 震荡市策略不使用Big4仓位调整")
+                else:
+                    try:
+                        big4_result = self.get_big4_result()
+                        market_signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+                        # 根据市场信号决定仓位倍数
+                        if market_signal == 'BULLISH' and side == 'LONG':
+                            position_multiplier = 1.2  # 市场看多,做多加仓
+                            logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
+                        elif market_signal == 'BEARISH' and side == 'SHORT':
+                            position_multiplier = 1.2  # 市场看空,做空加仓
+                            logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
+                        else:
+                            position_multiplier = 1.0  # 其他情况正常仓位
+                            if market_signal != 'NEUTRAL':
+                                logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
+                    except Exception as e:
+                        logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                        position_multiplier = 1.0
 
                 # 获取自适应参数
                 if side == 'LONG':
@@ -1926,38 +1283,55 @@ class SmartTraderService:
             notional_value = quantity * current_price
             margin = adjusted_position_size
 
-            # ========== 趋势模式: 计算止损止盈 ==========
-            # 使用自适应参数计算止损
-            base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
+            # ========== 根据策略类型确定止损止盈 ==========
+            if strategy == 'bollinger_mean_reversion' and 'take_profit_price' in opp and 'stop_loss_price' in opp:
+                # 震荡市策略: 使用策略提供的具体价格
+                stop_loss = opp['stop_loss_price']
+                take_profit = opp['take_profit_price']
 
-            # 缺陷5修复: 波动率自适应止损
-            stop_loss_pct = self.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
+                # 计算实际百分比用于日志
+                if side == 'LONG':
+                    stop_loss_pct = (current_price - stop_loss) / current_price
+                    take_profit_pct = (take_profit - current_price) / current_price
+                else:  # SHORT
+                    stop_loss_pct = (stop_loss - current_price) / current_price
+                    take_profit_pct = (current_price - take_profit) / current_price
 
-            # 问题4优化: 使用波动率配置计算动态止盈
-            volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
-            if volatility_profile:
-                # 根据方向使用对应的止盈配置
-                if side == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
-                    take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
-                    logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
-                elif side == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
-                    take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
-                    logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
+                logger.info(f"[RANGE_TP_SL] {symbol} 使用布林带策略止盈止损: TP=${take_profit:.4f}({take_profit_pct*100:.2f}%), SL=${stop_loss:.4f}({stop_loss_pct*100:.2f}%)")
+
+            else:
+                # 趋势模式: 使用原有逻辑
+                # 使用自适应参数计算止损
+                base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
+
+                # 缺陷5修复: 波动率自适应止损
+                stop_loss_pct = self.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
+
+                # 问题4优化: 使用波动率配置计算动态止盈
+                volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
+                if volatility_profile:
+                    # 根据方向使用对应的止盈配置
+                    if side == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
+                        take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
+                        logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
+                    elif side == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
+                        take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
+                        logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
+                    else:
+                        # 回退到自适应参数
+                        take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+                        logger.debug(f"[TP_FALLBACK] {symbol} {side} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
                 else:
                     # 回退到自适应参数
                     take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
-                    logger.debug(f"[TP_FALLBACK] {symbol} {side} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
-            else:
-                # 回退到自适应参数
-                take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
-                logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
+                    logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
 
-            if side == 'LONG':
-                stop_loss = current_price * (1 - stop_loss_pct)    # 止损
-                take_profit = current_price * (1 + take_profit_pct) # 止盈
-            else:  # SHORT
-                stop_loss = current_price * (1 + stop_loss_pct)    # 止损
-                take_profit = current_price * (1 - take_profit_pct) # 止盈
+                if side == 'LONG':
+                    stop_loss = current_price * (1 - stop_loss_pct)    # 止损
+                    take_profit = current_price * (1 + take_profit_pct) # 止盈
+                else:  # SHORT
+                    stop_loss = current_price * (1 + stop_loss_pct)    # 止损
+                    take_profit = current_price * (1 - take_profit_pct) # 止盈
 
             logger.info(f"[OPEN] {symbol} {side} | 价格: ${current_price:.4f} ({price_source}) | 数量: {quantity:.2f}")
 
@@ -1971,28 +1345,24 @@ class SmartTraderService:
             signal_components_json = json.dumps(signal_components) if signal_components else None
             entry_score = opp.get('score', 0)
 
-            # 🔥 标识信号版本 (v2/v3/traditional)
-            # 🔥 优化: 优先使用已设置的signal_version，避免V2被误判为V3
-            signal_version = opp.get('signal_version', 'traditional')
-            if signal_version == 'traditional' and opp.get('v3_mode'):
-                signal_version = 'v3'
-            logger.info(f"[SIGNAL_VERSION] {symbol} 信号版本: {signal_version}")
-
             # 生成信号组合键 (按字母顺序排序信号名称)
             if signal_components:
                 sorted_signals = sorted(signal_components.keys())
                 signal_combination_key = " + ".join(sorted_signals)
             else:
-                signal_combination_key = "unknown"
+                # 如果是震荡市策略但缺少signal_components（兼容旧版本）
+                if strategy == 'bollinger_mean_reversion':
+                    signal_combination_key = "range_trading"
+                else:
+                    signal_combination_key = "unknown"
 
             # 检查是否为反转信号
             if is_reversal:
                 signal_combination_key = f"REVERSAL_{opp.get('reversal_from', 'unknown')}"
 
-
-            # 趋势策略特殊标记：如果不是RANGE也不是REVERSAL，就是TREND策略
-            elif not signal_combination_key.startswith(('RANGE_', 'REVERSAL_', 'TREND_')):
-                signal_combination_key = f"TREND_{signal_combination_key}"
+            # 震荡市策略特殊标记（如果还没有RANGE前缀）
+            if strategy == 'bollinger_mean_reversion' and not signal_combination_key.startswith('RANGE_'):
+                signal_combination_key = f"RANGE_{signal_combination_key}"
 
             logger.info(f"[SIGNAL_COMBO] {symbol} {side} 信号组合: {signal_combination_key} (评分: {entry_score}) 策略: {strategy}")
 
@@ -2003,10 +1373,11 @@ class SmartTraderService:
                 logger.info(f"[BIG4-APPLIED] {symbol} Big4趋势: {big4_signal} (强度: {big4_strength})")
 
             # ========== 根据策略类型确定超时时间 ==========
-            # 🔥 紧急修复: 优先检查是否有中性市场指定的持仓时间
-            if 'max_hold_minutes' in opp:
-                base_timeout_minutes = opp['max_hold_minutes']
-                logger.info(f"[中性市-TIMEOUT] {symbol} 使用指定持仓时间: {base_timeout_minutes}分钟")
+            if strategy == 'bollinger_mean_reversion' and mode_config:
+                # 震荡市策略: 使用range_max_hold_hours (默认4小时)
+                range_max_hold_hours = int(mode_config.get('range_max_hold_hours', 4))  # 转换Decimal为int
+                base_timeout_minutes = range_max_hold_hours * 60
+                logger.info(f"[RANGE_TIMEOUT] {symbol} 震荡市最大持仓时间: {base_timeout_minutes}分钟")
             else:
                 # 趋势模式: 使用动态超时时间
                 base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
@@ -2017,18 +1388,21 @@ class SmartTraderService:
 
             # 准备entry_reason
             entry_reason = opp.get('reason', '')
-            # 插入持仓记录 (包含动态超时字段和信号版本)
+            if strategy == 'bollinger_mean_reversion':
+                entry_reason = f"[震荡市] {entry_reason}"
+
+            # 插入持仓记录 (包含动态超时字段)
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 entry_signal_type, signal_version, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
+                 entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, side, quantity, current_price, self.leverage,
                 notional_value, margin, stop_loss, take_profit,
-                signal_combination_key, signal_version, entry_reason, entry_score, signal_components_json,
+                signal_combination_key, entry_reason, entry_score, signal_components_json,
                 base_timeout_minutes, timeout_at
             ))
 
@@ -2099,11 +1473,6 @@ class SmartTraderService:
         symbol = opp['symbol']
         side = opp['side']
 
-        # 🚀🚀🚀 V3模式: 使用5M精准入场执行器 🚀🚀🚀
-        if opp.get('v3_mode') and self.entry_executor_v3:
-            logger.info(f"[V3-ENTRY] {symbol} {side} 使用V3精准入场执行器")
-            return await self._execute_v3_entry(opp)
-
         try:
             # 注意：信号验证已在 open_position() 中完成，这里直接计算保证金
             signal_components = opp.get('signal_components', {})
@@ -2154,7 +1523,6 @@ class SmartTraderService:
                 'total_margin': adjusted_position_size,
                 'leverage': self.leverage,
                 'strategy_id': 'smart_trader',
-                'max_hold_minutes': opp.get('max_hold_minutes', 240),  # 🔥 传入持仓时间(中性市120,趋势市240)
                 'trade_params': {
                     'entry_score': opp.get('score', 0),
                     'signal_components': signal_components,
@@ -2164,38 +1532,33 @@ class SmartTraderService:
             }))
 
             # 添加完成回调来启动智能平仓监控
-            # 明确捕获闭包变量
-            _symbol = symbol
-            _side = side
-            _smart_exit_optimizer = self.smart_exit_optimizer
-
             def on_entry_complete(task):
                 try:
                     entry_result = task.result()
                     if entry_result['success']:
                         position_id = entry_result['position_id']
                         logger.info(
-                            f"✅ [BATCH_ENTRY_COMPLETE] {_symbol} {_side} | "
+                            f"✅ [BATCH_ENTRY_COMPLETE] {symbol} {side} | "
                             f"持仓ID: {position_id} | "
                             f"平均价格: ${entry_result['avg_price']:.4f} | "
                             f"总数量: {entry_result['total_quantity']:.2f}"
                         )
 
                         # 启动智能平仓监控（如果启用）
-                        if _smart_exit_optimizer:
+                        if self.smart_exit_optimizer:
                             try:
                                 loop = asyncio.get_event_loop()
                                 if loop.is_closed():
                                     logger.warning(f"⚠️ 事件循环已关闭，无法启动智能平仓监控: 持仓{position_id}")
                                 else:
-                                    asyncio.create_task(_smart_exit_optimizer.start_monitoring_position(position_id))
+                                    asyncio.create_task(self.smart_exit_optimizer.start_monitoring_position(position_id))
                                     logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
                             except RuntimeError as e:
                                 logger.warning(f"⚠️ 无法启动智能平仓监控: {e}")
                     else:
-                        logger.error(f"❌ [BATCH_ENTRY_FAILED] {_symbol} {_side} | {entry_result.get('error')}")
+                        logger.error(f"❌ [BATCH_ENTRY_FAILED] {symbol} {side} | {entry_result.get('error')}")
                 except Exception as e:
-                    logger.error(f"❌ [BATCH_ENTRY_CALLBACK_ERROR] {_symbol} {_side} | {e}")
+                    logger.error(f"❌ [BATCH_ENTRY_CALLBACK_ERROR] {symbol} {side} | {e}")
 
             entry_task.add_done_callback(on_entry_complete)
             logger.info(f"🚀 [BATCH_ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行60分钟）")
@@ -2208,137 +1571,13 @@ class SmartTraderService:
             logger.error(traceback.format_exc())
             return False
 
-    async def _execute_v3_entry(self, opp: dict):
-        """🚀 V3精准入场执行 - 使用V3一次性精准入场"""
-        symbol = opp['symbol']
-        side = opp['side']
-
-        try:
-            logger.info(f"[V3-ENTRY] {symbol} {side} 开始V3精准入场流程（等待5M K线确认 → 一次性入场）")
-
-            # V3模式使用SmartEntryExecutorV3（一次性精准入场，不再分批）
-            signal_components = opp.get('signal_components', {})
-
-            # 计算保证金（复用原有逻辑）
-            rating_level = self.opt_config.get_symbol_rating_level(symbol)
-            rating_config = self.opt_config.get_blacklist_config(rating_level)
-
-            if rating_level == 3:
-                logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
-                return False
-
-            rating_margin_multiplier = rating_config['margin_multiplier']
-            base_position_size = self.position_size_usdt * rating_margin_multiplier
-
-            # 获取Big4市场信号动态调整仓位倍数
-            try:
-                big4_result = self.get_big4_result()
-                market_signal = big4_result.get('overall_signal', 'NEUTRAL')
-
-                if market_signal == 'BULLISH' and side == 'LONG':
-                    position_multiplier = 1.2
-                    logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
-                elif market_signal == 'BEARISH' and side == 'SHORT':
-                    position_multiplier = 1.2
-                    logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
-                else:
-                    position_multiplier = 1.0
-            except Exception as e:
-                logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
-                position_multiplier = 1.0
-
-            # 获取自适应参数
-            if side == 'LONG':
-                adaptive_params = self.brain.adaptive_long
-            else:
-                adaptive_params = self.brain.adaptive_short
-
-            adjusted_position_size = base_position_size * position_multiplier
-
-            # 🚀 调用V3一次性精准入场执行器
-            logger.info(f"[V3-ENTRY] {symbol} {side} 保证金: ${adjusted_position_size:.2f}, 杠杆: {self.leverage}x")
-
-            # 准备V3信号数据
-            signal_data = {
-                'total_score': opp.get('score', 0),
-                'max_score': 42,  # V3系统总分
-                'breakdown': signal_components
-            }
-
-            # 异步调用V3入场执行器
-            entry_task = asyncio.create_task(
-                self.entry_executor_v3.execute_entry(
-                    signal=signal_data,
-                    symbol=symbol,
-                    position_side=side,
-                    total_margin=adjusted_position_size,
-                    leverage=self.leverage
-                )
-            )
-
-            # 添加完成回调来启动V3持仓管理器
-            _symbol = symbol
-            _side = side
-            _position_manager_v3 = self.position_manager_v3
-
-            def on_entry_complete(task):
-                try:
-                    entry_result = task.result()
-                    if entry_result and entry_result.get('success'):
-                        position_id = entry_result['position_id']
-                        logger.info(
-                            f"✅ [V3-ENTRY_COMPLETE] {_symbol} {_side} | "
-                            f"持仓ID: {position_id} | "
-                            f"入场价: ${entry_result['entry_price']:.4f} | "
-                            f"数量: {entry_result['quantity']:.6f} | "
-                            f"保证金: ${entry_result['margin']:.2f}"
-                        )
-
-                        # 🚀 启动V3持仓管理器（移动止盈+动态反转止损+Big4紧急干预）
-                        if _position_manager_v3:
-                            try:
-                                position = {
-                                    'id': position_id,
-                                    'symbol': _symbol,
-                                    'position_side': _side,
-                                    'entry_price': entry_result['entry_price'],
-                                    'quantity': entry_result['quantity'],
-                                    'created_at': entry_result['created_at']
-                                }
-                                asyncio.create_task(_position_manager_v3.manage_position(position))
-                                logger.info(f"✅ [V3-POSITION_MANAGER] 已启动V3持仓管理: 持仓{position_id}")
-                            except Exception as e:
-                                logger.error(f"❌ 启动V3持仓管理器失败: {e}")
-                    else:
-                        error_msg = entry_result.get('error') if entry_result else 'No result'
-                        logger.error(f"❌ [V3-ENTRY_FAILED] {_symbol} {_side} | {error_msg}")
-                except Exception as e:
-                    logger.error(f"❌ [V3-ENTRY_CALLBACK_ERROR] {_symbol} {_side} | {e}")
-
-            entry_task.add_done_callback(on_entry_complete)
-            logger.info(f"🚀 [V3-ENTRY_STARTED] {symbol} {side} | 等待5M K线确认后一次性入场（15分钟超时）")
-
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ [V3-ENTRY_ERROR] {symbol} {side} | {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
-
     def _generate_signal_combination_key(self, signal_components: dict) -> str:
-        """
-        生成信号组合键
-        注意: 此方法仅用于分批建仓,而分批建仓仅用于TREND策略
-        因此直接添加TREND_前缀
-        """
+        """生成信号组合键"""
         if signal_components:
             sorted_signals = sorted(signal_components.keys())
-            signal_key = " + ".join(sorted_signals)
-            # 分批建仓只用于TREND策略,直接添加TREND_前缀
-            return f"TREND_{signal_key}"
+            return " + ".join(sorted_signals)
         else:
-            return "TREND_unknown"
+            return "unknown"
 
     def check_top_bottom(self, symbol: str, position_side: str, entry_price: float):
         """智能识别顶部和底部 - 使用1h K线更稳健的判断"""
@@ -2772,106 +2011,6 @@ class SmartTraderService:
         except:
             return False
 
-    def _emergency_close_all_positions(self, position_side: str, reason: str):
-        """
-        🔥 紧急干预: 立即平掉所有指定方向的持仓
-
-        场景: Big4同步反转时,立即平掉所有持仓,避免继续亏损
-
-        Args:
-            position_side: 'LONG' 或 'SHORT'
-            reason: 平仓原因
-        """
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-            # 查询所有指定方向的开仓持仓
-            cursor.execute("""
-                SELECT id, symbol, position_side, quantity, entry_price
-                FROM futures_positions
-                WHERE status = 'open'
-                AND position_side = %s
-                AND account_id = %s
-            """, (position_side, self.account_id))
-
-            positions = cursor.fetchall()
-            cursor.close()
-
-            if not positions:
-                logger.info(f"🔥 [EMERGENCY] 无{position_side}持仓需要平仓")
-                return
-
-            logger.critical(f"🚨 [EMERGENCY] 检测到Big4反转,立即平掉所有{position_side}持仓! 数量:{len(positions)}个")
-
-            # 立即平掉所有持仓
-            closed_count = 0
-            failed_count = 0
-
-            for pos in positions:
-                symbol = pos['symbol']
-                try:
-                    success = self.close_position_by_side(
-                        symbol=symbol,
-                        side=position_side,
-                        reason=f"EMERGENCY:{reason}"
-                    )
-
-                    if success:
-                        closed_count += 1
-                        logger.critical(f"🚨 [EMERGENCY] {symbol} {position_side}持仓已紧急平仓")
-                    else:
-                        failed_count += 1
-                        logger.error(f"❌ [EMERGENCY] {symbol} {position_side}持仓紧急平仓失败")
-
-                except Exception as e:
-                    failed_count += 1
-                    logger.error(f"❌ [EMERGENCY] {symbol} {position_side}平仓异常: {e}")
-
-            logger.critical(f"🚨 [EMERGENCY] 紧急平仓完成! 成功:{closed_count}, 失败:{failed_count}")
-
-        except Exception as e:
-            logger.error(f"❌ [EMERGENCY] 紧急平仓流程失败: {e}", exc_info=True)
-
-
-    def _emergency_close_position_by_symbol_side(self, symbol: str, side: str, reason: str):
-        """
-        🔥 紧急平仓：破位反手时平掉指定交易对的反向持仓
-
-        Args:
-            symbol: 交易对
-            side: 要平掉的持仓方向（'LONG' or 'SHORT'）
-            reason: 平仓原因
-        """
-        try:
-            # 检查是否有该方向的持仓
-            conn = self._get_connection()
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-            cursor.execute("""
-                SELECT id FROM futures_positions
-                WHERE symbol = %s
-                AND position_side = %s
-                AND status = 'open'
-                AND account_id = %s
-            """, (symbol, side, self.account_id))
-
-            position = cursor.fetchone()
-            cursor.close()
-
-            if position:
-                logger.critical(f"🔥 [BREAKOUT_REVERSE] {symbol} 检测到反向持仓{side}，立即平仓！原因: {reason}")
-                success = self.close_position_by_side(symbol, side, reason)
-                if success:
-                    logger.critical(f"✅ [BREAKOUT_REVERSE] {symbol} {side}持仓已平仓，准备反手")
-                else:
-                    logger.error(f"❌ [BREAKOUT_REVERSE] {symbol} {side}持仓平仓失败")
-            else:
-                logger.info(f"✅ [BREAKOUT_REVERSE] {symbol} 无{side}持仓，无需平仓")
-
-        except Exception as e:
-            logger.error(f"❌ [BREAKOUT_REVERSE] {symbol} 检查反向持仓失败: {e}")
-
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
         """关闭指定交易对和方向的持仓"""
         try:
@@ -2882,9 +2021,9 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
 
-            # 获取持仓信息用于日志和计算盈亏（包含signal_type用于更新质量）
+            # 获取持仓信息用于日志和计算盈亏
             cursor.execute("""
-                SELECT id, entry_price, quantity, leverage, margin, entry_signal_type FROM futures_positions
+                SELECT id, entry_price, quantity, leverage, margin FROM futures_positions
                 WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
             """, (symbol, side, self.account_id))
 
@@ -2921,11 +2060,6 @@ class SmartTraderService:
                         notes = CONCAT(IFNULL(notes, ''), '|', %s)
                     WHERE id = %s
                 """, (current_price, realized_pnl, reason, pos['id']))
-
-                # 🔥 新增: 更新信号质量统计（平仓后）
-                if self.brain and hasattr(self.brain, 'quality_manager') and pos.get('entry_signal_type'):
-                    signal_key = pos['entry_signal_type']
-                    self.brain.quality_manager.update_signal_quality(signal_key, side, realized_pnl)
 
                 # Calculate values for orders and trades
                 import uuid
@@ -3460,8 +2594,8 @@ class SmartTraderService:
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
-                AND timeout_at IS NOT NULL
-                AND NOW() > timeout_at
+                AND planned_close_time IS NOT NULL
+                AND NOW() > planned_close_time
             """, (self.account_id,))
 
             timeout_count = cursor.fetchone()[0]
@@ -3645,8 +2779,7 @@ class SmartTraderService:
                     self._check_and_restart_smart_exit_optimizer()
                     last_smart_exit_check = now
 
-
-                # 5. 检查持仓
+                # 4. 检查持仓
                 current_positions = self.get_open_positions_count()
                 logger.info(f"[STATUS] 持仓: {current_positions}/{self.max_positions}")
 
@@ -3656,14 +2789,50 @@ class SmartTraderService:
                     continue
 
                 # 5. 获取当前交易模式并扫描机会
-                # 固定使用趋势模式 (mode_switcher已废弃)
-                current_mode = 'trend'
+                try:
+                    mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
+                    current_mode = mode_config['mode_type'] if mode_config else 'trend'
+                except Exception as e:
+                    logger.error(f"[MODE-ERROR] 获取交易模式失败: {e}, 使用默认趋势模式")
+                    current_mode = 'trend'
 
                 logger.info(f"[SCAN] 模式:{current_mode} | 扫描 {len(self.brain.whitelist)} 个币种...")
 
-                # 趋势模式扫描
-                opportunities = self.brain.scan_all()
-                logger.info(f"[TREND-SCAN] 扫描完成, 找到 {len(opportunities)} 个机会")
+                # 根据模式选择策略
+                if current_mode == 'range':
+                    # 震荡模式: 使用布林带均值回归策略
+                    opportunities = []
+                    big4_result = self.get_big4_result()
+                    big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+                    for symbol in self.brain.whitelist:
+                        try:
+                            signal = self.bollinger_strategy.generate_signal(
+                                symbol=symbol,
+                                big4_signal=big4_signal,
+                                timeframe='15m'
+                            )
+
+                            if signal and signal['score'] >= int(mode_config.get('range_min_score', 50)):
+                                opportunities.append({
+                                    'symbol': signal['symbol'],
+                                    'side': signal['signal'],
+                                    'score': signal['score'],
+                                    'strategy': 'bollinger_mean_reversion',
+                                    'reason': signal['reason'],
+                                    'take_profit_price': signal.get('take_profit_price'),
+                                    'stop_loss_price': signal.get('stop_loss_price'),
+                                    'signal_components': {'range_trading': signal['score']}  # 添加信号组件标识
+                                })
+                                logger.info(f"[RANGE-SIGNAL] {symbol} {signal['signal']} 分数:{signal['score']} | {signal['reason']}")
+                        except Exception as e:
+                            logger.error(f"[RANGE-ERROR] {symbol} 震荡市信号生成失败: {e}")
+
+                    logger.info(f"[RANGE-SCAN] 震荡模式扫描完成, 找到 {len(opportunities)} 个机会")
+                else:
+                    # 趋势模式: 使用原有策略
+                    opportunities = self.brain.scan_all()
+                    logger.info(f"[TREND-SCAN] 趋势模式扫描完成, 找到 {len(opportunities)} 个机会")
 
                 if not opportunities:
                     logger.info("[SCAN] 无交易机会")
@@ -3675,43 +2844,6 @@ class SmartTraderService:
                     logger.info("[TRADING-DISABLED] ⏸️ U本位合约交易已停止，跳过开仓（不影响已有持仓）")
                     time.sleep(self.scan_interval)
                     continue
-
-                # 5.6. 🔥 检查Big4市场信号 - V3模式下不阻止NEUTRAL，传统模式下NEUTRAL停止开仓
-                try:
-                    big4_result = self.get_big4_result()
-                    big4_market_signal = big4_result.get('overall_signal', 'NEUTRAL')
-                    big4_market_strength = big4_result.get('signal_strength', 0)
-
-                    # V3模式: Big4只作为评分维度之一，NEUTRAL不阻止开仓
-                    # 传统模式: Big4 NEUTRAL时停止开仓
-                    if not self.use_v3_mode and big4_market_signal == 'NEUTRAL':
-                        logger.info(f"[BIG4-NEUTRAL] 🛑 市场中性(强度{big4_market_strength:.1f}),停止开仓,等待明确趋势（传统模式）")
-                        time.sleep(self.scan_interval)
-                        continue
-                    elif self.use_v3_mode and big4_market_signal == 'NEUTRAL':
-                        logger.info(f"[BIG4-NEUTRAL] ℹ️ 市场中性(强度{big4_market_strength:.1f}), V3模式继续评估（Big4占5/42分）")
-                except Exception as e:
-                    logger.warning(f"[BIG4-CHECK] 获取Big4信号失败: {e}, 继续交易")
-
-                # 5.7. 🔥 统一检测Big4反转（避免重复检测）
-                big4_bottom_blocked = False
-                big4_top_blocked = False
-
-                # 检查是否有做空机会
-                has_short_opportunities = any(opp['side'] == 'SHORT' for opp in opportunities)
-                if has_short_opportunities:
-                    should_block, reversal_reason = self.brain.detect_big4_bottom_reversal('SHORT')
-                    if should_block:
-                        big4_bottom_blocked = True
-                        logger.warning(f"🚫 [BIG4-BOTTOM] {reversal_reason}, 过滤所有SHORT机会")
-
-                # 检查是否有做多机会
-                has_long_opportunities = any(opp['side'] == 'LONG' for opp in opportunities)
-                if has_long_opportunities:
-                    should_block, reversal_reason = self.brain.detect_big4_top_reversal('LONG')
-                    if should_block:
-                        big4_top_blocked = True
-                        logger.warning(f"🚫 [BIG4-TOP] {reversal_reason}, 过滤所有LONG机会")
 
                 # 6. 执行交易
                 logger.info(f"[EXECUTE] 找到 {len(opportunities)} 个机会")
@@ -3725,33 +2857,62 @@ class SmartTraderService:
                     new_score = opp['score']
                     opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
 
-                    # 🔥 Big4反转过滤: 统一检测结果
-                    if big4_bottom_blocked and new_side == 'SHORT':
-                        logger.info(f"[BIG4-FILTER] {symbol} SHORT被Big4底部反转阻止，跳过")
-                        continue
-                    if big4_top_blocked and new_side == 'LONG':
-                        logger.info(f"[BIG4-FILTER] {symbol} LONG被Big4顶部反转阻止，跳过")
-                        continue
-
-                    # ========== 固定趋势模式 (自动切换已禁用) ==========
-                    # 注释: 根据文档《模式切换风险与建议》, 自动切换已被禁用
-                    # 系统固定使用趋势模式, Big4仅用于信号评分调整
+                    # ========== 交易模式检查和自动切换 ==========
                     try:
                         big4_result = self.get_big4_result()
                         big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                         big4_strength = big4_result.get('signal_strength', 0)
 
-                        # 固定为趋势模式
-                        current_mode = 'trend'
-                        logger.info(f"📊 [TRADING-MODE] 固定趋势模式 | Big4: {big4_signal}({big4_strength:.1f})")
+                        # 检查是否需要自动切换模式
+                        suggested_mode = self.mode_switcher.auto_switch_check(
+                            account_id=self.account_id,
+                            trading_type='usdt_futures',
+                            big4_signal=big4_signal,
+                            big4_strength=big4_strength
+                        )
+
+                        if suggested_mode:
+                            logger.info(f"🔄 [MODE-AUTO-SWITCH] Big4={big4_signal}({big4_strength:.1f}), 建议切换到{suggested_mode}模式")
+                            self.mode_switcher.switch_mode(
+                                account_id=self.account_id,
+                                trading_type='usdt_futures',
+                                new_mode=suggested_mode,
+                                trigger='auto',
+                                reason=f'Big4: {big4_signal} 强度:{big4_strength:.1f}',
+                                big4_signal=big4_signal,
+                                big4_strength=big4_strength,
+                                switched_by='smart_trader_service'
+                            )
+
+                        # 获取当前交易模式
+                        current_mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
+                        current_mode = current_mode_config['mode_type'] if current_mode_config else 'trend'
+
+                        logger.info(f"📊 [TRADING-MODE] 当前模式: {current_mode} | Big4: {big4_signal}({big4_strength:.1f})")
 
                     except Exception as e:
-                        logger.error(f"[BIG4-CHECK-ERROR] Big4检测失败: {e}")
-                        import traceback
-                        logger.error(traceback.format_exc())
-                        # 降级策略：保持趋势模式
-                        current_mode = 'trend'
+                        logger.error(f"[MODE-CHECK-ERROR] 模式检查失败: {e}")
+                        current_mode = 'trend'  # 默认趋势模式
                     # ========== 模式检查结束 ==========
+
+                    # ========== 模式筛选: 只接受匹配当前模式的信号 ==========
+                    signal_type = opp.get('signal_type', '')
+
+                    if current_mode == 'trend':
+                        # 趋势模式: 只接受TREND类型信号
+                        if 'TREND' not in signal_type:
+                            logger.info(f"[MODE-FILTER] {symbol} 当前trend模式,跳过非TREND信号 (信号类型: {signal_type[:40]})")
+                            continue
+                        logger.info(f"[MODE-MATCH] {symbol} TREND信号匹配当前模式")
+
+                    elif current_mode == 'range':
+                        # 震荡模式: 只接受RANGE类型信号
+                        if 'RANGE' not in signal_type:
+                            logger.info(f"[MODE-FILTER] {symbol} 当前range模式,跳过非RANGE信号 (信号类型: {signal_type[:40]})")
+                            continue
+                        logger.info(f"[MODE-MATCH] {symbol} RANGE信号匹配当前模式")
+
+                    # ========== 模式筛选结束 ==========
 
                     # Big4 趋势检测 - 应用到所有币种
                     try:
@@ -3767,17 +2928,43 @@ class SmartTraderService:
                             signal_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
+                        # ========== 震荡市过滤: NEUTRAL时提高门槛 ==========
+                        if symbol_signal == 'NEUTRAL':
+                            if signal_strength < 30:  # 弱信号,震荡市
+                                threshold_boost = 15  # 需要额外15分
+                                if new_score < 35 + threshold_boost:  # 原阈值35 + 15 = 50分
+                                    logger.warning(f"[BIG4-NEUTRAL-SKIP] {symbol} 震荡市且评分不足 ({new_score} < 50), 跳过")
+                                    continue
+                                else:
+                                    logger.info(f"[BIG4-NEUTRAL-OK] {symbol} 震荡市但评分足够 ({new_score} >= 50), 允许开仓")
+                            else:
+                                logger.info(f"[BIG4-NEUTRAL] {symbol} 市场中性(强度{signal_strength:.1f}),正常开仓")
+                        # ========== NEUTRAL 处理结束 ==========
 
                         # 如果信号方向与交易方向冲突,降低评分或跳过
-                        # 🔥 修复BUG: 任何方向冲突都应该直接跳过,不管强度高低
-                        # 原因: 市场看多时开空单/市场看空时开多单都是反市场行为,风险极高
-                        if symbol_signal == 'BEARISH' and new_side == 'LONG':
-                            logger.info(f"[BIG4-SKIP] {symbol} 市场看空(强度{signal_strength:.1f}), 跳过LONG信号 (原评分{new_score})")
-                            continue
+                        elif symbol_signal == 'BEARISH' and new_side == 'LONG':
+                            if signal_strength >= 60:  # 强烈看空信号
+                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
+                                continue
+                            else:
+                                penalty = int(signal_strength * 0.5)  # 根据强度降低评分
+                                new_score = new_score - penalty
+                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看空, LONG评分降低: {opp['score']} -> {new_score} (-{penalty})")
+                                if new_score < 20:  # 评分太低则跳过
+                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
+                                    continue
 
                         elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
-                            logger.info(f"[BIG4-SKIP] {symbol} 市场看多(强度{signal_strength:.1f}), 跳过SHORT信号 (原评分{new_score})")
-                            continue
+                            if signal_strength >= 60:  # 强烈看多信号
+                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看多 (强度{signal_strength}), 跳过SHORT信号 (原评分{new_score})")
+                                continue
+                            else:
+                                penalty = int(signal_strength * 0.5)  # 根据强度降低评分
+                                new_score = new_score - penalty
+                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看多, SHORT评分降低: {opp['score']} -> {new_score} (-{penalty})")
+                                if new_score < 20:  # 评分太低则跳过
+                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
+                                    continue
 
                         # 如果信号方向一致,提升评分
                         elif symbol_signal == 'BULLISH' and new_side == 'LONG':
@@ -3800,20 +2987,9 @@ class SmartTraderService:
                         logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
                         # 失败不影响正常交易流程
 
-                    # 🔥 紧急过滤: 禁用60+分的breakout_long信号 (今日数据: 胜率0%, 平均亏损-45.72U)
-                    signal_components_str = opp.get('signal_components', '')
-                    if new_score >= 60 and 'breakout_long' in signal_components_str:
-                        logger.warning(f"[FILTER-BREAKOUT] {symbol} {new_side} 分数{new_score} 包含breakout_long信号,禁止开仓(追高风险)")
-                        continue
-
-                    # 检查同方向同版本是否已有持仓 (V2/V3并行测试: 允许同方向不同版本各开一单)
-                    # 🔥 优化: 优先使用已设置的signal_version，避免V2被误判为V3
-                    signal_version = opp.get('signal_version', 'traditional')
-                    if signal_version == 'traditional' and opp.get('v3_mode'):
-                        signal_version = 'v3'
-
-                    if self.has_position(symbol, new_side, signal_version):
-                        logger.info(f"[SKIP] {symbol} {new_side}方向已有{signal_version}持仓")
+                    # 检查同方向是否已有持仓
+                    if self.has_position(symbol, new_side):
+                        logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
                         continue
 
                     # 检查是否刚刚平仓(1小时冷却期)

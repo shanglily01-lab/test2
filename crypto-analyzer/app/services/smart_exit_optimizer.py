@@ -63,13 +63,6 @@ class SmartExitOptimizer:
         # 部分平仓阶段跟踪（避免重复触发）
         self.partial_close_stage: Dict[int, int] = {}  # position_id -> stage (0=未平仓, 1=平50%, 2=平70%, 3=平100%)
 
-        # 🔥🔥🔥 重构: 移动止盈配置（优化：让利润奔跑）
-        self.trailing_stop_enabled = True  # 启用移动止盈
-        self.trailing_threshold_pct = 0.01  # 1%开启移动止盈
-        self.trailing_step_pct = 0.015  # 优化: 0.5% → 1.5%，让利润有更多奔跑空间
-        self.max_profit_tracker: Dict[int, float] = {}  # position_id -> max_profit_pct
-        logger.info("🚀 移动止盈已启用: 门槛1%, 回撤阈值1.5%")
-
     async def start_monitoring_position(self, position_id: int):
         """
         开始监控持仓（从开仓完成后立即开始）
@@ -299,24 +292,18 @@ class SmartExitOptimizer:
         Returns:
             {'profit_pct': float, 'profit_usdt': float, 'current_price': float}
         """
-        # avg_entry_price可能为None，使用entry_price作为fallback
-        entry_price_value = position['avg_entry_price'] or position['entry_price']
-        if not entry_price_value:
-            logger.error(f"持仓{position['id']}无有效的entry_price")
-            return {'profit_pct': 0, 'profit_usdt': 0, 'current_price': float(current_price)}
-
-        avg_entry_price = Decimal(str(entry_price_value))
+        avg_entry_price = Decimal(str(position['avg_entry_price']))
         position_size = Decimal(str(position['position_size']))
         direction = position['direction']
 
-        # 计算盈亏百分比（返回小数形式，如0.01表示1%）
+        # 计算盈亏百分比
         if direction == 'LONG':
-            profit_pct = float((current_price - avg_entry_price) / avg_entry_price)
+            profit_pct = float((current_price - avg_entry_price) / avg_entry_price * 100)
         else:  # SHORT
-            profit_pct = float((avg_entry_price - current_price) / avg_entry_price)
+            profit_pct = float((avg_entry_price - current_price) / avg_entry_price * 100)
 
         # 计算盈亏金额（USDT）
-        profit_usdt = float(position_size * avg_entry_price * Decimal(str(profit_pct)))
+        profit_usdt = float(position_size * avg_entry_price * Decimal(str(profit_pct / 100)))
 
         return {
             'profit_pct': profit_pct,
@@ -402,67 +389,6 @@ class SmartExitOptimizer:
         # 计算当前回撤（从最高点）
         drawback = max_profit_pct - profit_pct
 
-        # 🔥🔥🔥 重构: 移动止盈逻辑 (优先级最高)
-        if self.trailing_stop_enabled and profit_pct > 0:
-            position_id = position['id']
-
-            # 记录最高盈利 (BUG修复: 从数据库读取历史最高值)
-            if position_id not in self.max_profit_tracker:
-                # 从数据库读取之前记录的max_profit_pct
-                db_max_pct = position.get('max_profit_pct', 0)
-                if db_max_pct:
-                    db_max_pct = float(db_max_pct)
-                else:
-                    db_max_pct = 0.0
-                # 使用数据库记录和当前盈利中的较大值
-                self.max_profit_tracker[position_id] = max(db_max_pct, profit_pct)
-            elif profit_pct > self.max_profit_tracker[position_id]:
-                self.max_profit_tracker[position_id] = profit_pct
-
-            tracked_max = self.max_profit_tracker[position_id]
-
-            # 如果盈利超过门槛 (1%)
-            if tracked_max >= self.trailing_threshold_pct:
-                # 🔥 动态回撤阈值：盈利越大，给予更多空间
-                # 小盈利(1-3%): 1.5%回撤止盈
-                # 中盈利(3-5%): 2%回撤止盈
-                # 大盈利(>5%): 2.5%回撤止盈
-                dynamic_step = self.trailing_step_pct
-                if tracked_max >= 0.05:  # >5%
-                    dynamic_step = 0.025  # 2.5%回撤
-                elif tracked_max >= 0.03:  # 3-5%
-                    dynamic_step = 0.02   # 2%回撤
-                # else: 使用默认1.5%
-
-                # 计算回撤幅度
-                trailing_drawback = tracked_max - profit_pct
-
-                if trailing_drawback >= dynamic_step:
-                    protected_profit = profit_pct
-                    return True, f"移动止盈(最高{tracked_max*100:.2f}% → 当前{profit_pct*100:.2f}%, 保护{protected_profit*100:.2f}%利润)"
-
-        # 🔥🔥🔥 重构: 快速止损逻辑 (优化: 取消缓冲期，立即保护)
-        if profit_pct < 0:
-            # 计算持仓时长
-            open_time = position.get('open_time') or position.get('created_at')
-            if open_time:
-                holding_minutes = (datetime.now() - open_time).total_seconds() / 60
-
-                # 🔥 优化: 取消10分钟缓冲期，立即启用止损保护
-                # 0-15分钟内亏损超过1% → 立即止损
-                if holding_minutes <= 15 and profit_pct <= -0.01:
-                    return True, f"快速止损-15分钟(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
-
-                # 15-30分钟内亏损超过1.5% → 立即止损
-                if holding_minutes <= 30 and profit_pct <= -0.015:
-                    return True, f"快速止损-30分钟(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
-
-                # 30-60分钟内亏损超过2% → 立即止损
-                if holding_minutes <= 60 and profit_pct <= -0.02:
-                    return True, f"快速止损-60分钟(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
-
-                # 60分钟以上，由固定止损(1.5%)兜底
-
         # ========== 优先级最高：止损止盈检查（任何时候都检查） ==========
 
         # 检查止损价格
@@ -515,12 +441,12 @@ class SmartExitOptimizer:
         # 这个方法现在主要用于兜底逻辑
 
         # 兜底逻辑1: 超高盈利立即全部平仓
-        if profit_pct >= 0.05:  # 5%
-            return True, f"超高盈利全部平仓(价格变化{profit_pct*100:.2f}%, ROI {roi_pct:.2f}%)"
+        if profit_pct >= 5.0:
+            return True, f"超高盈利全部平仓(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
         # 兜底逻辑2: 巨额亏损立即全部平仓
-        if profit_pct <= -0.03:  # -3%
-            return True, f"巨额亏损全部平仓(价格变化{profit_pct*100:.2f}%, ROI {roi_pct:.2f}%)"
+        if profit_pct <= -3.0:
+            return True, f"巨额亏损全部平仓(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
         # 默认：不平仓（由智能分批平仓处理）
         return False, ""
@@ -701,24 +627,24 @@ class SmartExitOptimizer:
 
             # ===== 智能优化器仅在亏损时介入（止损优化） =====
             # 盈利订单由正常止盈逻辑处理，不需要优化器提前平仓
-            if evaluation['profit_pct'] < -0.01:  # -1%
+            if evaluation['profit_pct'] < -1.0:
                 # 亏损超过1%，启用止损优化
 
                 # 条件1: 极佳卖点（评分 >= 95分）- 减少亏损
                 if evaluation['score'] >= 95:
-                    return True, f"止损优化-极佳卖点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']*100:.2f}%): {evaluation['reason']}"
+                    return True, f"止损优化-极佳卖点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']:.2f}%): {evaluation['reason']}"
 
                 # 条件2: 优秀卖点（评分 >= 85分）- 减少亏损
                 if evaluation['score'] >= 85:
-                    return True, f"止损优化-优秀卖点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']*100:.2f}%)"
+                    return True, f"止损优化-优秀卖点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']:.2f}%)"
 
                 # 条件3: 突破基线最高价（亏损时的反弹机会，减少损失）
                 if float(current_price) >= baseline['max_price'] * 1.001:
-                    return True, f"止损优化-突破基线最高价(亏损{evaluation['profit_pct']*100:.2f}%)"
+                    return True, f"止损优化-突破基线最高价(亏损{evaluation['profit_pct']:.2f}%)"
 
                 # 条件4: 强下跌趋势预警（亏损时趋势恶化，提前止损）
                 if baseline['trend']['direction'] == 'down' and baseline['trend']['strength'] > 0.6:
-                    return True, f"止损优化-强下跌趋势预警(亏损{evaluation['profit_pct']*100:.2f}%)"
+                    return True, f"止损优化-强下跌趋势预警(亏损{evaluation['profit_pct']:.2f}%)"
 
             # 条件5: 时间压力（T-10分钟，无论盈亏都必须平仓）
             if elapsed_minutes >= 20 and evaluation['score'] >= 60:
@@ -731,24 +657,24 @@ class SmartExitOptimizer:
 
             # ===== 智能优化器仅在亏损时介入（止损优化） =====
             # 盈利订单由正常止盈逻辑处理，不需要优化器提前平仓
-            if evaluation['profit_pct'] < -0.01:  # -1%
+            if evaluation['profit_pct'] < -1.0:
                 # 亏损超过1%，启用止损优化
 
                 # 条件1: 极佳买点（评分 >= 95分）- 减少亏损
                 if evaluation['score'] >= 95:
-                    return True, f"止损优化-极佳买点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']*100:.2f}%): {evaluation['reason']}"
+                    return True, f"止损优化-极佳买点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']:.2f}%): {evaluation['reason']}"
 
                 # 条件2: 优秀买点（评分 >= 85分）- 减少亏损
                 if evaluation['score'] >= 85:
-                    return True, f"止损优化-优秀买点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']*100:.2f}%)"
+                    return True, f"止损优化-优秀买点(评分{evaluation['score']}, 亏损{evaluation['profit_pct']:.2f}%)"
 
                 # 条件3: 跌破基线最低价（亏损时的下探机会，减少损失）
                 if float(current_price) <= baseline['min_price'] * 0.999:
-                    return True, f"止损优化-跌破基线最低价(亏损{evaluation['profit_pct']*100:.2f}%)"
+                    return True, f"止损优化-跌破基线最低价(亏损{evaluation['profit_pct']:.2f}%)"
 
                 # 条件4: 强上涨趋势预警（空单亏损时趋势恶化，提前止损）
                 if baseline['trend']['direction'] == 'up' and baseline['trend']['strength'] > 0.6:
-                    return True, f"止损优化-强上涨趋势预警(亏损{evaluation['profit_pct']*100:.2f}%)"
+                    return True, f"止损优化-强上涨趋势预警(亏损{evaluation['profit_pct']:.2f}%)"
 
             # 条件5: 时间压力（T-10分钟，无论盈亏都必须平仓）
             if elapsed_minutes >= 20 and evaluation['score'] >= 60:
@@ -1067,11 +993,11 @@ class SmartExitOptimizer:
             if not current_price:
                 return False, ""
 
-            # 计算当前盈亏比例（小数形式，如0.02表示2%）
+            # 计算当前盈亏比例
             if position_side == 'LONG':
-                profit_pct = (current_price - entry_price) / entry_price
+                profit_pct = ((current_price - entry_price) / entry_price) * 100
             else:  # SHORT
-                profit_pct = (entry_price - current_price) / entry_price
+                profit_pct = ((entry_price - current_price) / entry_price) * 100
 
             # 获取1h和4h K线强度
             strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
@@ -1083,19 +1009,19 @@ class SmartExitOptimizer:
             # 顶部识别（针对LONG持仓）
             if position_side == 'LONG':
                 # 条件1: 有盈利（至少2%）
-                has_profit = profit_pct >= 0.02
+                has_profit = profit_pct >= 2.0
 
                 # 条件2: 1h和4h都转为强烈看空
                 strong_bearish_1h = strength_1h.get('net_power', 0) <= -5
                 strong_bearish_4h = strength_4h.get('net_power', 0) <= -3
 
                 if has_profit and strong_bearish_1h and strong_bearish_4h:
-                    return True, f"顶部识别(盈利{profit_pct*100:.1f}%+强烈看空)"
+                    return True, f"顶部识别(盈利{profit_pct:.1f}%+强烈看空)"
 
             # 底部识别（针对SHORT持仓）
             elif position_side == 'SHORT':
                 # 条件1: 有盈利（至少2%）
-                has_profit = profit_pct >= 0.02
+                has_profit = profit_pct >= 2.0
 
                 # 条件2: 1h和4h都转为强烈看多
                 strong_bullish_1h = strength_1h.get('net_power', 0) >= 5
@@ -1155,10 +1081,10 @@ class SmartExitOptimizer:
             current_stage = self.partial_close_stage.get(position_id, 0)
 
             # ============================================================
-            # === 优先级0: 最小持仓时间限制 (30分钟) ===
+            # === 优先级0: 最小持仓时间限制 (2小时) ===
             # ============================================================
-            # 🔥 紧急修复: 从2小时缩短到30分钟,避免反转行情巨亏
-            MIN_HOLD_MINUTES = 30  # 30分钟最小持仓时间
+            # 开仓2小时内只允许止损和止盈,不允许其他原因平仓
+            MIN_HOLD_MINUTES = 120  # 2小时最小持仓时间
 
             # ============================================================
             # === 优先级1: 固定止损检查（风控底线，无需等待最小持仓时间） ===
@@ -1211,47 +1137,17 @@ class SmartExitOptimizer:
                         return ('固定止盈', 1.0)
 
             # ============================================================
-            # === 优先级3: 紧急反转检测 (30分钟后生效) ===
+            # === 在此之后的所有平仓检查都需要满足最小持仓时间(2小时) ===
             # ============================================================
-            # 🔥 紧急修复: 在30分钟后,如果亏损>1.5%且K线强烈反转,立即止损
-            if hold_minutes >= 30:
-                if profit_info['profit_pct'] < -0.015:  # -1.5%
-                    try:
-                        strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
-                        strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
-
-                        if strength_15m and strength_5m:
-                            net_power_15m = strength_15m.get('net_power', 0)
-                            net_power_5m = strength_5m.get('net_power', 0)
-
-                            # LONG持仓检查是否强烈反转为看空
-                            if position_side == 'LONG':
-                                if net_power_15m <= -6 and net_power_5m <= -6:
-                                    logger.warning(
-                                        f"🚨 紧急反转保护: 持仓{position_id} {symbol} LONG | "
-                                        f"亏损{profit_info['profit_pct']*100:.1f}% | "
-                                        f"15m净能量{net_power_15m}, 5m净能量{net_power_5m} (强烈看空) | "
-                                        f"持仓{hold_minutes:.0f}分钟"
-                                    )
-                                    return ('紧急反转止损(亏损+强烈反转)', 1.0)
-
-                            # SHORT持仓检查是否强烈反转为看多
-                            elif position_side == 'SHORT':
-                                if net_power_15m >= 6 and net_power_5m >= 6:
-                                    logger.warning(
-                                        f"🚨 紧急反转保护: 持仓{position_id} {symbol} SHORT | "
-                                        f"亏损{profit_info['profit_pct']*100:.1f}% | "
-                                        f"15m净能量{net_power_15m}, 5m净能量{net_power_5m} (强烈看多) | "
-                                        f"持仓{hold_minutes:.0f}分钟"
-                                    )
-                                    return ('紧急反转止损(亏损+强烈反转)', 1.0)
-                    except Exception as e:
-                        logger.debug(f"紧急反转检查失败: {e}")
+            # 开仓2小时内不平仓(除了止损和止盈)
+            if hold_minutes < MIN_HOLD_MINUTES:
+                # 2小时内只允许止损和止盈,不进行其他平仓检查
+                return None
 
             # ============================================================
-            # === 优先级4: 智能顶底识别 (立即生效,无需等待) ===
+            # === 优先级4: 智能顶底识别 ===
             # ============================================================
-            # 🔥 紧急修复: 移除最小持仓时间限制,趋势策略30分钟后就能检查顶底
+            # 注: 已满足2小时最小持仓时间,现在可以检查顶底
             is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price)
             if is_top_bottom:
                 logger.info(
@@ -1332,7 +1228,7 @@ class SmartExitOptimizer:
 
             # === 亏损 + 强度反转（止损，全平） ===
             # 注意: 这个检查在2小时限制之后,所以不会过早触发
-            if profit_info['profit_pct'] < -0.01:  # -1%
+            if profit_info['profit_pct'] < -1.0:
                 # 亏损>1%，检查K线方向是否反转
                 if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
                     logger.warning(
@@ -1348,13 +1244,13 @@ class SmartExitOptimizer:
             # 阶段0 → 阶段1: 首次触发部分平仓50%
             if current_stage == 0:
                 # 检测盈利+强度大幅减弱(止盈)
-                if profit_info['profit_pct'] >= 0.02 and current_kline['total_score'] < 15:  # 2%
+                if profit_info['profit_pct'] >= 2.0 and current_kline['total_score'] < 15:
                     return ('盈利>=2%+强度大幅减弱', 0.5)  # 首次平仓50%
 
             # 阶段1 → 阶段2: 条件恶化，再平70%（总共平85%）
             elif current_stage == 1:
                 # 盈利>=4%且强度减弱(止盈加码)
-                if profit_info['profit_pct'] >= 0.04 and current_kline['total_score'] < 20:  # 4%
+                if profit_info['profit_pct'] >= 4.0 and current_kline['total_score'] < 20:
                     return ('盈利>=4%+强度减弱', 0.7)  # 再平70%
 
                 # 持仓接近4小时且强度不足

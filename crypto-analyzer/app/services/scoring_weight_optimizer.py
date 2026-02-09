@@ -2,21 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 信号评分权重优化器
-
-⚠️⚠️⚠️ 警告：此优化器已被废弃！⚠️⚠️⚠️
-
-问题：
-1. 会修改信号权重，导致反方向信号权重被错误调整
-   例如：momentum_up_3pct (上涨3%) 本应是LONG信号，但SHORT权重被调成30
-2. 违反基本原则：纯LONG信号的SHORT权重必须为0，不能被优化
-
-替代方案：
-使用 SignalQualityManager 来调整信号筛选阈值，而不是修改权重
-- 表现好的信号 → 降低开仓门槛
-- 表现差的信号 → 提高开仓门槛
-- 权重永远不变
-
-此类仅保留用于查看代码逻辑，不应被调用！
+根据历史交易表现，动态调整各评分组件的权重
 """
 
 import pymysql
@@ -26,20 +12,11 @@ from loguru import logger
 
 
 class ScoringWeightOptimizer:
-    """
-    信号评分权重优化器（已废弃）
-
-    ⚠️ 请使用 SignalQualityManager 替代
-    """
+    """信号评分权重优化器"""
 
     def __init__(self, db_config: dict):
         self.db_config = db_config
         self.connection = None
-
-        # 🔥 禁用标志：防止此类被意外调用
-        self.DEPRECATED = True
-        logger.warning("⚠️ ScoringWeightOptimizer 已被废弃！请使用 SignalQualityManager")
-        logger.warning("⚠️ 此类会错误地修改反方向信号权重，违反基本原则")
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -197,13 +174,6 @@ class ScoringWeightOptimizer:
         Returns:
             dict: 调整结果
         """
-        # 🔥 禁用此功能：防止错误调整反方向信号权重
-        if self.DEPRECATED:
-            logger.error("❌ ScoringWeightOptimizer.adjust_weights() 已被禁用！")
-            logger.error("❌ 此方法会错误地修改反方向信号权重（如momentum_up_3pct的SHORT权重）")
-            logger.error("❌ 请使用 SignalQualityManager 替代（调整阈值而非权重）")
-            return {'adjusted': [], 'skipped': [], 'error': 'Method deprecated and disabled'}
-
         try:
             # 1. 分析组件表现
             component_performance = self.analyze_component_performance(days=7)

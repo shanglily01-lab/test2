@@ -39,8 +39,7 @@ class VolatilityCalculator:
         symbol: str,
         position_side: str,
         entry_score: int = 50,
-        signal_components: list = None,
-        max_hold_minutes: int = 240
+        signal_components: list = None
     ) -> Tuple[float, float, str]:
         """
         获取开仓时应该使用的止损止盈百分比
@@ -50,7 +49,6 @@ class VolatilityCalculator:
             position_side: 持仓方向 'LONG' 或 'SHORT'
             entry_score: 入场评分 (用于调整止损宽度)
             signal_components: 信号组件列表
-            max_hold_minutes: 最大持仓时间(用于判断是趋势市还是中性市)
 
         返回:
             (止损百分比, 止盈百分比, 计算原因)
@@ -59,28 +57,95 @@ class VolatilityCalculator:
             >>> calc = VolatilityCalculator()
             >>> sl, tp, reason = calc.get_sl_tp_for_position('AXS/USDT', 'SHORT', 75)
             >>> print(f"SL: {sl}%, TP: {tp}%")
-            SL: 3.0%, TP: 5.0%
+            SL: 4.0%, TP: 1.8%
         """
         signal_components = signal_components or []
 
-        # 🔥 紧急修复: 根据持仓时间判断市场类型,使用固定止损止盈
-        # 中性市 (max_hold_minutes=120): 止损1%, 止盈1.5%
-        # 趋势市 (max_hold_minutes=240): 止损3%, 止盈5%
+        # 1. 获取波动率数据(使用缓存)
+        volatility = self._get_volatility_cached(symbol)
 
-        if max_hold_minutes <= 120:
-            # 中性市场 (Big4强度30-60)
-            final_sl = 1.0   # 1%止损
-            final_tp = 1.5   # 1.5%止盈
-            market_type = "中性市"
-            reason = f"中性市场固定值 | 止损1% 止盈1.5% | 盈亏比1:1.5 | 持仓{max_hold_minutes}分钟"
-        else:
-            # 趋势市场 (Big4强度>60 或 正常市场)
-            final_sl = 3.0   # 3%止损
-            final_tp = 5.0   # 5%止盈
-            market_type = "趋势市"
-            reason = f"趋势市场固定值 | 止损3% 止盈5% | 盈亏比1:1.67 | 持仓{max_hold_minutes}分钟"
+        if not volatility:
+            # 没有历史数据,使用保守的固定值
+            logger.warning(f"{symbol} 无历史波动数据,使用固定值")
+            return self._get_default_sl_tp(position_side, "无历史数据")
 
-        logger.info(f"{symbol} {position_side} - {market_type} SL:{final_sl:.2f}% TP:{final_tp:.2f}% - {reason}")
+        # 2. 根据方向计算基础止损止盈
+        if position_side == 'LONG':
+            # 多单: 风险是向下,收益是向上
+            base_sl = max(
+                volatility['downside_p75'] * 1.3,  # 覆盖75%向下波动+30%
+                volatility['avg_downside'] * 1.5
+            )
+            base_tp = min(
+                volatility['upside_p75'] * 0.8,    # 目标75%向上波动的80%
+                volatility['avg_upside'] * 2.0
+            )
+        else:  # SHORT
+            # 空单: 风险是向上,收益是向下
+            base_sl = max(
+                volatility['upside_p75'] * 1.3,
+                volatility['avg_upside'] * 1.5
+            )
+            base_tp = min(
+                volatility['downside_p75'] * 0.8,
+                volatility['avg_downside'] * 2.0
+            )
+
+        # 3. 根据入场评分调整(低分需要更大止损空间)
+        score_multiplier = 1.0
+        if entry_score < 35:
+            score_multiplier = 1.3  # 低分+30%止损空间
+        elif entry_score < 40:
+            score_multiplier = 1.2
+        elif entry_score > 60:
+            score_multiplier = 0.9  # 高分可以适当收紧
+
+        adjusted_sl = base_sl * score_multiplier
+
+        # 4. 特殊信号调整
+        special_adjustments = []
+
+        if 'volatility_high' in signal_components:
+            adjusted_sl *= 1.3  # 高波动信号+30%
+            special_adjustments.append('高波动+30%')
+
+        # 检查方向性风险
+        directional_bias = volatility['avg_upside'] - volatility['avg_downside']
+        if position_side == 'SHORT' and directional_bias > 0.5:
+            # 空单遇到向上偏好的币种,增加止损
+            adjusted_sl *= 1.2
+            special_adjustments.append('向上偏好+20%')
+        elif position_side == 'LONG' and directional_bias < -0.5:
+            # 多单遇到向下偏好的币种,增加止损
+            adjusted_sl *= 1.2
+            special_adjustments.append('向下偏好+20%')
+
+        # 5. 应用安全边界
+        final_sl = max(adjusted_sl, 2.5)  # 最小2.5% (5x杠杆下ROI损失12.5%)
+        final_sl = min(final_sl, 15.0)    # 最大15%(避免过于宽松)
+
+        final_tp = max(base_tp, 5.0)      # 最小5% (5x杠杆下ROI 25%)
+        final_tp = min(final_tp, 15.0)    # 最大15% (5x杠杆下ROI 75%)
+
+        # 6. 确保盈亏比不会太差 (盈亏比 = 止损:止盈 = 风险:收益)
+        risk_reward = final_sl / final_tp if final_tp > 0 else 0
+        if risk_reward > 0.67:  # 盈亏比高于1:1.5太差 (止损不能超过止盈的67%)
+            final_tp = final_sl * 2.0  # 至少保证1:2盈亏比
+            special_adjustments.append('盈亏比调整至1:2')
+
+        # 7. 生成计算原因
+        reason_parts = [
+            f"基于24H数据: 向上{volatility['avg_upside']:.1f}% 向下{volatility['avg_downside']:.1f}%",
+            f"评分{entry_score}分"
+        ]
+
+        if special_adjustments:
+            reason_parts.append(', '.join(special_adjustments))
+
+        reason_parts.append(f"盈亏比1:{(1/risk_reward if risk_reward > 0 else 0):.2f}")
+        reason = ' | '.join(reason_parts)
+
+        logger.info(f"{symbol} {position_side} - SL:{final_sl:.2f}% TP:{final_tp:.2f}% - {reason}")
 
         return round(final_sl, 2), round(final_tp, 2), reason
 
