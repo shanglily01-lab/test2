@@ -330,23 +330,57 @@ class AdaptiveOptimizer:
 
                     # 检查是否已存在
                     cursor.execute("""
-                        SELECT id FROM trading_blacklist
-                        WHERE symbol = %s AND is_active = TRUE
+                        SELECT id, rating_level FROM trading_symbol_rating
+                        WHERE symbol = %s
                     """, (symbol,))
 
-                    if not cursor.fetchone():
-                        # 插入新黑名单
+                    existing = cursor.fetchone()
+
+                    if existing:
+                        # 更新现有记录，提升黑名单等级
+                        current_level = existing['rating_level']
+                        new_level = min(current_level + 1, 2)  # 最高2级（永久禁止是3级）
+
                         cursor.execute("""
-                            INSERT INTO trading_blacklist
-                            (symbol, reason, total_loss, win_rate, order_count, is_active)
-                            VALUES (%s, %s, %s, %s, %s, TRUE)
-                        """, (symbol, reason, abs(total_pnl), win_rate, order_count))
+                            UPDATE trading_symbol_rating
+                            SET rating_level = %s,
+                                reason = %s,
+                                total_loss_amount = total_loss_amount + %s,
+                                win_rate = %s,
+                                total_trades = total_trades + %s,
+                                previous_level = %s,
+                                level_changed_at = NOW(),
+                                level_change_reason = %s,
+                                stats_end_date = CURDATE()
+                            WHERE symbol = %s
+                        """, (new_level, reason, abs(total_pnl), win_rate, order_count,
+                              current_level, f"自适应优化器: {reason}", symbol))
 
                         results['blacklist_added'].append({
                             'symbol': symbol,
+                            'action': 'updated',
+                            'old_level': current_level,
+                            'new_level': new_level,
                             'reason': reason
                         })
-                        logger.info(f"➕ 添加到数据库黑名单: {symbol} - {reason}")
+                        logger.info(f"⬆️ 提升黑名单等级: {symbol} (L{current_level}→L{new_level}) - {reason}")
+                    else:
+                        # 插入新黑名单记录（等级1）
+                        cursor.execute("""
+                            INSERT INTO trading_symbol_rating
+                            (symbol, rating_level, reason, total_loss_amount, win_rate,
+                             total_trades, stats_start_date, stats_end_date, level_change_reason)
+                            VALUES (%s, 1, %s, %s, %s, %s, CURDATE(), CURDATE(), %s)
+                        """, (symbol, reason, abs(total_pnl), win_rate, order_count,
+                              f"自适应优化器: {reason}"))
+
+                        results['blacklist_added'].append({
+                            'symbol': symbol,
+                            'action': 'added',
+                            'level': 1,
+                            'reason': reason
+                        })
+                        logger.info(f"➕ 添加到黑名单: {symbol} (L1) - {reason}")
 
                 conn.commit()
                 cursor.close()
