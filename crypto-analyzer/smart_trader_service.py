@@ -2869,7 +2869,9 @@ class SmartTraderService:
                 # 5.8. 🚀 反弹交易窗口检查 (优先于正常信号)
                 # 逻辑: Big4触底 = 全市场信号，所有交易对都开多
                 try:
-                    cursor = self.conn.cursor(pymysql.cursors.DictCursor)
+                    conn_bounce = self._get_connection()
+                    cursor = conn_bounce.cursor()
+
                     # 检查是否有Big4的活跃反弹窗口
                     BIG4 = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
 
@@ -2956,6 +2958,7 @@ class SmartTraderService:
                         logger.warning(f"🚀 [MARKET-BOUNCE] 反弹交易完成: 共开仓 {opened_count} 个币种")
 
                     cursor.close()
+                    conn_bounce.close()
 
                 except Exception as e:
                     logger.error(f"[BOUNCE-CHECK-ERROR] 反弹窗口检查失败: {e}")
