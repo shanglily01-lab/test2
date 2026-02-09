@@ -635,12 +635,16 @@ class SmartDecisionBrain:
                     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
                     return None
 
+                # 生成signal_type用于模式匹配
+                signal_type = f"TREND_{signal_combination_key}_{side}_{int(score)}"
+
                 return {
                     'symbol': symbol,
                     'side': side,
                     'score': score,
                     'current_price': current,
-                    'signal_components': signal_components  # 添加信号组成
+                    'signal_components': signal_components,  # 添加信号组成
+                    'signal_type': signal_type  # 添加信号类型，用于模式过滤
                 }
 
             return None
