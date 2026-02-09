@@ -717,51 +717,36 @@ class Big4TrendDetector:
                         bounce_opportunity = True
                         bounce_symbols.append(symbol)
                         bounce_window_end = h1_time + timedelta(minutes=45)
+
+                        # 🔥 同时标记为bottom_detected，立即触发紧急干预（不等15M确认）
+                        bottom_detected = True
+                        trigger_symbols.append(
+                            f"{symbol.split('/')[0]}深V反转(1H下影{lower_shadow_pct:.1f}%)"
+                        )
+
                         logger.warning(f"🚀🚀🚀 真深V反转! {symbol} 下影{lower_shadow_pct:.1f}%, "
                                      f"72H跌幅{drop_from_high_72h:.1f}%, 24H跌幅{drop_from_high_24h:.1f}%, "
-                                     f"首次触底, 窗口剩余{45-time_since_candle:.0f}分钟")
+                                     f"首次触底, 窗口剩余{45-time_since_candle:.0f}分钟 | "
+                                     f"立即禁止做空2小时")
 
-                    # 查看该1H K线后的15M K线 (用于emergency intervention判断)
-                    h1_start_time = h1_candle['open_time']
-                    h1_end_time = h1_start_time + 3600000 * 2  # 后2小时的15M
+                    # 🔥 已优化：深V反转检测到长下影线即立即触发紧急干预
+                    # 不再等待15M阳线确认，避免抢反弹过程中被做空信号干扰
+                    #
+                    # 原逻辑（已废弃）：
+                    # - 检测15M连续阳线
+                    # - 连续3根阳线才触发emergency intervention
+                    # 问题：
+                    # - bounce_window已创建允许抢反弹，但未禁止做空
+                    # - 逻辑不一致，时间延迟
+                    #
+                    # 新逻辑（已在上面实现）：
+                    # - 检测到is_true_deep_v即同时设置bottom_detected
+                    # - bounce_window和emergency_intervention同步创建
+                    # - 立即保护反弹仓位
 
-                    cursor.execute("""
-                        SELECT open_price, close_price, open_time
-                        FROM kline_data
-                        WHERE symbol = %s
-                        AND timeframe = '15m'
-                        AND exchange = 'binance_futures'
-                        AND open_time >= %s
-                        AND open_time <= %s
-                        ORDER BY open_time ASC
-                        LIMIT %s
-                    """, (symbol, h1_start_time, h1_end_time, self.CHECK_15M_CANDLES))
-
-                    m15_candles = cursor.fetchall()
-
-                    # 检测连续阳线 (用于emergency intervention)
-                    if m15_candles and len(m15_candles) >= self.CONSECUTIVE_GREEN_15M:
-                        consecutive_green = 0
-                        max_consecutive = 0
-
-                        for m15 in m15_candles:
-                            m15_open = float(m15['open_price'])
-                            m15_close = float(m15['close_price'])
-
-                            if m15_close > m15_open:  # 阳线
-                                consecutive_green += 1
-                                max_consecutive = max(max_consecutive, consecutive_green)
-                            else:
-                                consecutive_green = 0
-
-                        # 如果检测到连续N根阳线 = 深V反转 (触发emergency intervention)
-                        if max_consecutive >= self.CONSECUTIVE_GREEN_15M:
-                            bottom_detected = True
-                            trigger_symbols.append(
-                                f"{symbol.split('/')[0]}深V反转(1H下影{lower_shadow_pct:.1f}%+15M连续{max_consecutive}阳)"
-                            )
-                            logger.info(f"🔥 检测到{symbol}深V反转: 1H下影线{lower_shadow_pct:.1f}%, 15M连续{max_consecutive}根阳线")
-                            break  # 检测到就不再检查这个币种的其他1H K线
+                    # 如果已经通过长下影线触发了bottom_detected，跳出循环
+                    if is_true_deep_v and time_since_candle <= 45:
+                        break  # 不再检查这个币种的其他1H K线
 
         # 3. 保存反弹窗口到数据库 (独立于emergency intervention)
         if bounce_opportunity and bounce_symbols:
