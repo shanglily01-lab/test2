@@ -506,7 +506,130 @@ class CoinFuturesTradingEngine:
                     'message': f"无法获取{symbol}的价格，请检查数据源或稍后重试。错误: {str(price_error)}"
                 }
 
-            # 1.5. 检查限价单逻辑
+            # 1.5. 检查紧急干预（复用U本位的Big4检测结果）
+            try:
+                cursor.execute("""
+                    SELECT * FROM emergency_intervention
+                    WHERE account_id = 2
+                    AND trading_type = 'usdt_futures'
+                    AND expires_at > NOW()
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """)
+                emergency = cursor.fetchone()
+
+                if emergency:
+                    block_long = emergency.get('block_long', False)
+                    block_short = emergency.get('block_short', False)
+                    intervention_type = emergency.get('intervention_type', 'UNKNOWN')
+                    trigger_reason = emergency.get('trigger_reason', '')
+
+                    should_block_short = block_short
+                    should_block_long = block_long
+
+                    # 智能释放逻辑：实时检测市场反弹3%+，自动解除限制
+                    if should_block_short and position_side == 'SHORT':
+                        try:
+                            conn_check = self._connect_db()
+                            cursor_check = conn_check.cursor(pymysql.cursors.DictCursor)
+
+                            all_recovered = True
+                            for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
+                                # 转换时间戳
+                                from datetime import datetime, timedelta
+                                hours_ago_dt = datetime.now() - timedelta(hours=4)
+                                hours_ago_timestamp = int(hours_ago_dt.timestamp() * 1000)
+
+                                cursor_check.execute("""
+                                    SELECT low_price, close_price
+                                    FROM kline_data
+                                    WHERE symbol = %s AND timeframe = '1h'
+                                    AND exchange = 'binance_futures'
+                                    AND open_time >= %s
+                                    ORDER BY open_time DESC
+                                    LIMIT 4
+                                """, (big4_symbol, hours_ago_timestamp))
+
+                                recent_klines = cursor_check.fetchall()
+                                if recent_klines:
+                                    period_low = min([float(k['low_price']) for k in recent_klines])
+                                    latest_close = float(recent_klines[0]['close_price'])
+                                    recovery_pct = (latest_close - period_low) / period_low * 100
+
+                                    if recovery_pct < 3.0:
+                                        all_recovered = False
+                                        break
+
+                            cursor_check.close()
+
+                            if all_recovered:
+                                should_block_short = False
+                                logger.info(f"✅ [币本位-SMART-RELEASE] {symbol} 市场已反弹3%+，解除做空限制")
+                        except Exception as check_error:
+                            logger.warning(f"⚠️ [币本位-智能释放检查失败] {check_error}")
+
+                    if should_block_long and position_side == 'LONG':
+                        try:
+                            conn_check = self._connect_db()
+                            cursor_check = conn_check.cursor(pymysql.cursors.DictCursor)
+
+                            all_recovered = True
+                            for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
+                                # 转换时间戳
+                                from datetime import datetime, timedelta
+                                hours_ago_dt = datetime.now() - timedelta(hours=4)
+                                hours_ago_timestamp = int(hours_ago_dt.timestamp() * 1000)
+
+                                cursor_check.execute("""
+                                    SELECT high_price, close_price
+                                    FROM kline_data
+                                    WHERE symbol = %s AND timeframe = '1h'
+                                    AND exchange = 'binance_futures'
+                                    AND open_time >= %s
+                                    ORDER BY open_time DESC
+                                    LIMIT 4
+                                """, (big4_symbol, hours_ago_timestamp))
+
+                                recent_klines = cursor_check.fetchall()
+                                if recent_klines:
+                                    period_high = max([float(k['high_price']) for k in recent_klines])
+                                    latest_close = float(recent_klines[0]['close_price'])
+                                    drop_pct = (latest_close - period_high) / period_high * 100
+
+                                    if drop_pct > -3.0:
+                                        all_recovered = False
+                                        break
+
+                            cursor_check.close()
+
+                            if all_recovered:
+                                should_block_long = False
+                                logger.info(f"✅ [币本位-SMART-RELEASE] {symbol} 市场已回落3%+，解除做多限制")
+                        except Exception as check_error:
+                            logger.warning(f"⚠️ [币本位-智能释放检查失败] {check_error}")
+
+                    # 触底反弹 → 禁止做空
+                    if should_block_short and position_side == 'SHORT':
+                        logger.warning(f"🛑 [币本位-紧急干预] {symbol} 市场触底反弹，禁止做空: {trigger_reason}")
+                        return {
+                            'success': False,
+                            'message': f'🛑 市场{intervention_type}，暂停做空操作: {trigger_reason}'
+                        }
+
+                    # 触顶回调 → 禁止做多
+                    if should_block_long and position_side == 'LONG':
+                        logger.warning(f"🛑 [币本位-紧急干预] {symbol} 市场触顶回调，禁止做多: {trigger_reason}")
+                        return {
+                            'success': False,
+                            'message': f'🛑 市场{intervention_type}，暂停做多操作: {trigger_reason}'
+                        }
+
+                    logger.info(f"✅ [币本位-紧急干预检查] {symbol} {position_side} 通过检查")
+            except Exception as emergency_error:
+                # 紧急干预检查失败不应阻止交易，只记录日志
+                logger.warning(f"⚠️ [币本位-紧急干预检查失败] {emergency_error}")
+
+            # 1.6. 检查限价单逻辑
             logger.info(f"[开仓] {symbol} {position_side} 收到 limit_price={limit_price}, current_price={current_price}")
             # 如果设置了限价，检查是否需要创建未成交订单
             if limit_price and limit_price > 0:
