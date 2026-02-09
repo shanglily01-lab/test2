@@ -10,6 +10,7 @@ import pymysql
 import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
+from decimal import Decimal
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -338,8 +339,8 @@ class SmartEntryExecutorV3:
             cursor = conn.cursor()
 
             # 获取止盈止损参数（默认3%止损，6%止盈）
-            stop_loss_pct = 3.0
-            take_profit_pct = 6.0
+            stop_loss_pct = Decimal('3.0')  # 🔥 修复: 使用Decimal类型
+            take_profit_pct = Decimal('6.0')  # 🔥 修复: 使用Decimal类型
 
             if position_side == 'LONG':
                 stop_loss_price = entry_price * (1 - stop_loss_pct / 100)

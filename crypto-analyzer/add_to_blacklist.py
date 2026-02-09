@@ -112,10 +112,12 @@ def add_to_blacklist(symbols: list, level: int = 2, reason: str = ""):
 if __name__ == '__main__':
     # 要添加到黑名单2级的交易对
     blacklist_symbols = [
-        'DUSK/USDT'    # 频繁止损，表现不稳定
+        'SKR/USDT',    # 24H亏损-86.57U, 胜率62.5%但盈亏比差
+        'PENGU/USDT',  # 24H亏损-79.50U, 胜率0%
+        'IP/USDT'      # 24H亏损-62.20U, 胜率0%
     ]
 
-    reason = "表现不稳定，加入黑名单L2 (2026-02-09)"
+    reason = "24H表现差/胜率低/亏损大，加入黑名单L2 (2026-02-09)"
 
     logger.info("=" * 60)
     logger.info(f"准备将以下交易对加入黑名单L2:")
