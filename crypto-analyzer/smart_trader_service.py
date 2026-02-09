@@ -3013,7 +3013,10 @@ class SmartTraderService:
                     # ========== 模式筛选: 只接受匹配当前模式的信号 ==========
                     signal_type = opp.get('signal_type', '')
 
-                    if current_mode == 'trend':
+                    # 🚀 紧急反弹信号绕过模式过滤 (Big4触底 = 最高优先级)
+                    if signal_type == 'EMERGENCY_BOUNCE':
+                        logger.warning(f"🚀 [EMERGENCY-BYPASS] {symbol} 反弹信号绕过模式过滤")
+                    elif current_mode == 'trend':
                         # 趋势模式: 只接受TREND类型信号
                         if 'TREND' not in signal_type:
                             logger.info(f"[MODE-FILTER] {symbol} 当前trend模式,跳过非TREND信号 (信号类型: {signal_type[:40]})")
