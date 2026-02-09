@@ -534,71 +534,23 @@ class SmartDecisionBrain:
                 if weight['short'] > 0:
                     signal_components['volume_power_1h_bear'] = weight['short']
 
-            # 8. 突破追涨信号: position_high + 强力量能多头 → 可以做多
-            # 用户反馈: "不适合做空，那就适合做多啊", "K线多空比，还要结合量能一起看"
-            # 🔥 新增: 增强追高过滤，防止买在顶部
-            if position_pct > 70 and (net_power_1h >= 2 or (net_power_1h >= 2 and net_power_15m >= 2)):
-                # 额外过滤条件: 防止追高
-                can_breakout = True
-                breakout_warnings = []
-
-                # 过滤1: 检查最近3根1H K线是否有长上影线（抛压）
-                recent_3_klines = klines_1h[-3:]
-                for k in recent_3_klines:
-                    upper_shadow_pct = (k['high'] - max(k['open'], k['close'])) / k['close'] if k['close'] > 0 else 0
-                    if upper_shadow_pct > 0.015:  # 上影线>1.5%
-                        can_breakout = False
-                        breakout_warnings.append(f"长上影线{upper_shadow_pct*100:.1f}%")
-                        break
-
-                # 过滤2: 检查是否连续上涨太多天（追高风险）
-                recent_5d_gains = sum(1 for k in klines_1d[-5:] if k['close'] > k['open'])
-                if recent_5d_gains >= 4:  # 连续4天以上上涨
-                    can_breakout = False
-                    breakout_warnings.append(f"连续{recent_5d_gains}天上涨")
-
-                # 移除过滤3: Big4市场趋势判断已足够,1D趋势检查多余且过于严格
-
-                # 🔥 V5.1优化: 增加Big4强度过滤，震荡市禁用突破信号
-                if can_breakout:
-                    # 检查Big4强度，震荡市(强度<70)禁用突破追涨
-                    # big4_result由外部传入
-                    big4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
-                    big4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
-
-                    if big4_strength >= 70 and big4_signal == 'BULLISH':
-                        # 强趋势上涨(70+)，允许突破追涨
-                        weight = self.scoring_weights.get('breakout_long', {'long': 20, 'short': 0})
-                        long_score += weight['long']
-                        if weight['long'] > 0:
-                            signal_components['breakout_long'] = weight['long']
-                            logger.info(f"{symbol} 突破追涨: position={position_pct:.1f}%, 1H净力量={net_power_1h}, Big4={big4_strength:.0f}")
-                            if breakout_warnings:
-                                logger.warning(f"{symbol} 突破追涨警告: {', '.join(breakout_warnings)}")
-                    else:
-                        # 震荡市或非BULLISH，禁用突破追涨
-                        logger.debug(f"{symbol} 突破追涨被过滤: Big4强度{big4_strength:.0f}<70或非BULLISH，震荡市不追涨")
-                else:
-                    logger.warning(f"{symbol} 追高风险过滤: {', '.join(breakout_warnings)}, 跳过突破信号")
-
-            # 9. 破位追空信号: position_low + 强力量能空头 → 可以做空
-            # 🔥 V5.1优化: 增加Big4强度过滤，震荡市禁用破位信号
-            elif position_pct < 30 and (net_power_1h <= -2 or (net_power_1h <= -2 and net_power_15m <= -2)):
-                # 检查Big4强度，震荡市(强度<70)禁用破位追空
-                # big4_result由外部传入
-                big4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
-                big4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
-
-                if big4_strength >= 70 and big4_signal == 'BEARISH':
-                    # 强趋势下跌(70+)，允许破位追空
-                    weight = self.scoring_weights.get('breakdown_short', {'long': 0, 'short': 20})
-                    short_score += weight['short']
-                    if weight['short'] > 0:
-                        signal_components['breakdown_short'] = weight['short']
-                        logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}, Big4={big4_strength:.0f}")
-                else:
-                    # 震荡市或非BEARISH，禁用破位追空
-                    logger.debug(f"{symbol} 破位追空被过滤: Big4强度{big4_strength:.0f}<70或非BEARISH，震荡市不追空")
+            # ========== 破位/突破信号已禁用 (2026-02-09) ==========
+            # 8. 突破追涨信号: position_high + 强力量能多头 → 已禁用
+            # 9. 破位追空信号: position_low + 强力量能空头 → 已禁用
+            #
+            # 禁用原因:
+            # 1. 用户反馈: "宁愿不开仓，也不乱开仓"
+            # 2. 今日数据: 22笔订单破位追空，1胜21负 (4.5%胜率)
+            # 3. 破位信号在震荡市容易被诱导，导致频繁止损
+            # 4. Big4强度>=70时，市场趋势已明确，不需要破位确认
+            # 5. Big4强度<70时，震荡市破位信号不可靠
+            #
+            # 结论: 完全禁用破位/突破信号，只依赖其他维度评分
+            #
+            # if position_pct > 70 and (net_power_1h >= 2 or ...):
+            #     [已注释掉的突破追涨代码]
+            # elif position_pct < 30 and (net_power_1h <= -2 or ...):
+            #     [已注释掉的破位追空代码]
 
             # ========== 移除EMA评分 (已有Big4市场趋势判断) ==========
             # 已移除: ema_bull, ema_bear
