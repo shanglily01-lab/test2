@@ -3112,15 +3112,99 @@ class SmartTraderService:
                         logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
                         # 失败不影响正常交易流程
 
-                    # 🔥 紧急干预检查: 触底/触顶反转保护
+                    # 🔥 紧急干预检查: 触底/触顶反转保护 (实时判断)
                     try:
                         emergency = big4_result.get('emergency_intervention', {})
-                        if emergency.get('block_long') and new_side == 'LONG':
+
+                        # 🔥 新增: 实时检查市场恢复状态，绕过Big4检测器的15分钟缓存
+                        should_block_long = emergency.get('block_long', False)
+                        should_block_short = emergency.get('block_short', False)
+
+                        # 如果有触底干预且要做空，实时检查是否已反弹3%+
+                        if should_block_short and new_side == 'SHORT' and emergency.get('bottom_detected'):
+                            # 快速检查: 查询最近4根1H K线，判断是否已反弹
+                            try:
+                                conn_check = self._get_connection()
+                                cursor_check = conn_check.cursor(pymysql.cursors.DictCursor)
+
+                                # 检查Big4是否已完成3%反弹
+                                all_recovered = True
+                                for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
+                                    cursor_check.execute("""
+                                        SELECT low_price, close_price
+                                        FROM kline_data
+                                        WHERE symbol = %s
+                                        AND timeframe = '1h'
+                                        AND exchange = 'binance_futures'
+                                        ORDER BY open_time DESC
+                                        LIMIT 4
+                                    """, (big4_symbol,))
+
+                                    recent_klines = cursor_check.fetchall()
+                                    if recent_klines:
+                                        period_low = min([float(k['low_price']) for k in recent_klines])
+                                        latest_close = float(recent_klines[0]['close_price'])
+                                        recovery_pct = (latest_close - period_low) / period_low * 100
+
+                                        if recovery_pct < 3.0:
+                                            all_recovered = False
+                                            break
+
+                                cursor_check.close()
+
+                                # 如果所有Big4都已反弹3%+，解除禁止做空
+                                if all_recovered:
+                                    should_block_short = False
+                                    logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已反弹3%+，解除做空限制")
+
+                            except Exception as check_error:
+                                logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
+
+                        # 如果有触顶干预且要做多，实时检查是否已回调3%+
+                        if should_block_long and new_side == 'LONG' and emergency.get('top_detected'):
+                            try:
+                                conn_check = self._get_connection()
+                                cursor_check = conn_check.cursor(pymysql.cursors.DictCursor)
+
+                                all_cooled = True
+                                for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
+                                    cursor_check.execute("""
+                                        SELECT high_price, close_price
+                                        FROM kline_data
+                                        WHERE symbol = %s
+                                        AND timeframe = '1h'
+                                        AND exchange = 'binance_futures'
+                                        ORDER BY open_time DESC
+                                        LIMIT 4
+                                    """, (big4_symbol,))
+
+                                    recent_klines = cursor_check.fetchall()
+                                    if recent_klines:
+                                        period_high = max([float(k['high_price']) for k in recent_klines])
+                                        latest_close = float(recent_klines[0]['close_price'])
+                                        cooldown_pct = (latest_close - period_high) / period_high * 100
+
+                                        if cooldown_pct > -3.0:
+                                            all_cooled = False
+                                            break
+
+                                cursor_check.close()
+
+                                if all_cooled:
+                                    should_block_long = False
+                                    logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已回调3%+，解除做多限制")
+
+                            except Exception as check_error:
+                                logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
+
+                        # 执行最终的阻止判断
+                        if should_block_long and new_side == 'LONG':
                             logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触顶反转风险,禁止做多 | {emergency.get('details', '')}")
                             continue
-                        if emergency.get('block_short') and new_side == 'SHORT':
+                        if should_block_short and new_side == 'SHORT':
                             logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触底反弹风险,禁止做空 | {emergency.get('details', '')}")
                             continue
+
                     except Exception as e:
                         logger.error(f"[EMERGENCY-ERROR] {symbol} 紧急干预检查失败: {e}")
                         # 检查失败不影响正常交易
