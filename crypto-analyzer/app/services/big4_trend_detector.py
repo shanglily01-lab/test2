@@ -425,34 +425,49 @@ class Big4TrendDetector:
         """
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 1. 检查数据库中是否有未过期的紧急干预记录
+        # 1. 检查数据库中是否有未过期的紧急干预记录 (可能有多条)
         cursor.execute("""
-            SELECT intervention_type, expires_at, trigger_reason
+            SELECT intervention_type, expires_at, trigger_reason, block_long, block_short
             FROM emergency_intervention
             WHERE account_id = 2
             AND trading_type = 'usdt_futures'
             AND expires_at > NOW()
             ORDER BY created_at DESC
-            LIMIT 1
         """)
 
-        existing = cursor.fetchone()
+        existing_records = cursor.fetchall()
 
-        if existing:
-            # 已有未过期的干预记录
-            intervention_type = existing['intervention_type']
-            expires_at = existing['expires_at']
-            reason = existing['trigger_reason']
+        if existing_records:
+            # 🔥 修复: 合并多条记录的状态
+            bottom_detected = False
+            top_detected = False
+            block_long = False
+            block_short = False
+            reasons = []
+            latest_expires = None
+
+            for record in existing_records:
+                if record['intervention_type'] == 'BOTTOM_BOUNCE':
+                    bottom_detected = True
+                    block_short = block_short or record['block_short']
+                elif record['intervention_type'] == 'TOP_REVERSAL':
+                    top_detected = True
+                    block_long = block_long or record['block_long']
+
+                reasons.append(f"{record['trigger_reason']}")
+                if latest_expires is None or record['expires_at'] > latest_expires:
+                    latest_expires = record['expires_at']
 
             cursor.close()
 
+            combined_reason = ', '.join(reasons)
             return {
-                'bottom_detected': intervention_type == 'BOTTOM_BOUNCE',
-                'top_detected': intervention_type == 'TOP_REVERSAL',
-                'block_long': intervention_type == 'TOP_REVERSAL',
-                'block_short': intervention_type == 'BOTTOM_BOUNCE',
-                'details': f"⚠️ 紧急干预中: {reason} (失效于 {expires_at.strftime('%H:%M')})",
-                'expires_at': expires_at,
+                'bottom_detected': bottom_detected,
+                'top_detected': top_detected,
+                'block_long': block_long,
+                'block_short': block_short,
+                'details': f"⚠️ 紧急干预中: {combined_reason} (失效于 {latest_expires.strftime('%H:%M')})",
+                'expires_at': latest_expires,
                 'bounce_opportunity': False,  # 已在干预期，不触发新反弹
                 'bounce_symbols': [],
                 'bounce_window_end': None
@@ -732,43 +747,72 @@ class Big4TrendDetector:
         cursor.close()
 
         # 4. 如果检测到新的反转，保存到数据库
+        # 🔥 修复: 触底和触顶分开处理，分别插入记录
         if bottom_detected or top_detected:
-            intervention_type = 'BOTTOM_BOUNCE' if bottom_detected else 'TOP_REVERSAL'
-            block_long = top_detected
-            block_short = bottom_detected
-            details = f"{'触底反弹' if bottom_detected else '触顶回调'}: {', '.join(trigger_symbols)}"
             expires_at = datetime.now() + timedelta(hours=self.BLOCK_DURATION_HOURS)
 
-            # 保存到数据库
             try:
                 conn_write = pymysql.connect(**self.db_config)
                 cursor_write = conn_write.cursor()
 
-                cursor_write.execute("""
-                    INSERT INTO emergency_intervention
-                    (account_id, trading_type, intervention_type, block_long, block_short,
-                     trigger_reason, expires_at, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
-                """, (
-                    2, 'usdt_futures', intervention_type, block_long, block_short,
-                    details, expires_at
-                ))
+                # 处理触底反弹 (优先级更高，先插入)
+                if bottom_detected:
+                    bottom_symbols = [s for s in trigger_symbols if '触底' in s]
+                    bottom_details = f"触底反弹: {', '.join(bottom_symbols)}"
+
+                    cursor_write.execute("""
+                        INSERT INTO emergency_intervention
+                        (account_id, trading_type, intervention_type, block_long, block_short,
+                         trigger_reason, expires_at, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    """, (
+                        2, 'usdt_futures', 'BOTTOM_BOUNCE', False, True,  # 只禁止做空
+                        bottom_details, expires_at
+                    ))
+
+                    logger.warning(f"🚨 紧急干预已激活: {bottom_details} (禁止做空{self.BLOCK_DURATION_HOURS}小时)")
+
+                # 处理触顶回调
+                if top_detected:
+                    top_symbols = [s for s in trigger_symbols if '触顶' in s]
+                    top_details = f"触顶回调: {', '.join(top_symbols)}"
+
+                    cursor_write.execute("""
+                        INSERT INTO emergency_intervention
+                        (account_id, trading_type, intervention_type, block_long, block_short,
+                         trigger_reason, expires_at, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    """, (
+                        2, 'usdt_futures', 'TOP_REVERSAL', True, False,  # 只禁止做多
+                        top_details, expires_at
+                    ))
+
+                    logger.warning(f"🚨 紧急干预已激活: {top_details} (禁止做多{self.BLOCK_DURATION_HOURS}小时)")
 
                 conn_write.commit()
                 cursor_write.close()
                 conn_write.close()
 
-                logger.warning(f"🚨 紧急干预已激活: {details} (持续{self.BLOCK_DURATION_HOURS}小时)")
-
             except Exception as e:
                 logger.error(f"❌ 保存紧急干预失败: {e}")
+
+            # 🔥 修复: 返回正确的block状态
+            details_list = []
+            if bottom_detected:
+                bottom_symbols = [s for s in trigger_symbols if '触底' in s]
+                details_list.append(f"触底反弹: {', '.join(bottom_symbols)}")
+            if top_detected:
+                top_symbols = [s for s in trigger_symbols if '触顶' in s]
+                details_list.append(f"触顶回调: {', '.join(top_symbols)}")
+
+            combined_details = ' | '.join(details_list)
 
             return {
                 'bottom_detected': bottom_detected,
                 'top_detected': top_detected,
-                'block_long': block_long,
-                'block_short': block_short,
-                'details': f"⚠️ {details} (阻止{self.BLOCK_DURATION_HOURS}小时)",
+                'block_long': top_detected,      # 触顶时禁止做多
+                'block_short': bottom_detected,  # 触底时禁止做空
+                'details': f"⚠️ {combined_details} (阻止{self.BLOCK_DURATION_HOURS}小时)",
                 'expires_at': expires_at,
                 'bounce_opportunity': bounce_opportunity,
                 'bounce_symbols': bounce_symbols,
