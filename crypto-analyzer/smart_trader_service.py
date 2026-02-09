@@ -2866,6 +2866,100 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
+                # 5.8. 🚀 反弹交易窗口检查 (优先于正常信号)
+                # 逻辑: Big4触底 = 全市场信号，所有交易对都开多
+                try:
+                    cursor = self.conn.cursor(pymysql.cursors.DictCursor)
+                    # 检查是否有Big4的活跃反弹窗口
+                    BIG4 = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
+
+                    cursor.execute("""
+                        SELECT symbol, lower_shadow_pct, window_end, trigger_time
+                        FROM bounce_window
+                        WHERE account_id = 2
+                        AND trading_type = 'usdt_futures'
+                        AND symbol IN ('BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT')
+                        AND window_end > NOW()
+                        ORDER BY trigger_time DESC
+                        LIMIT 1
+                    """)
+
+                    big4_bounce = cursor.fetchone()
+
+                    if big4_bounce:
+                        # 🚀 Big4触底 = 全市场反弹信号!
+                        window_end = big4_bounce['window_end']
+                        remaining_minutes = (window_end - datetime.now()).total_seconds() / 60
+                        trigger_symbol = big4_bounce['symbol']
+
+                        logger.warning(f"🚀🚀🚀 [MARKET-BOUNCE] {trigger_symbol} 触发全市场反弹窗口! "
+                                     f"下影{big4_bounce['lower_shadow_pct']:.1f}%, 剩余{remaining_minutes:.0f}分钟")
+
+                        # 获取所有交易对
+                        cursor.execute("""
+                            SELECT DISTINCT symbol
+                            FROM symbols
+                            WHERE trading_type = 'usdt_futures'
+                            AND is_active = TRUE
+                        """)
+                        all_symbols = [row['symbol'] for row in cursor.fetchall()]
+                        logger.info(f"🚀 [MARKET-BOUNCE] 准备对 {len(all_symbols)} 个交易对开多")
+
+                        opened_count = 0
+                        for symbol in all_symbols:
+                            if self.get_open_positions_count() >= self.max_positions:
+                                logger.info(f"[BOUNCE-SKIP] 已达最大持仓 {self.max_positions}，停止反弹交易")
+                                break
+
+                            # 检查是否已有该币种的LONG仓位
+                            if self.has_position(symbol, 'LONG'):
+                                continue
+
+                            # 检查是否有SHORT仓位
+                            if self.has_position(symbol, 'SHORT'):
+                                continue
+
+                            # 检查最近是否平仓过LONG (冷却期)
+                            if self.check_recent_close(symbol, 'LONG', cooldown_minutes=30):
+                                continue
+
+                            # 获取当前价格
+                            try:
+                                current_price = self.binance_api.get_current_price(symbol)
+                            except Exception as e:
+                                logger.error(f"[BOUNCE-ERROR] {symbol} 获取价格失败: {e}")
+                                continue
+
+                            # 🔥 激进开仓策略: 立即开仓
+                            # Big4触底 = 市场信号，所有币跟涨
+                            bounce_opp = {
+                                'symbol': symbol,
+                                'side': 'LONG',
+                                'score': 100,
+                                'strategy': 'emergency_bounce',
+                                'reason': f"🚀市场反弹: {trigger_symbol}触底{big4_bounce['lower_shadow_pct']:.1f}%, 窗口{remaining_minutes:.0f}分钟",
+                                'signal_type': 'EMERGENCY_BOUNCE',
+                                'position_size_pct': 70,  # 🔥 激进仓位70%
+                                'take_profit_pct': 3.5,   # 🔥 激进止盈3.5%
+                                'stop_loss_pct': 2.5,     # 🔥 止损2.5%
+                            }
+
+                            # 开仓
+                            try:
+                                self.open_position(bounce_opp)
+                                opened_count += 1
+                                logger.info(f"✅ [BOUNCE-OPENED] {symbol} 反弹多单已开 ({opened_count}/{len(all_symbols)})")
+                                time.sleep(1)  # 避免频率限制
+                            except Exception as e:
+                                logger.error(f"❌ [BOUNCE-ERROR] {symbol} 反弹开仓失败: {e}")
+
+                        logger.warning(f"🚀 [MARKET-BOUNCE] 反弹交易完成: 共开仓 {opened_count} 个币种")
+
+                    cursor.close()
+
+                except Exception as e:
+                    logger.error(f"[BOUNCE-CHECK-ERROR] 反弹窗口检查失败: {e}")
+
                 # 6. 执行交易
                 logger.info(f"[EXECUTE] 找到 {len(opportunities)} 个机会")
 

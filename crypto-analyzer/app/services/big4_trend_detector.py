@@ -418,6 +418,9 @@ class Big4TrendDetector:
             'block_short': bool,          # 是否阻止做空
             'details': str,               # 详细原因
             'expires_at': datetime | None # 干预失效时间
+            'bounce_opportunity': bool,   # 🔥 是否有反弹交易机会
+            'bounce_symbols': list,       # 🔥 反弹交易的币种列表
+            'bounce_window_end': datetime | None  # 🔥 反弹窗口结束时间 (45分钟)
         }
         """
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -449,7 +452,10 @@ class Big4TrendDetector:
                 'block_long': intervention_type == 'TOP_REVERSAL',
                 'block_short': intervention_type == 'BOTTOM_BOUNCE',
                 'details': f"⚠️ 紧急干预中: {reason} (失效于 {expires_at.strftime('%H:%M')})",
-                'expires_at': expires_at
+                'expires_at': expires_at,
+                'bounce_opportunity': False,  # 已在干预期，不触发新反弹
+                'bounce_symbols': [],
+                'bounce_window_end': None
             }
 
         # 2. 双重检测: 1H级别 + 15M深V反转
@@ -460,6 +466,11 @@ class Big4TrendDetector:
         trigger_symbols = []
         max_drop = 0
         max_rise = 0
+
+        # 🔥 反弹交易机会追踪
+        bounce_opportunity = False
+        bounce_symbols = []
+        bounce_window_end = None
 
         for symbol in BIG4_SYMBOLS:
             # ========== 方法1: 1H级别长周期检测 ==========
@@ -528,9 +539,83 @@ class Big4TrendDetector:
                 body_low = min(open_p, close_p)
                 lower_shadow_pct = (body_low - low_p) / low_p * 100 if low_p > 0 else 0
 
-                # 检测长下影线 (锤子线)
+                # 🔥 检测长下影线 = 潜在反弹交易机会
                 if lower_shadow_pct >= self.LOWER_SHADOW_THRESHOLD:
-                    # 查看该1H K线后的15M K线
+                    # 计算1H K线的时间
+                    h1_ts = int(h1_candle['open_time']) / 1000 if int(h1_candle['open_time']) > 9999999999 else int(h1_candle['open_time'])
+                    h1_time = datetime.fromtimestamp(h1_ts)
+                    time_since_candle = (datetime.now() - h1_time).total_seconds() / 60  # 分钟
+
+                    # 🎯 大周期过滤: 检查前72H是否持续下跌 (避免震荡市假信号)
+                    cursor_check = conn.cursor(pymysql.cursors.DictCursor)
+                    cursor_check.execute("""
+                        SELECT high_price, low_price, open_time
+                        FROM kline_data
+                        WHERE symbol = %s
+                        AND timeframe = '1h'
+                        AND exchange = 'binance_futures'
+                        AND open_time <= %s
+                        ORDER BY open_time DESC
+                        LIMIT 72
+                    """, (symbol, h1_candle['open_time']))
+
+                    history_72h = cursor_check.fetchall()
+                    cursor_check.close()
+
+                    is_true_deep_v = False
+
+                    if len(history_72h) >= 24:  # 至少需要24H数据
+                        # 计算72H和24H的最高点
+                        high_72h = max([float(k['high_price']) for k in history_72h])
+                        high_24h = max([float(k['high_price']) for k in history_72h[:24]])
+
+                        # 从高点到当前低点的跌幅
+                        drop_from_high_72h = (low_p - high_72h) / high_72h * 100
+                        drop_from_high_24h = (low_p - high_24h) / high_24h * 100
+
+                        # 判断条件:
+                        # 1. 72H持续下跌 >= 8%
+                        # 2. 24H加速下跌 >= 4%
+                        # 3. 首次触底 (24H内没有其他长下影线)
+                        is_sustained_drop = drop_from_high_72h <= -8.0
+                        is_accelerating = drop_from_high_24h <= -4.0
+
+                        # 检查24H内是否首次出现长下影线
+                        is_first_bottom = True
+                        for prev_k in history_72h[:24]:
+                            if prev_k['open_time'] == h1_candle['open_time']:
+                                continue  # 跳过当前K线
+                            prev_open = float(prev_k.get('open_price', 0)) if 'open_price' in prev_k else 0
+                            prev_close = float(prev_k.get('close_price', 0)) if 'close_price' in prev_k else 0
+                            prev_low = float(prev_k['low_price'])
+                            if prev_open > 0 and prev_close > 0:
+                                prev_body_low = min(prev_open, prev_close)
+                                prev_shadow = (prev_body_low - prev_low) / prev_low * 100 if prev_low > 0 else 0
+                                if prev_shadow >= self.LOWER_SHADOW_THRESHOLD:
+                                    is_first_bottom = False
+                                    break
+
+                        # 三个条件都满足 = 真深V反转
+                        is_true_deep_v = is_sustained_drop and is_accelerating and is_first_bottom
+
+                        if not is_true_deep_v:
+                            logger.info(f"⚠️ {symbol} 下影{lower_shadow_pct:.1f}% 不满足大周期条件: "
+                                      f"72H跌幅{drop_from_high_72h:.1f}% (需<-8%), "
+                                      f"24H跌幅{drop_from_high_24h:.1f}% (需<-4%), "
+                                      f"首次触底{'✅' if is_first_bottom else '❌'}")
+                    else:
+                        logger.info(f"⚠️ {symbol} 下影{lower_shadow_pct:.1f}% 数据不足，无法判断大周期")
+
+                    # 🔥 只有真深V反转才创建反弹窗口
+                    if is_true_deep_v and time_since_candle <= 45:
+                        bounce_opportunity = True
+                        bounce_symbols.append(symbol)
+                        bounce_window_end = h1_time + timedelta(minutes=45)
+                        logger.warning(f"🚀🚀🚀 真深V反转! {symbol} 下影{lower_shadow_pct:.1f}%, "
+                                     f"72H跌幅{drop_from_high_72h:.1f}%, 24H跌幅{drop_from_high_24h:.1f}%, "
+                                     f"首次触底, 窗口剩余{45-time_since_candle:.0f}分钟")
+
+                    # 查看该1H K线后的15M K线 (用于emergency intervention判断)
                     h1_start_time = h1_candle['open_time']
                     h1_end_time = h1_start_time + 3600000 * 2  # 后2小时的15M
 
@@ -548,7 +633,7 @@ class Big4TrendDetector:
 
                     m15_candles = cursor.fetchall()
 
-                    # 检测连续阳线
+                    # 检测连续阳线 (用于emergency intervention)
                     if m15_candles and len(m15_candles) >= self.CONSECUTIVE_GREEN_15M:
                         consecutive_green = 0
                         max_consecutive = 0
@@ -563,7 +648,7 @@ class Big4TrendDetector:
                             else:
                                 consecutive_green = 0
 
-                        # 如果检测到连续N根阳线 = 深V反转
+                        # 如果检测到连续N根阳线 = 深V反转 (触发emergency intervention)
                         if max_consecutive >= self.CONSECUTIVE_GREEN_15M:
                             bottom_detected = True
                             trigger_symbols.append(
@@ -572,9 +657,81 @@ class Big4TrendDetector:
                             logger.info(f"🔥 检测到{symbol}深V反转: 1H下影线{lower_shadow_pct:.1f}%, 15M连续{max_consecutive}根阳线")
                             break  # 检测到就不再检查这个币种的其他1H K线
 
+        # 3. 保存反弹窗口到数据库 (独立于emergency intervention)
+        if bounce_opportunity and bounce_symbols:
+            try:
+                conn_write = pymysql.connect(**self.db_config)
+                cursor_write = conn_write.cursor()
+
+                for symbol in bounce_symbols:
+                    # 获取该币种的1H K线信息
+                    cursor_write.execute("""
+                        SELECT open_price, close_price, low_price, high_price, open_time
+                        FROM kline_data
+                        WHERE symbol = %s
+                        AND timeframe = '1h'
+                        AND exchange = 'binance_futures'
+                        ORDER BY open_time DESC
+                        LIMIT 1
+                    """, (symbol,))
+
+                    h1_data = cursor_write.fetchone()
+                    if not h1_data:
+                        continue
+
+                    open_p = float(h1_data[0])
+                    close_p = float(h1_data[1])
+                    low_p = float(h1_data[2])
+                    h1_open_time = h1_data[4]
+
+                    body_low = min(open_p, close_p)
+                    lower_shadow_pct = (body_low - low_p) / low_p * 100 if low_p > 0 else 0
+
+                    # 计算触发时间
+                    h1_ts = int(h1_open_time) / 1000 if int(h1_open_time) > 9999999999 else int(h1_open_time)
+                    trigger_time = datetime.fromtimestamp(h1_ts)
+                    window_start = trigger_time
+                    window_end = trigger_time + timedelta(minutes=45)
+
+                    # 检查是否已存在未过期的bounce_window
+                    cursor_write.execute("""
+                        SELECT id FROM bounce_window
+                        WHERE account_id = 2
+                        AND trading_type = 'usdt_futures'
+                        AND symbol = %s
+                        AND window_end > NOW()
+                        AND bounce_entered = FALSE
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """, (symbol,))
+
+                    existing_window = cursor_write.fetchone()
+
+                    if not existing_window:
+                        # 创建新的bounce window
+                        cursor_write.execute("""
+                            INSERT INTO bounce_window
+                            (account_id, trading_type, symbol, trigger_time, window_start, window_end,
+                             lower_shadow_pct, trigger_price, bounce_entered, notes, created_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, NOW())
+                        """, (
+                            2, 'usdt_futures', symbol, trigger_time, window_start, window_end,
+                            lower_shadow_pct, close_p,
+                            f"1H下影线{lower_shadow_pct:.2f}%, 45分钟反弹窗口"
+                        ))
+
+                        logger.info(f"💾 反弹窗口已保存: {symbol} 下影{lower_shadow_pct:.1f}% 窗口至{window_end.strftime('%H:%M')}")
+
+                conn_write.commit()
+                cursor_write.close()
+                conn_write.close()
+
+            except Exception as e:
+                logger.error(f"❌ 保存反弹窗口失败: {e}")
+
         cursor.close()
 
-        # 3. 如果检测到新的反转，保存到数据库
+        # 4. 如果检测到新的反转，保存到数据库
         if bottom_detected or top_detected:
             intervention_type = 'BOTTOM_BOUNCE' if bottom_detected else 'TOP_REVERSAL'
             block_long = top_detected
@@ -612,17 +769,23 @@ class Big4TrendDetector:
                 'block_long': block_long,
                 'block_short': block_short,
                 'details': f"⚠️ {details} (阻止{self.BLOCK_DURATION_HOURS}小时)",
-                'expires_at': expires_at
+                'expires_at': expires_at,
+                'bounce_opportunity': bounce_opportunity,
+                'bounce_symbols': bounce_symbols,
+                'bounce_window_end': bounce_window_end
             }
 
-        # 无紧急情况
+        # 无紧急情况 (但可能有反弹机会)
         return {
             'bottom_detected': False,
             'top_detected': False,
             'block_long': False,
             'block_short': False,
             'details': '无紧急干预',
-            'expires_at': None
+            'expires_at': None,
+            'bounce_opportunity': bounce_opportunity,
+            'bounce_symbols': bounce_symbols,
+            'bounce_window_end': bounce_window_end
         }
 
     def _save_to_database(self, result: Dict):
