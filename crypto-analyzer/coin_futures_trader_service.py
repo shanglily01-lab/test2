@@ -26,9 +26,92 @@ from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.trading.coin_futures_trading_engine import CoinFuturesTradingEngine
+from app.services.breakout_system import BreakoutSystem
 
 # 加载环境变量
 load_dotenv()
+
+
+class DatabaseExchangeAdapter:
+    """数据库K线数据适配器 - 使币本位系统可以使用破位系统
+
+    将数据库K线查询包装成类似CCXT exchange的接口
+    """
+
+    def __init__(self, db_config: dict):
+        self.db_config = db_config
+        self.connection = None
+
+    def _get_connection(self):
+        """获取数据库连接"""
+        if self.connection is None or not self.connection.open:
+            self.connection = pymysql.connect(
+                **self.db_config,
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True
+            )
+        else:
+            try:
+                self.connection.ping(reconnect=True)
+            except:
+                self.connection = pymysql.connect(
+                    **self.db_config,
+                    charset='utf8mb4',
+                    cursorclass=pymysql.cursors.DictCursor,
+                    autocommit=True
+                )
+        return self.connection
+
+    def fetch_ohlcv(self, symbol: str, timeframe: str = '5m', limit: int = 288):
+        """
+        获取K线数据（兼容CCXT exchange接口）
+
+        Args:
+            symbol: 交易对
+            timeframe: 时间周期
+            limit: 数量限制
+
+        Returns:
+            K线数据列表，格式: [[timestamp, open, high, low, close, volume], ...]
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            query = """
+                SELECT open_time, open_price, high_price, low_price, close_price, volume
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = %s
+                AND exchange = 'binance_futures'
+                ORDER BY open_time DESC LIMIT %s
+            """
+            cursor.execute(query, (symbol, timeframe, limit))
+            rows = cursor.fetchall()
+            cursor.close()
+
+            if not rows:
+                logger.warning(f"[DatabaseAdapter] 未找到K线数据: {symbol} {timeframe}")
+                return []
+
+            # 转换为CCXT格式（反转顺序：从旧到新）
+            klines = []
+            for row in reversed(rows):
+                klines.append([
+                    int(row['open_time']),  # timestamp
+                    float(row['open_price']),  # open
+                    float(row['high_price']),  # high
+                    float(row['low_price']),   # low
+                    float(row['close_price']), # close
+                    float(row['volume'])       # volume
+                ])
+
+            return klines
+
+        except Exception as e:
+            logger.error(f"[DatabaseAdapter] 获取K线失败 {symbol} {timeframe}: {e}")
+            return []
+
 
 # 配置日志
 logger.remove()
@@ -63,6 +146,15 @@ class CoinFuturesDecisionBrain:
         self.emergency_bottom_reversal_time = None  # 底部反转触发时间
         self.emergency_top_reversal_time = None     # 顶部反转触发时间
         self.emergency_block_duration_hours = 2     # 紧急干预持续时间(小时)
+
+        # 初始化破位系统（使用数据库适配器）
+        try:
+            exchange_adapter = DatabaseExchangeAdapter(db_config)
+            self.breakout_system = BreakoutSystem(exchange_adapter)
+            logger.info("✅ 币本位-破位系统已初始化")
+        except Exception as e:
+            logger.warning(f"⚠️ 币本位-破位系统初始化失败: {e}")
+            self.breakout_system = None
 
     def _load_config(self):
         """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
@@ -551,6 +643,48 @@ class CoinFuturesDecisionBrain:
             logger.error(f"[BIG4-TOP-ERROR] Big4见顶检测失败: {e}")
             return False, None  # 检测失败时不阻止,避免影响正常交易
 
+    def check_breakout(self, current_positions: dict = None) -> dict:
+        """
+        检测Big4破位并处理现有持仓
+
+        Args:
+            current_positions: 当前持仓字典 {symbol: position_info}
+
+        Returns:
+            dict: 破位检测结果
+        """
+        if not self.breakout_system:
+            return {
+                'has_breakout': False,
+                'error': '破位系统未初始化'
+            }
+
+        try:
+            result = self.breakout_system.check_and_handle_breakout(current_positions)
+            return result
+        except Exception as e:
+            logger.error(f"[币本位-破位检测] 失败: {e}")
+            return {
+                'has_breakout': False,
+                'error': str(e)
+            }
+
+    def get_breakout_status(self) -> dict:
+        """
+        获取破位系统状态
+
+        Returns:
+            dict: 破位系统状态
+        """
+        if not self.breakout_system:
+            return {'active': False}
+
+        try:
+            return self.breakout_system.get_system_status()
+        except Exception as e:
+            logger.error(f"[币本位-破位状态] 获取失败: {e}")
+            return {'active': False, 'error': str(e)}
+
     def load_klines(self, symbol: str, timeframe: str, limit: int = 100):
         conn = self._get_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -918,12 +1052,47 @@ class CoinFuturesDecisionBrain:
                         logger.warning(f"🚫 {symbol} {reversal_reason}, 阻止做多")
                         return None
 
+                # 🔥 破位系统加权
+                breakout_boost = 0
+                if self.breakout_system:
+                    try:
+                        score_result = self.breakout_system.calculate_signal_score(
+                            symbol=symbol,
+                            base_score=score,
+                            signal_direction=side,
+                            current_price=current
+                        )
+
+                        # 应用破位加权
+                        breakout_boost = score_result.get('boost_score', 0)
+                        total_score = score_result.get('total_score', score)
+
+                        # 如果破位系统建议跳过（反向信号）
+                        if score_result.get('should_skip'):
+                            logger.warning(f"🚫 {symbol} 破位系统阻止: {score_result.get('skip_reason')}")
+                            return None
+
+                        # 如果有破位加权，记录开仓
+                        if breakout_boost > 0 and score_result.get('should_generate'):
+                            self.breakout_system.record_opening(symbol)
+                            logger.info(
+                                f"✅ {symbol} 破位加权: {side} 基础分{score} + 破位{breakout_boost:+d} = {total_score}"
+                            )
+
+                        # 更新评分
+                        score = total_score
+
+                    except Exception as e:
+                        logger.warning(f"⚠️ {symbol} 破位加权失败: {e}")
+                        breakout_boost = 0
+
                 return {
                     'symbol': symbol,
                     'side': side,
                     'score': score,
                     'current_price': current,
-                    'signal_components': signal_components  # 添加信号组成
+                    'signal_components': signal_components,  # 添加信号组成
+                    'breakout_boost': breakout_boost  # 添加破位加权分数
                 }
 
             return None
