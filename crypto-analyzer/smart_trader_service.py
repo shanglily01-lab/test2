@@ -201,6 +201,8 @@ class SmartDecisionBrain:
             self.blacklist = []
             self.adaptive_long = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
             self.adaptive_short = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
+            # 🔥 修复: 初始化signal_blacklist
+            self.signal_blacklist = {}
             # 🔥 修复: 初始化scoring_weights
             self.scoring_weights = {
                 'position_low': {'long': 20, 'short': 0},
