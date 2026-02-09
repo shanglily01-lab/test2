@@ -438,13 +438,14 @@ class Big4TrendDetector:
         existing_records = cursor.fetchall()
 
         if existing_records:
-            # 🔥 修复: 合并多条记录的状态
+            # 🔥 智能干预: 合并多条记录，但动态检查是否应该提前解除
             bottom_detected = False
             top_detected = False
             block_long = False
             block_short = False
             reasons = []
             latest_expires = None
+            oldest_created = None
 
             for record in existing_records:
                 if record['intervention_type'] == 'BOTTOM_BOUNCE':
@@ -458,9 +459,98 @@ class Big4TrendDetector:
                 if latest_expires is None or record['expires_at'] > latest_expires:
                     latest_expires = record['expires_at']
 
+            # 🔥 新增: 动态检查是否应该提前解除干预
+            # 检查反弹窗口是否已结束 (45分钟)
+            cursor.execute("""
+                SELECT window_end
+                FROM bounce_window
+                WHERE account_id = 2
+                AND trading_type = 'usdt_futures'
+                AND window_end > NOW()
+                ORDER BY created_at DESC
+                LIMIT 1
+            """)
+            active_bounce_window = cursor.fetchone()
+
+            # 如果反弹窗口已结束，检查市场是否已经恢复
+            if not active_bounce_window and bottom_detected:
+                # 检查Big4是否已经反弹完成（反弹超过3%）
+                market_recovered = True
+                for symbol in BIG4_SYMBOLS:
+                    cursor.execute("""
+                        SELECT open_price, close_price, low_price, high_price
+                        FROM kline_data
+                        WHERE symbol = %s
+                        AND timeframe = '1h'
+                        AND exchange = 'binance_futures'
+                        ORDER BY open_time DESC
+                        LIMIT 4
+                    """, (symbol,))
+
+                    recent_klines = cursor.fetchall()
+                    if recent_klines:
+                        period_low = min([float(k['low_price']) for k in recent_klines])
+                        latest_close = float(recent_klines[0]['close_price'])
+                        recovery_pct = (latest_close - period_low) / period_low * 100
+
+                        # 如果任一币种未完成3%反弹，认为市场尚未恢复
+                        if recovery_pct < 3.0:
+                            market_recovered = False
+                            break
+
+                # 如果市场已恢复，解除禁止做空限制
+                if market_recovered:
+                    block_short = False
+                    reasons.append("✅ 市场已反弹3%+，解除做空限制")
+
+            # 同理检查触顶是否已回调完成
+            if not active_bounce_window and top_detected:
+                market_cooled = True
+                for symbol in BIG4_SYMBOLS:
+                    cursor.execute("""
+                        SELECT open_price, close_price, low_price, high_price
+                        FROM kline_data
+                        WHERE symbol = %s
+                        AND timeframe = '1h'
+                        AND exchange = 'binance_futures'
+                        ORDER BY open_time DESC
+                        LIMIT 4
+                    """, (symbol,))
+
+                    recent_klines = cursor.fetchall()
+                    if recent_klines:
+                        period_high = max([float(k['high_price']) for k in recent_klines])
+                        latest_close = float(recent_klines[0]['close_price'])
+                        cooldown_pct = (latest_close - period_high) / period_high * 100
+
+                        # 如果任一币种未完成3%回调，认为市场尚未冷却
+                        if cooldown_pct > -3.0:
+                            market_cooled = False
+                            break
+
+                # 如果市场已冷却，解除禁止做多限制
+                if market_cooled:
+                    block_long = False
+                    reasons.append("✅ 市场已回调3%+，解除做多限制")
+
             cursor.close()
 
             combined_reason = ', '.join(reasons)
+
+            # 如果所有限制都已解除，返回空结果
+            if not block_long and not block_short:
+                return {
+                    'bottom_detected': False,
+                    'top_detected': False,
+                    'block_long': False,
+                    'block_short': False,
+                    'details': f"✅ 紧急干预已自动解除: {combined_reason}",
+                    'expires_at': None,
+                    'bounce_opportunity': False,
+                    'bounce_symbols': [],
+                    'bounce_window_end': None
+                }
+
             return {
                 'bottom_detected': bottom_detected,
                 'top_detected': top_detected,
