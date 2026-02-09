@@ -368,6 +368,24 @@ class SmartDecisionBrain:
                 'trade_params': {}
             }
 
+        # 🔥 V5.1优化: Big4强势反向时暂停白名单交易
+        # 检查Big4破位状态，如果强度>=12且方向为BEARISH，禁止白名单做多
+        if self.breakout_system:
+            booster_status = self.breakout_system.booster.get_status()
+            if booster_status['active']:
+                big4_direction = booster_status['direction']
+                big4_strength = booster_status['strength']
+
+                # 白名单只做多，检查Big4是否为BEARISH且强度>=12
+                if big4_direction == 'SHORT' and big4_strength >= 12:
+                    return {
+                        'decision': False,
+                        'direction': None,
+                        'score': 0,
+                        'reasons': [f'🚫 Big4强势下跌(强度{big4_strength:.0f})，暂停白名单做多交易'],
+                        'trade_params': {}
+                    }
+
         try:
             # 如果没有提供基础评分，进行完整分析
             if base_score is None:

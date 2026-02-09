@@ -83,11 +83,15 @@ class BreakoutSignalBooster:
         """
         计算信号加权分数
 
+        🔥 V5.1优化:
+        - 同向信号: 根据强度加分 (+20 到 +50)
+        - 反向信号: 强度>=12时会被should_skip_opposite_signal完全禁止，此方法不会被调用
+
         Args:
             signal_direction: 信号方向 ('LONG' | 'SHORT')
 
         Returns:
-            int: 加权分数 (-50 到 +50)
+            int: 加权分数 (0 到 +50)
         """
         if not self.is_breakout_active():
             return 0  # 破位信号已失效
@@ -101,30 +105,27 @@ class BreakoutSignalBooster:
                 boost = 40  # 强破位，+40分
             elif self.big4_strength >= 70:
                 boost = 30  # 中等破位，+30分
+            elif self.big4_strength >= 12:
+                boost = 20  # 中等破位，+20分
             else:
-                boost = 20  # 弱破位，+20分
+                boost = 10  # 弱破位，+10分
 
             logger.debug(f"[破位加权] 同向信号 {signal_direction} 加权 +{boost}分")
             return boost
 
-        # 反向信号扣分
+        # 反向信号：强度>=12时会被should_skip_opposite_signal完全禁止
+        # 如果执行到这里，说明强度<12，不需要扣分
         else:
-            # 根据Big4强度决定扣分
-            if self.big4_strength >= 90:
-                penalty = -50  # 极强破位，-50分
-            elif self.big4_strength >= 80:
-                penalty = -40  # 强破位，-40分
-            elif self.big4_strength >= 70:
-                penalty = -30  # 中等破位，-30分
-            else:
-                penalty = -20  # 弱破位，-20分
-
-            logger.debug(f"[破位加权] 反向信号 {signal_direction} 降权 {penalty}分")
-            return penalty
+            logger.debug(f"[破位加权] 反向信号 {signal_direction}，Big4强度<12，不扣分")
+            return 0
 
     def should_skip_opposite_signal(self, signal_direction: str, signal_score: int) -> tuple:
         """
         判断是否应该跳过反向信号
+
+        🔥 V5.1优化: 强化Big4否决权
+        - 强度>=12时完全禁止逆向开仓，不论评分多高
+        - 避免在强趋势中逆势开仓导致连续止损
 
         Args:
             signal_direction: 信号方向
@@ -140,20 +141,9 @@ class BreakoutSignalBooster:
         if signal_direction == self.big4_direction:
             return False, None
 
-        # 反向信号：根据强度判断
-        if self.big4_strength >= 90:
-            # 极强破位，直接跳过反向信号
-            return True, f"Big4极强{self.big4_direction}破位，禁止{signal_direction}信号"
-
-        elif self.big4_strength >= 80:
-            # 强破位，评分不足直接跳过
-            if signal_score < 90:
-                return True, f"Big4强{self.big4_direction}破位，{signal_direction}信号评分不足"
-
-        elif self.big4_strength >= 70:
-            # 中等破位，评分不足跳过
-            if signal_score < 80:
-                return True, f"Big4{self.big4_direction}破位，{signal_direction}信号评分不足"
+        # 🔥 反向信号：强度>=12时完全禁止（强力否决）
+        if self.big4_strength >= 12:
+            return True, f"🚫 Big4强力否决: {self.big4_direction}(强度{self.big4_strength:.0f}) 禁止{signal_direction}信号"
 
         return False, None
 
