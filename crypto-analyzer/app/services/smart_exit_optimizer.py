@@ -441,26 +441,27 @@ class SmartExitOptimizer:
                     protected_profit = profit_pct
                     return True, f"移动止盈(最高{tracked_max*100:.2f}% → 当前{profit_pct*100:.2f}%, 保护{protected_profit*100:.2f}%利润)"
 
-        # 🔥🔥🔥 重构: 快速止损逻辑 (优化: 前10分钟缓冲期)
+        # 🔥🔥🔥 重构: 快速止损逻辑 (优化: 取消缓冲期，立即保护)
         if profit_pct < 0:
             # 计算持仓时长
             open_time = position.get('open_time') or position.get('created_at')
             if open_time:
                 holding_minutes = (datetime.now() - open_time).total_seconds() / 60
 
-                # 🔥 优化: 前10分钟不触发快速止损 (给仓位缓冲时间，避免正常波动被误杀)
-                if holding_minutes > 10:
-                    # 10-30分钟内亏损超过2% → 立即止损 (优化: 1% → 2%)
-                    if holding_minutes <= 30 and profit_pct <= -0.02:
-                        return True, f"快速止损-30分钟(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
+                # 🔥 优化: 取消10分钟缓冲期，立即启用止损保护
+                # 0-15分钟内亏损超过1% → 立即止损
+                if holding_minutes <= 15 and profit_pct <= -0.01:
+                    return True, f"快速止损-15分钟(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
 
-                    # 30-60分钟内亏损超过2.5% → 立即止损 (优化: 1.5% → 2.5%)
-                    if holding_minutes <= 60 and profit_pct <= -0.025:
-                        return True, f"快速止损-1小时(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
+                # 15-30分钟内亏损超过1.5% → 立即止损
+                if holding_minutes <= 30 and profit_pct <= -0.015:
+                    return True, f"快速止损-30分钟(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
 
-                    # 1-2小时内亏损超过3% → 立即止损 (优化: 2% → 3%)
-                    if holding_minutes <= 120 and profit_pct <= -0.03:
-                        return True, f"快速止损-2小时(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
+                # 30-60分钟内亏损超过2% → 立即止损
+                if holding_minutes <= 60 and profit_pct <= -0.02:
+                    return True, f"快速止损-60分钟(亏损{profit_pct*100:.2f}%, 持仓{holding_minutes:.0f}分钟)"
+
+                # 60分钟以上，由固定止损(1.5%)兜底
 
         # ========== 优先级最高：止损止盈检查（任何时候都检查） ==========
 

@@ -338,8 +338,8 @@ class SmartEntryExecutorV3:
             conn = self.get_db_connection()
             cursor = conn.cursor()
 
-            # 获取止盈止损参数（默认3%止损，6%止盈）
-            stop_loss_pct = Decimal('3.0')  # 🔥 修复: 使用Decimal类型
+            # 获取止盈止损参数（默认1.5%止损，6%止盈）
+            stop_loss_pct = Decimal('1.5')  # 🔥 优化: 3% → 1.5% (10倍杠杆=15%本金亏损)
             take_profit_pct = Decimal('6.0')  # 🔥 修复: 使用Decimal类型
 
             if position_side == 'LONG':
