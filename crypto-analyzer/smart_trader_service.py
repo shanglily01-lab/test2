@@ -875,7 +875,8 @@ class SmartTraderService:
                 logger.info(f"🔱 Big4趋势已更新缓存 | {self.cached_big4_result['overall_signal']} (强度: {self.cached_big4_result['signal_strength']:.0f})")
 
                 # 更新破位信号加权系统
-                direction_map = {'BULLISH': 'UP', 'BEARISH': 'DOWN', 'NEUTRAL': 'NEUTRAL'}
+                # BULLISH=看涨→LONG, BEARISH=看跌→SHORT
+                direction_map = {'BULLISH': 'LONG', 'BEARISH': 'SHORT', 'NEUTRAL': 'NEUTRAL'}
                 direction = direction_map.get(self.cached_big4_result['overall_signal'], 'NEUTRAL')
                 if direction != 'NEUTRAL':
                     self.breakout_booster.update_big4_breakout(

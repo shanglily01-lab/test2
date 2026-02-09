@@ -36,14 +36,14 @@ class BreakoutSignalBooster:
         更新Big4破位状态
 
         Args:
-            direction: 破位方向 ('LONG' | 'SHORT')
-            strength: 破位强度 (0-100)
+            direction: Big4方向 ('LONG'=看涨 | 'SHORT'=看跌)
+            strength: Big4强度 (0-100)
         """
         self.big4_direction = direction
         self.big4_strength = strength
         self.breakout_time = datetime.now()
 
-        logger.info(f"[破位加权] Big4破位方向: {direction}, 强度: {strength:.1f}")
+        logger.info(f"[破位加权] Big4方向: {direction}, 强度: {strength:.1f}")
         logger.info(f"[破位加权] 有效期: {self.expiry_duration/3600:.1f}小时")
 
     def is_breakout_active(self) -> bool:
@@ -123,26 +123,26 @@ class BreakoutSignalBooster:
         """
         判断是否应该跳过反向信号
 
-        🔥 V5.1优化: 强化Big4否决权
-        - 强度>=12时完全禁止逆向开仓，不论评分多高
+        Big4否决权:
+        - 强度>=70时完全禁止逆向开仓
         - 避免在强趋势中逆势开仓导致连续止损
 
         Args:
-            signal_direction: 信号方向
+            signal_direction: 信号方向 ('LONG' | 'SHORT')
             signal_score: 信号评分（已包含加权）
 
         Returns:
             tuple: (是否跳过, 原因)
         """
         if not self.is_breakout_active():
-            return False, None  # 无破位，正常处理
+            return False, None  # 无Big4信号，正常处理
 
         # 同向信号：放行
         if signal_direction == self.big4_direction:
             return False, None
 
-        # 🔥 反向信号：强度>=12时完全禁止（强力否决）
-        if self.big4_strength >= 12:
+        # 🔥 反向信号：强度>=70时完全禁止（强力否决）
+        if self.big4_strength >= 70:
             return True, f"🚫 Big4强力否决: {self.big4_direction}(强度{self.big4_strength:.0f}) 禁止{signal_direction}信号"
 
         return False, None
