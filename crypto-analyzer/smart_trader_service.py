@@ -201,6 +201,25 @@ class SmartDecisionBrain:
             self.blacklist = []
             self.adaptive_long = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
             self.adaptive_short = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
+            # 🔥 修复: 初始化scoring_weights
+            self.scoring_weights = {
+                'position_low': {'long': 20, 'short': 0},
+                'position_mid': {'long': 5, 'short': 5},
+                'position_high': {'long': 0, 'short': 20},
+                'momentum_down_3pct': {'long': 0, 'short': 10},
+                'momentum_up_3pct': {'long': 10, 'short': 0},
+                'trend_1h_bull': {'long': 20, 'short': 0},
+                'trend_1h_bear': {'long': 0, 'short': 20},
+                'volatility_high': {'long': 10, 'short': 10},
+                'consecutive_bull': {'long': 15, 'short': 0},
+                'consecutive_bear': {'long': 0, 'short': 15},
+                'volume_power_bull': {'long': 25, 'short': 0},
+                'volume_power_bear': {'long': 0, 'short': 25},
+                'volume_power_1h_bull': {'long': 15, 'short': 0},
+                'volume_power_1h_bear': {'long': 0, 'short': 15},
+                'breakout_long': {'long': 20, 'short': 0},
+                'breakdown_short': {'long': 0, 'short': 20}
+            }
 
     def reload_config(self):
         """重新加载配置 - 供外部调用"""
