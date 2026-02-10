@@ -1113,12 +1113,15 @@ class SmartExitOptimizer:
                         return ('固定止损', 1.0)
 
             # ============================================================
-            # === 优先级1.5: 提前止损优化 (亏损-1%时重点监控) ===
+            # === 优先级1.5: 提前止损优化 (ROI亏损-10%时重点监控) ===
             # ============================================================
-            # 当亏损达到-1%时,检查是否有好转迹象,如无好转则提前止损
-            pnl_pct = profit_info.get('profit_pct', 0)
+            # 当真实ROI亏损达到-10%时,检查是否有好转迹象,如无好转则提前止损
+            # ROI = 价格变化% × 杠杆 (例: -1%价格 × 10倍杠杆 = -10% ROI)
+            pnl_pct = profit_info.get('profit_pct', 0)  # 价格变化百分比
+            leverage = float(position.get('leverage', 1))
+            roi_pct = pnl_pct * leverage  # 真实ROI
 
-            if pnl_pct <= -1.0:  # 亏损达到-1%
+            if roi_pct <= -10.0:  # 真实ROI亏损达到-10%
                 # 获取5M K线判断短期趋势
                 try:
                     strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 1)  # 最近1小时(12根5M)
@@ -1137,7 +1140,7 @@ class SmartExitOptimizer:
                             if bull_pct >= 60 or (strong_bull >= 3 and net_power > 0):
                                 has_recovery_signal = True
                                 logger.info(
-                                    f"⚡ 持仓{position_id} {symbol} LONG 亏损{pnl_pct:.2f}% 但有反弹信号"
+                                    f"⚡ 持仓{position_id} {symbol} LONG ROI亏损{roi_pct:.2f}% (价格{pnl_pct:.2f}%×{leverage}x) 但有反弹信号"
                                     f"(阳线{bull_pct:.0f}%, 强多{strong_bull}, 净力量{net_power:+d}), 继续持有"
                                 )
 
@@ -1147,22 +1150,22 @@ class SmartExitOptimizer:
                             if bear_pct >= 60 or (strong_bear >= 3 and net_power < 0):
                                 has_recovery_signal = True
                                 logger.info(
-                                    f"⚡ 持仓{position_id} {symbol} SHORT 亏损{pnl_pct:.2f}% 但有下跌信号"
+                                    f"⚡ 持仓{position_id} {symbol} SHORT ROI亏损{roi_pct:.2f}% (价格{pnl_pct:.2f}%×{leverage}x) 但有下跌信号"
                                     f"(阴线{bear_pct:.0f}%, 强空{strong_bear}, 净力量{net_power:+d}), 继续持有"
                                 )
 
                     # 如果无好转迹象,提前止损
                     if not has_recovery_signal:
-                        if pnl_pct <= -2.0:
-                            # 亏损超过-2%,立即提前止损
+                        if roi_pct <= -20.0:
+                            # ROI亏损超过-20% (价格-2%),立即提前止损
                             logger.warning(
-                                f"🚨 持仓{position_id} {symbol} {position_side}亏损{pnl_pct:.2f}% 无好转迹象,提前止损(优化)"
+                                f"🚨 持仓{position_id} {symbol} {position_side} ROI亏损{roi_pct:.2f}% (价格{pnl_pct:.2f}%×{leverage}x) 无好转迹象,提前止损(优化)"
                             )
                             return ('提前止损优化-无好转迹象', 1.0)
-                        elif pnl_pct <= -1.5:
-                            # 亏损-1.5%到-2%,警告监控
+                        elif roi_pct <= -15.0:
+                            # ROI亏损-15%到-20% (价格-1.5%到-2%),警告监控
                             logger.warning(
-                                f"⚠️  持仓{position_id} {symbol} {position_side}亏损{pnl_pct:.2f}% 无好转迹象,重点监控"
+                                f"⚠️  持仓{position_id} {symbol} {position_side} ROI亏损{roi_pct:.2f}% (价格{pnl_pct:.2f}%×{leverage}x) 无好转迹象,重点监控"
                             )
 
                 except Exception as e:
