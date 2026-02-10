@@ -588,6 +588,14 @@ class SmartDecisionBrain:
             # ========== 移除1D信号 (4小时持仓不需要1D趋势) ==========
             # 已移除: trend_1d_bull, trend_1d_bear
 
+            # 📊 输出评分日志 (无论是否达标)
+            max_score = max(long_score, short_score)
+            if max_score > 0:
+                if long_score > short_score:
+                    logger.info(f"📊 {symbol:<12} LONG评分:{long_score:>3} (SHORT:{short_score:>3}) | 阈值:{self.threshold} | {'✅达标' if long_score >= self.threshold else '❌未达标'}")
+                else:
+                    logger.info(f"📊 {symbol:<12} SHORT评分:{short_score:>3} (LONG:{long_score:>3}) | 阈值:{self.threshold} | {'✅达标' if short_score >= self.threshold else '❌未达标'}")
+
             # 选择得分更高的方向 (只要达到阈值就可以)
             if long_score >= self.threshold or short_score >= self.threshold:
                 if long_score >= short_score:
@@ -677,11 +685,20 @@ class SmartDecisionBrain:
         # 每次扫描前重新加载黑名单,确保运行时添加的黑名单立即生效
         self._reload_blacklist()
 
+        logger.info(f"\n{'='*100}")
+        logger.info(f"🔍 开始扫描 {len(self.whitelist)} 个交易对 | 开仓阈值: {self.threshold}分")
+        logger.info(f"{'='*100}")
+
         opportunities = []
         for symbol in self.whitelist:
             result = self.analyze(symbol, big4_result=big4_result)
             if result:
                 opportunities.append(result)
+
+        logger.info(f"{'='*100}")
+        logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个")
+        logger.info(f"{'='*100}\n")
+
         return opportunities
 
     def _validate_signal_direction(self, signal_components: dict, side: str) -> tuple:
@@ -3009,6 +3026,21 @@ class SmartTraderService:
 
                 # 6. 执行交易
                 logger.info(f"[EXECUTE] 找到 {len(opportunities)} 个机会")
+
+                # 输出所有机会的详细信息
+                if opportunities:
+                    logger.info(f"\n{'='*100}")
+                    logger.info(f"🎯 开仓机会列表 (按评分排序)")
+                    logger.info(f"{'='*100}")
+                    logger.info(f"{'币种':<14} {'方向':<6} {'评分':<6} {'信号组成':<50}")
+                    logger.info(f"{'-'*100}")
+
+                    sorted_opps = sorted(opportunities, key=lambda x: x['score'], reverse=True)
+                    for opp in sorted_opps:
+                        signal_comps = ', '.join(opp.get('signal_components', {}).keys())
+                        logger.info(f"{opp['symbol']:<14} {opp['side']:<6} {opp['score']:<6} {signal_comps:<50}")
+
+                    logger.info(f"{'='*100}\n")
 
                 for opp in opportunities:
                     if self.get_open_positions_count() >= self.max_positions:
