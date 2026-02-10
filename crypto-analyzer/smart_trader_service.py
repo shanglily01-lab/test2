@@ -2869,52 +2869,13 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5. 获取当前交易模式并扫描机会
-                try:
-                    mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
-                    current_mode = mode_config['mode_type'] if mode_config else 'trend'
-                except Exception as e:
-                    logger.error(f"[MODE-ERROR] 获取交易模式失败: {e}, 使用默认趋势模式")
-                    current_mode = 'trend'
+                # 5. 🔥 强制只做趋势单,不再做震荡市场的单
+                logger.info(f"[SCAN] 模式: TREND (只做趋势) | 扫描 {len(self.brain.whitelist)} 个币种...")
 
-                logger.info(f"[SCAN] 模式:{current_mode} | 扫描 {len(self.brain.whitelist)} 个币种...")
-
-                # 根据模式选择策略
-                if current_mode == 'range':
-                    # 震荡模式: 使用布林带均值回归策略
-                    opportunities = []
-                    big4_result = self.get_big4_result()
-                    big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
-
-                    for symbol in self.brain.whitelist:
-                        try:
-                            signal = self.bollinger_strategy.generate_signal(
-                                symbol=symbol,
-                                big4_signal=big4_signal,
-                                timeframe='15m'
-                            )
-
-                            if signal and signal['score'] >= int(mode_config.get('range_min_score', 50)):
-                                opportunities.append({
-                                    'symbol': signal['symbol'],
-                                    'side': signal['signal'],
-                                    'score': signal['score'],
-                                    'strategy': 'bollinger_mean_reversion',
-                                    'reason': signal['reason'],
-                                    'take_profit_price': signal.get('take_profit_price'),
-                                    'stop_loss_price': signal.get('stop_loss_price'),
-                                    'signal_components': {'range_trading': signal['score']}  # 添加信号组件标识
-                                })
-                                logger.info(f"[RANGE-SIGNAL] {symbol} {signal['signal']} 分数:{signal['score']} | {signal['reason']}")
-                        except Exception as e:
-                            logger.error(f"[RANGE-ERROR] {symbol} 震荡市信号生成失败: {e}")
-
-                    logger.info(f"[RANGE-SCAN] 震荡模式扫描完成, 找到 {len(opportunities)} 个机会")
-                else:
-                    # 趋势模式: 使用原有策略
-                    big4_result = self.get_big4_result()  # 获取Big4结果
-                    opportunities = self.brain.scan_all(big4_result=big4_result)
-                    logger.info(f"[TREND-SCAN] 趋势模式扫描完成, 找到 {len(opportunities)} 个机会")
+                # 获取Big4结果并扫描趋势信号
+                big4_result = self.get_big4_result()
+                opportunities = self.brain.scan_all(big4_result=big4_result)
+                logger.info(f"[TREND-SCAN] 趋势模式扫描完成, 找到 {len(opportunities)} 个机会")
 
                 if not opportunities:
                     logger.info("[SCAN] 无交易机会")
@@ -3051,65 +3012,35 @@ class SmartTraderService:
                     new_score = opp['score']
                     opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
 
-                    # ========== 交易模式检查和自动切换 ==========
+                    # 🔥 只做趋势单 - 获取Big4状态
                     try:
                         big4_result = self.get_big4_result()
                         big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                         big4_strength = big4_result.get('signal_strength', 0)
+                        logger.info(f"📊 [TRADING-MODE] 固定趋势模式 | Big4: {big4_signal}({big4_strength:.1f})")
 
-                        # 检查是否需要自动切换模式
-                        suggested_mode = self.mode_switcher.auto_switch_check(
-                            account_id=self.account_id,
-                            trading_type='usdt_futures',
-                            big4_signal=big4_signal,
-                            big4_strength=big4_strength
-                        )
-
-                        if suggested_mode:
-                            logger.info(f"🔄 [MODE-AUTO-SWITCH] Big4={big4_signal}({big4_strength:.1f}), 建议切换到{suggested_mode}模式")
-                            self.mode_switcher.switch_mode(
-                                account_id=self.account_id,
-                                trading_type='usdt_futures',
-                                new_mode=suggested_mode,
-                                trigger='auto',
-                                reason=f'Big4: {big4_signal} 强度:{big4_strength:.1f}',
-                                big4_signal=big4_signal,
-                                big4_strength=big4_strength,
-                                switched_by='smart_trader_service'
-                            )
-
-                        # 获取当前交易模式
-                        current_mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
-                        current_mode = current_mode_config['mode_type'] if current_mode_config else 'trend'
-
-                        logger.info(f"📊 [TRADING-MODE] 当前模式: {current_mode} | Big4: {big4_signal}({big4_strength:.1f})")
+                        # 🚫 Big4中性时禁止开单
+                        if big4_signal == 'NEUTRAL':
+                            logger.warning(f"🚫 [BIG4-NEUTRAL-BLOCK] {symbol} Big4中性市场(强度{big4_strength:.1f}), 禁止开仓")
+                            continue
 
                     except Exception as e:
-                        logger.error(f"[MODE-CHECK-ERROR] 模式检查失败: {e}")
-                        current_mode = 'trend'  # 默认趋势模式
-                    # ========== 模式检查结束 ==========
+                        logger.error(f"[BIG4-ERROR] Big4检测失败: {e}, 跳过开仓")
+                        continue
 
-                    # ========== 模式筛选: 只接受匹配当前模式的信号 ==========
+                    # ========== 只接受趋势信号 ==========
                     signal_type = opp.get('signal_type', '')
 
-                    # 🚀 紧急反弹信号绕过模式过滤 (Big4触底 = 最高优先级)
+                    # 🔥 只做趋势单,不再做震荡市单
+                    # 紧急反弹信号(Big4触底)优先级最高
                     if signal_type == 'EMERGENCY_BOUNCE':
-                        logger.warning(f"🚀 [EMERGENCY-BYPASS] {symbol} 反弹信号绕过模式过滤")
-                    elif current_mode == 'trend':
-                        # 趋势模式: 只接受TREND类型信号
-                        if 'TREND' not in signal_type:
-                            logger.info(f"[MODE-FILTER] {symbol} 当前trend模式,跳过非TREND信号 (信号类型: {signal_type[:40]})")
-                            continue
-                        logger.info(f"[MODE-MATCH] {symbol} TREND信号匹配当前模式")
-
-                    elif current_mode == 'range':
-                        # 震荡模式: 只接受RANGE类型信号
-                        if 'RANGE' not in signal_type:
-                            logger.info(f"[MODE-FILTER] {symbol} 当前range模式,跳过非RANGE信号 (信号类型: {signal_type[:40]})")
-                            continue
-                        logger.info(f"[MODE-MATCH] {symbol} RANGE信号匹配当前模式")
-
-                    # ========== 模式筛选结束 ==========
+                        logger.warning(f"🚀 [EMERGENCY-BOUNCE] {symbol} 反弹信号")
+                    elif 'TREND' in signal_type:
+                        logger.info(f"[TREND-SIGNAL] {symbol} 趋势信号")
+                    else:
+                        # 非趋势信号,跳过
+                        logger.debug(f"[SKIP-NON-TREND] {symbol} 非趋势信号,跳过 (类型: {signal_type[:40]})")
+                        continue
 
                     # Big4 趋势检测 - 应用到所有币种
                     try:
@@ -3125,18 +3056,10 @@ class SmartTraderService:
                             signal_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                        # ========== 震荡市过滤: NEUTRAL时提高门槛 ==========
+                        # 🚫 Big4中性已在上面被阻止，这里不应该到达
                         if symbol_signal == 'NEUTRAL':
-                            if signal_strength < 30:  # 弱信号,震荡市
-                                threshold_boost = 15  # 需要额外15分
-                                if new_score < 35 + threshold_boost:  # 原阈值35 + 15 = 50分
-                                    logger.warning(f"[BIG4-NEUTRAL-SKIP] {symbol} 震荡市且评分不足 ({new_score} < 50), 跳过")
-                                    continue
-                                else:
-                                    logger.info(f"[BIG4-NEUTRAL-OK] {symbol} 震荡市但评分足够 ({new_score} >= 50), 允许开仓")
-                            else:
-                                logger.info(f"[BIG4-NEUTRAL] {symbol} 市场中性(强度{signal_strength:.1f}),正常开仓")
-                        # ========== NEUTRAL 处理结束 ==========
+                            logger.error(f"[LOGIC-ERROR] {symbol} NEUTRAL信号不应到达此处,已在前面被阻止")
+                            continue
 
                         # ========== 破位否决检查 ==========
                         # Big4强度>=12时，完全禁止逆向开仓
