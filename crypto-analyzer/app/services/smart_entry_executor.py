@@ -765,8 +765,8 @@ class SmartEntryExecutor:
             signal = plan['signal']
             entry_score = signal.get('trade_params', {}).get('entry_score', 30)
 
-            # 🔥 修改: 统一4小时强制平仓,移除6小时选项
-            max_hold_minutes = 240  # 4小时强制平仓
+            # 🔥 修改: 统一3小时强制平仓 - 边际收益递减
+            max_hold_minutes = 180  # 3小时强制平仓
 
             planned_close_time = open_time + timedelta(minutes=max_hold_minutes)
 
@@ -845,8 +845,8 @@ class SmartEntryExecutor:
 
             # 计算计划平仓时间（基于 entry_score）
             entry_score = signal.get('trade_params', {}).get('entry_score', 30)
-            # 🔥 修改: 统一4小时强制平仓,移除6小时选项
-            max_hold_minutes = 240  # 4小时强制平仓
+            # 🔥 修改: 统一3小时强制平仓 - 边际收益递减
+            max_hold_minutes = 180  # 3小时强制平仓
 
             from datetime import timedelta
             planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
@@ -1166,8 +1166,8 @@ class SmartEntryExecutor:
                 logger.warning(f"解析batch_filled失败,使用当前时间作为开仓时间: {e}")
 
             # 根据entry_score计算持仓时长
-            # 🔥 修改: 统一4小时强制平仓,移除6小时选项
-            max_hold_minutes = 240  # 4小时强制平仓
+            # 🔥 修改: 统一3小时强制平仓 - 边际收益递减
+            max_hold_minutes = 180  # 3小时强制平仓
 
             planned_close_time = open_time + timedelta(minutes=max_hold_minutes)
 

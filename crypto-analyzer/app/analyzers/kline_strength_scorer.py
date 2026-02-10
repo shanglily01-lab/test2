@@ -362,14 +362,14 @@ class KlineStrengthScorer:
                 'mode': 'aggressive',
                 'window_minutes': 15,
                 'batch_ratio': [0.4, 0.3, 0.3],
-                'max_hold_minutes': 360  # 6小时
+                'max_hold_minutes': 180  # 3小时
             }
         elif total_score >= 20:
             return {
                 'mode': 'standard',
                 'window_minutes': 30,
                 'batch_ratio': [0.3, 0.3, 0.4],
-                'max_hold_minutes': 240  # 4小时
+                'max_hold_minutes': 180  # 3小时
             }
         else:
             return {

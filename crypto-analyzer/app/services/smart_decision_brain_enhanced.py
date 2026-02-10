@@ -349,13 +349,13 @@ class SmartDecisionBrainEnhanced:
 
                     if signal_score >= 70:
                         decision_score = 80  # 高分
-                        max_hold_minutes = 360  # 6小时
+                        max_hold_minutes = 180  # 3小时
                     elif signal_score >= 50:
                         decision_score = 50  # 中等分
-                        max_hold_minutes = 240  # 4小时
+                        max_hold_minutes = 180  # 3小时
                     else:
                         decision_score = 30  # 低分
-                        max_hold_minutes = 120  # 2小时
+                        max_hold_minutes = 180  # 3小时
 
                     return {
                         'decision': True,
@@ -489,13 +489,8 @@ class SmartDecisionBrainEnhanced:
                     entry_strategy = self.kline_scorer.get_entry_strategy(kline_score)
                     max_hold_minutes = entry_strategy['max_hold_minutes']
                 else:
-                    # 回退到传统评分
-                    if total_score >= 60:
-                        max_hold_minutes = 360
-                    elif total_score >= 45:
-                        max_hold_minutes = 240
-                    else:
-                        max_hold_minutes = 180
+                    # 统一3小时持仓 - 边际收益递减
+                    max_hold_minutes = 180
 
                 result['trade_params'] = {
                     'stop_loss': sr_data['support'],
