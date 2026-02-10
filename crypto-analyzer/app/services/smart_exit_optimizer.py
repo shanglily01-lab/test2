@@ -1121,26 +1121,35 @@ class SmartExitOptimizer:
             if pnl_pct <= -1.0:  # 亏损达到-1%
                 # 获取5M K线判断短期趋势
                 try:
-                    strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 12)  # 最近1小时
+                    strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 1)  # 最近1小时(12根5M)
 
                     # 判断是否有好转迹象
                     has_recovery_signal = False
 
-                    if position_side == 'LONG':
-                        # 多单需要看涨信号
-                        if strength_5m and strength_5m.get('direction') == 'up':
-                            recovery_strength = strength_5m.get('strength', 0)
-                            if recovery_strength >= 0.5:  # 50%以上强度的看涨
-                                has_recovery_signal = True
-                                logger.info(f"⚡ 持仓{position_id} {symbol} LONG 亏损{pnl_pct:.2f}% 但有反弹信号(5M强度{recovery_strength:.2f}),继续持有")
+                    if strength_5m and strength_5m.get('total', 0) >= 6:  # 至少6根K线
+                        bull_pct = strength_5m.get('bull_pct', 50)
+                        net_power = strength_5m.get('net_power', 0)
+                        strong_bull = strength_5m.get('strong_bull', 0)
+                        strong_bear = strength_5m.get('strong_bear', 0)
 
-                    elif position_side == 'SHORT':
-                        # 空单需要看跌信号
-                        if strength_5m and strength_5m.get('direction') == 'down':
-                            recovery_strength = strength_5m.get('strength', 0)
-                            if recovery_strength >= 0.5:  # 50%以上强度的看跌
+                        if position_side == 'LONG':
+                            # 多单需要看涨信号: 阳线>60% 或 强力多头量能>3
+                            if bull_pct >= 60 or (strong_bull >= 3 and net_power > 0):
                                 has_recovery_signal = True
-                                logger.info(f"⚡ 持仓{position_id} {symbol} SHORT 亏损{pnl_pct:.2f}% 但有下跌信号(5M强度{recovery_strength:.2f}),继续持有")
+                                logger.info(
+                                    f"⚡ 持仓{position_id} {symbol} LONG 亏损{pnl_pct:.2f}% 但有反弹信号"
+                                    f"(阳线{bull_pct:.0f}%, 强多{strong_bull}, 净力量{net_power:+d}), 继续持有"
+                                )
+
+                        elif position_side == 'SHORT':
+                            # 空单需要看跌信号: 阴线>60% 或 强力空头量能>3
+                            bear_pct = 100 - bull_pct
+                            if bear_pct >= 60 or (strong_bear >= 3 and net_power < 0):
+                                has_recovery_signal = True
+                                logger.info(
+                                    f"⚡ 持仓{position_id} {symbol} SHORT 亏损{pnl_pct:.2f}% 但有下跌信号"
+                                    f"(阴线{bear_pct:.0f}%, 强空{strong_bear}, 净力量{net_power:+d}), 继续持有"
+                                )
 
                     # 如果无好转迹象,提前止损
                     if not has_recovery_signal:
