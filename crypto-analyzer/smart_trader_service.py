@@ -2841,7 +2841,7 @@ class SmartTraderService:
                 # 0.5. 定期重新加载黑名单 (每5分钟)
                 now = datetime.now()
                 if (now - last_blacklist_reload).total_seconds() >= 300:  # 5分钟
-                    self._reload_blacklist()
+                    self.brain._reload_blacklist()
                     last_blacklist_reload = now
 
                 # 注意：止盈止损、超时检查已统一迁移到SmartExitOptimizer
