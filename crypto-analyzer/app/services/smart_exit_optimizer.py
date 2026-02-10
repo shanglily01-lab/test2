@@ -1113,6 +1113,53 @@ class SmartExitOptimizer:
                         return ('固定止损', 1.0)
 
             # ============================================================
+            # === 优先级1.5: 提前止损优化 (亏损-1%时重点监控) ===
+            # ============================================================
+            # 当亏损达到-1%时,检查是否有好转迹象,如无好转则提前止损
+            pnl_pct = profit_info.get('profit_pct', 0)
+
+            if pnl_pct <= -1.0:  # 亏损达到-1%
+                # 获取5M K线判断短期趋势
+                try:
+                    strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 12)  # 最近1小时
+
+                    # 判断是否有好转迹象
+                    has_recovery_signal = False
+
+                    if position_side == 'LONG':
+                        # 多单需要看涨信号
+                        if strength_5m and strength_5m.get('direction') == 'up':
+                            recovery_strength = strength_5m.get('strength', 0)
+                            if recovery_strength >= 0.5:  # 50%以上强度的看涨
+                                has_recovery_signal = True
+                                logger.info(f"⚡ 持仓{position_id} {symbol} LONG 亏损{pnl_pct:.2f}% 但有反弹信号(5M强度{recovery_strength:.2f}),继续持有")
+
+                    elif position_side == 'SHORT':
+                        # 空单需要看跌信号
+                        if strength_5m and strength_5m.get('direction') == 'down':
+                            recovery_strength = strength_5m.get('strength', 0)
+                            if recovery_strength >= 0.5:  # 50%以上强度的看跌
+                                has_recovery_signal = True
+                                logger.info(f"⚡ 持仓{position_id} {symbol} SHORT 亏损{pnl_pct:.2f}% 但有下跌信号(5M强度{recovery_strength:.2f}),继续持有")
+
+                    # 如果无好转迹象,提前止损
+                    if not has_recovery_signal:
+                        if pnl_pct <= -2.0:
+                            # 亏损超过-2%,立即提前止损
+                            logger.warning(
+                                f"🚨 持仓{position_id} {symbol} {position_side}亏损{pnl_pct:.2f}% 无好转迹象,提前止损(优化)"
+                            )
+                            return ('提前止损优化-无好转迹象', 1.0)
+                        elif pnl_pct <= -1.5:
+                            # 亏损-1.5%到-2%,警告监控
+                            logger.warning(
+                                f"⚠️  持仓{position_id} {symbol} {position_side}亏损{pnl_pct:.2f}% 无好转迹象,重点监控"
+                            )
+
+                except Exception as e:
+                    logger.error(f"提前止损检查失败: {e}")
+
+            # ============================================================
             # === 优先级2: 固定止盈检查（兜底） ===
             # ============================================================
             take_profit_price = position.get('take_profit_price')
