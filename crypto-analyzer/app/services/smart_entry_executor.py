@@ -98,17 +98,17 @@ class SmartEntryExecutor:
             'kline_strength': kline_strength  # 保存K线强度数据
         }
 
-        # 启动后台采样器（独立协程）
-        sampler = PriceSampler(symbol, self.price_service, window_seconds=300)
+        # 启动后台采样器（15分钟滚动窗口）
+        sampler = PriceSampler(symbol, self.price_service, window_seconds=900)
         sampling_task = asyncio.create_task(sampler.start_background_sampling())
 
-        logger.info(f"📊 等待5分钟建立初始价格基线...")
+        logger.info(f"📊 等待15分钟建立初始价格基线（采集更全面的价格数据）...")
 
-        # 等待初始基线建立（最多等待6分钟）
+        # 等待初始基线建立（最多等待15分钟）
         wait_start = datetime.now()
         while not sampler.initial_baseline_built:
             await asyncio.sleep(1)
-            if (datetime.now() - wait_start).total_seconds() > 360:  # 6分钟超时
+            if (datetime.now() - wait_start).total_seconds() > 900:  # 15分钟超时
                 logger.warning(f"{symbol} 基线建立超时，使用当前样本")
                 break
 
@@ -165,40 +165,42 @@ class SmartEntryExecutor:
             sampler.stop_sampling()
             sampling_task.cancel()
 
-        # 超时强制建仓剩余部分
-        await self._force_fill_remaining(plan)
+        # 不再强制建仓，买了几批算几批
+        filled_batches = [b for b in plan['batches'] if b['filled']]
+        filled_count = len(filled_batches)
+
+        if filled_count == 0:
+            logger.error(f"❌ {symbol} 建仓窗口结束，没有完成任何批次")
+            return {
+                'success': False,
+                'error': '没有完成任何批次',
+                'position_id': None
+            }
 
         # 计算平均成本和总数量
         avg_price = self._calculate_avg_price(plan)
-        total_quantity = sum(b.get('quantity', 0) for b in plan['batches'] if b.get('filled'))
+        total_quantity = sum(b.get('quantity', 0) for b in filled_batches)
 
-        # 检查是否所有批次都完成
-        if all(b['filled'] for b in plan['batches']):
-            # 最后一次更新：标记持仓为完全开仓状态
-            await self._finalize_position(plan)
+        # 标记持仓为完全开仓状态（无论完成几批）
+        await self._finalize_position(plan)
 
-            position_id = plan.get('position_id')
-            logger.info(
-                f"✅ [BATCH_ENTRY_COMPLETE] {symbol} {direction} | "
-                f"持仓ID: {position_id} | "
-                f"平均价格: ${avg_price:.4f} | "
-                f"总数量: {total_quantity:.2f}"
-            )
+        position_id = plan.get('position_id')
+        logger.info(
+            f"✅ [BATCH_ENTRY_COMPLETE] {symbol} {direction} | "
+            f"持仓ID: {position_id} | "
+            f"完成批次: {filled_count}/3 | "
+            f"平均价格: ${avg_price:.4f} | "
+            f"总数量: {total_quantity:.2f}"
+        )
 
-            return {
-                'success': True,
-                'position_id': position_id,
-                'avg_price': avg_price,
-                'total_quantity': total_quantity,
-                'plan': plan
-            }
-        else:
-            logger.error(f"❌ {symbol} 建仓未完成，部分批次失败")
-            return {
-                'success': False,
-                'error': '建仓未完成',
-                'position_id': plan.get('position_id')  # 返回已创建的持仓ID
-            }
+        return {
+            'success': True,
+            'position_id': position_id,
+            'avg_price': avg_price,
+            'total_quantity': total_quantity,
+            'filled_batches': filled_count,
+            'plan': plan
+        }
 
     async def _should_fill_batch1(
         self,
@@ -209,74 +211,30 @@ class SmartEntryExecutor:
         elapsed_minutes: float
     ) -> Tuple[bool, str]:
         """
-        判断是否应该建仓第1批
+        判断是否应该建仓第1批（基于90分位数阈值）
 
         Returns:
             (是否建仓, 原因)
         """
         if not baseline:
-            # 基线未建立，超过10分钟强制入场
-            if elapsed_minutes >= 10:
-                return True, f"基线未建立，超时入场(已{elapsed_minutes:.1f}分钟)"
-            return False, ""
+            # 基线未建立，不入场
+            return False, "基线未建立"
 
         direction = plan['direction']
 
         if direction == 'LONG':
-            # 做多：评估当前价格
+            # 做多：价格必须 <= p90
             evaluation = sampler.is_good_long_price(current_price)
 
-            # 条件1: 价格评分>=80分（极优价格）
-            if evaluation['score'] >= 80:
-                return True, f"极优价格(评分{evaluation['score']}): {evaluation['reason']}"
-
-            # 条件2: 价格评分>=60分 + 止跌信号
-            if evaluation['score'] >= 60:
-                signal_strength = sampler.detect_bottom_signal()
-                if signal_strength >= 50:
-                    return True, f"优秀价格(评分{evaluation['score']}) + 止跌信号({signal_strength}分)"
-
-            # 条件3: 价格跌破基线最低价
-            if float(current_price) <= baseline['min_price'] * 0.999:
-                return True, f"突破基线最低价({baseline['min_price']:.6f})"
-
-            # 条件4: 强上涨趋势 + 价格已升至p75以上（避免错过）
-            if baseline['trend']['direction'] == 'up' and baseline['trend']['strength'] > 0.7:
-                if float(current_price) >= baseline['p75']:
-                    return True, f"强上涨趋势({baseline['trend']['change_pct']:.2f}%)，避免错过"
-
-            # 条件5: 超时兜底（12分钟后价格合理即入场）
-            if elapsed_minutes >= 12 and evaluation['score'] >= 40:
-                return True, f"超时兜底(已{elapsed_minutes:.1f}分钟)，评分{evaluation['score']}"
-
-            # 条件6: 强制超时（15分钟）
-            if elapsed_minutes >= 15:
-                return True, f"强制入场(已{elapsed_minutes:.1f}分钟)"
+            if evaluation['suitable']:
+                return True, evaluation['reason']
 
         else:  # SHORT
-            # 做空：镜像逻辑
+            # 做空：价格必须 >= p90
             evaluation = sampler.is_good_short_price(current_price)
 
-            if evaluation['score'] >= 80:
-                return True, f"极优价格(评分{evaluation['score']}): {evaluation['reason']}"
-
-            if evaluation['score'] >= 60:
-                signal_strength = sampler.detect_top_signal()
-                if signal_strength >= 50:
-                    return True, f"优秀价格(评分{evaluation['score']}) + 止涨信号({signal_strength}分)"
-
-            if float(current_price) >= baseline['max_price'] * 1.001:
-                return True, f"突破基线最高价({baseline['max_price']:.6f})"
-
-            if baseline['trend']['direction'] == 'down' and baseline['trend']['strength'] > 0.7:
-                if float(current_price) <= baseline['p25']:
-                    return True, f"强下跌趋势({baseline['trend']['change_pct']:.2f}%)，避免错过"
-
-            if elapsed_minutes >= 12 and evaluation['score'] >= 40:
-                return True, f"超时兜底(已{elapsed_minutes:.1f}分钟)，评分{evaluation['score']}"
-
-            if elapsed_minutes >= 15:
-                return True, f"强制入场(已{elapsed_minutes:.1f}分钟)"
+            if evaluation['suitable']:
+                return True, evaluation['reason']
 
         return False, ""
 
@@ -287,52 +245,32 @@ class SmartEntryExecutor:
         baseline: Optional[Dict],
         elapsed_minutes: float
     ) -> Tuple[bool, str]:
-        """判断是否应该建仓第2批"""
-        direction = plan['direction']
-        batch1_price = plan['batches'][0]['price']
-        batch1_time = plan['batches'][0]['time']
+        """判断是否应该建仓第2批（基于90分位数阈值）"""
+        if not baseline:
+            return False, ""
 
-        if not batch1_price or not batch1_time:
+        batch1_time = plan['batches'][0]['time']
+        if not batch1_time:
             return False, ""
 
         time_since_batch1 = (datetime.now() - batch1_time).total_seconds() / 60
 
-        # 至少等待3分钟
-        if time_since_batch1 < 3:
+        # 至少等待1分钟
+        if time_since_batch1 < 1:
             return False, ""
 
-        batch1_price_float = float(batch1_price)
+        direction = plan['direction']
         current_price_float = float(current_price)
 
         if direction == 'LONG':
-            # 条件1: 价格回调至第1批价格-0.3%（优质加仓点）
-            if current_price_float <= batch1_price_float * 0.997:
-                return True, f"回调加仓(第1批价{batch1_price:.6f}, 当前{current_price:.6f})"
-
-            # 条件2: 价格仍低于p25分位数
-            if baseline and current_price_float <= baseline['p25']:
-                return True, f"价格仍在p25以下({baseline['p25']:.6f})"
-
-            # 条件4: 超时兜底（距第1批10分钟）
-            if time_since_batch1 >= 10:
-                return True, f"超时建仓(距第1批{time_since_batch1:.1f}分钟)"
-
-            # 条件5: 强制超时（距信号20分钟）
-            if elapsed_minutes >= 20:
-                return True, f"强制建仓(距信号{elapsed_minutes:.1f}分钟)"
+            # 做多：价格 <= p90
+            if current_price_float <= baseline['p90']:
+                return True, f"价格{current_price_float:.6f} <= p90({baseline['p90']:.6f})"
 
         else:  # SHORT
-            if current_price_float >= batch1_price_float * 1.003:
-                return True, f"反弹加仓(第1批价{batch1_price:.6f}, 当前{current_price:.6f})"
-
-            if baseline and current_price_float >= baseline['p75']:
-                return True, f"价格仍在p75以上({baseline['p75']:.6f})"
-
-            if time_since_batch1 >= 10:
-                return True, f"超时建仓(距第1批{time_since_batch1:.1f}分钟)"
-
-            if elapsed_minutes >= 20:
-                return True, f"强制建仓(距信号{elapsed_minutes:.1f}分钟)"
+            # 做空：价格 >= p90
+            if current_price_float >= baseline['p90']:
+                return True, f"价格{current_price_float:.6f} >= p90({baseline['p90']:.6f})"
 
         return False, ""
 
@@ -343,61 +281,32 @@ class SmartEntryExecutor:
         baseline: Optional[Dict],
         elapsed_minutes: float
     ) -> Tuple[bool, str]:
-        """判断是否应该建仓第3批"""
-        direction = plan['direction']
-        batch2_time = plan['batches'][1]['time']
+        """判断是否应该建仓第3批（基于90分位数阈值）"""
+        if not baseline:
+            return False, ""
 
+        batch2_time = plan['batches'][1]['time']
         if not batch2_time:
             return False, ""
 
         time_since_batch2 = (datetime.now() - batch2_time).total_seconds() / 60
 
-        # 至少等待3分钟
-        if time_since_batch2 < 3:
+        # 至少等待1分钟
+        if time_since_batch2 < 1:
             return False, ""
 
-        # 计算前两批平均价
-        avg_price = (float(plan['batches'][0]['price']) + float(plan['batches'][1]['price'])) / 2
+        direction = plan['direction']
         current_price_float = float(current_price)
 
         if direction == 'LONG':
-            # 条件1: 价格不高于前两批平均价
-            if current_price_float <= avg_price:
-                return True, f"价格优于平均成本({avg_price:.6f})"
-
-            # 条件2: 价格仍低于p50中位数
-            if baseline and current_price_float <= baseline['p50']:
-                return True, f"价格仍低于中位数({baseline['p50']:.6f})"
-
-            # 条件3: 价格略高于平均价但在容忍范围（+0.3%）
-            if current_price_float <= avg_price * 1.003:
-                deviation = (current_price_float / avg_price - 1) * 100
-                return True, f"价格接近平均成本(偏离{deviation:.2f}%)"
-
-            # 条件4: 超时兜底（距第2批8分钟）
-            if time_since_batch2 >= 8:
-                return True, f"超时建仓(距第2批{time_since_batch2:.1f}分钟)"
-
-            # 条件5: 强制超时（距信号28分钟）
-            if elapsed_minutes >= 28:
-                return True, f"强制完成建仓(距信号{elapsed_minutes:.1f}分钟)"
+            # 做多：价格 <= p90
+            if current_price_float <= baseline['p90']:
+                return True, f"价格{current_price_float:.6f} <= p90({baseline['p90']:.6f})"
 
         else:  # SHORT
-            if current_price_float >= avg_price:
-                return True, f"价格优于平均成本({avg_price:.6f})"
-
-            if baseline and current_price_float >= baseline['p50']:
-                return True, f"价格仍高于中位数({baseline['p50']:.6f})"
-
-            if current_price_float >= avg_price * 0.997:
-                deviation = (1 - current_price_float / avg_price) * 100
-                return True, f"价格接近平均成本(偏离{deviation:.2f}%)"
-
-            if time_since_batch2 >= 8:
-                return True, f"超时建仓(距第2批{time_since_batch2:.1f}分钟)"
-
-            if elapsed_minutes >= 28:
-                return True, f"强制完成建仓(距信号{elapsed_minutes:.1f}分钟)"
+            # 做空：价格 >= p90
+            if current_price_float >= baseline['p90']:
+                return True, f"价格{current_price_float:.6f} >= p90({baseline['p90']:.6f})"
 
         return False, ""
 
@@ -452,13 +361,14 @@ class SmartEntryExecutor:
                 f"已完成: {len(filled_batches)}/3批 ({total_weight*100:.0f}%)"
             )
 
-    async def _force_fill_remaining(self, plan: Dict):
-        """超时强制建仓剩余部分"""
-        for i, batch in enumerate(plan['batches']):
-            if not batch['filled']:
-                current_price = await self._get_current_price(plan['symbol'])
-                logger.warning(f"⚠️ 超时强制建仓第{i+1}批")
-                await self._execute_batch(plan, i, current_price, "超时强制建仓")
+    # 已移除强制完成逻辑 - 买了几批算几批，不再强制完成3批
+    # async def _force_fill_remaining(self, plan: Dict):
+    #     """超时强制建仓剩余部分"""
+    #     for i, batch in enumerate(plan['batches']):
+    #         if not batch['filled']:
+    #             current_price = await self._get_current_price(plan['symbol'])
+    #             logger.warning(f"⚠️ 超时强制建仓第{i+1}批")
+    #             await self._execute_batch(plan, i, current_price, "超时强制建仓")
 
     async def _get_current_price(self, symbol: str) -> Decimal:
         """
@@ -1160,16 +1070,16 @@ class SmartEntryExecutor:
 
         logger.info(f"🚀 继续建仓: {symbol} {direction} (持仓#{position_id})")
 
-        # 启动价格采样器
+        # 启动价格采样器（15分钟滚动窗口）
         from app.services.price_sampler import PriceSampler
-        sampler = PriceSampler(symbol, self.price_service, window_seconds=300)
+        sampler = PriceSampler(symbol, self.price_service, window_seconds=900)
         sampling_task = asyncio.create_task(sampler.start_background_sampling())
 
-        # 等待基线建立
+        # 等待基线建立（最多等待15分钟）
         wait_start = datetime.now()
         while not sampler.initial_baseline_built:
             await asyncio.sleep(1)
-            if (datetime.now() - wait_start).total_seconds() > 180:  # 3分钟超时
+            if (datetime.now() - wait_start).total_seconds() > 900:  # 15分钟超时
                 break
 
         try:
@@ -1210,9 +1120,9 @@ class SmartEntryExecutor:
 
                 await asyncio.sleep(10)
 
-            # 超时强制完成
-            logger.warning(f"持仓 {position_id} 恢复建仓超时,强制完成剩余批次")
-            await self._force_fill_remaining(plan)
+            # 超时结束，买了几批算几批
+            filled_count = len([b for b in plan['batches'] if b['filled']])
+            logger.info(f"持仓 {position_id} 恢复建仓超时，已完成{filled_count}/3批，标记为open")
             await self._finalize_position(plan)
 
         finally:

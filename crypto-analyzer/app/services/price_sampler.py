@@ -217,7 +217,9 @@ class PriceSampler:
 
     def is_good_long_price(self, current_price: Decimal) -> Dict:
         """
-        判断当前价格是否适合做多入场（基于实时滚动基线）
+        判断当前价格是否适合做多入场（基于90分位数阈值）
+
+        做多策略: 只在价格 <= 90分位数时买入（买在相对低位）
 
         Args:
             current_price: 当前价格
@@ -231,52 +233,38 @@ class PriceSampler:
         if not baseline:
             return {'suitable': False, 'score': 0, 'reason': '基线未建立'}
 
-        score = 0
-        reasons = []
         price_float = float(current_price)
+        p90 = baseline['p90']
 
-        # 评分标准1: 价格分位数（权重50分）
-        if price_float <= baseline['p10']:
-            score += 50
-            reasons.append(f"极优价格(p10={baseline['p10']:.6f})")
-        elif price_float <= baseline['p25']:
-            score += 40
-            reasons.append(f"优秀价格(p25={baseline['p25']:.6f})")
-        elif price_float <= baseline['p50']:
-            score += 25
-            reasons.append(f"合理价格(p50={baseline['p50']:.6f})")
+        # 核心判断: 价格必须 <= 90分位数
+        if price_float <= p90:
+            # 计算价格在分位数中的位置，越低分数越高
+            price_pct_in_range = (p90 - price_float) / (p90 - baseline['min_price']) * 100 if p90 > baseline['min_price'] else 0
+            score = min(100, 60 + int(price_pct_in_range * 0.4))  # 基础60分，最高100分
+
+            reason = f"✅ 适合做多: 价格{price_float:.6f} <= p90({p90:.6f}), 相对低位{price_pct_in_range:.1f}%"
+            suitable = True
         else:
-            score += 10
-            reasons.append(f"偏高价格(>p50)")
+            # 价格高于90分位数，不适合做多
+            exceed_pct = (price_float - p90) / p90 * 100
+            score = 0
+            reason = f"❌ 不适合做多: 价格{price_float:.6f} > p90({p90:.6f}), 高出{exceed_pct:.2f}%"
+            suitable = False
 
-        # 评分标准2: 相对最低价（权重30分）
-        if price_float <= baseline['min_price']:
-            score += 30
-            reasons.append(f"跌破滚动最低价({baseline['min_price']:.6f})")
-        elif price_float <= baseline['min_price'] * 1.002:
-            score += 20
-            reasons.append(f"接近滚动最低价")
-
-        # 评分标准3: 趋势确认（权重20分）
-        if baseline['trend']['direction'] == 'down':
-            score += 10
-            reasons.append("下跌趋势（利于做多抄底）")
-        elif baseline['trend']['direction'] == 'up' and baseline['trend']['strength'] > 0.7:
-            score += 20
-            reasons.append("强上涨趋势（利于做多追涨）")
-
-        suitable = score >= 50  # 50分以上认为合适
         return {
             'suitable': suitable,
             'score': score,
-            'reason': ' | '.join(reasons),
-            'current_price': float(current_price),
+            'reason': reason,
+            'current_price': price_float,
+            'p90_threshold': p90,
             'baseline_updated_at': baseline['updated_at']
         }
 
     def is_good_short_price(self, current_price: Decimal) -> Dict:
         """
-        判断当前价格是否适合做空入场（基于实时滚动基线）
+        判断当前价格是否适合做空入场（基于90分位数阈值）
+
+        做空策略: 只在价格 >= 90分位数时卖出（卖在相对高位）
 
         Args:
             current_price: 当前价格
@@ -290,46 +278,30 @@ class PriceSampler:
         if not baseline:
             return {'suitable': False, 'score': 0, 'reason': '基线未建立'}
 
-        score = 0
-        reasons = []
         price_float = float(current_price)
+        p90 = baseline['p90']
 
-        # 评分标准1: 价格分位数（权重50分）
-        if price_float >= baseline['p90']:
-            score += 50
-            reasons.append(f"极优价格(p90={baseline['p90']:.6f})")
-        elif price_float >= baseline['p75']:
-            score += 40
-            reasons.append(f"优秀价格(p75={baseline['p75']:.6f})")
-        elif price_float >= baseline['p50']:
-            score += 25
-            reasons.append(f"合理价格(p50={baseline['p50']:.6f})")
+        # 核心判断: 价格必须 >= 90分位数
+        if price_float >= p90:
+            # 计算价格在分位数中的位置，越高分数越高
+            price_pct_in_range = (price_float - p90) / (baseline['max_price'] - p90) * 100 if baseline['max_price'] > p90 else 0
+            score = min(100, 60 + int(price_pct_in_range * 0.4))  # 基础60分，最高100分
+
+            reason = f"✅ 适合做空: 价格{price_float:.6f} >= p90({p90:.6f}), 相对高位{price_pct_in_range:.1f}%"
+            suitable = True
         else:
-            score += 10
-            reasons.append(f"偏低价格(<p50)")
+            # 价格低于90分位数，不适合做空
+            below_pct = (p90 - price_float) / p90 * 100
+            score = 0
+            reason = f"❌ 不适合做空: 价格{price_float:.6f} < p90({p90:.6f}), 低于{below_pct:.2f}%"
+            suitable = False
 
-        # 评分标准2: 相对最高价（权重30分）
-        if price_float >= baseline['max_price']:
-            score += 30
-            reasons.append(f"突破滚动最高价({baseline['max_price']:.6f})")
-        elif price_float >= baseline['max_price'] * 0.998:
-            score += 20
-            reasons.append(f"接近滚动最高价")
-
-        # 评分标准3: 趋势确认（权重20分）
-        if baseline['trend']['direction'] == 'up':
-            score += 10
-            reasons.append("上涨趋势（利于做空高点）")
-        elif baseline['trend']['direction'] == 'down' and baseline['trend']['strength'] > 0.7:
-            score += 20
-            reasons.append("强下跌趋势（利于做空追跌）")
-
-        suitable = score >= 50
         return {
             'suitable': suitable,
             'score': score,
-            'reason': ' | '.join(reasons),
-            'current_price': float(current_price),
+            'reason': reason,
+            'current_price': price_float,
+            'p90_threshold': p90,
             'baseline_updated_at': baseline['updated_at']
         }
 
