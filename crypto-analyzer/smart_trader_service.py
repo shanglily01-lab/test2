@@ -61,6 +61,38 @@ class SmartDecisionBrain:
 
         self.threshold = 35  # 开仓阈值 (提高到35分,过滤低质量信号,防追高)
 
+    def _reload_blacklist(self):
+        """重新加载黑名单（运行时调用）"""
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT symbol FROM trading_symbol_rating
+                WHERE rating_level >= 1
+                ORDER BY rating_level DESC, updated_at DESC
+            """)
+            blacklist_rows = cursor.fetchall()
+            old_blacklist = set(self.blacklist) if hasattr(self, 'blacklist') else set()
+            new_blacklist = set([row['symbol'] for row in blacklist_rows]) if blacklist_rows else set()
+
+            # 记录黑名单变化
+            added = new_blacklist - old_blacklist
+            removed = old_blacklist - new_blacklist
+
+            if added:
+                logger.info(f"[BLACKLIST-UPDATE] ➕ 新增黑名单: {', '.join(added)}")
+            if removed:
+                logger.info(f"[BLACKLIST-UPDATE] ➖ 移除黑名单: {', '.join(removed)}")
+
+            self.blacklist = list(new_blacklist)
+            cursor.close()
+
+            return len(added) > 0 or len(removed) > 0  # 返回是否有变化
+        except Exception as e:
+            logger.error(f"[BLACKLIST-RELOAD-ERROR] 重新加载黑名单失败: {e}")
+            return False
+
     def _load_config(self):
         """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
         try:
@@ -642,6 +674,9 @@ class SmartDecisionBrain:
         Args:
             big4_result: Big4趋势结果 (由SmartTraderService传入)
         """
+        # 每次扫描前重新加载黑名单,确保运行时添加的黑名单立即生效
+        self._reload_blacklist()
+
         opportunities = []
         for symbol in self.whitelist:
             result = self.analyze(symbol, big4_result=big4_result)
@@ -2779,11 +2814,18 @@ class SmartTraderService:
     def run(self):
         """主循环"""
         last_smart_exit_check = datetime.now()
+        last_blacklist_reload = datetime.now()
 
         while self.running:
             try:
                 # 0. 检查是否需要运行每日自适应优化 (凌晨2点)
                 self.check_and_run_daily_optimization()
+
+                # 0.5. 定期重新加载黑名单 (每5分钟)
+                now = datetime.now()
+                if (now - last_blacklist_reload).total_seconds() >= 300:  # 5分钟
+                    self._reload_blacklist()
+                    last_blacklist_reload = now
 
                 # 注意：止盈止损、超时检查已统一迁移到SmartExitOptimizer
                 # 1. [已停用] 检查止盈止损 -> 由SmartExitOptimizer处理
@@ -3076,7 +3118,7 @@ class SmartTraderService:
                         # ========== 破位否决结束 ==========
 
                         # 如果信号方向与交易方向冲突,降低评分或跳过
-                        elif symbol_signal == 'BEARISH' and new_side == 'LONG':
+                        if symbol_signal == 'BEARISH' and new_side == 'LONG':
                             if signal_strength >= 60:  # 强烈看空信号
                                 logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
                                 continue
