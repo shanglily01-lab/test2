@@ -1140,8 +1140,8 @@ class SmartExitOptimizer:
                             if bull_pct >= 60 or (strong_bull >= 3 and net_power > 0):
                                 has_recovery_signal = True
                                 logger.info(
-                                    f"⚡ 持仓{position_id} {symbol} LONG ROI亏损{roi_pct:.2f}% (价格{pnl_pct:.2f}%×{leverage}x) 但有反弹信号"
-                                    f"(阳线{bull_pct:.0f}%, 强多{strong_bull}, 净力量{net_power:+d}), 继续持有"
+                                    f"⚡ 持仓{position_id} {symbol} LONG 亏损{pnl_pct:.2f}% 有反弹信号"
+                                    f"(阳线{bull_pct:.0f}% 强多{strong_bull} 净{net_power:+d}), 继续持有"
                                 )
 
                         elif position_side == 'SHORT':
@@ -1150,8 +1150,8 @@ class SmartExitOptimizer:
                             if bear_pct >= 60 or (strong_bear >= 3 and net_power < 0):
                                 has_recovery_signal = True
                                 logger.info(
-                                    f"⚡ 持仓{position_id} {symbol} SHORT ROI亏损{roi_pct:.2f}% (价格{pnl_pct:.2f}%×{leverage}x) 但有下跌信号"
-                                    f"(阴线{bear_pct:.0f}%, 强空{strong_bear}, 净力量{net_power:+d}), 继续持有"
+                                    f"⚡ 持仓{position_id} {symbol} SHORT 亏损{pnl_pct:.2f}% 有下跌信号"
+                                    f"(阴线{bear_pct:.0f}% 强空{strong_bear} 净{net_power:+d}), 继续持有"
                                 )
 
                     # 如果无好转迹象,提前止损
@@ -1159,13 +1159,13 @@ class SmartExitOptimizer:
                         if roi_pct <= -20.0:
                             # ROI亏损超过-20% (价格-2%),立即提前止损
                             logger.warning(
-                                f"🚨 持仓{position_id} {symbol} {position_side} ROI亏损{roi_pct:.2f}% (价格{pnl_pct:.2f}%×{leverage}x) 无好转迹象,提前止损(优化)"
+                                f"🚨 持仓{position_id} {symbol} {position_side} 亏损{pnl_pct:.2f}% 无好转迹象,提前止损"
                             )
                             return ('提前止损优化-无好转迹象', 1.0)
                         elif roi_pct <= -15.0:
                             # ROI亏损-15%到-20% (价格-1.5%到-2%),警告监控
                             logger.warning(
-                                f"⚠️  持仓{position_id} {symbol} {position_side} ROI亏损{roi_pct:.2f}% (价格{pnl_pct:.2f}%×{leverage}x) 无好转迹象,重点监控"
+                                f"⚠️  持仓{position_id} {symbol} {position_side} 亏损{pnl_pct:.2f}% 无好转迹象,重点监控"
                             )
 
                 except Exception as e:
