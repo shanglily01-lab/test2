@@ -308,6 +308,26 @@ signals:
     max_position: 0.5
     stop_loss_pct: 0.02
     take_profit_pct: 0.06
+  signal_quality_filter:
+    # 信号组合质量过滤规则（基于历史表现）
+    enabled: true
+    # 禁用规则：胜率<40% 且订单>5笔的信号组合
+    blacklist_signals:
+      - pattern: "breakdown_short"              # 破位做空系列信号全部禁用
+        reason: "追跌信号，违背90分位策略"
+      - pattern: "breakdown_short+跌势3%+高波动+volume_power_1h_bear"
+        min_trades: 5
+        max_win_rate: 40
+        reason: "13单30.8%胜率，亏损-294.27U"
+      - pattern: "breakdown_short+跌势3%+1H看跌+高波动+volume_power_bear"
+        min_trades: 5
+        max_win_rate: 40
+        reason: "8单37.5%胜率，亏损-14.09U"
+    # 减半规则：胜率<50%的信号开仓金额减半
+    reduced_margin_signals:
+      min_trades: 3                  # 至少3笔才判断
+      max_win_rate: 50               # 胜率低于50%
+      margin_multiplier: 0.5         # 开仓金额减半
   smart_exit:
     enabled: true
     extension_minutes: 30
