@@ -3068,17 +3068,11 @@ class SmartTraderService:
                         big4_strength = big4_result.get('signal_strength', 0)
                         logger.info(f"📊 [TRADING-MODE] 固定趋势模式 | Big4: {big4_signal}({big4_strength:.1f})")
 
-                        # 🔥 修复 (2026-02-11): Big4中性时提高开仓要求，而不是完全禁止
-                        # 旧逻辑: NEUTRAL → 完全禁止开仓 ❌（过于严格，119分5信号也被拒绝）
-                        # 新逻辑: NEUTRAL → 只允许高分强信号（评分≥80，信号≥4个）✓
+                        # 🚫 Big4中性时完全禁止开仓
+                        # Big4中性意味着市场方向不明确，风险太高，完全禁止开仓
                         if big4_signal == 'NEUTRAL':
-                            signal_count = len(opp.get('signal_components', {}))
-                            if new_score < 80 or signal_count < 4:
-                                logger.warning(f"🚫 [BIG4-NEUTRAL-FILTER] {symbol} Big4中性市场(强度{big4_strength:.1f}), "
-                                             f"要求高分强信号(当前{new_score}分{signal_count}信号，需要≥80分≥4信号), 跳过")
-                                continue
-                            else:
-                                logger.info(f"✅ [BIG4-NEUTRAL-PASS] {symbol} Big4中性但信号强({new_score}分{signal_count}信号), 允许开仓")
+                            logger.warning(f"🚫 [BIG4-NEUTRAL-BLOCK] {symbol} Big4中性市场(强度{big4_strength:.1f}), 禁止开仓")
+                            continue
 
                     except Exception as e:
                         logger.error(f"[BIG4-ERROR] Big4检测失败: {e}, 跳过开仓")
@@ -3112,12 +3106,10 @@ class SmartTraderService:
                             signal_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                        # 🔥 Big4中性信号处理 (2026-02-11修复)
-                        # 新逻辑: NEUTRAL状态下允许强信号(≥80分≥4信号)通过，在上面已过滤
-                        # 如果到达这里且是NEUTRAL，说明是通过了强信号过滤的高质量信号
+                        # 🚫 Big4中性已在上面被阻止，这里不应该到达
                         if symbol_signal == 'NEUTRAL':
-                            logger.info(f"✅ [BIG4-NEUTRAL-ALLOW] {symbol} Big4中性但强信号已通过过滤({new_score}分), 继续处理")
-                            # 不跳过，继续后续逻辑
+                            logger.error(f"[LOGIC-ERROR] {symbol} NEUTRAL信号不应到达此处,已在前面被阻止")
+                            continue
 
                         # ========== 破位否决检查 ==========
                         # Big4强度>=12时，完全禁止逆向开仓
