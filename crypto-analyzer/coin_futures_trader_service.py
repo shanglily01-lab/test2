@@ -2995,6 +2995,36 @@ class CoinFuturesTraderService:
                 volatility_results = self.volatility_updater.update_all_symbols_volatility(self.brain.whitelist)
                 self.volatility_updater.print_volatility_report(volatility_results)
 
+                # 4. 新增: 评估信号黑名单（动态升级/降级）
+                logger.info("=" * 80)
+                logger.info("🔍 开始评估信号黑名单（动态管理）")
+                logger.info("=" * 80)
+                try:
+                    from app.services.signal_blacklist_reviewer import SignalBlacklistReviewer
+                    reviewer = SignalBlacklistReviewer(self.db_config)
+                    review_results = reviewer.review_all_blacklisted_signals()
+                    reviewer.close()
+
+                    # 打印评估结果摘要
+                    if review_results['removed']:
+                        logger.info(f"✅ 解除黑名单: {len(review_results['removed'])} 个信号")
+                        for item in review_results['removed'][:5]:  # 只显示前5个
+                            logger.info(f"   - {item['signal'][:50]} ({item['side']})")
+                    if review_results['upgraded']:
+                        logger.info(f"📈 降低等级: {len(review_results['upgraded'])} 个信号")
+                    if review_results['downgraded']:
+                        logger.warning(f"📉 提高等级: {len(review_results['downgraded'])} 个信号")
+
+                    # 如果有信号被解除黑名单，重新加载配置
+                    if review_results['removed'] or review_results['upgraded']:
+                        logger.info("🔄 重新加载黑名单配置...")
+                        self.brain.reload_blacklist()
+
+                except Exception as e:
+                    logger.error(f"❌ 信号黑名单评估失败: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+
                 self.last_optimization_date = current_date
 
         except Exception as e:
