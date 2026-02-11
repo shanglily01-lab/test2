@@ -384,12 +384,20 @@ class Big4TrendDetector:
                 reasons.append(kline_5m['reason'])
 
         # 生成最终信号
-        if signal_score > 30:
+        # 🔥 修复 (2026-02-11): 强制1H验证，提高阈值到50
+        # 避免震荡市中15M+5M短周期假突破(40分)触发错误信号
+        # 要求: 必须1H主导方向明确 + 评分>50
+        if signal_score > 50 and kline_1h['dominant'] == 'BULL':
             signal = 'BULLISH'
-        elif signal_score < -30:
+        elif signal_score < -50 and kline_1h['dominant'] == 'BEAR':
             signal = 'BEARISH'
         else:
             signal = 'NEUTRAL'
+            # 添加原因说明（如果是因为1H不达标）
+            if signal_score > 50 and kline_1h['dominant'] != 'BULL':
+                reasons.append("⚠️ 评分达标但1H非多头，判定为中性")
+            elif signal_score < -50 and kline_1h['dominant'] != 'BEAR':
+                reasons.append("⚠️ 评分达标但1H非空头，判定为中性")
 
         strength = min(abs(signal_score), 100)
         reason = ' | '.join(reasons) if reasons else '无明显信号'
