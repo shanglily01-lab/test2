@@ -120,7 +120,7 @@ class SignalBlacklistChecker:
 
     def _pattern_match(self, pattern: str, signal_combination: str) -> bool:
         """
-        模式匹配（支持精确匹配和子串匹配）
+        模式匹配（智能匹配，避免误伤多信号组合）
 
         Args:
             pattern: 黑名单模式
@@ -132,23 +132,34 @@ class SignalBlacklistChecker:
         if not pattern or not signal_combination:
             return False
 
-        # 1. 精确匹配
+        # 1. 精确匹配（优先级最高）
         if pattern == signal_combination:
             return True
 
-        # 2. 子串匹配（pattern是signal_combination的子串）
-        # 例如: pattern="breakdown_short" 匹配 "breakdown_short+跌势3%"
-        if pattern in signal_combination:
-            return True
+        # 2. 🔥 智能匹配逻辑 (2026-02-11修复)
+        # 将信号组合拆分为组件（处理空格）
+        signal_components = set([s.strip() for s in signal_combination.split('+')])
+        pattern_components = set([s.strip() for s in pattern.split('+')])
 
-        # 3. 模糊匹配（处理+号分隔的组件）
-        # 将信号组合拆分为组件
-        signal_components = set(signal_combination.split('+'))
-        pattern_components = set(pattern.split('+'))
+        signal_count = len(signal_components)
+        pattern_count = len(pattern_components)
 
-        # 如果pattern的所有组件都在signal中，则匹配
-        if pattern_components.issubset(signal_components):
-            return True
+        # 情况A: 单一信号黑名单（pattern只有1个组件）
+        if pattern_count == 1:
+            # 只匹配单一信号，不匹配多信号组合
+            # 避免误伤：volatility_high 不应该匹配 "breakdown_short + volatility_high + volume_power_bear"
+            if signal_count == 1 and pattern_components == signal_components:
+                return True
+            else:
+                return False  # 单一信号黑名单不匹配多信号组合
+
+        # 情况B: 多信号黑名单（pattern有多个组件）
+        else:
+            # 完全匹配：所有组件都相同（顺序无关）
+            if pattern_components == signal_components:
+                return True
+            else:
+                return False  # 不完全匹配则不拦截
 
         return False
 
