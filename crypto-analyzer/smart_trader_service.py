@@ -3112,10 +3112,12 @@ class SmartTraderService:
                             signal_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                        # 🚫 Big4中性已在上面被阻止，这里不应该到达
+                        # 🔥 Big4中性信号处理 (2026-02-11修复)
+                        # 新逻辑: NEUTRAL状态下允许强信号(≥80分≥4信号)通过，在上面已过滤
+                        # 如果到达这里且是NEUTRAL，说明是通过了强信号过滤的高质量信号
                         if symbol_signal == 'NEUTRAL':
-                            logger.error(f"[LOGIC-ERROR] {symbol} NEUTRAL信号不应到达此处,已在前面被阻止")
-                            continue
+                            logger.info(f"✅ [BIG4-NEUTRAL-ALLOW] {symbol} Big4中性但强信号已通过过滤({new_score}分), 继续处理")
+                            # 不跳过，继续后续逻辑
 
                         # ========== 破位否决检查 ==========
                         # Big4强度>=12时，完全禁止逆向开仓
