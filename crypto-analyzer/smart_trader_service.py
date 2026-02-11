@@ -26,6 +26,7 @@ from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.breakout_signal_booster import BreakoutSignalBooster
+from app.services.signal_blacklist_checker import SignalBlacklistChecker
 from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
@@ -60,6 +61,9 @@ class SmartDecisionBrain:
         self._load_config()
 
         self.threshold = 35  # 开仓阈值 (提高到35分,过滤低质量信号,防追高)
+
+        # 初始化信号黑名单检查器（动态加载，5分钟缓存）
+        self.blacklist_checker = SignalBlacklistChecker(db_config, cache_minutes=5)
 
     def _reload_blacklist(self):
         """重新加载黑名单（运行时调用）"""
@@ -261,6 +265,9 @@ class SmartDecisionBrain:
         """重新加载配置 - 供外部调用"""
         logger.info("🔄 重新加载配置文件...")
         self._load_config()
+        # 同时强制重新加载信号黑名单
+        if hasattr(self, 'blacklist_checker'):
+            self.blacklist_checker.force_reload()
         return len(self.whitelist)
 
     def _get_connection(self):
@@ -637,10 +644,10 @@ class SmartDecisionBrain:
                 else:
                     signal_combination_key = "unknown"
 
-                # 检查信号黑名单 (使用完整的信号组合键)
-                blacklist_key = f"{signal_combination_key}_{side}"
-                if blacklist_key in self.signal_blacklist:
-                    logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（历史表现差）")
+                # 检查信号黑名单 (使用动态黑名单检查器)
+                is_blacklisted, blacklist_reason = self.blacklist_checker.is_blacklisted(signal_combination_key, side)
+                if is_blacklisted:
+                    logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（{blacklist_reason}）")
                     return None
 
                 # 🔥 新增: 检查信号方向矛盾（防止逻辑错误）

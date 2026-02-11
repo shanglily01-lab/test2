@@ -25,6 +25,7 @@ from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
+from app.services.signal_blacklist_checker import SignalBlacklistChecker
 from app.trading.coin_futures_trading_engine import CoinFuturesTradingEngine
 from app.services.breakout_system import BreakoutSystem
 
@@ -155,6 +156,9 @@ class CoinFuturesDecisionBrain:
         except Exception as e:
             logger.warning(f"⚠️ 币本位-破位系统初始化失败: {e}")
             self.breakout_system = None
+
+        # 初始化信号黑名单检查器（动态加载，5分钟缓存）
+        self.blacklist_checker = SignalBlacklistChecker(db_config, cache_minutes=5)
 
     def _load_config(self):
         """从数据库加载黑名单和自适应参数,从config.yaml加载交易对列表"""
@@ -308,6 +312,9 @@ class CoinFuturesDecisionBrain:
         """重新加载配置 - 供外部调用"""
         logger.info("🔄 重新加载配置文件...")
         self._load_config()
+        # 同时强制重新加载信号黑名单
+        if hasattr(self, 'blacklist_checker'):
+            self.blacklist_checker.force_reload()
         return len(self.whitelist)
 
     def _get_connection(self):
@@ -994,10 +1001,10 @@ class CoinFuturesDecisionBrain:
                 else:
                     signal_combination_key = "unknown"
 
-                # 检查信号黑名单 (使用完整的信号组合键)
-                blacklist_key = f"{signal_combination_key}_{side}"
-                if blacklist_key in self.signal_blacklist:
-                    logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（历史表现差）")
+                # 检查信号黑名单 (使用动态黑名单检查器)
+                is_blacklisted, blacklist_reason = self.blacklist_checker.is_blacklisted(signal_combination_key, side)
+                if is_blacklisted:
+                    logger.info(f"🚫 {symbol} 信号 [{signal_combination_key}] {side} 在黑名单中，跳过（{blacklist_reason}）")
                     return None
 
                 # 🔥 新增: 检查信号方向矛盾（防止逻辑错误）
