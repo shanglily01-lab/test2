@@ -14,17 +14,19 @@ from loguru import logger
 class PaperTradingEngine:
     """模拟交易引擎"""
 
-    def __init__(self, db_config: Dict, price_cache_service=None):
+    def __init__(self, db_config: Dict, price_cache_service=None, ws_price_service=None):
         """
         初始化交易引擎
 
         Args:
             db_config: 数据库配置
             price_cache_service: 价格缓存服务（可选，用于优化性能）
+            ws_price_service: WebSocket价格服务（可选，用于批量实时价格）
         """
         self.db_config = db_config
         self.fee_rate = Decimal('0.001')  # 手续费率 0.1%
         self.price_cache_service = price_cache_service  # 价格缓存服务
+        self.ws_price_service = ws_price_service  # WebSocket价格服务（批量获取）
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -122,6 +124,12 @@ class PaperTradingEngine:
         Returns:
             当前价格
         """
+        # 优先从WebSocket获取实时价格（批量订阅，无需单独请求）
+        if self.ws_price_service:
+            ws_price = self.ws_price_service.get_price(symbol)
+            if ws_price and ws_price > 0:
+                return Decimal(str(ws_price))
+
         # 如果要求使用实时价格，尝试从交易所API获取
         if use_realtime:
             try:
