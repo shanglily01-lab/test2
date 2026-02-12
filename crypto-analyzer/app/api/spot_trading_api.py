@@ -333,16 +333,15 @@ async def _get_current_price(cursor, symbol: str) -> Optional[float]:
     except Exception:
         pass
 
-    # 从数据库获取最新价格
+    # 从数据库获取最新价格（现货数据）
     try:
-        binance_symbol = symbol.replace('/', '')
         cursor.execute("""
             SELECT close_price
             FROM kline_data
-            WHERE symbol = %s AND timeframe = '1m' AND exchange = 'binance'
+            WHERE symbol = %s AND timeframe = '1h' AND exchange = 'binance'
             ORDER BY open_time DESC
             LIMIT 1
-        """, (binance_symbol,))
+        """, (symbol,))
 
         result = cursor.fetchone()
         if result:

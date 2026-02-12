@@ -454,15 +454,18 @@
                     <div class="card-header">
                         <div style="display: flex; gap: var(--spacing-md); align-items: center; flex-wrap: wrap;">
                             <button class="btn btn-primary" id="tabPositionsTitle" onclick="showTab('positions')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-md);">
-                                <i class="bi bi-briefcase"></i> 当前持仓
+                                <i class="bi bi-briefcase"></i> 模拟持仓
                             </button>
                             <button class="btn btn-secondary" id="tabHistoryTitle" onclick="showTab('history')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
-                                <i class="bi bi-clock-history"></i> 交易历史
+                                <i class="bi bi-clock-history"></i> 模拟历史
+                            </button>
+                            <button class="btn btn-secondary" id="tabSpotTitle" onclick="showTab('spot')" style="font-size: 14px; font-weight: 600; padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); opacity: 0.7;">
+                                <i class="bi bi-cart-check"></i> 现货实盘
                             </button>
                         </div>
                     </div>
                     <div class="card-body" id="positionsCardBody" style="overflow-y: auto; overflow-x: hidden; padding: var(--spacing-md); flex: 1;">
-                        <!-- Positions Content -->
+                        <!-- Positions Content (模拟持仓) -->
                         <div id="positionsTab">
                         <div id="positions-list">
                             <div class="empty-state">
@@ -470,11 +473,57 @@
                             </div>
                         </div>
                     </div>
-                        <!-- History Content -->
+                        <!-- History Content (模拟历史) -->
                         <div id="historyTab" style="display: none;">
                         <div id="trades-list">
                             <div class="empty-state">
                                 <div class="empty-state-text">加载中...</div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Spot Trading Content (现货实盘) -->
+                        <div id="spotTab" style="display: none;">
+                            <!-- 现货统计卡片 -->
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+                                <div class="stat-card" style="padding: 16px;">
+                                    <div class="stat-label" style="font-size: 11px;">持仓数量</div>
+                                    <div class="stat-value" id="spot-total-positions" style="font-size: 20px;">0</div>
+                                </div>
+                                <div class="stat-card" style="padding: 16px;">
+                                    <div class="stat-label" style="font-size: 11px;">总成本</div>
+                                    <div class="stat-value" id="spot-total-cost" style="font-size: 20px;">0 USDT</div>
+                                </div>
+                                <div class="stat-card" style="padding: 16px;">
+                                    <div class="stat-label" style="font-size: 11px;">未实现盈亏</div>
+                                    <div class="stat-value pnl" id="spot-unrealized-pnl" style="font-size: 20px;">0 USDT</div>
+                                </div>
+                            </div>
+
+                            <!-- 子标签页：现货持仓 / 现货历史 -->
+                            <div style="display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border-default); padding-bottom: 8px;">
+                                <button class="btn btn-sm btn-primary" id="spotSubTabPositions" onclick="showSpotSubTab('positions')" style="padding: 6px 16px;">
+                                    当前持仓
+                                </button>
+                                <button class="btn btn-sm btn-secondary" id="spotSubTabHistory" onclick="showSpotSubTab('history')" style="padding: 6px 16px; opacity: 0.7;">
+                                    交易历史
+                                </button>
+                            </div>
+
+                            <!-- 现货持仓列表 -->
+                            <div id="spot-positions-content">
+                                <div id="spot-positions-list">
+                                    <div class="empty-state">
+                                        <div class="empty-state-text">加载中...</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 现货历史列表 -->
+                            <div id="spot-history-content" style="display: none;">
+                                <div id="spot-history-list">
+                                    <div class="empty-state">
+                                        <div class="empty-state-text">加载中...</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -799,11 +848,13 @@
         function showTab(tab) {
             const tabPositionsTitle = document.getElementById('tabPositionsTitle');
             const tabHistoryTitle = document.getElementById('tabHistoryTitle');
+            const tabSpotTitle = document.getElementById('tabSpotTitle');
             const positionsTab = document.getElementById('positionsTab');
             const historyTab = document.getElementById('historyTab');
+            const spotTab = document.getElementById('spotTab');
 
             // 重置所有标签样式
-            [tabPositionsTitle, tabHistoryTitle].forEach(title => {
+            [tabPositionsTitle, tabHistoryTitle, tabSpotTitle].forEach(title => {
                 if (title) {
                     title.className = 'btn btn-secondary';
                     title.style.opacity = '0.7';
@@ -814,6 +865,7 @@
             // 隐藏所有内容
             if (positionsTab) positionsTab.style.display = 'none';
             if (historyTab) historyTab.style.display = 'none';
+            if (spotTab) spotTab.style.display = 'none';
 
             if (tab === 'positions') {
                 tabPositionsTitle.className = 'btn btn-primary';
@@ -826,8 +878,199 @@
                 tabHistoryTitle.style.boxShadow = 'var(--shadow-md)';
                 historyTab.style.display = 'block';
                 loadTrades(); // 加载交易历史
+            } else if (tab === 'spot') {
+                tabSpotTitle.className = 'btn btn-primary';
+                tabSpotTitle.style.opacity = '1';
+                tabSpotTitle.style.boxShadow = 'var(--shadow-md)';
+                spotTab.style.display = 'block';
+                loadSpotData(); // 加载现货数据
             }
         }
+
+        // ==================== 现货实盘功能 ====================
+
+        // 切换现货子标签页（持仓/历史）
+        function showSpotSubTab(subTab) {
+            const btnPositions = document.getElementById('spotSubTabPositions');
+            const btnHistory = document.getElementById('spotSubTabHistory');
+            const positionsContent = document.getElementById('spot-positions-content');
+            const historyContent = document.getElementById('spot-history-content');
+
+            if (subTab === 'positions') {
+                btnPositions.className = 'btn btn-sm btn-primary';
+                btnHistory.className = 'btn btn-sm btn-secondary';
+                btnHistory.style.opacity = '0.7';
+                positionsContent.style.display = 'block';
+                historyContent.style.display = 'none';
+                loadSpotPositions();
+            } else if (subTab === 'history') {
+                btnPositions.className = 'btn btn-sm btn-secondary';
+                btnPositions.style.opacity = '0.7';
+                btnHistory.className = 'btn btn-sm btn-primary';
+                positionsContent.style.display = 'none';
+                historyContent.style.display = 'block';
+                loadSpotHistory();
+            }
+        }
+
+        // 加载现货数据（统计+持仓）
+        async function loadSpotData() {
+            await loadSpotSummary();
+            await loadSpotPositions();
+        }
+
+        // 加载现货统计
+        async function loadSpotSummary() {
+            try {
+                const response = await fetch('/api/spot-trading/summary');
+                if (!response.ok) throw new Error('获取概览失败');
+
+                const data = await response.json();
+
+                document.getElementById('spot-total-positions').textContent = data.total_positions;
+                document.getElementById('spot-total-cost').textContent = data.total_cost.toFixed(2) + ' USDT';
+
+                const pnlElement = document.getElementById('spot-unrealized-pnl');
+                pnlElement.textContent = data.total_unrealized_pnl.toFixed(2) + ' USDT (' + data.total_unrealized_pnl_pct.toFixed(2) + '%)';
+                pnlElement.className = 'stat-value pnl ' + (data.total_unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+            } catch (error) {
+                console.error('加载现货概览失败:', error);
+            }
+        }
+
+        // 加载现货持仓
+        async function loadSpotPositions() {
+            const container = document.getElementById('spot-positions-list');
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载中...</div></div>';
+
+            try {
+                const response = await fetch('/api/spot-trading/positions');
+                if (!response.ok) throw new Error('获取持仓失败');
+
+                const positions = await response.json();
+
+                if (positions.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-text">当前无持仓</div></div>';
+                    return;
+                }
+
+                container.innerHTML = positions.map(pos => {
+                    const pnlClass = pos.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    const pnlSign = pos.unrealized_pnl >= 0 ? '+' : '';
+
+                    return `
+                        <div class="position-card long" style="padding: 12px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                                <div>
+                                    <span style="font-weight: 700; font-size: 16px;">${pos.symbol}</span>
+                                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                                        ${new Date(pos.created_at).toLocaleString('zh-CN')}
+                                    </div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div class="${pnlClass}" style="font-family: var(--font-mono); font-size: 16px; font-weight: 700;">
+                                        ${pnlSign}${pos.unrealized_pnl ? pos.unrealized_pnl.toFixed(2) : '0.00'} USDT
+                                    </div>
+                                    <div class="${pnlClass}" style="font-size: 12px;">
+                                        (${pnlSign}${pos.unrealized_pnl_pct ? pos.unrealized_pnl_pct.toFixed(2) : '0.00'}%)
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
+                                <div>
+                                    <span style="color: var(--text-secondary);">入场价:</span>
+                                    <span style="font-family: var(--font-mono); margin-left: 4px;">${pos.entry_price ? pos.entry_price.toFixed(6) : '0'}</span>
+                                </div>
+                                <div>
+                                    <span style="color: var(--text-secondary);">当前价:</span>
+                                    <span style="font-family: var(--font-mono); margin-left: 4px;">${pos.current_price ? pos.current_price.toFixed(6) : '0'}</span>
+                                </div>
+                                <div>
+                                    <span style="color: var(--text-secondary);">数量:</span>
+                                    <span style="font-family: var(--font-mono); margin-left: 4px;">${pos.quantity ? pos.quantity.toFixed(4) : '0'}</span>
+                                </div>
+                                <div>
+                                    <span style="color: var(--text-secondary);">成本:</span>
+                                    <span style="font-family: var(--font-mono); margin-left: 4px;">${pos.total_cost ? pos.total_cost.toFixed(2) : '0'} USDT</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                console.error('加载现货持仓失败:', error);
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text text-danger">加载失败: ' + error.message + '</div></div>';
+            }
+        }
+
+        // 加载现货历史
+        async function loadSpotHistory() {
+            const container = document.getElementById('spot-history-list');
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载中...</div></div>';
+
+            try {
+                const response = await fetch('/api/spot-trading/history?limit=50');
+                if (!response.ok) throw new Error('获取历史失败');
+
+                const history = await response.json();
+
+                if (history.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无历史记录</div></div>';
+                    return;
+                }
+
+                container.innerHTML = history.map(rec => {
+                    const pnlClass = rec.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    const pnlSign = rec.pnl >= 0 ? '+' : '';
+
+                    return `
+                        <div class="position-card" style="border-left-color: ${rec.pnl >= 0 ? 'var(--success-green)' : 'var(--danger-red)'}; padding: 12px; margin-bottom: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                                <div>
+                                    <span style="font-weight: 700; font-size: 16px;">${rec.symbol}</span>
+                                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                                        ${rec.close_reason || '平仓'}
+                                    </div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div class="${pnlClass}" style="font-family: var(--font-mono); font-size: 16px; font-weight: 700;">
+                                        ${pnlSign}${rec.pnl ? rec.pnl.toFixed(2) : '0.00'} USDT
+                                    </div>
+                                    <div class="${pnlClass}" style="font-size: 12px;">
+                                        (${pnlSign}${rec.pnl_pct ? rec.pnl_pct.toFixed(2) : '0.00'}%)
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 12px;">
+                                <div>
+                                    <span style="color: var(--text-secondary);">入场价:</span>
+                                    <span style="font-family: var(--font-mono); margin-left: 4px;">${rec.entry_price ? rec.entry_price.toFixed(6) : '0'}</span>
+                                </div>
+                                <div>
+                                    <span style="color: var(--text-secondary);">出场价:</span>
+                                    <span style="font-family: var(--font-mono); margin-left: 4px;">${rec.exit_price ? rec.exit_price.toFixed(6) : '0'}</span>
+                                </div>
+                                <div>
+                                    <span style="color: var(--text-secondary);">开仓:</span>
+                                    <span style="font-size: 11px; margin-left: 4px;">${new Date(rec.created_at).toLocaleString('zh-CN', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})}</span>
+                                </div>
+                                <div>
+                                    <span style="color: var(--text-secondary);">平仓:</span>
+                                    <span style="font-size: 11px; margin-left: 4px;">${new Date(rec.closed_at).toLocaleString('zh-CN', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'})}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                console.error('加载现货历史失败:', error);
+                container.innerHTML = '<div class="empty-state"><div class="empty-state-text text-danger">加载失败: ' + error.message + '</div></div>';
+            }
+        }
+
+        // ==================== 现货实盘功能结束 ====================
 
         // 同步面板高度
         function syncPanelHeights() {
