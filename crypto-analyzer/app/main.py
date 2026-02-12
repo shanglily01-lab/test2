@@ -646,6 +646,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册现货交易API路由
+try:
+    from app.api.spot_trading_api import router as spot_trading_router
+    app.include_router(spot_trading_router)
+    logger.info("✅ 现货交易API路由已注册")
+except Exception as e:
+    logger.warning(f"⚠️  现货交易API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册U本位合约交易API路由
 try:
     from app.api.futures_api import router as futures_router
@@ -1064,6 +1074,18 @@ def paper_trading_page():
         return FileResponse(str(trading_path))
     else:
         raise HTTPException(status_code=404, detail=f"Paper trading page not found at {trading_path}")
+
+
+@app.get("/spot_trading")
+def spot_trading_page():
+    """
+    现货交易页面
+    """
+    spot_path = project_root / "templates" / "spot_trading.html"
+    if spot_path.exists():
+        return FileResponse(str(spot_path))
+    else:
+        raise HTTPException(status_code=404, detail=f"Spot trading page not found at {spot_path}")
 
 
 @app.get("/futures_trading")

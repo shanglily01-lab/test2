@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>现货交易 - AlphaFlow</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/paper_trading.css') }}">
+    <style>
+        /* 复用paper_trading.html的样式变量 */
+        :root {
+            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6;
+            --success-green: #10B981; --success-green-bg: #D1FAE5;
+            --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
+            --warning-yellow: #F59E0B;
+            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
+            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681;
+            --border-default: #30363D; --border-muted: #21262D;
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2); --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25);
+            --radius-lg: 12px; --radius-md: 8px;
+            --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px;
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', sans-serif;
+            --font-mono: 'SF Mono', Monaco, monospace;
+            --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: var(--font-family); background: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; }
+        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
+        .header { background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); }
+        .header-title { font-size: 24px; font-weight: 700; margin-bottom: var(--spacing-sm); }
+        .header-subtitle { color: var(--text-secondary); font-size: 13px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); }
+        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: var(--spacing-sm); }
+        .stat-value { font-size: 28px; font-weight: 700; font-family: var(--font-mono); }
+        .stat-value.positive { color: var(--success-green); }
+        .stat-value.negative { color: var(--danger-red); }
+        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); }
+        .card-title { font-size: 18px; font-weight: 600; margin-bottom: var(--spacing-lg); padding-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); }
+        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
+        table { width: 100%; border-collapse: collapse; }
+        thead { background: var(--bg-tertiary); }
+        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; }
+        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); font-size: 13px; }
+        tbody tr:hover { background: var(--bg-hover); }
+        .positive { color: var(--success-green); }
+        .negative { color: var(--danger-red); }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .badge-success { background: var(--success-green-bg); color: var(--success-green); }
+        .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
+        .loading { text-align: center; padding: var(--spacing-xl); color: var(--text-secondary); }
+        .error { background: var(--danger-red-bg); color: var(--danger-red); padding: var(--spacing-lg); border-radius: var(--radius-md); margin-bottom: var(--spacing-lg); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="header-title">💼 现货交易</h1>
+            <p class="header-subtitle">Big4底部买入 · 顶部卖出 · 实时监控</p>
+        </div>
+
+        <!-- 统计概览 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">当前持仓</div>
+                <div class="stat-value" id="totalPositions">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">总成本</div>
+                <div class="stat-value" id="totalCost">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">当前市值</div>
+                <div class="stat-value" id="totalValue">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">未实现盈亏</div>
+                <div class="stat-value" id="unrealizedPnl">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">历史总盈亏</div>
+                <div class="stat-value" id="historyPnl">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">胜率</div>
+                <div class="stat-value" id="winRate">-</div>
+            </div>
+        </div>
+
+        <!-- 当前持仓 -->
+        <div class="card">
+            <h2 class="card-title">📊 当前持仓</h2>
+            <div id="positionsError" class="error" style="display:none;"></div>
+            <div id="positionsLoading" class="loading">加载中...</div>
+            <div class="table-container" id="positionsTable" style="display:none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>币种</th>
+                            <th>入场价</th>
+                            <th>数量</th>
+                            <th>成本</th>
+                            <th>当前价</th>
+                            <th>当前市值</th>
+                            <th>未实现盈亏</th>
+                            <th>盈亏率</th>
+                            <th>创建时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="positionsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 历史记录 -->
+        <div class="card">
+            <h2 class="card-title">📜 交易历史</h2>
+            <div id="historyError" class="error" style="display:none;"></div>
+            <div id="historyLoading" class="loading">加载中...</div>
+            <div class="table-container" id="historyTable" style="display:none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>币种</th>
+                            <th>入场价</th>
+                            <th>出场价</th>
+                            <th>数量</th>
+                            <th>成本</th>
+                            <th>盈亏</th>
+                            <th>盈亏率</th>
+                            <th>平仓原因</th>
+                            <th>创建时间</th>
+                            <th>平仓时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API URLs
+        const API_BASE = '/api/spot-trading';
+
+        // 格式化数字
+        function formatNumber(num, decimals = 2) {
+            if (num === null || num === undefined) return '-';
+            return Number(num).toLocaleString('zh-CN', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+
+        // 格式化日期时间
+        function formatDateTime(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // 加载统计概览
+        async function loadSummary() {
+            try {
+                const response = await fetch(`${API_BASE}/summary`);
+                if (!response.ok) throw new Error('获取概览失败');
+
+                const data = await response.json();
+
+                document.getElementById('totalPositions').textContent = data.total_positions;
+                document.getElementById('totalCost').textContent = formatNumber(data.total_cost) + ' USDT';
+                document.getElementById('totalValue').textContent = formatNumber(data.total_value) + ' USDT';
+
+                const unrealizedPnlElem = document.getElementById('unrealizedPnl');
+                unrealizedPnlElem.textContent = formatNumber(data.total_unrealized_pnl) + ' USDT (' + formatNumber(data.total_unrealized_pnl_pct) + '%)';
+                unrealizedPnlElem.className = 'stat-value ' + (data.total_unrealized_pnl >= 0 ? 'positive' : 'negative');
+
+                const historyPnlElem = document.getElementById('historyPnl');
+                historyPnlElem.textContent = formatNumber(data.history_total_pnl) + ' USDT';
+                historyPnlElem.className = 'stat-value ' + (data.history_total_pnl >= 0 ? 'positive' : 'negative');
+
+                document.getElementById('winRate').textContent = formatNumber(data.history_win_rate) + '%';
+            } catch (error) {
+                console.error('加载概览失败:', error);
+            }
+        }
+
+        // 加载当前持仓
+        async function loadPositions() {
+            const loading = document.getElementById('positionsLoading');
+            const errorDiv = document.getElementById('positionsError');
+            const tableDiv = document.getElementById('positionsTable');
+            const tbody = document.getElementById('positionsBody');
+
+            try {
+                loading.style.display = 'block';
+                errorDiv.style.display = 'none';
+                tableDiv.style.display = 'none';
+
+                const response = await fetch(`${API_BASE}/positions`);
+                if (!response.ok) throw new Error('获取持仓失败');
+
+                const positions = await response.json();
+
+                loading.style.display = 'none';
+
+                if (positions.length === 0) {
+                    errorDiv.textContent = '当前无持仓';
+                    errorDiv.style.display = 'block';
+                    errorDiv.className = 'loading'; // 使用loading样式而不是error
+                    return;
+                }
+
+                tableDiv.style.display = 'block';
+                tbody.innerHTML = positions.map(pos => `
+                    <tr>
+                        <td><strong>${pos.symbol}</strong></td>
+                        <td>${formatNumber(pos.entry_price, 6)}</td>
+                        <td>${formatNumber(pos.quantity, 6)}</td>
+                        <td>${formatNumber(pos.total_cost)} USDT</td>
+                        <td>${formatNumber(pos.current_price, 6)}</td>
+                        <td>${formatNumber(pos.current_value)} USDT</td>
+                        <td class="${pos.unrealized_pnl >= 0 ? 'positive' : 'negative'}">
+                            ${formatNumber(pos.unrealized_pnl)} USDT
+                        </td>
+                        <td class="${pos.unrealized_pnl_pct >= 0 ? 'positive' : 'negative'}">
+                            ${formatNumber(pos.unrealized_pnl_pct)}%
+                        </td>
+                        <td>${formatDateTime(pos.created_at)}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                loading.style.display = 'none';
+                errorDiv.textContent = '加载失败: ' + error.message;
+                errorDiv.style.display = 'block';
+                console.error('加载持仓失败:', error);
+            }
+        }
+
+        // 加载历史记录
+        async function loadHistory() {
+            const loading = document.getElementById('historyLoading');
+            const errorDiv = document.getElementById('historyError');
+            const tableDiv = document.getElementById('historyTable');
+            const tbody = document.getElementById('historyBody');
+
+            try {
+                loading.style.display = 'block';
+                errorDiv.style.display = 'none';
+                tableDiv.style.display = 'none';
+
+                const response = await fetch(`${API_BASE}/history?limit=100`);
+                if (!response.ok) throw new Error('获取历史失败');
+
+                const history = await response.json();
+
+                loading.style.display = 'none';
+
+                if (history.length === 0) {
+                    errorDiv.textContent = '暂无历史记录';
+                    errorDiv.style.display = 'block';
+                    errorDiv.className = 'loading';
+                    return;
+                }
+
+                tableDiv.style.display = 'block';
+                tbody.innerHTML = history.map(rec => `
+                    <tr>
+                        <td><strong>${rec.symbol}</strong></td>
+                        <td>${formatNumber(rec.entry_price, 6)}</td>
+                        <td>${formatNumber(rec.exit_price, 6)}</td>
+                        <td>${formatNumber(rec.quantity, 6)}</td>
+                        <td>${formatNumber(rec.total_cost)} USDT</td>
+                        <td class="${rec.pnl >= 0 ? 'positive' : 'negative'}">
+                            ${formatNumber(rec.pnl)} USDT
+                        </td>
+                        <td class="${rec.pnl_pct >= 0 ? 'positive' : 'negative'}">
+                            ${formatNumber(rec.pnl_pct)}%
+                        </td>
+                        <td>${rec.close_reason || '-'}</td>
+                        <td>${formatDateTime(rec.created_at)}</td>
+                        <td>${formatDateTime(rec.closed_at)}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                loading.style.display = 'none';
+                errorDiv.textContent = '加载失败: ' + error.message;
+                errorDiv.style.display = 'block';
+                console.error('加载历史失败:', error);
+            }
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSummary();
+            loadPositions();
+            loadHistory();
+
+            // 每30秒刷新一次
+            setInterval(() => {
+                loadSummary();
+                loadPositions();
+            }, 30000);
+        });
+    </script>
+</body>
+</html>
