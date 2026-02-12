@@ -19,15 +19,45 @@ router = APIRouter(prefix="/api/paper-trading", tags=["模拟交易"])
 
 # WebSocket价格服务（全局单例，批量订阅实时价格）
 _ws_price_service = None
+_ws_initialized = False
 
 def get_ws_price_service():
     """获取WebSocket价格服务（延迟初始化）"""
-    global _ws_price_service
+    global _ws_price_service, _ws_initialized
     if _ws_price_service is None:
         try:
             from app.services.binance_ws_price import BinanceWSPriceService
             _ws_price_service = BinanceWSPriceService(market_type='spot')
-            logger.info("✅ WebSocket价格服务已初始化（批量实时数据）")
+            logger.info("✅ WebSocket价格服务已创建")
+
+            # 启动WebSocket并订阅交易对（异步任务）
+            if not _ws_initialized:
+                import asyncio
+                import threading
+
+                def start_ws_service():
+                    """在后台线程中运行WebSocket服务"""
+                    try:
+                        config = get_config()
+                        symbols = config.get('symbols', [])
+
+                        # 创建新的事件循环
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+
+                        # 订阅交易对并启动服务
+                        loop.run_until_complete(_ws_price_service.subscribe(symbols))
+                        loop.run_until_complete(_ws_price_service.start())
+
+                        logger.info(f"✅ WebSocket已订阅 {len(symbols)} 个现货交易对")
+                    except Exception as e:
+                        logger.error(f"❌ WebSocket服务启动失败: {e}")
+
+                # 在后台线程中启动
+                ws_thread = threading.Thread(target=start_ws_service, daemon=True)
+                ws_thread.start()
+                _ws_initialized = True
+
         except Exception as e:
             logger.warning(f"⚠️ WebSocket价格服务初始化失败: {e}")
     return _ws_price_service

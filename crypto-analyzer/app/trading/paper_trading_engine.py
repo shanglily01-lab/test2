@@ -232,10 +232,30 @@ class PaperTradingEngine:
                     price = Decimal(str(result['close_price']))
                     return price
 
-                # 只对每个交易对警告一次，避免日志刷屏
+                # 数据库中没有价格，尝试从实时API获取（fallback）
                 if symbol not in self._warned_symbols:
-                    logger.warning(f"找不到 {symbol} 的价格数据（该交易对可能未配置在config.yaml中）")
+                    logger.info(f"数据库无价格数据，尝试从API获取: {symbol}")
                     self._warned_symbols.add(symbol)
+
+                # Fallback到实时API
+                try:
+                    import requests
+                    symbol_clean = symbol.replace('/', '').upper()
+                    response = requests.get(
+                        'https://api.binance.com/api/v3/ticker/price',
+                        params={'symbol': symbol_clean},
+                        timeout=3
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data and 'price' in data:
+                            price = Decimal(str(data['price']))
+                            logger.info(f"从Binance API获取价格成功: {symbol} = {price}")
+                            return price
+                except Exception as e:
+                    logger.warning(f"从API获取 {symbol} 价格失败: {e}")
+
+                logger.warning(f"无法获取 {symbol} 的价格数据（数据库和API均失败）")
                 return Decimal('0')
         finally:
             connection.close()
