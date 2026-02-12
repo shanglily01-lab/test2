@@ -22,8 +22,12 @@ import pymysql
 from dotenv import load_dotenv
 import yaml
 
-# 导入Big4趋势检测器
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 导入Big4趋势检测器和WebSocket价格服务
+# 添加项目根目录到sys.path
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.binance_ws_price import get_ws_price_service
 
