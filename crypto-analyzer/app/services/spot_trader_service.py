@@ -109,8 +109,8 @@ class SpotBottomTopTrader:
 
             cursor.execute("""
                 SELECT *
-                FROM spot_positions
-                WHERE status = 'active'
+                FROM paper_trading_positions
+                WHERE status = 'open' AND account_id = 1
                 ORDER BY created_at DESC
             """)
 
@@ -290,22 +290,22 @@ class SpotBottomTopTrader:
             stop_loss_price = price * (1 - self.STOP_LOSS_PCT)
 
             cursor.execute("""
-                INSERT INTO spot_positions (
-                    symbol, entry_price, quantity, total_cost,
+                INSERT INTO paper_trading_positions (
+                    account_id, symbol, position_side, quantity, available_quantity,
+                    avg_entry_price, total_cost,
                     take_profit_price, stop_loss_price,
-                    signal_strength, signal_details, status, created_at, updated_at
+                    status, created_at, updated_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, 'active', NOW(), NOW()
+                    1, %s, 'LONG', %s, %s, %s, %s, %s, %s, 'open', NOW(), NOW()
                 )
             """, (
                 symbol,
-                price,
                 quantity,
-                amount,
+                quantity,  # available_quantity = quantity
+                price,  # avg_entry_price
+                amount,  # total_cost
                 take_profit_price,
-                stop_loss_price,
-                drop_pct,  # 使用跌幅作为信号强度
-                f"Big4底部抄底 - 跌幅{drop_pct:.2f}%"
+                stop_loss_price
             ))
 
             conn.commit()
@@ -380,12 +380,11 @@ class SpotBottomTopTrader:
             pnl_pct = (exit_price - entry_price) / entry_price
 
             cursor.execute("""
-                UPDATE spot_positions
+                UPDATE paper_trading_positions
                 SET status = 'closed',
-                    exit_price = %s,
-                    pnl = %s,
-                    pnl_pct = %s,
-                    close_reason = %s,
+                    current_price = %s,
+                    unrealized_pnl = %s,
+                    unrealized_pnl_pct = %s,
                     closed_at = NOW(),
                     updated_at = NOW()
                 WHERE id = %s
@@ -393,7 +392,6 @@ class SpotBottomTopTrader:
                 exit_price,
                 pnl,
                 pnl_pct,
-                reason,
                 position['id']
             ))
 

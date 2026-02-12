@@ -95,14 +95,15 @@ async def get_spot_positions():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 查询所有open状态的持仓
+        # 查询所有open状态的持仓（使用paper_trading_positions表）
         cursor.execute("""
             SELECT
-                id, symbol, entry_price, avg_entry_price, quantity, total_cost,
-                take_profit_price, stop_loss_price, signal_details,
+                id, symbol, avg_entry_price AS entry_price, avg_entry_price,
+                quantity, total_cost,
+                take_profit_price, stop_loss_price, '' AS signal_details,
                 created_at, updated_at
-            FROM spot_positions
-            WHERE status = 'open'
+            FROM paper_trading_positions
+            WHERE status = 'open' AND account_id = 1
             ORDER BY created_at DESC
         """)
 
@@ -181,15 +182,17 @@ async def get_spot_history(
 
         where_clause = " AND ".join(where_conditions)
 
-        # 查询历史记录
+        # 查询历史记录（使用paper_trading_positions表）
         query = f"""
             SELECT
-                id, symbol, entry_price, exit_price, quantity, total_cost,
-                pnl, pnl_pct, close_reason, signal_details,
-                created_at, closed_at
-            FROM spot_positions
-            WHERE {where_clause}
-            ORDER BY closed_at DESC
+                p.id, p.symbol, p.avg_entry_price AS entry_price,
+                p.current_price AS exit_price, p.quantity, p.total_cost,
+                p.unrealized_pnl AS pnl, p.unrealized_pnl_pct AS pnl_pct,
+                '' AS close_reason, '' AS signal_details,
+                p.created_at, p.updated_at AS closed_at
+            FROM paper_trading_positions p
+            WHERE p.account_id = 1 AND {where_clause.replace("status = 'closed'", "p.status = 'closed'")}
+            ORDER BY p.updated_at DESC
             LIMIT %s OFFSET %s
         """
 
@@ -237,22 +240,22 @@ async def get_spot_summary():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 1. 统计当前持仓
+        # 1. 统计当前持仓（使用paper_trading_positions表）
         cursor.execute("""
             SELECT
                 COUNT(*) as total_positions,
                 SUM(total_cost) as total_cost,
                 SUM(quantity) as total_quantity
-            FROM spot_positions
-            WHERE status = 'open'
+            FROM paper_trading_positions
+            WHERE status = 'open' AND account_id = 1
         """)
         open_stats = cursor.fetchone()
 
-        # 2. 获取当前持仓的市值和未实现盈亏
+        # 2. 获取当前持仓的市值和未实现盈亏（使用paper_trading_positions表）
         cursor.execute("""
             SELECT id, symbol, quantity, total_cost
-            FROM spot_positions
-            WHERE status = 'open'
+            FROM paper_trading_positions
+            WHERE status = 'open' AND account_id = 1
         """)
         open_positions = cursor.fetchall()
 
@@ -269,15 +272,15 @@ async def get_spot_summary():
         total_cost = float(open_stats['total_cost']) if open_stats['total_cost'] else 0
         total_unrealized_pnl_pct = (total_unrealized_pnl / total_cost * 100) if total_cost > 0 else 0
 
-        # 3. 统计历史交易
+        # 3. 统计历史交易（使用paper_trading_positions表）
         cursor.execute("""
             SELECT
-                SUM(pnl) as total_pnl,
-                SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as win_count,
-                SUM(CASE WHEN pnl <= 0 THEN 1 ELSE 0 END) as loss_count,
+                SUM(unrealized_pnl) as total_pnl,
+                SUM(CASE WHEN unrealized_pnl > 0 THEN 1 ELSE 0 END) as win_count,
+                SUM(CASE WHEN unrealized_pnl <= 0 THEN 1 ELSE 0 END) as loss_count,
                 COUNT(*) as total_count
-            FROM spot_positions
-            WHERE status = 'closed'
+            FROM paper_trading_positions
+            WHERE status = 'closed' AND account_id = 1
         """)
         history_stats = cursor.fetchone()
 

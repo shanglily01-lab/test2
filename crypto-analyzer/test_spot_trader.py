@@ -259,7 +259,7 @@ class SpotTraderTester:
                 logger.info(f"   表字段数: {len(columns)}")
 
                 # 统计记录
-                cursor.execute("SELECT COUNT(*) as total, SUM(status='active') as active, SUM(status='closed') as closed FROM spot_positions")
+                cursor.execute("SELECT COUNT(*) as total, SUM(status='open') as active, SUM(status='closed') as closed FROM paper_trading_positions WHERE account_id = 1")
                 stats = cursor.fetchone()
                 logger.info(f"   总记录: {stats['total']}, 活跃: {stats['active']}, 已平: {stats['closed']}")
             else:
