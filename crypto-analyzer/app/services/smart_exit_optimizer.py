@@ -1047,12 +1047,13 @@ class SmartExitOptimizer:
 
         优先级（从高到低）：
         1. 固定止损检查（风控底线）
-        2. 智能顶底识别（替代固定止盈）
-        3. 固定止盈检查（兜底）
-        4. 动态超时检查
-        5. 分阶段超时检查
-        6. 6小时绝对时间托底
-        7. K线强度衰减检查
+        2. 固定止盈检查（兜底）
+        3. 移动止盈（30分钟后启动，盈利≥2%时追踪回撤0.5%）
+        4. 智能顶底识别
+        5. 动态超时检查
+        6. 分阶段超时检查
+        7. 3小时绝对时间强制平仓
+        8. K线强度衰减检查
 
         Args:
             position: 持仓信息
@@ -1207,6 +1208,38 @@ class SmartExitOptimizer:
                         return ('固定止盈', 1.0)
 
             # ============================================================
+            # === 优先级3: 移动止盈（30分钟后启动，盈利≥2%时追踪）===
+            # ============================================================
+            TRAILING_STOP_START_MINUTES = 30  # 30分钟后开始监控
+            TRAILING_STOP_PROFIT_THRESHOLD = 2.0  # 盈利≥2%时启动移动止盈
+            TRAILING_STOP_DRAWDOWN_PCT = 0.5  # 回撤0.5%时平仓
+
+            if hold_minutes >= TRAILING_STOP_START_MINUTES:
+                current_profit_pct = profit_info.get('profit_pct', 0)
+
+                # 启动条件：盈利≥2%
+                if current_profit_pct >= TRAILING_STOP_PROFIT_THRESHOLD:
+                    max_profit_price = position.get('max_profit_price')
+
+                    if max_profit_price and float(max_profit_price) > 0:
+                        # 计算回撤百分比
+                        if position_side == 'LONG':
+                            # 做多：从最高价回撤
+                            drawdown_pct = ((float(max_profit_price) - current_price) / float(max_profit_price)) * 100
+                        else:  # SHORT
+                            # 做空：从最低价反弹
+                            drawdown_pct = ((current_price - float(max_profit_price)) / float(max_profit_price)) * 100
+
+                        # 触发移动止盈
+                        if drawdown_pct >= TRAILING_STOP_DRAWDOWN_PCT:
+                            logger.info(
+                                f"📈 [移动止盈] 持仓{position_id} {symbol} {position_side} 盈利{current_profit_pct:.2f}% | "
+                                f"价格从最高点回撤{drawdown_pct:.2f}%≥{TRAILING_STOP_DRAWDOWN_PCT}%，触发平仓 | "
+                                f"最高价${max_profit_price:.6f} → 当前价${current_price:.6f}"
+                            )
+                            return (f'移动止盈(回撤{drawdown_pct:.1f}%)', 1.0)
+
+            # ============================================================
             # === 在此之后的所有平仓检查都需要满足最小持仓时间(1小时) ===
             # ============================================================
             # 开仓1小时内不平仓(除了止损和止盈)
@@ -1281,7 +1314,7 @@ class SmartExitOptimizer:
             # ============================================================
             # === 优先级8: K线强度衰减检查（智能分批平仓） ===
             # ============================================================
-            # 注意: 15M强力反转和亏损+反转已在优先级3处理(紧急风控),这里不再重复检查
+            # 注意: 15M强力反转和亏损+反转已在优先级1处理(止损风控),这里不再重复检查
 
             # 获取K线强度
             strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
