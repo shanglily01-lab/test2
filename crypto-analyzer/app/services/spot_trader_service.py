@@ -235,6 +235,36 @@ class SpotBottomTopTrader:
         else:
             logger.info("💤 本轮未买入新币种")
 
+    def _get_latest_price_from_db(self, symbol: str) -> Optional[float]:
+        """
+        从数据库获取最新价格（作为WebSocket价格的备用）
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            binance_symbol = symbol.replace('/', '')
+
+            cursor.execute("""
+                SELECT close_price
+                FROM kline_data
+                WHERE symbol = %s AND timeframe = '1m' AND exchange = 'binance'
+                ORDER BY open_time DESC
+                LIMIT 1
+            """, (binance_symbol,))
+
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+
+            if result:
+                return float(result['close_price'])
+            return None
+
+        except Exception as e:
+            logger.error(f"从数据库获取价格失败 {symbol}: {e}")
+            return None
+
     def _execute_spot_buy(self, symbol: str, price: float, amount: float, drop_pct: float) -> bool:
         """
         执行现货买入
@@ -290,7 +320,7 @@ class SpotBottomTopTrader:
         执行顶部卖出
 
         逻辑:
-        卖出所有持仓
+        卖出所有持仓（强制全部卖出，不允许跳过）
         """
         positions = self.get_current_positions()
 
@@ -298,23 +328,35 @@ class SpotBottomTopTrader:
             logger.info("💼 当前无持仓，无需卖出")
             return
 
-        logger.info(f"🔴 Big4触顶信号 - 卖出所有持仓 ({len(positions)}个)")
+        logger.info(f"🔴 Big4触顶信号 - 强制卖出所有持仓 ({len(positions)}个)")
 
         sold_count = 0
+        failed_symbols = []
+
         for pos in positions:
             symbol = pos['symbol']
             current_price = self.ws_price_service.get_price(symbol)
 
+            # 如果WebSocket价格缺失，尝试从数据库获取最新价格
             if not current_price:
-                logger.warning(f"⚠️  {symbol} 价格缺失，跳过")
-                continue
+                logger.warning(f"⚠️  {symbol} WebSocket价格缺失，尝试从数据库获取...")
+                current_price = self._get_latest_price_from_db(symbol)
+
+            # 如果仍然获取不到价格，使用入场价作为兜底
+            if not current_price:
+                logger.error(f"❌ {symbol} 无法获取价格，使用入场价强制卖出")
+                current_price = float(pos['entry_price'])
 
             success = self._execute_spot_sell(pos, current_price, "Big4顶部信号")
             if success:
                 sold_count += 1
+            else:
+                failed_symbols.append(symbol)
 
         if sold_count > 0:
-            logger.success(f"✅ 顶部卖出 {sold_count} 个币种")
+            logger.success(f"✅ 顶部卖出 {sold_count}/{len(positions)} 个币种")
+        if failed_symbols:
+            logger.error(f"❌ 卖出失败的币种: {', '.join(failed_symbols)}")
 
     def _execute_spot_sell(self, position: Dict, exit_price: float, reason: str) -> bool:
         """
