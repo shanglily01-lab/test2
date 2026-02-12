@@ -765,8 +765,9 @@ class PaperTradingEngine:
                     quantity = Decimal(str(pos['quantity']))
                     avg_cost = Decimal(str(pos['avg_entry_price']))
 
-                    # 获取当前价格（监控止盈止损时使用实时价格）
-                    current_price = self.get_current_price(symbol, use_realtime=True)
+                    # 获取当前价格（使用缓存价格，避免大量API调用阻塞）
+                    # 实时价格更新由独立的价格采集器负责
+                    current_price = self.get_current_price(symbol, use_realtime=False)
                     if current_price == 0:
                         continue
 
