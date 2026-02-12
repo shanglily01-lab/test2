@@ -1244,32 +1244,32 @@
         // 加载持仓（优化：直接使用API返回的价格，无需额外请求）
         async function loadPositions() {
             try {
-                const response = await fetch('/api/spot-trading/positions');
-                const positions = await response.json();
+                const response = await fetch('/api/paper-trading/spot-v2/positions');
+                const data = await response.json();
 
                 const container = document.getElementById('positions-list');
 
                 // 更新持仓映射表
                 positionsMap = {};
+                const positions = data.positions || [];
 
                 // 直接使用API返回的价格和计算好的盈亏数据，无需额外请求
                 const positionsWithPrices = positions.map(pos => {
                     const currentPrice = parseFloat(pos.current_price) || 0;
                     const quantity = parseFloat(pos.quantity) || 0;
-                    const avgEntryPrice = parseFloat(pos.entry_price) || 0;  // 现货API使用 entry_price
+                    const avgEntryPrice = parseFloat(pos.avg_entry_price) || 0;
 
                     // 优先使用后端计算的值（已经考虑了实时价格）
                     const unrealizedPnl = parseFloat(pos.unrealized_pnl) || 0;
                     const unrealizedPnlPct = parseFloat(pos.unrealized_pnl_pct) || 0;
-                    const marketValue = parseFloat(pos.current_value) || 0;  // 现货API使用 current_value
+                    const marketValue = parseFloat(pos.market_value) || 0;
 
                     const updatedPos = {
                         ...pos,
                         current_price: currentPrice,
-                        avg_entry_price: avgEntryPrice,  // 兼容性：统一使用 avg_entry_price
                         unrealized_pnl: unrealizedPnl,
                         unrealized_pnl_pct: unrealizedPnlPct,
-                        market_value: marketValue  // 兼容性：统一使用 market_value
+                        market_value: marketValue
                     };
 
                     positionsMap[pos.symbol] = updatedPos;
@@ -1357,8 +1357,8 @@
                     container.innerHTML = htmlContent;
                 }
 
-                // 动态计算并更新总盈亏统计（现货API没有stats，传null）
-                updateTotalPnlStats(positionsWithPrices, null);
+                // 动态计算并更新总盈亏统计
+                updateTotalPnlStats(positionsWithPrices, data.stats);
             } catch (error) {
             }
         }
@@ -1689,10 +1689,10 @@
             container.innerHTML = '<div class="empty-state"><div class="empty-state-text">加载中...</div></div>';
 
             try {
-                const response = await fetch('/api/spot-trading/history?limit=100');
-                const history = await response.json();
+                const response = await fetch('/api/paper-trading/closed-trades');
+                const data = await response.json();
 
-                if (history && history.length > 0) {
+                if (data.trades && data.trades.length > 0) {
                     // 格式化交易类型
                     function formatOrderSource(orderSource) {
                         if (!orderSource) return '<span class="badge badge-info">手动</span>';
@@ -1778,44 +1778,39 @@
                         return result;
                     }
                     
-                    container.innerHTML = history.map(rec => {
+                    container.innerHTML = data.trades.map(trade => {
                         // 已平仓交易显示
-                        const pnlClass = rec.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                        const pnlIcon = rec.pnl >= 0 ? '📈' : '📉';
-                        const entryPrice = rec.entry_price || 0;
-                        const exitPrice = rec.exit_price || 0;
-                        const closeReason = rec.close_reason || '平仓';
-                        const closedAt = new Date(rec.closed_at).toLocaleString('zh-CN');
-                        const createdAt = new Date(rec.created_at).toLocaleString('zh-CN', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
-                        const totalCost = (rec.total_cost || 0).toFixed(2);
-                        const totalRevenue = (rec.quantity * exitPrice).toFixed(2);
+                        const pnlClass = trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                        const pnlIcon = trade.realized_pnl >= 0 ? '📈' : '📉';
+                        const costPrice = trade.cost_price || 0;
+                        const sellPrice = trade.price || 0;
+                        const totalAmount = (trade.total_amount || 0).toFixed(2);
 
                         return `
                             <div style="padding: 12px; border-bottom: 1px solid var(--border-default); background: var(--bg-secondary);">
                                 <div class="d-flex justify-between align-center">
                                     <div>
-                                        <span class="badge badge-primary">现货</span>
-                                        <strong style="margin-left: 8px;">${rec.symbol || '-'}</strong>
-                                        <span class="badge badge-info">${closeReason}</span>
+                                        <span class="badge badge-primary">平仓</span>
+                                        <strong style="margin-left: 8px;">${trade.symbol || '-'}</strong>
+                                        ${formatOrderSource(trade.order_source)}
                                     </div>
-                                    <span class="text-sm text-secondary">${closedAt}</span>
+                                    <span class="text-sm text-secondary">${trade.trade_time || '-'}</span>
                                 </div>
                                 <div class="text-sm" style="margin-top: 6px;">
-                                    <span class="text-secondary">数量:</span> <strong>${rec.quantity || 0}</strong>
+                                    <span class="text-secondary">数量:</span> <strong>${trade.quantity || 0}</strong>
                                 </div>
                                 <div class="text-sm" style="margin-top: 3px;">
-                                    <span class="text-secondary">买入价:</span> <strong>${formatPrice(entryPrice)}</strong>
-                                    <span class="text-secondary" style="margin-left: 12px;">卖出价:</span> <strong>${formatPrice(exitPrice)}</strong>
+                                    <span class="text-secondary">成本价:</span> <strong>${formatPrice(costPrice)}</strong>
+                                    <span class="text-secondary" style="margin-left: 12px;">卖出价:</span> <strong>${formatPrice(sellPrice)}</strong>
                                 </div>
                                 <div class="text-sm" style="margin-top: 3px;">
-                                    <span class="text-secondary">成本:</span> ${totalCost} USDT
-                                    <span class="text-secondary" style="margin-left: 12px;">收入:</span> ${totalRevenue} USDT
+                                    <span class="text-secondary">卖出总额:</span> ${totalAmount} USDT
                                 </div>
                                 <div class="text-sm ${pnlClass}" style="margin-top: 6px; font-weight: bold;">
-                                    ${pnlIcon} 盈亏: ${rec.pnl >= 0 ? '+' : ''}${(rec.pnl || 0).toFixed(2)} USDT (${rec.pnl_pct >= 0 ? '+' : ''}${(rec.pnl_pct || 0).toFixed(2)}%)
+                                    ${pnlIcon} 盈亏: ${trade.realized_pnl >= 0 ? '+' : ''}${(trade.realized_pnl || 0).toFixed(2)} USDT (${trade.pnl_pct >= 0 ? '+' : ''}${(trade.pnl_pct || 0).toFixed(2)}%)
                                 </div>
                                 <div class="text-sm text-secondary" style="margin-top: 3px;">
-                                    <span class="text-secondary">开仓:</span> ${createdAt}
+                                    ${formatStopLossTakeProfit(trade.stop_loss_price, trade.take_profit_price, trade.order_source)}
                                 </div>
                             </div>
                         `;
