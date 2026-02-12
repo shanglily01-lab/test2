@@ -1084,12 +1084,45 @@ async def get_ema_signals(limit: int = 10):
 
 
 # ==================== 现货V2 (动态价格采样策略) API ====================
-# 已废弃 - spot_positions_v2 表已不再使用
 
-# @router.get("/spot-v2/positions")
-# async def get_spot_v2_positions():
-#     """
-#     获取现货V2持仓列表 (动态价格采样策略)
-#     已废弃 - 表已迁移到 paper_trading_positions
-#     """
-#     pass
+@router.get("/spot-v2/positions")
+async def get_spot_v2_positions(account_id: Optional[int] = None, engine: PaperTradingEngine = Depends(get_engine)):
+    """
+    获取现货V2持仓列表 (兼容旧前端)
+    现在统一使用 paper_trading_positions 表
+    """
+    try:
+        summary = engine.get_account_summary(account_id or 1)
+        if not summary:
+            return {
+                "positions": [],
+                "total_count": 0
+            }
+
+        positions = []
+        for pos in summary.get('positions', []):
+            positions.append({
+                "symbol": pos['symbol'],
+                "quantity": float(pos['quantity']),
+                "available_quantity": float(pos['available_quantity']),
+                "avg_entry_price": float(pos['avg_entry_price']),
+                "current_price": float(pos['current_price']) if pos['current_price'] else 0,
+                "market_value": float(pos['market_value']) if pos['market_value'] else 0,
+                "total_cost": float(pos['total_cost']),
+                "unrealized_pnl": float(pos['unrealized_pnl']) if pos['unrealized_pnl'] else 0,
+                "unrealized_pnl_pct": float(pos['unrealized_pnl_pct']) if pos['unrealized_pnl_pct'] else 0,
+                "stop_loss_price": float(pos['stop_loss_price']) if pos.get('stop_loss_price') else None,
+                "take_profit_price": float(pos['take_profit_price']) if pos.get('take_profit_price') else None,
+                "first_buy_time": pos['first_buy_time'].strftime('%Y-%m-%d %H:%M:%S') if pos['first_buy_time'] else None,
+                "last_update_time": pos['last_update_time'].strftime('%Y-%m-%d %H:%M:%S') if pos['last_update_time'] else None
+            })
+
+        return {
+            "positions": positions,
+            "total_count": len(positions)
+        }
+    except Exception as e:
+        logger.error(f"获取现货V2持仓失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
