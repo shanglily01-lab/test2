@@ -56,7 +56,7 @@ class SpotBottomTopTrader:
         # 交易配置
         self.AMOUNT_PER_TRADE = 800  # 每笔800 USDT
         self.MAX_POSITIONS = 30      # 最多30个持仓
-        self.TAKE_PROFIT_PCT = 0.20  # 20% 止盈（备用）
+        self.TAKE_PROFIT_PCT = 0.50  # 50% 止盈（备用）
         self.STOP_LOSS_PCT = 0.10    # 10% 止损（防极端情况）
         self.MIN_DROP_PCT = 3.0      # 最小跌幅3%才考虑买入
 
