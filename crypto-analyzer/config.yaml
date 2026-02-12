@@ -282,8 +282,8 @@ signals:
     - 0.4
     enabled: true
     sampling_interval_seconds: 10
-    sampling_window_seconds: 900      # 15分钟价格采样窗口，采集更全面的价格数据
-    time_window_minutes: 10           # 总建仓时间窗口10分钟，买了几批算几批
+    sampling_window_seconds: 900
+    time_window_minutes: 10
     whitelist_symbols: []
   blacklist:
   - IP/USDT
@@ -309,34 +309,31 @@ signals:
     stop_loss_pct: 0.02
     take_profit_pct: 0.06
   signal_quality_filter:
-    # 信号组合质量过滤规则（基于历史表现）
     enabled: true
-    # 禁用规则：胜率<40% 且订单>5笔的信号组合
     blacklist_signals:
-      - pattern: "breakdown_short"              # 破位做空系列信号全部禁用
-        reason: "追跌信号，违背90分位策略"
-      - pattern: "breakdown_short+跌势3%+高波动+volume_power_1h_bear"
-        min_trades: 5
-        max_win_rate: 40
-        reason: "13单30.8%胜率，亏损-294.27U"
-      - pattern: "breakdown_short+跌势3%+1H看跌+高波动+volume_power_bear"
-        min_trades: 5
-        max_win_rate: 40
-        reason: "8单37.5%胜率，亏损-14.09U"
-    # 减半规则：胜率<50%的信号开仓金额减半
+    - pattern: breakdown_short
+      reason: 追跌信号，违背90分位策略
+    - pattern: breakdown_short+跌势3%+高波动+volume_power_1h_bear
+      min_trades: 5
+      max_win_rate: 40
+      reason: 13单30.8%胜率，亏损-294.27U
+    - pattern: breakdown_short+跌势3%+1H看跌+高波动+volume_power_bear
+      min_trades: 5
+      max_win_rate: 40
+      reason: 8单37.5%胜率，亏损-14.09U
     reduced_margin_signals:
-      min_trades: 3                  # 至少3笔才判断
-      max_win_rate: 50               # 胜率低于50%
-      margin_multiplier: 0.5         # 开仓金额减半
+      min_trades: 3
+      max_win_rate: 50
+      margin_multiplier: 0.5
   smart_exit:
     enabled: true
     extension_minutes: 30
-    high_profit_drawback: 0.1       # 高盈利(>3%)回撤10%止盈
-    high_profit_threshold: 3.0      # 高盈利阈值3%
-    low_profit_target: 1.0          # 低盈利目标1%
-    micro_loss_threshold: -0.5      # 微亏损-0.5%
-    mid_profit_drawback: 0.2        # 中等盈利(>2%)回撤20%止盈
-    mid_profit_threshold: 2.0       # 中等盈利阈值2%
+    high_profit_drawback: 0.1
+    high_profit_threshold: 3.0
+    low_profit_target: 1.0
+    micro_loss_threshold: -0.5
+    mid_profit_drawback: 0.2
+    mid_profit_threshold: 2.0
   weights:
     news: 0.3
     social: 0.1
@@ -494,3 +491,157 @@ symbols:
 - ZRX/USDT
 - COMP/USDT
 - UNI/USDT
+- USDC/USDT
+- USD1/USDT
+- U/USDT
+- PAXG/USDT
+- DOGE/USDT
+- FDUSD/USDT
+- TRX/USDT
+- PEPE/USDT
+- EUR/USDT
+- TNSR/USDT
+- HBAR/USDT
+- AAVE/USDT
+- XUSD/USDT
+- OG/USDT
+- ARB/USDT
+- DYM/USDT
+- ME/USDT
+- BFUSD/USDT
+- S/USDT
+- RESOLV/USDT
+- RLUSD/USDT
+- BONK/USDT
+- KITE/USDT
+- DASH/USDT
+- STG/USDT
+- NIL/USDT
+- SHIB/USDT
+- ALLO/USDT
+- WBTC/USDT
+- 币安人生/USDT
+- AXS/USDT
+- USDE/USDT
+- ACE/USDT
+- VIRTUAL/USDT
+- ICP/USDT
+- MANTA/USDT
+- MOVE/USDT
+- SEI/USDT
+- EIGEN/USDT
+- ZK/USDT
+- RENDER/USDT
+- WBETH/USDT
+- CRV/USDT
+- POL/USDT
+- SAGA/USDT
+- INIT/USDT
+- ZBT/USDT
+- VANA/USDT
+- JASMY/USDT
+- GIGGLE/USDT
+- CAKE/USDT
+- STRK/USDT
+- AR/USDT
+- ROSE/USDT
+- AEUR/USDT
+- OP/USDT
+- ONDO/USDT
+- ETHFI/USDT
+- RUNE/USDT
+- GALA/USDT
+- GPS/USDT
+- KAITO/USDT
+- ENSO/USDT
+- YB/USDT
+- TWT/USDT
+- TIA/USDT
+- FLOKI/USDT
+- VTHO/USDT
+- FOGO/USDT
+- CHZ/USDT
+- ATOM/USDT
+- SENT/USDT
+- BNSOL/USDT
+- BREV/USDT
+- SKY/USDT
+- JUP/USDT
+- OPEN/USDT
+- KERNEL/USDT
+- W/USDT
+- SYRUP/USDT
+- AVNT/USDT
+- LDO/USDT
+- MUBARAK/USDT
+- ZIL/USDT
+- XVG/USDT
+- SUSHI/USDT
+- NEIRO/USDT
+- ATM/USDT
+- PENDLE/USDT
+- PNUT/USDT
+- ORDI/USDT
+- BIO/USDT
+- CYBER/USDT
+- SNX/USDT
+- PROVE/USDT
+- ZKP/USDT
+- FF/USDT
+- SOLV/USDT
+- CFX/USDT
+- MINA/USDT
+- ARKM/USDT
+- ALT/USDT
+- LAYER/USDT
+- MAGIC/USDT
+- AXL/USDT
+- ACT/USDT
+- BANANAS31/USDT
+- LUNC/USDT
+- 1000CHEEMS/USDT
+- IOTA/USDT
+- GUN/USDT
+- NOM/USDT
+- AUCTION/USDT
+- QNT/USDT
+- XAI/USDT
+- C98/USDT
+- OM/USDT
+- DYDX/USDT
+- APE/USDT
+- IO/USDT
+- STX/USDT
+- HEMI/USDT
+- EURI/USDT
+- LQTY/USDT
+- SPK/USDT
+- THETA/USDT
+- DOLO/USDT
+- JTO/USDT
+- TURTLE/USDT
+- BROCCOLI714/USDT
+- ANIME/USDT
+- ENS/USDT
+- CHESS/USDT
+- IMX/USDT
+- NKN/USDT
+- PARTI/USDT
+- PLUME/USDT
+- MMT/USDT
+- BARD/USDT
+- AWE/USDT
+- COW/USDT
+- RONIN/USDT
+- MEME/USDT
+- JST/USDT
+- RAY/USDT
+- GHST/USDT
+- CKB/USDT
+- ASR/USDT
+- THE/USDT
+- TREE/USDT
+- NXPC/USDT
+- EUL/USDT
+- NEWT/USDT
+- XVS/USDT
