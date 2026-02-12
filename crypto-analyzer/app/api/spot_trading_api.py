@@ -9,33 +9,24 @@ from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime, timedelta
 import pymysql
-from functools import lru_cache
 from loguru import logger
 
 router = APIRouter(prefix="/api/spot-trading", tags=["现货交易"])
 
 # ==================== 依赖注入 ====================
 
-@lru_cache()
-def get_config():
-    """缓存配置文件读取"""
-    from app.utils.config_loader import load_config
-    return load_config()
-
-def get_db_config():
-    """获取数据库配置"""
-    config = get_config()
-    return config.get('database', {}).get('mysql', {})
-
 def get_db_connection():
-    """获取数据库连接"""
-    db_config = get_db_config()
+    """获取数据库连接（直接从环境变量）"""
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+
     return pymysql.connect(
-        host=db_config.get('host', 'localhost'),
-        port=db_config.get('port', 3306),
-        user=db_config.get('user', 'root'),
-        password=db_config.get('password', ''),
-        database=db_config.get('database', 'binance-data'),
+        host=os.getenv('DB_HOST', 'localhost'),
+        port=int(os.getenv('DB_PORT', 3306)),
+        user=os.getenv('DB_USER', 'root'),
+        password=os.getenv('DB_PASSWORD', ''),
+        database=os.getenv('DB_NAME', 'binance-data'),
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor
     )
