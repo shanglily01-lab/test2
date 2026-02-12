@@ -17,6 +17,21 @@ from loguru import logger
 
 router = APIRouter(prefix="/api/paper-trading", tags=["模拟交易"])
 
+# WebSocket价格服务（全局单例，批量订阅实时价格）
+_ws_price_service = None
+
+def get_ws_price_service():
+    """获取WebSocket价格服务（延迟初始化）"""
+    global _ws_price_service
+    if _ws_price_service is None:
+        try:
+            from app.services.binance_ws_price import BinanceWSPriceService
+            _ws_price_service = BinanceWSPriceService(market_type='spot')
+            logger.info("✅ WebSocket价格服务已初始化（批量实时数据）")
+        except Exception as e:
+            logger.warning(f"⚠️ WebSocket价格服务初始化失败: {e}")
+    return _ws_price_service
+
 # ==================== 依赖注入：延迟初始化（修复阻塞问题）====================
 
 @lru_cache()
@@ -31,10 +46,11 @@ def get_db_config():
     return config.get('database', {}).get('mysql', {})
 
 def get_engine():
-    """获取 PaperTradingEngine 实例（依赖注入，使用价格缓存优化）"""
+    """获取 PaperTradingEngine 实例（集成缓存+WebSocket批量价格）"""
     db_config = get_db_config()
-    price_cache = get_global_price_cache()  # 获取全局价格缓存
-    return PaperTradingEngine(db_config, price_cache_service=price_cache)
+    price_cache = get_global_price_cache()
+    ws_service = get_ws_price_service()  # WebSocket批量实时价格
+    return PaperTradingEngine(db_config, price_cache_service=price_cache, ws_price_service=ws_service)
 
 
 # ==================== 请求模型 ====================
