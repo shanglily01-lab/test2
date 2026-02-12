@@ -395,8 +395,6 @@ async def get_data_statistics():
             {'name': 'paper_trading_orders', 'label': '现货订单', 'description': '现货订单记录', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
             {'name': 'paper_trading_trades', 'label': '现货成交', 'description': '现货成交记录', 'time_field': 'timestamp', 'is_binance': False, 'category': '现货交易'},
             {'name': 'paper_trading_accounts', 'label': '现货账户', 'description': '现货账户信息', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
-            {'name': 'spot_positions', 'label': '现货持仓v1', 'description': '现货持仓记录v1', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
-            {'name': 'spot_positions_v2', 'label': '现货持仓v2', 'description': '现货持仓记录v2', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
 
             # 信号与分析
             {'name': 'ema_signals', 'label': 'EMA信号', 'description': 'EMA技术指标信号', 'time_field': 'timestamp', 'is_binance': False, 'category': '信号分析'},
@@ -684,7 +682,6 @@ async def get_table_sample(table_name: str, limit: int = 10):
                 'live_futures_positions', 'live_futures_orders', 'live_futures_trades', 'live_trading_accounts', 'live_trading_logs',
                 # 现货交易
                 'paper_trading_positions', 'paper_trading_orders', 'paper_trading_trades', 'paper_trading_accounts',
-                'spot_positions', 'spot_positions_v2',
                 # 信号分析
                 'ema_signals', 'signal_blacklist', 'signal_component_performance', 'investment_recommendations', 'trading_symbol_rating',
                 # ETF数据

@@ -108,7 +108,14 @@ class SpotBottomTopTrader:
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT *
+                SELECT
+                    id, symbol, position_side, quantity, available_quantity,
+                    avg_entry_price, avg_entry_price AS entry_price,
+                    total_cost, current_price, market_value,
+                    unrealized_pnl, unrealized_pnl_pct,
+                    stop_loss_price, take_profit_price,
+                    first_buy_time, last_update_time,
+                    status, created_at, updated_at, closed_at
                 FROM paper_trading_positions
                 WHERE status = 'open' AND account_id = 1
                 ORDER BY created_at DESC
