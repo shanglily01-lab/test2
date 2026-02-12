@@ -25,8 +25,13 @@ def get_futures_symbols() -> Set[str]:
     futures_symbols = set()
     for symbol, market in markets.items():
         if market['quote'] == 'USDT' and market['active']:
-            # 转换为现货格式（例如 BTCUSDT -> BTC/USDT）
+            # 添加原格式
             futures_symbols.add(symbol)
+
+            # 如果是永续合约格式 "BTC/USDT:USDT"，也添加现货格式 "BTC/USDT"
+            if ':USDT' in symbol:
+                spot_format = symbol.replace(':USDT', '')
+                futures_symbols.add(spot_format)
 
     print(f"找到 {len(futures_symbols)} 个支持合约的USDT交易对")
     return futures_symbols
