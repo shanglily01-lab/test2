@@ -1977,9 +1977,11 @@ class CoinFuturesTraderService:
                                 if loop.is_closed():
                                     logger.warning(f"⚠️ 事件循环已关闭，无法启动智能平仓监控: 持仓{position_id}")
                                 else:
-                                    asyncio.create_task(_smart_exit_optimizer.start_monitoring_position(position_id))
+                                    # 使用loop.create_task而非asyncio.create_task，确保使用同一个loop实例
+                                    loop.create_task(_smart_exit_optimizer.start_monitoring_position(position_id))
                                     logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
-                            except RuntimeError as e:
+                            except (RuntimeError, Exception) as e:
+                                # 捕获所有异常，包括"Already closed"等事件循环相关错误
                                 logger.warning(f"⚠️ 无法启动智能平仓监控: {e}")
                     else:
                         logger.error(f"❌ [BATCH_ENTRY_FAILED] {_symbol} {_side} | {entry_result.get('error')}")
