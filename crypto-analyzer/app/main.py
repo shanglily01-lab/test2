@@ -1076,18 +1076,6 @@ def paper_trading_page():
         raise HTTPException(status_code=404, detail=f"Paper trading page not found at {trading_path}")
 
 
-@app.get("/spot_trading")
-def spot_trading_page():
-    """
-    现货交易页面
-    """
-    spot_path = project_root / "templates" / "spot_trading.html"
-    if spot_path.exists():
-        return FileResponse(str(spot_path))
-    else:
-        raise HTTPException(status_code=404, detail=f"Spot trading page not found at {spot_path}")
-
-
 @app.get("/futures_trading")
 async def futures_trading_page():
     """
