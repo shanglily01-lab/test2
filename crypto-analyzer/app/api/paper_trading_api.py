@@ -435,31 +435,11 @@ async def get_closed_trades(account_id: Optional[int] = None, limit: int = 100, 
     conn = engine._get_connection()
     try:
         with conn.cursor() as cursor:
-            # 查询所有SELL交易（代表平仓）
+            # 查询所有SELL交易（代表平仓）- 优化：简化查询，止盈止损信息从trades表直接获取
             cursor.execute(
                 """SELECT
                     t.*,
-                    o.order_source,
-                    COALESCE(
-                        (SELECT p_closed.stop_loss_price
-                         FROM paper_trading_positions p_closed
-                         WHERE p_closed.symbol = t.symbol
-                           AND p_closed.account_id = t.account_id
-                           AND p_closed.status = 'closed'
-                           AND p_closed.last_update_time <= DATE_ADD(t.trade_time, INTERVAL 5 MINUTE)
-                         ORDER BY p_closed.last_update_time DESC
-                         LIMIT 1)
-                    ) as stop_loss_price,
-                    COALESCE(
-                        (SELECT p_closed.take_profit_price
-                         FROM paper_trading_positions p_closed
-                         WHERE p_closed.symbol = t.symbol
-                           AND p_closed.account_id = t.account_id
-                           AND p_closed.status = 'closed'
-                           AND p_closed.last_update_time <= DATE_ADD(t.trade_time, INTERVAL 5 MINUTE)
-                         ORDER BY p_closed.last_update_time DESC
-                         LIMIT 1)
-                    ) as take_profit_price
+                    o.order_source
                 FROM paper_trading_trades t
                 LEFT JOIN paper_trading_orders o ON t.order_id = o.order_id
                 WHERE t.account_id = %s
@@ -487,8 +467,9 @@ async def get_closed_trades(account_id: Optional[int] = None, limit: int = 100, 
                     "cost_price": float(trade['cost_price']) if trade['cost_price'] else None,
                     "trade_time": trade['trade_time'].strftime('%Y-%m-%d %H:%M:%S') if trade['trade_time'] else None,
                     "order_source": trade.get('order_source', 'manual'),
-                    "stop_loss_price": float(trade['stop_loss_price']) if trade.get('stop_loss_price') else None,
-                    "take_profit_price": float(trade['take_profit_price']) if trade.get('take_profit_price') else None
+                    # 止损止盈信息暂时不返回（性能优化）
+                    "stop_loss_price": None,
+                    "take_profit_price": None
                 })
 
             return {
