@@ -76,19 +76,34 @@ class Big4TrendDetector:
         conn = pymysql.connect(**self.db_config)
         results = {}
 
+        # 🔥 新增权重系统 (2026-02-12)
+        # BTC和ETH是市场领导者，应该有更高权重
+        COIN_WEIGHTS = {
+            'BTC/USDT': 0.40,  # 40% - 市场领导者
+            'ETH/USDT': 0.30,  # 30% - 第二大币
+            'BNB/USDT': 0.15,  # 15% - 币安生态
+            'SOL/USDT': 0.15   # 15% - 新兴公链
+        }
+
         bullish_count = 0
         bearish_count = 0
+        bullish_weight = 0  # 看涨权重总和
+        bearish_weight = 0  # 看跌权重总和
         total_strength = 0
 
         for symbol in BIG4_SYMBOLS:
             analysis = self._analyze_symbol(conn, symbol)
             results[symbol] = analysis
 
+            weight = COIN_WEIGHTS.get(symbol, 0.25)  # 默认25%
+
             if analysis['signal'] == 'BULLISH':
                 bullish_count += 1
+                bullish_weight += weight
                 total_strength += analysis['strength']
             elif analysis['signal'] == 'BEARISH':
                 bearish_count += 1
+                bearish_weight += weight
                 total_strength += analysis['strength']
 
         # 🔥 紧急干预检测 (在分析完Big4后执行)
@@ -96,16 +111,17 @@ class Big4TrendDetector:
 
         conn.close()
 
-        # 综合判断
-        if bullish_count >= 3:
+        # 综合判断 - 使用权重而非简单计数
+        # 权重≥60%视为趋势明确（例如BTC+ETH=70%，或BTC+BNB+SOL=70%）
+        if bullish_weight >= 0.60:
             overall_signal = 'BULLISH'
-            recommendation = "市场整体看涨，建议优先考虑多单机会"
-        elif bearish_count >= 3:
+            recommendation = f"市场整体看涨(权重{bullish_weight*100:.0f}%)，建议优先考虑多单机会"
+        elif bearish_weight >= 0.60:
             overall_signal = 'BEARISH'
-            recommendation = "市场整体看跌，建议优先考虑空单机会"
+            recommendation = f"市场整体看跌(权重{bearish_weight*100:.0f}%)，建议优先考虑空单机会"
         else:
             overall_signal = 'NEUTRAL'
-            recommendation = "市场方向不明确，建议观望或减少仓位"
+            recommendation = f"市场方向不明确(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望或减少仓位"
 
         # 🔥 如果紧急干预激活，覆盖recommendation
         if emergency_intervention['block_long']:
@@ -120,6 +136,8 @@ class Big4TrendDetector:
             'signal_strength': avg_strength,
             'bullish_count': bullish_count,
             'bearish_count': bearish_count,
+            'bullish_weight': bullish_weight,  # 新增：看涨权重
+            'bearish_weight': bearish_weight,  # 新增：看跌权重
             'details': results,
             'recommendation': recommendation,
             'emergency_intervention': emergency_intervention,  # 🔥 新增
