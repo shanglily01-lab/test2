@@ -646,6 +646,40 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/prices/batch")
+async def get_batch_prices(symbols: List[str], force_refresh: bool = False, engine: PaperTradingEngine = Depends(get_engine)):
+    """
+    批量获取多个交易对的当前价格（避免大量并发请求）
+
+    Args:
+        symbols: 交易对列表
+        force_refresh: 是否强制刷新
+
+    Returns:
+        价格字典
+    """
+    try:
+        result = {}
+        for symbol in symbols:
+            try:
+                # 使用缓存价格，避免大量API调用
+                price = engine.get_current_price(symbol, use_realtime=False)
+                result[symbol] = {
+                    "price": float(price) if price else 0,
+                    "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                }
+            except Exception as e:
+                logger.warning(f"获取{symbol}价格失败: {e}")
+                result[symbol] = {
+                    "price": 0,
+                    "error": str(e)
+                }
+        return result
+    except Exception as e:
+        logger.error(f"批量获取价格失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/update-positions")
 async def update_positions(account_id: Optional[int] = None, engine: PaperTradingEngine = Depends(get_engine)):
     """
