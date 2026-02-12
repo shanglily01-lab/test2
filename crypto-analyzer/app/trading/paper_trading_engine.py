@@ -27,6 +27,7 @@ class PaperTradingEngine:
         self.fee_rate = Decimal('0.001')  # 手续费率 0.1%
         self.price_cache_service = price_cache_service  # 价格缓存服务
         self.ws_price_service = ws_price_service  # WebSocket价格服务（批量获取）
+        self._warned_symbols = set()  # 跟踪已警告的交易对，避免重复警告
 
     def _get_connection(self):
         """获取数据库连接"""
@@ -231,7 +232,10 @@ class PaperTradingEngine:
                     price = Decimal(str(result['close_price']))
                     return price
 
-                logger.warning(f"找不到 {symbol} 的价格数据")
+                # 只对每个交易对警告一次，避免日志刷屏
+                if symbol not in self._warned_symbols:
+                    logger.warning(f"找不到 {symbol} 的价格数据（该交易对可能未配置在config.yaml中）")
+                    self._warned_symbols.add(symbol)
                 return Decimal('0')
         finally:
             connection.close()
