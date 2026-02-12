@@ -915,7 +915,12 @@
             setInterval(() => {
                 updatePositionPrices();
             }, 2000);
-            
+
+            // 定期更新交易对下拉框中的价格（每3秒）
+            setInterval(() => {
+                updateSymbolPrices();
+            }, 3000);
+
             // 定期更新持仓市值并检测止盈止损（每5秒）
             setInterval(async () => {
                 try {
@@ -1072,10 +1077,14 @@
                 symbolSelect.innerHTML = '';
 
                 if (data.symbols && data.symbols.length > 0) {
+                    // 保存交易对列表供后续更新价格使用
+                    window.allSymbols = data.symbols;
+
                     data.symbols.forEach(symbol => {
                         const option = document.createElement('option');
                         option.value = symbol;
-                        option.textContent = symbol;
+                        option.textContent = `${symbol} - 加载中...`;
+                        option.setAttribute('data-symbol', symbol);
                         symbolSelect.appendChild(option);
                     });
 
@@ -1083,6 +1092,9 @@
                     refreshPrice(true);
                     // 如果该交易对有持仓，自动填充数量
                     fillQuantityFromPosition();
+
+                    // 立即更新一次交易对价格
+                    updateSymbolPrices();
                 } else {
                     symbolSelect.innerHTML = '<option value="">暂无可用交易对</option>';
                 }
@@ -1090,111 +1102,152 @@
             }
         }
 
+        // 更新交易对下拉框中的价格显示
+        async function updateSymbolPrices() {
+            try {
+                if (!window.allSymbols || window.allSymbols.length === 0) return;
+
+                const symbolSelect = document.getElementById('symbol');
+                if (!symbolSelect) return;
+
+                // 使用批量价格API获取所有交易对的价格
+                const response = await fetch('/api/paper-trading/prices/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbols: window.allSymbols })
+                });
+
+                if (response.ok) {
+                    const pricesData = await response.json();
+
+                    // 更新每个option的显示文本
+                    const options = symbolSelect.querySelectorAll('option[data-symbol]');
+                    options.forEach(option => {
+                        const symbol = option.getAttribute('data-symbol');
+                        const priceInfo = pricesData[symbol];
+                        if (priceInfo && priceInfo.price > 0) {
+                            option.textContent = `${symbol} - $${formatPrice(priceInfo.price)}`;
+                        } else {
+                            option.textContent = `${symbol} - N/A`;
+                        }
+                    });
+                }
+            } catch (error) {
+                // 静默处理错误
+            }
+        }
+
         // 刷新数据
         // 存储持仓价格历史（用于价格变化动画）
         let positionPriceHistory = {};
         
-        // 更新持仓价格（不重新加载整个持仓列表）
+        // 更新持仓价格（不重新加载整个持仓列表）- 使用批量价格API
         async function updatePositionPrices() {
             try {
                 const container = document.getElementById('positions-list');
                 if (!container) {
                     return;
                 }
-                
+
                 // 获取所有持仓卡片
                 const positionCards = container.querySelectorAll('.position-card[data-symbol]');
-                
+
                 if (positionCards.length === 0) {
                     // 如果没有持仓，尝试重新加载一次
                     await loadPositions();
                     return;
                 }
-                
-                // 为每个持仓更新价格和盈亏（不重新渲染整个列表）
-                await Promise.all(Array.from(positionCards).map(async (card) => {
+
+                // 收集所有持仓的交易对
+                const symbols = Array.from(positionCards).map(card => card.getAttribute('data-symbol')).filter(Boolean);
+
+                if (symbols.length === 0) return;
+
+                // 使用批量价格API一次性获取所有价格
+                const response = await fetch('/api/paper-trading/prices/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbols: symbols })
+                });
+
+                if (!response.ok) return;
+
+                const pricesData = await response.json();
+
+                // 更新每个持仓的价格和盈亏
+                positionCards.forEach(card => {
                     const symbol = card.getAttribute('data-symbol');
                     if (!symbol) return;
-                    
-                    try {
-                        // 获取实时价格（强制刷新）
-                        const priceUrl = `/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}&force_refresh=true`;
-                        const priceResponse = await fetch(priceUrl);
-                        if (priceResponse.ok) {
-                            const priceData = await priceResponse.json();
-                            if (priceData.price && priceData.price > 0) {
-                                const currentPrice = parseFloat(priceData.price);
-                                
-                                // 从持仓映射表获取持仓信息
-                                const position = positionsMap[symbol];
-                                if (!position) return;
-                                
-                                // 计算实时盈亏
-                                const quantity = parseFloat(position.quantity) || 0;
-                                const avgEntryPrice = parseFloat(position.avg_entry_price) || 0;
-                                
-                                let unrealizedPnl = 0;
-                                let unrealizedPnlPct = 0;
-                                let marketValue = 0;
-                                
-                                if (currentPrice > 0 && avgEntryPrice > 0 && quantity > 0) {
-                                    marketValue = currentPrice * quantity;
-                                    unrealizedPnl = (currentPrice - avgEntryPrice) * quantity;
-                                    const cost = avgEntryPrice * quantity;
-                                    if (cost > 0) {
-                                        unrealizedPnlPct = (unrealizedPnl / cost) * 100;
-                                    }
-                                }
-                                
-                                // 更新价格显示
-                                const priceElement = card.querySelector('.current-price-display[data-symbol="' + symbol + '"]');
-                                if (priceElement) {
-                                    const oldPrice = priceElement.textContent;
-                                    priceElement.textContent = formatPrice(currentPrice);
-                                    // 更新价格颜色
-                                    if (currentPrice > avgEntryPrice) {
-                                        priceElement.style.color = 'var(--success-green)';
-                                    } else if (currentPrice < avgEntryPrice) {
-                                        priceElement.style.color = 'var(--danger-red)';
-                                    } else {
-                                        priceElement.style.color = 'var(--text-secondary)';
-                                    }
-                                }
-                                
-                                // 更新盈亏显示
-                                const pnlElements = card.querySelectorAll('.pnl-positive, .pnl-negative');
-                                pnlElements.forEach(el => {
-                                    if (el.textContent.includes('USDT')) {
-                                        el.textContent = `${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)} USDT`;
-                                        el.className = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                                    } else if (el.textContent.includes('%')) {
-                                        el.textContent = `${unrealizedPnlPct >= 0 ? '+' : ''}${unrealizedPnlPct.toFixed(2)}%`;
-                                        el.className = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                                    }
-                                });
-                                
-                                // 更新市值显示
-                                const marketValueElements = card.querySelectorAll('.text-sm.text-secondary');
-                                marketValueElements.forEach(el => {
-                                    if (el.textContent.includes('市值:')) {
-                                        el.innerHTML = el.innerHTML.replace(/市值: [\d.]+ USDT/, `市值: ${marketValue.toFixed(2)} USDT`);
-                                    }
-                                });
-                                
-                                // 更新持仓映射表
-                                positionsMap[symbol] = {
-                                    ...position,
-                                    current_price: currentPrice,
-                                    unrealized_pnl: unrealizedPnl,
-                                    unrealized_pnl_pct: unrealizedPnlPct,
-                                    market_value: marketValue
-                                };
-                            }
+
+                    const priceInfo = pricesData[symbol];
+                    if (!priceInfo || !priceInfo.price || priceInfo.price <= 0) return;
+
+                    const currentPrice = parseFloat(priceInfo.price);
+
+                    // 从持仓映射表获取持仓信息
+                    const position = positionsMap[symbol];
+                    if (!position) return;
+
+                    // 计算实时盈亏
+                    const quantity = parseFloat(position.quantity) || 0;
+                    const avgEntryPrice = parseFloat(position.avg_entry_price) || 0;
+
+                    let unrealizedPnl = 0;
+                    let unrealizedPnlPct = 0;
+                    let marketValue = 0;
+
+                    if (currentPrice > 0 && avgEntryPrice > 0 && quantity > 0) {
+                        marketValue = currentPrice * quantity;
+                        unrealizedPnl = (currentPrice - avgEntryPrice) * quantity;
+                        const cost = avgEntryPrice * quantity;
+                        if (cost > 0) {
+                            unrealizedPnlPct = (unrealizedPnl / cost) * 100;
                         }
-                    } catch (e) {
-                        // 静默处理单个持仓更新失败，不影响其他持仓
                     }
-                }));
+
+                    // 更新价格显示
+                    const priceElement = card.querySelector('.current-price-display[data-symbol="' + symbol + '"]');
+                    if (priceElement) {
+                        priceElement.textContent = formatPrice(currentPrice);
+                        // 更新价格颜色
+                        if (currentPrice > avgEntryPrice) {
+                            priceElement.style.color = 'var(--success-green)';
+                        } else if (currentPrice < avgEntryPrice) {
+                            priceElement.style.color = 'var(--danger-red)';
+                        } else {
+                            priceElement.style.color = 'var(--text-secondary)';
+                        }
+                    }
+
+                    // 更新盈亏显示
+                    const pnlElements = card.querySelectorAll('.pnl-positive, .pnl-negative');
+                    pnlElements.forEach(el => {
+                        if (el.textContent.includes('USDT')) {
+                            el.textContent = `${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)} USDT`;
+                            el.className = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                        } else if (el.textContent.includes('%')) {
+                            el.textContent = `${unrealizedPnlPct >= 0 ? '+' : ''}${unrealizedPnlPct.toFixed(2)}%`;
+                            el.className = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                        }
+                    });
+
+                    // 更新市值显示
+                    const marketValueElements = card.querySelectorAll('.text-sm.text-secondary');
+                    marketValueElements.forEach(el => {
+                        if (el.textContent.includes('市值:')) {
+                            el.innerHTML = el.innerHTML.replace(/市值: [\d.]+ USDT/, `市值: ${marketValue.toFixed(2)} USDT`);
+                        }
+                    });
+
+                    // 更新持仓映射表
+                    positionsMap[symbol] = {
+                        ...position,
+                        current_price: currentPrice,
+                        unrealized_pnl: unrealizedPnl,
+                        unrealized_pnl_pct: unrealizedPnlPct,
+                        market_value: marketValue
+                    };
+                });
             } catch (error) {
                 // 静默处理更新失败
             }

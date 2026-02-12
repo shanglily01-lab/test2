@@ -81,6 +81,12 @@ class UpdateStopLossTakeProfitRequest(BaseModel):
     take_profit_price: Optional[float] = None  # 止盈价格（None表示清除）
 
 
+class BatchPricesRequest(BaseModel):
+    """批量获取价格请求"""
+    symbols: List[str]  # 交易对列表
+    force_refresh: bool = False  # 是否强制刷新
+
+
 # ==================== API 接口 ====================
 
 @router.get("/account")
@@ -663,20 +669,19 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
 
 
 @router.post("/prices/batch")
-async def get_batch_prices(symbols: List[str], force_refresh: bool = False, engine: PaperTradingEngine = Depends(get_engine)):
+async def get_batch_prices(request: BatchPricesRequest, engine: PaperTradingEngine = Depends(get_engine)):
     """
     批量获取多个交易对的当前价格（避免大量并发请求）
 
     Args:
-        symbols: 交易对列表
-        force_refresh: 是否强制刷新
+        request: 批量价格请求（包含symbols和force_refresh）
 
     Returns:
         价格字典
     """
     try:
         result = {}
-        for symbol in symbols:
+        for symbol in request.symbols:
             try:
                 # 使用缓存价格，避免大量API调用
                 price = engine.get_current_price(symbol, use_realtime=False)
