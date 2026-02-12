@@ -1222,13 +1222,16 @@ class SmartExitOptimizer:
                     max_profit_price = position.get('max_profit_price')
 
                     if max_profit_price and float(max_profit_price) > 0:
-                        # 计算回撤百分比
+                        # 计算回撤百分比（确保所有变量都是float类型）
+                        max_price = float(max_profit_price)
+                        curr_price = float(current_price)
+
                         if position_side == 'LONG':
                             # 做多：从最高价回撤
-                            drawdown_pct = ((float(max_profit_price) - current_price) / float(max_profit_price)) * 100
+                            drawdown_pct = ((max_price - curr_price) / max_price) * 100
                         else:  # SHORT
                             # 做空：从最低价反弹
-                            drawdown_pct = ((current_price - float(max_profit_price)) / float(max_profit_price)) * 100
+                            drawdown_pct = ((curr_price - max_price) / max_price) * 100
 
                         # 触发移动止盈
                         if drawdown_pct >= TRAILING_STOP_DRAWDOWN_PCT:
