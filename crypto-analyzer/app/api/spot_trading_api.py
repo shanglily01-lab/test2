@@ -173,11 +173,11 @@ async def get_spot_history(
         params = []
 
         if start_date:
-            where_conditions.append("DATE(closed_at) >= %s")
+            where_conditions.append("DATE(updated_at) >= %s")
             params.append(start_date)
 
         if end_date:
-            where_conditions.append("DATE(closed_at) <= %s")
+            where_conditions.append("DATE(updated_at) <= %s")
             params.append(end_date)
 
         where_clause = " AND ".join(where_conditions)

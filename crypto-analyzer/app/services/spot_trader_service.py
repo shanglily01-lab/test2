@@ -115,7 +115,7 @@ class SpotBottomTopTrader:
                     unrealized_pnl, unrealized_pnl_pct,
                     stop_loss_price, take_profit_price,
                     first_buy_time, last_update_time,
-                    status, created_at, updated_at, closed_at
+                    status, created_at, updated_at
                 FROM paper_trading_positions
                 WHERE status = 'open' AND account_id = 1
                 ORDER BY created_at DESC
@@ -392,7 +392,6 @@ class SpotBottomTopTrader:
                     current_price = %s,
                     unrealized_pnl = %s,
                     unrealized_pnl_pct = %s,
-                    closed_at = NOW(),
                     updated_at = NOW()
                 WHERE id = %s
             """, (
