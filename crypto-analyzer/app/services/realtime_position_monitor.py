@@ -241,47 +241,56 @@ class RealtimePositionMonitor:
             # 同步更新缓存
             position['max_profit_pct'] = current_pnl_pct
 
-        # 4. 检查是否激活移动止盈
-        if not trailing_activated and max_profit_pct >= trailing_activate:
-            updates['trailing_stop_activated'] = True
-            trailing_activated = True
-
-            if position_side == 'LONG':
-                trailing_stop_price = current_price * (1 - trailing_callback / 100)
-            else:
-                trailing_stop_price = current_price * (1 + trailing_callback / 100)
-            updates['trailing_stop_price'] = trailing_stop_price
-
-            logger.info(f"🎯 [实时监控] {symbol} 移动止盈激活! 盈利={max_profit_pct:.2f}%, 止损价={trailing_stop_price:.6f}")
-
-            # 同步更新缓存
-            position['trailing_stop_activated'] = True
-            position['trailing_stop_price'] = trailing_stop_price
-
-        # 5. 检查移动止盈回撤
-        if trailing_activated:
-            callback_pct = max_profit_pct - current_pnl_pct
-            if callback_pct >= trailing_callback:
-                close_reason = f"移动止盈平仓(从最高{max_profit_pct:.2f}%回撤{callback_pct:.2f}% >= {trailing_callback}%)"
-                logger.info(f"💰 [实时监控] {symbol} {close_reason}")
-                await self._close_position(position, close_reason)
-                return
-
-            # 更新移动止损价格
-            if position_side == 'LONG':
-                new_trailing_price = current_price * (1 - trailing_callback / 100)
-                current_trailing_price = float(position.get('trailing_stop_price') or 0)
-                if new_trailing_price > current_trailing_price:
-                    updates['trailing_stop_price'] = new_trailing_price
-                    position['trailing_stop_price'] = new_trailing_price
-                    logger.debug(f"[移动止盈] {symbol} 做多 止损价上移: {current_trailing_price:.6f} -> {new_trailing_price:.6f}")
-            else:
-                new_trailing_price = current_price * (1 + trailing_callback / 100)
-                current_trailing_price = float(position.get('trailing_stop_price') or float('inf'))
-                if new_trailing_price < current_trailing_price:
-                    updates['trailing_stop_price'] = new_trailing_price
-                    position['trailing_stop_price'] = new_trailing_price
-                    logger.debug(f"[移动止盈] {symbol} 做空 止损价下移: {current_trailing_price:.6f} -> {new_trailing_price:.6f}")
+        # ============================================================
+        # 【已禁用】旧的移动止盈机制
+        # 原因：已被 smart_exit_optimizer.py 中的新移动止盈机制替代
+        # 新机制特点：
+        # - 30分钟后启动（避免过早触发）
+        # - 盈利≥2%时激活（更稳健）
+        # - 回撤0.5%触发平仓
+        # ============================================================
+        #
+        # # 4. 检查是否激活移动止盈
+        # if not trailing_activated and max_profit_pct >= trailing_activate:
+        #     updates['trailing_stop_activated'] = True
+        #     trailing_activated = True
+        #
+        #     if position_side == 'LONG':
+        #         trailing_stop_price = current_price * (1 - trailing_callback / 100)
+        #     else:
+        #         trailing_stop_price = current_price * (1 + trailing_callback / 100)
+        #     updates['trailing_stop_price'] = trailing_stop_price
+        #
+        #     logger.info(f"🎯 [实时监控] {symbol} 移动止盈激活! 盈利={max_profit_pct:.2f}%, 止损价={trailing_stop_price:.6f}")
+        #
+        #     # 同步更新缓存
+        #     position['trailing_stop_activated'] = True
+        #     position['trailing_stop_price'] = trailing_stop_price
+        #
+        # # 5. 检查移动止盈回撤
+        # if trailing_activated:
+        #     callback_pct = max_profit_pct - current_pnl_pct
+        #     if callback_pct >= trailing_callback:
+        #         close_reason = f"移动止盈平仓(从最高{max_profit_pct:.2f}%回撤{callback_pct:.2f}% >= {trailing_callback}%)"
+        #         logger.info(f"💰 [实时监控] {symbol} {close_reason}")
+        #         await self._close_position(position, close_reason)
+        #         return
+        #
+        #     # 更新移动止损价格
+        #     if position_side == 'LONG':
+        #         new_trailing_price = current_price * (1 - trailing_callback / 100)
+        #         current_trailing_price = float(position.get('trailing_stop_price') or 0)
+        #         if new_trailing_price > current_trailing_price:
+        #             updates['trailing_stop_price'] = new_trailing_price
+        #             position['trailing_stop_price'] = new_trailing_price
+        #             logger.debug(f"[移动止盈] {symbol} 做多 止损价上移: {current_trailing_price:.6f} -> {new_trailing_price:.6f}")
+        #     else:
+        #         new_trailing_price = current_price * (1 + trailing_callback / 100)
+        #         current_trailing_price = float(position.get('trailing_stop_price') or float('inf'))
+        #         if new_trailing_price < current_trailing_price:
+        #             updates['trailing_stop_price'] = new_trailing_price
+        #             position['trailing_stop_price'] = new_trailing_price
+        #             logger.debug(f"[移动止盈] {symbol} 做空 止损价下移: {current_trailing_price:.6f} -> {new_trailing_price:.6f}")
 
         # 保存更新
         if updates:
