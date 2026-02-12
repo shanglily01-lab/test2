@@ -76,13 +76,13 @@ class Big4TrendDetector:
         conn = pymysql.connect(**self.db_config)
         results = {}
 
-        # 🔥 新增权重系统 (2026-02-12)
-        # BTC和ETH是市场领导者，应该有更高权重
+        # 🔥 权重系统 (2026-02-12调整)
+        # BTC是绝对市场领导者，占据主导地位
         COIN_WEIGHTS = {
-            'BTC/USDT': 0.40,  # 40% - 市场领导者
+            'BTC/USDT': 0.50,  # 50% - 市场绝对领导者
             'ETH/USDT': 0.30,  # 30% - 第二大币
-            'BNB/USDT': 0.15,  # 15% - 币安生态
-            'SOL/USDT': 0.15   # 15% - 新兴公链
+            'BNB/USDT': 0.10,  # 10% - 币安生态
+            'SOL/USDT': 0.10   # 10% - 新兴公链
         }
 
         bullish_count = 0
