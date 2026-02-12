@@ -1271,7 +1271,60 @@ class SmartExitOptimizer:
                         return (f'分阶段超时{hour_checkpoint}H(亏损{pnl_pct*100:.1f}%)', 1.0)
 
             # ============================================================
-            # === 优先级7: 3小时绝对时间强制平仓 ===
+            # === 优先级7: 准备平仓模式（2.5小时后，主动寻找平仓机会）===
+            # ============================================================
+            PREPARE_CLOSE_MINUTES = 150  # 2.5小时后进入准备平仓模式
+            if hold_minutes >= PREPARE_CLOSE_MINUTES:
+                logger.info(f"⏳ 持仓{position_id} {symbol}已持有{hold_hours:.1f}h，进入准备平仓模式")
+
+                # 条件1: 盈利≥1% → 立即平仓
+                if profit_info['profit_pct'] >= 1.0:
+                    logger.info(
+                        f"✅ [准备平仓] 持仓{position_id} {symbol} 盈利{profit_info['profit_pct']:.2f}%≥1%，触发平仓 | "
+                        f"当前价${current_price:.6f}"
+                    )
+                    return ('准备平仓模式(盈利≥1%)', 1.0)
+
+                # 条件2: 价格从最高点回撤≥0.5% → 平仓（锁定利润）
+                max_profit_price = position.get('max_profit_price')
+                if max_profit_price and float(max_profit_price) > 0:
+                    if position_side == 'LONG':
+                        # 做多：最高价 - 当前价
+                        drawdown_pct = ((float(max_profit_price) - current_price) / float(max_profit_price)) * 100
+                    else:  # SHORT
+                        # 做空：当前价 - 最低价（max_profit_price记录的是最低价）
+                        drawdown_pct = ((current_price - float(max_profit_price)) / float(max_profit_price)) * 100
+
+                    if drawdown_pct >= 0.5:
+                        logger.info(
+                            f"📉 [准备平仓] 持仓{position_id} {symbol} 价格从最高点回撤{drawdown_pct:.2f}%≥0.5%，触发平仓 | "
+                            f"最高价${max_profit_price:.6f} → 当前价${current_price:.6f}"
+                        )
+                        return (f'准备平仓模式(回撤{drawdown_pct:.1f}%)', 1.0)
+
+                # 条件3: 持平/小亏(<0.5%)且K线方向转弱 → 平仓
+                if profit_info['profit_pct'] < 0.5:  # 盈利<0.5%(接近持平或小亏)
+                    # 获取K线强度
+                    strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
+                    strength_15m = self.signal_analyzer.analyze_kline_strength(symbol, '15m', 24)
+                    strength_5m = self.signal_analyzer.analyze_kline_strength(symbol, '5m', 24)
+
+                    if all([strength_1h, strength_15m, strength_5m]):
+                        current_kline = self.kline_scorer.calculate_strength_score(
+                            strength_1h, strength_15m, strength_5m
+                        )
+
+                        # K线方向转弱或反转
+                        if current_kline['direction'] == 'NEUTRAL' or current_kline['direction'] != direction:
+                            logger.info(
+                                f"⚠️ [准备平仓] 持仓{position_id} {symbol} 盈利{profit_info['profit_pct']:.2f}%<0.5% 且K线方向转弱/反转 | "
+                                f"当前方向{current_kline['direction']} vs 持仓{direction} | "
+                                f"K线强度{current_kline['total_score']}"
+                            )
+                            return ('准备平仓模式(持平+方向转弱)', 1.0)
+
+            # ============================================================
+            # === 优先级8: 3小时绝对时间强制平仓 ===
             # ============================================================
             max_hold_minutes = position.get('max_hold_minutes') or 180  # 默认3小时强制平仓
             if hold_minutes >= max_hold_minutes:
@@ -1279,7 +1332,7 @@ class SmartExitOptimizer:
                 return ('持仓时长到期(3小时强制平仓)', 1.0)
 
             # ============================================================
-            # === 优先级8: K线强度衰减检查（智能分批平仓） ===
+            # === 优先级9: K线强度衰减检查（智能分批平仓） ===
             # ============================================================
             # 注意: 15M强力反转和亏损+反转已在优先级3处理(紧急风控),这里不再重复检查
 
