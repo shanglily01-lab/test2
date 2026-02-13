@@ -3015,8 +3015,9 @@ class SmartTraderService:
                                 'reason': f"🚀市场反弹: {trigger_symbol}触底{big4_bounce['lower_shadow_pct']:.1f}%, 窗口{remaining_minutes:.0f}分钟",
                                 'signal_type': 'EMERGENCY_BOUNCE',
                                 'position_size_pct': 70,  # 🔥 激进仓位70%
-                                'take_profit_pct': 3.5,   # 🔥 激进止盈3.5%
-                                'stop_loss_pct': 2.5,     # 🔥 止损2.5%
+                                'take_profit_pct': 8.0,   # 🔥 止盈8%（基于历史平均反弹12.6%）
+                                'stop_loss_pct': 3.0,     # 🔥 止损3%
+                                'trailing_stop_pct': 5.0, # 🔥 动态追踪：回撤5%平仓
                             }
 
                             # 开仓
