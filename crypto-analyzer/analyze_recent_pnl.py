@@ -48,13 +48,13 @@ systems = [
     },
     {
         'name': '🔵 U本位合约实盘',
-        'table': 'live_futures_trades',
+        'table': 'futures_trades',
         'account_id': 2
     },
     {
         'name': '🟡 币本位合约实盘',
         'table': 'coin_futures_trades',
-        'account_id': None  # 币本位可能用不同的account_id
+        'account_id': 2
     }
 ]
 
@@ -95,6 +95,14 @@ for system in systems:
         if has_order_source:
             select_fields += ",\n                order_source"
 
+        # 根据不同表使用不同的side条件
+        if system['table'] == 'futures_trades':
+            side_condition = "side IN ('CLOSE_LONG', 'CLOSE_SHORT')"
+        elif system['table'] == 'coin_futures_trades':
+            side_condition = "side IN ('CLOSE_LONG', 'CLOSE_SHORT')"
+        else:
+            side_condition = "side = 'SELL'"
+
         query = f"""
             SELECT
 {select_fields}
@@ -103,7 +111,7 @@ for system in systems:
               AND trade_time >= %s
               AND trade_time <= %s
               AND realized_pnl IS NOT NULL
-              AND side = 'SELL'
+              AND {side_condition}
             ORDER BY trade_time DESC
         """
 
