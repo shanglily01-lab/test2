@@ -180,12 +180,14 @@ class Big4TrendDetector:
         步骤:
         1. 1H (30根): 主趋势判断
         2. 15M (16根): 趋势确认
-        3. 5M (3根): 入场时机
+        3. 5M (3根): 反向入场时机（大方向确认后，5M反向=入场机会）
 
         评分规则：
         - 1H: 阳线>=18根(强势40分) / >=16根(中等30分)
         - 15M: 阳线>=11根(强势30分) / >=9根(中等20分)
-        - 5M: 3根全阳(10分) / 2阳1阴(5分)
+        - 5M反向加分:
+          * 主趋势多头 + 5M全阴(3根) = +10分（回调买入机会）
+          * 主趋势空头 + 5M全阳(3根) = +10分（反弹卖出机会）
         - 开仓条件: 评分>=60分（只做强势行情）
         """
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -196,12 +198,12 @@ class Big4TrendDetector:
         # 2. 分析15M K线 (16根)
         kline_15m = self._analyze_kline_count(cursor, symbol, '15m', 16)
 
-        # 3. 分析5M K线 (3根)
+        # 3. 分析5M K线 (3根) - 用于反向入场
         kline_5m = self._analyze_kline_count(cursor, symbol, '5m', 3)
 
         cursor.close()
 
-        # 4. 基于数量的评分判断
+        # 4. 基于数量的评分判断（1H+15M+5M反向）
         signal, strength, reason = self._generate_signal_by_count(
             kline_1h, kline_15m, kline_5m
         )
@@ -400,7 +402,7 @@ class Big4TrendDetector:
                 level = 'MEDIUM'
 
         elif timeframe == '5m' and count == 3:
-            # 5M周期评分
+            # 5M周期评分（不再用于Big4评分，仅用于破位检测）
             if bullish_count == 3:
                 score = 10
                 level = 'STRONG'
@@ -414,11 +416,20 @@ class Big4TrendDetector:
                 score = -5
                 level = 'MEDIUM'
 
+        # 生成主导方向（用于数据库保存）
+        if score > 0:
+            dominant = 'BULL'
+        elif score < 0:
+            dominant = 'BEAR'
+        else:
+            dominant = 'NEUTRAL'
+
         return {
             'bullish_count': bullish_count,
             'bearish_count': bearish_count,
             'score': score,
             'level': level,
+            'dominant': dominant,
             'total': count
         }
 
@@ -431,20 +442,33 @@ class Big4TrendDetector:
         """
         基于K线数量生成信号（简化版）
 
-        🔥 2026-02-13新增：只做强势行情，评分>=60分
+        🔥 2026-02-13最新：只做强势行情，评分>=60分
+        🔥 5M反向加分逻辑：大方向确认后，5M反向=好的入场机会
 
         权重分配:
         - 1H: 强势40分 / 中等30分
         - 15M: 强势30分 / 中等20分
-        - 5M: 全同向10分 / 部分5分
+        - 5M反向加分: 10分（必须主趋势已确认）
 
         开仓条件:
         - 评分 >= 60分 → BULLISH/BEARISH
         - 评分 < 60分 → NEUTRAL（中等行情不做）
 
+        5M反向加分逻辑:
+        - 主趋势多头(1H+15M>0) + 5M全阴(3根) = +10分（回调买入）
+        - 主趋势空头(1H+15M<0) + 5M全阳(3根) = +10分（反弹卖出）
+        - 主趋势中性或5M不满足 = 0分
+
+        可能的开仓组合:
+        - 1H强势(40) + 15M强势(30) = 70分 ✅
+        - 1H强势(40) + 15M中等(20) = 60分 ✅
+        - 1H中等(30) + 15M强势(30) = 60分 ✅
+        - 1H中等(30) + 15M中等(20) + 5M反向(10) = 60分 ✅（新增）
+
         返回: (信号方向, 强度0-100, 原因)
         """
-        signal_score = kline_1h['score'] + kline_15m['score'] + kline_5m['score']
+        # 先计算主趋势得分（1H+15M）
+        main_trend_score = kline_1h['score'] + kline_15m['score']
         reasons = []
 
         # 1H分析
@@ -463,12 +487,25 @@ class Big4TrendDetector:
         else:
             reasons.append(f"15M中性({kline_15m['bullish_count']}阳:{kline_15m['bearish_count']}阴)")
 
-        # 5M分析
-        if kline_5m['score'] != 0:
-            if kline_5m['score'] > 0:
-                reasons.append(f"5M多头({kline_5m['bullish_count']}阳,{kline_5m['score']}分)")
-            else:
-                reasons.append(f"5M空头({kline_5m['bearish_count']}阴,{kline_5m['score']}分)")
+        # 5M反向加分逻辑
+        five_m_bonus = 0
+        if main_trend_score > 0:  # 主趋势多头
+            # 看5M是否全阴（回调机会）
+            if kline_5m['bearish_count'] == 3:
+                five_m_bonus = 10
+                reasons.append(f"5M全阴(3根)回调，+10分入场机会")
+            elif kline_5m['bearish_count'] >= 2:
+                reasons.append(f"5M部分阴({kline_5m['bearish_count']}根)，但不满足全阴")
+        elif main_trend_score < 0:  # 主趋势空头
+            # 看5M是否全阳（反弹机会）
+            if kline_5m['bullish_count'] == 3:
+                five_m_bonus = 10
+                reasons.append(f"5M全阳(3根)反弹，+10分入场机会")
+            elif kline_5m['bullish_count'] >= 2:
+                reasons.append(f"5M部分阳({kline_5m['bullish_count']}根)，但不满足全阳")
+
+        # 总分 = 主趋势 + 5M反向加分
+        signal_score = main_trend_score + five_m_bonus
 
         # 判断信号（门槛60分）
         if signal_score >= 60:
