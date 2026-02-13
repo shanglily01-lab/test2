@@ -42,10 +42,11 @@ class Big4TrendDetector:
         self.TOP_RISE_THRESHOLD = 5.0       # 顶部判断: 涨幅超过5%
         self.BLOCK_DURATION_HOURS = 2       # 触发后阻止交易的时长
 
-        # 🔥 15M深V反转检测配置
-        self.LOWER_SHADOW_THRESHOLD = 3.0   # 1H长下影线阈值: 3%
+        # 🔥 15M深V反转检测配置（方案4：综合放宽）
+        self.LOWER_SHADOW_THRESHOLD = 2.0   # 1H长下影线阈值: 2%（从3%降低）
         self.CONSECUTIVE_GREEN_15M = 3      # 15M连续阳线数量: 3根
         self.CHECK_15M_CANDLES = 8          # 检查后续8根15M K线
+        self.CHECK_FIRST_BOTTOM = False     # 允许24H内多次触发（不要求首次触底）
 
     def detect_market_trend(self) -> Dict:
         """
@@ -747,36 +748,37 @@ class Big4TrendDetector:
                         drop_from_high_72h = (low_p - high_72h) / high_72h * 100
                         drop_from_high_24h = (low_p - high_24h) / high_24h * 100
 
-                        # 判断条件（放宽版）:
-                        # 1. 72H持续下跌 >= 5% (从8%降低)
-                        # 2. 24H加速下跌 >= 2.5% (从4%降低)
-                        # 3. 首次触底 (24H内没有其他长下影线)
-                        is_sustained_drop = drop_from_high_72h <= -5.0
-                        is_accelerating = drop_from_high_24h <= -2.5
+                        # 判断条件（方案4：综合放宽）:
+                        # 1. 72H持续下跌 >= 3% (从5%进一步降低)
+                        # 2. 24H加速下跌 >= 1.5% (从2.5%进一步降低)
+                        # 3. 允许多次触底 (不要求首次触底)
+                        is_sustained_drop = drop_from_high_72h <= -3.0
+                        is_accelerating = drop_from_high_24h <= -1.5
 
-                        # 检查24H内是否首次出现长下影线
+                        # 检查24H内是否首次出现长下影线（如果启用检查）
                         is_first_bottom = True
-                        for prev_k in history_72h[:24]:
-                            if prev_k['open_time'] == h1_candle['open_time']:
-                                continue  # 跳过当前K线
-                            prev_open = float(prev_k.get('open_price', 0)) if 'open_price' in prev_k else 0
-                            prev_close = float(prev_k.get('close_price', 0)) if 'close_price' in prev_k else 0
-                            prev_low = float(prev_k['low_price'])
-                            if prev_open > 0 and prev_close > 0:
-                                prev_body_low = min(prev_open, prev_close)
-                                prev_shadow = (prev_body_low - prev_low) / prev_low * 100 if prev_low > 0 else 0
-                                if prev_shadow >= self.LOWER_SHADOW_THRESHOLD:
-                                    is_first_bottom = False
-                                    break
+                        if self.CHECK_FIRST_BOTTOM:
+                            for prev_k in history_72h[:24]:
+                                if prev_k['open_time'] == h1_candle['open_time']:
+                                    continue  # 跳过当前K线
+                                prev_open = float(prev_k.get('open_price', 0)) if 'open_price' in prev_k else 0
+                                prev_close = float(prev_k.get('close_price', 0)) if 'close_price' in prev_k else 0
+                                prev_low = float(prev_k['low_price'])
+                                if prev_open > 0 and prev_close > 0:
+                                    prev_body_low = min(prev_open, prev_close)
+                                    prev_shadow = (prev_body_low - prev_low) / prev_low * 100 if prev_low > 0 else 0
+                                    if prev_shadow >= self.LOWER_SHADOW_THRESHOLD:
+                                        is_first_bottom = False
+                                        break
 
-                        # 三个条件都满足 = 真深V反转
+                        # 判断条件：持续下跌 + 加速下跌 + (首次触底 or 允许多次)
                         is_true_deep_v = is_sustained_drop and is_accelerating and is_first_bottom
 
                         if not is_true_deep_v:
                             logger.info(f"⚠️ {symbol} 下影{lower_shadow_pct:.1f}% 不满足大周期条件: "
-                                      f"72H跌幅{drop_from_high_72h:.1f}% (需<-5%), "
-                                      f"24H跌幅{drop_from_high_24h:.1f}% (需<-2.5%), "
-                                      f"首次触底{'✅' if is_first_bottom else '❌'}")
+                                      f"72H跌幅{drop_from_high_72h:.1f}% (需<-3%), "
+                                      f"24H跌幅{drop_from_high_24h:.1f}% (需<-1.5%), "
+                                      f"{'首次触底' + ('✅' if is_first_bottom else '❌') if self.CHECK_FIRST_BOTTOM else '允许多次✅'}")
                     else:
                         logger.info(f"⚠️ {symbol} 下影{lower_shadow_pct:.1f}% 数据不足，无法判断大周期")
 
