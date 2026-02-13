@@ -747,12 +747,12 @@ class Big4TrendDetector:
                         drop_from_high_72h = (low_p - high_72h) / high_72h * 100
                         drop_from_high_24h = (low_p - high_24h) / high_24h * 100
 
-                        # 判断条件:
-                        # 1. 72H持续下跌 >= 8%
-                        # 2. 24H加速下跌 >= 4%
+                        # 判断条件（放宽版）:
+                        # 1. 72H持续下跌 >= 5% (从8%降低)
+                        # 2. 24H加速下跌 >= 2.5% (从4%降低)
                         # 3. 首次触底 (24H内没有其他长下影线)
-                        is_sustained_drop = drop_from_high_72h <= -8.0
-                        is_accelerating = drop_from_high_24h <= -4.0
+                        is_sustained_drop = drop_from_high_72h <= -5.0
+                        is_accelerating = drop_from_high_24h <= -2.5
 
                         # 检查24H内是否首次出现长下影线
                         is_first_bottom = True
@@ -774,8 +774,8 @@ class Big4TrendDetector:
 
                         if not is_true_deep_v:
                             logger.info(f"⚠️ {symbol} 下影{lower_shadow_pct:.1f}% 不满足大周期条件: "
-                                      f"72H跌幅{drop_from_high_72h:.1f}% (需<-8%), "
-                                      f"24H跌幅{drop_from_high_24h:.1f}% (需<-4%), "
+                                      f"72H跌幅{drop_from_high_72h:.1f}% (需<-5%), "
+                                      f"24H跌幅{drop_from_high_24h:.1f}% (需<-2.5%), "
                                       f"首次触底{'✅' if is_first_bottom else '❌'}")
                     else:
                         logger.info(f"⚠️ {symbol} 下影{lower_shadow_pct:.1f}% 数据不足，无法判断大周期")
