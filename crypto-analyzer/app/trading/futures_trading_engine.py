@@ -1134,18 +1134,25 @@ class FuturesTradingEngine:
             # 8. 更新账户余额和交易统计
             # 判断是盈利还是亏损
             is_winning_trade = realized_pnl > 0
-            
+
+            # 🔥 修改：不再直接累加 realized_pnl，而是从 futures_positions 重新计算
+            # 原因：分批平仓时 futures_trades 的 realized_pnl 计算有误，导致累加错误
+            # 改为基于 futures_positions 的 realized_pnl 总和来更新账户
             cursor.execute(
-                """UPDATE futures_trading_accounts
-                SET current_balance = current_balance + %s + %s,
-                    frozen_balance = frozen_balance - %s,
-                    realized_pnl = realized_pnl + %s,
-                    total_trades = total_trades + 1,
-                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
-                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
-                WHERE id = %s""",
+                """UPDATE futures_trading_accounts a
+                SET a.current_balance = a.current_balance + %s + %s,
+                    a.frozen_balance = a.frozen_balance - %s,
+                    a.realized_pnl = (
+                        SELECT COALESCE(SUM(p.realized_pnl), 0)
+                        FROM futures_positions p
+                        WHERE p.account_id = a.id AND p.status = 'closed'
+                    ),
+                    a.total_trades = a.total_trades + 1,
+                    a.winning_trades = a.winning_trades + IF(%s > 0, 1, 0),
+                    a.losing_trades = a.losing_trades + IF(%s < 0, 1, 0)
+                WHERE a.id = %s""",
                 (float(released_margin), float(realized_pnl), float(released_margin),
-                 float(realized_pnl), float(realized_pnl), float(realized_pnl), account_id)
+                 float(realized_pnl), float(realized_pnl), account_id)
             )
             
             # 更新胜率
