@@ -305,14 +305,15 @@ class Big4TrendDetector:
 
     def _detect_5m_signal(self, cursor, symbol: str) -> Dict:
         """
-        检测5M买卖时机（纯价格版本）
+        检测5M破位（需要量能配合）
 
-        检测突破:
-        - 力度 = 价格变化%
-        （已移除量能分析，避免滞后性误判）
+        破位检测需要量能确认:
+        - 力度 = 价格变化% × 0.8 + 成交量归一化 × 0.2
+        - 价格突破 + 量能配合 = 真突破
+        - 价格突破 + 量能不足 = 假突破
         """
         query = """
-            SELECT open_price, close_price, high_price, low_price
+            SELECT open_price, close_price, high_price, low_price, volume
             FROM kline_data
             WHERE symbol = %s
             AND timeframe = '5m'
@@ -332,6 +333,12 @@ class Big4TrendDetector:
                 'reason': '数据不足'
             }
 
+        # 先收集所有成交量,用于归一化
+        volumes = [float(k['volume']) if k['volume'] else 0 for k in klines]
+        max_volume = max(volumes) if volumes else 1
+        min_volume = min(volumes) if volumes else 0
+        volume_range = max_volume - min_volume if max_volume != min_volume else 1
+
         # 分析最近3根K线
         total_bull_power = 0
         total_bear_power = 0
@@ -339,15 +346,21 @@ class Big4TrendDetector:
         for k in klines:
             open_p = float(k['open_price'])
             close_p = float(k['close_price'])
+            volume = float(k['volume']) if k['volume'] else 0
+
+            # 成交量归一化到 0-100
+            volume_normalized = ((volume - min_volume) / volume_range * 100) if volume_range > 0 else 0
 
             if close_p > open_p:
-                # 阳线力度
+                # 阳线力度（价格80% + 量能20%）
                 price_change_pct = (close_p - open_p) / open_p * 100
-                total_bull_power += price_change_pct
+                power = price_change_pct * 0.8 + volume_normalized * 0.2
+                total_bull_power += power
             else:
-                # 阴线力度
+                # 阴线力度（价格80% + 量能20%）
                 price_change_pct = (open_p - close_p) / open_p * 100
-                total_bear_power += price_change_pct
+                power = price_change_pct * 0.8 + volume_normalized * 0.2
+                total_bear_power += power
 
         # 判断突破方向
         if total_bull_power > total_bear_power * 1.5:  # 多头力度明显强于空头
