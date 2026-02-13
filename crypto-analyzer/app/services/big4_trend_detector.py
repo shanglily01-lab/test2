@@ -173,33 +173,47 @@ class Big4TrendDetector:
 
     def _analyze_symbol(self, conn, symbol: str) -> Dict:
         """
-        分析单个币种的趋势 (简化版)
+        分析单个币种的趋势（多周期共振版本）
+
+        🔥 2026-02-13优化：增加4H周期，确保信号1小时有效性
 
         步骤:
-        1. 1H (30根): 主导方向判断
-        2. 15M (30根): 趋势确认
-        3. 5M (3根): 买卖时机
+        1. 4H (24根=4天): 主趋势方向（最重要，预测未来1小时方向）
+        2. 1H (30根=30小时): 中期趋势
+        3. 15M (30根=7.5小时): 短期确认
+        4. 5M (3根=15分钟): 入场时机
+
+        多周期共振规则：
+        - 4H主趋势必须明确（BULL或BEAR）
+        - 1H、15M必须与4H同向
+        - 只有多周期共振才发出信号，确保未来1小时方向正确
         """
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 1. 分析1H K线 (30根) - 主导方向
+        # 1. 分析4H K线 (24根=4天) - 主趋势方向
+        kline_4h = self._analyze_kline_power(cursor, symbol, '4h', 24)
+
+        # 2. 分析1H K线 (30根) - 中期趋势
         kline_1h = self._analyze_kline_power(cursor, symbol, '1h', 30)
 
-        # 2. 分析15M K线 (30根) - 趋势确认
+        # 3. 分析15M K线 (30根) - 短期确认
         kline_15m = self._analyze_kline_power(cursor, symbol, '15m', 30)
 
-        # 3. 分析5M K线 (3根) - 买卖时机
+        # 4. 分析5M K线 (3根) - 入场时机
         kline_5m = self._detect_5m_signal(cursor, symbol)
 
         cursor.close()
 
-        # 4. 综合判断
-        signal, strength, reason = self._generate_signal(kline_1h, kline_15m, kline_5m)
+        # 5. 多周期共振判断
+        signal, strength, reason = self._generate_signal_with_resonance(
+            kline_4h, kline_1h, kline_15m, kline_5m
+        )
 
         return {
             'signal': signal,
             'strength': strength,
             'reason': reason,
+            '4h_analysis': kline_4h,  # 新增4H分析结果
             '1h_analysis': kline_1h,
             '15m_analysis': kline_15m,
             '5m_signal': kline_5m
@@ -447,6 +461,114 @@ class Big4TrendDetector:
                 reasons.append("⚠️ 评分达标但1H非多头，判定为中性")
             elif signal_score < -35 and kline_1h['dominant'] != 'BEAR':
                 reasons.append("⚠️ 评分达标但1H非空头，判定为中性")
+
+        strength = min(abs(signal_score), 100)
+        reason = ' | '.join(reasons) if reasons else '无明显信号'
+
+        return signal, strength, reason
+
+    def _generate_signal_with_resonance(
+        self,
+        kline_4h: Dict,
+        kline_1h: Dict,
+        kline_15m: Dict,
+        kline_5m: Dict
+    ) -> Tuple[str, int, str]:
+        """
+        多周期共振信号生成（确保1小时有效性）
+
+        🔥 2026-02-13新增：增加4H周期，提升信号预测准确性
+
+        权重分配:
+        - 4H主趋势: 40分（最重要，决定未来1小时方向）
+        - 1H中期趋势: 30分
+        - 15M短期确认: 20分
+        - 5M入场时机: 10分
+
+        共振规则:
+        1. 4H主趋势必须明确（BULL或BEAR），否则返回NEUTRAL
+        2. 1H、15M必须与4H同向，才算有效信号
+        3. 5M可以不同向（用于精确入场时机）
+        4. 只有多周期共振（4H+1H+15M同向），信号才有效
+
+        目标：确保信号发出后，未来1小时方向正确率>=70%
+
+        返回: (信号方向, 强度0-100, 原因)
+        """
+        signal_score = 0  # -100 to +100
+        reasons = []
+
+        # 📊 第一步：检查4H主趋势（必须明确）
+        trend_4h = kline_4h['dominant']
+
+        if trend_4h == 'NEUTRAL':
+            # 4H都看不清方向，直接返回NEUTRAL
+            return 'NEUTRAL', 0, '4H主趋势不明确，市场方向不清晰'
+
+        # 📊 第二步：多周期共振检查
+        trend_1h = kline_1h['dominant']
+        trend_15m = kline_15m['dominant']
+
+        # 4H主趋势（权重40）
+        if trend_4h == 'BULL':
+            signal_score += 40
+            reasons.append(f"4H多头主导({kline_4h['bullish_count']}阳:{kline_4h['bearish_count']}阴)")
+        else:  # BEAR
+            signal_score -= 40
+            reasons.append(f"4H空头主导({kline_4h['bearish_count']}阴:{kline_4h['bullish_count']}阳)")
+
+        # 1H中期趋势（权重30，必须与4H同向）
+        if trend_1h == trend_4h:
+            # 同向，加分
+            if trend_1h == 'BULL':
+                signal_score += 30
+                reasons.append(f"1H多头确认({kline_1h['bullish_count']}阳:{kline_1h['bearish_count']}阴)")
+            else:  # BEAR
+                signal_score -= 30
+                reasons.append(f"1H空头确认({kline_1h['bearish_count']}阴:{kline_1h['bullish_count']}阳)")
+        else:
+            # 1H与4H不同向，扣分并警告
+            reasons.append(f"⚠️ 1H({trend_1h})与4H({trend_4h})分歧")
+
+        # 15M短期确认（权重20，必须与4H同向）
+        if trend_15m == trend_4h:
+            # 同向，加分
+            if trend_15m == 'BULL':
+                signal_score += 20
+                reasons.append(f"15M多头确认({kline_15m['bullish_count']}阳:{kline_15m['bearish_count']}阴)")
+            else:  # BEAR
+                signal_score -= 20
+                reasons.append(f"15M空头确认({kline_15m['bearish_count']}阴:{kline_15m['bullish_count']}阳)")
+        else:
+            # 15M与4H不同向，警告
+            reasons.append(f"⚠️ 15M({trend_15m})与4H({trend_4h})分歧")
+
+        # 5M入场时机（权重10，可以不同向）
+        if kline_5m['detected']:
+            direction_5m = kline_5m['direction']
+            # 只有当5M与4H同向时才加分
+            if (direction_5m == 'BULLISH' and trend_4h == 'BULL') or \
+               (direction_5m == 'BEARISH' and trend_4h == 'BEAR'):
+                if direction_5m == 'BULLISH':
+                    signal_score += 10
+                else:
+                    signal_score -= 10
+                reasons.append(kline_5m['reason'])
+
+        # 📊 第三步：判断信号（要求多周期共振）
+        # 至少需要70分（4H+1H+15M全部同向）才发出信号
+        if signal_score >= 70 and trend_4h == 'BULL':
+            signal = 'BULLISH'
+            reasons.append('✅ 多周期共振，看涨信号确认')
+        elif signal_score <= -70 and trend_4h == 'BEAR':
+            signal = 'BEARISH'
+            reasons.append('✅ 多周期共振，看跌信号确认')
+        else:
+            signal = 'NEUTRAL'
+            if abs(signal_score) >= 40:
+                reasons.append(f'⚠️ 周期分歧，评分{signal_score}分但未达到共振标准(±70分)')
+            else:
+                reasons.append('市场方向不明确')
 
         strength = min(abs(signal_score), 100)
         reason = ' | '.join(reasons) if reasons else '无明显信号'
