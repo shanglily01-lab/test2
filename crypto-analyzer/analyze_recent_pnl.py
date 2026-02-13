@@ -39,21 +39,21 @@ print(f"时间范围: {start_time.strftime('%Y-%m-%d %H:%M:%S')} 至 {now.strfti
 print("=" * 100)
 print()
 
-# 查询各个交易系统
+# 查询各个交易系统（只看合约，不看现货）
 systems = [
-    {
-        'name': '🟢 纸面现货交易',
-        'table': 'paper_trading_trades',
-        'account_id': 1
-    },
+    # {
+    #     'name': '🟢 纸面现货交易',
+    #     'table': 'paper_trading_trades',
+    #     'account_id': 1
+    # },
     {
         'name': '🔵 U本位合约实盘',
-        'table': 'futures_trades',
+        'table': 'futures_positions',
         'account_id': 2
     },
     {
         'name': '🟡 币本位合约实盘',
-        'table': 'coin_futures_trades',
+        'table': 'coin_futures_positions',
         'account_id': 2
     }
 ]
@@ -73,46 +73,37 @@ for system in systems:
         # 检查表结构
         cursor.execute(f"DESCRIBE {system['table']}")
         columns = [row['Field'] for row in cursor.fetchall()]
-        has_order_source = 'order_source' in columns
-        has_pnl_pct = 'pnl_pct' in columns
+        has_source = 'source' in columns
+        has_unrealized_pnl_pct = 'unrealized_pnl_pct' in columns
 
         # 构建查询
         account_filter = f"account_id = {system['account_id']}" if system['account_id'] else "1=1"
 
-        # 基础字段
+        # 基础字段（positions表使用不同的字段名）
         select_fields = """
                 symbol,
-                side,
+                position_side,
                 quantity,
-                price,
+                entry_price,
                 realized_pnl,
-                trade_time"""
+                margin,
+                close_time"""
 
         # 可选字段
-        if has_pnl_pct:
-            select_fields += ",\n                pnl_pct"
+        if has_source:
+            select_fields += ",\n                source"
 
-        if has_order_source:
-            select_fields += ",\n                order_source"
-
-        # 根据不同表使用不同的side条件
-        if system['table'] == 'futures_trades':
-            side_condition = "side IN ('CLOSE_LONG', 'CLOSE_SHORT')"
-        elif system['table'] == 'coin_futures_trades':
-            side_condition = "side IN ('CLOSE_LONG', 'CLOSE_SHORT')"
-        else:
-            side_condition = "side = 'SELL'"
-
+        # positions表使用status='closed'来筛选已平仓记录
         query = f"""
             SELECT
 {select_fields}
             FROM {system['table']}
             WHERE {account_filter}
-              AND trade_time >= %s
-              AND trade_time <= %s
+              AND close_time >= %s
+              AND close_time <= %s
+              AND status = 'closed'
               AND realized_pnl IS NOT NULL
-              AND {side_condition}
-            ORDER BY trade_time DESC
+            ORDER BY close_time DESC
         """
 
         cursor.execute(query, (start_time, now))
@@ -155,22 +146,27 @@ for system in systems:
         display_count = min(len(trades), 15)
         for i, trade in enumerate(trades[:display_count], 1):
             pnl = float(trade['realized_pnl'])
-            pnl_pct = float(trade['pnl_pct']) if trade.get('pnl_pct') else 0
+            # 计算盈亏百分比：realized_pnl / margin * 100
+            margin = float(trade['margin']) if trade.get('margin') else 0
+            pnl_pct = (pnl / margin * 100) if margin > 0 else 0
             emoji = '📈' if pnl > 0 else '📉' if pnl < 0 else '➡️'
-            source = trade.get('order_source', 'manual')
+            position_side = trade.get('position_side', 'UNKNOWN')
+            side_emoji = '🟢' if position_side == 'LONG' else '🔴' if position_side == 'SHORT' else '⚪'
+            source = trade.get('source', 'manual')
             source_map = {
                 'manual': '手动',
                 'signal': '信号',
+                'smart_trader': '超脑',
+                'smart_trader_batch': '超脑分批',
                 'stop_loss': '止损',
-                'take_profit': '止盈',
-                'smart_brain': '超脑'
+                'take_profit': '止盈'
             }
-            source_display = source_map.get(source, source)
-            time_str = trade['trade_time'].strftime('%m-%d %H:%M')
+            source_display = source_map.get(source, source[:8])
+            time_str = trade['close_time'].strftime('%m-%d %H:%M')
 
-            print(f"    {i:2d}. {emoji} {trade['symbol']:15} "
+            print(f"    {i:2d}. {emoji} {side_emoji} {trade['symbol']:12} "
                   f"{time_str} | {pnl:+9.2f} USDT ({pnl_pct:+6.2f}%) "
-                  f"| {source_display:8}")
+                  f"| {source_display:10}")
 
         if len(trades) > display_count:
             print(f"    ... 还有 {len(trades) - display_count} 笔交易未显示")

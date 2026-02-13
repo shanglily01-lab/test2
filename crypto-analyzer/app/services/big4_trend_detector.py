@@ -111,17 +111,38 @@ class Big4TrendDetector:
 
         conn.close()
 
-        # 综合判断 - 使用权重而非简单计数
-        # 权重≥60%视为趋势明确（例如BTC+ETH=70%，或BTC+BNB+SOL=70%）
-        if bullish_weight >= 0.60:
+        # 🔥 综合判断 - 严格化逻辑（2026-02-13优化）
+        # 目标：减少信号切换频率，延长信号持续时间至3小时
+        # 1. BTC强制同向原则：BTC必须非NEUTRAL才能触发整体信号
+        # 2. 权重差阈值提高：从20%提高到50%
+        # 3. 只允许极强信号通过，避免震荡市频繁切换
+
+        btc_signal = results.get('BTC/USDT', {}).get('signal', 'NEUTRAL')
+
+        # 🔥 规则1：BTC强势领涨/领跌（BTC明确+权重>=50%）
+        if btc_signal == 'BULLISH' and bullish_weight >= 0.50:
             overall_signal = 'BULLISH'
-            recommendation = f"市场整体看涨(权重{bullish_weight*100:.0f}%)，建议优先考虑多单机会"
-        elif bearish_weight >= 0.60:
+            recommendation = f"BTC领涨(权重{bullish_weight*100:.0f}%)，市场看涨，建议优先考虑多单机会"
+        elif btc_signal == 'BEARISH' and bearish_weight >= 0.50:
             overall_signal = 'BEARISH'
-            recommendation = f"市场整体看跌(权重{bearish_weight*100:.0f}%)，建议优先考虑空单机会"
+            recommendation = f"BTC领跌(权重{bearish_weight*100:.0f}%)，市场看跌，建议优先考虑空单机会"
+
+        # 🔥 规则2：市场一致性极强（权重差≥50% 且 BTC非NEUTRAL）
+        # 防止BTC中性时，仅靠ETH触发整体信号
+        elif bullish_weight - bearish_weight >= 0.50 and btc_signal == 'BULLISH':
+            overall_signal = 'BULLISH'
+            recommendation = f"市场整体看涨(权重{bullish_weight*100:.0f}% vs {bearish_weight*100:.0f}%)，BTC同步，建议优先考虑多单机会"
+        elif bearish_weight - bullish_weight >= 0.50 and btc_signal == 'BEARISH':
+            overall_signal = 'BEARISH'
+            recommendation = f"市场整体看跌(权重{bearish_weight*100:.0f}% vs {bullish_weight*100:.0f}%)，BTC同步，建议优先考虑空单机会"
+
+        # 🔥 其他情况：NEUTRAL（包括BTC为NEUTRAL或权重差<50%）
         else:
             overall_signal = 'NEUTRAL'
-            recommendation = f"市场方向不明确(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望或减少仓位"
+            if btc_signal == 'NEUTRAL':
+                recommendation = f"BTC方向不明(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望"
+            else:
+                recommendation = f"市场分歧较大(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望或减少仓位"
 
         # 🔥 如果紧急干预激活，覆盖recommendation
         if emergency_intervention['block_long']:
@@ -255,15 +276,36 @@ class Big4TrendDetector:
                 power = price_change_pct * 0.8 + volume_normalized * 0.2
                 bearish_power += power
 
-        # 判断主导方向 (更严格的标准)
-        # 上涨趋势: 阳线 >= 17根 (30根K线中占57%)
-        # 下跌趋势: 阴线 >= 17根 (30根K线中占57%)
-        # 其他情况: 震荡行情
-        if bullish_count >= 17:
-            dominant = 'BULL'
-        elif bearish_count >= 17:
-            dominant = 'BEAR'
+        # 判断主导方向 (综合力度和数量，双重验证)
+        # 🔥 修改：力度为主（70%）+ 数量为辅（30%）
+        # 既看趋势强度，也看趋势一致性
+
+        total_power = bullish_power + bearish_power
+        total_count = bullish_count + bearish_count
+
+        if total_power > 0 and total_count > 0:
+            # 计算力度占比
+            bullish_power_ratio = bullish_power / total_power
+            bearish_power_ratio = bearish_power / total_power
+
+            # 计算数量占比
+            bullish_count_ratio = bullish_count / total_count
+            bearish_count_ratio = bearish_count / total_count
+
+            # 🔥 综合得分 = 力度占比 × 70% + 数量占比 × 30%
+            bullish_score = bullish_power_ratio * 0.7 + bullish_count_ratio * 0.3
+            bearish_score = bearish_power_ratio * 0.7 + bearish_count_ratio * 0.3
+
+            # 综合得分 >= 0.60 (60%) → 主导趋势
+            # 相当于：力度65% + 数量50% → 得分60.5%
+            if bullish_score >= 0.60:
+                dominant = 'BULL'
+            elif bearish_score >= 0.60:
+                dominant = 'BEAR'
+            else:
+                dominant = 'NEUTRAL'
         else:
+            # 力度总和为0（数据异常或无变化）
             dominant = 'NEUTRAL'
 
         return {
