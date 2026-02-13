@@ -60,7 +60,7 @@ class SmartDecisionBrain:
         # 从config.yaml加载配置
         self._load_config()
 
-        self.threshold = 35  # 开仓阈值 (提高到35分,过滤低质量信号,防追高)
+        self.threshold = 55  # 开仓阈值 (从35提高到55分,防止开仓过多,理论最大232分,55分≈24%强度)
 
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
         self.blacklist_checker = SignalBlacklistChecker(db_config, cache_minutes=5)
