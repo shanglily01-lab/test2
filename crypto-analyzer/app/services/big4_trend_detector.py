@@ -207,10 +207,10 @@ class Big4TrendDetector:
 
     def _analyze_kline_power(self, cursor, symbol: str, timeframe: str, count: int) -> Dict:
         """
-        分析K线力度 (简化版)
+        分析K线力度（纯价格版本）
 
-        力度 = 价格变化% × 0.8 + 成交量归一化 × 0.2
-        (价格权重80%, 成交量权重20%)
+        力度 = 价格变化%
+        （已移除量能分析，避免滞后性误判）
 
         返回:
         {
@@ -222,7 +222,7 @@ class Big4TrendDetector:
         }
         """
         query = """
-            SELECT open_price, close_price, volume
+            SELECT open_price, close_price
             FROM kline_data
             WHERE symbol = %s
             AND timeframe = %s
@@ -243,39 +243,25 @@ class Big4TrendDetector:
                 'dominant': 'NEUTRAL'
             }
 
-        # 先收集所有数据,用于计算成交量归一化
-        volumes = [float(k['volume']) if k['volume'] else 0 for k in klines]
-        max_volume = max(volumes) if volumes else 1
-        min_volume = min(volumes) if volumes else 0
-        volume_range = max_volume - min_volume if max_volume != min_volume else 1
-
         bullish_count = 0
         bearish_count = 0
-        bullish_power = 0  # 阳线力度 = Σ(价格变化% × 0.8 + 成交量归一化 × 0.2)
-        bearish_power = 0  # 阴线力度 = Σ(价格变化% × 0.8 + 成交量归一化 × 0.2)
+        bullish_power = 0  # 阳线力度 = Σ(价格变化%)
+        bearish_power = 0  # 阴线力度 = Σ(价格变化%)
 
         for k in klines:
             open_p = float(k['open_price'])
             close_p = float(k['close_price'])
-            volume = float(k['volume']) if k['volume'] else 0
-
-            # 成交量归一化到 0-100
-            volume_normalized = ((volume - min_volume) / volume_range * 100) if volume_range > 0 else 0
 
             if close_p > open_p:
                 # 阳线
                 bullish_count += 1
                 price_change_pct = (close_p - open_p) / open_p * 100
-                # 力度 = 价格变化%(80%) + 成交量归一化(20%)
-                power = price_change_pct * 0.8 + volume_normalized * 0.2
-                bullish_power += power
+                bullish_power += price_change_pct
             else:
                 # 阴线
                 bearish_count += 1
                 price_change_pct = (open_p - close_p) / open_p * 100
-                # 力度 = 价格变化%(80%) + 成交量归一化(20%)
-                power = price_change_pct * 0.8 + volume_normalized * 0.2
-                bearish_power += power
+                bearish_power += price_change_pct
 
         # 判断主导方向 (综合力度和数量，双重验证)
         # 🔥 修改：力度为主（70%）+ 数量为辅（30%）
@@ -319,13 +305,14 @@ class Big4TrendDetector:
 
     def _detect_5m_signal(self, cursor, symbol: str) -> Dict:
         """
-        检测5M买卖时机 (最近3根K线)
+        检测5M买卖时机（纯价格版本）
 
         检测突破:
-        - 力度 = 价格变化% × 0.8 + 成交量归一化 × 0.2
+        - 力度 = 价格变化%
+        （已移除量能分析，避免滞后性误判）
         """
         query = """
-            SELECT open_price, close_price, high_price, low_price, volume
+            SELECT open_price, close_price, high_price, low_price
             FROM kline_data
             WHERE symbol = %s
             AND timeframe = '5m'
@@ -345,12 +332,6 @@ class Big4TrendDetector:
                 'reason': '数据不足'
             }
 
-        # 先收集所有成交量,用于归一化
-        volumes = [float(k['volume']) if k['volume'] else 0 for k in klines]
-        max_volume = max(volumes) if volumes else 1
-        min_volume = min(volumes) if volumes else 0
-        volume_range = max_volume - min_volume if max_volume != min_volume else 1
-
         # 分析最近3根K线
         total_bull_power = 0
         total_bear_power = 0
@@ -358,21 +339,15 @@ class Big4TrendDetector:
         for k in klines:
             open_p = float(k['open_price'])
             close_p = float(k['close_price'])
-            volume = float(k['volume']) if k['volume'] else 0
-
-            # 成交量归一化到 0-100
-            volume_normalized = ((volume - min_volume) / volume_range * 100) if volume_range > 0 else 0
 
             if close_p > open_p:
                 # 阳线力度
                 price_change_pct = (close_p - open_p) / open_p * 100
-                power = price_change_pct * 0.8 + volume_normalized * 0.2
-                total_bull_power += power
+                total_bull_power += price_change_pct
             else:
                 # 阴线力度
                 price_change_pct = (open_p - close_p) / open_p * 100
-                power = price_change_pct * 0.8 + volume_normalized * 0.2
-                total_bear_power += power
+                total_bear_power += price_change_pct
 
         # 判断突破方向
         if total_bull_power > total_bear_power * 1.5:  # 多头力度明显强于空头
