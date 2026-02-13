@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """分析昨晚到现在的订单盈亏（参考操作说明.ini）"""
 import pymysql
 import os
+import sys
 from datetime import datetime, timedelta
 from decimal import Decimal
 from dotenv import load_dotenv
+
+# 设置Windows控制台编码
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # 加载.env配置
 load_dotenv()
@@ -22,10 +29,9 @@ conn = pymysql.connect(
 
 cursor = conn.cursor()
 
-# 时间范围：昨晚20:00到现在
+# 时间范围：最近24小时
 now = datetime.now()
-yesterday = now - timedelta(days=1)
-start_time = yesterday.replace(hour=20, minute=0, second=0, microsecond=0)
+start_time = now - timedelta(hours=24)
 
 print("=" * 100)
 print(f"交易盈亏分析报告")
@@ -59,19 +65,39 @@ total_losses = 0
 
 for system in systems:
     try:
+        # 检查表是否存在
+        cursor.execute("SHOW TABLES LIKE %s", (system['table'],))
+        if not cursor.fetchone():
+            continue
+
+        # 检查表结构
+        cursor.execute(f"DESCRIBE {system['table']}")
+        columns = [row['Field'] for row in cursor.fetchall()]
+        has_order_source = 'order_source' in columns
+        has_pnl_pct = 'pnl_pct' in columns
+
         # 构建查询
         account_filter = f"account_id = {system['account_id']}" if system['account_id'] else "1=1"
 
-        query = f"""
-            SELECT
+        # 基础字段
+        select_fields = """
                 symbol,
                 side,
                 quantity,
                 price,
                 realized_pnl,
-                pnl_pct,
-                trade_time,
-                order_source
+                trade_time"""
+
+        # 可选字段
+        if has_pnl_pct:
+            select_fields += ",\n                pnl_pct"
+
+        if has_order_source:
+            select_fields += ",\n                order_source"
+
+        query = f"""
+            SELECT
+{select_fields}
             FROM {system['table']}
             WHERE {account_filter}
               AND trade_time >= %s
