@@ -173,47 +173,43 @@ class Big4TrendDetector:
 
     def _analyze_symbol(self, conn, symbol: str) -> Dict:
         """
-        分析单个币种的趋势（多周期共振版本）
+        分析单个币种的趋势（基于K线数量评分）
 
-        🔥 2026-02-13优化：增加4H周期，确保信号1小时有效性
+        🔥 2026-02-13 最新优化：基于K线数量的简单评分系统
 
         步骤:
-        1. 4H (24根=4天): 主趋势方向（最重要，预测未来1小时方向）
-        2. 1H (30根=30小时): 中期趋势
-        3. 15M (30根=7.5小时): 短期确认
-        4. 5M (3根=15分钟): 入场时机
+        1. 1H (30根): 主趋势判断
+        2. 15M (16根): 趋势确认
+        3. 5M (3根): 入场时机
 
-        多周期共振规则：
-        - 4H主趋势必须明确（BULL或BEAR）
-        - 1H、15M必须与4H同向
-        - 只有多周期共振才发出信号，确保未来1小时方向正确
+        评分规则：
+        - 1H: 阳线>=18根(强势40分) / >=16根(中等30分)
+        - 15M: 阳线>=11根(强势30分) / >=9根(中等20分)
+        - 5M: 3根全阳(10分) / 2阳1阴(5分)
+        - 开仓条件: 评分>=60分（只做强势行情）
         """
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        # 1. 分析4H K线 (24根=4天) - 主趋势方向
-        kline_4h = self._analyze_kline_power(cursor, symbol, '4h', 24)
+        # 1. 分析1H K线 (30根)
+        kline_1h = self._analyze_kline_count(cursor, symbol, '1h', 30)
 
-        # 2. 分析1H K线 (30根) - 中期趋势
-        kline_1h = self._analyze_kline_power(cursor, symbol, '1h', 30)
+        # 2. 分析15M K线 (16根)
+        kline_15m = self._analyze_kline_count(cursor, symbol, '15m', 16)
 
-        # 3. 分析15M K线 (30根) - 短期确认
-        kline_15m = self._analyze_kline_power(cursor, symbol, '15m', 30)
-
-        # 4. 分析5M K线 (3根) - 入场时机
-        kline_5m = self._detect_5m_signal(cursor, symbol)
+        # 3. 分析5M K线 (3根)
+        kline_5m = self._analyze_kline_count(cursor, symbol, '5m', 3)
 
         cursor.close()
 
-        # 5. 多周期共振判断
-        signal, strength, reason = self._generate_signal_with_resonance(
-            kline_4h, kline_1h, kline_15m, kline_5m
+        # 4. 基于数量的评分判断
+        signal, strength, reason = self._generate_signal_by_count(
+            kline_1h, kline_15m, kline_5m
         )
 
         return {
             'signal': signal,
             'strength': strength,
             'reason': reason,
-            '4h_analysis': kline_4h,  # 新增4H分析结果
             '1h_analysis': kline_1h,
             '15m_analysis': kline_15m,
             '5m_signal': kline_5m
@@ -316,6 +312,182 @@ class Big4TrendDetector:
             'bearish_power': bearish_power,
             'dominant': dominant
         }
+
+    def _analyze_kline_count(self, cursor, symbol: str, timeframe: str, count: int) -> Dict:
+        """
+        基于K线数量的趋势分析（简化版）
+
+        🔥 2026-02-13新增：只看阳线/阴线数量，不计算力度
+
+        评分规则：
+        - 1H (30根): 阳>=18(强势40分) / >=16(中等30分)
+        - 15M (16根): 阳>=11(强势30分) / >=9(中等20分)
+        - 5M (3根): 3阳(10分) / 2阳(5分)
+
+        返回:
+        {
+            'bullish_count': int,  # 阳线数量
+            'bearish_count': int,  # 阴线数量
+            'score': int,          # 评分
+            'level': str           # 'STRONG' / 'MEDIUM' / 'NEUTRAL'
+        }
+        """
+        query = """
+            SELECT open_price, close_price
+            FROM kline_data
+            WHERE symbol = %s
+            AND timeframe = %s
+            AND exchange = 'binance_futures'
+            ORDER BY open_time DESC
+            LIMIT %s
+        """
+
+        cursor.execute(query, (symbol, timeframe, count))
+        klines = cursor.fetchall()
+
+        if not klines or len(klines) < count:
+            return {
+                'bullish_count': 0,
+                'bearish_count': 0,
+                'score': 0,
+                'level': 'NEUTRAL'
+            }
+
+        bullish_count = 0
+        bearish_count = 0
+
+        for k in klines:
+            open_p = float(k['open_price'])
+            close_p = float(k['close_price'])
+
+            if close_p > open_p:
+                bullish_count += 1
+            else:
+                bearish_count += 1
+
+        # 根据周期和数量评分
+        score = 0
+        level = 'NEUTRAL'
+
+        if timeframe == '1h' and count == 30:
+            # 1H周期评分
+            if bullish_count >= 18:  # 60%
+                score = 40
+                level = 'STRONG'
+            elif bullish_count >= 16:  # 53%
+                score = 30
+                level = 'MEDIUM'
+            elif bearish_count >= 18:
+                score = -40
+                level = 'STRONG'
+            elif bearish_count >= 16:
+                score = -30
+                level = 'MEDIUM'
+
+        elif timeframe == '15m' and count == 16:
+            # 15M周期评分
+            if bullish_count >= 11:  # 69%
+                score = 30
+                level = 'STRONG'
+            elif bullish_count >= 9:  # 56%
+                score = 20
+                level = 'MEDIUM'
+            elif bearish_count >= 11:
+                score = -30
+                level = 'STRONG'
+            elif bearish_count >= 9:
+                score = -20
+                level = 'MEDIUM'
+
+        elif timeframe == '5m' and count == 3:
+            # 5M周期评分
+            if bullish_count == 3:
+                score = 10
+                level = 'STRONG'
+            elif bullish_count == 2:
+                score = 5
+                level = 'MEDIUM'
+            elif bearish_count == 3:
+                score = -10
+                level = 'STRONG'
+            elif bearish_count == 2:
+                score = -5
+                level = 'MEDIUM'
+
+        return {
+            'bullish_count': bullish_count,
+            'bearish_count': bearish_count,
+            'score': score,
+            'level': level,
+            'total': count
+        }
+
+    def _generate_signal_by_count(
+        self,
+        kline_1h: Dict,
+        kline_15m: Dict,
+        kline_5m: Dict
+    ) -> Tuple[str, int, str]:
+        """
+        基于K线数量生成信号（简化版）
+
+        🔥 2026-02-13新增：只做强势行情，评分>=60分
+
+        权重分配:
+        - 1H: 强势40分 / 中等30分
+        - 15M: 强势30分 / 中等20分
+        - 5M: 全同向10分 / 部分5分
+
+        开仓条件:
+        - 评分 >= 60分 → BULLISH/BEARISH
+        - 评分 < 60分 → NEUTRAL（中等行情不做）
+
+        返回: (信号方向, 强度0-100, 原因)
+        """
+        signal_score = kline_1h['score'] + kline_15m['score'] + kline_5m['score']
+        reasons = []
+
+        # 1H分析
+        if kline_1h['score'] > 0:
+            reasons.append(f"1H{kline_1h['level']}多头({kline_1h['bullish_count']}阳:{kline_1h['bearish_count']}阴,{kline_1h['score']}分)")
+        elif kline_1h['score'] < 0:
+            reasons.append(f"1H{kline_1h['level']}空头({kline_1h['bearish_count']}阴:{kline_1h['bullish_count']}阳,{kline_1h['score']}分)")
+        else:
+            reasons.append(f"1H中性({kline_1h['bullish_count']}阳:{kline_1h['bearish_count']}阴)")
+
+        # 15M分析
+        if kline_15m['score'] > 0:
+            reasons.append(f"15M{kline_15m['level']}多头({kline_15m['bullish_count']}阳:{kline_15m['bearish_count']}阴,{kline_15m['score']}分)")
+        elif kline_15m['score'] < 0:
+            reasons.append(f"15M{kline_15m['level']}空头({kline_15m['bearish_count']}阴:{kline_15m['bullish_count']}阳,{kline_15m['score']}分)")
+        else:
+            reasons.append(f"15M中性({kline_15m['bullish_count']}阳:{kline_15m['bearish_count']}阴)")
+
+        # 5M分析
+        if kline_5m['score'] != 0:
+            if kline_5m['score'] > 0:
+                reasons.append(f"5M多头({kline_5m['bullish_count']}阳,{kline_5m['score']}分)")
+            else:
+                reasons.append(f"5M空头({kline_5m['bearish_count']}阴,{kline_5m['score']}分)")
+
+        # 判断信号（门槛60分）
+        if signal_score >= 60:
+            signal = 'BULLISH'
+            reasons.append(f'✅总分{signal_score}>=60，强势看涨')
+        elif signal_score <= -60:
+            signal = 'BEARISH'
+            reasons.append(f'✅总分{signal_score}<=-60，强势看跌')
+        else:
+            signal = 'NEUTRAL'
+            if abs(signal_score) >= 50:
+                reasons.append(f'⚠️总分{signal_score}，中等行情不做')
+            else:
+                reasons.append(f'⚠️总分{signal_score}，趋势不明确')
+
+        strength = min(abs(signal_score), 100)
+        reason = ' | '.join(reasons)
+
+        return signal, strength, reason
 
     def _detect_5m_signal(self, cursor, symbol: str) -> Dict:
         """
