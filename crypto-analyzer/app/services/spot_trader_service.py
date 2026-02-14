@@ -575,55 +575,88 @@ class SpotBottomTopTrader:
 
     def _select_trend_symbols(self, big4_result: Dict) -> List[str]:
         """
-        选择最适合趋势跟随的币种
+        选择最适合趋势跟随的币种 (避免追高策略)
 
-        策略: 选择Big4之外涨幅居中的币种(避免追高,也避免弱势币)
+        筛选条件（A+C组合）:
+        1. Big4 BULLISH (强度>=50) - 已由调用方检查
+        2. 个币信号 BULLISH (评分>=50)
+        3. 价格回调: 当前价格 < 1H最高价 * 0.98 (回调至少2%)
+        4. 5M反向信号: 5M有阴线回调 (精准入场时机)
         """
         candidates = []
 
         try:
-            # 计算最近1H涨跌幅
-            symbol_changes = []
+            # 初始化Big4检测器用于分析个币信号
+            detector = Big4TrendDetector()
+            conn = self._get_connection()
+
             for symbol in self.symbols:
                 if symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
                     continue  # 跳过Big4本身
 
+                # 1. 检查个币信号 (BULLISH且评分>=50)
+                coin_signal = detector._analyze_symbol(conn, symbol)
+                if coin_signal['signal'] != 'BULLISH' or coin_signal['strength'] < 50:
+                    continue
+
+                # 2. 获取当前价格
                 current_price = self.ws_price_service.get_price(symbol)
                 if not current_price:
                     continue
 
-                # 查询1小时前价格
-                conn = self._get_connection()
-                cursor = conn.cursor()
-
-                # 转换交易对格式: BTC/USDT -> BTCUSDT
+                # 3. 检查价格回调 (当前价 < 1H最高价 * 0.98)
                 binance_symbol = symbol.replace('/', '')
-
+                cursor = conn.cursor()
                 cursor.execute("""
-                    SELECT close_price
+                    SELECT MAX(high_price) as max_high
                     FROM kline_data
                     WHERE symbol = %s AND timeframe = '1h' AND exchange = 'binance'
-                    ORDER BY open_time DESC
-                    LIMIT 1 OFFSET 1
+                        AND open_time >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
                 """, (binance_symbol,))
                 result = cursor.fetchone()
-                conn.close()
+                cursor.close()
 
-                if result:
-                    price_1h_ago = float(result['close_price'])
-                    change_pct = (current_price - price_1h_ago) / price_1h_ago
-                    symbol_changes.append((symbol, change_pct))
+                if not result or not result['max_high']:
+                    continue
 
-            # 排序并选择中间段(20%-60%分位)
-            symbol_changes.sort(key=lambda x: x[1], reverse=True)
-            start_idx = int(len(symbol_changes) * 0.2)
-            end_idx = int(len(symbol_changes) * 0.6)
-            candidates = [s[0] for s in symbol_changes[start_idx:end_idx]]
+                max_high_1h = float(result['max_high'])
+                pullback_threshold = max_high_1h * 0.98
+
+                if current_price >= pullback_threshold:
+                    # 价格没有回调2%，跳过（避免追高）
+                    continue
+
+                # 4. 检查5M反向信号 (必须有阴线回调)
+                if '5m_signal' in coin_signal:
+                    m5 = coin_signal['5m_signal']
+                    # 多头趋势，需要5M有阴线
+                    if m5['bearish_count'] < 1:
+                        continue  # 没有阴线回调，跳过
+
+                # 通过所有过滤条件
+                pullback_pct = (1 - current_price / max_high_1h) * 100
+                candidates.append({
+                    'symbol': symbol,
+                    'signal_strength': coin_signal['strength'],
+                    'pullback_pct': pullback_pct,
+                    'price': current_price
+                })
+
+            conn.close()
+
+            # 按信号强度排序，选择最强的
+            candidates.sort(key=lambda x: x['signal_strength'], reverse=True)
+
+            if candidates:
+                logger.info(f"📊 筛选出 {len(candidates)} 个符合条件的币种（避免追高+5M确认）:")
+                for i, c in enumerate(candidates[:10], 1):
+                    logger.info(f"  {i}. {c['symbol']:12} 强度:{c['signal_strength']:3.0f} 回调:{c['pullback_pct']:4.1f}% 价格:{c['price']:.6f}")
+
+            return [c['symbol'] for c in candidates[:10]]
 
         except Exception as e:
             logger.error(f"选择趋势币种失败: {e}")
-
-        return candidates[:10]  # 最多返回10个候选
+            return []
 
     def _get_spot_position(self, symbol: str) -> Optional[Dict]:
         """获取现货持仓"""
