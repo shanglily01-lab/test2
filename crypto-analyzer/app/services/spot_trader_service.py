@@ -595,13 +595,17 @@ class SpotBottomTopTrader:
                 # 查询1小时前价格
                 conn = self._get_connection()
                 cursor = conn.cursor()
+
+                # 转换交易对格式: BTC/USDT -> BTCUSDT
+                binance_symbol = symbol.replace('/', '')
+
                 cursor.execute("""
                     SELECT close_price
-                    FROM klines_1h
-                    WHERE symbol = %s
-                    ORDER BY close_time DESC
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = '1h' AND exchange = 'binance'
+                    ORDER BY open_time DESC
                     LIMIT 1 OFFSET 1
-                """, (symbol,))
+                """, (binance_symbol,))
                 result = cursor.fetchone()
                 conn.close()
 
