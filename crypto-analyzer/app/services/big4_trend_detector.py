@@ -105,8 +105,8 @@ class Big4TrendDetector:
                 bearish_count += 1
                 bearish_weight += weight
 
-            # 无论信号是什么，都累加强度用于计算平均值
-            total_strength += analysis['strength']
+            # 无论信号是什么，都按权重累加强度
+            total_strength += analysis['strength'] * weight
 
         # 🔥 紧急干预检测 (在分析完Big4后执行)
         emergency_intervention = self._detect_emergency_reversal(conn)
@@ -152,7 +152,8 @@ class Big4TrendDetector:
         if emergency_intervention['block_short']:
             recommendation = f"⚠️ 触底反弹风险 - 禁止做空 | {recommendation}"
 
-        avg_strength = total_strength / len(BIG4_SYMBOLS) if BIG4_SYMBOLS else 0
+        # 已按权重累加，不需要再除以数量（权重总和=1.0）
+        avg_strength = total_strength
 
         result = {
             'overall_signal': overall_signal,
