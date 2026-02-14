@@ -449,8 +449,10 @@ class SpotBottomTopTrader:
 
         # 只在BULLISH且强度>=50时买入
         if signal != 'BULLISH' or strength < 50:
+            logger.debug(f"[趋势跟随] 不满足开仓条件: signal={signal}, strength={strength}")
             return
 
+        logger.debug(f"[趋势跟随] Big4={signal}/{strength:.0f}, last_signal={self.last_big4_signal}, positions={len(self.trend_positions)}")
         now = datetime.now()
 
         # 1. 检查现有趋势持仓,执行分批买入
@@ -495,9 +497,11 @@ class SpotBottomTopTrader:
 
         # 2. 如果Big4刚转为BULLISH,开始新的趋势跟随
         if self.last_big4_signal != 'BULLISH' and signal == 'BULLISH':
+            logger.info(f"🔄 Big4转为BULLISH，开始选择趋势币种...")
             # 选择最强势的币种(限制最多5个)
             if len(self.trend_positions) < self.TREND_MAX_SYMBOLS:
                 candidates = self._select_trend_symbols(big4_result)
+                logger.info(f"📊 筛选结果: 找到 {len(candidates)} 个候选币种")
                 for symbol in candidates[:self.TREND_MAX_SYMBOLS - len(self.trend_positions)]:
                     current_price = self.ws_price_service.get_price(symbol)
                     if not current_price:
@@ -648,14 +652,18 @@ class SpotBottomTopTrader:
             candidates.sort(key=lambda x: x['signal_strength'], reverse=True)
 
             if candidates:
-                logger.info(f"📊 筛选出 {len(candidates)} 个符合条件的币种（避免追高+5M确认）:")
+                logger.info(f"✅ 筛选出 {len(candidates)} 个符合条件的币种（避免追高+5M确认）:")
                 for i, c in enumerate(candidates[:10], 1):
                     logger.info(f"  {i}. {c['symbol']:12} 强度:{c['signal_strength']:3.0f} 回调:{c['pullback_pct']:4.1f}% 价格:{c['price']:.6f}")
+            else:
+                logger.warning(f"⚠️ 未找到符合条件的币种（个币BULLISH + 回调2% + 5M有阴线）")
 
             return [c['symbol'] for c in candidates[:10]]
 
         except Exception as e:
-            logger.error(f"选择趋势币种失败: {e}")
+            logger.error(f"❌ 选择趋势币种失败: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
 
     def _get_spot_position(self, symbol: str) -> Optional[Dict]:
