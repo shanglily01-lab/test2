@@ -101,11 +101,12 @@ class Big4TrendDetector:
             if analysis['signal'] == 'BULLISH':
                 bullish_count += 1
                 bullish_weight += weight
-                total_strength += analysis['strength']
             elif analysis['signal'] == 'BEARISH':
                 bearish_count += 1
                 bearish_weight += weight
-                total_strength += analysis['strength']
+
+            # 无论信号是什么，都累加强度用于计算平均值
+            total_strength += analysis['strength']
 
         # 🔥 紧急干预检测 (在分析完Big4后执行)
         emergency_intervention = self._detect_emergency_reversal(conn)
