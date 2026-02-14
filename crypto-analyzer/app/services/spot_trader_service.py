@@ -36,7 +36,12 @@ load_dotenv()
 
 
 class SpotBottomTopTrader:
-    """现货底部抄底顶部卖出交易器"""
+    """
+    现货双策略交易器
+
+    策略1: 深V反转抄底（原有策略）
+    策略2: Big4趋势跟随分批买入（新增）
+    """
 
     def __init__(self):
         # 数据库配置
@@ -57,23 +62,41 @@ class SpotBottomTopTrader:
         # 加载交易对列表
         self.symbols = self._load_symbols_from_config()
 
-        # 交易配置
+        # ========== 策略1: 深V反转配置 ==========
         self.AMOUNT_PER_TRADE = 800  # 每笔800 USDT
         self.MAX_POSITIONS = 30      # 最多30个持仓
-        self.TAKE_PROFIT_PCT = 0.50  # 50% 止盈（备用）
-        self.STOP_LOSS_PCT = 0.10    # 10% 止损（防极端情况）
         self.MIN_DROP_PCT = 3.0      # 最小跌幅3%才考虑买入
 
-        # 状态追踪
+        # ========== 策略2: 趋势跟随配置 ==========
+        self.TREND_TOTAL_AMOUNT = 3000      # 每个币种总仓位3000 USDT
+        self.TREND_BATCH_COUNT = 3          # 分3批买入
+        self.TREND_BATCH_INTERVAL = 3600    # 每批间隔1小时（秒）
+        self.TREND_DIP_PCT = 0.005          # 逢低买入阈值0.5%
+        self.TREND_TAKE_PROFIT = 0.25       # 止盈25%
+        self.TREND_STOP_LOSS = 0.10         # 止损10%
+        self.TREND_MAX_SYMBOLS = 5          # 最多同时跟踪5个币种
+
+        # 止盈止损（通用）
+        self.TAKE_PROFIT_PCT = 0.50  # 深V策略50%止盈
+        self.STOP_LOSS_PCT = 0.10    # 防极端情况10%止损
+
+        # ========== 状态追踪 ==========
+        # 深V策略状态
         self.last_bottom_detected_at = None
         self.last_top_detected_at = None
         self.in_bottom_window = False
 
+        # 趋势跟随状态 {symbol: {'batch': 1, 'prices': [price1], 'times': [time1], 'amounts': [amt1]}}
+        self.trend_positions = {}
+        self.last_big4_signal = 'NEUTRAL'
+
         logger.info("=" * 80)
-        logger.info("🚀 现货底部抄底顶部卖出交易服务启动")
-        logger.info(f"每笔金额: {self.AMOUNT_PER_TRADE} USDT")
-        logger.info(f"最大持仓: {self.MAX_POSITIONS} 个")
-        logger.info(f"止盈: {self.TAKE_PROFIT_PCT*100:.0f}%, 止损: {self.STOP_LOSS_PCT*100:.0f}%")
+        logger.info("🚀 现货双策略交易服务启动")
+        logger.info("📊 策略1 - 深V反转: 每笔{} USDT, 最多{}仓".format(self.AMOUNT_PER_TRADE, self.MAX_POSITIONS))
+        logger.info("📈 策略2 - 趋势跟随: 每币{}U分{}批, 3小时内逢低买入".format(
+            self.TREND_TOTAL_AMOUNT, self.TREND_BATCH_COUNT))
+        logger.info(f"止盈: 趋势{self.TREND_TAKE_PROFIT*100:.0f}% / 深V{self.TAKE_PROFIT_PCT*100:.0f}%")
+        logger.info(f"止损: {self.STOP_LOSS_PCT*100:.0f}%")
         logger.info(f"监控币种: {len(self.symbols)} 个")
         logger.info("=" * 80)
 
@@ -413,6 +436,241 @@ class SpotBottomTopTrader:
             logger.error(f"卖出失败 {position['symbol']}: {e}")
             return False
 
+    # ========== 趋势跟随策略方法 ==========
+
+    def execute_trend_follow_buy(self, big4_result: Dict):
+        """
+        执行趋势跟随分批买入
+
+        策略: Big4 BULLISH时,选择最强势的币种,分3批3小时内逢低买入
+        """
+        signal = big4_result.get('overall_signal', 'NEUTRAL')
+        strength = big4_result.get('signal_strength', 0)
+
+        # 只在BULLISH且强度>=50时买入
+        if signal != 'BULLISH' or strength < 50:
+            return
+
+        now = datetime.now()
+
+        # 1. 检查现有趋势持仓,执行分批买入
+        for symbol in list(self.trend_positions.keys()):
+            position = self.trend_positions[symbol]
+            batch_num = position['batch']
+            last_time = position['times'][-1] if position['times'] else now
+            last_price = position['prices'][-1] if position['prices'] else None
+
+            # 如果还未完成3批
+            if batch_num < self.TREND_BATCH_COUNT:
+                time_diff = (now - last_time).total_seconds()
+                next_batch_time = self.TREND_BATCH_INTERVAL
+
+                current_price = self.ws_price_service.get_price(symbol)
+                if not current_price:
+                    continue
+
+                should_buy = False
+                reason = ""
+
+                # 判断是否应该买入下一批
+                if time_diff >= next_batch_time:
+                    # 时间到了,检查是否逢低
+                    if last_price and current_price < last_price * (1 - self.TREND_DIP_PCT):
+                        should_buy = True
+                        reason = f"逢低{(1 - current_price/last_price)*100:.2f}%"
+                    elif time_diff >= next_batch_time * 1.2:
+                        # 超时20%仍未跌,则按时间买入
+                        should_buy = True
+                        reason = "按时间买入"
+
+                if should_buy:
+                    batch_amount = self.TREND_TOTAL_AMOUNT / self.TREND_BATCH_COUNT
+                    success = self._execute_spot_buy(symbol, batch_amount, f"趋势跟随第{batch_num+1}批({reason})")
+                    if success:
+                        position['batch'] += 1
+                        position['prices'].append(current_price)
+                        position['times'].append(now)
+                        position['amounts'].append(batch_amount)
+                        logger.success(f"📈 {symbol} 趋势跟随第{position['batch']}/3批买入完成 @ {current_price:.6f}")
+
+        # 2. 如果Big4刚转为BULLISH,开始新的趋势跟随
+        if self.last_big4_signal != 'BULLISH' and signal == 'BULLISH':
+            # 选择最强势的币种(限制最多5个)
+            if len(self.trend_positions) < self.TREND_MAX_SYMBOLS:
+                candidates = self._select_trend_symbols(big4_result)
+                for symbol in candidates[:self.TREND_MAX_SYMBOLS - len(self.trend_positions)]:
+                    current_price = self.ws_price_service.get_price(symbol)
+                    if not current_price:
+                        continue
+
+                    # 执行第1批买入
+                    batch_amount = self.TREND_TOTAL_AMOUNT / self.TREND_BATCH_COUNT
+                    success = self._execute_spot_buy(symbol, batch_amount, "趋势跟随第1批(Big4转多)")
+                    if success:
+                        self.trend_positions[symbol] = {
+                            'batch': 1,
+                            'prices': [current_price],
+                            'times': [now],
+                            'amounts': [batch_amount],
+                            'entry_time': now
+                        }
+                        logger.success(f"🚀 {symbol} 开始趋势跟随 1/3批 @ {current_price:.6f}")
+
+        self.last_big4_signal = signal
+
+    def execute_trend_follow_sell(self, big4_result: Dict):
+        """
+        执行趋势跟随卖出
+
+        条件:
+        - Big4转BEARISH: 全部卖出
+        - Big4转NEUTRAL: 卖出50%
+        - 止盈: +25%
+        - 止损: -10%
+        """
+        signal = big4_result.get('overall_signal', 'NEUTRAL')
+
+        for symbol in list(self.trend_positions.keys()):
+            position = self.trend_positions[symbol]
+
+            # 获取平均成本
+            avg_price = sum(position['prices']) / len(position['prices']) if position['prices'] else 0
+            current_price = self.ws_price_service.get_price(symbol)
+
+            if not current_price or not avg_price:
+                continue
+
+            pnl_pct = (current_price - avg_price) / avg_price
+
+            sell_pct = 0
+            reason = ""
+
+            # 判断卖出条件
+            if signal == 'BEARISH':
+                sell_pct = 1.0
+                reason = "Big4转空"
+            elif signal == 'NEUTRAL' and self.last_big4_signal == 'BULLISH':
+                sell_pct = 0.5
+                reason = "Big4转中性"
+            elif pnl_pct >= self.TREND_TAKE_PROFIT:
+                sell_pct = 1.0
+                reason = f"止盈{pnl_pct*100:.1f}%"
+            elif pnl_pct <= -self.TREND_STOP_LOSS:
+                sell_pct = 1.0
+                reason = f"止损{pnl_pct*100:.1f}%"
+
+            if sell_pct > 0:
+                # 查询实际持仓
+                spot_position = self._get_spot_position(symbol)
+                if spot_position and float(spot_position['available_quantity']) > 0:
+                    sell_qty = float(spot_position['available_quantity']) * sell_pct
+                    success = self._execute_spot_sell(symbol, sell_qty, reason)
+                    if success:
+                        if sell_pct >= 1.0:
+                            # 全部卖出,移除跟踪
+                            del self.trend_positions[symbol]
+                            logger.success(f"✅ {symbol} 趋势跟随已清仓,{reason}")
+                        else:
+                            logger.info(f"📉 {symbol} 减仓{sell_pct*100:.0f}%,{reason}")
+
+    def _select_trend_symbols(self, big4_result: Dict) -> List[str]:
+        """
+        选择最适合趋势跟随的币种
+
+        策略: 选择Big4之外涨幅居中的币种(避免追高,也避免弱势币)
+        """
+        candidates = []
+
+        try:
+            # 计算最近1H涨跌幅
+            symbol_changes = []
+            for symbol in self.symbols:
+                if symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
+                    continue  # 跳过Big4本身
+
+                current_price = self.ws_price_service.get_price(symbol)
+                if not current_price:
+                    continue
+
+                # 查询1小时前价格
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT close_price
+                    FROM klines_1h
+                    WHERE symbol = %s
+                    ORDER BY close_time DESC
+                    LIMIT 1 OFFSET 1
+                """, (symbol,))
+                result = cursor.fetchone()
+                conn.close()
+
+                if result:
+                    price_1h_ago = float(result['close_price'])
+                    change_pct = (current_price - price_1h_ago) / price_1h_ago
+                    symbol_changes.append((symbol, change_pct))
+
+            # 排序并选择中间段(20%-60%分位)
+            symbol_changes.sort(key=lambda x: x[1], reverse=True)
+            start_idx = int(len(symbol_changes) * 0.2)
+            end_idx = int(len(symbol_changes) * 0.6)
+            candidates = [s[0] for s in symbol_changes[start_idx:end_idx]]
+
+        except Exception as e:
+            logger.error(f"选择趋势币种失败: {e}")
+
+        return candidates[:10]  # 最多返回10个候选
+
+    def _get_spot_position(self, symbol: str) -> Optional[Dict]:
+        """获取现货持仓"""
+        positions = self.get_current_positions()
+        for pos in positions:
+            if pos['symbol'] == symbol:
+                return pos
+        return None
+
+    def _execute_spot_buy(self, symbol: str, amount_usdt: float, reason: str) -> bool:
+        """执行现货买入(模拟)"""
+        try:
+            current_price = self.ws_price_service.get_price(symbol)
+            if not current_price:
+                logger.warning(f"无法获取{symbol}价格")
+                return False
+
+            quantity = amount_usdt / current_price
+
+            # TODO: 这里应该调用实际的交易API
+            # 目前只是模拟记录
+            logger.info(f"🔵 模拟买入: {symbol} {quantity:.6f} @ {current_price:.6f} USDT ({amount_usdt:.2f}U) - {reason}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"买入失败 {symbol}: {e}")
+            return False
+
+    def _execute_spot_sell(self, symbol: str, quantity: float, reason: str) -> bool:
+        """执行现货卖出(模拟)"""
+        try:
+            current_price = self.ws_price_service.get_price(symbol)
+            if not current_price:
+                logger.warning(f"无法获取{symbol}价格")
+                return False
+
+            amount_usdt = quantity * current_price
+
+            # TODO: 这里应该调用实际的交易API
+            # 目前只是模拟记录
+            logger.info(f"🔴 模拟卖出: {symbol} {quantity:.6f} @ {current_price:.6f} USDT ({amount_usdt:.2f}U) - {reason}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"卖出失败 {symbol}: {e}")
+            return False
+
+    # ========== 原有方法 ==========
+
     def check_stop_profit_loss(self):
         """
         检查止盈止损（备用逻辑）
@@ -498,10 +756,26 @@ class SpotBottomTopTrader:
                     else:
                         logger.info("⏸️  顶部信号已在1小时内触发过，跳过")
 
-                # 4. 备用止盈止损检查
+                # 4. 趋势跟随策略（新增）
+                logger.info("📊 检查趋势跟随...")
+                self.execute_trend_follow_buy(big4_result)
+                self.execute_trend_follow_sell(big4_result)
+
+                # 显示趋势跟随状态
+                if self.trend_positions:
+                    logger.info(f"📈 趋势跟随持仓 ({len(self.trend_positions)}个):")
+                    for symbol, pos in self.trend_positions.items():
+                        batch = pos['batch']
+                        avg_price = sum(pos['prices']) / len(pos['prices'])
+                        current_price = self.ws_price_service.get_price(symbol)
+                        if current_price:
+                            pnl_pct = (current_price - avg_price) / avg_price * 100
+                            logger.info(f"  {symbol:12} 批次:{batch}/3 均价:{avg_price:.6f} 现价:{current_price:.6f} {pnl_pct:+.2f}%")
+
+                # 5. 备用止盈止损检查
                 self.check_stop_profit_loss()
 
-                # 5. 显示当前持仓
+                # 6. 显示当前持仓（所有策略）
                 positions = self.get_current_positions()
                 if positions:
                     logger.info(f"\n💼 当前持仓 ({len(positions)}个):")
@@ -517,7 +791,7 @@ class SpotBottomTopTrader:
                 else:
                     logger.info("\n💼 当前无持仓")
 
-                # 6. 等待下一个周期 (5分钟)
+                # 7. 等待下一个周期 (5分钟)
                 logger.info("⏳ 等待5分钟...")
                 await asyncio.sleep(300)
 
@@ -531,7 +805,9 @@ class SpotBottomTopTrader:
 def main():
     """主函数"""
     logger.info("=" * 80)
-    logger.info("🌟 现货底部抄底顶部卖出交易服务")
+    logger.info("🌟 现货双策略交易服务")
+    logger.info("策略1: 深V反转抄底")
+    logger.info("策略2: Big4趋势跟随(分3批逢低买入)")
     logger.info("=" * 80)
 
     service = SpotBottomTopTrader()
