@@ -842,12 +842,6 @@ class SmartTraderService:
         self.big4_detector = Big4TrendDetector()
         self.big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
 
-        # Big4缓存机制: 15分钟检测一次, 1小时缓存有效期
-        self.cached_big4_result = None
-        self.big4_cache_time = None
-        self.big4_cache_duration = 3600  # 1小时缓存
-        self.big4_detection_interval = 900  # 15分钟检测间隔
-
         # ========== 破位信号加权系统 ==========
         self.breakout_booster = BreakoutSignalBooster(expiry_hours=4)
         logger.info("✅ 破位信号加权系统已初始化 (4小时有效期)")
@@ -857,9 +851,8 @@ class SmartTraderService:
         self.bollinger_strategy = BollingerMeanReversionStrategy(self.db_config)
         self.mode_switcher = TradingModeSwitcher(self.db_config)
         logger.info("✅ 震荡市交易策略模块已初始化")
-        self.last_big4_detection_time = None
 
-        logger.info("🔱 Big4趋势检测器已启动 (15分钟检测, 1小时缓存)")
+        logger.info("🔱 Big4趋势检测器已启动 (实时检测模式)")
 
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
@@ -915,63 +908,35 @@ class SmartTraderService:
 
     def get_big4_result(self):
         """
-        获取Big4趋势结果 (带缓存机制)
+        获取Big4趋势结果 (实时检测模式)
 
-        缓存策略:
-        - 检测间隔: 15分钟
-        - 缓存有效期: 1小时
-        - 如果缓存过期或不存在，触发新检测
+        每次调用都会实时检测市场趋势，确保信号的时效性
         """
-        now = datetime.now()
+        try:
+            result = self.big4_detector.detect_market_trend()
+            logger.debug(f"🔱 Big4趋势实时检测 | {result['overall_signal']} (强度: {result['signal_strength']:.0f})")
 
-        # 检查是否需要重新检测 (15分钟间隔)
-        should_detect = (
-            self.last_big4_detection_time is None or
-            (now - self.last_big4_detection_time).total_seconds() >= self.big4_detection_interval
-        )
+            # 更新破位信号加权系统
+            # BULLISH=看涨→LONG, BEARISH=看跌→SHORT
+            direction_map = {'BULLISH': 'LONG', 'BEARISH': 'SHORT', 'NEUTRAL': 'NEUTRAL'}
+            direction = direction_map.get(result['overall_signal'], 'NEUTRAL')
+            if direction != 'NEUTRAL':
+                self.breakout_booster.update_big4_breakout(
+                    direction,
+                    result['signal_strength']
+                )
+                logger.debug(f"💥 破位系统已更新: {direction} 强度{result['signal_strength']:.0f}")
 
-        # 检查缓存是否有效 (1小时)
-        cache_valid = (
-            self.cached_big4_result is not None and
-            self.big4_cache_time is not None and
-            (now - self.big4_cache_time).total_seconds() < self.big4_cache_duration
-        )
-
-        # 如果需要检测且缓存无效，执行新检测
-        if should_detect and not cache_valid:
-            try:
-                self.cached_big4_result = self.big4_detector.detect_market_trend()
-                self.big4_cache_time = now
-                self.last_big4_detection_time = now
-                logger.info(f"🔱 Big4趋势已更新缓存 | {self.cached_big4_result['overall_signal']} (强度: {self.cached_big4_result['signal_strength']:.0f})")
-
-                # 更新破位信号加权系统
-                # BULLISH=看涨→LONG, BEARISH=看跌→SHORT
-                direction_map = {'BULLISH': 'LONG', 'BEARISH': 'SHORT', 'NEUTRAL': 'NEUTRAL'}
-                direction = direction_map.get(self.cached_big4_result['overall_signal'], 'NEUTRAL')
-                if direction != 'NEUTRAL':
-                    self.breakout_booster.update_big4_breakout(
-                        direction,
-                        self.cached_big4_result['signal_strength']
-                    )
-                    logger.info(f"💥 破位系统已更新: {direction} 强度{self.cached_big4_result['signal_strength']:.0f}")
-            except Exception as e:
-                logger.error(f"❌ Big4趋势检测失败: {e}")
-                # 检测失败时，如果有旧缓存就继续用，否则返回空结果
-                if self.cached_big4_result is None:
-                    return {
-                        'overall_signal': 'NEUTRAL',
-                        'signal_strength': 0,
-                        'details': {},
-                        'timestamp': now
-                    }
-
-        # 如果需要检测但缓存仍有效，只更新检测时间（实际不检测）
-        elif should_detect and cache_valid:
-            self.last_big4_detection_time = now
-            logger.debug(f"🔱 Big4缓存仍有效，跳过检测")
-
-        return self.cached_big4_result
+            return result
+        except Exception as e:
+            logger.error(f"❌ Big4趋势检测失败: {e}")
+            # 检测失败时返回中性结果
+            return {
+                'overall_signal': 'NEUTRAL',
+                'signal_strength': 0,
+                'details': {},
+                'timestamp': datetime.now()
+            }
 
     def get_current_price(self, symbol: str):
         """获取当前价格 - 优先WebSocket实时价,回退到5m K线"""
