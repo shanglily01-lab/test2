@@ -3127,8 +3127,8 @@ class SmartTraderService:
 
                         # 如果信号方向与交易方向冲突,降低评分或跳过
                         if symbol_signal == 'BEARISH' and new_side == 'LONG':
-                            if signal_strength >= 60:  # 强烈看空信号
-                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
+                            if signal_strength >= 40:  # Big4看空>=40分,完全禁止LONG
+                                logger.info(f"[BIG4-SKIP] {symbol} 市场看空 (强度{signal_strength}), 完全禁止LONG信号 (原评分{new_score})")
                                 continue
                             else:
                                 penalty = int(signal_strength * 0.5)  # 根据强度降低评分
@@ -3139,8 +3139,8 @@ class SmartTraderService:
                                     continue
 
                         elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
-                            if signal_strength >= 60:  # 强烈看多信号
-                                logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看多 (强度{signal_strength}), 跳过SHORT信号 (原评分{new_score})")
+                            if signal_strength >= 40:  # Big4看多>=40分,完全禁止SHORT
+                                logger.info(f"[BIG4-SKIP] {symbol} 市场看多 (强度{signal_strength}), 完全禁止SHORT信号 (原评分{new_score})")
                                 continue
                             else:
                                 penalty = int(signal_strength * 0.5)  # 根据强度降低评分
