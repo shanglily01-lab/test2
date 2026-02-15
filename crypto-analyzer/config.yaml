@@ -288,9 +288,9 @@ signals:
     - 0.3
     - 0.4
     enabled: true
-    strategy: kline_pullback  # 策略类型: 'price_percentile'(V1价格分位数) 或 'kline_pullback'(V2 K线回调)
+    strategy: price_percentile  # 策略类型: 'price_percentile'(V1价格分位数) 或 'kline_pullback'(V2 K线回调)
   big4_filter:
-    enabled: false  # 临时禁用Big4过滤，用于测试K线回调策略
+    enabled: true  # 启用Big4过滤
     # V1策略配置（价格分位数）
     sampling_interval_seconds: 10
     sampling_window_seconds: 900
