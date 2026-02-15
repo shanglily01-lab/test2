@@ -290,7 +290,7 @@ signals:
     enabled: true
     strategy: price_percentile  # 策略类型: 'price_percentile'(V1价格分位数) 或 'kline_pullback'(V2 K线回调)
   big4_filter:
-    enabled: false  # 启用Big4过滤（已禁用以测试V1+V2配合）
+    enabled: true  # 启用Big4过滤
     # V1策略配置（价格分位数）
     sampling_interval_seconds: 10
     sampling_window_seconds: 900
