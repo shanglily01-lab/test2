@@ -280,6 +280,8 @@ class KlinePullbackEntryExecutor:
 
     async def _create_position_record(self, plan: Dict, entry_price: Decimal):
         """创建持仓记录（第1批）"""
+        import json
+
         try:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
@@ -288,12 +290,37 @@ class KlinePullbackEntryExecutor:
             direction = plan['direction']
             batch1 = plan['batches'][0]
 
+            # 准备batch_plan JSON（保存完整的建仓计划）
+            batch_plan_json = json.dumps({
+                'batches': [
+                    {'ratio': b['ratio']} for b in plan['batches']
+                ],
+                'total_margin': plan['total_margin'],
+                'leverage': plan['leverage'],
+                'signal_time': plan['signal_time'].isoformat(),
+                'strategy': 'kline_pullback_v2'
+            })
+
+            # 准备batch_filled JSON（目前只有第1批）
+            batch_filled_json = json.dumps({
+                'batches': [{
+                    'batch_num': 0,
+                    'ratio': batch1['ratio'],
+                    'price': batch1['price'],
+                    'time': batch1['time'].isoformat(),
+                    'margin': batch1['margin'],
+                    'quantity': batch1['quantity'],
+                    'reason': batch1['reason']
+                }]
+            })
+
             cursor.execute("""
                 INSERT INTO futures_positions (
                     account_id, symbol, side, entry_price, quantity,
                     leverage, margin, status, entry_time, stop_loss_price,
-                    take_profit_price, position_type, batch_entry_status
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    take_profit_price, position_type, batch_entry_status,
+                    batch_plan, batch_filled, entry_signal_time
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 self.account_id,
                 symbol,
@@ -307,7 +334,10 @@ class KlinePullbackEntryExecutor:
                 None,  # 止损后续设置
                 None,  # 止盈后续设置
                 'kline_pullback_v2',
-                'partial'  # 分批建仓中
+                'partial',  # 分批建仓中
+                batch_plan_json,
+                batch_filled_json,
+                plan['signal_time']
             ))
 
             position_id = cursor.lastrowid
@@ -324,6 +354,8 @@ class KlinePullbackEntryExecutor:
 
     async def _update_position_record(self, plan: Dict):
         """更新持仓记录（第2、3批）"""
+        import json
+
         try:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
@@ -339,13 +371,30 @@ class KlinePullbackEntryExecutor:
             avg_price = total_cost / total_quantity if total_quantity > 0 else 0
             total_margin = sum(b['margin'] for b in filled_batches)
 
+            # 更新batch_filled JSON
+            batch_filled_json = json.dumps({
+                'batches': [
+                    {
+                        'batch_num': i,
+                        'ratio': b['ratio'],
+                        'price': b['price'],
+                        'time': b['time'].isoformat(),
+                        'margin': b['margin'],
+                        'quantity': b['quantity'],
+                        'reason': b['reason']
+                    }
+                    for i, b in enumerate(plan['batches']) if b['filled']
+                ]
+            })
+
             cursor.execute("""
                 UPDATE futures_positions
                 SET entry_price = %s,
                     quantity = %s,
-                    margin = %s
+                    margin = %s,
+                    batch_filled = %s
                 WHERE id = %s
-            """, (avg_price, total_quantity, total_margin, position_id))
+            """, (avg_price, total_quantity, total_margin, batch_filled_json, position_id))
 
             conn.commit()
             cursor.close()
@@ -424,50 +473,201 @@ class KlinePullbackEntryExecutor:
         """
         恢复未完成的分批建仓任务
 
-        注意：V2 K线回调策略基于实时K线形态，无法中途恢复
-        此方法仅用于清理超时的partial状态持仓
+        系统重启后，继续完成未完成的批次（如果还在60分钟窗口内）
         """
+        import json
+
         try:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 查询所有partial状态的持仓（超过60分钟建仓窗口的）
+            # 查询所有partial状态的持仓
             cursor.execute("""
-                SELECT id, symbol, side, entry_time, batch_entry_status
+                SELECT id, symbol, side, batch_plan, batch_filled, entry_signal_time
                 FROM futures_positions
                 WHERE account_id = %s
                 AND batch_entry_status = 'partial'
-                AND entry_time < DATE_SUB(NOW(), INTERVAL 60 MINUTE)
+                ORDER BY entry_signal_time ASC
             """, (self.account_id,))
 
             partial_positions = cursor.fetchall()
+            cursor.close()
+            conn.close()
 
             if not partial_positions:
-                logger.info("✅ [V2-RECOVERY] 没有需要清理的partial状态持仓")
-                cursor.close()
-                conn.close()
+                logger.info("✅ [V2-RECOVERY] 没有需要恢复的partial状态持仓")
                 return
 
-            logger.info(f"🔄 [V2-RECOVERY] 发现 {len(partial_positions)} 个超时的partial状态持仓，标记为completed...")
+            logger.info(f"🔄 [V2-RECOVERY] 发现 {len(partial_positions)} 个partial状态持仓，开始恢复...")
 
-            # 标记所有超时的partial持仓为completed
             for pos in partial_positions:
-                cursor.execute("""
-                    UPDATE futures_positions
-                    SET batch_entry_status = 'completed'
-                    WHERE id = %s
-                """, (pos['id'],))
+                try:
+                    await self._recover_single_position(pos)
+                except Exception as e:
+                    logger.error(f"❌ [V2-RECOVERY] 恢复持仓 {pos['id']} 失败: {e}")
 
-                logger.info(
-                    f"✅ [V2-RECOVERY] 持仓 {pos['id']} ({pos['symbol']} {pos['side']}) "
-                    f"已超过60分钟建仓窗口，标记为completed"
+            logger.info(f"✅ [V2-RECOVERY] 恢复任务完成")
+
+        except Exception as e:
+            logger.error(f"❌ [V2-RECOVERY] 恢复任务失败: {e}")
+
+    async def _recover_single_position(self, pos: Dict):
+        """恢复单个未完成的持仓"""
+        import json
+
+        position_id = pos['id']
+        symbol = pos['symbol']
+        direction = pos['side']
+
+        # 解析batch_plan和batch_filled
+        try:
+            batch_plan = json.loads(pos['batch_plan']) if pos['batch_plan'] else None
+            batch_filled = json.loads(pos['batch_filled']) if pos['batch_filled'] else None
+        except:
+            logger.warning(f"⚠️ [V2-RECOVERY] 持仓 {position_id} batch数据解析失败，标记为completed")
+            await self._mark_position_completed(position_id)
+            return
+
+        if not batch_plan or not batch_filled:
+            logger.warning(f"⚠️ [V2-RECOVERY] 持仓 {position_id} 缺少batch数据，标记为completed")
+            await self._mark_position_completed(position_id)
+            return
+
+        # 解析信号时间
+        signal_time = pos['entry_signal_time']
+        if isinstance(signal_time, str):
+            signal_time = datetime.fromisoformat(signal_time)
+
+        # 计算已过去时间和剩余时间
+        elapsed_minutes = (datetime.now() - signal_time).total_seconds() / 60
+        remaining_minutes = self.total_window_minutes - elapsed_minutes
+
+        if remaining_minutes <= 0:
+            # 超时，标记为completed
+            logger.info(
+                f"⏰ [V2-RECOVERY] 持仓 {position_id} ({symbol} {direction}) "
+                f"已超过60分钟窗口 (已过{elapsed_minutes:.1f}分钟)，标记为completed"
+            )
+            await self._mark_position_completed(position_id)
+            return
+
+        # 重建plan对象
+        filled_count = len(batch_filled['batches'])
+        total_batches = len(batch_plan['batches'])
+
+        logger.info(
+            f"🔄 [V2-RECOVERY] 恢复持仓 {position_id} ({symbol} {direction}) | "
+            f"已完成 {filled_count}/{total_batches} 批次 | "
+            f"剩余时间 {remaining_minutes:.1f}分钟"
+        )
+
+        # 重建plan
+        plan = {
+            'position_id': position_id,
+            'symbol': symbol,
+            'direction': direction,
+            'signal_time': signal_time,
+            'total_margin': batch_plan['total_margin'],
+            'leverage': batch_plan['leverage'],
+            'batches': [],
+            'phase': 'primary' if elapsed_minutes < self.primary_window_minutes else 'fallback'
+        }
+
+        # 重建batches数组
+        for i, batch_spec in enumerate(batch_plan['batches']):
+            # 检查这一批是否已完成
+            filled_batch = next((b for b in batch_filled['batches'] if b['batch_num'] == i), None)
+
+            if filled_batch:
+                # 已完成的批次
+                plan['batches'].append({
+                    'ratio': batch_spec['ratio'],
+                    'filled': True,
+                    'price': filled_batch['price'],
+                    'time': datetime.fromisoformat(filled_batch['time']),
+                    'reason': filled_batch['reason'],
+                    'margin': filled_batch['margin'],
+                    'quantity': filled_batch['quantity']
+                })
+            else:
+                # 未完成的批次
+                plan['batches'].append({
+                    'ratio': batch_spec['ratio'],
+                    'filled': False,
+                    'price': None,
+                    'time': None,
+                    'reason': None,
+                    'margin': None,
+                    'quantity': None
+                })
+
+        # 继续执行建仓流程（从当前时间点继续）
+        try:
+            while (datetime.now() - signal_time).total_seconds() < self.total_window_minutes * 60:
+                elapsed_minutes = (datetime.now() - signal_time).total_seconds() / 60
+                current_price = await self._get_current_price(symbol)
+
+                if not current_price:
+                    await asyncio.sleep(self.check_interval_seconds)
+                    continue
+
+                # 判断当前阶段（15M或5M）
+                if elapsed_minutes < self.primary_window_minutes:
+                    timeframe = '15m'
+                    plan['phase'] = 'primary'
+                else:
+                    # 阶段2: 如果第1批未完成，切换到5M
+                    if not plan['batches'][0]['filled']:
+                        timeframe = '5m'
+                        plan['phase'] = 'fallback'
+                        logger.info(f"⏰ [V2-RECOVERY] {symbol} 切换到5M监控")
+                    else:
+                        timeframe = '15m'
+
+                # 获取最近2根K线，判断是否连续反向
+                reverse_confirmed = await self._check_consecutive_reverse_klines(
+                    symbol, direction, timeframe, count=2
                 )
+
+                if reverse_confirmed:
+                    # 找到第一个未完成的批次
+                    for batch_idx, batch in enumerate(plan['batches']):
+                        if not batch['filled']:
+                            reason = f"{timeframe.upper()}连续2根反向K线回调确认(恢复)"
+                            await self._execute_batch(plan, batch_idx, current_price, reason)
+                            break
+
+                # 检查是否全部完成
+                if all(b['filled'] for b in plan['batches']):
+                    logger.info(f"🎉 [V2-RECOVERY] {symbol} 全部批次建仓完成！")
+                    await self._finalize_position(plan)
+                    return
+
+                await asyncio.sleep(self.check_interval_seconds)
+
+            # 时间窗口结束
+            logger.info(f"⏰ [V2-RECOVERY] {symbol} 建仓窗口结束，标记为completed")
+            await self._finalize_position(plan)
+
+        except Exception as e:
+            logger.error(f"❌ [V2-RECOVERY] {symbol} 恢复执行失败: {e}")
+            await self._mark_position_completed(position_id)
+
+    async def _mark_position_completed(self, position_id: int):
+        """标记持仓为completed"""
+        try:
+            conn = pymysql.connect(**self.db_config)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                UPDATE futures_positions
+                SET batch_entry_status = 'completed'
+                WHERE id = %s
+            """, (position_id,))
 
             conn.commit()
             cursor.close()
             conn.close()
 
-            logger.info(f"✅ [V2-RECOVERY] 完成 {len(partial_positions)} 个持仓的状态清理")
-
         except Exception as e:
-            logger.error(f"❌ [V2-RECOVERY] 恢复任务失败: {e}")
+            logger.error(f"❌ 标记持仓 {position_id} 为completed失败: {e}")
