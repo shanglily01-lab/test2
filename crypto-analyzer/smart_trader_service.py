@@ -66,8 +66,7 @@ class SmartDecisionBrain:
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
         self.blacklist_checker = SignalBlacklistChecker(db_config, cache_minutes=5)
 
-        # 初始化V2评分服务（基于数据库预计算评分）
-        self.score_v2_service = None  # 延迟初始化，在_load_config中创建
+        # V2评分服务已在_load_config()中初始化
 
     def _reload_blacklist(self):
         """重新加载黑名单（运行时调用）"""
