@@ -27,6 +27,7 @@ from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.breakout_signal_booster import BreakoutSignalBooster
 from app.services.signal_blacklist_checker import SignalBlacklistChecker
+from app.services.signal_score_v2_service import SignalScoreV2Service
 from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
@@ -64,6 +65,9 @@ class SmartDecisionBrain:
 
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
         self.blacklist_checker = SignalBlacklistChecker(db_config, cache_minutes=5)
+
+        # 初始化V2评分服务（基于数据库预计算评分）
+        self.score_v2_service = None  # 延迟初始化，在_load_config中创建
 
     def _reload_blacklist(self):
         """重新加载黑名单（运行时调用）"""
@@ -228,6 +232,23 @@ class SmartDecisionBrain:
                     # 已移除: ema_bull, ema_bear (Big4市场趋势判断已足够)
                 }
                 logger.info(f"   📊 评分权重: 使用默认权重")
+
+            # 8. 初始化V2评分服务
+            try:
+                score_v2_config = config.get('signals', {}).get('resonance_filter', {})
+                self.score_v2_service = SignalScoreV2Service(self.db_config, score_v2_config)
+
+                if score_v2_config.get('enabled', True):
+                    logger.info(f"   ✅ V2评分过滤已启用:")
+                    logger.info(f"      代币最低评分: {score_v2_config.get('min_symbol_score', 15)}")
+                    logger.info(f"      Big4最低评分: {score_v2_config.get('min_big4_score', 10)}")
+                    logger.info(f"      要求方向一致: {score_v2_config.get('require_same_direction', True)}")
+                    logger.info(f"      共振阈值: {score_v2_config.get('resonance_threshold', 25)}")
+                else:
+                    logger.info(f"   ⚠️  V2评分过滤已禁用")
+            except Exception as v2_error:
+                logger.warning(f"   ⚠️  V2评分服务初始化失败: {v2_error}, 将继续使用传统信号过滤")
+                self.score_v2_service = None
 
         except Exception as e:
             logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
@@ -411,23 +432,23 @@ class SmartDecisionBrain:
 
             # ========== 1小时K线分析 (主要) ==========
 
-            # 1. 位置评分 - 使用24小时(1天)高低点
-            high_24h = max(k['high'] for k in klines_1h[-24:])
-            low_24h = min(k['low'] for k in klines_1h[-24:])
+            # 1. 位置评分 - 使用72小时(3天)高低点
+            high_72h = max(k['high'] for k in klines_1h[-72:])
+            low_72h = min(k['low'] for k in klines_1h[-72:])
 
-            if high_24h == low_24h:
+            if high_72h == low_72h:
                 position_pct = 50
             else:
-                position_pct = (current - low_24h) / (high_24h - low_24h) * 100
+                position_pct = (current - low_72h) / (high_72h - low_72h) * 100
 
             # 提前计算1H量能（在位置判断之前）
-            volumes_1h = [k['volume'] for k in klines_1h[-24:]]
+            volumes_1h = [k['volume'] for k in klines_1h[-48:]]
             avg_volume_1h = sum(volumes_1h) / len(volumes_1h) if volumes_1h else 1
 
             strong_bull_1h = 0  # 有力量的阳线
             strong_bear_1h = 0  # 有力量的阴线
 
-            for k in klines_1h[-24:]:
+            for k in klines_1h[-48:]:
                 is_bull = k['close'] > k['open']
                 is_high_volume = k['volume'] > avg_volume_1h * 1.2  # 成交量 > 1.2倍平均量
 
@@ -472,16 +493,16 @@ class SmartDecisionBrain:
                 if weight['long'] > 0:
                     signal_components['momentum_up_3pct'] = weight['long']
 
-            # 3. 1小时趋势评分 - 最近24根K线(1天)
-            bullish_1h = sum(1 for k in klines_1h[-24:] if k['close'] > k['open'])
-            bearish_1h = 24 - bullish_1h
+            # 3. 1小时趋势评分 - 最近48根K线(2天)
+            bullish_1h = sum(1 for k in klines_1h[-48:] if k['close'] > k['open'])
+            bearish_1h = 48 - bullish_1h
 
-            if bullish_1h >= 13:  # 阳线>=13根(54.2%)
+            if bullish_1h >= 30:  # 阳线>=30根(62.5%)
                 weight = self.scoring_weights.get('trend_1h_bull', {'long': 20, 'short': 0})
                 long_score += weight['long']
                 if weight['long'] > 0:
                     signal_components['trend_1h_bull'] = weight['long']
-            elif bearish_1h >= 13:  # 阴线>=13根(54.2%)
+            elif bearish_1h >= 30:  # 阴线>=30根(62.5%)
                 weight = self.scoring_weights.get('trend_1h_bear', {'long': 0, 'short': 20})
                 short_score += weight['short']
                 if weight['short'] > 0:
@@ -676,6 +697,18 @@ class SmartDecisionBrain:
                 if side == 'SHORT' and 'position_low' in signal_components:
                     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
                     return None
+
+                # 🔥 新增: V2评分过滤
+                if self.score_v2_service:
+                    filter_result = self.score_v2_service.check_score_filter(symbol, side)
+                    if not filter_result['passed']:
+                        logger.info(f"🚫 {symbol} V2评分过滤: {filter_result['reason']}")
+                        return None
+                    else:
+                        # 评分通过，记录详细信息
+                        coin_score = filter_result.get('coin_score')
+                        if coin_score:
+                            logger.info(f"✅ {symbol} V2评分通过: 总分{coin_score['total_score']:+d} 方向{coin_score['direction']} 强度{coin_score['strength_level']}")
 
                 # 生成signal_type用于模式匹配
                 signal_type = f"TREND_{signal_combination_key}_{side}_{int(score)}"

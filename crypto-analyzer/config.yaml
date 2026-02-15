@@ -302,6 +302,12 @@ signals:
     total_window_minutes: 60  # 总时长
     consecutive_klines_required: 2  # 需要连续几根反向K线
     whitelist_symbols: []
+  resonance_filter:
+    enabled: true  # 启用共振过滤
+    min_symbol_score: 15  # 代币最低评分（绝对值）
+    min_big4_score: 10  # Big4最低评分（绝对值）
+    require_same_direction: true  # 要求方向一致
+    resonance_threshold: 25  # 共振总分阈值（绝对值之和）
   blacklist:
   - IP/USDT
   - ADA/USDT

@@ -34,12 +34,12 @@ print('='*100)
 print('\n【1】V2 K线回调订单（kline_pullback_v2）')
 print('-'*100)
 cursor.execute("""
-    SELECT id, symbol, side, entry_price, quantity, margin,
-           position_type, batch_entry_status, entry_time, status,
+    SELECT id, symbol, position_side, entry_price, quantity, margin,
+           entry_signal_type, status, open_time,
            batch_plan, batch_filled
     FROM futures_positions
-    WHERE position_type = 'kline_pullback_v2'
-    ORDER BY entry_time DESC
+    WHERE entry_signal_type = 'kline_pullback_v2'
+    ORDER BY open_time DESC
     LIMIT 10
 """)
 
@@ -47,10 +47,10 @@ v2_orders = cursor.fetchall()
 print(f'找到 {len(v2_orders)} 个V2订单')
 if v2_orders:
     for order in v2_orders:
-        batch_status = order.get('batch_entry_status', 'N/A')
-        print(f"  ID={order['id']:4d} {order['symbol']:15s} {order['side']:5s} "
+        batch_status = order.get('status', 'N/A')
+        print(f"  ID={order['id']:4d} {order['symbol']:15s} {order['position_side']:5s} "
               f"状态={batch_status:10s} 入场价={order['entry_price']:10.4f} "
-              f"数量={order['quantity']:8.2f} 时间={order['entry_time']}")
+              f"数量={order['quantity']:8.2f} 时间={order['open_time']}")
 
         # 显示batch详情
         if order.get('batch_filled'):
@@ -64,37 +64,37 @@ if v2_orders:
 else:
     print('  ❌ 没有找到任何V2 K线回调订单')
 
-# 2. 查询所有partial状态的订单
-print('\n【2】partial状态的订单（未完成分批建仓）')
+# 2. 查询所有building状态的订单（未完成分批建仓）
+print('\n【2】building状态的订单（未完成分批建仓）')
 print('-'*100)
 cursor.execute("""
-    SELECT id, symbol, side, position_type, batch_entry_status, entry_time, entry_signal_time
+    SELECT id, symbol, position_side, entry_signal_type, status, open_time, entry_signal_time
     FROM futures_positions
-    WHERE batch_entry_status = 'partial'
-    ORDER BY entry_time DESC
+    WHERE status = 'building'
+    ORDER BY open_time DESC
     LIMIT 10
 """)
 
-partial_orders = cursor.fetchall()
-print(f'找到 {len(partial_orders)} 个partial状态订单')
-if partial_orders:
-    for order in partial_orders:
-        pos_type = order.get('position_type', 'N/A')
+building_orders = cursor.fetchall()
+print(f'找到 {len(building_orders)} 个building状态订单')
+if building_orders:
+    for order in building_orders:
+        pos_type = order.get('entry_signal_type', 'N/A')
         signal_time = order.get('entry_signal_time', 'N/A')
-        print(f"  ID={order['id']:4d} {order['symbol']:15s} {order['side']:5s} "
+        print(f"  ID={order['id']:4d} {order['symbol']:15s} {order['position_side']:5s} "
               f"类型={pos_type:20s} 信号时间={signal_time}")
 else:
-    print('  ✅ 没有partial状态的订单')
+    print('  ✅ 没有building状态的订单')
 
 # 3. 查询最近3小时的所有订单
 print('\n【3】最近3小时的所有订单')
 print('-'*100)
 three_hours_ago = (datetime.now() - timedelta(hours=3)).strftime('%Y-%m-%d %H:%M:%S')
 cursor.execute("""
-    SELECT id, symbol, side, position_type, batch_entry_status, entry_time, status
+    SELECT id, symbol, position_side, entry_signal_type, status, open_time
     FROM futures_positions
-    WHERE entry_time >= %s
-    ORDER BY entry_time DESC
+    WHERE open_time >= %s
+    ORDER BY open_time DESC
     LIMIT 30
 """, (three_hours_ago,))
 
@@ -102,10 +102,10 @@ recent_orders = cursor.fetchall()
 print(f'找到 {len(recent_orders)} 个最近3小时的订单')
 if recent_orders:
     for order in recent_orders:
-        batch_status = order.get('batch_entry_status') or 'N/A'
-        pos_type = order.get('position_type') or 'N/A'
-        print(f"  ID={order['id']:4d} {order['symbol']:15s} {order['side']:5s} "
-              f"类型={pos_type:20s} batch状态={batch_status:10s} 时间={order['entry_time']}")
+        batch_status = order.get('status') or 'N/A'
+        pos_type = order.get('entry_signal_type') or 'N/A'
+        print(f"  ID={order['id']:4d} {order['symbol']:15s} {order['position_side']:5s} "
+              f"类型={pos_type:20s} 状态={batch_status:10s} 时间={order['open_time']}")
 else:
     print('  ❌ 最近3小时没有任何新订单')
 
@@ -115,10 +115,10 @@ print('-'*100)
 cursor.execute("""
     SELECT COUNT(*) as count
     FROM futures_positions
-    WHERE position_type LIKE '%batch%' OR position_type LIKE '%percentile%'
+    WHERE source = 'smart_trader_batch' AND entry_signal_type != 'kline_pullback_v2'
 """)
 v1_count = cursor.fetchone()
-print(f'找到 {v1_count["count"]} 个V1相关订单')
+print(f'找到 {v1_count["count"]} 个V1分批建仓订单（非V2）')
 
 cursor.close()
 conn.close()
