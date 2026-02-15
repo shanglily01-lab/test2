@@ -411,14 +411,14 @@ class SmartDecisionBrain:
 
             # ========== 1小时K线分析 (主要) ==========
 
-            # 1. 位置评分 - 使用72小时(3天)高低点
-            high_72h = max(k['high'] for k in klines_1h[-72:])
-            low_72h = min(k['low'] for k in klines_1h[-72:])
+            # 1. 位置评分 - 使用24小时(1天)高低点
+            high_24h = max(k['high'] for k in klines_1h[-24:])
+            low_24h = min(k['low'] for k in klines_1h[-24:])
 
-            if high_72h == low_72h:
+            if high_24h == low_24h:
                 position_pct = 50
             else:
-                position_pct = (current - low_72h) / (high_72h - low_72h) * 100
+                position_pct = (current - low_24h) / (high_24h - low_24h) * 100
 
             # 提前计算1H量能（在位置判断之前）
             volumes_1h = [k['volume'] for k in klines_1h[-24:]]
@@ -472,16 +472,16 @@ class SmartDecisionBrain:
                 if weight['long'] > 0:
                     signal_components['momentum_up_3pct'] = weight['long']
 
-            # 3. 1小时趋势评分 - 最近48根K线(2天)
-            bullish_1h = sum(1 for k in klines_1h[-48:] if k['close'] > k['open'])
-            bearish_1h = 48 - bullish_1h
+            # 3. 1小时趋势评分 - 最近24根K线(1天)
+            bullish_1h = sum(1 for k in klines_1h[-24:] if k['close'] > k['open'])
+            bearish_1h = 24 - bullish_1h
 
-            if bullish_1h > 30:  # 超过62.5%是阳线
+            if bullish_1h >= 13:  # 阳线>=13根(54.2%)
                 weight = self.scoring_weights.get('trend_1h_bull', {'long': 20, 'short': 0})
                 long_score += weight['long']
                 if weight['long'] > 0:
                     signal_components['trend_1h_bull'] = weight['long']
-            elif bearish_1h > 30:  # 超过62.5%是阴线
+            elif bearish_1h >= 13:  # 阴线>=13根(54.2%)
                 weight = self.scoring_weights.get('trend_1h_bear', {'long': 0, 'short': 20})
                 short_score += weight['short']
                 if weight['short'] > 0:
