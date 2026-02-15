@@ -200,7 +200,7 @@ class KlinePullbackEntryExecutor:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            binance_symbol = symbol.replace('/', '')
+            # 🔥 数据库中symbol格式为 'RAY/USDT'（带斜杠），不需要转换
 
             # 🔥 关键修复：只查询信号时间之后的已完成K线
             # 排除最近1根（可能未完成），按时间正序获取
@@ -226,7 +226,7 @@ class KlinePullbackEntryExecutor:
                       AND open_time < %s
                     ORDER BY open_time DESC
                     LIMIT %s
-                """, (binance_symbol, timeframe, signal_timestamp, exclude_timestamp, count))
+                """, (symbol, timeframe, signal_timestamp, exclude_timestamp, count))
             else:
                 # 兼容旧逻辑（无signal_time时）
                 cursor.execute("""
@@ -237,7 +237,7 @@ class KlinePullbackEntryExecutor:
                       AND exchange = 'binance_futures'
                     ORDER BY open_time DESC
                     LIMIT %s
-                """, (binance_symbol, timeframe, count))
+                """, (symbol, timeframe, count))
 
             klines = cursor.fetchall()
             cursor.close()
