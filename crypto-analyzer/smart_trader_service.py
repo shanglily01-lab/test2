@@ -813,6 +813,7 @@ class SmartTraderService:
             config = yaml.safe_load(f)
             self.batch_entry_config = config.get('signals', {}).get('batch_entry', {'enabled': False})
             self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
+            self.big4_filter_config = config.get('signals', {}).get('big4_filter', {'enabled': True})
 
         # 初始化智能分批建仓执行器
         if self.batch_entry_config.get('enabled'):
@@ -3073,186 +3074,191 @@ class SmartTraderService:
                         logger.debug(f"[SKIP-NON-TREND] {symbol} 非趋势信号,跳过 (类型: {signal_type[:40]})")
                         continue
 
-                    # Big4 趋势检测 - 应用到所有币种
-                    try:
-                        # 如果是四大天王本身,使用该币种的专属信号
-                        if symbol in self.big4_symbols:
-                            symbol_detail = big4_result['details'].get(symbol, {})
-                            symbol_signal = symbol_detail.get('signal', 'NEUTRAL')
-                            signal_strength = symbol_detail.get('strength', 0)
-                            logger.info(f"[BIG4-SELF] {symbol} 自身趋势: {symbol_signal} (强度: {signal_strength})")
-                        else:
-                            # 对其他币种,使用Big4整体趋势信号
-                            symbol_signal = big4_result.get('overall_signal', 'NEUTRAL')
-                            signal_strength = big4_result.get('signal_strength', 0)
-                            logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
+                    # Big4 趋势检测 - 应用到所有币种（可配置禁用）
+                    if self.big4_filter_config.get('enabled', True):
+                        try:
+                            # 如果是四大天王本身,使用该币种的专属信号
+                            if symbol in self.big4_symbols:
+                                symbol_detail = big4_result['details'].get(symbol, {})
+                                symbol_signal = symbol_detail.get('signal', 'NEUTRAL')
+                                signal_strength = symbol_detail.get('strength', 0)
+                                logger.info(f"[BIG4-SELF] {symbol} 自身趋势: {symbol_signal} (强度: {signal_strength})")
+                            else:
+                                # 对其他币种,使用Big4整体趋势信号
+                                symbol_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                                signal_strength = big4_result.get('signal_strength', 0)
+                                logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                        # 🚫 Big4中性已在上面被阻止，这里不应该到达
-                        if symbol_signal == 'NEUTRAL':
-                            logger.error(f"[LOGIC-ERROR] {symbol} NEUTRAL信号不应到达此处,已在前面被阻止")
-                            continue
-
-                        # ========== 破位否决检查 ==========
-                        # Big4强度>=12时，完全禁止逆向开仓
-                        should_skip, veto_reason = self.breakout_booster.should_skip_opposite_signal(
-                            new_side,
-                            new_score
-                        )
-                        if should_skip:
-                            logger.warning(f"💥 [BREAKOUT-VETO] {symbol} {veto_reason}")
-                            continue
-                        # ========== 破位否决结束 ==========
-
-                        # 如果信号方向与交易方向冲突,降低评分或跳过
-                        if symbol_signal == 'BEARISH' and new_side == 'LONG':
-                            if signal_strength >= 70:  # Big4看空>=70分,完全禁止LONG（极端行情）
-                                logger.info(f"[BIG4-SKIP] {symbol} 市场看空强度极高 (强度{signal_strength}), 完全禁止LONG信号 (原评分{new_score})")
+                            # 🚫 Big4中性已在上面被阻止，这里不应该到达
+                            if symbol_signal == 'NEUTRAL':
+                                logger.error(f"[LOGIC-ERROR] {symbol} NEUTRAL信号不应到达此处,已在前面被阻止")
                                 continue
-                            elif signal_strength >= 50:  # 50-70之间,中等惩罚
-                                penalty = int(signal_strength * 0.6)  # 加大惩罚系数
-                                new_score = new_score - penalty
-                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看空 (强度{signal_strength}), LONG评分降低: {opp['score']} -> {new_score} (-{penalty})")
-                                if new_score < 20:  # 评分太低则跳过
-                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
-                                    continue
-                            else:  # <50,轻微惩罚
-                                penalty = int(signal_strength * 0.3)
-                                new_score = new_score - penalty
-                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看空弱信号 (强度{signal_strength}), LONG评分轻微降低: {opp['score']} -> {new_score} (-{penalty})")
 
-                        elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
-                            if signal_strength >= 70:  # Big4看多>=70分,完全禁止SHORT（极端行情）
-                                logger.info(f"[BIG4-SKIP] {symbol} 市场看多强度极高 (强度{signal_strength}), 完全禁止SHORT信号 (原评分{new_score})")
+                            # ========== 破位否决检查 ==========
+                            # Big4强度>=12时，完全禁止逆向开仓
+                            should_skip, veto_reason = self.breakout_booster.should_skip_opposite_signal(
+                                new_side,
+                                new_score
+                            )
+                            if should_skip:
+                                logger.warning(f"💥 [BREAKOUT-VETO] {symbol} {veto_reason}")
                                 continue
-                            elif signal_strength >= 50:  # 50-70之间,中等惩罚
-                                penalty = int(signal_strength * 0.6)  # 加大惩罚系数
-                                new_score = new_score - penalty
-                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看多 (强度{signal_strength}), SHORT评分降低: {opp['score']} -> {new_score} (-{penalty})")
-                                if new_score < 20:  # 评分太低则跳过
-                                    logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
+                            # ========== 破位否决结束 ==========
+
+                            # 如果信号方向与交易方向冲突,降低评分或跳过
+                            if symbol_signal == 'BEARISH' and new_side == 'LONG':
+                                if signal_strength >= 70:  # Big4看空>=70分,完全禁止LONG（极端行情）
+                                    logger.info(f"[BIG4-SKIP] {symbol} 市场看空强度极高 (强度{signal_strength}), 完全禁止LONG信号 (原评分{new_score})")
                                     continue
-                            else:  # <50,轻微惩罚
-                                penalty = int(signal_strength * 0.3)
-                                new_score = new_score - penalty
-                                logger.info(f"[BIG4-ADJUST] {symbol} 市场看多弱信号 (强度{signal_strength}), SHORT评分轻微降低: {opp['score']} -> {new_score} (-{penalty})")
+                                elif signal_strength >= 50:  # 50-70之间,中等惩罚
+                                    penalty = int(signal_strength * 0.6)  # 加大惩罚系数
+                                    new_score = new_score - penalty
+                                    logger.info(f"[BIG4-ADJUST] {symbol} 市场看空 (强度{signal_strength}), LONG评分降低: {opp['score']} -> {new_score} (-{penalty})")
+                                    if new_score < 20:  # 评分太低则跳过
+                                        logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
+                                        continue
+                                else:  # <50,轻微惩罚
+                                    penalty = int(signal_strength * 0.3)
+                                    new_score = new_score - penalty
+                                    logger.info(f"[BIG4-ADJUST] {symbol} 市场看空弱信号 (强度{signal_strength}), LONG评分轻微降低: {opp['score']} -> {new_score} (-{penalty})")
 
-                        # 如果信号方向一致,提升评分
-                        elif symbol_signal == 'BULLISH' and new_side == 'LONG':
-                            boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
-                            new_score = new_score + boost
-                            logger.info(f"[BIG4-BOOST] {symbol} 市场看多与LONG方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+                            elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
+                                if signal_strength >= 70:  # Big4看多>=70分,完全禁止SHORT（极端行情）
+                                    logger.info(f"[BIG4-SKIP] {symbol} 市场看多强度极高 (强度{signal_strength}), 完全禁止SHORT信号 (原评分{new_score})")
+                                    continue
+                                elif signal_strength >= 50:  # 50-70之间,中等惩罚
+                                    penalty = int(signal_strength * 0.6)  # 加大惩罚系数
+                                    new_score = new_score - penalty
+                                    logger.info(f"[BIG4-ADJUST] {symbol} 市场看多 (强度{signal_strength}), SHORT评分降低: {opp['score']} -> {new_score} (-{penalty})")
+                                    if new_score < 20:  # 评分太低则跳过
+                                        logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
+                                        continue
+                                else:  # <50,轻微惩罚
+                                    penalty = int(signal_strength * 0.3)
+                                    new_score = new_score - penalty
+                                    logger.info(f"[BIG4-ADJUST] {symbol} 市场看多弱信号 (强度{signal_strength}), SHORT评分轻微降低: {opp['score']} -> {new_score} (-{penalty})")
 
-                        elif symbol_signal == 'BEARISH' and new_side == 'SHORT':
-                            boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
-                            new_score = new_score + boost
-                            logger.info(f"[BIG4-BOOST] {symbol} 市场看空与SHORT方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+                            # 如果信号方向一致,提升评分
+                            elif symbol_signal == 'BULLISH' and new_side == 'LONG':
+                                boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
+                                new_score = new_score + boost
+                                logger.info(f"[BIG4-BOOST] {symbol} 市场看多与LONG方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
 
-                        # 更新机会评分 (用于后续记录)
-                        opp['score'] = new_score
-                        opp['big4_adjusted'] = True
-                        opp['big4_signal'] = symbol_signal
-                        opp['big4_strength'] = signal_strength
+                            elif symbol_signal == 'BEARISH' and new_side == 'SHORT':
+                                boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
+                                new_score = new_score + boost
+                                logger.info(f"[BIG4-BOOST] {symbol} 市场看空与SHORT方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
 
-                    except Exception as e:
-                        logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
-                        # 失败不影响正常交易流程
+                            # 更新机会评分 (用于后续记录)
+                            opp['score'] = new_score
+                            opp['big4_adjusted'] = True
+                            opp['big4_signal'] = symbol_signal
+                            opp['big4_strength'] = signal_strength
 
-                    # 🔥 紧急干预检查: 触底/触顶反转保护 (实时判断)
-                    try:
-                        emergency = big4_result.get('emergency_intervention', {})
+                        except Exception as e:
+                            logger.error(f"[BIG4-ERROR] {symbol} Big4检测失败: {e}")
+                            # 失败不影响正常交易流程
 
-                        # 🔥 新增: 实时检查市场恢复状态，绕过Big4检测器的15分钟缓存
-                        should_block_long = emergency.get('block_long', False)
-                        should_block_short = emergency.get('block_short', False)
+                        # 🔥 紧急干预检查: 触底/触顶反转保护 (实时判断)
+                        try:
+                            emergency = big4_result.get('emergency_intervention', {})
 
-                        # 如果有做空限制，实时检查是否已反弹3%+ (不依赖bottom_detected字段)
-                        if should_block_short and new_side == 'SHORT':
-                            # 快速检查: 查询最近4根1H K线，判断是否已反弹
-                            try:
-                                conn_check = self._get_connection()
-                                cursor_check = conn_check.cursor(pymysql.cursors.DictCursor)
+                            # 🔥 新增: 实时检查市场恢复状态，绕过Big4检测器的15分钟缓存
+                            should_block_long = emergency.get('block_long', False)
+                            should_block_short = emergency.get('block_short', False)
 
-                                # 检查Big4是否已完成3%反弹
-                                all_recovered = True
-                                for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
-                                    cursor_check.execute("""
-                                        SELECT low_price, close_price
-                                        FROM kline_data
-                                        WHERE symbol = %s
-                                        AND timeframe = '1h'
-                                        AND exchange = 'binance_futures'
-                                        ORDER BY open_time DESC
-                                        LIMIT 4
-                                    """, (big4_symbol,))
+                            # 如果有做空限制，实时检查是否已反弹3%+ (不依赖bottom_detected字段)
+                            if should_block_short and new_side == 'SHORT':
+                                # 快速检查: 查询最近4根1H K线，判断是否已反弹
+                                try:
+                                    conn_check = self._get_connection()
+                                    cursor_check = conn_check.cursor(pymysql.cursors.DictCursor)
 
-                                    recent_klines = cursor_check.fetchall()
-                                    if recent_klines:
-                                        period_low = min([float(k['low_price']) for k in recent_klines])
-                                        latest_close = float(recent_klines[0]['close_price'])
-                                        recovery_pct = (latest_close - period_low) / period_low * 100
+                                    # 检查Big4是否已完成3%反弹
+                                    all_recovered = True
+                                    for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
+                                        cursor_check.execute("""
+                                            SELECT low_price, close_price
+                                            FROM kline_data
+                                            WHERE symbol = %s
+                                            AND timeframe = '1h'
+                                            AND exchange = 'binance_futures'
+                                            ORDER BY open_time DESC
+                                            LIMIT 4
+                                        """, (big4_symbol,))
 
-                                        if recovery_pct < 3.0:
-                                            all_recovered = False
-                                            break
+                                        recent_klines = cursor_check.fetchall()
+                                        if recent_klines:
+                                            period_low = min([float(k['low_price']) for k in recent_klines])
+                                            latest_close = float(recent_klines[0]['close_price'])
+                                            recovery_pct = (latest_close - period_low) / period_low * 100
 
-                                cursor_check.close()
+                                            if recovery_pct < 3.0:
+                                                all_recovered = False
+                                                break
 
-                                # 如果所有Big4都已反弹3%+，解除禁止做空
-                                if all_recovered:
-                                    should_block_short = False
-                                    logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已反弹3%+，解除做空限制")
+                                    cursor_check.close()
 
-                            except Exception as check_error:
-                                logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
+                                    # 如果所有Big4都已反弹3%+，解除禁止做空
+                                    if all_recovered:
+                                        should_block_short = False
+                                        logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已反弹3%+，解除做空限制")
 
-                        # 如果有做多限制，实时检查是否已回调3%+ (不依赖top_detected字段)
-                        if should_block_long and new_side == 'LONG':
-                            try:
-                                conn_check = self._get_connection()
-                                cursor_check = conn_check.cursor(pymysql.cursors.DictCursor)
+                                except Exception as check_error:
+                                    logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
 
-                                all_cooled = True
-                                for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
-                                    cursor_check.execute("""
-                                        SELECT high_price, close_price
-                                        FROM kline_data
-                                        WHERE symbol = %s
-                                        AND timeframe = '1h'
-                                        AND exchange = 'binance_futures'
-                                        ORDER BY open_time DESC
-                                        LIMIT 4
-                                    """, (big4_symbol,))
+                            # 如果有做多限制，实时检查是否已回调3%+ (不依赖top_detected字段)
+                            if should_block_long and new_side == 'LONG':
+                                try:
+                                    conn_check = self._get_connection()
+                                    cursor_check = conn_check.cursor(pymysql.cursors.DictCursor)
 
-                                    recent_klines = cursor_check.fetchall()
-                                    if recent_klines:
-                                        period_high = max([float(k['high_price']) for k in recent_klines])
-                                        latest_close = float(recent_klines[0]['close_price'])
-                                        cooldown_pct = (latest_close - period_high) / period_high * 100
+                                    all_cooled = True
+                                    for big4_symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
+                                        cursor_check.execute("""
+                                            SELECT high_price, close_price
+                                            FROM kline_data
+                                            WHERE symbol = %s
+                                            AND timeframe = '1h'
+                                            AND exchange = 'binance_futures'
+                                            ORDER BY open_time DESC
+                                            LIMIT 4
+                                        """, (big4_symbol,))
 
-                                        if cooldown_pct > -3.0:
-                                            all_cooled = False
-                                            break
+                                        recent_klines = cursor_check.fetchall()
+                                        if recent_klines:
+                                            period_high = max([float(k['high_price']) for k in recent_klines])
+                                            latest_close = float(recent_klines[0]['close_price'])
+                                            cooldown_pct = (latest_close - period_high) / period_high * 100
 
-                                cursor_check.close()
+                                            if cooldown_pct > -3.0:
+                                                all_cooled = False
+                                                break
 
-                                if all_cooled:
-                                    should_block_long = False
-                                    logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已回调3%+，解除做多限制")
+                                    cursor_check.close()
 
-                            except Exception as check_error:
-                                logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
+                                    if all_cooled:
+                                        should_block_long = False
+                                        logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已回调3%+，解除做多限制")
 
-                        # 执行最终的阻止判断
-                        if should_block_long and new_side == 'LONG':
-                            logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触顶反转风险,禁止做多 | {emergency.get('details', '')}")
-                            continue
-                        if should_block_short and new_side == 'SHORT':
-                            logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触底反弹风险,禁止做空 | {emergency.get('details', '')}")
-                            continue
+                                except Exception as check_error:
+                                    logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
 
-                    except Exception as e:
-                        logger.error(f"[EMERGENCY-ERROR] {symbol} 紧急干预检查失败: {e}")
-                        # 检查失败不影响正常交易
+                            # 执行最终的阻止判断
+                            if should_block_long and new_side == 'LONG':
+                                logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触顶反转风险,禁止做多 | {emergency.get('details', '')}")
+                                continue
+                            if should_block_short and new_side == 'SHORT':
+                                logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触底反弹风险,禁止做空 | {emergency.get('details', '')}")
+                                continue
+
+                        except Exception as e:
+                            logger.error(f"[EMERGENCY-ERROR] {symbol} 紧急干预检查失败: {e}")
+                            # 检查失败不影响正常交易
+
+                    else:
+                        # Big4过滤已禁用（测试模式）
+                        logger.debug(f"[BIG4-DISABLED] {symbol} Big4过滤已禁用，直接使用原始信号 (测试模式)")
 
                     # 检查同方向是否已有持仓
                     if self.has_position(symbol, new_side):

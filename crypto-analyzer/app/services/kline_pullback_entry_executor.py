@@ -419,3 +419,55 @@ class KlinePullbackEntryExecutor:
         total_quantity = sum(b['quantity'] for b in filled_batches)
 
         return total_cost / total_quantity if total_quantity > 0 else 0
+
+    async def recover_building_positions(self):
+        """
+        恢复未完成的分批建仓任务
+
+        注意：V2 K线回调策略基于实时K线形态，无法中途恢复
+        此方法仅用于清理超时的partial状态持仓
+        """
+        try:
+            conn = pymysql.connect(**self.db_config)
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+            # 查询所有partial状态的持仓（超过60分钟建仓窗口的）
+            cursor.execute("""
+                SELECT id, symbol, side, entry_time, batch_entry_status
+                FROM futures_positions
+                WHERE account_id = %s
+                AND batch_entry_status = 'partial'
+                AND entry_time < DATE_SUB(NOW(), INTERVAL 60 MINUTE)
+            """, (self.account_id,))
+
+            partial_positions = cursor.fetchall()
+
+            if not partial_positions:
+                logger.info("✅ [V2-RECOVERY] 没有需要清理的partial状态持仓")
+                cursor.close()
+                conn.close()
+                return
+
+            logger.info(f"🔄 [V2-RECOVERY] 发现 {len(partial_positions)} 个超时的partial状态持仓，标记为completed...")
+
+            # 标记所有超时的partial持仓为completed
+            for pos in partial_positions:
+                cursor.execute("""
+                    UPDATE futures_positions
+                    SET batch_entry_status = 'completed'
+                    WHERE id = %s
+                """, (pos['id'],))
+
+                logger.info(
+                    f"✅ [V2-RECOVERY] 持仓 {pos['id']} ({pos['symbol']} {pos['side']}) "
+                    f"已超过60分钟建仓窗口，标记为completed"
+                )
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            logger.info(f"✅ [V2-RECOVERY] 完成 {len(partial_positions)} 个持仓的状态清理")
+
+        except Exception as e:
+            logger.error(f"❌ [V2-RECOVERY] 恢复任务失败: {e}")
