@@ -117,7 +117,7 @@ class KlinePullbackEntryExecutor:
 
                 # 获取最近2根K线，判断是否连续反向
                 reverse_confirmed = await self._check_consecutive_reverse_klines(
-                    symbol, direction, timeframe, count=2
+                    symbol, direction, timeframe, count=2, signal_time=signal_time
                 )
 
                 if reverse_confirmed:
@@ -180,16 +180,18 @@ class KlinePullbackEntryExecutor:
         symbol: str,
         direction: str,
         timeframe: str,
-        count: int = 2
+        count: int = 2,
+        signal_time: datetime = None
     ) -> bool:
         """
-        检查最近是否有连续N根反向K线
+        检查信号时间之后是否有连续N根反向K线
 
         Args:
             symbol: 交易对
             direction: 方向（LONG/SHORT）
             timeframe: 时间周期（15m/5m）
             count: 需要连续的K线数量
+            signal_time: 信号时间（只检查此时间之后的K线）
 
         Returns:
             是否确认反向回调
@@ -198,17 +200,36 @@ class KlinePullbackEntryExecutor:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 查询最近N根K线
             binance_symbol = symbol.replace('/', '')
-            cursor.execute("""
-                SELECT open_price, close_price, open_time
-                FROM kline_data
-                WHERE symbol = %s
-                  AND timeframe = %s
-                  AND exchange = 'binance_futures'
-                ORDER BY open_time DESC
-                LIMIT %s
-            """, (binance_symbol, timeframe, count))
+
+            # 🔥 关键修复：只查询信号时间之后的已完成K线
+            # 排除最近1根（可能未完成），按时间正序获取
+            if signal_time:
+                # 计算时间周期的秒数（15m=900s, 5m=300s）
+                timeframe_seconds = 900 if timeframe == '15m' else 300
+
+                cursor.execute("""
+                    SELECT open_price, close_price, open_time
+                    FROM kline_data
+                    WHERE symbol = %s
+                      AND timeframe = %s
+                      AND exchange = 'binance_futures'
+                      AND open_time > %s
+                      AND open_time < NOW() - INTERVAL %s SECOND
+                    ORDER BY open_time DESC
+                    LIMIT %s
+                """, (binance_symbol, timeframe, signal_time, timeframe_seconds, count))
+            else:
+                # 兼容旧逻辑（无signal_time时）
+                cursor.execute("""
+                    SELECT open_price, close_price, open_time
+                    FROM kline_data
+                    WHERE symbol = %s
+                      AND timeframe = %s
+                      AND exchange = 'binance_futures'
+                    ORDER BY open_time DESC
+                    LIMIT %s
+                """, (binance_symbol, timeframe, count))
 
             klines = cursor.fetchall()
             cursor.close()
@@ -219,9 +240,11 @@ class KlinePullbackEntryExecutor:
 
             # 判断K线方向
             reverse_count = 0
+            kline_times = []
             for kline in klines:
                 open_price = float(kline['open_price'])
                 close_price = float(kline['close_price'])
+                kline_times.append(kline['open_time'])
 
                 if direction == 'LONG':
                     # 做多：需要阴线回调（close < open）
@@ -233,10 +256,24 @@ class KlinePullbackEntryExecutor:
                         reverse_count += 1
 
             # 必须全部是反向K线
-            return reverse_count == count
+            is_confirmed = reverse_count == count
+
+            # 调试日志
+            if signal_time:
+                logger.debug(
+                    f"🔍 [{symbol}] {direction} {timeframe} K线检测 | "
+                    f"信号时间: {signal_time} | "
+                    f"检测到 {len(klines)}/{count} 根K线 | "
+                    f"反向数: {reverse_count} | "
+                    f"结果: {'✅确认' if is_confirmed else '❌未确认'}"
+                )
+
+            return is_confirmed
 
         except Exception as e:
             logger.error(f"❌ {symbol} 检查K线形态失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     async def _execute_batch(self, plan: Dict, batch_num: int, price: Decimal, reason: str):
@@ -626,7 +663,7 @@ class KlinePullbackEntryExecutor:
 
                 # 获取最近2根K线，判断是否连续反向
                 reverse_confirmed = await self._check_consecutive_reverse_klines(
-                    symbol, direction, timeframe, count=2
+                    symbol, direction, timeframe, count=2, signal_time=signal_time
                 )
 
                 if reverse_confirmed:
