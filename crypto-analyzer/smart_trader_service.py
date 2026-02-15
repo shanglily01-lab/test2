@@ -3043,22 +3043,30 @@ class SmartTraderService:
                     new_score = opp['score']
                     opposite_side = 'SHORT' if new_side == 'LONG' else 'LONG'
 
-                    # 🔥 只做趋势单 - 获取Big4状态
+                    # 🔥 获取Big4状态（用于后续判断）
                     try:
                         big4_result = self.get_big4_result()
-                        big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
-                        big4_strength = big4_result.get('signal_strength', 0)
-                        logger.info(f"📊 [TRADING-MODE] 固定趋势模式 | Big4: {big4_signal}({big4_strength:.1f})")
-
-                        # 🚫 Big4中性时完全禁止开仓
-                        # Big4中性意味着市场方向不明确，风险太高，完全禁止开仓
-                        if big4_signal == 'NEUTRAL':
-                            logger.warning(f"🚫 [BIG4-NEUTRAL-BLOCK] {symbol} Big4中性市场(强度{big4_strength:.1f}), 禁止开仓")
-                            continue
-
                     except Exception as e:
-                        logger.error(f"[BIG4-ERROR] Big4检测失败: {e}, 跳过开仓")
-                        continue
+                        logger.error(f"[BIG4-ERROR] Big4检测失败: {e}")
+                        big4_result = None
+
+                    # 🔥 只做趋势单 - Big4中性检查（可配置禁用）
+                    if self.big4_filter_config.get('enabled', True):
+                        if big4_result:
+                            big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                            big4_strength = big4_result.get('signal_strength', 0)
+                            logger.info(f"📊 [TRADING-MODE] 固定趋势模式 | Big4: {big4_signal}({big4_strength:.1f})")
+
+                            # 🚫 Big4中性时完全禁止开仓
+                            # Big4中性意味着市场方向不明确，风险太高，完全禁止开仓
+                            if big4_signal == 'NEUTRAL':
+                                logger.warning(f"🚫 [BIG4-NEUTRAL-BLOCK] {symbol} Big4中性市场(强度{big4_strength:.1f}), 禁止开仓")
+                                continue
+                        else:
+                            logger.warning(f"[BIG4-ERROR] {symbol} Big4数据不可用, 跳过开仓")
+                            continue
+                    else:
+                        logger.debug(f"[BIG4-DISABLED] {symbol} Big4过滤已禁用，跳过中性检查")
 
                     # ========== 只接受趋势信号 ==========
                     signal_type = opp.get('signal_type', '')
