@@ -351,30 +351,36 @@ class KlinePullbackEntryExecutor:
                 }]
             })
 
+            # 计算名义价值（quantity * entry_price）
+            notional_value = batch1['quantity'] * float(entry_price)
+
             cursor.execute("""
-                INSERT INTO futures_positions (
-                    account_id, symbol, side, entry_price, quantity,
-                    leverage, margin, status, entry_time, stop_loss_price,
-                    take_profit_price, position_type, batch_entry_status,
-                    batch_plan, batch_filled, entry_signal_time
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO futures_positions
+                (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
+                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
+                 entry_signal_type,
+                 batch_plan, batch_filled, entry_signal_time,
+                 source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
             """, (
                 self.account_id,
                 symbol,
-                direction,
-                float(entry_price),
+                direction,  # LONG/SHORT
                 batch1['quantity'],
+                float(entry_price),
+                float(entry_price),  # avg_entry_price（第1批时与entry_price相同）
                 plan['leverage'],
+                notional_value,
                 batch1['margin'],
-                'open',
                 batch1['time'],
                 None,  # 止损后续设置
                 None,  # 止盈后续设置
-                'kline_pullback_v2',
-                'partial',  # 分批建仓中
+                'kline_pullback_v2',  # entry_signal_type存储策略类型
                 batch_plan_json,
                 batch_filled_json,
-                plan['signal_time']
+                plan['signal_time'],
+                'smart_trader_batch',  # source
+                'building'  # status = building（分批建仓中）
             ))
 
             position_id = cursor.lastrowid
@@ -450,9 +456,10 @@ class KlinePullbackEntryExecutor:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
 
+            # 从building（分批建仓中）改为open（正式持仓）
             cursor.execute("""
                 UPDATE futures_positions
-                SET batch_entry_status = 'completed'
+                SET status = 'open', updated_at = NOW()
                 WHERE id = %s
             """, (position_id,))
 
@@ -518,12 +525,13 @@ class KlinePullbackEntryExecutor:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 查询所有partial状态的持仓
+            # 查询所有building状态的持仓（分批建仓中）
             cursor.execute("""
-                SELECT id, symbol, side, batch_plan, batch_filled, entry_signal_time
+                SELECT id, symbol, position_side, batch_plan, batch_filled, entry_signal_time
                 FROM futures_positions
                 WHERE account_id = %s
-                AND batch_entry_status = 'partial'
+                AND status = 'building'
+                AND entry_signal_type = 'kline_pullback_v2'
                 ORDER BY entry_signal_time ASC
             """, (self.account_id,))
 
@@ -532,10 +540,10 @@ class KlinePullbackEntryExecutor:
             conn.close()
 
             if not partial_positions:
-                logger.info("✅ [V2-RECOVERY] 没有需要恢复的partial状态持仓")
+                logger.info("✅ [V2-RECOVERY] 没有需要恢复的building状态持仓")
                 return
 
-            logger.info(f"🔄 [V2-RECOVERY] 发现 {len(partial_positions)} 个partial状态持仓，开始恢复...")
+            logger.info(f"🔄 [V2-RECOVERY] 发现 {len(partial_positions)} 个building状态持仓，开始恢复...")
 
             for pos in partial_positions:
                 try:
@@ -554,7 +562,7 @@ class KlinePullbackEntryExecutor:
 
         position_id = pos['id']
         symbol = pos['symbol']
-        direction = pos['side']
+        direction = pos['position_side']  # 使用正确的字段名
 
         # 解析batch_plan和batch_filled
         try:
@@ -691,14 +699,14 @@ class KlinePullbackEntryExecutor:
             await self._mark_position_completed(position_id)
 
     async def _mark_position_completed(self, position_id: int):
-        """标记持仓为completed"""
+        """标记持仓为open（完成分批建仓）"""
         try:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
 
             cursor.execute("""
                 UPDATE futures_positions
-                SET batch_entry_status = 'completed'
+                SET status = 'open', updated_at = NOW()
                 WHERE id = %s
             """, (position_id,))
 
@@ -707,4 +715,4 @@ class KlinePullbackEntryExecutor:
             conn.close()
 
         except Exception as e:
-            logger.error(f"❌ 标记持仓 {position_id} 为completed失败: {e}")
+            logger.error(f"❌ 标记持仓 {position_id} 为open失败: {e}")
