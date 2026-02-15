@@ -288,9 +288,17 @@ signals:
     - 0.3
     - 0.4
     enabled: true
+    strategy: kline_pullback  # 策略类型: 'price_percentile'(V1价格分位数) 或 'kline_pullback'(V2 K线回调)
+    # V1策略配置（价格分位数）
     sampling_interval_seconds: 10
     sampling_window_seconds: 900
     time_window_minutes: 10
+    # V2策略配置（K线回调）
+    primary_timeframe: 15m  # 第一阶段时间周期
+    primary_window_minutes: 30  # 第一阶段时长
+    fallback_timeframe: 5m  # 第二阶段时间周期
+    total_window_minutes: 60  # 总时长
+    consecutive_klines_required: 2  # 需要连续几根反向K线
     whitelist_symbols: []
   blacklist:
   - IP/USDT
@@ -499,7 +507,6 @@ symbols:
 - DASH/USDT
 - STG/USDT
 - NIL/USDT
-- SHIB/USDT
 - ALLO/USDT
 - 币安人生/USDT
 - AXS/USDT
@@ -633,3 +640,4 @@ symbols:
 - SKR/USDT
 - LIGHT/USDT
 - MELANIA/USDT
+- VIRTUAL/USDT

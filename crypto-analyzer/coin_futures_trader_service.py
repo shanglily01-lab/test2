@@ -1230,13 +1230,27 @@ class CoinFuturesTraderService:
 
         # 初始化智能分批建仓执行器
         if self.batch_entry_config.get('enabled'):
-            self.smart_entry_executor = SmartEntryExecutor(
-                db_config=self.db_config,
-                live_engine=self,
-                price_service=self.ws_service,
-                account_id=self.account_id  # 传入币本位account_id=3
-            )
-            logger.info("✅ 智能分批建仓执行器已启动")
+            strategy_type = self.batch_entry_config.get('strategy', 'price_percentile')
+
+            if strategy_type == 'kline_pullback':
+                # V2: K线回调策略
+                from app.services.kline_pullback_entry_executor import KlinePullbackEntryExecutor
+                self.smart_entry_executor = KlinePullbackEntryExecutor(
+                    db_config=self.db_config,
+                    live_engine=self,
+                    price_service=self.ws_service,
+                    account_id=self.account_id  # 传入币本位account_id=3
+                )
+                logger.info("✅ 智能分批建仓执行器已启动 (V2 K线回调策略)")
+            else:
+                # V1: 价格分位数策略（原有）
+                self.smart_entry_executor = SmartEntryExecutor(
+                    db_config=self.db_config,
+                    live_engine=self,
+                    price_service=self.ws_service,
+                    account_id=self.account_id  # 传入币本位account_id=3
+                )
+                logger.info("✅ 智能分批建仓执行器已启动 (V1 价格分位数策略)")
         else:
             self.smart_entry_executor = None
             logger.info("⚠️ 智能分批建仓未启用")
