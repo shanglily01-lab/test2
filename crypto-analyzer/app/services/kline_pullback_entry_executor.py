@@ -208,6 +208,14 @@ class KlinePullbackEntryExecutor:
                 # 计算时间周期的秒数（15m=900s, 5m=300s）
                 timeframe_seconds = 900 if timeframe == '15m' else 300
 
+                # 🔥 时区修复：数据库存储的是Unix毫秒时间戳（UTC+0）
+                # 将Python datetime转换为Unix毫秒时间戳
+                signal_timestamp = int(signal_time.timestamp() * 1000)
+
+                # 当前时间戳（毫秒）- 排除最近未完成的K线
+                current_timestamp = int(datetime.now().timestamp() * 1000)
+                exclude_timestamp = current_timestamp - (timeframe_seconds * 1000)
+
                 cursor.execute("""
                     SELECT open_price, close_price, open_time
                     FROM kline_data
@@ -215,10 +223,10 @@ class KlinePullbackEntryExecutor:
                       AND timeframe = %s
                       AND exchange = 'binance_futures'
                       AND open_time > %s
-                      AND open_time < NOW() - INTERVAL %s SECOND
+                      AND open_time < %s
                     ORDER BY open_time DESC
                     LIMIT %s
-                """, (binance_symbol, timeframe, signal_time, timeframe_seconds, count))
+                """, (binance_symbol, timeframe, signal_timestamp, exclude_timestamp, count))
             else:
                 # 兼容旧逻辑（无signal_time时）
                 cursor.execute("""
