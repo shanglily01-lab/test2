@@ -706,9 +706,13 @@ class SmartDecisionBrain:
                         return None
                     else:
                         # 评分通过，记录详细信息
+                        logger.info(f"✅ {symbol} V2共振过滤通过: {filter_result['reason']}")
                         coin_score = filter_result.get('coin_score')
+                        big4_score = filter_result.get('big4_score')
                         if coin_score:
-                            logger.info(f"✅ {symbol} V2评分通过: 总分{coin_score['total_score']:+d} 方向{coin_score['direction']} 强度{coin_score['strength_level']}")
+                            logger.info(f"   └─ 代币评分: {coin_score['total_score']:+d} ({coin_score['direction']}/{coin_score['strength_level']})")
+                        if big4_score:
+                            logger.info(f"   └─ Big4评分: {big4_score['total_score']:+d} ({big4_score['direction']}/{big4_score['strength_level']})")
 
                 # 生成signal_type用于模式匹配
                 signal_type = f"TREND_{signal_combination_key}_{side}_{int(score)}"
