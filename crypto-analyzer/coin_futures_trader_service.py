@@ -3345,18 +3345,21 @@ class CoinFuturesTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5.6. 🔥 检查Big4市场信号 - NEUTRAL时停止开仓（币本位合约使用传统模式）
-                try:
-                    big4_result = self.get_big4_result()
-                    big4_market_signal = big4_result.get('overall_signal', 'NEUTRAL')
-                    big4_market_strength = big4_result.get('signal_strength', 0)
+                # 5.6. 🔥 检查Big4市场信号 - NEUTRAL时停止开仓（可配置禁用）
+                if self.big4_filter_config.get('enabled', True):
+                    try:
+                        big4_result = self.get_big4_result()
+                        big4_market_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                        big4_market_strength = big4_result.get('signal_strength', 0)
 
-                    if big4_market_signal == 'NEUTRAL':
-                        logger.info(f"[BIG4-NEUTRAL] 🛑 市场中性(强度{big4_market_strength:.1f}),停止开仓,等待明确趋势（币本位传统模式）")
-                        time.sleep(self.scan_interval)
-                        continue
-                except Exception as e:
-                    logger.warning(f"[BIG4-CHECK] 获取Big4信号失败: {e}, 继续交易")
+                        if big4_market_signal == 'NEUTRAL':
+                            logger.info(f"[BIG4-NEUTRAL] 🛑 市场中性(强度{big4_market_strength:.1f}),停止开仓,等待明确趋势（币本位传统模式）")
+                            time.sleep(self.scan_interval)
+                            continue
+                    except Exception as e:
+                        logger.warning(f"[BIG4-CHECK] 获取Big4信号失败: {e}, 继续交易")
+                else:
+                    logger.debug(f"[BIG4-DISABLED] Big4过滤已禁用，跳过中性检查（测试模式）")
 
                 # 6. 执行交易
                 logger.info(f"[EXECUTE] 找到 {len(opportunities)} 个机会")
