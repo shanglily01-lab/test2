@@ -26,6 +26,7 @@ from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.signal_blacklist_checker import SignalBlacklistChecker
+from app.services.signal_score_v2_service import SignalScoreV2Service
 from app.trading.coin_futures_trading_engine import CoinFuturesTradingEngine
 from app.services.breakout_system import BreakoutSystem
 
@@ -296,6 +297,23 @@ class CoinFuturesDecisionBrain:
                     # 已移除: ema_bull, ema_bear (Big4市场趋势判断已足够)
                 }
                 logger.info(f"   📊 评分权重: 使用默认权重")
+
+            # 8. 初始化V2评分服务
+            try:
+                score_v2_config = config.get('signals', {}).get('resonance_filter', {})
+                self.score_v2_service = SignalScoreV2Service(self.db_config, score_v2_config)
+
+                if score_v2_config.get('enabled', True):
+                    logger.info(f"   ✅ V2评分过滤已启用:")
+                    logger.info(f"      代币最低评分: {score_v2_config.get('min_symbol_score', 15)}")
+                    logger.info(f"      Big4最低评分: {score_v2_config.get('min_big4_score', 10)}")
+                    logger.info(f"      要求方向一致: {score_v2_config.get('require_same_direction', True)}")
+                    logger.info(f"      共振阈值: {score_v2_config.get('resonance_threshold', 25)}")
+                else:
+                    logger.info(f"   ⚠️  V2评分过滤已禁用")
+            except Exception as v2_error:
+                logger.warning(f"   ⚠️  V2评分服务初始化失败: {v2_error}, 将继续使用传统信号过滤")
+                self.score_v2_service = None
 
         except Exception as e:
             logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
@@ -1104,6 +1122,25 @@ class CoinFuturesDecisionBrain:
                     except Exception as e:
                         logger.warning(f"⚠️ {symbol} 破位加权失败: {e}")
                         breakout_boost = 0
+
+                # 🔥 新增: V2评分过滤
+                if self.score_v2_service:
+                    logger.debug(f"[V2-CHECK] {symbol} {side} 开始V2共振过滤检查...")
+                    filter_result = self.score_v2_service.check_score_filter(symbol, side)
+                    if not filter_result['passed']:
+                        logger.info(f"🚫 {symbol} {side} V2评分过滤未通过: {filter_result['reason']}")
+                        return None
+                    else:
+                        # 评分通过，记录详细信息
+                        logger.info(f"✅ {symbol} {side} V2共振过滤通过: {filter_result['reason']}")
+                        coin_score = filter_result.get('coin_score')
+                        big4_score = filter_result.get('big4_score')
+                        if coin_score:
+                            logger.info(f"   └─ 代币评分: {coin_score['total_score']:+d} ({coin_score['direction']}/{coin_score['strength_level']})")
+                        if big4_score:
+                            logger.info(f"   └─ Big4评分: {big4_score['total_score']:+d} ({big4_score['direction']}/{big4_score['strength_level']})")
+                else:
+                    logger.warning(f"[V2-SKIP] {symbol} {side} V2评分服务未初始化，跳过共振过滤")
 
                 return {
                     'symbol': symbol,
