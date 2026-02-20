@@ -104,8 +104,11 @@ class KlinePullbackEntryExecutor:
                 current_price = await self._get_current_price(symbol)
 
                 if not current_price:
+                    logger.warning(f"⚠️ {symbol} 无法获取当前价格，等待{self.check_interval_seconds}秒后重试...")
                     await asyncio.sleep(self.check_interval_seconds)
                     continue
+
+                logger.debug(f"🔄 {symbol} 当前价格: ${current_price} | 已用时: {elapsed_minutes:.1f}分钟")
 
                 # 判断当前阶段（15M或5M）
                 if elapsed_minutes < self.primary_window_minutes:
