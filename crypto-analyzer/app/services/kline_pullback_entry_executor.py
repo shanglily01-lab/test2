@@ -271,15 +271,12 @@ class KlinePullbackEntryExecutor:
             logger.info(f"🔄 {symbol} 进入主循环，窗口时长: {self.total_window_minutes}分钟")
             while (datetime.now() - signal_time).total_seconds() < self.total_window_minutes * 60:
                 elapsed_minutes = (datetime.now() - signal_time).total_seconds() / 60
-                logger.debug(f"🔄 {symbol} 循环开始 | 已用时: {elapsed_minutes:.1f}分钟")
                 current_price = await self._get_current_price(symbol)
 
                 if not current_price:
                     logger.warning(f"⚠️ {symbol} 无法获取当前价格，等待{self.check_interval_seconds}秒后重试...")
                     await asyncio.sleep(self.check_interval_seconds)
                     continue
-
-                logger.debug(f"🔄 {symbol} 当前价格: ${current_price} | 已用时: {elapsed_minutes:.1f}分钟")
 
                 # 判断当前阶段（15M或5M）
                 if elapsed_minutes < self.primary_window_minutes:
@@ -295,6 +292,11 @@ class KlinePullbackEntryExecutor:
                         logger.info(f"⏰ {symbol} 30分钟后切换到5M精准监控 | 已完成{completed}/3批")
                         plan['fallback_logged'] = True
 
+                # 定期输出检查状态(每5分钟)
+                if int(elapsed_minutes) % 5 == 0 and elapsed_minutes > 0:
+                    completed = sum(1 for b in plan['batches'] if b['filled'])
+                    logger.info(f"🔄 {symbol} 执行中 | {timeframe.upper()}阶段 | 已用时:{elapsed_minutes:.0f}分钟 | 已完成:{completed}/3批 | 价格:${current_price:.4f}")
+
                 # 获取最近2根K线，判断是否连续反向
                 # 根据阶段确定检测基准时间
                 if plan['phase'] == 'primary':
@@ -309,6 +311,7 @@ class KlinePullbackEntryExecutor:
                 )
 
                 if reverse_confirmed:
+                    logger.info(f"✅ {symbol} 检测到{timeframe.upper()}反向K线 | 准备执行批次")
                     # 找到第一个未完成的批次，但要遵守阶段和时间规则
                     for batch_idx, batch in enumerate(plan['batches']):
                         if not batch['filled']:
