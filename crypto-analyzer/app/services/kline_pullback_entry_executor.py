@@ -399,18 +399,18 @@ class KlinePullbackEntryExecutor:
                 # 🔥 将Python datetime转换为Unix毫秒时间戳（数据库存储格式）
                 signal_timestamp = int(signal_time.timestamp() * 1000)
 
-                # 🔥 关键逻辑：查询信号后的前N根K线（包括当前进行中的K线）
-                # K线数据是实时更新的，当前K线虽未完成但也有当前开盘价和收盘价
-                # 不排除当前K线，直接取前N根进行判断
+                # 🔥 关键修复：使用close_time而不是open_time来包含当前正在进行的K线
+                # 例如：信号16:36触发，可以检测到16:30-16:45这根K线（close_time=16:45 > 16:36）
+                # 而不是等到16:45开盘才能检测（open_time=16:45）
                 logger.info(f"🔍 [{symbol}] 查询K线 | timeframe={timeframe} | signal_timestamp={signal_timestamp} | count={count}")
                 cursor.execute("""
-                    SELECT open_price, close_price, open_time
+                    SELECT open_price, close_price, open_time, close_time
                     FROM kline_data
                     WHERE symbol = %s
                       AND timeframe = %s
                       AND exchange = 'binance_futures'
-                      AND open_time > %s
-                    ORDER BY open_time ASC
+                      AND close_time > %s
+                    ORDER BY close_time ASC
                     LIMIT %s
                 """, (symbol, timeframe, signal_timestamp, count))
 
@@ -441,7 +441,7 @@ class KlinePullbackEntryExecutor:
             for kline in klines:
                 open_price = float(kline['open_price'])
                 close_price = float(kline['close_price'])
-                kline_times.append(kline['open_time'])
+                kline_times.append(kline['close_time'])  # 使用收盘时间更直观
 
                 if direction == 'LONG':
                     # 做多：需要阴线回调（close < open）
