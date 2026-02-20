@@ -260,6 +260,27 @@ class KlinePullbackEntryExecutor:
 
         if filled_count == 0:
             logger.warning(f"⚠️ {symbol} 建仓窗口结束，未完成任何批次（无回调机会，遵守纪律）")
+
+            # 清理未完成的building记录，避免产生空的持仓记录
+            position_id = plan.get('position_id')
+            if position_id:
+                try:
+                    conn = pymysql.connect(**self.db_config)
+                    cursor = conn.cursor()
+
+                    cursor.execute("""
+                        DELETE FROM futures_positions
+                        WHERE id = %s AND status = 'building' AND quantity = 0
+                    """, (position_id,))
+
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+
+                    logger.info(f"🗑️ {symbol} 已删除未完成的building记录（ID:{position_id}）")
+                except Exception as e:
+                    logger.error(f"❌ {symbol} 删除building记录失败: {e}")
+
             return {
                 'success': False,
                 'error': '无回调机会，未完成任何批次',
