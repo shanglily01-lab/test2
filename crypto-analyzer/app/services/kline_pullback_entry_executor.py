@@ -105,6 +105,16 @@ class KlinePullbackEntryExecutor:
         }
 
         try:
+            # 检查信号是否已过期
+            elapsed_seconds = (datetime.now() - signal_time).total_seconds()
+            if elapsed_seconds >= self.total_window_minutes * 60:
+                logger.warning(f"⚠️ {symbol} 信号已过期 | 信号时间: {signal_time.strftime('%H:%M:%S')} | 已过: {elapsed_seconds/60:.1f}分钟 > {self.total_window_minutes}分钟窗口")
+                return {
+                    'success': False,
+                    'error': f'信号已过期({elapsed_seconds/60:.0f}分钟)',
+                    'position_id': None
+                }
+
             # 执行分批建仓主循环
             logger.info(f"🔄 {symbol} 进入主循环，窗口时长: {self.total_window_minutes}分钟")
             while (datetime.now() - signal_time).total_seconds() < self.total_window_minutes * 60:
