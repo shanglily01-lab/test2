@@ -306,7 +306,7 @@ signals:
     enabled: true  # 启用共振过滤
     min_symbol_score: 15  # 代币最低评分（绝对值）
     min_big4_score: 10  # Big4最低评分（绝对值）
-    require_same_direction: true  # 要求方向一致
+    require_same_direction: false  # 允许方向不一致（V1的SHORT信号即使V2评分是LONG也可以通过）
     resonance_threshold: 25  # 共振总分阈值（绝对值之和）
   blacklist:
   - IP/USDT

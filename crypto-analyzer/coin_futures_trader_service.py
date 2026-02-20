@@ -1276,6 +1276,7 @@ class CoinFuturesTraderService:
             # 🔥 从数据库读取策略配置（优先级高于config.yaml）
             from app.services.system_settings_loader import get_batch_entry_strategy
             strategy_type = get_batch_entry_strategy()
+            self.batch_entry_strategy = strategy_type  # 保存策略类型供后续使用
             logger.info(f"📊 从数据库加载分批建仓策略: {strategy_type}")
 
             if strategy_type == 'kline_pullback':
@@ -1301,6 +1302,7 @@ class CoinFuturesTraderService:
                 logger.info("✅ 智能分批建仓执行器已启动 (V1 价格分位数策略)")
         else:
             self.smart_entry_executor = None
+            self.batch_entry_strategy = None  # 未启用分批建仓
             logger.info("⚠️ 智能分批建仓未启用")
 
         # 初始化智能平仓优化器
