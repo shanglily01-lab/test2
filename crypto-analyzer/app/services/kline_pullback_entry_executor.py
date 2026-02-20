@@ -212,19 +212,12 @@ class KlinePullbackEntryExecutor:
             # 例如：信号14:42触发，等待的是14:45和15:00这固定的2根15M K线
             # 而不是每次都取最近的2根（那样永远等不到）
             if signal_time:
-                # 计算时间周期的秒数（15m=900s, 5m=300s）
-                timeframe_seconds = 900 if timeframe == '15m' else 300
-
-                # 🔥 时区修复：数据库存储的是Unix毫秒时间戳（UTC+0）
-                # 将Python datetime转换为Unix毫秒时间戳
+                # 🔥 将Python datetime转换为Unix毫秒时间戳（数据库存储格式）
                 signal_timestamp = int(signal_time.timestamp() * 1000)
 
-                # 🔥 排除当前未完成的K线（对齐到K线周期开始时间）
-                current_timestamp_sec = int(datetime.now().timestamp())
-                # 对齐到K线周期（15m=900s, 5m=300s）
-                current_kline_start_sec = (current_timestamp_sec // timeframe_seconds) * timeframe_seconds
-                exclude_timestamp = current_kline_start_sec * 1000
-
+                # 🔥 关键逻辑：查询信号后的前N根K线（包括当前进行中的K线）
+                # K线数据是实时更新的，当前K线虽未完成但也有当前开盘价和收盘价
+                # 不排除当前K线，直接取前N根进行判断
                 cursor.execute("""
                     SELECT open_price, close_price, open_time
                     FROM kline_data
@@ -232,10 +225,9 @@ class KlinePullbackEntryExecutor:
                       AND timeframe = %s
                       AND exchange = 'binance_futures'
                       AND open_time > %s
-                      AND open_time < %s
                     ORDER BY open_time ASC
                     LIMIT %s
-                """, (symbol, timeframe, signal_timestamp, exclude_timestamp, count))
+                """, (symbol, timeframe, signal_timestamp, count))
             else:
                 # 兼容旧逻辑（无signal_time时）
                 cursor.execute("""
