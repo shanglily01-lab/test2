@@ -601,11 +601,16 @@ class KlinePullbackEntryExecutor:
             cursor = conn.cursor()
 
             # 从building（分批建仓中）改为open（正式持仓）
+            # 只有quantity > 0才改为open，避免产生空的持仓记录
             cursor.execute("""
                 UPDATE futures_positions
                 SET status = 'open', updated_at = NOW()
-                WHERE id = %s
+                WHERE id = %s AND quantity > 0
             """, (position_id,))
+
+            rows_affected = cursor.rowcount
+            if rows_affected == 0:
+                logger.warning(f"⚠️ 持仓{position_id}未更新为open状态（可能quantity=0）")
 
             conn.commit()
             cursor.close()
