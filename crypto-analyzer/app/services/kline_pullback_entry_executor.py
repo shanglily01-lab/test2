@@ -104,13 +104,14 @@ class KlinePullbackEntryExecutor:
                 take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
                 logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
 
-            # 计算止盈止损价格
+            # 计算止盈止损价格 (确保current_price是float类型)
+            price = float(current_price)
             if direction == 'LONG':
-                stop_loss_price = current_price * (1 - stop_loss_pct)
-                take_profit_price = current_price * (1 + take_profit_pct)
+                stop_loss_price = price * (1 - stop_loss_pct)
+                take_profit_price = price * (1 + take_profit_pct)
             else:  # SHORT
-                stop_loss_price = current_price * (1 + stop_loss_pct)
-                take_profit_price = current_price * (1 - take_profit_pct)
+                stop_loss_price = price * (1 + stop_loss_pct)
+                take_profit_price = price * (1 - take_profit_pct)
 
             logger.info(f"[V2_SL_TP] {symbol} {direction} | 价格:${current_price:.4f} | 止损:${stop_loss_price:.4f}({stop_loss_pct*100:.2f}%) | 止盈:${take_profit_price:.4f}({take_profit_pct*100:.2f}%)")
 
