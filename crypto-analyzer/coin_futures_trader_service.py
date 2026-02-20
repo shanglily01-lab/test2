@@ -1136,9 +1136,9 @@ class CoinFuturesDecisionBrain:
                         coin_score = filter_result.get('coin_score')
                         big4_score = filter_result.get('big4_score')
                         if coin_score:
-                            logger.info(f"   └─ 代币评分: {coin_score['total_score']:+d} ({coin_score['direction']}/{coin_score['strength_level']})")
+                            logger.info(f"   └─ 代币评分: {coin_score['total_score']:+.0f} ({coin_score['direction']}/{coin_score['strength_level']})")
                         if big4_score:
-                            logger.info(f"   └─ Big4评分: {big4_score['total_score']:+d} ({big4_score['direction']}/{big4_score['strength_level']})")
+                            logger.info(f"   └─ Big4评分: {big4_score['total_score']:+.0f} ({big4_score['direction']}/{big4_score['strength_level']})")
                 else:
                     logger.warning(f"[V2-SKIP] {symbol} {side} V2评分服务未初始化，跳过共振过滤")
 
