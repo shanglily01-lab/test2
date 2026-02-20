@@ -6,10 +6,21 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Dict, Optional
 import pymysql
+import os
 from loguru import logger
-from app.database import get_db_config
 
 router = APIRouter(prefix="/api/system", tags=["System Settings"])
+
+
+def get_db_config():
+    """获取数据库配置"""
+    return {
+        'host': os.getenv('DB_HOST', '13.212.252.171'),
+        'user': os.getenv('DB_USER', 'admin'),
+        'password': os.getenv('DB_PASSWORD', 'Tonny@1000'),
+        'database': os.getenv('DB_NAME', 'binance-data'),
+        'charset': 'utf8mb4'
+    }
 
 
 class SystemSetting(BaseModel):
