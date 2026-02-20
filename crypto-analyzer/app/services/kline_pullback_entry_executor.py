@@ -3,8 +3,8 @@ K线回调分批建仓执行器 V2
 基于K线形态回调确认实现最优入场时机
 
 核心策略：
-- 做多：等待连续2根反向阴线作为回调确认
-- 做空：等待连续2根反向阳线作为反弹确认
+- 做多：等待1根反向阴线作为回调确认
+- 做空：等待1根反向阳线作为反弹确认
 - 两级降级：15M（0-30分钟）→ 5M（30-60分钟）
 - 纪律严明：宁愿错过，不追涨杀跌
 """
@@ -48,8 +48,8 @@ class KlinePullbackEntryExecutor:
         执行K线回调分批建仓
 
         流程：
-        1. 阶段1（0-30分钟）：监控15M K线，等待连续2根反向K线
-        2. 阶段2（30-60分钟）：如果未完成第1批，切换到5M K线
+        1. 阶段1（0-30分钟）：监控15M K线，等待1根反向K线
+        2. 阶段2（30-60分钟）：切换到5M K线，等待1根反向K线
         3. 60分钟截止，能完成几批算几批
 
         Args:
@@ -69,7 +69,7 @@ class KlinePullbackEntryExecutor:
         signal_time = datetime.now()
 
         logger.info(f"🚀 {symbol} 开始K线回调分批建仓 V2 | 方向: {direction}")
-        logger.info(f"   策略: 连续2根反向K线确认 | 15M(0-30min) → 5M(30-60min)")
+        logger.info(f"   策略: 1根反向K线确认 | 15M(0-30min) → 5M(30-60min)")
         logger.info(f"   原则: 宁愿错过，不追涨杀跌")
 
         # 初始化建仓计划
@@ -123,14 +123,14 @@ class KlinePullbackEntryExecutor:
                     detection_base_time = signal_time + timedelta(minutes=self.primary_window_minutes)
 
                 reverse_confirmed = await self._check_consecutive_reverse_klines(
-                    symbol, direction, timeframe, count=2, signal_time=detection_base_time
+                    symbol, direction, timeframe, count=1, signal_time=detection_base_time
                 )
 
                 if reverse_confirmed:
                     # 找到第一个未完成的批次
                     for batch_idx, batch in enumerate(plan['batches']):
                         if not batch['filled']:
-                            reason = f"{timeframe.upper()}连续2根反向K线回调确认"
+                            reason = f"{timeframe.upper()}反向K线回调确认"
                             await self._execute_batch(plan, batch_idx, current_price, reason)
                             break
 
@@ -186,17 +186,17 @@ class KlinePullbackEntryExecutor:
         symbol: str,
         direction: str,
         timeframe: str,
-        count: int = 2,
+        count: int = 1,
         signal_time: datetime = None
     ) -> bool:
         """
-        检查信号时间之后是否有连续N根反向K线
+        检查信号时间之后是否有反向K线
 
         Args:
             symbol: 交易对
             direction: 方向（LONG/SHORT）
             timeframe: 时间周期（15m/5m）
-            count: 需要连续的K线数量
+            count: 需要的K线数量（默认1根）
             signal_time: 信号时间（只检查此时间之后的K线）
 
         Returns:
@@ -682,16 +682,16 @@ class KlinePullbackEntryExecutor:
                     else:
                         timeframe = '15m'
 
-                # 获取最近2根K线，判断是否连续反向
+                # 判断是否有反向K线
                 reverse_confirmed = await self._check_consecutive_reverse_klines(
-                    symbol, direction, timeframe, count=2, signal_time=signal_time
+                    symbol, direction, timeframe, count=1, signal_time=signal_time
                 )
 
                 if reverse_confirmed:
                     # 找到第一个未完成的批次
                     for batch_idx, batch in enumerate(plan['batches']):
                         if not batch['filled']:
-                            reason = f"{timeframe.upper()}连续2根反向K线回调确认(恢复)"
+                            reason = f"{timeframe.upper()}反向K线回调确认(恢复)"
                             await self._execute_batch(plan, batch_idx, current_price, reason)
                             break
 
