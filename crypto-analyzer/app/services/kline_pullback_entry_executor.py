@@ -78,7 +78,6 @@ class KlinePullbackEntryExecutor:
         logger.info(f"🚀 {symbol} 开始K线回调分批建仓 V2 | 方向: {direction}")
         logger.info(f"   信号时间: {signal_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"   策略: 1根反向K线确认 | 15M(0-30min) → 5M(30-60min)")
-        logger.info(f"   原则: 宁愿错过，不追涨杀跌")
 
         # 🔥 确保symbol已订阅到WebSocket价格服务
         if self.price_service and hasattr(self.price_service, 'subscribe'):
@@ -107,8 +106,10 @@ class KlinePullbackEntryExecutor:
 
         try:
             # 执行分批建仓主循环
+            logger.info(f"🔄 {symbol} 进入主循环，窗口时长: {self.total_window_minutes}分钟")
             while (datetime.now() - signal_time).total_seconds() < self.total_window_minutes * 60:
                 elapsed_minutes = (datetime.now() - signal_time).total_seconds() / 60
+                logger.debug(f"🔄 {symbol} 循环开始 | 已用时: {elapsed_minutes:.1f}分钟")
                 current_price = await self._get_current_price(symbol)
 
                 if not current_price:
