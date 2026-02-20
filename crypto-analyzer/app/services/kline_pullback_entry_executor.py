@@ -202,8 +202,9 @@ class KlinePullbackEntryExecutor:
 
             # 🔥 数据库中symbol格式为 'RAY/USDT'（带斜杠），不需要转换
 
-            # 🔥 关键修复：只查询信号时间之后的已完成K线
-            # 排除最近1根（可能未完成），按时间正序获取
+            # 🔥 关键逻辑：查询信号时间之后的**固定前N根**K线（非滑动窗口）
+            # 例如：信号14:42触发，等待的是14:45和15:00这固定的2根15M K线
+            # 而不是每次都取最近的2根（那样永远等不到）
             if signal_time:
                 # 计算时间周期的秒数（15m=900s, 5m=300s）
                 timeframe_seconds = 900 if timeframe == '15m' else 300
@@ -224,7 +225,7 @@ class KlinePullbackEntryExecutor:
                       AND exchange = 'binance_futures'
                       AND open_time > %s
                       AND open_time < %s
-                    ORDER BY open_time DESC
+                    ORDER BY open_time ASC
                     LIMIT %s
                 """, (symbol, timeframe, signal_timestamp, exclude_timestamp, count))
             else:
