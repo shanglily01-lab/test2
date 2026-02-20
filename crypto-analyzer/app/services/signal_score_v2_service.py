@@ -112,19 +112,17 @@ class SignalScoreV2Service:
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
         try:
+            # 🔥 使用big4_trend_history表获取最新Big4趋势数据
             cursor.execute("""
                 SELECT
-                    total_score,
-                    main_score,
-                    five_m_bonus,
-                    h1_score,
-                    m15_score,
-                    direction,
-                    strength_level,
-                    updated_at
-                FROM big4_kline_scores
-                WHERE exchange = 'binance_futures'
-                ORDER BY updated_at DESC
+                    signal_strength,
+                    overall_signal,
+                    bullish_count,
+                    bearish_count,
+                    recommendation,
+                    created_at
+                FROM big4_trend_history
+                ORDER BY created_at DESC
                 LIMIT 1
             """)
 
@@ -132,8 +130,38 @@ class SignalScoreV2Service:
             cursor.close()
 
             if result:
-                logger.debug(f"✅ Big4 评分: {result['total_score']}, 方向: {result['direction']}")
-                return result
+                # 转换字段名以保持兼容性
+                signal_strength = float(result['signal_strength'])
+                overall_signal = result['overall_signal']
+
+                # 映射overall_signal到direction
+                direction_map = {
+                    'BULLISH': 'LONG',
+                    'BEARISH': 'SHORT',
+                    'NEUTRAL': 'NEUTRAL'
+                }
+                direction = direction_map.get(overall_signal, 'NEUTRAL')
+
+                # 根据signal判断正负
+                if overall_signal == 'BEARISH':
+                    total_score = -signal_strength
+                else:
+                    total_score = signal_strength
+
+                # 构造返回数据结构
+                big4_data = {
+                    'total_score': total_score,
+                    'signal_strength': signal_strength,  # 绝对值
+                    'direction': direction,
+                    'overall_signal': overall_signal,
+                    'bullish_count': result['bullish_count'],
+                    'bearish_count': result['bearish_count'],
+                    'recommendation': result['recommendation'],
+                    'updated_at': result['created_at']
+                }
+
+                logger.debug(f"✅ Big4 评分: {total_score:+.0f}, 方向: {direction} (来自big4_trend_history)")
+                return big4_data
             else:
                 logger.warning(f"⚠️ Big4 没有评分数据")
                 return None
