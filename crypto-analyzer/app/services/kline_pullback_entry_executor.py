@@ -214,8 +214,8 @@ class KlinePullbackEntryExecutor:
                  stop_loss_pct, take_profit_pct,
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time, planned_close_time,
-                 source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
+                 signal_version, source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'v2', 'smart_trader_batch', 'building', NOW(), NOW())
             """, (
                 self.account_id,
                 symbol,
