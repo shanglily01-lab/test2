@@ -1115,8 +1115,43 @@ class FuturesTradingEngine:
 
                 # 释放全部保证金
                 released_margin = margin
+
+                # 8. 更新账户余额和交易统计（只在完全平仓时更新）
+                # 🔥 修复：分批平仓时不更新账户余额，只有完全平仓（status='closed'）时才更新
+                # 这样避免了同一个持仓的盈亏被多次计入账户余额
+
+                # 判断是盈利还是亏损
+                is_winning_trade = realized_pnl > 0
+
+                # 先释放保证金
+                cursor.execute(
+                    """UPDATE futures_trading_accounts
+                    SET frozen_balance = frozen_balance - %s
+                    WHERE id = %s""",
+                    (float(released_margin), account_id)
+                )
+
+                # 再从 futures_positions 重新计算账户余额和已实现盈亏
+                cursor.execute(
+                    """UPDATE futures_trading_accounts a
+                    SET a.realized_pnl = (
+                            SELECT COALESCE(SUM(p.realized_pnl), 0)
+                            FROM futures_positions p
+                            WHERE p.account_id = a.id AND p.status = 'closed'
+                        ),
+                        a.current_balance = a.initial_balance + (
+                            SELECT COALESCE(SUM(p.realized_pnl), 0)
+                            FROM futures_positions p
+                            WHERE p.account_id = a.id AND p.status = 'closed'
+                        ),
+                        a.total_trades = a.total_trades + 1,
+                        a.winning_trades = a.winning_trades + IF(%s > 0, 1, 0),
+                        a.losing_trades = a.losing_trades + IF(%s < 0, 1, 0)
+                    WHERE a.id = %s""",
+                    (float(realized_pnl), float(realized_pnl), account_id)
+                )
             else:
-                # 部分平仓
+                # 部分平仓：只更新持仓数据，不更新账户余额
                 remaining_quantity = quantity - close_quantity
                 remaining_margin = margin * (remaining_quantity / quantity)
 
@@ -1131,29 +1166,13 @@ class FuturesTradingEngine:
 
                 released_margin = margin - remaining_margin
 
-            # 8. 更新账户余额和交易统计
-            # 判断是盈利还是亏损
-            is_winning_trade = realized_pnl > 0
-
-            # 🔥 修改：不再直接累加 realized_pnl，而是从 futures_positions 重新计算
-            # 原因：分批平仓时 futures_trades 的 realized_pnl 计算有误，导致累加错误
-            # 改为基于 futures_positions 的 realized_pnl 总和来更新账户
-            cursor.execute(
-                """UPDATE futures_trading_accounts a
-                SET a.current_balance = a.current_balance + %s + %s,
-                    a.frozen_balance = a.frozen_balance - %s,
-                    a.realized_pnl = (
-                        SELECT COALESCE(SUM(p.realized_pnl), 0)
-                        FROM futures_positions p
-                        WHERE p.account_id = a.id AND p.status = 'closed'
-                    ),
-                    a.total_trades = a.total_trades + 1,
-                    a.winning_trades = a.winning_trades + IF(%s > 0, 1, 0),
-                    a.losing_trades = a.losing_trades + IF(%s < 0, 1, 0)
-                WHERE a.id = %s""",
-                (float(released_margin), float(realized_pnl), float(released_margin),
-                 float(realized_pnl), float(realized_pnl), account_id)
-            )
+                # 部分平仓只释放保证金，不更新余额和统计
+                cursor.execute(
+                    """UPDATE futures_trading_accounts
+                    SET frozen_balance = frozen_balance - %s
+                    WHERE id = %s""",
+                    (float(released_margin), account_id)
+                )
             
             # 更新胜率
             cursor.execute(
