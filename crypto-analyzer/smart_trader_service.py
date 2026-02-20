@@ -857,7 +857,9 @@ class SmartTraderService:
 
         # 初始化智能分批建仓执行器
         if self.batch_entry_config.get('enabled'):
-            strategy_type = self.batch_entry_config.get('strategy', 'price_percentile')
+            # 从数据库读取策略配置（覆盖yaml配置）
+            from app.services.system_settings_loader import get_batch_entry_strategy
+            strategy_type = get_batch_entry_strategy()
 
             if strategy_type == 'kline_pullback':
                 # V2: K线回调策略
