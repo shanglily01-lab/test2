@@ -686,6 +686,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册系统配置API路由
+try:
+    from app.api.system_settings_api import router as system_settings_router
+    app.include_router(system_settings_router)
+    logger.info("✅ 系统配置API路由已注册 (/api/system)")
+except Exception as e:
+    logger.warning(f"⚠️  系统配置API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册实盘交易API路由
 try:
     from app.api.live_trading_api import router as live_trading_router
@@ -978,6 +988,18 @@ async def dashboard_new_page():
         return FileResponse(str(dashboard_path))
     else:
         raise HTTPException(status_code=404, detail="New dashboard page not found")
+
+
+@app.get("/system-settings")
+async def system_settings_page():
+    """
+    系统配置页面
+    """
+    settings_path = project_root / "templates" / "system_settings.html"
+    if settings_path.exists():
+        return FileResponse(str(settings_path))
+    else:
+        raise HTTPException(status_code=404, detail="System settings page not found")
 
 
 @app.get("/contract_trading_new")
