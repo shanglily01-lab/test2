@@ -201,60 +201,14 @@ class KlinePullbackEntryExecutor:
         max_hold_minutes = 180  # 3小时强制平仓
         planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
 
-        # 🔥 立即创建数据库记录，持久化signal_time
-        # 这样重启后可以继续基于原始signal_time执行，而不是重新开始
-        try:
-            conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor()
+        # 🔥 保存止盈止损参数到plan中，等第1批成交时创建持仓记录
+        plan['stop_loss_price'] = stop_loss_price
+        plan['take_profit_price'] = take_profit_price
+        plan['stop_loss_pct'] = stop_loss_pct
+        plan['take_profit_pct'] = take_profit_pct
+        plan['planned_close_time'] = planned_close_time
 
-            cursor.execute("""
-                INSERT INTO futures_positions
-                (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
-                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 stop_loss_pct, take_profit_pct,
-                 entry_signal_type, entry_score, signal_components,
-                 batch_plan, batch_filled, entry_signal_time, planned_close_time,
-                 signal_version, source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'v2', 'smart_trader_batch', 'building', NOW(), NOW())
-            """, (
-                self.account_id,
-                symbol,
-                direction,
-                0,  # quantity初始为0
-                0,  # entry_price初始为0
-                0,  # avg_entry_price初始为0
-                plan['leverage'],
-                0,  # notional_value初始为0
-                0,  # margin初始为0
-                stop_loss_price,  # 使用计算的止损价格
-                take_profit_price,  # 使用计算的止盈价格
-                stop_loss_pct,  # 使用计算的止损百分比
-                take_profit_pct,  # 使用计算的止盈百分比
-                'kline_pullback_v2',
-                signal.get('trade_params', {}).get('entry_score', 0),
-                json.dumps(signal.get('trade_params', {}).get('signal_components', {})),
-                json.dumps(plan['batches']),
-                json.dumps([]),  # batch_filled初始为空
-                signal_time,  # entry_signal_time
-                planned_close_time  # 计划平仓时间（V1方式）
-            ))
-
-            position_id = cursor.lastrowid
-            plan['position_id'] = position_id
-
-            conn.commit()
-            cursor.close()
-            conn.close()
-
-            logger.info(f"✅ {symbol} 创建V2持仓记录 | ID:{position_id} | 信号时间:{signal_time.strftime('%H:%M:%S')}")
-
-        except Exception as e:
-            logger.error(f"❌ {symbol} 创建持仓记录失败: {e}")
-            return {
-                'success': False,
-                'error': f'创建持仓记录失败: {e}',
-                'position_id': None
-            }
+        logger.info(f"💡 {symbol} V2策略：等待反向K线后才创建持仓（类似V1，避免被has_position跳过）")
 
         try:
             # 检查信号是否已过期
@@ -559,21 +513,17 @@ class KlinePullbackEntryExecutor:
             await self._update_position_record(plan)
 
     async def _create_position_record(self, plan: Dict, entry_price: Decimal):
-        """更新持仓记录（第1批完成时）- UPDATE已有的building记录"""
+        """创建持仓记录（第1批完成时）- INSERT新的building记录"""
         import json
 
         try:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
 
-            position_id = plan.get('position_id')
-            if not position_id:
-                logger.error("未找到position_id，无法更新持仓")
-                return
-
             symbol = plan['symbol']
             direction = plan['direction']
             batch1 = plan['batches'][0]
+            signal_time = plan['signal_time']
 
             # 准备batch_filled JSON（目前只有第1批）
             batch_filled_json = json.dumps({
@@ -588,6 +538,9 @@ class KlinePullbackEntryExecutor:
                 }]
             })
 
+            # 准备batch_plan JSON
+            batch_plan_json = json.dumps(plan['batches'])
+
             # 计算名义价值（quantity * entry_price）
             notional_value = batch1['quantity'] * float(entry_price)
 
@@ -597,45 +550,52 @@ class KlinePullbackEntryExecutor:
                 symbol, direction, float(entry_price), signal_components
             )
 
-            # UPDATE已有的building记录，填充第1批数据
+            # INSERT新的building记录
             cursor.execute("""
-                UPDATE futures_positions
-                SET quantity = %s,
-                    entry_price = %s,
-                    avg_entry_price = %s,
-                    notional_value = %s,
-                    margin = %s,
-                    open_time = %s,
-                    batch_filled = %s,
-                    stop_loss_price = %s,
-                    take_profit_price = %s,
-                    stop_loss_pct = %s,
-                    take_profit_pct = %s,
-                    updated_at = NOW()
-                WHERE id = %s
+                INSERT INTO futures_positions
+                (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
+                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
+                 stop_loss_pct, take_profit_pct,
+                 entry_signal_type, entry_score, signal_components,
+                 batch_plan, batch_filled, entry_signal_time, planned_close_time,
+                 signal_version, source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'v2', 'smart_trader_batch', 'building', NOW(), NOW())
             """, (
+                self.account_id,
+                symbol,
+                direction,
                 batch1['quantity'],
                 float(entry_price),
                 float(entry_price),  # avg_entry_price（第1批时与entry_price相同）
+                plan['leverage'],
                 notional_value,
                 batch1['margin'],
-                batch1['time'],
-                batch_filled_json,
+                batch1['time'],  # open_time使用第1批成交时间
                 stop_loss_price,
                 take_profit_price,
                 stop_loss_pct,
                 take_profit_pct,
-                position_id
+                'kline_pullback_v2',
+                plan['signal'].get('trade_params', {}).get('entry_score', 0),
+                json.dumps(signal_components),
+                batch_plan_json,
+                batch_filled_json,
+                signal_time,  # entry_signal_time
+                plan.get('planned_close_time')  # 计划平仓时间
             ))
+
+            position_id = cursor.lastrowid
+            plan['position_id'] = position_id
 
             conn.commit()
             cursor.close()
             conn.close()
 
-            logger.info(f"✅ {symbol} 第1批建仓完成，更新持仓记录 | ID:{position_id}")
+            logger.info(f"✅ {symbol} 第1批建仓完成，创建持仓记录 | ID:{position_id}")
 
         except Exception as e:
-            logger.error(f"❌ {symbol} 更新持仓记录失败: {e}")
+            logger.error(f"❌ {symbol} 创建持仓记录失败: {e}")
+            raise
 
     async def _update_position_record(self, plan: Dict):
         """更新持仓记录（第2、3批）"""
