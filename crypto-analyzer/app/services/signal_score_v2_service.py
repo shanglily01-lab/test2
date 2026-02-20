@@ -46,11 +46,17 @@ class SignalScoreV2Service:
         """获取代币评分
 
         Args:
-            symbol: 交易对（如BTC/USDT）
+            symbol: 交易对（如BTC/USDT或BTC/USD）
 
         Returns:
             评分数据字典，如果没有数据则返回None
         """
+        # 币本位转换：BTC/USD -> BTC/USDT (因为币本位没有单独的评分数据)
+        query_symbol = symbol
+        if symbol.endswith('/USD'):
+            query_symbol = symbol.replace('/USD', '/USDT')
+            logger.debug(f"币本位交易对 {symbol} 使用 {query_symbol} 的评分数据")
+
         conn = self._get_connection()
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
@@ -79,7 +85,7 @@ class SignalScoreV2Service:
                 WHERE symbol = %s
                 AND exchange = 'binance_futures'
                 LIMIT 1
-            """, (symbol,))
+            """, (query_symbol,))
 
             result = cursor.fetchone()
             cursor.close()
