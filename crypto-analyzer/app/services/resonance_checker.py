@@ -95,7 +95,7 @@ class ResonanceChecker:
             'value': symbol_score,
             'threshold': min_symbol_score,
             'passed': symbol_meets_threshold,
-            'desc': f"{symbol} 评分={symbol_score:+d} (阈值≥{min_symbol_score})"
+            'desc': f"{symbol} 评分={symbol_score:+.0f} (阈值≥{min_symbol_score})"
         })
 
         # 3. 检查Big4分数是否达标
@@ -108,7 +108,7 @@ class ResonanceChecker:
             'value': big4_score,
             'threshold': min_big4_score,
             'passed': big4_meets_threshold,
-            'desc': f"Big4 评分={big4_score:+d} (阈值≥{min_big4_score})"
+            'desc': f"Big4 评分={big4_score:+.0f} (阈值≥{min_big4_score})"
         })
 
         # 4. 检查方向是否一致
@@ -226,5 +226,5 @@ class ResonanceChecker:
 
         return (
             f"✅ {trend_desc}{strength_cn}共振通过: "
-            f"{symbol}({symbol_score:+d}) + Big4({big4_score:+d}) = {total_abs_score}分"
+            f"{symbol}({symbol_score:+.0f}) + Big4({big4_score:+.0f}) = {total_abs_score}分"
         )
