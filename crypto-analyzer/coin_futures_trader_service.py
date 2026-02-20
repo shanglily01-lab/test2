@@ -1277,9 +1277,11 @@ class CoinFuturesTraderService:
                     db_config=self.db_config,
                     live_engine=self,
                     price_service=self.ws_service,
-                    account_id=self.account_id  # 传入币本位account_id=3
+                    account_id=self.account_id,  # 传入币本位account_id=3
+                    brain=self.brain,  # 传入智能大脑（用于止盈止损计算）
+                    opt_config=self.opt_config  # 传入优化配置（用于波动率配置）
                 )
-                logger.info("✅ 智能分批建仓执行器已启动 (V2 K线回调策略)")
+                logger.info("✅ 智能分批建仓执行器已启动 (V2 K线回调策略 + 止盈止损)")
             else:
                 # V1: 价格分位数策略（原有）
                 self.smart_entry_executor = SmartEntryExecutor(

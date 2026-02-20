@@ -21,7 +21,7 @@ import pymysql
 class KlinePullbackEntryExecutor:
     """K线回调分批建仓执行器"""
 
-    def __init__(self, db_config: dict, live_engine, price_service, account_id=None):
+    def __init__(self, db_config: dict, live_engine, price_service, account_id=None, brain=None, opt_config=None):
         """
         初始化执行器
 
@@ -30,6 +30,8 @@ class KlinePullbackEntryExecutor:
             live_engine: 交易引擎
             price_service: 价格服务（WebSocket）
             account_id: 账户ID
+            brain: 智能大脑（用于获取自适应参数）
+            opt_config: 优化配置（用于获取波动率配置）
         """
         self.db_config = db_config
         self.live_engine = live_engine
@@ -39,11 +41,84 @@ class KlinePullbackEntryExecutor:
         else:
             self.account_id = getattr(live_engine, 'account_id', 2)
 
+        # 获取brain和opt_config（用于止盈止损计算）
+        self.brain = brain if brain else getattr(live_engine, 'brain', None)
+        self.opt_config = opt_config if opt_config else getattr(live_engine, 'opt_config', None)
+
         # 分批配置
         self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40%
         self.total_window_minutes = 60  # 总时间窗口60分钟
         self.primary_window_minutes = 30  # 第一阶段30分钟（15M）
         self.check_interval_seconds = 60  # 每60秒检查一次（K线更新频率）
+
+    def _calculate_stop_take_prices(self, symbol: str, direction: str, current_price: float, signal_components: dict) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
+        """
+        计算止盈止损价格和百分比
+
+        Args:
+            symbol: 交易对
+            direction: 方向 LONG/SHORT
+            current_price: 当前价格
+            signal_components: 信号组成
+
+        Returns:
+            (stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct)
+        """
+        try:
+            # 如果没有brain或opt_config，返回None（使用SmartExitOptimizer默认逻辑）
+            if not self.brain or not self.opt_config:
+                logger.warning(f"⚠️ {symbol} brain或opt_config未初始化，止盈止损将由平仓优化器管理")
+                return None, None, None, None
+
+            # 获取自适应参数
+            if direction == 'LONG':
+                adaptive_params = self.brain.adaptive_long
+            else:  # SHORT
+                adaptive_params = self.brain.adaptive_short
+
+            # 使用自适应参数计算止损
+            base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
+
+            # 波动率自适应止损（复用live_engine的方法）
+            if hasattr(self.live_engine, 'calculate_volatility_adjusted_stop_loss'):
+                stop_loss_pct = self.live_engine.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
+            else:
+                stop_loss_pct = base_stop_loss_pct
+
+            # 使用波动率配置计算动态止盈
+            volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
+            if volatility_profile:
+                # 根据方向使用对应的止盈配置
+                if direction == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
+                    take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
+                    logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
+                elif direction == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
+                    take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
+                    logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
+                else:
+                    # 回退到自适应参数
+                    take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+                    logger.debug(f"[TP_FALLBACK] {symbol} {direction} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
+            else:
+                # 回退到自适应参数
+                take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+                logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
+
+            # 计算止盈止损价格
+            if direction == 'LONG':
+                stop_loss_price = current_price * (1 - stop_loss_pct)
+                take_profit_price = current_price * (1 + take_profit_pct)
+            else:  # SHORT
+                stop_loss_price = current_price * (1 + stop_loss_pct)
+                take_profit_price = current_price * (1 - take_profit_pct)
+
+            logger.info(f"[V2_SL_TP] {symbol} {direction} | 价格:${current_price:.4f} | 止损:${stop_loss_price:.4f}({stop_loss_pct*100:.2f}%) | 止盈:${take_profit_price:.4f}({take_profit_pct*100:.2f}%)")
+
+            return stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct
+
+        except Exception as e:
+            logger.error(f"❌ {symbol} 计算止盈止损失败: {e}")
+            return None, None, None, None
 
     async def execute_entry(self, signal: Dict) -> Dict:
         """
@@ -106,6 +181,21 @@ class KlinePullbackEntryExecutor:
             'consecutive_reverse_count': 0  # 连续反向K线计数
         }
 
+        # 🔥 计算止盈止损（基于当前价格的初始预估）
+        current_price = await self._get_current_price(symbol)
+        signal_components = signal.get('trade_params', {}).get('signal_components', {})
+
+        if current_price:
+            stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct = self._calculate_stop_take_prices(
+                symbol, direction, current_price, signal_components
+            )
+        else:
+            logger.warning(f"⚠️ {symbol} 无法获取当前价格，止盈止损将由平仓优化器管理")
+            stop_loss_price = None
+            take_profit_price = None
+            stop_loss_pct = None
+            take_profit_pct = None
+
         # 🔥 立即创建数据库记录，持久化signal_time
         # 这样重启后可以继续基于原始signal_time执行，而不是重新开始
         try:
@@ -131,10 +221,10 @@ class KlinePullbackEntryExecutor:
                 plan['leverage'],
                 0,  # notional_value初始为0
                 0,  # margin初始为0
-                None,  # stop_loss_price
-                None,  # take_profit_price
-                None,  # stop_loss_pct
-                None,  # take_profit_pct
+                stop_loss_price,  # 使用计算的止损价格
+                take_profit_price,  # 使用计算的止盈价格
+                stop_loss_pct,  # 使用计算的止损百分比
+                take_profit_pct,  # 使用计算的止盈百分比
                 'kline_pullback_v2',
                 signal.get('trade_params', {}).get('entry_score', 0),
                 json.dumps(signal.get('trade_params', {}).get('signal_components', {})),
@@ -491,6 +581,12 @@ class KlinePullbackEntryExecutor:
             # 计算名义价值（quantity * entry_price）
             notional_value = batch1['quantity'] * float(entry_price)
 
+            # 重新计算止盈止损（基于第1批实际成交价格）
+            signal_components = plan['signal'].get('trade_params', {}).get('signal_components', {})
+            stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct = self._calculate_stop_take_prices(
+                symbol, direction, float(entry_price), signal_components
+            )
+
             # UPDATE已有的building记录，填充第1批数据
             cursor.execute("""
                 UPDATE futures_positions
@@ -501,6 +597,10 @@ class KlinePullbackEntryExecutor:
                     margin = %s,
                     open_time = %s,
                     batch_filled = %s,
+                    stop_loss_price = %s,
+                    take_profit_price = %s,
+                    stop_loss_pct = %s,
+                    take_profit_pct = %s,
                     updated_at = NOW()
                 WHERE id = %s
             """, (
@@ -511,6 +611,10 @@ class KlinePullbackEntryExecutor:
                 batch1['margin'],
                 batch1['time'],
                 batch_filled_json,
+                stop_loss_price,
+                take_profit_price,
+                stop_loss_pct,
+                take_profit_pct,
                 position_id
             ))
 
@@ -558,14 +662,28 @@ class KlinePullbackEntryExecutor:
                 ]
             })
 
+            # 重新计算止盈止损（基于新的平均价格）
+            symbol = plan['symbol']
+            direction = plan['direction']
+            signal_components = plan['signal'].get('trade_params', {}).get('signal_components', {})
+
+            stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct = self._calculate_stop_take_prices(
+                symbol, direction, avg_price, signal_components
+            )
+
             cursor.execute("""
                 UPDATE futures_positions
                 SET entry_price = %s,
                     quantity = %s,
                     margin = %s,
-                    batch_filled = %s
+                    batch_filled = %s,
+                    stop_loss_price = %s,
+                    take_profit_price = %s,
+                    stop_loss_pct = %s,
+                    take_profit_pct = %s
                 WHERE id = %s
-            """, (avg_price, total_quantity, total_margin, batch_filled_json, position_id))
+            """, (avg_price, total_quantity, total_margin, batch_filled_json,
+                  stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct, position_id))
 
             conn.commit()
             cursor.close()
