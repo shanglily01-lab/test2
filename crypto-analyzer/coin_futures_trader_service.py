@@ -1264,11 +1264,19 @@ class CoinFuturesTraderService:
             config = yaml.safe_load(f)
             self.batch_entry_config = config.get('signals', {}).get('batch_entry', {'enabled': False})
             self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
-            self.big4_filter_config = config.get('signals', {}).get('big4_filter', {'enabled': True})
+
+            # 🔥 从数据库读取Big4过滤器配置（优先级高于config.yaml）
+            from app.services.system_settings_loader import get_big4_filter_enabled
+            big4_enabled_from_db = get_big4_filter_enabled()
+            self.big4_filter_config = {'enabled': big4_enabled_from_db}
+            logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
 
         # 初始化智能分批建仓执行器
         if self.batch_entry_config.get('enabled'):
-            strategy_type = self.batch_entry_config.get('strategy', 'price_percentile')
+            # 🔥 从数据库读取策略配置（优先级高于config.yaml）
+            from app.services.system_settings_loader import get_batch_entry_strategy
+            strategy_type = get_batch_entry_strategy()
+            logger.info(f"📊 从数据库加载分批建仓策略: {strategy_type}")
 
             if strategy_type == 'kline_pullback':
                 # V2: K线回调策略
