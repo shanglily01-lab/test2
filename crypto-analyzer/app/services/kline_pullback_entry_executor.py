@@ -114,8 +114,16 @@ class KlinePullbackEntryExecutor:
                         plan['fallback_logged'] = True
 
                 # 获取最近2根K线，判断是否连续反向
+                # 根据阶段确定检测基准时间
+                if plan['phase'] == 'primary':
+                    # 15M阶段：从信号时间开始检测
+                    detection_base_time = signal_time
+                else:
+                    # 5M阶段：从30分钟时刻开始检测
+                    detection_base_time = signal_time + timedelta(minutes=self.primary_window_minutes)
+
                 reverse_confirmed = await self._check_consecutive_reverse_klines(
-                    symbol, direction, timeframe, count=2, signal_time=signal_time
+                    symbol, direction, timeframe, count=2, signal_time=detection_base_time
                 )
 
                 if reverse_confirmed:
