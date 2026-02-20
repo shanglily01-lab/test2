@@ -130,8 +130,8 @@ class SignalScoreV2Service:
             cursor.close()
 
             if result:
-                # 转换字段名以保持兼容性
-                signal_strength = float(result['signal_strength'])
+                # 转换字段名以保持兼容性 (转为整数保持与V1一致)
+                signal_strength = int(round(float(result['signal_strength'])))
                 overall_signal = result['overall_signal']
 
                 # 映射overall_signal到direction
@@ -160,7 +160,7 @@ class SignalScoreV2Service:
                     'updated_at': result['created_at']
                 }
 
-                logger.debug(f"✅ Big4 评分: {total_score:+.0f}, 方向: {direction} (来自big4_trend_history)")
+                logger.debug(f"✅ Big4 评分: {total_score:+d}, 方向: {direction} (来自big4_trend_history)")
                 return big4_data
             else:
                 logger.warning(f"⚠️ Big4 没有评分数据")
