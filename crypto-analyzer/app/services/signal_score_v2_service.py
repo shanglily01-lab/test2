@@ -273,6 +273,7 @@ class SignalScoreV2Service:
                     }
             else:
                 # Big4不够强，允许逆势交易，不检查方向
+                pass
 
         # 检查4: 共振总分是否达标
         resonance_score = coin_total + big4_total
