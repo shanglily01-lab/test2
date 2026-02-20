@@ -104,6 +104,47 @@ class KlinePullbackEntryExecutor:
             'consecutive_reverse_count': 0  # 连续反向K线计数
         }
 
+        # 🔥 立即创建数据库记录，持久化signal_time
+        # 这样重启后可以继续基于原始signal_time执行，而不是重新开始
+        try:
+            conn = pymysql.connect(**self.db_config)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO futures_positions (
+                    account_id, symbol, position_side, status, source,
+                    entry_signal_time, entry_signal_type,
+                    batch_plan, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                self.account_id,
+                symbol,
+                direction,
+                'building',  # 标记为建仓中
+                'smart_trader_batch',
+                datetime.utcfromtimestamp(signal_time.timestamp()),  # 持久化信号时间（UTC）
+                'kline_pullback_v2',
+                json.dumps(plan['batches']),
+                datetime.utcnow()
+            ))
+
+            position_id = cursor.lastrowid
+            plan['position_id'] = position_id
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            logger.info(f"✅ {symbol} 创建V2持仓记录 | ID:{position_id} | 信号时间:{signal_time.strftime('%H:%M:%S')}")
+
+        except Exception as e:
+            logger.error(f"❌ {symbol} 创建持仓记录失败: {e}")
+            return {
+                'success': False,
+                'error': f'创建持仓记录失败: {e}',
+                'position_id': None
+            }
+
         try:
             # 检查信号是否已过期
             elapsed_seconds = (datetime.now() - signal_time).total_seconds()

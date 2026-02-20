@@ -1992,12 +1992,6 @@ class CoinFuturesTraderService:
             # 🔥 获取信号触发时间：优先使用opp中的时间，否则使用当前时间
             signal_time = opp.get('signal_time', datetime.now())
 
-            # 🔥 检查信号时效性：只处理5分钟内的新信号，避免重启后执行旧信号
-            signal_age_minutes = (datetime.now() - signal_time).total_seconds() / 60
-            if signal_age_minutes > 5:
-                logger.warning(f"[SKIP] {symbol} {side} 信号已过期 ({signal_age_minutes:.1f}分钟)，跳过建仓")
-                return False
-
             # 调用智能建仓执行器（作为后台任务，避免阻塞主循环）
             entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
                 'symbol': symbol,
