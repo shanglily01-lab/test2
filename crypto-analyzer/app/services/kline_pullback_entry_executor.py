@@ -402,6 +402,7 @@ class KlinePullbackEntryExecutor:
                 # 🔥 关键逻辑：查询信号后的前N根K线（包括当前进行中的K线）
                 # K线数据是实时更新的，当前K线虽未完成但也有当前开盘价和收盘价
                 # 不排除当前K线，直接取前N根进行判断
+                logger.info(f"🔍 [{symbol}] 查询K线 | timeframe={timeframe} | signal_timestamp={signal_timestamp} | count={count}")
                 cursor.execute("""
                     SELECT open_price, close_price, open_time
                     FROM kline_data
@@ -412,6 +413,9 @@ class KlinePullbackEntryExecutor:
                     ORDER BY open_time ASC
                     LIMIT %s
                 """, (symbol, timeframe, signal_timestamp, count))
+
+                klines = cursor.fetchall()
+                logger.info(f"🔍 [{symbol}] 查询结果: {len(klines)}根K线")
             else:
                 # 兼容旧逻辑（无signal_time时）
                 cursor.execute("""
