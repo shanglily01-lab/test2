@@ -721,12 +721,47 @@ class KlinePullbackEntryExecutor:
         remaining_minutes = self.total_window_minutes - elapsed_minutes
 
         if remaining_minutes <= 0:
-            # 超时，标记为completed
-            logger.info(
-                f"⏰ [V2-RECOVERY] 持仓 {position_id} ({symbol} {direction}) "
-                f"已超过60分钟窗口 (已过{elapsed_minutes:.1f}分钟)，标记为completed"
-            )
-            await self._mark_position_completed(position_id)
+            # 超时，检查是否有实际仓位
+            # 如果quantity=0（未完成任何批次），删除building记录
+            # 如果quantity>0（有部分批次完成），标记为open
+            try:
+                conn = pymysql.connect(**self.db_config)
+                cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+                cursor.execute("""
+                    SELECT quantity FROM futures_positions WHERE id = %s
+                """, (position_id,))
+
+                result = cursor.fetchone()
+                cursor.close()
+                conn.close()
+
+                if result and result['quantity'] and result['quantity'] > 0:
+                    # 有实际仓位，标记为open
+                    logger.info(
+                        f"⏰ [V2-RECOVERY] 持仓 {position_id} ({symbol} {direction}) "
+                        f"已超过60分钟窗口 (已过{elapsed_minutes:.1f}分钟)，标记为open"
+                    )
+                    await self._mark_position_completed(position_id)
+                else:
+                    # 没有仓位，删除building记录
+                    logger.info(
+                        f"⏰ [V2-RECOVERY] 持仓 {position_id} ({symbol} {direction}) "
+                        f"已超过60分钟窗口 (已过{elapsed_minutes:.1f}分钟)，未完成任何批次，删除记录"
+                    )
+                    conn = pymysql.connect(**self.db_config)
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        DELETE FROM futures_positions
+                        WHERE id = %s AND status = 'building' AND (quantity = 0 OR quantity IS NULL)
+                    """, (position_id,))
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+
+            except Exception as e:
+                logger.error(f"❌ [V2-RECOVERY] 处理超时持仓 {position_id} 失败: {e}")
+
             return
 
         # 重建plan对象
