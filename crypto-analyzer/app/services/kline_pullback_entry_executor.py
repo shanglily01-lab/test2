@@ -831,7 +831,7 @@ class KlinePullbackEntryExecutor:
             await self._mark_position_completed(position_id)
             return
 
-        if not batch_plan or not batch_filled:
+        if batch_plan is None or batch_filled is None:
             logger.warning(f"⚠️ [V2-RECOVERY] 持仓 {position_id} 缺少batch数据，标记为completed")
             await self._mark_position_completed(position_id)
             return
