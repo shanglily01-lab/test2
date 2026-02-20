@@ -427,8 +427,7 @@ class KlinePullbackEntryExecutor:
                     ORDER BY open_time DESC
                     LIMIT %s
                 """, (symbol, timeframe, count))
-
-            klines = cursor.fetchall()
+                klines = cursor.fetchall()
             cursor.close()
             conn.close()
 
