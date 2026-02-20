@@ -219,9 +219,11 @@ class KlinePullbackEntryExecutor:
                 # 将Python datetime转换为Unix毫秒时间戳
                 signal_timestamp = int(signal_time.timestamp() * 1000)
 
-                # 当前时间戳（毫秒）- 排除最近未完成的K线
-                current_timestamp = int(datetime.now().timestamp() * 1000)
-                exclude_timestamp = current_timestamp - (timeframe_seconds * 1000)
+                # 🔥 排除当前未完成的K线（对齐到K线周期开始时间）
+                current_timestamp_sec = int(datetime.now().timestamp())
+                # 对齐到K线周期（15m=900s, 5m=300s）
+                current_kline_start_sec = (current_timestamp_sec // timeframe_seconds) * timeframe_seconds
+                exclude_timestamp = current_kline_start_sec * 1000
 
                 cursor.execute("""
                     SELECT open_price, close_price, open_time
@@ -275,10 +277,14 @@ class KlinePullbackEntryExecutor:
 
             # 调试日志
             if signal_time:
-                logger.debug(
+                kline_times_str = ', '.join([
+                    datetime.fromtimestamp(kt / 1000).strftime('%H:%M') for kt in kline_times
+                ]) if kline_times else '无'
+
+                logger.info(
                     f"🔍 [{symbol}] {direction} {timeframe} K线检测 | "
-                    f"信号时间: {signal_time} | "
-                    f"检测到 {len(klines)}/{count} 根K线 | "
+                    f"信号时间: {signal_time.strftime('%H:%M:%S')} | "
+                    f"检测到 {len(klines)}/{count} 根K线 [{kline_times_str}] | "
                     f"反向数: {reverse_count} | "
                     f"结果: {'✅确认' if is_confirmed else '❌未确认'}"
                 )
