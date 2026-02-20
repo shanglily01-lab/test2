@@ -460,27 +460,20 @@ class KlinePullbackEntryExecutor:
             await self._update_position_record(plan)
 
     async def _create_position_record(self, plan: Dict, entry_price: Decimal):
-        """创建持仓记录（第1批）"""
+        """更新持仓记录（第1批完成时）- UPDATE已有的building记录"""
         import json
 
         try:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
 
-            symbol = plan['symbol']
-            direction = plan['direction']
-            batch1 = plan['batches'][0]
+            position_id = plan.get('position_id')
+            if not position_id:
+                logger.error("未找到position_id，无法更新持仓")
+                return
 
-            # 准备batch_plan JSON（保存完整的建仓计划）
-            batch_plan_json = json.dumps({
-                'batches': [
-                    {'ratio': b['ratio']} for b in plan['batches']
-                ],
-                'total_margin': plan['total_margin'],
-                'leverage': plan['leverage'],
-                'signal_time': plan['signal_time'].isoformat(),
-                'strategy': 'kline_pullback_v2'
-            })
+            symbol = plan['symbol']
+            batch1 = plan['batches'][0]
 
             # 准备batch_filled JSON（目前只有第1批）
             batch_filled_json = json.dumps({
@@ -498,46 +491,37 @@ class KlinePullbackEntryExecutor:
             # 计算名义价值（quantity * entry_price）
             notional_value = batch1['quantity'] * float(entry_price)
 
+            # UPDATE已有的building记录，填充第1批数据
             cursor.execute("""
-                INSERT INTO futures_positions
-                (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
-                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 entry_signal_type,
-                 batch_plan, batch_filled, entry_signal_time,
-                 source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                UPDATE futures_positions
+                SET quantity = %s,
+                    entry_price = %s,
+                    avg_entry_price = %s,
+                    notional_value = %s,
+                    margin = %s,
+                    open_time = %s,
+                    batch_filled = %s,
+                    updated_at = NOW()
+                WHERE id = %s
             """, (
-                self.account_id,
-                symbol,
-                direction,  # LONG/SHORT
                 batch1['quantity'],
                 float(entry_price),
                 float(entry_price),  # avg_entry_price（第1批时与entry_price相同）
-                plan['leverage'],
                 notional_value,
                 batch1['margin'],
                 batch1['time'],
-                None,  # 止损后续设置
-                None,  # 止盈后续设置
-                'kline_pullback_v2',  # entry_signal_type存储策略类型
-                batch_plan_json,
                 batch_filled_json,
-                plan['signal_time'],
-                'smart_trader_batch',  # source
-                'building'  # status = building（分批建仓中）
+                position_id
             ))
-
-            position_id = cursor.lastrowid
-            plan['position_id'] = position_id
 
             conn.commit()
             cursor.close()
             conn.close()
 
-            logger.info(f"✅ {symbol} 创建持仓记录 | ID: {position_id}")
+            logger.info(f"✅ {symbol} 第1批建仓完成，更新持仓记录 | ID:{position_id}")
 
         except Exception as e:
-            logger.error(f"❌ {symbol} 创建持仓记录失败: {e}")
+            logger.error(f"❌ {symbol} 更新持仓记录失败: {e}")
 
     async def _update_position_record(self, plan: Dict):
         """更新持仓记录（第2、3批）"""
