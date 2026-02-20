@@ -294,7 +294,7 @@ class SignalScoreV2Service:
                 if big4_score['direction'] != signal_direction:
                     return {
                         'passed': False,
-                        'reason': f'Big4极强({big4_score["total_score"]:+d})且方向冲突：Big4 {big4_score["direction"]} vs 信号{signal_direction}',
+                        'reason': f'Big4极强({big4_score["total_score"]:+.0f})且方向冲突：Big4 {big4_score["direction"]} vs 信号{signal_direction}',
                         'coin_score': coin_score,
                         'big4_score': big4_score,
                         'details': {'big4_strong_block': True}
