@@ -563,6 +563,7 @@ class KlinePullbackEntryExecutor:
                 return
 
             symbol = plan['symbol']
+            direction = plan['direction']
             batch1 = plan['batches'][0]
 
             # 准备batch_filled JSON（目前只有第1批）
