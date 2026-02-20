@@ -258,25 +258,21 @@ class SignalScoreV2Service:
 
         # 检查3: 方向是否一致（如果要求）
         if require_same_direction:
-            # 检查代币方向是否与信号方向一致
-            if coin_score['direction'] != signal_direction:
-                return {
-                    'passed': False,
-                    'reason': f'{symbol} 方向不匹配：评分{coin_score["direction"]} vs 信号{signal_direction}',
-                    'coin_score': coin_score,
-                    'big4_score': big4_score,
-                    'details': {}
-                }
+            # 🔥 只有Big4极强(>70)时才强制要求方向一致，否则允许逆势交易
+            big4_is_strong = big4_total > 70
 
-            # 检查Big4方向是否与信号方向一致
-            if big4_score['direction'] != signal_direction:
-                return {
-                    'passed': False,
-                    'reason': f'Big4方向不匹配：评分{big4_score["direction"]} vs 信号{signal_direction}',
-                    'coin_score': coin_score,
-                    'big4_score': big4_score,
-                    'details': {}
-                }
+            if big4_is_strong:
+                # Big4极强时，必须方向一致
+                if big4_score['direction'] != signal_direction:
+                    return {
+                        'passed': False,
+                        'reason': f'Big4极强({big4_score["total_score"]:+d})且方向冲突：Big4 {big4_score["direction"]} vs 信号{signal_direction}',
+                        'coin_score': coin_score,
+                        'big4_score': big4_score,
+                        'details': {'big4_strong_block': True}
+                    }
+            else:
+                # Big4不够强，允许逆势交易，不检查方向
 
         # 检查4: 共振总分是否达标
         resonance_score = coin_total + big4_total
