@@ -148,11 +148,20 @@ class SignalScoreV2Service:
                 else:
                     total_score = signal_strength
 
+                # 计算strength_level
+                if signal_strength >= 50:
+                    strength_level = 'strong'
+                elif signal_strength >= 20:
+                    strength_level = 'medium'
+                else:
+                    strength_level = 'weak'
+
                 # 构造返回数据结构
                 big4_data = {
                     'total_score': total_score,
                     'signal_strength': signal_strength,  # 绝对值
                     'direction': direction,
+                    'strength_level': strength_level,
                     'overall_signal': overall_signal,
                     'bullish_count': result['bullish_count'],
                     'bearish_count': result['bearish_count'],
