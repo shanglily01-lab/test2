@@ -113,26 +113,34 @@ class KlinePullbackEntryExecutor:
             cursor = conn.cursor()
 
             cursor.execute("""
-                INSERT INTO futures_positions (
-                    account_id, symbol, position_side, leverage,
-                    quantity, entry_price, margin,
-                    status, source, entry_signal_time, entry_signal_type,
-                    batch_plan, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO futures_positions
+                (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
+                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
+                 stop_loss_pct, take_profit_pct,
+                 entry_signal_type, entry_score, signal_components,
+                 batch_plan, batch_filled, entry_signal_time,
+                 source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
             """, (
                 self.account_id,
                 symbol,
                 direction,
+                0,  # quantity初始为0
+                0,  # entry_price初始为0
+                0,  # avg_entry_price初始为0
                 plan['leverage'],
-                0,  # quantity初始为0，建仓完成后更新
-                0,  # entry_price初始为0，建仓完成后更新
-                0,  # margin初始为0，建仓完成后更新
-                'building',  # 标记为建仓中
-                'smart_trader_batch',
-                datetime.utcfromtimestamp(signal_time.timestamp()),  # 持久化信号时间（UTC）
+                0,  # notional_value初始为0
+                0,  # margin初始为0
+                None,  # stop_loss_price
+                None,  # take_profit_price
+                None,  # stop_loss_pct
+                None,  # take_profit_pct
                 'kline_pullback_v2',
+                signal.get('trade_params', {}).get('entry_score', 0),
+                json.dumps(signal.get('trade_params', {}).get('signal_components', {})),
                 json.dumps(plan['batches']),
-                datetime.utcnow()
+                json.dumps([]),  # batch_filled初始为空
+                signal_time  # entry_signal_time
             ))
 
             position_id = cursor.lastrowid
