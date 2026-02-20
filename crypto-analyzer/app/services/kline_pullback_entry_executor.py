@@ -66,9 +66,17 @@ class KlinePullbackEntryExecutor:
         """
         symbol = signal['symbol']
         direction = signal['direction']
-        signal_time = datetime.now()
+
+        # 🔥 关键修复：使用真实的信号触发时间，而不是重启时间
+        # 如果signal中有signal_time，使用它；否则使用当前时间（新信号）
+        signal_time = signal.get('signal_time', datetime.now())
+
+        # 如果signal_time是字符串，转换为datetime
+        if isinstance(signal_time, str):
+            signal_time = datetime.fromisoformat(signal_time)
 
         logger.info(f"🚀 {symbol} 开始K线回调分批建仓 V2 | 方向: {direction}")
+        logger.info(f"   信号时间: {signal_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"   策略: 1根反向K线确认 | 15M(0-30min) → 5M(30-60min)")
         logger.info(f"   原则: 宁愿错过，不追涨杀跌")
 

@@ -1989,6 +1989,9 @@ class CoinFuturesTraderService:
 
             adjusted_position_size = base_position_size * position_multiplier
 
+            # 🔥 获取信号触发时间：优先使用opp中的时间，否则使用当前时间
+            signal_time = opp.get('signal_time', datetime.now())
+
             # 调用智能建仓执行器（作为后台任务，避免阻塞主循环）
             entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
                 'symbol': symbol,
@@ -1996,6 +1999,7 @@ class CoinFuturesTraderService:
                 'total_margin': adjusted_position_size,
                 'leverage': self.leverage,
                 'strategy_id': 'smart_trader',
+                'signal_time': signal_time,  # 🔥 传入真实的信号触发时间
                 'trade_params': {
                     'entry_score': opp.get('score', 0),
                     'signal_components': signal_components,

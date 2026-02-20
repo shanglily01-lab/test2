@@ -725,7 +725,8 @@ class SmartDecisionBrain:
                     'score': score,
                     'current_price': current,
                     'signal_components': signal_components,  # 添加信号组成
-                    'signal_type': signal_type  # 添加信号类型，用于模式过滤
+                    'signal_type': signal_type,  # 添加信号类型，用于模式过滤
+                    'signal_time': datetime.now()  # 🔥 关键修复：记录信号产生的时间
                 }
 
             return None
@@ -1627,6 +1628,9 @@ class SmartTraderService:
 
             adjusted_position_size = base_position_size * position_multiplier
 
+            # 🔥 获取信号触发时间：优先使用opp中的时间，否则使用当前时间
+            signal_time = opp.get('signal_time', datetime.now())
+
             # 调用智能建仓执行器（作为后台任务，避免阻塞主循环）
             entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
                 'symbol': symbol,
@@ -1634,6 +1638,7 @@ class SmartTraderService:
                 'total_margin': adjusted_position_size,
                 'leverage': self.leverage,
                 'strategy_id': 'smart_trader',
+                'signal_time': signal_time,  # 🔥 传入真实的信号触发时间
                 'trade_params': {
                     'entry_score': opp.get('score', 0),
                     'signal_components': signal_components,
