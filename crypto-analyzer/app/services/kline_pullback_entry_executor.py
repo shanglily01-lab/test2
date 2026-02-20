@@ -506,13 +506,13 @@ class KlinePullbackEntryExecutor:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            binance_symbol = symbol.replace('/', '')
+            # 数据库中symbol格式为 'ENSO/USDT'（带斜杠），直接使用
             cursor.execute("""
                 SELECT close_price
                 FROM kline_data
                 WHERE symbol = %s AND timeframe = '5m' AND exchange = 'binance_futures'
                 ORDER BY open_time DESC LIMIT 1
-            """, (binance_symbol,))
+            """, (symbol,))
 
             result = cursor.fetchone()
             cursor.close()
