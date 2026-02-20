@@ -455,6 +455,8 @@ class KlinePullbackEntryExecutor:
             # 必须全部是反向K线
             is_confirmed = reverse_count == count
 
+            logger.info(f"🔍 [{symbol}] 开始打印检测日志 | signal_time={signal_time} | reverse_count={reverse_count} | is_confirmed={is_confirmed}")
+
             # 调试日志
             if signal_time:
                 kline_times_str = ', '.join([
