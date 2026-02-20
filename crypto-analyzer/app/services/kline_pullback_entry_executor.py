@@ -80,6 +80,14 @@ class KlinePullbackEntryExecutor:
         logger.info(f"   策略: 1根反向K线确认 | 15M(0-30min) → 5M(30-60min)")
         logger.info(f"   原则: 宁愿错过，不追涨杀跌")
 
+        # 🔥 确保symbol已订阅到WebSocket价格服务
+        if self.price_service and hasattr(self.price_service, 'subscribe'):
+            try:
+                await self.price_service.subscribe([symbol])
+                logger.debug(f"✅ {symbol} 已订阅到WebSocket价格服务")
+            except Exception as e:
+                logger.warning(f"⚠️ {symbol} WebSocket订阅失败: {e}，将使用数据库价格")
+
         # 初始化建仓计划
         plan = {
             'symbol': symbol,
