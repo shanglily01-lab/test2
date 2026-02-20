@@ -9,6 +9,8 @@ K线回调分批建仓执行器 V2
 - 纪律严明：宁愿错过，不追涨杀跌
 """
 import asyncio
+import json
+import pymysql
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from decimal import Decimal
