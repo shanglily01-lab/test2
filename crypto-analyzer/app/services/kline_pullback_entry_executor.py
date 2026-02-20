@@ -213,9 +213,33 @@ class KlinePullbackEntryExecutor:
                 )
 
                 if reverse_confirmed:
-                    # 找到第一个未完成的批次
+                    # 找到第一个未完成的批次，但要遵守阶段和时间规则
                     for batch_idx, batch in enumerate(plan['batches']):
                         if not batch['filled']:
+                            # 第1批（batch 0）：只在15M阶段执行
+                            if batch_idx == 0 and plan['phase'] != 'primary':
+                                continue
+
+                            # 第2批（batch 1）：只在5M阶段执行
+                            if batch_idx == 1 and plan['phase'] != 'fallback':
+                                continue
+
+                            # 第3批（batch 2）：需要第2批完成，且至少间隔5分钟
+                            if batch_idx == 2:
+                                if plan['phase'] != 'fallback':
+                                    continue
+                                if not plan['batches'][1]['filled']:
+                                    continue
+                                # 检查第2批完成时间
+                                batch2_time = plan['batches'][1].get('time')
+                                if batch2_time:
+                                    if isinstance(batch2_time, str):
+                                        batch2_time = datetime.fromisoformat(batch2_time)
+                                    elapsed = (datetime.now() - batch2_time).total_seconds() / 60
+                                    if elapsed < 5:
+                                        logger.debug(f"🕐 {symbol} 第3批需等待第2批完成后5分钟 | 已过{elapsed:.1f}分钟")
+                                        continue
+
                             reason = f"{timeframe.upper()}反向K线回调确认"
                             await self._execute_batch(plan, batch_idx, current_price, reason)
                             break
