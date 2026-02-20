@@ -1105,10 +1105,11 @@ class FuturesTradingEngine:
 
             if close_quantity == quantity:
                 # 全部平仓
+                # 🔥 修复：如果之前有分批平仓，realized_pnl需要累加而不是覆盖
                 cursor.execute(
                     """UPDATE futures_positions
                     SET status = 'closed', close_time = %s,
-                        realized_pnl = %s, notes = %s
+                        realized_pnl = realized_pnl + %s, notes = %s
                     WHERE id = %s""",
                     (datetime.utcnow(), float(realized_pnl), notes_reason, position_id)
                 )
