@@ -105,15 +105,13 @@ class KlinePullbackEntryExecutor:
                     timeframe = '15m'
                     plan['phase'] = 'primary'
                 else:
-                    # 阶段2: 如果第1批未完成，切换到5M
-                    if not plan['batches'][0]['filled']:
-                        timeframe = '5m'
-                        plan['phase'] = 'fallback'
-                        if plan.get('fallback_logged') != True:
-                            logger.info(f"⏰ {symbol} 30分钟后仍未完成第1批，切换到5M监控")
-                            plan['fallback_logged'] = True
-                    else:
-                        timeframe = '15m'  # 第1批已完成，继续用15M
+                    # 阶段2: 30分钟后统一切换到5M（无论第1批是否完成）
+                    timeframe = '5m'
+                    plan['phase'] = 'fallback'
+                    if plan.get('fallback_logged') != True:
+                        completed = sum(1 for b in plan['batches'] if b['filled'])
+                        logger.info(f"⏰ {symbol} 30分钟后切换到5M精准监控 | 已完成{completed}/3批")
+                        plan['fallback_logged'] = True
 
                 # 获取最近2根K线，判断是否连续反向
                 reverse_confirmed = await self._check_consecutive_reverse_klines(
