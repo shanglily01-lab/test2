@@ -114,14 +114,19 @@ class KlinePullbackEntryExecutor:
 
             cursor.execute("""
                 INSERT INTO futures_positions (
-                    account_id, symbol, position_side, status, source,
-                    entry_signal_time, entry_signal_type,
+                    account_id, symbol, position_side, leverage,
+                    quantity, entry_price, margin,
+                    status, source, entry_signal_time, entry_signal_type,
                     batch_plan, created_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 self.account_id,
                 symbol,
                 direction,
+                plan['leverage'],
+                0,  # quantity初始为0，建仓完成后更新
+                0,  # entry_price初始为0，建仓完成后更新
+                0,  # margin初始为0，建仓完成后更新
                 'building',  # 标记为建仓中
                 'smart_trader_batch',
                 datetime.utcfromtimestamp(signal_time.timestamp()),  # 持久化信号时间（UTC）
