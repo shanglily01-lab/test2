@@ -196,6 +196,10 @@ class KlinePullbackEntryExecutor:
             stop_loss_pct = None
             take_profit_pct = None
 
+        # 🔥 计算计划平仓时间（完全按V1方式: 统一3小时强制平仓）
+        max_hold_minutes = 180  # 3小时强制平仓
+        planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
+
         # 🔥 立即创建数据库记录，持久化signal_time
         # 这样重启后可以继续基于原始signal_time执行，而不是重新开始
         try:
@@ -208,9 +212,9 @@ class KlinePullbackEntryExecutor:
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
                  stop_loss_pct, take_profit_pct,
                  entry_signal_type, entry_score, signal_components,
-                 batch_plan, batch_filled, entry_signal_time,
+                 batch_plan, batch_filled, entry_signal_time, planned_close_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
             """, (
                 self.account_id,
                 symbol,
@@ -230,7 +234,8 @@ class KlinePullbackEntryExecutor:
                 json.dumps(signal.get('trade_params', {}).get('signal_components', {})),
                 json.dumps(plan['batches']),
                 json.dumps([]),  # batch_filled初始为空
-                signal_time  # entry_signal_time
+                signal_time,  # entry_signal_time
+                planned_close_time  # 计划平仓时间（V1方式）
             ))
 
             position_id = cursor.lastrowid
