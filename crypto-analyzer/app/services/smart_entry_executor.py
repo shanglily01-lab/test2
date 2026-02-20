@@ -951,7 +951,7 @@ class SmartEntryExecutor:
             conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
             cursor = conn.cursor()
 
-            # 查询所有building状态的持仓
+            # 查询所有building状态的持仓（排除V2 K线回调策略的记录）
             cursor.execute("""
                 SELECT
                     id, symbol, position_side, batch_plan, batch_filled,
@@ -959,6 +959,7 @@ class SmartEntryExecutor:
                 FROM futures_positions
                 WHERE account_id = %s
                 AND status = 'building'
+                AND (entry_signal_type IS NULL OR entry_signal_type != 'kline_pullback_v2')
                 ORDER BY created_at ASC
             """, (self.account_id,))
 
