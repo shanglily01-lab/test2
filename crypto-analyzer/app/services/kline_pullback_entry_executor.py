@@ -18,6 +18,7 @@ from loguru import logger
 import pymysql
 
 from app.services.batch_position_manager import BatchPositionManager
+from app.services.optimization_config import OptimizationConfig
 
 
 class KlinePullbackEntryExecutor:
@@ -47,14 +48,44 @@ class KlinePullbackEntryExecutor:
         self.brain = brain if brain else getattr(live_engine, 'brain', None)
         self.opt_config = opt_config if opt_config else getattr(live_engine, 'opt_config', None)
 
+        # 如果still没有opt_config，创建新实例
+        if not self.opt_config:
+            self.opt_config = OptimizationConfig(db_config)
+
         # 🔥 初始化持仓管理器（封装公共逻辑）
         self.position_manager = BatchPositionManager(db_config, self.account_id)
 
         # 分批配置
-        self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40%
+        self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40% (已废弃，保留用于兼容)
         self.total_window_minutes = 60  # 总时间窗口60分钟
         self.primary_window_minutes = 30  # 第一阶段30分钟（15M）
         self.check_interval_seconds = 60  # 每60秒检查一次（K线更新频率）
+
+    def _get_margin_per_batch(self, symbol: str) -> float:
+        """
+        根据交易对评级等级获取每批保证金金额
+
+        Args:
+            symbol: 交易对符号
+
+        Returns:
+            每批保证金金额(USDT)，如果是黑名单3级则返回0
+        """
+        rating_level = self.opt_config.get_symbol_rating_level(symbol)
+
+        # 根据评级等级设置每批保证金
+        if rating_level == 0:
+            # 白名单/默认：200U每批
+            return 200.0
+        elif rating_level == 1:
+            # 黑名单1级：50U每批
+            return 50.0
+        elif rating_level == 2:
+            # 黑名单2级：30U每批
+            return 30.0
+        else:
+            # 黑名单3级：不交易
+            return 0.0
 
     def _calculate_stop_take_prices(self, symbol: str, direction: str, current_price: float, signal_components: dict) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
         """
@@ -158,9 +189,24 @@ class KlinePullbackEntryExecutor:
         if isinstance(signal_time, str):
             signal_time = datetime.fromisoformat(signal_time)
 
+        # === 根据黑名单等级获取每批保证金 (新增) ===
+        margin_per_batch = self._get_margin_per_batch(symbol)
+
+        if margin_per_batch == 0:
+            # 黑名单3级，不交易
+            rating_level = self.opt_config.get_symbol_rating_level(symbol)
+            logger.warning(f"❌ {symbol} 为黑名单{rating_level}级，禁止交易")
+            return {
+                'success': False,
+                'reason': f'黑名单{rating_level}级禁止交易',
+                'plan': None,
+                'avg_price': 0
+            }
+
         logger.info(f"🚀 {symbol} 开始K线回调分批建仓 V2 | 方向: {direction}")
         logger.info(f"   信号时间: {signal_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"   策略: 1根反向K线确认 | 15M(0-30min) → 5M(30-60min)")
+        logger.info(f"💰 每批保证金: {margin_per_batch}U (评级等级: {self.opt_config.get_symbol_rating_level(symbol)})")
 
         # 🔥 确保symbol已订阅到WebSocket价格服务
         if self.price_service and hasattr(self.price_service, 'subscribe'):
@@ -175,12 +221,12 @@ class KlinePullbackEntryExecutor:
             'symbol': symbol,
             'direction': direction,
             'signal_time': signal_time,
-            'total_margin': signal.get('total_margin', 400),
+            'margin_per_batch': margin_per_batch,  # 每批固定保证金
             'leverage': signal.get('leverage', 5),
             'batches': [
-                {'ratio': self.batch_ratio[0], 'filled': False, 'price': None, 'time': None, 'reason': None, 'margin': None, 'quantity': None},
-                {'ratio': self.batch_ratio[1], 'filled': False, 'price': None, 'time': None, 'reason': None, 'margin': None, 'quantity': None},
-                {'ratio': self.batch_ratio[2], 'filled': False, 'price': None, 'time': None, 'reason': None, 'margin': None, 'quantity': None},
+                {'filled': False, 'price': None, 'time': None, 'reason': None, 'margin': None, 'quantity': None},
+                {'filled': False, 'price': None, 'time': None, 'reason': None, 'margin': None, 'quantity': None},
+                {'filled': False, 'price': None, 'time': None, 'reason': None, 'margin': None, 'quantity': None},
             ],
             'signal': signal,
             'phase': 'primary',  # primary=15M阶段, fallback=5M阶段
@@ -497,8 +543,8 @@ class KlinePullbackEntryExecutor:
         symbol = plan['symbol']
         direction = plan['direction']
 
-        # 计算这一批的保证金和数量
-        batch_margin = plan['total_margin'] * batch['ratio']
+        # 使用固定保证金计算数量（不再使用比例）
+        batch_margin = plan['margin_per_batch']
         batch_quantity = (batch_margin * plan['leverage']) / float(price)
 
         # 记录批次信息
@@ -534,7 +580,7 @@ class KlinePullbackEntryExecutor:
                 margin=Decimal(str(current_batch['margin'])),
                 leverage=plan['leverage'],
                 batch_num=batch_num,
-                batch_ratio=current_batch['ratio'],
+                batch_ratio=1.0,  # 不再使用比例，传固定值
                 signal=plan['signal'],
                 signal_time=plan['signal_time'],
                 planned_close_time=plan.get('planned_close_time'),
@@ -734,7 +780,7 @@ class KlinePullbackEntryExecutor:
             'symbol': symbol,
             'direction': direction,
             'signal_time': signal_time,
-            'total_margin': batch_plan['total_margin'],
+            'margin_per_batch': self._get_margin_per_batch(symbol),  # 使用新的固定保证金逻辑
             'leverage': batch_plan['leverage'],
             'batches': [],
             'phase': 'primary' if elapsed_minutes < self.primary_window_minutes else 'fallback'

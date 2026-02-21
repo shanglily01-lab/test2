@@ -494,16 +494,21 @@ else:
     final_score -= penalty
 ```
 
-### 信号黑名单制度
+### 交易对评级与保证金制度
 
-| 等级 | 保证金倍数 | 说明 |
+| 等级 | 每批保证金 | 说明 |
 |------|----------|------|
-| Level0 | 1.0 | 白名单（默认） |
-| Level1 | 0.75 | 警告：降25% |
-| Level2 | 0.875 | 谨慎：降12.5% |
-| Level3 | 0 | 永久禁止 |
+| Level0 (白名单/默认) | 200 USDT | 正常交易 |
+| Level1 (黑名单1级) | 50 USDT | 警告：降75% |
+| Level2 (黑名单2级) | 30 USDT | 谨慎：降85% |
+| Level3 (黑名单3级) | 0 USDT | 永久禁止 |
 
 **白名单保护**: BTC, ETH, BNB, SOL永不进入黑名单
+
+**注意**:
+- 分批建仓时，每一批使用相同的固定保证金
+- 不再使用总保证金×比例的方式分配
+- 根据交易对历史表现自动升降级
 
 ---
 
@@ -511,28 +516,36 @@ else:
 
 ### 仓位管理
 
-**单仓位配置**:
+**单批次配置**:
 ```yaml
-base_margin: 400 USDT      # 基础保证金
 leverage: 5x               # 杠杆倍数
 stop_loss: 2%              # 止损比例
 take_profit: 6%            # 止盈比例
+
+# 每批保证金根据交易对评级等级决定:
+rating_level_0: 200 USDT   # 白名单/默认
+rating_level_1: 50 USDT    # 黑名单1级
+rating_level_2: 30 USDT    # 黑名单2级
+rating_level_3: 0 USDT     # 黑名单3级（禁止）
 ```
 
-**动态仓位调整**:
+**保证金计算示例**:
 ```python
-# 1. 币种分级调整
-if rating_level == 1:
-    margin *= 0.75   # Level1: -25%
-elif rating_level == 2:
-    margin *= 0.875  # Level2: -12.5%
-elif rating_level == 3:
-    margin *= 0      # Level3: 禁止
+# 获取交易对评级等级
+rating_level = get_symbol_rating_level(symbol)
 
-# 2. Big4顺势加仓
-if (big4 == 'BULLISH' and side == 'LONG') or \
-   (big4 == 'BEARISH' and side == 'SHORT'):
-    margin *= 1.2    # 顺势+20%
+# 根据等级设置每批保证金
+if rating_level == 0:
+    margin_per_batch = 200   # 白名单
+elif rating_level == 1:
+    margin_per_batch = 50    # 黑名单1级
+elif rating_level == 2:
+    margin_per_batch = 30    # 黑名单2级
+else:
+    return "禁止交易"        # 黑名单3级
+
+# 每批使用相同的保证金
+# 不再使用 total_margin * batch_ratio 的方式
 ```
 
 ### 8层风控体系

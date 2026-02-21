@@ -11,6 +11,7 @@ from loguru import logger
 from app.services.price_sampler import PriceSampler
 from app.services.volatility_calculator import get_volatility_calculator
 from app.services.batch_position_manager import BatchPositionManager
+from app.services.optimization_config import OptimizationConfig
 
 
 class SmartEntryExecutor:
@@ -38,9 +39,38 @@ class SmartEntryExecutor:
         # 🔥 初始化公共的持仓管理器
         self.position_manager = BatchPositionManager(db_config=db_config, account_id=self.account_id)
 
+        # 初始化优化配置（用于获取交易对评级）
+        self.opt_config = OptimizationConfig(db_config=db_config)
+
         # 分批配置
-        self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40%
+        self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40% (已废弃，保留用于K线强度评分显示)
         self.time_window = 30  # 30分钟建仓窗口 (配合K线强度评分: 15/30/45分钟)
+
+    def _get_margin_per_batch(self, symbol: str) -> float:
+        """
+        根据交易对评级等级获取每批保证金金额
+
+        Args:
+            symbol: 交易对符号
+
+        Returns:
+            每批保证金金额(USDT)，如果是黑名单3级则返回0
+        """
+        rating_level = self.opt_config.get_symbol_rating_level(symbol)
+
+        # 根据评级等级设置每批保证金
+        if rating_level == 0:
+            # 白名单/默认：200U每批
+            return 200.0
+        elif rating_level == 1:
+            # 黑名单1级：50U每批
+            return 50.0
+        elif rating_level == 2:
+            # 黑名单2级：30U每批
+            return 30.0
+        else:
+            # 黑名单3级：不交易
+            return 0.0
 
     async def execute_entry(self, signal: Dict) -> Dict:
         """
@@ -67,6 +97,22 @@ class SmartEntryExecutor:
         direction = signal['direction']
         signal_time = datetime.now()
 
+        # === 根据黑名单等级获取每批保证金 (新增) ===
+        margin_per_batch = self._get_margin_per_batch(symbol)
+
+        if margin_per_batch == 0:
+            # 黑名单3级，不交易
+            rating_level = self.opt_config.get_symbol_rating_level(symbol)
+            logger.warning(f"❌ {symbol} 为黑名单{rating_level}级，禁止交易")
+            return {
+                'success': False,
+                'reason': f'黑名单{rating_level}级禁止交易',
+                'plan': None,
+                'avg_price': 0
+            }
+
+        logger.info(f"💰 {symbol} 每批保证金: {margin_per_batch}U (评级等级: {self.opt_config.get_symbol_rating_level(symbol)})")
+
         # === 根据K线强度调整建仓策略 (新增) ===
         entry_strategy = signal.get('entry_strategy')
         kline_strength = signal.get('kline_strength')
@@ -79,24 +125,24 @@ class SmartEntryExecutor:
 
             logger.info(f"🚀 {symbol} 开始智能建仓 | 方向: {direction} | 策略: {entry_mode}")
             logger.info(f"   K线强度: {kline_strength['total_score']}/40分 ({kline_strength['direction']}, {kline_strength['strength']})")
-            logger.info(f"   建仓窗口: {self.time_window}分钟 | 分批比例: {self.batch_ratio}")
+            logger.info(f"   建仓窗口: {self.time_window}分钟")
         else:
             # 使用默认策略
             self.batch_ratio = [0.3, 0.3, 0.4]
             self.time_window = 30
             logger.info(f"🚀 {symbol} 开始智能建仓流程 | 方向: {direction} (默认策略)")
 
-        # 初始化建仓计划
+        # 初始化建仓计划（使用固定保证金，不再使用比例）
         plan = {
             'symbol': symbol,
             'direction': direction,
             'signal_time': signal_time,
-            'total_margin': signal.get('total_margin', 400),
+            'margin_per_batch': margin_per_batch,  # 每批固定保证金
             'leverage': signal.get('leverage', 5),
             'batches': [
-                {'ratio': self.batch_ratio[0], 'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
-                {'ratio': self.batch_ratio[1], 'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
-                {'ratio': self.batch_ratio[2], 'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
+                {'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
+                {'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
+                {'filled': False, 'price': None, 'time': None, 'score': None, 'margin': None, 'quantity': None},
             ],
             'signal': signal,  # 保存原始信号用于创建持仓记录
             'kline_strength': kline_strength  # 保存K线强度数据
@@ -326,8 +372,8 @@ class SmartEntryExecutor:
         """
         batch = plan['batches'][batch_num]
 
-        # 计算这一批的保证金和数量（模拟盘，不调用交易所API）
-        batch_margin = plan['total_margin'] * batch['ratio']
+        # 使用固定保证金计算数量（不再使用比例）
+        batch_margin = plan['margin_per_batch']
         batch_quantity = (batch_margin * plan['leverage']) / float(price)
 
         # 记录建仓信息
@@ -340,7 +386,7 @@ class SmartEntryExecutor:
         logger.info(
             f"✅ {plan['symbol']} 第{batch_num+1}批建仓完成 | "
             f"价格: {price:.6f} | "
-            f"比例: {batch['ratio']*100:.0f}% | "
+            f"保证金: {batch_margin}U | "
             f"原因: {reason}"
         )
 
@@ -348,14 +394,14 @@ class SmartEntryExecutor:
         position_id = await self._create_position_record(plan, batch_num)
         logger.info(f"📝 创建独立持仓记录 #{position_id} (第{batch_num+1}批)")
 
-        # 计算当前平均成本
+        # 计算当前平均成本（按保证金加权）
         filled_batches = [b for b in plan['batches'] if b['filled']]
         if len(filled_batches) > 0:
-            total_weight = sum(b['ratio'] for b in filled_batches)
-            avg_cost = sum(float(b['price']) * b['ratio'] for b in filled_batches) / total_weight
+            total_margin = sum(b['margin'] for b in filled_batches)
+            avg_cost = sum(float(b['price']) * b['margin'] for b in filled_batches) / total_margin
             logger.info(
                 f"   当前平均成本: {avg_cost:.6f} | "
-                f"已完成: {len(filled_batches)}/3批 ({total_weight*100:.0f}%)"
+                f"已完成: {len(filled_batches)}/3批 (总保证金: {total_margin}U)"
             )
 
     # 已移除强制完成逻辑 - 买了几批算几批，不再强制完成3批
@@ -465,15 +511,15 @@ class SmartEntryExecutor:
         return Decimal('0')
 
     def _calculate_avg_price(self, plan: Dict) -> float:
-        """计算加权平均价格"""
+        """计算加权平均价格（按保证金加权）"""
         filled_batches = [b for b in plan['batches'] if b['filled'] and b['price']]
         if not filled_batches:
             return 0.0
 
-        total_weight = sum(b['ratio'] for b in filled_batches)
-        weighted_sum = sum(float(b['price']) * b['ratio'] for b in filled_batches)
+        total_margin = sum(b['margin'] for b in filled_batches)
+        weighted_sum = sum(float(b['price']) * b['margin'] for b in filled_batches)
 
-        return weighted_sum / total_weight if total_weight > 0 else 0.0
+        return weighted_sum / total_margin if total_margin > 0 else 0.0
 
     async def _create_position_record(self, plan: Dict, batch_num: int = 0) -> int:
         """
@@ -498,7 +544,7 @@ class SmartEntryExecutor:
                 margin=Decimal(str(current_batch['margin'])),
                 leverage=plan['leverage'],
                 batch_num=batch_num,
-                batch_ratio=current_batch['ratio'],
+                batch_ratio=1.0,  # 不再使用比例，传固定值
                 signal=plan['signal'],
                 signal_time=plan['signal_time'],
                 planned_close_time=plan.get('planned_close_time'),
@@ -604,22 +650,24 @@ class SmartEntryExecutor:
             f"进度: {filled_count}/{total_batches}"
         )
 
+        # 获取该交易对的每批保证金
+        margin_per_batch = self._get_margin_per_batch(symbol)
+
         # 重建plan对象
         plan = {
             'position_id': position_id,
             'symbol': symbol,
             'direction': direction,
             'signal_time': pos.get('entry_signal_time') or created_at,
-            'total_margin': 400,  # 默认值,实际已经在数据库中
+            'margin_per_batch': margin_per_batch,  # 使用新的固定保证金逻辑
             'leverage': 5,
             'batches': [],
             'signal': {}
         }
 
-        # 重建batches结构
+        # 重建batches结构（不再使用ratio）
         for i, batch_plan_item in enumerate(batch_plan['batches']):
             batch = {
-                'ratio': batch_plan_item['ratio'],
                 'filled': False,
                 'price': None,
                 'time': None,
