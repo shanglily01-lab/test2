@@ -63,6 +63,18 @@ class SmartExitOptimizer:
         # 部分平仓阶段跟踪（避免重复触发）
         self.partial_close_stage: Dict[int, int] = {}  # position_id -> stage (0=未平仓, 1=平50%, 2=平70%, 3=平100%)
 
+        # === 智能监控策略 K线缓冲区 (新增) ===
+        self.kline_5m_buffer: Dict[int, List] = {}  # position_id -> 最近N根5M K线
+        self.kline_15m_buffer: Dict[int, List] = {}  # position_id -> 最近N根15M K线
+        self.last_5m_check: Dict[int, datetime] = {}  # position_id -> 上次检查5M的时间
+        self.last_15m_check: Dict[int, datetime] = {}  # position_id -> 上次检查15M的时间
+
+        # 价格采样器（用于150分钟后的最优价格评估）
+        self.price_samples: Dict[int, List[float]] = {}  # position_id -> 价格采样列表
+
+        # === HTTP Session 复用（性能优化）===
+        self._http_session: Optional[aiohttp.ClientSession] = None
+
     async def start_monitoring_position(self, position_id: int):
         """
         开始监控持仓（从开仓完成后立即开始）
@@ -98,6 +110,20 @@ class SmartExitOptimizer:
             # 清理K线检查时间记录
             if position_id in self.last_kline_check:
                 del self.last_kline_check[position_id]
+
+            # 清理K线缓冲区
+            if position_id in self.kline_5m_buffer:
+                del self.kline_5m_buffer[position_id]
+            if position_id in self.kline_15m_buffer:
+                del self.kline_15m_buffer[position_id]
+            if position_id in self.last_5m_check:
+                del self.last_5m_check[position_id]
+            if position_id in self.last_15m_check:
+                del self.last_15m_check[position_id]
+
+            # 清理价格采样
+            if position_id in self.price_samples:
+                del self.price_samples[position_id]
 
             logger.info(f"⏹️ 停止监控持仓 {position_id}")
 
@@ -136,6 +162,10 @@ class SmartExitOptimizer:
 
                 # 更新最高盈利记录
                 await self._update_max_profit(position_id, profit_info)
+
+                # === 更新K线缓冲区和价格采样（用于智能监控）===
+                await self._update_kline_buffers(position_id, position['symbol'])
+                await self._update_price_samples(position_id, float(current_price))
 
                 # 检查兜底平仓条件（超高盈利/巨额亏损）
                 should_close, reason = await self._check_exit_conditions(
@@ -241,9 +271,8 @@ class SmartExitOptimizer:
         except Exception as e:
             logger.warning(f"{symbol} WebSocket获取失败: {e}")
 
-        # 第2级: REST API实时价格
+        # 第2级: REST API实时价格（异步，复用session）
         try:
-            import requests
             symbol_clean = symbol.replace('/', '').upper()
 
             # 根据交易对类型选择API
@@ -256,23 +285,23 @@ class SmartExitOptimizer:
                 api_url = 'https://fapi.binance.com/fapi/v1/ticker/price'
                 symbol_for_api = symbol_clean
 
-            response = requests.get(
+            session = await self._get_http_session()
+            async with session.get(
                 api_url,
                 params={'symbol': symbol_for_api},
-                timeout=3
-            )
+                timeout=aiohttp.ClientTimeout(total=3)
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    # 币本位API返回数组，U本位返回对象
+                    if isinstance(data, list) and len(data) > 0:
+                        rest_price = float(data[0]['price'])
+                    else:
+                        rest_price = float(data['price'])
 
-            if response.status_code == 200:
-                data = response.json()
-                # 币本位API返回数组，U本位返回对象
-                if isinstance(data, list) and len(data) > 0:
-                    rest_price = float(data[0]['price'])
-                else:
-                    rest_price = float(data['price'])
-
-                if rest_price > 0:
-                    logger.info(f"{symbol} 降级到REST API价格: {rest_price}")
-                    return Decimal(str(rest_price))
+                    if rest_price > 0:
+                        logger.info(f"{symbol} 降级到REST API价格: {rest_price}")
+                        return Decimal(str(rest_price))
         except Exception as e:
             logger.warning(f"{symbol} REST API获取失败: {e}")
 
@@ -975,6 +1004,268 @@ class SmartExitOptimizer:
 
         return False
 
+    async def _update_kline_buffers(self, position_id: int, symbol: str):
+        """
+        更新K线缓冲区（5M和15M）
+
+        Args:
+            position_id: 持仓ID
+            symbol: 交易对
+        """
+        try:
+            now = datetime.now()
+
+            # === 更新5M K线缓冲区 ===
+            if position_id not in self.kline_5m_buffer:
+                # 首次初始化：获取最近3根5M K线
+                klines = await self._fetch_latest_kline(symbol, '5m', limit=3)
+                if klines:
+                    self.kline_5m_buffer[position_id] = klines
+                    self.last_5m_check[position_id] = now
+                    logger.debug(f"初始化5M K线缓冲区: 持仓{position_id}，获取{len(klines)}根K线")
+            elif (now - self.last_5m_check.get(position_id, now)).total_seconds() >= 300:
+                # 定期更新：每5分钟检查一次
+                klines = await self._fetch_latest_kline(symbol, '5m', limit=1)
+                if klines and len(klines) > 0:
+                    latest_kline = klines[0]
+
+                    # 检查是否是新K线（避免重复）
+                    if len(self.kline_5m_buffer[position_id]) == 0 or \
+                       latest_kline['close_time'] > self.kline_5m_buffer[position_id][-1]['close_time']:
+                        self.kline_5m_buffer[position_id].append(latest_kline)
+                        # 只保留最近3根
+                        if len(self.kline_5m_buffer[position_id]) > 3:
+                            self.kline_5m_buffer[position_id] = self.kline_5m_buffer[position_id][-3:]
+                        logger.debug(f"更新5M K线: 持仓{position_id}，收盘时间{latest_kline['close_time']}")
+
+                    self.last_5m_check[position_id] = now
+
+            # === 更新15M K线缓冲区 ===
+            if position_id not in self.kline_15m_buffer:
+                # 首次初始化：获取最近3根15M K线
+                klines = await self._fetch_latest_kline(symbol, '15m', limit=3)
+                if klines:
+                    self.kline_15m_buffer[position_id] = klines
+                    self.last_15m_check[position_id] = now
+                    logger.debug(f"初始化15M K线缓冲区: 持仓{position_id}，获取{len(klines)}根K线")
+            elif (now - self.last_15m_check.get(position_id, now)).total_seconds() >= 900:
+                # 定期更新：每15分钟检查一次
+                klines = await self._fetch_latest_kline(symbol, '15m', limit=1)
+                if klines and len(klines) > 0:
+                    latest_kline = klines[0]
+
+                    # 检查是否是新K线（避免重复）
+                    if len(self.kline_15m_buffer[position_id]) == 0 or \
+                       latest_kline['close_time'] > self.kline_15m_buffer[position_id][-1]['close_time']:
+                        self.kline_15m_buffer[position_id].append(latest_kline)
+                        # 只保留最近3根
+                        if len(self.kline_15m_buffer[position_id]) > 3:
+                            self.kline_15m_buffer[position_id] = self.kline_15m_buffer[position_id][-3:]
+                        logger.debug(f"更新15M K线: 持仓{position_id}，收盘时间{latest_kline['close_time']}")
+
+                    self.last_15m_check[position_id] = now
+
+        except Exception as e:
+            logger.error(f"更新K线缓冲区失败: {e}")
+
+    async def _get_http_session(self):
+        """获取或创建HTTP session（复用以提升性能）"""
+        if self._http_session is None or self._http_session.closed:
+            import aiohttp
+            self._http_session = aiohttp.ClientSession()
+        return self._http_session
+
+    async def _fetch_latest_kline(self, symbol: str, interval: str, limit: int = 1):
+        """
+        获取最新K线数据（异步，复用session）
+
+        Args:
+            symbol: 交易对
+            interval: 时间间隔（5m/15m）
+            limit: 获取K线数量（默认1根，初始化时可获取多根）
+
+        Returns:
+            K线字典列表 [{open, high, low, close, close_time, open_time}]
+        """
+        try:
+            symbol_clean = symbol.replace('/', '').upper()
+
+            # 根据交易对类型选择API
+            if symbol.endswith('/USD'):
+                api_url = 'https://dapi.binance.com/dapi/v1/klines'
+                symbol_for_api = symbol_clean + '_PERP'
+            else:
+                api_url = 'https://fapi.binance.com/fapi/v1/klines'
+                symbol_for_api = symbol_clean
+
+            session = await self._get_http_session()
+            async with session.get(
+                api_url,
+                params={'symbol': symbol_for_api, 'interval': interval, 'limit': limit},
+                timeout=aiohttp.ClientTimeout(total=3)
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data and len(data) > 0:
+                        # 返回K线列表
+                        klines = []
+                        for kline in data:
+                            klines.append({
+                                'open': float(kline[1]),
+                                'high': float(kline[2]),
+                                'low': float(kline[3]),
+                                'close': float(kline[4]),
+                                'open_time': datetime.fromtimestamp(kline[0] / 1000),
+                                'close_time': datetime.fromtimestamp(kline[6] / 1000)
+                            })
+                        return klines
+        except Exception as e:
+            logger.warning(f"获取{symbol} {interval} K线失败: {e}")
+            return None
+
+    async def _check_5m_no_improvement(self, position_id: int, position_side: str) -> bool:
+        """
+        检查2根5M K线是否无好转
+
+        Args:
+            position_id: 持仓ID
+            position_side: 持仓方向（LONG/SHORT）
+
+        Returns:
+            是否无好转
+        """
+        if position_id not in self.kline_5m_buffer:
+            return False
+
+        buffer = self.kline_5m_buffer[position_id]
+        if len(buffer) < 2:
+            return False
+
+        candle_1, candle_2 = buffer[-2:]
+
+        # 判断是否持续恶化或无明显好转
+        if position_side == 'LONG':
+            # 多仓: 期待价格上涨
+            if candle_2['close'] <= candle_1['close']:
+                logger.debug(f"持仓{position_id} LONG 5M无好转: {candle_1['close']:.6f} -> {candle_2['close']:.6f}")
+                return True  # 继续下跌或横盘
+        else:  # SHORT
+            # 空仓: 期待价格下跌
+            if candle_2['close'] >= candle_1['close']:
+                logger.debug(f"持仓{position_id} SHORT 5M无好转: {candle_1['close']:.6f} -> {candle_2['close']:.6f}")
+                return True  # 继续上涨或横盘
+
+        return False
+
+    async def _check_15m_no_sustained_improvement(self, position_id: int, position_side: str) -> bool:
+        """
+        检查2根15M K线是否无持续好转
+
+        Args:
+            position_id: 持仓ID
+            position_side: 持仓方向（LONG/SHORT）
+
+        Returns:
+            是否无持续好转
+        """
+        if position_id not in self.kline_15m_buffer:
+            return False
+
+        buffer = self.kline_15m_buffer[position_id]
+        if len(buffer) < 2:
+            return False
+
+        candle_1, candle_2 = buffer[-2:]
+
+        # 判断是否持续好转
+        if position_side == 'LONG':
+            # 第1根好转但第2根反转
+            if candle_1['close'] > candle_1['open'] and candle_2['close'] < candle_1['close']:
+                logger.debug(
+                    f"持仓{position_id} LONG 15M无持续好转: "
+                    f"K1 {candle_1['open']:.6f}->{candle_1['close']:.6f}, "
+                    f"K2 {candle_2['open']:.6f}->{candle_2['close']:.6f}"
+                )
+                return True
+        else:  # SHORT
+            # 第1根好转但第2根反转
+            if candle_1['close'] < candle_1['open'] and candle_2['close'] > candle_1['close']:
+                logger.debug(
+                    f"持仓{position_id} SHORT 15M无持续好转: "
+                    f"K1 {candle_1['open']:.6f}->{candle_1['close']:.6f}, "
+                    f"K2 {candle_2['open']:.6f}->{candle_2['close']:.6f}"
+                )
+                return True
+
+        return False
+
+    async def _update_price_samples(self, position_id: int, current_price: float):
+        """
+        更新价格采样（用于150分钟后的最优价格评估）
+
+        Args:
+            position_id: 持仓ID
+            current_price: 当前价格
+        """
+        if position_id not in self.price_samples:
+            self.price_samples[position_id] = []
+
+        self.price_samples[position_id].append(current_price)
+
+        # 只保留最近30分钟的数据（每秒1个，保留1800个）
+        if len(self.price_samples[position_id]) > 1800:
+            self.price_samples[position_id] = self.price_samples[position_id][-1800:]
+
+    async def _find_optimal_exit_price(self, position_id: int, position_side: str, current_price: float, profit_pct: float) -> bool:
+        """
+        寻找最优平仓价格（150分钟后启动）
+
+        Args:
+            position_id: 持仓ID
+            position_side: 持仓方向
+            current_price: 当前价格
+            profit_pct: 当前盈亏百分比
+
+        Returns:
+            是否找到最优价格
+        """
+        if position_id not in self.price_samples or len(self.price_samples[position_id]) < 600:
+            # 数据不足（少于10分钟）
+            return False
+
+        recent_prices = self.price_samples[position_id][-1800:]  # 最近30分钟
+
+        if profit_pct > 0:
+            # 盈利场景: 寻找局部高点
+            if position_side == 'LONG':
+                # 做多: 当前价格是最近10分钟的最高点
+                recent_10min = recent_prices[-600:]
+                if current_price >= max(recent_10min):
+                    logger.info(f"持仓{position_id} LONG 找到局部高点 ${current_price:.6f}，盈利{profit_pct:.2f}%")
+                    return True
+            else:  # SHORT
+                # 做空: 当前价格是最近10分钟的最低点
+                recent_10min = recent_prices[-600:]
+                if current_price <= min(recent_10min):
+                    logger.info(f"持仓{position_id} SHORT 找到局部低点 ${current_price:.6f}，盈利{profit_pct:.2f}%")
+                    return True
+        else:
+            # 亏损场景: 寻找相对回升点
+            if position_side == 'LONG':
+                # 做多亏损: 价格反弹（相对回升）
+                recent_10min = recent_prices[-600:]
+                if current_price >= max(recent_10min[-120:]):  # 最近2分钟的高点
+                    logger.info(f"持仓{position_id} LONG 找到相对回升点 ${current_price:.6f}，亏损{profit_pct:.2f}%")
+                    return True
+            else:  # SHORT
+                # 做空亏损: 价格回落（相对回升）
+                recent_10min = recent_prices[-600:]
+                if current_price <= min(recent_10min[-120:]):  # 最近2分钟的低点
+                    logger.info(f"持仓{position_id} SHORT 找到相对回落点 ${current_price:.6f}，亏损{profit_pct:.2f}%")
+                    return True
+
+        return False
+
     async def _check_top_bottom(self, symbol: str, position_side: str, entry_price: float) -> tuple:
         """
         检查是否触发顶底识别
@@ -1082,10 +1373,10 @@ class SmartExitOptimizer:
             current_stage = self.partial_close_stage.get(position_id, 0)
 
             # ============================================================
-            # === 优先级0: 最小持仓时间限制 (1小时) ===
+            # === 优先级0: 最小持仓时间限制 (30分钟) ===
             # ============================================================
-            # 开仓1小时内只允许止损和止盈,不允许其他原因平仓
-            MIN_HOLD_MINUTES = 60  # 1小时最小持仓时间
+            # 开仓30分钟内只允许止损和止盈,不允许其他原因平仓
+            MIN_HOLD_MINUTES = 30  # 30分钟最小持仓时间
 
             # ============================================================
             # === 优先级1: 分批止损检查（风控底线，无需等待最小持仓时间） ===
@@ -1125,7 +1416,36 @@ class SmartExitOptimizer:
                     return ('分批止损-第1档(平50%)', 0.5)
 
             # ============================================================
-            # === 优先级1.5: 提前止损优化 (ROI亏损-10%时重点监控) ===
+            # === 优先级1.5: 智能亏损监控（30分钟后启动）===
+            # ============================================================
+            # 策略A: 亏损≥2% + 2根5M K线无好转 → 立即平仓
+            # 策略B: 亏损≥1% + 2根15M K线无持续好转 → 平仓
+
+            if hold_minutes >= MIN_HOLD_MINUTES:
+                pnl_pct = profit_info.get('profit_pct', 0)
+
+                # 策略A: 亏损≥2% + 2根5M无好转
+                if pnl_pct <= -2.0:
+                    no_improvement = await self._check_5m_no_improvement(position_id, position_side)
+                    if no_improvement:
+                        logger.warning(
+                            f"🚨 持仓{position_id} {symbol} {position_side} 触发智能亏损监控-策略A | "
+                            f"亏损{pnl_pct:.2f}% >= 2% + 2根5M K线无好转，立即平仓"
+                        )
+                        return ('亏损2%+5M无好转', 1.0)
+
+                # 策略B: 亏损≥1% + 2根15M无持续好转
+                elif pnl_pct <= -1.0:
+                    no_sustained = await self._check_15m_no_sustained_improvement(position_id, position_side)
+                    if no_sustained:
+                        logger.warning(
+                            f"⚠️ 持仓{position_id} {symbol} {position_side} 触发智能亏损监控-策略B | "
+                            f"亏损{pnl_pct:.2f}% >= 1% + 2根15M K线无持续好转，平仓"
+                        )
+                        return ('亏损1%+15M无持续好转', 1.0)
+
+            # ============================================================
+            # === 优先级1.6: 提前止损优化 (ROI亏损-10%时重点监控) ===
             # ============================================================
             # 当真实ROI亏损达到-10%时,检查是否有好转迹象,如无好转则提前止损
             # ROI = 价格变化% × 杠杆 (例: -1%价格 × 10倍杠杆 = -10% ROI)
@@ -1243,17 +1563,17 @@ class SmartExitOptimizer:
                             return (f'移动止盈(回撤{drawdown_pct:.1f}%)', 1.0)
 
             # ============================================================
-            # === 在此之后的所有平仓检查都需要满足最小持仓时间(1小时) ===
+            # === 在此之后的所有平仓检查都需要满足最小持仓时间(30分钟) ===
             # ============================================================
-            # 开仓1小时内不平仓(除了止损和止盈)
+            # 开仓30分钟内不平仓(除了止损和止盈)
             if hold_minutes < MIN_HOLD_MINUTES:
-                # 1小时内只允许止损和止盈,不进行其他平仓检查
+                # 30分钟内只允许止损和止盈,不进行其他平仓检查
                 return None
 
             # ============================================================
             # === 优先级4: 智能顶底识别 ===
             # ============================================================
-            # 注: 已满足1小时最小持仓时间,现在可以检查顶底
+            # 注: 已满足30分钟最小持仓时间,现在可以检查顶底
             is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price)
             if is_top_bottom:
                 logger.info(
@@ -1261,6 +1581,22 @@ class SmartExitOptimizer:
                     f"持仓{hold_hours:.1f}小时"
                 )
                 return (tb_reason, 1.0)
+
+            # ============================================================
+            # === 优先级4.5: 最优价格评估（150分钟后启动）===
+            # ============================================================
+            # 接近3小时持仓时间（150分钟后），启动价格评估系统寻找最优平仓点
+            if hold_minutes >= 150:
+                pnl_pct = profit_info.get('profit_pct', 0)
+                optimal_found = await self._find_optimal_exit_price(
+                    position_id, position_side, float(current_price), pnl_pct
+                )
+                if optimal_found:
+                    logger.info(
+                        f"💎 持仓{position_id} {symbol} {position_side} 找到最优平仓价格 | "
+                        f"持仓{hold_minutes:.0f}分钟 | 盈亏{pnl_pct:+.2f}%"
+                    )
+                    return ('最优价格评估', 1.0)
 
             # ============================================================
             # === 优先级5: 动态超时检查（基于timeout_at字段） ===
