@@ -30,6 +30,9 @@ def collect_day_data(target_date):
         'options': {'defaultType': 'future'}
     })
 
+    # 加载市场信息
+    markets = exchange.load_markets()
+
     # 连接数据库
     conn = mysql.connector.connect(
         host=os.getenv('DB_HOST'),
