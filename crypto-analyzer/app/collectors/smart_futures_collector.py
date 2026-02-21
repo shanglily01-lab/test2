@@ -61,6 +61,12 @@ class SmartFuturesCollector:
         """
         判断当前是否需要采集该时间周期的K线
 
+        🔥 修复逻辑：基于K线整点时间判断，而不是距上次采集时间
+        - 5m: 每5分钟整点 (00:00, 00:05, 00:10, ...)
+        - 15m: 每15分钟整点 (00:00, 00:15, 00:30, 00:45)
+        - 1h: 每小时整点 (00:00, 01:00, 02:00, ...)
+        - 1d: 每天00:00
+
         Args:
             interval: 时间周期 (5m, 15m, 1h, 1d)
 
@@ -75,19 +81,34 @@ class SmartFuturesCollector:
 
         last_time = self.last_collection_time[interval]
 
-        # 根据interval判断是否到了采集时间
+        # 🔥 新逻辑：基于K线整点时间判断
         if interval == '5m':
-            # 每5分钟采集一次
-            return (now - last_time).total_seconds() >= 300
+            # 计算当前5分钟整点（向下取整到最近的5分钟）
+            current_bar_minute = (now.minute // 5) * 5
+            current_bar_time = now.replace(minute=current_bar_minute, second=0, microsecond=0)
+
+            # 如果上次采集时间早于当前K线整点，则需要采集
+            return last_time < current_bar_time
+
         elif interval == '15m':
-            # 每15分钟采集一次
-            return (now - last_time).total_seconds() >= 900
+            # 计算当前15分钟整点（0, 15, 30, 45）
+            current_bar_minute = (now.minute // 15) * 15
+            current_bar_time = now.replace(minute=current_bar_minute, second=0, microsecond=0)
+
+            return last_time < current_bar_time
+
         elif interval == '1h':
-            # 每1小时采集一次
-            return (now - last_time).total_seconds() >= 3600
+            # 计算当前小时整点
+            current_bar_time = now.replace(minute=0, second=0, microsecond=0)
+
+            return last_time < current_bar_time
+
         elif interval == '1d':
-            # 每1天采集一次
-            return (now - last_time).total_seconds() >= 86400
+            # 计算当前天00:00
+            current_bar_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+            return last_time < current_bar_time
+
         else:
             return True
 
