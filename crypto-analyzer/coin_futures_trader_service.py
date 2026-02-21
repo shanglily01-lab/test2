@@ -1123,24 +1123,10 @@ class CoinFuturesDecisionBrain:
                         logger.warning(f"⚠️ {symbol} 破位加权失败: {e}")
                         breakout_boost = 0
 
-                # 🔥 新增: V2评分过滤
-                if self.score_v2_service:
-                    logger.debug(f"[V2-CHECK] {symbol} {side} 开始V2共振过滤检查...")
-                    filter_result = self.score_v2_service.check_score_filter(symbol, side)
-                    if not filter_result['passed']:
-                        logger.info(f"🚫 {symbol} {side} V2评分过滤未通过: {filter_result['reason']}")
-                        return None
-                    else:
-                        # 评分通过，记录详细信息
-                        logger.info(f"✅ {symbol} {side} V2共振过滤通过: {filter_result['reason']}")
-                        coin_score = filter_result.get('coin_score')
-                        big4_score = filter_result.get('big4_score')
-                        if coin_score:
-                            logger.info(f"   └─ 代币评分: {coin_score['total_score']:+.0f} ({coin_score['direction']}/{coin_score['strength_level']})")
-                        if big4_score:
-                            logger.info(f"   └─ Big4评分: {big4_score['total_score']:+.0f} ({big4_score['direction']}/{big4_score['strength_level']})")
-                else:
-                    logger.warning(f"[V2-SKIP] {symbol} {side} V2评分服务未初始化，跳过共振过滤")
+                # 🔥 Big4方向过滤（简化版）：只在强度>=70时禁止反向
+                # V1技术指标评分作为主导，Big4只做简单的方向过滤
+                # 移除V2共振检查（V1和V2维度不同，强行共振没有意义）
+                # Big4方向过滤已在scan_all()中处理，这里不需要额外检查
 
                 return {
                     'symbol': symbol,

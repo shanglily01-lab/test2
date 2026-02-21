@@ -288,6 +288,21 @@ class SignalScoreV2Service:
         coin_raw_score = coin_score['total_score']  # 带符号：正数=LONG，负数=SHORT
         big4_raw_score = big4_score['total_score']  # 带符号：正数=BULLISH，负数=BEARISH
 
+        # 🔥 检查0: V1信号方向和V2评分方向是否匹配
+        # V1说SHORT，但V2评分是LONG（+40），这种矛盾应该拒绝
+        if coin_score['direction'] != signal_direction:
+            return {
+                'passed': False,
+                'reason': f'❌ V1/V2方向冲突: V1信号{signal_direction} vs V2评分{coin_score["direction"]}({coin_raw_score:+d})',
+                'coin_score': coin_score,
+                'big4_score': big4_score,
+                'details': {
+                    'v1_signal_direction': signal_direction,
+                    'v2_coin_direction': coin_score['direction'],
+                    'direction_mismatch': True
+                }
+            }
+
         min_symbol_score = self.config.get('min_symbol_score', 15)
         min_big4_score = self.config.get('min_big4_score', 10)
         resonance_threshold = self.config.get('resonance_threshold', 25)

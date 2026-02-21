@@ -698,24 +698,10 @@ class SmartDecisionBrain:
                     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
                     return None
 
-                # 🔥 新增: V2评分过滤
-                if self.score_v2_service:
-                    logger.debug(f"[V2-CHECK] {symbol} {side} 开始V2共振过滤检查...")
-                    filter_result = self.score_v2_service.check_score_filter(symbol, side)
-                    if not filter_result['passed']:
-                        logger.info(f"🚫 {symbol} {side} V2评分过滤未通过: {filter_result['reason']}")
-                        return None
-                    else:
-                        # 评分通过，记录详细信息
-                        logger.info(f"✅ {symbol} {side} V2共振过滤通过: {filter_result['reason']}")
-                        coin_score = filter_result.get('coin_score')
-                        big4_score = filter_result.get('big4_score')
-                        if coin_score:
-                            logger.info(f"   └─ 代币评分: {coin_score['total_score']:+d} ({coin_score['direction']}/{coin_score['strength_level']})")
-                        if big4_score:
-                            logger.info(f"   └─ Big4评分: {big4_score['total_score']:+d} ({big4_score['direction']}/{big4_score['strength_level']})")
-                else:
-                    logger.warning(f"[V2-SKIP] {symbol} {side} V2评分服务未初始化，跳过共振过滤")
+                # 🔥 Big4方向过滤（简化版）：只在强度>=70时禁止反向
+                # V1技术指标评分作为主导，Big4只做简单的方向过滤
+                # 移除V2共振检查（V1和V2维度不同，强行共振没有意义）
+                # Big4方向过滤已在scan_all()中处理，这里不需要额外检查
 
                 # 生成signal_type用于模式匹配
                 signal_type = f"TREND_{signal_combination_key}_{side}_{int(score)}"
@@ -762,11 +748,17 @@ class SmartDecisionBrain:
         for symbol in self.whitelist:
             result = self.analyze(symbol, big4_result=big4_result)
             if result:
-                # 🔥 Big4方向过滤和加分（提前应用）
+                # 🔥 Big4方向过滤（提前应用）
                 if big4_result:
                     signal_side = result['side']
                     big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                     big4_strength = big4_result.get('signal_strength', 0)
+
+                    # 🔥 Big4中性时，不允许开仓（市场方向不明确）
+                    if big4_signal == 'NEUTRAL':
+                        logger.debug(f"[BIG4-FILTER] {symbol} {signal_side}信号被过滤（Big4中性，市场方向不明确）")
+                        filtered_count += 1
+                        continue
 
                     # Big4看空时，只有强度>=70才完全禁止开多
                     if big4_signal == 'BEARISH' and signal_side == 'LONG' and big4_strength >= 70:
@@ -775,18 +767,13 @@ class SmartDecisionBrain:
                         continue
 
                     # Big4看多时，只有强度>=70才完全禁止开空
-                    elif big4_signal == 'BULLISH' and signal_side == 'SHORT' and big4_strength >= 70:
+                    if big4_signal == 'BULLISH' and signal_side == 'SHORT' and big4_strength >= 70:
                         logger.debug(f"[BIG4-FILTER] {symbol} SHORT信号被过滤（Big4看多强度{big4_strength:.0f}>=70）")
                         filtered_count += 1
                         continue
 
-                    # 方向一致时，应用Big4加分
-                    if (big4_signal == 'BULLISH' and signal_side == 'LONG') or \
-                       (big4_signal == 'BEARISH' and signal_side == 'SHORT'):
-                        boost = min(20, int(big4_strength * 0.3))
-                        result['score'] += boost
-                        result['big4_boost'] = boost
-                        logger.debug(f"[BIG4-BOOST] {symbol} {signal_side} 加分 +{boost} (Big4: {big4_signal})")
+                    # 🔥 V1主导评分，Big4只做方向过滤
+                    # 不给同向信号加分，保持V1评分的纯粹性
 
                 opportunities.append(result)
 
