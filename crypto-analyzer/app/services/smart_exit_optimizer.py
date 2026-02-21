@@ -192,13 +192,9 @@ class SmartExitOptimizer:
                         logger.info(
                             f"📊 K线强度衰减触发平仓: 持仓{position_id} {position['symbol']} | {reason}"
                         )
-                        if ratio >= 1.0:
-                            # 全部平仓
-                            await self._execute_close(position_id, current_price, reason)
-                            break
-                        else:
-                            # 部分平仓
-                            await self._execute_partial_close(position_id, current_price, ratio, reason)
+                        # 统一全部平仓，不再分批
+                        await self._execute_close(position_id, current_price, reason)
+                        break
 
                 # 检查智能分批平仓
                 exit_completed = await self._smart_batch_exit(
@@ -961,10 +957,12 @@ class SmartExitOptimizer:
                 SET
                     status = 'closed',
                     close_time = %s,
+                    close_reason = %s,
                     notes = %s
                 WHERE id = %s
             """, (
                 datetime.now(),
+                close_reason,
                 close_reason,
                 position_id
             ))
@@ -1379,41 +1377,34 @@ class SmartExitOptimizer:
             MIN_HOLD_MINUTES = 30  # 30分钟最小持仓时间
 
             # ============================================================
-            # === 优先级1: 分批止损检查（风控底线，无需等待最小持仓时间） ===
+            # === 优先级1: 亏损止损检查（风控底线，无需等待最小持仓时间） ===
             # ============================================================
-            # 策略: 亏损越大，平仓比例越高
-            # - 亏损1.0% → 平50%（降低风险暴露）
-            # - 亏损1.8% → 再平70%（继续减仓）
-            # - 亏损2.5% → 清仓剩余（彻底止损）
+            # 不再使用分批止损，统一全部平仓
 
             pnl_pct = profit_info.get('profit_pct', 0)
 
-            # 分批止损立即生效，无需等待最小持仓时间
+            # 亏损止损立即生效，无需等待最小持仓时间
             if pnl_pct <= -2.5:
-                # 亏损>=2.5%，清仓剩余
+                # 亏损>=2.5%，立即止损
                 logger.warning(
-                    f"🛑 持仓{position_id} {symbol} {position_side} 触发第3档止损 | "
-                    f"亏损{pnl_pct:.2f}% >= 2.5%，清仓剩余"
+                    f"🛑 持仓{position_id} {symbol} {position_side} 触发紧急止损 | "
+                    f"亏损{pnl_pct:.2f}% >= 2.5%"
                 )
-                return ('分批止损-第3档(清仓)', 1.0)
+                return ('紧急止损(亏损≥2.5%)', 1.0)
             elif pnl_pct <= -1.8:
-                # 亏损1.8-2.5%，平70%
-                current_stage = self.partial_close_stage.get(position_id, 0)
-                if current_stage < 2:  # 还未执行第2档
-                    logger.warning(
-                        f"🛑 持仓{position_id} {symbol} {position_side} 触发第2档止损 | "
-                        f"亏损{pnl_pct:.2f}% >= 1.8%，平70%"
-                    )
-                    return ('分批止损-第2档(平70%)', 0.7)
+                # 亏损1.8-2.5%，止损
+                logger.warning(
+                    f"🛑 持仓{position_id} {symbol} {position_side} 触发止损 | "
+                    f"亏损{pnl_pct:.2f}% >= 1.8%"
+                )
+                return ('止损(亏损≥1.8%)', 1.0)
             elif pnl_pct <= -1.0:
-                # 亏损1.0-1.8%，平50%
-                current_stage = self.partial_close_stage.get(position_id, 0)
-                if current_stage < 1:  # 还未执行第1档
-                    logger.warning(
-                        f"🛑 持仓{position_id} {symbol} {position_side} 触发第1档止损 | "
-                        f"亏损{pnl_pct:.2f}% >= 1.0%，平50%"
-                    )
-                    return ('分批止损-第1档(平50%)', 0.5)
+                # 亏损1.0-1.8%，止损
+                logger.warning(
+                    f"🛑 持仓{position_id} {symbol} {position_side} 触发止损 | "
+                    f"亏损{pnl_pct:.2f}% >= 1.0%"
+                )
+                return ('止损(亏损≥1.0%)', 1.0)
 
             # ============================================================
             # === 优先级1.5: 智能亏损监控（30分钟后启动）===
