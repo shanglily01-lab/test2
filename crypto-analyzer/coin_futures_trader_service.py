@@ -3464,30 +3464,16 @@ class CoinFuturesTraderService:
                                 signal_strength = big4_result.get('signal_strength', 0)
                                 logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                            # 如果信号方向与交易方向冲突,降低评分或跳过
+                            # 🚫 完全禁止反方向开仓（无论强度如何）
                             if symbol_signal == 'BEARISH' and new_side == 'LONG':
-                                if signal_strength >= 60:  # 强烈看空信号
-                                    logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看空 (强度{signal_strength}), 跳过LONG信号 (原评分{new_score})")
-                                    continue
-                                else:
-                                    penalty = int(signal_strength * 0.5)  # 根据强度降低评分
-                                    new_score = new_score - penalty
-                                    logger.info(f"[BIG4-ADJUST] {symbol} 市场看空, LONG评分降低: {opp['score']} -> {new_score} (-{penalty})")
-                                    if new_score < 20:  # 评分太低则跳过
-                                        logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
-                                        continue
+                                # Big4看空时，完全禁止开多
+                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看空(强度{signal_strength:.1f}), 完全禁止LONG信号 (原评分{new_score})")
+                                continue
 
                             elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
-                                if signal_strength >= 60:  # 强烈看多信号
-                                    logger.info(f"[BIG4-SKIP] {symbol} 市场强烈看多 (强度{signal_strength}), 跳过SHORT信号 (原评分{new_score})")
-                                    continue
-                                else:
-                                    penalty = int(signal_strength * 0.5)  # 根据强度降低评分
-                                    new_score = new_score - penalty
-                                    logger.info(f"[BIG4-ADJUST] {symbol} 市场看多, SHORT评分降低: {opp['score']} -> {new_score} (-{penalty})")
-                                    if new_score < 20:  # 评分太低则跳过
-                                        logger.info(f"[BIG4-SKIP] {symbol} 调整后评分过低 ({new_score}), 跳过")
-                                        continue
+                                # Big4看多时，完全禁止开空
+                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看多(强度{signal_strength:.1f}), 完全禁止SHORT信号 (原评分{new_score})")
+                                continue
 
                             # 如果信号方向一致,提升评分
                             elif symbol_signal == 'BULLISH' and new_side == 'LONG':

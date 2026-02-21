@@ -2,9 +2,14 @@
 # -*- coding: utf-8 -*-
 """检查SmartExitOptimizer监控状态"""
 import pymysql
+import sys
+import io
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+
+# Fix Windows console encoding
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 load_dotenv()
 

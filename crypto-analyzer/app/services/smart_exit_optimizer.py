@@ -440,6 +440,56 @@ class SmartExitOptimizer:
                 if current_price <= take_profit_price:
                     return True, f"止盈(价格{current_price:.8f} <= 止盈价{take_profit_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
+        # ========== 智能监控逻辑（开仓30分钟后启动，每秒实时检查）==========
+        position_id = position['id']
+        position_side = position.get('position_side', position['direction'])
+        entry_time = position.get('entry_signal_time') or position.get('open_time') or datetime.now()
+        hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
+
+        MIN_HOLD_MINUTES = 30  # 30分钟最小持仓时间
+
+        # === 优先级1: 极端亏损兜底止损（无需等待30分钟）===
+        if profit_pct <= -3.0:
+            return True, f"极端亏损止损(亏损{profit_pct:.2f}%≥3.0%)"
+
+        # === 开仓30分钟后启动智能监控 ===
+        if hold_minutes >= MIN_HOLD_MINUTES:
+
+            # === 优先级2: 智能亏损监控 ===
+            # 策略A: 亏损≥2% + 2根5M K线无好转
+            if profit_pct <= -2.0:
+                no_improvement = await self._check_5m_no_improvement(position_id, position_side)
+                if no_improvement:
+                    return True, f"亏损2%+5M无好转(亏损{profit_pct:.2f}%)"
+
+            # 策略B: 亏损≥1% + 2根15M K线无持续好转
+            elif profit_pct <= -1.0:
+                no_sustained = await self._check_15m_no_sustained_improvement(position_id, position_side)
+                if no_sustained:
+                    return True, f"亏损1%+15M无持续好转(亏损{profit_pct:.2f}%)"
+
+            # === 优先级3: 移动止盈（盈利≥2%时追踪回撤0.5%）===
+            TRAILING_STOP_PROFIT_THRESHOLD = 2.0
+            TRAILING_STOP_DRAWDOWN_PCT = 0.5
+
+            if profit_pct >= TRAILING_STOP_PROFIT_THRESHOLD:
+                max_profit_price = position.get('max_profit_price')
+
+                if max_profit_price and float(max_profit_price) > 0:
+                    max_price = float(max_profit_price)
+                    curr_price = float(current_price)
+
+                    if position_side == 'LONG':
+                        # 做多：从最高价回撤
+                        drawdown_pct = ((max_price - curr_price) / max_price) * 100
+                    else:  # SHORT
+                        # 做空：从最低价反弹
+                        drawdown_pct = ((curr_price - max_price) / max_price) * 100
+
+                    # 触发移动止盈
+                    if drawdown_pct >= TRAILING_STOP_DRAWDOWN_PCT:
+                        return True, f"移动止盈(盈利{profit_pct:.2f}%,回撤{drawdown_pct:.2f}%)"
+
         # ========== 智能平仓逻辑（计划平仓前30分钟）==========
         planned_close_time = position['planned_close_time']
 
@@ -450,7 +500,7 @@ class SmartExitOptimizer:
         now = datetime.now()
         monitoring_start_time = planned_close_time - timedelta(minutes=30)
 
-        # 如果还未到监控时间，只检查止损止盈
+        # 如果还未到监控时间，继续其他检查（不再直接返回）
         if now < monitoring_start_time:
             return False, ""
 
