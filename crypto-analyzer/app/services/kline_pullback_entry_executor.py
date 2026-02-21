@@ -511,14 +511,12 @@ class KlinePullbackEntryExecutor:
             f"原因: {reason}"
         )
 
-        # 第1批时创建持仓记录，后续批次更新持仓
-        if batch_num == 0:
-            await self._create_position_record(plan, price)
-        else:
-            await self._update_position_record(plan)
+        # 🔥 每批都创建独立的持仓记录，不再更新同一个持仓
+        # 这样每个持仓都是独立的，盈亏独立计算，逻辑更清晰
+        await self._create_position_record(plan, price, batch_num)
 
-    async def _create_position_record(self, plan: Dict, entry_price: Decimal):
-        """创建持仓记录（第1批完成时）- INSERT新的building记录"""
+    async def _create_position_record(self, plan: Dict, entry_price: Decimal, batch_num: int = 0):
+        """创建持仓记录 - 每批都创建独立的持仓记录"""
         import json
 
         try:
@@ -527,19 +525,19 @@ class KlinePullbackEntryExecutor:
 
             symbol = plan['symbol']
             direction = plan['direction']
-            batch1 = plan['batches'][0]
+            current_batch = plan['batches'][batch_num]  # 获取当前批次
             signal_time = plan['signal_time']
 
-            # 准备batch_filled JSON（目前只有第1批）
+            # 准备batch_filled JSON（当前批次）
             batch_filled_json = json.dumps({
                 'batches': [{
-                    'batch_num': 0,
-                    'ratio': batch1['ratio'],
-                    'price': batch1['price'],
-                    'time': batch1['time'].isoformat(),
-                    'margin': batch1['margin'],
-                    'quantity': batch1['quantity'],
-                    'reason': batch1['reason']
+                    'batch_num': batch_num,
+                    'ratio': current_batch['ratio'],
+                    'price': current_batch['price'],
+                    'time': current_batch['time'].isoformat(),
+                    'margin': current_batch['margin'],
+                    'quantity': current_batch['quantity'],
+                    'reason': current_batch['reason']
                 }]
             })
 
@@ -547,7 +545,7 @@ class KlinePullbackEntryExecutor:
             batch_plan_json = json.dumps(plan['batches'])
 
             # 计算名义价值（quantity * entry_price）
-            notional_value = batch1['quantity'] * float(entry_price)
+            notional_value = current_batch['quantity'] * float(entry_price)
 
             # 重新计算止盈止损（基于第1批实际成交价格）
             signal_components = plan['signal'].get('trade_params', {}).get('signal_components', {})
@@ -555,7 +553,7 @@ class KlinePullbackEntryExecutor:
                 symbol, direction, float(entry_price), signal_components
             )
 
-            # INSERT新的building记录
+            # 🔥 INSERT新的持仓记录（每批都是独立的持仓，直接设置为'open'状态）
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
@@ -564,18 +562,18 @@ class KlinePullbackEntryExecutor:
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time, planned_close_time,
                  signal_version, source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'v2', 'smart_trader_batch', 'building', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'v2', 'smart_trader_batch', 'open', NOW(), NOW())
             """, (
                 self.account_id,
                 symbol,
                 direction,
-                batch1['quantity'],
+                current_batch['quantity'],
                 float(entry_price),
-                float(entry_price),  # avg_entry_price（第1批时与entry_price相同）
+                float(entry_price),  # avg_entry_price
                 plan['leverage'],
                 notional_value,
-                batch1['margin'],
-                batch1['time'],  # open_time使用第1批成交时间
+                current_batch['margin'],
+                current_batch['time'],  # open_time使用当前批次成交时间
                 stop_loss_price,
                 take_profit_price,
                 stop_loss_pct,
@@ -590,111 +588,27 @@ class KlinePullbackEntryExecutor:
             ))
 
             position_id = cursor.lastrowid
-            plan['position_id'] = position_id
+            # 🔥 不再保存到plan['position_id']，因为每批都是独立的持仓
 
             conn.commit()
             cursor.close()
             conn.close()
 
-            logger.info(f"✅ {symbol} 第1批建仓完成，创建持仓记录 | ID:{position_id}")
+            logger.info(f"✅ {symbol} 第{batch_num+1}批建仓完成，创建独立持仓记录 | ID:{position_id}")
 
         except Exception as e:
             logger.error(f"❌ {symbol} 创建持仓记录失败: {e}")
             raise
 
-    async def _update_position_record(self, plan: Dict):
-        """更新持仓记录（第2、3批）"""
-        import json
-
-        try:
-            conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor()
-
-            position_id = plan.get('position_id')
-            if not position_id:
-                return
-
-            # 计算新的平均成本和总数量
-            filled_batches = [b for b in plan['batches'] if b['filled']]
-            total_quantity = sum(b['quantity'] for b in filled_batches)
-            total_cost = sum(b['price'] * b['quantity'] for b in filled_batches)
-            avg_price = total_cost / total_quantity if total_quantity > 0 else 0
-            total_margin = sum(b['margin'] for b in filled_batches)
-
-            # 更新batch_filled JSON
-            batch_filled_json = json.dumps({
-                'batches': [
-                    {
-                        'batch_num': i,
-                        'ratio': b['ratio'],
-                        'price': b['price'],
-                        'time': b['time'].isoformat(),
-                        'margin': b['margin'],
-                        'quantity': b['quantity'],
-                        'reason': b['reason']
-                    }
-                    for i, b in enumerate(plan['batches']) if b['filled']
-                ]
-            })
-
-            # 重新计算止盈止损（基于新的平均价格）
-            symbol = plan['symbol']
-            direction = plan['direction']
-            signal_components = plan['signal'].get('trade_params', {}).get('signal_components', {})
-
-            stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct = self._calculate_stop_take_prices(
-                symbol, direction, avg_price, signal_components
-            )
-
-            cursor.execute("""
-                UPDATE futures_positions
-                SET entry_price = %s,
-                    quantity = %s,
-                    margin = %s,
-                    batch_filled = %s,
-                    stop_loss_price = %s,
-                    take_profit_price = %s,
-                    stop_loss_pct = %s,
-                    take_profit_pct = %s
-                WHERE id = %s
-            """, (avg_price, total_quantity, total_margin, batch_filled_json,
-                  stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct, position_id))
-
-            conn.commit()
-            cursor.close()
-            conn.close()
-
-        except Exception as e:
-            logger.error(f"❌ 更新持仓记录失败: {e}")
+    # 🔥 已废弃：不再更新同一个持仓，每批都创建独立持仓
+    # async def _update_position_record(self, plan: Dict):
+    #     """更新持仓记录（第2、3批）- 已废弃"""
+    #     pass
 
     async def _finalize_position(self, plan: Dict):
-        """完成建仓，标记持仓为完全开仓状态"""
-        try:
-            position_id = plan.get('position_id')
-            if not position_id:
-                return
-
-            conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor()
-
-            # 从building（分批建仓中）改为open（正式持仓）
-            # 只有quantity > 0才改为open，避免产生空的持仓记录
-            cursor.execute("""
-                UPDATE futures_positions
-                SET status = 'open', updated_at = NOW()
-                WHERE id = %s AND quantity > 0
-            """, (position_id,))
-
-            rows_affected = cursor.rowcount
-            if rows_affected == 0:
-                logger.warning(f"⚠️ 持仓{position_id}未更新为open状态（可能quantity=0）")
-
-            conn.commit()
-            cursor.close()
-            conn.close()
-
-        except Exception as e:
-            logger.error(f"❌ 完成建仓标记失败: {e}")
+        """🔥 已废弃：每批都直接创建为'open'状态，不需要从'building'转换"""
+        # 保留空方法以保持向后兼容，避免调用处报错
+        pass
 
     async def _get_current_price(self, symbol: str) -> Optional[Decimal]:
         """获取当前价格"""

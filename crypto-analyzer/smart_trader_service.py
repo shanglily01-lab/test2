@@ -1090,6 +1090,36 @@ class SmartTraderService:
         except:
             return False
 
+    def count_positions(self, symbol: str, side: str = None):
+        """
+        统计持仓数量
+        symbol: 交易对
+        side: 方向(LONG/SHORT), None表示统计任意方向
+        Returns: 持仓数量
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            if side:
+                # 统计特定方向的持仓数量
+                cursor.execute("""
+                    SELECT COUNT(*) FROM futures_positions
+                    WHERE symbol = %s AND position_side = %s AND status IN ('open', 'building') AND account_id = %s
+                """, (symbol, side, self.account_id))
+            else:
+                # 统计任意方向的持仓数量
+                cursor.execute("""
+                    SELECT COUNT(*) FROM futures_positions
+                    WHERE symbol = %s AND status IN ('open', 'building') AND account_id = %s
+                """, (symbol, self.account_id))
+
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0] if result else 0
+        except:
+            return 0
+
     def validate_signal_timeframe(self, signal_components: dict, side: str, symbol: str) -> tuple:
         """
         验证信号组合的时间框架一致性
@@ -3324,6 +3354,12 @@ class SmartTraderService:
                     # if self.has_position(symbol, new_side):
                     #     logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
                     #     continue
+
+                    # 🔥 新增：限制同一交易对同方向最多3个持仓（分批建仓上限）
+                    position_count = self.count_positions(symbol, new_side)
+                    if position_count >= 3:
+                        logger.info(f"[SKIP] {symbol} {new_side}方向已有{position_count}个持仓，达到上限(3)")
+                        continue
 
                     # 检查是否刚刚平仓(1小时冷却期)
                     if self.check_recent_close(symbol, new_side, cooldown_minutes=15):
