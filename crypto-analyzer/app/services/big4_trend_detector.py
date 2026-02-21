@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Tuple
 import pymysql
 from dotenv import load_dotenv
 import os
+import ccxt
 
 # 加载环境变量
 load_dotenv()
@@ -36,6 +37,13 @@ class Big4TrendDetector:
             'database': os.getenv('DB_NAME', 'binance-data'),
             'charset': 'utf8mb4'
         }
+
+        # 🔥 初始化交易所（用于获取实时K线）
+        self.exchange = ccxt.binance({
+            'enableRateLimit': True,
+            'options': {'defaultType': 'future'}
+        })
+
         # 🔥 紧急干预配置
         self.EMERGENCY_DETECTION_HOURS = 4  # 检测最近N小时的剧烈波动
         self.BOTTOM_DROP_THRESHOLD = -5.0   # 底部判断: 跌幅超过5%
@@ -198,6 +206,7 @@ class Big4TrendDetector:
         分析单个币种的趋势（基于K线数量评分）
 
         🔥 2026-02-21 最新优化：添加5M反向评分，用于回调/反弹确认
+        🔥 2026-02-21 紧急修复：改为从交易所获取实时K线，而不是从数据库读取旧数据
 
         步骤:
         1. 1H (30根): 主趋势判断
@@ -210,18 +219,14 @@ class Big4TrendDetector:
         - 5M反向: 3根反向K线(10分) / 2根反向(5分)
         - 开仓条件: 评分>=50分（中等行情也可做）
         """
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        # 1. 分析1H K线 (30根) - 从交易所获取实时数据
+        kline_1h = self._analyze_kline_count_realtime(symbol, '1h', 30)
 
-        # 1. 分析1H K线 (30根)
-        kline_1h = self._analyze_kline_count(cursor, symbol, '1h', 30)
+        # 2. 分析15M K线 (16根) - 从交易所获取实时数据
+        kline_15m = self._analyze_kline_count_realtime(symbol, '15m', 16)
 
-        # 2. 分析15M K线 (16根)
-        kline_15m = self._analyze_kline_count(cursor, symbol, '15m', 16)
-
-        # 3. 分析5M K线 (3根) - 用于反向回调/反弹确认
-        kline_5m = self._analyze_kline_count(cursor, symbol, '5m', 3)
-
-        cursor.close()
+        # 3. 分析5M K线 (3根) - 从交易所获取实时数据
+        kline_5m = self._analyze_kline_count_realtime(symbol, '5m', 3)
 
         # 4. 基于数量的评分判断（1H+15M+5M反向）
         signal, strength, reason = self._generate_signal_by_count(
@@ -334,6 +339,125 @@ class Big4TrendDetector:
             'bearish_power': bearish_power,
             'dominant': dominant
         }
+
+    def _analyze_kline_count_realtime(self, symbol: str, timeframe: str, count: int) -> Dict:
+        """
+        基于K线数量的趋势分析（实时版本 - 从交易所获取）
+
+        🔥 2026-02-21新增：直接从交易所获取实时K线，不依赖数据库
+
+        评分规则：
+        - 1H (30根): 阳>=18(强势40分) / >=16(中等30分)
+        - 15M (16根): 阳>=11(强势30分) / >=9(中等20分)
+        - 5M (3根): 3阳(10分) / 2阳(5分)
+
+        返回:
+        {
+            'bullish_count': int,  # 阳线数量
+            'bearish_count': int,  # 阴线数量
+            'score': int,          # 评分
+            'level': str           # 'STRONG' / 'MEDIUM' / 'NEUTRAL'
+        }
+        """
+        try:
+            # 从交易所获取实时K线
+            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=count)
+
+            if not ohlcv or len(ohlcv) < count:
+                return {
+                    'bullish_count': 0,
+                    'bearish_count': 0,
+                    'score': 0,
+                    'level': 'NEUTRAL'
+                }
+
+            bullish_count = 0
+            bearish_count = 0
+
+            for candle in ohlcv:
+                # candle格式: [timestamp, open, high, low, close, volume]
+                open_price = float(candle[1])
+                close_price = float(candle[4])
+
+                if close_price > open_price:
+                    bullish_count += 1
+                else:
+                    bearish_count += 1
+
+            # 根据阳阴线数量评分
+            if timeframe == '1h':
+                # 1H评分规则
+                if bullish_count >= 18:
+                    score = 40
+                    level = 'STRONG'
+                elif bullish_count >= 16:
+                    score = 30
+                    level = 'MEDIUM'
+                elif bearish_count >= 18:
+                    score = -40
+                    level = 'STRONG'
+                elif bearish_count >= 16:
+                    score = -30
+                    level = 'MEDIUM'
+                else:
+                    score = 0
+                    level = 'NEUTRAL'
+
+            elif timeframe == '15m':
+                # 15M评分规则
+                if bullish_count >= 11:
+                    score = 30
+                    level = 'STRONG'
+                elif bullish_count >= 9:
+                    score = 20
+                    level = 'MEDIUM'
+                elif bearish_count >= 11:
+                    score = -30
+                    level = 'STRONG'
+                elif bearish_count >= 9:
+                    score = -20
+                    level = 'MEDIUM'
+                else:
+                    score = 0
+                    level = 'NEUTRAL'
+
+            elif timeframe == '5m':
+                # 5M评分规则
+                if bullish_count == 3:
+                    score = 10
+                    level = 'STRONG'
+                elif bullish_count == 2:
+                    score = 5
+                    level = 'MEDIUM'
+                elif bearish_count == 3:
+                    score = -10
+                    level = 'STRONG'
+                elif bearish_count == 2:
+                    score = -5
+                    level = 'MEDIUM'
+                else:
+                    score = 0
+                    level = 'NEUTRAL'
+
+            else:
+                score = 0
+                level = 'NEUTRAL'
+
+            return {
+                'bullish_count': bullish_count,
+                'bearish_count': bearish_count,
+                'score': score,
+                'level': level
+            }
+
+        except Exception as e:
+            logger.error(f"获取{symbol} {timeframe}实时K线失败: {e}")
+            return {
+                'bullish_count': 0,
+                'bearish_count': 0,
+                'score': 0,
+                'level': 'NEUTRAL'
+            }
 
     def _analyze_kline_count(self, cursor, symbol: str, timeframe: str, count: int) -> Dict:
         """
