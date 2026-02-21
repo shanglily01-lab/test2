@@ -17,6 +17,8 @@ from decimal import Decimal
 from loguru import logger
 import pymysql
 
+from app.services.batch_position_manager import BatchPositionManager
+
 
 class KlinePullbackEntryExecutor:
     """K线回调分批建仓执行器"""
@@ -44,6 +46,9 @@ class KlinePullbackEntryExecutor:
         # 获取brain和opt_config（用于止盈止损计算）
         self.brain = brain if brain else getattr(live_engine, 'brain', None)
         self.opt_config = opt_config if opt_config else getattr(live_engine, 'opt_config', None)
+
+        # 🔥 初始化持仓管理器（封装公共逻辑）
+        self.position_manager = BatchPositionManager(db_config, self.account_id)
 
         # 分批配置
         self.batch_ratio = [0.3, 0.3, 0.4]  # 30%/30%/40%
