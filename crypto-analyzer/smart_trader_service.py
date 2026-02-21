@@ -888,11 +888,17 @@ class SmartTraderService:
             config = yaml.safe_load(f)
             self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
 
-            # 🔥 从数据库读取Big4过滤器配置（优先级高于config.yaml）
-            from app.services.system_settings_loader import get_big4_filter_enabled
+            # 🔥 从数据库读取系统配置（优先级高于config.yaml）
+            from app.services.system_settings_loader import get_big4_filter_enabled, get_batch_entry_strategy
+
+            # Big4过滤器配置
             big4_enabled_from_db = get_big4_filter_enabled()
             self.big4_filter_config = {'enabled': big4_enabled_from_db}
             logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
+
+            # K线回调建仓策略配置
+            self.batch_entry_strategy = get_batch_entry_strategy()
+            logger.info(f"📊 建仓策略: {self.batch_entry_strategy} ({'V2回调' if self.batch_entry_strategy == 'kline_pullback' else 'V1直接'})")
 
         # 初始化智能平仓优化器
         if self.smart_exit_config.get('enabled'):
@@ -1331,9 +1337,9 @@ class SmartTraderService:
             logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
             return False
 
-        # ========== 第三步：K线回调建仓逻辑（V2策略）==========
-        # 使用KlinePullbackEntryExecutor，等待15M阴线回调后开仓
-        if self.pullback_executor and self.event_loop:
+        # ========== 第三步：根据数据库配置选择建仓策略 ==========
+        # batch_entry_strategy: 'kline_pullback' (V2) or 'price_percentile' (V1)
+        if self.batch_entry_strategy == 'kline_pullback' and self.pullback_executor and self.event_loop:
             try:
                 # 准备信号字典
                 signal = {
@@ -1361,10 +1367,10 @@ class SmartTraderService:
 
             except Exception as e:
                 logger.error(f"❌ [V2-PULLBACK-ERROR] {symbol} 启动回调任务失败: {e}")
-                logger.error(f"   回退到直接开仓模式")
+                logger.error(f"   回退到V1直接开仓模式")
                 # 失败时回退到直接开仓
 
-        # ========== 回退：一次性开仓逻辑（V1策略，用于回退）==========
+        # ========== V1策略：一次性直接开仓（price_percentile模式或V2失败回退）==========
         try:
 
             # 优先从 WebSocket 获取实时价格
