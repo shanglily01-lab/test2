@@ -910,32 +910,29 @@ class UnifiedDataScheduler:
         enabled_exchanges = list(self.price_collector.collectors.keys())
         exchanges_str = ' + '.join(enabled_exchanges) if enabled_exchanges else 'Binance'
 
-        # 1. 现货数据 (Binance)
-        # 注意: 1m K线数据采集已移除，使用5m作为最小周期
-        # schedule.every(5).seconds.do(
-        #     lambda: asyncio.run(self.collect_binance_data('1m'))
+        # 1. 现货K线数据采集 - 已禁用，改用 fast_collector_service.py 采集合约K线
+        # 注意: 交易系统使用合约数据，不需要现货K线数据
+        # schedule.every(5).minutes.do(
+        #     lambda: asyncio.run(self.collect_binance_data('5m'))
         # )
-        # logger.info(f"  ✓ 现货({exchanges_str}) 1分钟数据 - 每 5 秒")
+        # logger.info(f"  ✓ 现货({exchanges_str}) 5分钟数据 - 每 5 分钟")
+        #
+        # schedule.every(15).minutes.do(
+        #     lambda: asyncio.run(self.collect_binance_data('15m'))
+        # )
+        # logger.info(f"  ✓ 现货({exchanges_str}) 15分钟数据 - 每 15 分钟")
+        #
+        # schedule.every(1).hours.do(
+        #     lambda: asyncio.run(self.collect_binance_data('1h'))
+        # )
+        # logger.info(f"  ✓ 现货({exchanges_str}) 1小时数据 - 每 1 小时")
+        #
+        # schedule.every().day.at("00:05").do(
+        #     lambda: asyncio.run(self.collect_binance_data('1d'))
+        # )
+        # logger.info(f"  ✓ 现货({exchanges_str}) 1天数据 - 每天 00:05")
 
-        schedule.every(5).minutes.do(
-            lambda: asyncio.run(self.collect_binance_data('5m'))
-        )
-        logger.info(f"  ✓ 现货({exchanges_str}) 5分钟数据 - 每 5 分钟")
-
-        schedule.every(15).minutes.do(
-            lambda: asyncio.run(self.collect_binance_data('15m'))
-        )
-        logger.info(f"  ✓ 现货({exchanges_str}) 15分钟数据 - 每 15 分钟")
-
-        schedule.every(1).hours.do(
-            lambda: asyncio.run(self.collect_binance_data('1h'))
-        )
-        logger.info(f"  ✓ 现货({exchanges_str}) 1小时数据 - 每 1 小时")
-
-        schedule.every().day.at("00:05").do(
-            lambda: asyncio.run(self.collect_binance_data('1d'))
-        )
-        logger.info(f"  ✓ 现货({exchanges_str}) 1天数据 - 每天 00:05")
+        logger.info("  ⚠️  现货K线采集已禁用 - 交易系统使用合约数据，由 fast_collector_service.py 采集")
 
         # 1.5 币安合约数据 - 已移至 fast_collector_service.py
         # if self.futures_collector:
