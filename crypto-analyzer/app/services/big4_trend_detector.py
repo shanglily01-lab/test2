@@ -368,7 +368,9 @@ class Big4TrendDetector:
                     'bullish_count': 0,
                     'bearish_count': 0,
                     'score': 0,
-                    'level': 'NEUTRAL'
+                    'level': 'NEUTRAL',
+                    'dominant': 'NEUTRAL',
+                    'total': 0
                 }
 
             bullish_count = 0
@@ -443,11 +445,21 @@ class Big4TrendDetector:
                 score = 0
                 level = 'NEUTRAL'
 
+            # 计算主导方向（用于其他逻辑判断）
+            if score > 0:
+                dominant = 'BULL'
+            elif score < 0:
+                dominant = 'BEAR'
+            else:
+                dominant = 'NEUTRAL'
+
             return {
                 'bullish_count': bullish_count,
                 'bearish_count': bearish_count,
                 'score': score,
-                'level': level
+                'level': level,
+                'dominant': dominant,
+                'total': count
             }
 
         except Exception as e:
@@ -456,7 +468,9 @@ class Big4TrendDetector:
                 'bullish_count': 0,
                 'bearish_count': 0,
                 'score': 0,
-                'level': 'NEUTRAL'
+                'level': 'NEUTRAL',
+                'dominant': 'NEUTRAL',
+                'total': 0
             }
 
     def _analyze_kline_count(self, cursor, symbol: str, timeframe: str, count: int) -> Dict:
