@@ -2622,10 +2622,9 @@ class CoinFuturesTraderService:
                     SET status = 'closed', mark_price = %s,
                         realized_pnl = %s,
                         close_time = NOW(), updated_at = NOW(),
-                        close_reason = %s,
-                        notes = CONCAT(IFNULL(notes, ''), '|', %s)
+                        notes = CONCAT(IFNULL(notes, ''), '|close_reason:', %s)
                     WHERE id = %s
-                """, (current_price, realized_pnl, reason, reason, pos['id']))
+                """, (current_price, realized_pnl, reason, pos['id']))
 
                 # Calculate values for orders and trades
                 import uuid
