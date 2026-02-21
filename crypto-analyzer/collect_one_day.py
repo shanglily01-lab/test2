@@ -147,6 +147,7 @@ def collect_day_data(target_date):
                 # 显示进度
                 if idx % 10 == 0 or idx == total_symbols:
                     print(f'  进度: {idx}/{total_symbols} | 已保存: {interval_count} 条', end='\r')
+                    sys.stdout.flush()
 
             except Exception as e:
                 print(f'  ❌ {symbol} {interval} 失败: {e}')
