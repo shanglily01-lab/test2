@@ -163,7 +163,8 @@
       "Bash(wc:*)",
       "Bash(/tmp/check_strategies.sh:*)",
       "Bash(/tmp/check_toplevel.sh:*)",
-      "Bash(/tmp/check_imported.sh:*)"
+      "Bash(/tmp/check_imported.sh:*)",
+      "Bash(git -C crypto-analyzer status)"
     ],
     "deny": [],
     "ask": []

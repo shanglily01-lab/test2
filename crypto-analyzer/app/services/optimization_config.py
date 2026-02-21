@@ -129,14 +129,8 @@ class OptimizationConfig:
         Returns:
             超时时间(分钟)
         """
-        if entry_score >= 40:
-            return int(self.get_param('timeout_by_score_40', 360))
-        elif entry_score >= 35:
-            return int(self.get_param('timeout_by_score_35', 300))
-        elif entry_score >= 30:
-            return int(self.get_param('timeout_by_score_30', 240))
-        else:
-            return int(self.get_param('timeout_by_score_below_30', 180))
+        # 统一设置为180分钟（3小时）
+        return 180
 
     def adjust_timeout_by_pnl(self, base_timeout_minutes: int, pnl_pct: float) -> int:
         """
