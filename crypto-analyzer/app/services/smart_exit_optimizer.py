@@ -844,12 +844,10 @@ class SmartExitOptimizer:
                 SET
                     status = 'closed',
                     close_time = %s,
-                    close_reason = %s,
-                    notes = %s
+                    notes = CONCAT(IFNULL(notes, ''), '|close_reason:', %s)
                 WHERE id = %s
             """, (
                 datetime.now(),
-                close_reason,
                 close_reason,
                 position_id
             ))
