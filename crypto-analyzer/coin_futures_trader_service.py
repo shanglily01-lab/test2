@@ -449,7 +449,7 @@ class CoinFuturesDecisionBrain:
                 cursor.execute("""
                     SELECT open_time, open_price, high_price, low_price, close_price
                     FROM kline_data
-                    WHERE symbol = %s AND timeframe = '15m'
+                    WHERE symbol = %s AND timeframe = '15m' AND exchange = 'binance_futures'
                     AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 4 HOUR)) * 1000
                     ORDER BY open_time DESC LIMIT 16
                 """, (symbol,))
@@ -578,7 +578,7 @@ class CoinFuturesDecisionBrain:
                 cursor.execute("""
                     SELECT open_time, open_price, high_price, low_price, close_price
                     FROM kline_data
-                    WHERE symbol = %s AND timeframe = '15m'
+                    WHERE symbol = %s AND timeframe = '15m' AND exchange = 'binance_futures'
                     AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 4 HOUR)) * 1000
                     ORDER BY open_time DESC LIMIT 16
                 """, (symbol,))
@@ -719,7 +719,7 @@ class CoinFuturesDecisionBrain:
                    low_price as low, close_price as close,
                    volume
             FROM kline_data
-            WHERE symbol = %s AND timeframe = %s
+            WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
             AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 60 DAY)) * 1000
             ORDER BY open_time DESC LIMIT %s
         """
@@ -1437,7 +1437,7 @@ class CoinFuturesTraderService:
             cursor.execute("""
                 SELECT close_price, open_time
                 FROM kline_data
-                WHERE symbol = %s AND timeframe = '5m'
+                WHERE symbol = %s AND timeframe = '5m' AND exchange = 'binance_futures'
                 ORDER BY open_time DESC LIMIT 1
             """, (symbol,))
             result = cursor.fetchone()

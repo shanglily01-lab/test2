@@ -51,6 +51,7 @@ class SignalAnalysisService:
             FROM kline_data
             WHERE symbol = %s
             AND timeframe = %s
+            AND exchange = 'binance_futures'
             AND timestamp >= DATE_SUB(NOW(), INTERVAL %s HOUR)
             ORDER BY timestamp DESC
         ''', (symbol, timeframe, hours))

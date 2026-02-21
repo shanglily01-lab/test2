@@ -385,7 +385,7 @@ class SmartDecisionBrain:
                    low_price as low, close_price as close,
                    volume
             FROM kline_data
-            WHERE symbol = %s AND timeframe = %s
+            WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
             AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 60 DAY)) * 1000
             ORDER BY open_time DESC LIMIT %s
         """
