@@ -860,32 +860,10 @@ class SmartTraderService:
             self.big4_filter_config = {'enabled': big4_enabled_from_db}
             logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
 
-        # 初始化智能分批建仓执行器
-        if self.batch_entry_config.get('enabled'):
-            # 从数据库读取策略配置（覆盖yaml配置）
-            from app.services.system_settings_loader import get_batch_entry_strategy
-            strategy_type = get_batch_entry_strategy()
-
-            if strategy_type == 'kline_pullback':
-                # V2: K线回调策略
-                from app.services.kline_pullback_entry_executor import KlinePullbackEntryExecutor
-                self.smart_entry_executor = KlinePullbackEntryExecutor(
-                    db_config=self.db_config,
-                    live_engine=self,
-                    price_service=self.ws_service
-                )
-                logger.info("✅ 智能分批建仓执行器已启动 (V2 K线回调策略)")
-            else:
-                # V1: 价格分位数策略（原有）
-                self.smart_entry_executor = SmartEntryExecutor(
-                    db_config=self.db_config,
-                    live_engine=self,
-                    price_service=self.ws_service
-                )
-                logger.info("✅ 智能分批建仓执行器已启动 (V1 价格分位数策略)")
-        else:
-            self.smart_entry_executor = None
-            logger.info("⚠️ 智能分批建仓未启用")
+        # 初始化智能分批建仓执行器（已禁用，改为一次性开仓）
+        # 保留配置读取，但不初始化执行器
+        self.smart_entry_executor = None
+        logger.info("⚠️ 智能分批建仓已禁用（U本位统一使用一次性开仓）")
 
         # 初始化智能平仓优化器
         if self.smart_exit_config.get('enabled'):
@@ -1292,40 +1270,7 @@ class SmartTraderService:
             logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
             return False
 
-        # ========== 第三步：决定使用分批建仓还是一次性开仓 ==========
-        # 检查是否启用分批建仓
-        if self.smart_entry_executor and self.batch_entry_config.get('enabled'):
-            # 检查是否在白名单中（如果白名单为空，则对所有币种启用）
-            whitelist = self.batch_entry_config.get('whitelist_symbols', [])
-            should_use_batch = (not whitelist) or (symbol in whitelist)
-
-            # 反转开仓不使用分批建仓（直接一次性开仓）
-            is_reversal = 'reversal_from' in opp
-
-            # 震荡市策略不使用分批建仓（使用固定2%止损，与分批建仓的波动率止损不兼容）
-            is_range_strategy = strategy == 'bollinger_mean_reversion'
-
-            if should_use_batch and not is_reversal and not is_range_strategy:
-                logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓（后台异步执行）")
-                # 在后台异步执行分批建仓，不阻塞主循环
-                import asyncio
-                try:
-                    # 使用保存的事件循环引用
-                    if self.event_loop:
-                        # 在后台创建任务，不等待完成
-                        asyncio.run_coroutine_threadsafe(
-                            self._open_position_with_batch(opp),
-                            self.event_loop
-                        )
-                        logger.info(f"[BATCH_ENTRY] {symbol} {side} 分批建仓任务已启动（后台运行60分钟）")
-                        return True  # 立即返回，不阻塞
-                    else:
-                        logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 事件循环未初始化，降级到一次性开仓")
-                except Exception as e:
-                    logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 分批建仓启动失败: {e}，降级到一次性开仓")
-                    # 降级到原有一次性开仓逻辑
-
-        # ========== 第三步：一次性开仓逻辑 ==========
+        # ========== 第三步：一次性开仓逻辑（已禁用分批建仓）==========
         try:
 
             # 优先从 WebSocket 获取实时价格
