@@ -28,12 +28,11 @@ print()
 cursor.execute("""
     SELECT
         account_id,
-        trading_type,
         COUNT(*) as count,
         SUM(margin) as total_margin
     FROM futures_positions
     WHERE status = 'open'
-    GROUP BY account_id, trading_type
+    GROUP BY account_id
 """)
 
 open_positions = cursor.fetchall()
@@ -41,7 +40,7 @@ open_positions = cursor.fetchall()
 if open_positions:
     print("📊 当前开仓持仓:")
     for pos in open_positions:
-        print(f"  账户{pos['account_id']} - {pos['trading_type']}: {pos['count']}个持仓，总保证金${pos['total_margin']:.2f}")
+        print(f"  账户{pos['account_id']}: {pos['count']}个持仓，总保证金${pos['total_margin']:.2f}")
 else:
     print("✅ 没有开仓持仓")
 
