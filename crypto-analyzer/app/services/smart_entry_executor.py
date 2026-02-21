@@ -340,16 +340,9 @@ class SmartEntryExecutor:
             f"原因: {reason}"
         )
 
-        # 立即创建或更新持仓记录
-        if batch_num == 0:
-            # 第1批：创建新持仓记录
-            position_id = await self._create_initial_position(plan)
-            plan['position_id'] = position_id
-            logger.info(f"📝 创建持仓记录 #{position_id} (第1批)")
-        else:
-            # 第2/3批：更新现有持仓记录
-            await self._update_position(plan)
-            logger.info(f"📝 更新持仓记录 #{plan.get('position_id')} (第{batch_num+1}批)")
+        # 🔥 每批都创建独立的持仓记录，不再更新同一个持仓
+        position_id = await self._create_position_record(plan, batch_num)
+        logger.info(f"📝 创建独立持仓记录 #{position_id} (第{batch_num+1}批)")
 
         # 计算当前平均成本
         filled_batches = [b for b in plan['batches'] if b['filled']]
@@ -478,13 +471,13 @@ class SmartEntryExecutor:
 
         return weighted_sum / total_weight if total_weight > 0 else 0.0
 
-    async def _create_initial_position(self, plan: Dict) -> int:
+    async def _create_position_record(self, plan: Dict, batch_num: int = 0) -> int:
         """
-        创建初始持仓记录（第1批建仓后）
-        状态设为'building'表示正在分批建仓中
+        创建持仓记录 - 每批都创建独立的持仓记录
 
         Args:
             plan: 建仓计划
+            batch_num: 批次序号（0/1/2）
 
         Returns:
             position_id: 持仓ID
@@ -499,7 +492,7 @@ class SmartEntryExecutor:
             symbol = plan['symbol']
             direction = plan['direction']
             signal = plan['signal']
-            batch = plan['batches'][0]  # 第1批
+            batch = plan['batches'][batch_num]  # 🔥 获取当前批次
 
             # ========== 🔥 已移除防重复检查，支持同一方向多个独立持仓 ==========
             # 每批建仓都创建独立的持仓记录，不再限制"同一方向只能1个持仓"
@@ -543,10 +536,10 @@ class SmartEntryExecutor:
                 ]
             })
 
-            # 准备 batch_filled JSON (目前只有第1批)
+            # 准备 batch_filled JSON (当前批次)
             batch_filled_json = json.dumps({
                 'batches': [{
-                    'batch_num': 0,
+                    'batch_num': batch_num,
                     'ratio': batch['ratio'],
                     'price': batch['price'],
                     'time': batch['time'].isoformat(),
@@ -580,7 +573,7 @@ class SmartEntryExecutor:
                 stop_loss = price * (1 + stop_loss_pct_decimal)
                 take_profit = price * (1 - take_profit_pct_decimal)
 
-            # 插入持仓记录（status='building'表示正在建仓）
+            # 🔥 插入持仓记录（每批都是独立持仓，直接设置为'open'）
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
@@ -589,7 +582,7 @@ class SmartEntryExecutor:
                  entry_signal_type, entry_score, signal_components,
                  batch_plan, batch_filled, entry_signal_time,
                  source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'building', NOW(), NOW())
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, direction, quantity, price, price,
                 plan['leverage'], quantity * price, margin,
@@ -604,7 +597,7 @@ class SmartEntryExecutor:
 
             position_id = cursor.lastrowid
 
-            # 冻结第1批保证金
+            # 冻结当前批次保证金
             cursor.execute("""
                 UPDATE futures_trading_accounts
                 SET current_balance = current_balance - %s,
@@ -614,332 +607,25 @@ class SmartEntryExecutor:
             """, (margin, margin, self.account_id))
 
             conn.commit()
+            logger.info(f"✅ 第{batch_num+1}批建仓完成，创建独立持仓记录 | ID:{position_id}")
             return position_id
 
         except Exception as e:
             conn.rollback()
-            logger.error(f"创建初始持仓记录失败: {e}")
+            logger.error(f"创建持仓记录失败（第{batch_num+1}批）: {e}")
             raise
         finally:
             cursor.close()
             conn.close()
 
-    async def _update_position(self, plan: Dict):
-        """
-        更新持仓记录（第2/3批建仓后）
-        累加数量、保证金，更新平均价格和batch_filled
 
-        Args:
-            plan: 建仓计划
-        """
-        import pymysql
-        import json
-
-        conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
-        cursor = conn.cursor()
-
-        try:
-            position_id = plan.get('position_id')
-            if not position_id:
-                logger.error("未找到position_id，无法更新持仓")
-                return
-
-            # 计算当前所有已成交批次的汇总数据
-            filled_batches = [b for b in plan['batches'] if b['filled']]
-            total_quantity = sum(b['quantity'] for b in filled_batches)
-            total_margin = sum(b['margin'] for b in filled_batches)
-            avg_price = self._calculate_avg_price(plan)
-
-            # 更新 batch_filled JSON
-            batch_filled_json = json.dumps({
-                'batches': [
-                    {
-                        'batch_num': i,
-                        'ratio': b['ratio'],
-                        'price': b['price'],
-                        'time': b['time'].isoformat(),
-                        'margin': b['margin'],
-                        'quantity': b['quantity']
-                    }
-                    for i, b in enumerate(plan['batches']) if b['filled']
-                ]
-            })
-
-            # 重新计算止损止盈（基于新的平均价格和波动率）
-            signal = plan['signal']
-            direction = plan['direction']
-
-            volatility_calc = get_volatility_calculator()
-            entry_score = signal.get('trade_params', {}).get('entry_score', 30)
-            signal_components = list(signal.get('trade_params', {}).get('signal_components', {}).keys())
-
-            stop_loss_pct, take_profit_pct, calc_reason = volatility_calc.get_sl_tp_for_position(
-                symbol=plan['symbol'],
-                position_side=direction,
-                entry_score=entry_score,
-                signal_components=signal_components
-            )
-
-            # 转换为小数
-            stop_loss_pct_decimal = stop_loss_pct / 100
-            take_profit_pct_decimal = take_profit_pct / 100
-
-            if direction == 'LONG':
-                stop_loss = avg_price * (1 - stop_loss_pct_decimal)
-                take_profit = avg_price * (1 + take_profit_pct_decimal)
-            else:
-                stop_loss = avg_price * (1 + stop_loss_pct_decimal)
-                take_profit = avg_price * (1 - take_profit_pct_decimal)
-
-            # 更新持仓记录
-            cursor.execute("""
-                UPDATE futures_positions
-                SET quantity = %s,
-                    avg_entry_price = %s,
-                    notional_value = %s,
-                    margin = %s,
-                    stop_loss_price = %s,
-                    take_profit_price = %s,
-                    stop_loss_pct = %s,
-                    take_profit_pct = %s,
-                    batch_filled = %s,
-                    updated_at = NOW()
-                WHERE id = %s
-            """, (
-                total_quantity, avg_price, total_quantity * avg_price, total_margin,
-                stop_loss, take_profit, stop_loss_pct, take_profit_pct,
-                batch_filled_json, position_id
-            ))
-
-            # 冻结新增保证金
-            new_batch = filled_batches[-1]  # 最新一批
-            new_margin = new_batch['margin']
-
-            cursor.execute("""
-                UPDATE futures_trading_accounts
-                SET current_balance = current_balance - %s,
-                    frozen_balance = frozen_balance + %s,
-                    updated_at = NOW()
-                WHERE id = %s
-            """, (new_margin, new_margin, self.account_id))
-
-            conn.commit()
-
-        except Exception as e:
-            conn.rollback()
-            logger.error(f"更新持仓记录失败: {e}")
-            raise
-        finally:
-            cursor.close()
-            conn.close()
+    # 🔥 已废弃：_update_position 方法已移除
+    # 不再更新同一个持仓，每批都创建独立持仓记录
 
     async def _finalize_position(self, plan: Dict):
-        """
-        完成持仓建仓（所有批次完成后）
-        将status从'building'改为'open'，计算planned_close_time
-
-        Args:
-            plan: 建仓计划
-        """
-        import pymysql
-        from datetime import timedelta
-
-        conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
-        cursor = conn.cursor()
-
-        try:
-            position_id = plan.get('position_id')
-            if not position_id:
-                logger.error("未找到position_id，无法完成持仓")
-                return
-
-            # 获取所有已完成的批次,找到最晚一批的时间作为开仓时间
-            filled_batches = [b for b in plan['batches'] if b['filled']]
-            if filled_batches:
-                # 最后一批的时间就是开仓时间
-                last_batch_time = filled_batches[-1]['time']
-                open_time = last_batch_time
-            else:
-                # 如果没有已完成批次(理论上不应该发生),使用当前时间
-                open_time = datetime.now()
-
-            # 计算计划平仓时间(从最晚一批开始计算)
-            signal = plan['signal']
-            entry_score = signal.get('trade_params', {}).get('entry_score', 30)
-
-            # 🔥 修改: 统一3小时强制平仓 - 边际收益递减
-            max_hold_minutes = 180  # 3小时强制平仓
-
-            planned_close_time = open_time + timedelta(minutes=max_hold_minutes)
-
-            # 更新状态为'open',设置开仓时间和计划平仓时间
-            cursor.execute("""
-                UPDATE futures_positions
-                SET status = 'open',
-                    open_time = %s,
-                    planned_close_time = %s,
-                    updated_at = NOW()
-                WHERE id = %s
-            """, (open_time, planned_close_time, position_id))
-
-            conn.commit()
-
-            logger.info(f"✅ 持仓 #{position_id} 已完成建仓，状态: building → open")
-
-        except Exception as e:
-            conn.rollback()
-            logger.error(f"完成持仓记录失败: {e}")
-            raise
-        finally:
-            cursor.close()
-            conn.close()
-
-    async def _create_position_record(self, plan: Dict) -> int:
-        """
-        创建分批建仓持仓记录（模拟盘，不调用交易所API）
-
-        Args:
-            plan: 建仓计划
-
-        Returns:
-            position_id: 持仓ID
-        """
-        import pymysql
-        import json
-
-        conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
-        cursor = conn.cursor()
-
-        try:
-            symbol = plan['symbol']
-            direction = plan['direction']
-            signal = plan['signal']
-
-            # 计算汇总数据
-            total_quantity = sum(b['quantity'] for b in plan['batches'] if b['filled'])
-            avg_price = self._calculate_avg_price(plan)
-            total_margin = sum(b['margin'] for b in plan['batches'] if b['filled'])
-
-            # 准备 batch_plan 和 batch_filled JSON
-            # 优化后的分批时间: 1小时内完成 (前15分钟采集样本, 然后30/45/60分钟执行)
-            batch_plan_json = json.dumps({
-                'batches': [
-                    {
-                        'ratio': b['ratio'],
-                        'timeout_minutes': [30, 45, 60][i]
-                    }
-                    for i, b in enumerate(plan['batches'])
-                ]
-            })
-
-            batch_filled_json = json.dumps({
-                'batches': [
-                    {
-                        'ratio': b['ratio'],
-                        'price': b['price'],
-                        'time': b['time'].isoformat() if b['time'] else None,
-                        'margin': b['margin'],
-                        'quantity': b['quantity']
-                    }
-                    for b in plan['batches'] if b['filled']
-                ]
-            })
-
-            # 计算计划平仓时间（基于 entry_score）
-            entry_score = signal.get('trade_params', {}).get('entry_score', 30)
-            # 🔥 修改: 统一3小时强制平仓 - 边际收益递减
-            max_hold_minutes = 180  # 3小时强制平仓
-
-            from datetime import timedelta
-            planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
-
-            # 计算止损止盈价格 (使用基于波动率的动态计算)
-            volatility_calc = get_volatility_calculator()
-            signal_components = list(signal.get('trade_params', {}).get('signal_components', {}).keys())
-
-            stop_loss_pct, take_profit_pct, calc_reason = volatility_calc.get_sl_tp_for_position(
-                symbol=symbol,
-                position_side=direction,
-                entry_score=entry_score,
-                signal_components=signal_components
-            )
-
-            logger.info(f"[{symbol}] {direction} 最终止损止盈: SL={stop_loss_pct}% TP={take_profit_pct}% | {calc_reason}")
-
-            # 转换为小数
-            stop_loss_pct_decimal = stop_loss_pct / 100
-            take_profit_pct_decimal = take_profit_pct / 100
-
-            if direction == 'LONG':
-                stop_loss = avg_price * (1 - stop_loss_pct_decimal)
-                take_profit = avg_price * (1 + take_profit_pct_decimal)
-            else:  # SHORT
-                stop_loss = avg_price * (1 + stop_loss_pct_decimal)
-                take_profit = avg_price * (1 - take_profit_pct_decimal)
-
-            # 插入持仓记录
-            cursor.execute("""
-                INSERT INTO futures_positions
-                (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
-                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 stop_loss_pct, take_profit_pct,
-                 entry_signal_type, entry_score, signal_components,
-                 batch_plan, batch_filled, entry_signal_time, planned_close_time,
-                 source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader_batch', 'open', NOW(), NOW())
-            """, (
-                self.account_id,
-                symbol,
-                direction,
-                total_quantity,
-                avg_price,  # entry_price 使用平均价
-                avg_price,  # avg_entry_price
-                plan['leverage'],
-                total_quantity * avg_price,  # notional_value
-                total_margin,
-                stop_loss,
-                take_profit,
-                stop_loss_pct,
-                take_profit_pct,
-                signal.get('trade_params', {}).get('signal_combination_key', 'batch_entry'),
-                entry_score,
-                json.dumps(signal.get('trade_params', {}).get('signal_components', {})),
-                batch_plan_json,
-                batch_filled_json,
-                plan['signal_time'],
-                planned_close_time
-            ))
-
-            position_id = cursor.lastrowid
-
-            # 冻结保证金
-            cursor.execute("""
-                UPDATE futures_trading_accounts
-                SET current_balance = current_balance - %s,
-                    frozen_balance = frozen_balance + %s,
-                    updated_at = NOW()
-                WHERE id = %s
-            """, (total_margin, total_margin, self.account_id))
-
-            conn.commit()
-
-            logger.info(
-                f"📝 持仓记录已创建: ID={position_id} | "
-                f"{symbol} {direction} | "
-                f"数量: {total_quantity:.2f} | "
-                f"平均价: ${avg_price:.4f} | "
-                f"保证金: ${total_margin:.0f}"
-            )
-
-            return position_id
-
-        except Exception as e:
-            conn.rollback()
-            logger.error(f"创建持仓记录失败: {e}")
-            raise
-        finally:
-            cursor.close()
-            conn.close()
+        """🔥 已废弃：每批都直接创建为'open'状态，不需要从'building'转换"""
+        # 保留空方法以保持向后兼容
+        pass
 
     async def recover_building_positions(self):
         """
