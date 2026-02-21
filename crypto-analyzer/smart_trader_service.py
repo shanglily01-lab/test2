@@ -22,7 +22,6 @@ from app.services.adaptive_optimizer import AdaptiveOptimizer
 from app.services.optimization_config import OptimizationConfig
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
-from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.breakout_signal_booster import BreakoutSignalBooster
@@ -882,11 +881,10 @@ class SmartTraderService:
         # 波动率配置更新器 (15M K线动态止盈)
         self.volatility_updater = VolatilityProfileUpdater(self.db_config)
 
-        # 加载分批建仓和智能平仓配置
+        # 加载智能平仓配置
         import yaml
         with open('config.yaml', 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
-            self.batch_entry_config = config.get('signals', {}).get('batch_entry', {'enabled': False})
             self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
 
             # 🔥 从数据库读取Big4过滤器配置（优先级高于config.yaml）
@@ -894,11 +892,6 @@ class SmartTraderService:
             big4_enabled_from_db = get_big4_filter_enabled()
             self.big4_filter_config = {'enabled': big4_enabled_from_db}
             logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
-
-        # 初始化智能分批建仓执行器（已禁用，改为一次性开仓）
-        # 保留配置读取，但不初始化执行器
-        self.smart_entry_executor = None
-        logger.info("⚠️ 智能分批建仓已禁用（U本位统一使用一次性开仓）")
 
         # 初始化智能平仓优化器
         if self.smart_exit_config.get('enabled'):
@@ -1620,115 +1613,6 @@ class SmartTraderService:
             logger.error(f"[ERROR] {symbol} 开仓失败: {e}")
             return False
 
-    async def _open_position_with_batch(self, opp: dict):
-        """使用智能分批建仓执行器开仓（信号已在调用前验证）"""
-        symbol = opp['symbol']
-        side = opp['side']
-
-        try:
-            # 注意：信号验证已在 open_position() 中完成，这里直接计算保证金
-            signal_components = opp.get('signal_components', {})
-
-            # 计算保证金（复用原有逻辑）
-            rating_level = self.opt_config.get_symbol_rating_level(symbol)
-            rating_config = self.opt_config.get_blacklist_config(rating_level)
-
-            if rating_level == 3:
-                logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
-                return False
-
-            rating_margin_multiplier = rating_config['margin_multiplier']
-            base_position_size = self.position_size_usdt * rating_margin_multiplier
-
-            # 根据Big4市场信号动态调整仓位倍数
-            try:
-                big4_result = self.get_big4_result()
-                market_signal = big4_result.get('overall_signal', 'NEUTRAL')
-
-                # 根据市场信号决定仓位倍数
-                if market_signal == 'BULLISH' and side == 'LONG':
-                    position_multiplier = 1.2  # 市场看多,做多加仓
-                    logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
-                elif market_signal == 'BEARISH' and side == 'SHORT':
-                    position_multiplier = 1.2  # 市场看空,做空加仓
-                    logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
-                else:
-                    position_multiplier = 1.0  # 其他情况正常仓位
-                    if market_signal != 'NEUTRAL':
-                        logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
-            except Exception as e:
-                logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
-                position_multiplier = 1.0
-
-            # 获取自适应参数
-            if side == 'LONG':
-                adaptive_params = self.brain.adaptive_long
-            else:
-                adaptive_params = self.brain.adaptive_short
-
-            adjusted_position_size = base_position_size * position_multiplier
-
-            # 🔥 获取信号触发时间：优先使用opp中的时间，否则使用当前时间
-            signal_time = opp.get('signal_time', datetime.now())
-
-            # 调用智能建仓执行器（作为后台任务，避免阻塞主循环）
-            entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
-                'symbol': symbol,
-                'direction': side,
-                'total_margin': adjusted_position_size,
-                'leverage': self.leverage,
-                'strategy_id': 'smart_trader',
-                'signal_time': signal_time,  # 🔥 传入真实的信号触发时间
-                'trade_params': {
-                    'entry_score': opp.get('score', 0),
-                    'signal_components': signal_components,
-                    'adaptive_params': adaptive_params,
-                    'signal_combination_key': self._generate_signal_combination_key(signal_components)
-                }
-            }))
-
-            # 添加完成回调来启动智能平仓监控
-            def on_entry_complete(task):
-                try:
-                    entry_result = task.result()
-                    if entry_result['success']:
-                        position_id = entry_result['position_id']
-                        logger.info(
-                            f"✅ [BATCH_ENTRY_COMPLETE] {symbol} {side} | "
-                            f"持仓ID: {position_id} | "
-                            f"平均价格: ${entry_result['avg_price']:.4f} | "
-                            f"总数量: {entry_result['total_quantity']:.2f}"
-                        )
-
-                        # 启动智能平仓监控（如果启用）
-                        if self.smart_exit_optimizer:
-                            try:
-                                loop = asyncio.get_event_loop()
-                                if loop.is_closed():
-                                    logger.warning(f"⚠️ 事件循环已关闭，无法启动智能平仓监控: 持仓{position_id}")
-                                else:
-                                    # 使用loop.create_task而非asyncio.create_task，确保使用同一个loop实例
-                                    loop.create_task(self.smart_exit_optimizer.start_monitoring_position(position_id))
-                                    logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
-                            except (RuntimeError, Exception) as e:
-                                # 捕获所有异常，包括"Already closed"等事件循环相关错误
-                                logger.warning(f"⚠️ 无法启动智能平仓监控: {e}")
-                    else:
-                        logger.error(f"❌ [BATCH_ENTRY_FAILED] {symbol} {side} | {entry_result.get('error')}")
-                except Exception as e:
-                    logger.error(f"❌ [BATCH_ENTRY_CALLBACK_ERROR] {symbol} {side} | {e}")
-
-            entry_task.add_done_callback(on_entry_complete)
-            logger.info(f"🚀 [BATCH_ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行60分钟）")
-
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ [BATCH_ENTRY_ERROR] {symbol} {side} | {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
-
     def _generate_signal_combination_key(self, signal_components: dict) -> str:
         """生成信号组合键"""
         if signal_components:
@@ -2331,252 +2215,6 @@ class SmartTraderService:
 
         except Exception as e:
             logger.error(f"异步平仓失败: {symbol} {direction} | {e}")
-            return {'success': False, 'error': str(e)}
-
-    async def close_position_partial(self, position_id: int, close_ratio: float, reason: str):
-        """
-        部分平仓方法（供SmartExitOptimizer调用）
-
-        Args:
-            position_id: 持仓ID
-            close_ratio: 平仓比例 (0.0-1.0)
-            reason: 平仓原因
-
-        Returns:
-            dict: {'success': bool, 'position_id': int, 'closed_quantity': float}
-        """
-        conn = None
-        cursor = None
-        try:
-            # 创建独立连接，避免与其他异步操作冲突（重要！）
-            # SmartExitOptimizer异步调用此方法时，共享连接会导致竞态条件
-            conn = pymysql.connect(
-                **self.db_config,
-                charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor,
-                autocommit=False  # 使用事务确保数据一致性
-            )
-            cursor = conn.cursor()
-
-            # 获取持仓信息
-            cursor.execute("""
-                SELECT id, symbol, position_side, quantity, entry_price, avg_entry_price,
-                       leverage, margin, status
-                FROM futures_positions
-                WHERE id = %s AND status = 'open' AND account_id = %s
-            """, (position_id, self.account_id))
-
-            position = cursor.fetchone()
-
-            if not position:
-                cursor.close()
-                conn.close()
-                logger.error(f"持仓 {position_id} 不存在或已关闭")
-                return {'success': False, 'error': 'Position not found or already closed'}
-
-            symbol = position['symbol']
-            side = position['position_side']
-            total_quantity = float(position['quantity'])
-            entry_price = float(position['avg_entry_price'])
-            leverage = position['leverage'] if position.get('leverage') else 1
-            total_margin = float(position['margin']) if position.get('margin') else 0.0
-
-            # 计算平仓数量和保证金
-            close_quantity = total_quantity * close_ratio
-            close_margin = total_margin * close_ratio
-            remaining_quantity = total_quantity - close_quantity
-            remaining_margin = total_margin - close_margin
-
-            # 如果剩余保证金太小(<10 USDT),直接全部平仓避免垃圾仓位
-            MIN_MARGIN_THRESHOLD = 10.0
-            if remaining_margin < MIN_MARGIN_THRESHOLD and remaining_margin > 0:
-                logger.warning(
-                    f"⚠️ 剩余保证金太小(${remaining_margin:.2f} < ${MIN_MARGIN_THRESHOLD}), "
-                    f"改为全部平仓避免垃圾仓位"
-                )
-                close_quantity = total_quantity
-                close_margin = total_margin
-                remaining_quantity = 0
-                remaining_margin = 0
-                close_ratio = 1.0
-
-            # 获取当前价格
-            current_price = self.get_current_price(symbol)
-            if not current_price:
-                cursor.close()
-                conn.close()
-                logger.error(f"无法获取 {symbol} 当前价格")
-                return {'success': False, 'error': 'Failed to get current price'}
-
-            # 计算盈亏
-            if side == 'LONG':
-                realized_pnl = (current_price - entry_price) * close_quantity
-                pnl_pct = (current_price - entry_price) / entry_price * 100
-            else:  # SHORT
-                realized_pnl = (entry_price - current_price) * close_quantity
-                pnl_pct = (entry_price - current_price) / entry_price * 100
-
-            roi = (realized_pnl / close_margin) * 100 if close_margin > 0 else 0
-
-            logger.info(
-                f"[PARTIAL_CLOSE] {symbol} {side} | 持仓{position_id} | "
-                f"平仓比例: {close_ratio*100:.0f}% | 数量: {close_quantity:.4f}/{total_quantity:.4f} | "
-                f"盈亏: {pnl_pct:+.2f}% ({realized_pnl:+.2f} USDT) | 原因: {reason}"
-            )
-
-            # 更新持仓记录
-            if remaining_quantity <= 0.0001:  # 全部平仓
-                cursor.execute("""
-                    UPDATE futures_positions
-                    SET quantity = 0,
-                        margin = 0,
-                        notional_value = 0,
-                        status = 'closed',
-                        close_time = NOW(),
-                        realized_pnl = IFNULL(realized_pnl, 0) + %s,
-                        updated_at = NOW(),
-                        notes = CONCAT(IFNULL(notes, ''), '|full_close:', %s, ' (from partial_close due to small remaining)')
-                    WHERE id = %s
-                """, (
-                    realized_pnl,
-                    reason,
-                    position_id
-                ))
-                logger.info(f"✅ 持仓{position_id}已全部平仓(剩余保证金太小)")
-            else:  # 部分平仓
-                cursor.execute("""
-                    UPDATE futures_positions
-                    SET quantity = %s,
-                        margin = %s,
-                        notional_value = %s,
-                        realized_pnl = IFNULL(realized_pnl, 0) + %s,
-                        updated_at = NOW(),
-                        notes = CONCAT(IFNULL(notes, ''), '|partial_close:', %s, ',ratio:', %s)
-                    WHERE id = %s
-                """, (
-                    remaining_quantity,
-                    remaining_margin,
-                    remaining_quantity * entry_price,
-                    realized_pnl,
-                    reason,
-                    f"{close_ratio:.2f}",
-                    position_id
-                ))
-
-            # 创建平仓订单记录
-            import uuid
-            from datetime import datetime
-            close_side = 'CLOSE_LONG' if side == 'LONG' else 'CLOSE_SHORT'
-            notional_value = current_price * close_quantity
-            fee = notional_value * 0.0004
-            # 使用时间戳确保order_id唯一性，避免重复触发时主键冲突
-            timestamp = datetime.now().strftime('%H%M%S%f')[:9]  # HHMMSSMMM (毫秒)
-            order_id = f"PARTIAL-{position_id}-{int(close_ratio*100)}-{timestamp}"
-            trade_id = str(uuid.uuid4())
-
-            cursor.execute("""
-                INSERT INTO futures_orders (
-                    account_id, order_id, position_id, symbol,
-                    side, order_type, leverage,
-                    price, quantity, executed_quantity,
-                    total_value, executed_value,
-                    fee, fee_rate, status,
-                    avg_fill_price, fill_time,
-                    realized_pnl, pnl_pct,
-                    order_source, notes
-                ) VALUES (
-                    %s, %s, %s, %s,
-                    %s, 'MARKET', %s,
-                    %s, %s, %s,
-                    %s, %s,
-                    %s, %s, 'FILLED',
-                    %s, %s,
-                    %s, %s,
-                    'smart_exit', %s
-                )
-            """, (
-                self.account_id, order_id, position_id, symbol,
-                close_side, leverage,
-                current_price, close_quantity, close_quantity,
-                notional_value, notional_value,
-                fee, 0.0004,
-                current_price, datetime.utcnow(),
-                realized_pnl, pnl_pct,
-                f"partial_close_{close_ratio:.0%}:{reason}"
-            ))
-
-            # 创建交易记录
-            cursor.execute("""
-                INSERT INTO futures_trades (
-                    trade_id, position_id, account_id, symbol, side,
-                    price, quantity, notional_value, leverage, margin,
-                    fee, realized_pnl, pnl_pct, roi, entry_price,
-                    close_price, order_id, trade_time, created_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s
-                )
-            """, (
-                trade_id, position_id, self.account_id, symbol, close_side,
-                current_price, close_quantity, notional_value, leverage, close_margin,
-                fee, realized_pnl, pnl_pct, roi, entry_price,
-                current_price, order_id, datetime.utcnow(), datetime.utcnow()
-            ))
-
-            # 更新账户余额
-            cursor.execute("""
-                UPDATE futures_trading_accounts
-                SET current_balance = current_balance + %s + %s,
-                    frozen_balance = frozen_balance - %s,
-                    realized_pnl = realized_pnl + %s,
-                    total_trades = total_trades + 1,
-                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
-                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
-                WHERE id = %s
-            """, (
-                float(close_margin), float(realized_pnl), float(close_margin),
-                float(realized_pnl), float(realized_pnl), float(realized_pnl),
-                self.account_id
-            ))
-
-            cursor.execute("""
-                UPDATE futures_trading_accounts
-                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
-                WHERE id = %s
-            """, (self.account_id,))
-
-            conn.commit()
-            cursor.close()
-            conn.close()
-
-            logger.info(f"✅ 部分平仓成功: 持仓{position_id} | 剩余数量: {remaining_quantity:.4f}")
-
-            return {
-                'success': True,
-                'position_id': position_id,
-                'closed_quantity': close_quantity,
-                'remaining_quantity': remaining_quantity,
-                'realized_pnl': realized_pnl
-            }
-
-        except Exception as e:
-            logger.error(f"部分平仓失败: 持仓{position_id} | {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-
-            # 确保回滚事务并关闭连接
-            try:
-                if conn:
-                    conn.rollback()
-                if cursor:
-                    cursor.close()
-                if conn:
-                    conn.close()
-            except Exception as cleanup_error:
-                logger.error(f"清理连接时出错: {cleanup_error}")
-
             return {'success': False, 'error': str(e)}
 
     def run_adaptive_optimization(self):
@@ -3362,12 +3000,7 @@ async def async_main():
     # 初始化 WebSocket 服务
     await service.init_ws_service()
 
-    # 恢复未完成的分批建仓任务（系统重启后）
-    if service.smart_entry_executor:
-        logger.info("🔄 检查并恢复未完成的分批建仓任务...")
-        await service.smart_entry_executor.recover_building_positions()
-
-    # 初始化智能平仓监控（为所有已开仓的分批建仓持仓启动监控）
+    # 初始化智能平仓监控
     if service.smart_exit_optimizer:
         await service._start_smart_exit_monitoring()
 
