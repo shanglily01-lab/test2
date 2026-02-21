@@ -217,21 +217,28 @@ class SignalScoreV2Service:
                 'details': {}
             }
 
-        # 🔥 检查数据是否过时（超过24小时），如果过时则忽略V2过滤
-        from datetime import datetime, timedelta
+        # 🔥 检查数据是否过时（超过15分钟），如果过时则忽略V2过滤
+        from datetime import datetime, timedelta, timezone
         updated_at = coin_score.get('updated_at')
         if updated_at:
             if isinstance(updated_at, str):
                 updated_at = datetime.fromisoformat(updated_at)
-            age_hours = (datetime.now() - updated_at).total_seconds() / 3600
-            if age_hours > 24:
-                logger.warning(f"⚠️ {symbol} 评分数据过时（{age_hours:.1f}小时前更新），忽略V2过滤")
+            # 数据库时间是UTC，使用UTC时间进行比较
+            now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            # 如果updated_at没有时区信息，假定为UTC
+            if updated_at.tzinfo is None:
+                age_minutes = (now_utc - updated_at).total_seconds() / 60
+            else:
+                age_minutes = (now_utc - updated_at.replace(tzinfo=None)).total_seconds() / 60
+
+            if age_minutes > 15:
+                logger.warning(f"⚠️ {symbol} 评分数据过时（{age_minutes:.1f}分钟前更新），忽略V2过滤")
                 return {
                     'passed': True,
-                    'reason': f'{symbol} 评分数据过时（{age_hours:.1f}h），自动通过',
+                    'reason': f'{symbol} 评分数据过时（{age_minutes:.1f}min），自动通过',
                     'coin_score': coin_score,
                     'big4_score': None,
-                    'details': {'data_age_hours': age_hours}
+                    'details': {'data_age_minutes': age_minutes}
                 }
 
         # 获取Big4评分
