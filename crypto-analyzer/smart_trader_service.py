@@ -746,16 +746,51 @@ class SmartDecisionBrain:
 
         logger.info(f"\n{'='*100}")
         logger.info(f"🔍 开始扫描 {len(self.whitelist)} 个交易对 | 开仓阈值: {self.threshold}分")
+
+        # 显示Big4状态
+        if big4_result:
+            big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
+            big4_strength = big4_result.get('signal_strength', 0)
+            logger.info(f"📊 Big4市场趋势: {big4_signal} (强度: {big4_strength:.1f})")
+
         logger.info(f"{'='*100}")
 
         opportunities = []
+        filtered_count = 0  # 被Big4过滤的信号数
+
         for symbol in self.whitelist:
             result = self.analyze(symbol, big4_result=big4_result)
             if result:
+                # 🔥 Big4方向过滤和加分（提前应用）
+                if big4_result:
+                    signal_side = result['side']
+                    big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                    big4_strength = big4_result.get('signal_strength', 0)
+
+                    # Big4看空时，完全禁止开多
+                    if big4_signal == 'BEARISH' and signal_side == 'LONG':
+                        logger.debug(f"[BIG4-FILTER] {symbol} LONG信号被过滤（Big4看空）")
+                        filtered_count += 1
+                        continue
+
+                    # Big4看多时，完全禁止开空
+                    elif big4_signal == 'BULLISH' and signal_side == 'SHORT':
+                        logger.debug(f"[BIG4-FILTER] {symbol} SHORT信号被过滤（Big4看多）")
+                        filtered_count += 1
+                        continue
+
+                    # 方向一致时，应用Big4加分
+                    elif (big4_signal == 'BULLISH' and signal_side == 'LONG') or \
+                         (big4_signal == 'BEARISH' and signal_side == 'SHORT'):
+                        boost = min(20, int(big4_strength * 0.3))
+                        result['score'] += boost
+                        result['big4_boost'] = boost
+                        logger.debug(f"[BIG4-BOOST] {symbol} {signal_side} 加分 +{boost} (Big4: {big4_signal})")
+
                 opportunities.append(result)
 
         logger.info(f"{'='*100}")
-        logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个")
+        logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个 | Big4过滤: {filtered_count} 个")
         logger.info(f"{'='*100}\n")
 
         return opportunities
@@ -3162,30 +3197,11 @@ class SmartTraderService:
                                 continue
                             # ========== 破位否决结束 ==========
 
-                            # 🚫 完全禁止反方向开仓（无论强度如何）
-                            if symbol_signal == 'BEARISH' and new_side == 'LONG':
-                                # Big4看空时，完全禁止开多
-                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看空(强度{signal_strength:.1f}), 完全禁止LONG信号 (原评分{new_score})")
-                                continue
+                            # 📝 注意：Big4方向过滤和加分已在scan_all()中提前处理
+                            # 这里只记录Big4状态信息，不再重复过滤和加分
+                            logger.debug(f"[BIG4-INFO] {symbol} {new_side} | Big4: {symbol_signal}({signal_strength:.1f})")
 
-                            elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
-                                # Big4看多时，完全禁止开空
-                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看多(强度{signal_strength:.1f}), 完全禁止SHORT信号 (原评分{new_score})")
-                                continue
-
-                            # 如果信号方向一致,提升评分
-                            elif symbol_signal == 'BULLISH' and new_side == 'LONG':
-                                boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
-                                new_score = new_score + boost
-                                logger.info(f"[BIG4-BOOST] {symbol} 市场看多与LONG方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
-
-                            elif symbol_signal == 'BEARISH' and new_side == 'SHORT':
-                                boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
-                                new_score = new_score + boost
-                                logger.info(f"[BIG4-BOOST] {symbol} 市场看空与SHORT方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
-
-                            # 更新机会评分 (用于后续记录)
-                            opp['score'] = new_score
+                            # 更新机会的Big4状态信息 (用于后续记录)
                             opp['big4_adjusted'] = True
                             opp['big4_signal'] = symbol_signal
                             opp['big4_strength'] = signal_strength
