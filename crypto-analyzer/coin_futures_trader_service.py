@@ -3369,12 +3369,7 @@ async def async_main():
     # 初始化 WebSocket 服务
     await service.init_ws_service()
 
-    # 恢复未完成的分批建仓任务（已禁用）
-    # if service.smart_entry_executor:
-    #     logger.info("🔄 检查并恢复未完成的分批建仓任务...")
-    #     await service.smart_entry_executor.recover_building_positions()
-
-    # 初始化智能平仓监控（为所有已开仓的分批建仓持仓启动监控）
+    # 初始化智能平仓监控
     if service.smart_exit_optimizer:
         await service._start_smart_exit_monitoring()
 
