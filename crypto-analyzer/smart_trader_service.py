@@ -1098,6 +1098,27 @@ class SmartTraderService:
         except:
             return 0
 
+    def _get_margin_per_batch(self, symbol: str) -> float:
+        """
+        根据评级等级获取每批固定保证金
+
+        Args:
+            symbol: 交易对
+
+        Returns:
+            每批保证金金额（USDT）
+        """
+        rating_level = self.opt_config.get_symbol_rating_level(symbol)
+
+        if rating_level == 0:
+            return 200.0  # 白名单/默认
+        elif rating_level == 1:
+            return 50.0   # 黑名单1级
+        elif rating_level == 2:
+            return 30.0   # 黑名单2级
+        else:
+            return 0.0    # 黑名单3级 - 禁止交易
+
     def validate_signal_timeframe(self, signal_components: dict, side: str, symbol: str) -> tuple:
         """
         验证信号组合的时间框架一致性
@@ -1309,9 +1330,17 @@ class SmartTraderService:
 
             if not is_reversal or 'original_margin' not in opp:
                 # 正常开仓流程
-                # 问题2优化: 使用3级评级制度替代简单黑名单
-                # 注意: rating_level已在函数开头检查过了
-                rating_config = self.opt_config.get_blacklist_config(rating_level)
+                # 使用固定保证金金额替代倍数逻辑
+                margin_per_batch = self._get_margin_per_batch(symbol)
+
+                # Level 3 = 永久禁止
+                if margin_per_batch == 0:
+                    logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易 (Level{rating_level})")
+                    return False
+
+                # 记录评级信息
+                rating_tag = f"[Level{rating_level}]" if rating_level > 0 else ""
+                logger.info(f"{rating_tag} {symbol} 固定保证金: ${margin_per_batch:.2f}")
 
                 # ========== 检查是否为震荡市策略 ==========
                 mode_config = None
@@ -1320,25 +1349,17 @@ class SmartTraderService:
                         mode_config = self.mode_switcher.get_current_mode(self.account_id, 'usdt_futures')
                         if mode_config:
                             logger.info(f"[RANGE_MODE] {symbol} 使用震荡市交易参数")
+                            # 震荡市模式使用固定保证金的60%
+                            base_position_size = margin_per_batch * 0.6
+                            logger.info(f"[RANGE_POSITION] {symbol} 震荡市仓位: ${base_position_size:.2f} (60%)")
+                        else:
+                            base_position_size = margin_per_batch
                     except Exception as e:
                         logger.error(f"[MODE_ERROR] 获取模式配置失败: {e}")
-
-                # 获取评级对应的保证金倍数
-                rating_margin_multiplier = rating_config['margin_multiplier']
-
-                # ========== 根据策略类型确定基础仓位大小 ==========
-                if strategy == 'bollinger_mean_reversion' and mode_config:
-                    # 震荡市模式: 使用range_position_size (默认3%)
-                    range_position_pct = float(mode_config['range_position_size'])  # 转换Decimal为float
-                    base_position_size = self.position_size_usdt * (range_position_pct / 5.0) * rating_margin_multiplier
-                    logger.info(f"[RANGE_POSITION] {symbol} 震荡市仓位: {range_position_pct}% × {rating_margin_multiplier:.2f} = ${base_position_size:.2f}")
+                        base_position_size = margin_per_batch
                 else:
-                    # 趋势模式: 使用默认仓位(5%)
-                    base_position_size = self.position_size_usdt * rating_margin_multiplier
-
-                # 记录评级信息
-                rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
-                logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
+                    # 趋势模式: 使用完整固定保证金
+                    base_position_size = margin_per_batch
 
                 # 根据Big4市场信号动态调整仓位倍数 (震荡市策略不调整仓位)
                 if strategy == 'bollinger_mean_reversion':
