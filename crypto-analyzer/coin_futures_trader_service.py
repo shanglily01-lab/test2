@@ -1271,39 +1271,11 @@ class CoinFuturesTraderService:
             self.big4_filter_config = {'enabled': big4_enabled_from_db}
             logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
 
-        # 初始化智能分批建仓执行器
-        if self.batch_entry_config.get('enabled'):
-            # 🔥 从数据库读取策略配置（优先级高于config.yaml）
-            from app.services.system_settings_loader import get_batch_entry_strategy
-            strategy_type = get_batch_entry_strategy()
-            self.batch_entry_strategy = strategy_type  # 保存策略类型供后续使用
-            logger.info(f"📊 从数据库加载分批建仓策略: {strategy_type}")
-
-            if strategy_type == 'kline_pullback':
-                # V2: K线回调策略
-                from app.services.kline_pullback_entry_executor import KlinePullbackEntryExecutor
-                self.smart_entry_executor = KlinePullbackEntryExecutor(
-                    db_config=self.db_config,
-                    live_engine=self,
-                    price_service=self.ws_service,
-                    account_id=self.account_id,  # 传入币本位account_id=3
-                    brain=self.brain,  # 传入智能大脑（用于止盈止损计算）
-                    opt_config=self.opt_config  # 传入优化配置（用于波动率配置）
-                )
-                logger.info("✅ 智能分批建仓执行器已启动 (V2 K线回调策略 + 止盈止损)")
-            else:
-                # V1: 价格分位数策略（原有）
-                self.smart_entry_executor = SmartEntryExecutor(
-                    db_config=self.db_config,
-                    live_engine=self,
-                    price_service=self.ws_service,
-                    account_id=self.account_id  # 传入币本位account_id=3
-                )
-                logger.info("✅ 智能分批建仓执行器已启动 (V1 价格分位数策略)")
-        else:
-            self.smart_entry_executor = None
-            self.batch_entry_strategy = None  # 未启用分批建仓
-            logger.info("⚠️ 智能分批建仓未启用")
+        # 初始化智能分批建仓执行器（已禁用，改为一次性开仓）
+        # 保留配置读取，但不初始化执行器
+        self.smart_entry_executor = None
+        self.batch_entry_strategy = None
+        logger.info("⚠️ 智能分批建仓已禁用（币本位统一使用一次性开仓）")
 
         # 初始化智能平仓优化器
         if self.smart_exit_config.get('enabled'):
@@ -1350,6 +1322,32 @@ class CoinFuturesTraderService:
             except:
                 self.connection = pymysql.connect(**self.db_config, autocommit=True)
         return self.connection
+
+    def _get_margin_per_batch(self, symbol: str) -> float:
+        """
+        根据交易对评级等级获取每批保证金金额
+
+        Args:
+            symbol: 交易对符号
+
+        Returns:
+            每批保证金金额(USDT)，如果是黑名单3级则返回0
+        """
+        rating_level = self.opt_config.get_symbol_rating_level(symbol)
+
+        # 根据评级等级设置每批保证金
+        if rating_level == 0:
+            # 白名单/默认：200U每批
+            return 200.0
+        elif rating_level == 1:
+            # 黑名单1级：50U每批
+            return 50.0
+        elif rating_level == 2:
+            # 黑名单2级：30U每批
+            return 30.0
+        else:
+            # 黑名单3级：不交易
+            return 0.0
 
     def check_trading_enabled(self) -> bool:
         """
@@ -1718,37 +1716,7 @@ class CoinFuturesTraderService:
             else:
                 logger.info(f"[ANTI-FOMO] {symbol} {side} 通过防追高检查: {filter_reason}")
 
-        # ========== 第二步：决定使用分批建仓还是一次性开仓 ==========
-        # 检查是否启用分批建仓
-        if self.smart_entry_executor and self.batch_entry_config.get('enabled'):
-            # 检查是否在白名单中（如果白名单为空，则对所有币种启用）
-            whitelist = self.batch_entry_config.get('whitelist_symbols', [])
-            should_use_batch = (not whitelist) or (symbol in whitelist)
-
-            # 反转开仓不使用分批建仓（直接一次性开仓）
-            is_reversal = 'reversal_from' in opp
-
-            if should_use_batch and not is_reversal:
-                logger.info(f"[BATCH_ENTRY] {symbol} {side} 使用智能分批建仓（后台异步执行）")
-                # 在后台异步执行分批建仓，不阻塞主循环
-                import asyncio
-                try:
-                    # 使用保存的事件循环引用
-                    if self.event_loop:
-                        # 在后台创建任务，不等待完成
-                        asyncio.run_coroutine_threadsafe(
-                            self._open_position_with_batch(opp),
-                            self.event_loop
-                        )
-                        logger.info(f"[BATCH_ENTRY] {symbol} {side} 分批建仓任务已启动（后台运行60分钟）")
-                        return True  # 立即返回，不阻塞
-                    else:
-                        logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 事件循环未初始化，降级到一次性开仓")
-                except Exception as e:
-                    logger.error(f"[BATCH_ENTRY_ERROR] {symbol} {side} 分批建仓启动失败: {e}，降级到一次性开仓")
-                    # 降级到原有一次性开仓逻辑
-
-        # ========== 第三步：一次性开仓逻辑 ==========
+        # ========== 第二步：一次性开仓逻辑（不再使用分批建仓）==========
         try:
 
             # 优先从 WebSocket 获取实时价格
@@ -1787,41 +1755,39 @@ class CoinFuturesTraderService:
 
             if not is_reversal or 'original_margin' not in opp:
                 # 正常开仓流程
-                # 问题2优化: 使用3级评级制度替代简单黑名单
+                # 使用固定保证金金额替代倍数逻辑
                 rating_level = self.opt_config.get_symbol_rating_level(symbol)
-                rating_config = self.opt_config.get_blacklist_config(rating_level)
+
+                # 获取每批固定保证金
+                margin_per_batch = self._get_margin_per_batch(symbol)
 
                 # Level 3 = 永久禁止
-                if rating_level == 3:
-                    logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
+                if margin_per_batch == 0:
+                    logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易 (Level{rating_level})")
                     return False
-
-                # 获取评级对应的保证金倍数
-                rating_margin_multiplier = rating_config['margin_multiplier']
-                base_position_size = self.position_size_usdt * rating_margin_multiplier
 
                 # 记录评级信息
                 rating_tag = f"[Level{rating_level}]" if rating_level > 0 else "[白名单]"
-                logger.info(f"{rating_tag} {symbol} 保证金倍数: {rating_margin_multiplier:.2f}")
+                logger.info(f"{rating_tag} {symbol} 固定保证金: ${margin_per_batch:.2f}")
 
-                # 根据Big4市场信号动态调整仓位倍数
+                # 根据Big4市场信号动态调整保证金
                 try:
                     big4_result = self.get_big4_result()
                     market_signal = big4_result.get('overall_signal', 'NEUTRAL')
 
-                    # 根据市场信号决定仓位倍数
+                    # 根据市场信号决定保证金倍数
                     if market_signal == 'BULLISH' and side == 'LONG':
                         position_multiplier = 1.2  # 市场看多,做多加仓
-                        logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
+                        logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多保证金 × 1.2")
                     elif market_signal == 'BEARISH' and side == 'SHORT':
                         position_multiplier = 1.2  # 市场看空,做空加仓
-                        logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
+                        logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空保证金 × 1.2")
                     else:
-                        position_multiplier = 1.0  # 其他情况正常仓位
+                        position_multiplier = 1.0  # 其他情况正常保证金
                         if market_signal != 'NEUTRAL':
-                            logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
+                            logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,保证金 × 1.0 (市场{market_signal}, 开仓{side})")
                 except Exception as e:
-                    logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
+                    logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认倍数1.0: {e}")
                     position_multiplier = 1.0
 
                 # 获取自适应参数
@@ -1830,8 +1796,8 @@ class CoinFuturesTraderService:
                 else:  # SHORT
                     adaptive_params = self.brain.adaptive_short
 
-                # 应用仓位倍数
-                adjusted_position_size = base_position_size * position_multiplier
+                # 应用Big4倍数调整
+                adjusted_position_size = margin_per_batch * position_multiplier
 
             quantity = adjusted_position_size * self.leverage / current_price
             notional_value = quantity * current_price
@@ -2651,9 +2617,10 @@ class CoinFuturesTraderService:
                     SET status = 'closed', mark_price = %s,
                         realized_pnl = %s,
                         close_time = NOW(), updated_at = NOW(),
+                        close_reason = %s,
                         notes = CONCAT(IFNULL(notes, ''), '|', %s)
                     WHERE id = %s
-                """, (current_price, realized_pnl, reason, pos['id']))
+                """, (current_price, realized_pnl, reason, reason, pos['id']))
 
                 # Calculate values for orders and trades
                 import uuid
@@ -3593,10 +3560,10 @@ async def async_main():
     # 初始化 WebSocket 服务
     await service.init_ws_service()
 
-    # 恢复未完成的分批建仓任务（系统重启后）
-    if service.smart_entry_executor:
-        logger.info("🔄 检查并恢复未完成的分批建仓任务...")
-        await service.smart_entry_executor.recover_building_positions()
+    # 恢复未完成的分批建仓任务（已禁用）
+    # if service.smart_entry_executor:
+    #     logger.info("🔄 检查并恢复未完成的分批建仓任务...")
+    #     await service.smart_entry_executor.recover_building_positions()
 
     # 初始化智能平仓监控（为所有已开仓的分批建仓持仓启动监控）
     if service.smart_exit_optimizer:
