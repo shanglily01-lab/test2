@@ -76,11 +76,13 @@ def collect_day_data(target_date):
     }
 
     total_saved = {'5m': 0, '15m': 0, '1h': 0, '1d': 0}
+    total_symbols = len(futures_symbols)
 
     for interval, expected_count in intervals_config.items():
         print(f'开始采集 {interval} K线...')
+        interval_count = 0
 
-        for symbol in futures_symbols:
+        for idx, symbol in enumerate(futures_symbols, 1):
             try:
                 # 获取K线数据
                 ohlcv = exchange.fetch_ohlcv(
@@ -138,15 +140,20 @@ def collect_day_data(target_date):
                             Decimal('0')   # taker_buy_quote_volume
                         ))
                         total_saved[interval] += 1
+                        interval_count += 1
                     except Exception as e:
                         pass  # 忽略重复键错误
+
+                # 显示进度
+                if idx % 10 == 0 or idx == total_symbols:
+                    print(f'  进度: {idx}/{total_symbols} | 已保存: {interval_count} 条', end='\r')
 
             except Exception as e:
                 print(f'  ❌ {symbol} {interval} 失败: {e}')
                 continue
 
         conn.commit()
-        print(f'  ✅ {interval} 完成，共保存 {total_saved[interval]} 条')
+        print(f'\n  ✅ {interval} 完成，共保存 {total_saved[interval]} 条')
 
     print()
     print('=' * 100)
