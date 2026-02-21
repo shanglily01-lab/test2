@@ -3491,10 +3491,10 @@ class CoinFuturesTraderService:
                     #     logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
                     #     continue
 
-                    # 🔥 新增：限制同一交易对同方向最多3个持仓（分批建仓上限）
+                    # 🔥 限制：同一交易对同方向只能有1个持仓
                     position_count = self.count_positions(symbol, new_side)
-                    if position_count >= 3:
-                        logger.info(f"[SKIP] {symbol} {new_side}方向已有{position_count}个持仓，达到上限(3)")
+                    if position_count >= 1:
+                        logger.info(f"[SKIP] {symbol} {new_side}方向已有{position_count}个持仓，达到上限(1)")
                         continue
 
                     # 检查是否刚刚平仓(1小时冷却期)
