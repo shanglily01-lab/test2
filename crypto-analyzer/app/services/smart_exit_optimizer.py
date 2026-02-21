@@ -9,6 +9,7 @@ from decimal import Decimal
 from loguru import logger
 import mysql.connector
 from mysql.connector import pooling
+import aiohttp
 
 from app.services.price_sampler import PriceSampler
 from app.services.signal_analysis_service import SignalAnalysisService
@@ -1071,7 +1072,6 @@ class SmartExitOptimizer:
     async def _get_http_session(self):
         """获取或创建HTTP session（复用以提升性能）"""
         if self._http_session is None or self._http_session.closed:
-            import aiohttp
             self._http_session = aiohttp.ClientSession()
         return self._http_session
 
