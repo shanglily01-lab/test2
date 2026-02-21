@@ -735,6 +735,8 @@ class SmartDecisionBrain:
         logger.info(f"🔍 开始扫描 {len(self.whitelist)} 个交易对 | 开仓阈值: {self.threshold}分")
 
         # 显示Big4状态
+        big4_signal = 'NEUTRAL'
+        big4_strength = 0
         if big4_result:
             big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
             big4_strength = big4_result.get('signal_strength', 0)
@@ -778,7 +780,7 @@ class SmartDecisionBrain:
                 opportunities.append(result)
 
         logger.info(f"{'='*100}")
-        logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个 | Big4过滤: {filtered_count} 个")
+        logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个 | Big4过滤: {filtered_count} 个 | Big4状态: {big4_signal}(强度{big4_strength:.0f})")
         logger.info(f"{'='*100}\n")
 
         return opportunities
