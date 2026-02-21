@@ -159,7 +159,11 @@
       "Bash(git -C \"d:\\\\test2\\\\crypto-analyzer\" log --oneline --all --since=\"2 days ago\")",
       "Bash(tasklist:*)",
       "Bash(findstr:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(wc:*)",
+      "Bash(/tmp/check_strategies.sh:*)",
+      "Bash(/tmp/check_toplevel.sh:*)",
+      "Bash(/tmp/check_imported.sh:*)"
     ],
     "deny": [],
     "ask": []
