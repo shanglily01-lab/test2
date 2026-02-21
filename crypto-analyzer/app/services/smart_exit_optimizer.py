@@ -151,8 +151,14 @@ class SmartExitOptimizer:
                     await asyncio.sleep(2)  # 等待2秒后重试
                     continue
 
-                # 计算当前盈亏
-                profit_info = self._calculate_profit(position, current_price)
+                # 计算当前盈亏（如果avg_entry_price为空，使用entry_price作为备用）
+                try:
+                    profit_info = self._calculate_profit(position, current_price)
+                except ValueError as ve:
+                    # avg_entry_price 或 quantity 为空，可能是持仓刚创建或正在建仓中
+                    logger.debug(f"持仓{position_id} 计算盈亏失败（可能正在建仓）: {ve}")
+                    await asyncio.sleep(2)
+                    continue
 
                 # 更新最高盈利记录
                 await self._update_max_profit(position_id, profit_info)
@@ -203,7 +209,7 @@ class SmartExitOptimizer:
         except asyncio.CancelledError:
             logger.info(f"监控任务被取消: 持仓 {position_id}")
         except Exception as e:
-            logger.error(f"监控持仓 {position_id} 异常: {e}")
+            logger.error(f"监控持仓 {position_id} 异常: {type(e).__name__}: {e}", exc_info=True)
 
     async def _get_position(self, position_id: int) -> Optional[Dict]:
         """
@@ -311,8 +317,24 @@ class SmartExitOptimizer:
         Returns:
             {'profit_pct': float, 'profit_usdt': float, 'current_price': float}
         """
-        avg_entry_price = Decimal(str(position['avg_entry_price']))
-        position_size = Decimal(str(position['position_size']))
+        # 验证必要字段
+        avg_entry_price_val = position.get('avg_entry_price')
+        position_size_val = position.get('position_size')
+
+        # 如果 avg_entry_price 为空，尝试使用 entry_price 作为备用
+        if avg_entry_price_val is None or avg_entry_price_val == '':
+            entry_price_val = position.get('entry_price')
+            if entry_price_val is not None and entry_price_val != '':
+                avg_entry_price_val = entry_price_val
+                logger.debug(f"持仓 {position.get('id')} avg_entry_price为空，使用entry_price={entry_price_val}作为备用")
+            else:
+                raise ValueError(f"持仓 {position.get('id')} avg_entry_price 和 entry_price 都为空")
+
+        if position_size_val is None or position_size_val == '' or float(position_size_val) == 0:
+            raise ValueError(f"持仓 {position.get('id')} position_size 为空或为0")
+
+        avg_entry_price = Decimal(str(avg_entry_price_val))
+        position_size = Decimal(str(position_size_val))
         direction = position['direction']
 
         # 计算盈亏百分比
