@@ -1890,6 +1890,9 @@ class CoinFuturesTraderService:
                 base_timeout_minutes, timeout_at
             ))
 
+            # 获取刚插入的持仓ID
+            position_id = cursor.lastrowid
+
             # 冻结资金 (开仓时扣除可用余额，增加冻结余额)
             cursor.execute("""
                 UPDATE futures_trading_accounts
