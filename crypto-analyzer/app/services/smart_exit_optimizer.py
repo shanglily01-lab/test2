@@ -1,6 +1,6 @@
 """
 智能平仓优化器
-基于实时价格监控的智能分批平仓策略
+基于实时价格监控的智能平仓策略（独立持仓，全部平仓）
 """
 import asyncio
 from datetime import datetime, timedelta
@@ -17,7 +17,7 @@ from app.analyzers.kline_strength_scorer import KlineStrengthScorer
 
 
 class SmartExitOptimizer:
-    """智能平仓优化器（基于实时价格监控 + K线强度衰减检测 + 智能分批平仓）"""
+    """智能平仓优化器（基于实时价格监控 + K线强度衰减检测 + 全部平仓）"""
 
     def __init__(self, db_config: dict, live_engine, price_service, account_id=None):
         """
@@ -49,10 +49,10 @@ class SmartExitOptimizer:
         # 监控状态
         self.monitoring_tasks: Dict[str, asyncio.Task] = {}  # position_id -> task
 
-        # 智能平仓计划（分批平仓）
+        # 智能平仓计划
         self.exit_plans: Dict[int, Dict] = {}  # position_id -> exit_plan
 
-        # === K线强度监控 (新增) ===
+        # === K线强度监控 ===
         self.signal_analyzer = SignalAnalysisService(db_config)
         self.kline_scorer = KlineStrengthScorer()
         self.enable_kline_monitoring = True  # 启用K线强度监控
@@ -60,9 +60,6 @@ class SmartExitOptimizer:
         # K线强度检查间隔（15分钟）
         self.kline_check_interval = 900  # 秒
         self.last_kline_check: Dict[int, datetime] = {}  # position_id -> last_check_time
-
-        # 部分平仓阶段跟踪（避免重复触发）
-        self.partial_close_stage: Dict[int, int] = {}  # position_id -> stage (0=未平仓, 1=平50%, 2=平70%, 3=平100%)
 
         # === 智能监控策略 K线缓冲区 (新增) ===
         self.kline_5m_buffer: Dict[int, List] = {}  # position_id -> 最近N根5M K线
@@ -103,10 +100,6 @@ class SmartExitOptimizer:
         if position_id in self.monitoring_tasks:
             self.monitoring_tasks[position_id].cancel()
             del self.monitoring_tasks[position_id]
-
-            # 清理部分平仓阶段记录
-            if position_id in self.partial_close_stage:
-                del self.partial_close_stage[position_id]
 
             # 清理K线检查时间记录
             if position_id in self.last_kline_check:
@@ -196,13 +189,13 @@ class SmartExitOptimizer:
                         await self._execute_close(position_id, current_price, reason)
                         break
 
-                # 检查智能分批平仓
+                # 检查智能平仓
                 exit_completed = await self._smart_batch_exit(
                     position_id, position, current_price, profit_info
                 )
 
                 if exit_completed:
-                    logger.info(f"✅ 智能分批平仓完成: 持仓{position_id}")
+                    logger.info(f"✅ 智能平仓完成: 持仓{position_id}")
                     break
 
                 await asyncio.sleep(1)  # 每秒检查一次（实时监控）
@@ -447,10 +440,10 @@ class SmartExitOptimizer:
                 if current_price <= take_profit_price:
                     return True, f"止盈(价格{current_price:.8f} <= 止盈价{take_profit_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
-        # ========== 智能分批平仓逻辑（计划平仓前30分钟）==========
+        # ========== 智能平仓逻辑（计划平仓前30分钟）==========
         planned_close_time = position['planned_close_time']
 
-        # 如果没有设置计划平仓时间（恢复的分批建仓持仓），只检查止损止盈，不执行智能分批平仓
+        # 如果没有设置计划平仓时间（恢复的分批建仓持仓），只检查止损止盈，不执行智能平仓
         if planned_close_time is None:
             return False, ""
 
@@ -461,9 +454,9 @@ class SmartExitOptimizer:
         if now < monitoring_start_time:
             return False, ""
 
-        # ========== 到达监控窗口，使用智能分批平仓 ==========
+        # ========== 到达监控窗口，使用智能平仓 ==========
         # 注意：这里不再直接返回平仓决策
-        # 而是在 _monitor_position 中调用 _smart_batch_exit 处理分批平仓
+        # 而是在 _monitor_position 中调用 _smart_batch_exit 处理平仓
         # 这个方法现在主要用于兜底逻辑
 
         # 兜底逻辑1: 超高盈利立即全部平仓
@@ -474,7 +467,7 @@ class SmartExitOptimizer:
         if profit_pct <= -3.0:
             return True, f"巨额亏损全部平仓(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
-        # 默认：不平仓（由智能分批平仓处理）
+        # 默认：不平仓（由智能平仓处理）
         return False, ""
 
     async def _smart_batch_exit(
@@ -509,7 +502,7 @@ class SmartExitOptimizer:
         """
         planned_close_time = position['planned_close_time']
 
-        # 如果没有设置计划平仓时间（恢复的分批建仓持仓），不执行智能分批平仓
+        # 如果没有设置计划平仓时间（恢复的分批建仓持仓），不执行智能平仓
         if planned_close_time is None:
             return False
 
@@ -707,184 +700,6 @@ class SmartExitOptimizer:
                 return True, f"接近截止(已{elapsed_minutes:.0f}分钟)，评分{evaluation['score']}"
 
         return False, ""
-
-    async def _execute_partial_close(
-        self,
-        position_id: int,
-        position: Dict,
-        current_price: Decimal,
-        close_ratio: float,
-        reason: str
-    ):
-        """
-        执行部分平仓
-
-        Args:
-            position_id: 持仓ID
-            position: 持仓信息
-            current_price: 当前价格
-            close_ratio: 平仓比例（0.5=平50%, 1.0=平剩余全部）
-            reason: 平仓原因
-        """
-        try:
-            # 计算平仓数量
-            remaining_quantity = float(position['position_size'])
-
-            # 如果是第2批，检查已平仓的数量
-            if position_id in self.exit_plans:
-                exit_plan = self.exit_plans[position_id]
-                if exit_plan['batches'][0]['filled']:
-                    # 第1批已平仓，计算剩余数量
-                    remaining_quantity = exit_plan['total_quantity'] * 0.5
-
-            close_quantity = remaining_quantity * close_ratio
-
-            logger.info(
-                f"🔴 执行部分平仓({close_ratio*100:.0f}%): 持仓{position_id} {position['symbol']} "
-                f"{position['direction']} | 数量{close_quantity:.8f} | 价格{current_price} | {reason}"
-            )
-
-            # 调用实盘引擎执行部分平仓
-            close_result = await self.live_engine.close_position(
-                symbol=position['symbol'],
-                direction=position['direction'],
-                position_size=close_quantity,
-                reason=reason
-            )
-
-            if close_result['success']:
-                # 更新数据库（减少持仓数量）
-                await self._update_position_partial_close(
-                    position_id,
-                    close_quantity,
-                    float(current_price),
-                    reason
-                )
-
-                logger.info(f"✅ 部分平仓成功: 持仓{position_id} 平仓{close_quantity:.8f}")
-            else:
-                logger.error(f"部分平仓失败: 持仓{position_id} | {close_result.get('error')}")
-
-        except Exception as e:
-            logger.error(f"执行部分平仓异常: {e}")
-
-    async def _update_position_partial_close(
-        self,
-        position_id: int,
-        close_quantity: float,
-        close_price: float,
-        close_reason: str
-    ):
-        """
-        更新持仓记录（部分平仓）
-
-        Args:
-            position_id: 持仓ID
-            close_quantity: 平仓数量
-            close_price: 平仓价格
-            close_reason: 平仓原因
-        """
-        try:
-            conn = self.db_pool.get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            # 获取当前持仓数量
-            cursor.execute("""
-                SELECT quantity, notes
-                FROM futures_positions
-                WHERE id = %s
-            """, (position_id,))
-
-            result = cursor.fetchone()
-            if not result:
-                return
-
-            current_quantity = float(result['quantity'])
-            current_notes = result['notes'] or ''
-
-            # 计算剩余数量
-            remaining_quantity = current_quantity - close_quantity
-
-            # 更新持仓数量和备注
-            new_notes = f"{current_notes}\n部分平仓: {close_quantity:.8f} @ {close_price:.6f} - {close_reason}" if current_notes else f"部分平仓: {close_quantity:.8f} @ {close_price:.6f} - {close_reason}"
-
-            if remaining_quantity <= 0.0001:  # 全部平仓
-                cursor.execute("""
-                    UPDATE futures_positions
-                    SET
-                        quantity = 0,
-                        status = 'closed',
-                        close_time = %s,
-                        notes = %s,
-                        updated_at = NOW()
-                    WHERE id = %s
-                """, (datetime.now(), new_notes, position_id))
-            else:  # 部分平仓
-                cursor.execute("""
-                    UPDATE futures_positions
-                    SET
-                        quantity = %s,
-                        notional_value = quantity * avg_entry_price,
-                        notes = %s,
-                        updated_at = NOW()
-                    WHERE id = %s
-                """, (remaining_quantity, new_notes, position_id))
-
-            conn.commit()
-
-            cursor.close()
-            conn.close()
-
-        except Exception as e:
-            logger.error(f"更新部分平仓状态失败: {e}")
-
-    async def _extend_close_time(self, position_id: int, extend_minutes: int):
-        """
-        延长平仓时间
-
-        Args:
-            position_id: 持仓ID
-            extend_minutes: 延长分钟数
-        """
-        try:
-            conn = self.db_pool.get_connection()
-            cursor = conn.cursor()
-
-            # 获取当前计划平仓时间
-            cursor.execute("""
-                SELECT planned_close_time
-                FROM futures_positions
-                WHERE id = %s
-            """, (position_id,))
-
-            result = cursor.fetchone()
-            if not result:
-                return
-
-            planned_close_time = result[0]
-            extended_close_time = planned_close_time + timedelta(minutes=extend_minutes)
-
-            # 更新延长时间
-            cursor.execute("""
-                UPDATE futures_positions
-                SET
-                    close_extended = TRUE,
-                    extended_close_time = %s
-                WHERE id = %s
-            """, (extended_close_time, position_id))
-
-            conn.commit()
-
-            cursor.close()
-            conn.close()
-
-            logger.info(
-                f"⏰ 延长平仓时间: 持仓{position_id} "
-                f"{planned_close_time.strftime('%H:%M:%S')} -> {extended_close_time.strftime('%H:%M:%S')}"
-            )
-
-        except Exception as e:
-            logger.error(f"延长平仓时间失败: {e}")
 
     async def _execute_close(self, position_id: int, current_price: Decimal, reason: str):
         """
@@ -1367,9 +1182,6 @@ class SmartExitOptimizer:
             hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
             hold_hours = hold_minutes / 60
 
-            # 获取当前部分平仓阶段
-            current_stage = self.partial_close_stage.get(position_id, 0)
-
             # ============================================================
             # === 优先级0: 最小持仓时间限制 (30分钟) ===
             # ============================================================
@@ -1628,7 +1440,7 @@ class SmartExitOptimizer:
                 return ('持仓时长到期(3小时强制平仓)', 1.0)
 
             # ============================================================
-            # === 优先级8: K线强度衰减检查（智能分批平仓） ===
+            # === 优先级8: K线强度衰减检查（智能平仓） ===
             # ============================================================
             # 注意: 15M强力反转和亏损+反转已在优先级1处理(止损风控),这里不再重复检查
 
@@ -1656,11 +1468,11 @@ class SmartExitOptimizer:
                     )
                     return ('亏损>1%+方向反转', 1.0)
 
-            # === 禁用盈利分批平仓，让利润奔跑 ===
-            # 注: 盈利单不再分批平仓，由固定止盈8%或顶底识别触发全部平仓
-            # 只有亏损单才分批平仓
+            # === 禁用盈利平仓，让利润奔跑 ===
+            # 注: 盈利单不再平仓，由固定止盈8%或顶底识别触发全部平仓
+            # 只有亏损单才平仓
 
-            # 【已禁用】盈利分批平仓逻辑
+            # 【已禁用】盈利平仓逻辑
             # 原因: 分批止盈导致平均盈利只有5.46U，应该让利润奔跑
             #
             # if current_stage == 0:
@@ -1675,82 +1487,3 @@ class SmartExitOptimizer:
             logger.error(f"检查K线强度衰减失败: {e}")
             return None
 
-    async def _execute_partial_close(
-        self,
-        position_id: int,
-        current_price: float,
-        close_ratio: float,
-        reason: str
-    ):
-        """
-        执行部分平仓
-
-        Args:
-            position_id: 持仓ID
-            current_price: 当前价格
-            close_ratio: 平仓比例 (0.0-1.0)
-            reason: 平仓原因
-        """
-        try:
-            # 获取持仓
-            position = await self._get_position(position_id)
-            if not position:
-                return
-
-            # 计算平仓数量
-            total_size = Decimal(str(position['position_size']))
-            close_size = total_size * Decimal(str(close_ratio))
-
-            logger.info(
-                f"📉 执行部分平仓: 持仓{position_id} {position['symbol']} | "
-                f"比例{close_ratio*100:.0f}% | 数量{float(close_size):.4f}/{float(total_size):.4f}"
-            )
-
-            # 调用实盘引擎执行平仓
-            if self.live_engine:
-                await self.live_engine.close_position_partial(
-                    position_id=position_id,
-                    close_ratio=close_ratio,
-                    reason=reason
-                )
-
-            # 更新数据库 (减少持仓数量)
-            conn = self.db_pool.get_connection()
-            cursor = conn.cursor()
-
-            remaining_size = total_size - close_size
-
-            cursor.execute("""
-                UPDATE futures_positions
-                SET quantity = %s,
-                    notes = CONCAT(COALESCE(notes, ''), %s)
-                WHERE id = %s
-            """, (
-                float(remaining_size),
-                f"\n[部分平仓{close_ratio*100:.0f}%] {reason} @ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                position_id
-            ))
-
-            conn.commit()
-            cursor.close()
-            conn.close()
-
-            # 更新部分平仓阶段
-            current_stage = self.partial_close_stage.get(position_id, 0)
-            if close_ratio >= 1.0:
-                # 全部平仓，设置为阶段3
-                self.partial_close_stage[position_id] = 3
-            elif close_ratio >= 0.7:
-                # 平仓70%，进入阶段2
-                self.partial_close_stage[position_id] = 2
-            elif close_ratio >= 0.5:
-                # 平仓50%，进入阶段1
-                self.partial_close_stage[position_id] = 1
-
-            logger.info(
-                f"✅ 部分平仓完成: 持仓{position_id} | 剩余数量{float(remaining_size):.4f} | "
-                f"阶段{current_stage}→{self.partial_close_stage[position_id]}"
-            )
-
-        except Exception as e:
-            logger.error(f"执行部分平仓失败: {e}")
