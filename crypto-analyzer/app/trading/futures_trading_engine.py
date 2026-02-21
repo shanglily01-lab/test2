@@ -869,16 +869,19 @@ class FuturesTradingEngine:
     def close_position(
         self,
         position_id: int,
-        close_quantity: Optional[Decimal] = None,
+        close_quantity: Optional[Decimal] = None,  # 🔥 保留参数以兼容旧代码，但总是全部平仓
         reason: str = 'manual',
         close_price: Optional[Decimal] = None
     ) -> Dict:
         """
-        平仓
+        平仓（全部平仓）
+
+        🔥 新逻辑：每个持仓都是独立的，根据盈亏比例直接全部平仓
+        不再支持分批平仓，close_quantity参数仅为兼容性保留
 
         Args:
             position_id: 持仓ID
-            close_quantity: 平仓数量（None表示全部平仓）
+            close_quantity: 已废弃，总是全部平仓
             reason: 平仓原因
 
         Returns:
@@ -941,18 +944,9 @@ class FuturesTradingEngine:
             else:
                 balance_before = frozen_before = available_before = None
 
-            # 如果没指定平仓数量，则全部平仓
-            if close_quantity is None:
-                close_quantity = quantity
-            else:
-                # 根据交易对精度对平仓数量进行四舍五入
-                close_quantity = round_quantity(close_quantity, symbol)
-
-            if close_quantity <= 0:
-                raise ValueError(f"平仓数量必须大于0")
-            
-            if close_quantity > quantity:
-                raise ValueError(f"平仓数量{close_quantity}大于持仓数量{quantity}")
+            # 🔥 总是全部平仓（忽略 close_quantity 参数）
+            close_quantity = quantity
+            logger.info(f"📤 全部平仓: {symbol} {position_side} 数量={float(quantity)}")
 
             # 2. 获取平仓价格
             # 如果指定了平仓价格（如止盈止损触发），使用指定价格；否则使用当前市场价格
@@ -1103,77 +1097,49 @@ class FuturesTradingEngine:
             }
             notes_reason = reason_map.get(reason, reason)
 
-            if close_quantity == quantity:
-                # 全部平仓
-                # 🔥 修复：如果之前有分批平仓，realized_pnl需要累加而不是覆盖
-                cursor.execute(
-                    """UPDATE futures_positions
-                    SET status = 'closed', close_time = %s,
-                        realized_pnl = realized_pnl + %s, notes = %s
-                    WHERE id = %s""",
-                    (datetime.utcnow(), float(realized_pnl), notes_reason, position_id)
-                )
+            # 🔥 全部平仓（每个持仓都是独立的，直接全部平仓）
+            cursor.execute(
+                """UPDATE futures_positions
+                SET status = 'closed', close_time = %s,
+                    realized_pnl = %s, notes = %s
+                WHERE id = %s""",
+                (datetime.utcnow(), float(realized_pnl), notes_reason, position_id)
+            )
 
-                # 释放全部保证金
-                released_margin = margin
+            # 释放全部保证金
+            released_margin = margin
 
-                # 8. 更新账户余额和交易统计（只在完全平仓时更新）
-                # 🔥 修复：分批平仓时不更新账户余额，只有完全平仓（status='closed'）时才更新
-                # 这样避免了同一个持仓的盈亏被多次计入账户余额
+            # 8. 更新账户余额和交易统计
+            # 判断是盈利还是亏损
+            is_winning_trade = realized_pnl > 0
 
-                # 判断是盈利还是亏损
-                is_winning_trade = realized_pnl > 0
+            # 先释放保证金
+            cursor.execute(
+                """UPDATE futures_trading_accounts
+                SET frozen_balance = frozen_balance - %s
+                WHERE id = %s""",
+                (float(released_margin), account_id)
+            )
 
-                # 先释放保证金
-                cursor.execute(
-                    """UPDATE futures_trading_accounts
-                    SET frozen_balance = frozen_balance - %s
-                    WHERE id = %s""",
-                    (float(released_margin), account_id)
-                )
-
-                # 再从 futures_positions 重新计算账户余额和已实现盈亏
-                cursor.execute(
-                    """UPDATE futures_trading_accounts a
-                    SET a.realized_pnl = (
-                            SELECT COALESCE(SUM(p.realized_pnl), 0)
-                            FROM futures_positions p
-                            WHERE p.account_id = a.id AND p.status = 'closed'
-                        ),
-                        a.current_balance = a.initial_balance + (
-                            SELECT COALESCE(SUM(p.realized_pnl), 0)
-                            FROM futures_positions p
-                            WHERE p.account_id = a.id AND p.status = 'closed'
-                        ),
-                        a.total_trades = a.total_trades + 1,
-                        a.winning_trades = a.winning_trades + IF(%s > 0, 1, 0),
-                        a.losing_trades = a.losing_trades + IF(%s < 0, 1, 0)
-                    WHERE a.id = %s""",
-                    (float(realized_pnl), float(realized_pnl), account_id)
-                )
-            else:
-                # 部分平仓：只更新持仓数据，不更新账户余额
-                remaining_quantity = quantity - close_quantity
-                remaining_margin = margin * (remaining_quantity / quantity)
-
-                cursor.execute(
-                    """UPDATE futures_positions
-                    SET quantity = %s, margin = %s,
-                        realized_pnl = realized_pnl + %s
-                    WHERE id = %s""",
-                    (float(remaining_quantity), float(remaining_margin),
-                     float(realized_pnl), position_id)
-                )
-
-                released_margin = margin - remaining_margin
-
-                # 部分平仓只释放保证金，不更新余额和统计
-                cursor.execute(
-                    """UPDATE futures_trading_accounts
-                    SET frozen_balance = frozen_balance - %s
-                    WHERE id = %s""",
-                    (float(released_margin), account_id)
-                )
+            # 再从 futures_positions 重新计算账户余额和已实现盈亏
+            cursor.execute(
+                """UPDATE futures_trading_accounts a
+                SET a.realized_pnl = (
+                        SELECT COALESCE(SUM(p.realized_pnl), 0)
+                        FROM futures_positions p
+                        WHERE p.account_id = a.id AND p.status = 'closed'
+                    ),
+                    a.current_balance = a.initial_balance + (
+                        SELECT COALESCE(SUM(p.realized_pnl), 0)
+                        FROM futures_positions p
+                        WHERE p.account_id = a.id AND p.status = 'closed'
+                    ),
+                    a.total_trades = a.total_trades + 1,
+                    a.winning_trades = a.winning_trades + IF(%s > 0, 1, 0),
+                    a.losing_trades = a.losing_trades + IF(%s < 0, 1, 0)
+                WHERE a.id = %s""",
+                (float(realized_pnl), float(realized_pnl), account_id)
+            )
             
             # 更新胜率
             cursor.execute(
