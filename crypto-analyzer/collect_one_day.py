@@ -5,6 +5,8 @@ import sys
 import os
 import ccxt
 import mysql.connector
+import yaml
+from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -48,11 +50,21 @@ def collect_day_data(target_date):
     print('=' * 100)
     print()
 
-    # 获取所有USDT永续合约
-    markets = exchange.load_markets()
-    futures_symbols = [s for s in markets.keys() if '/USDT' in s and markets[s].get('type') == 'swap']
+    # 从配置文件读取交易对列表
+    config_path = Path(__file__).parent / 'config.yaml'
+    if not config_path.exists():
+        print(f'❌ 配置文件不存在: {config_path}')
+        return
 
-    print(f'目标: {len(futures_symbols)} 个USDT永续合约')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+        futures_symbols = config.get('symbols', [])
+
+    if not futures_symbols:
+        print('❌ 配置文件中没有找到交易对列表')
+        return
+
+    print(f'目标: {len(futures_symbols)} 个交易对')
     print()
 
     # 定义时间周期和数量
