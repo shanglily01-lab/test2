@@ -176,17 +176,17 @@ class BatchPositionManager:
 
         logger.info(f"[{symbol}] {direction} 止损止盈: SL={stop_loss_pct}% TP={take_profit_pct}% | {calc_reason}")
 
-        # 转换为小数
-        stop_loss_pct_decimal = stop_loss_pct / 100
-        take_profit_pct_decimal = take_profit_pct / 100
+        # 转换为 Decimal 小数（避免 Decimal * float 类型错误）
+        stop_loss_pct_decimal = Decimal(str(stop_loss_pct)) / Decimal('100')
+        take_profit_pct_decimal = Decimal(str(take_profit_pct)) / Decimal('100')
 
         # 计算价格
         if direction == 'LONG':
-            stop_loss_price = float(entry_price * (1 - stop_loss_pct_decimal))
-            take_profit_price = float(entry_price * (1 + take_profit_pct_decimal))
+            stop_loss_price = float(entry_price * (Decimal('1') - stop_loss_pct_decimal))
+            take_profit_price = float(entry_price * (Decimal('1') + take_profit_pct_decimal))
         else:  # SHORT
-            stop_loss_price = float(entry_price * (1 + stop_loss_pct_decimal))
-            take_profit_price = float(entry_price * (1 - take_profit_pct_decimal))
+            stop_loss_price = float(entry_price * (Decimal('1') + stop_loss_pct_decimal))
+            take_profit_price = float(entry_price * (Decimal('1') - take_profit_pct_decimal))
 
         return stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct
 
