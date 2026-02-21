@@ -83,9 +83,9 @@ class BreakoutSignalBooster:
         """
         计算信号加权分数
 
-        🔥 V5.1优化:
+        🔥 V5.2优化:
         - 同向信号: 根据强度加分 (+20 到 +50)
-        - 反向信号: 强度>=12时会被should_skip_opposite_signal完全禁止，此方法不会被调用
+        - 反向信号: 会被should_skip_opposite_signal完全禁止，此方法不会被调用
 
         Args:
             signal_direction: 信号方向 ('LONG' | 'SHORT')
@@ -113,19 +113,19 @@ class BreakoutSignalBooster:
             logger.debug(f"[破位加权] 同向信号 {signal_direction} 加权 +{boost}分")
             return boost
 
-        # 反向信号：强度>=12时会被should_skip_opposite_signal完全禁止
-        # 如果执行到这里，说明强度<12，不需要扣分
+        # 反向信号：会被should_skip_opposite_signal完全禁止
+        # 如果执行到这里，说明存在逻辑错误
         else:
-            logger.debug(f"[破位加权] 反向信号 {signal_direction}，Big4强度<12，不扣分")
+            logger.warning(f"[破位加权] 反向信号 {signal_direction} 不应到达此处（应被提前过滤）")
             return 0
 
     def should_skip_opposite_signal(self, signal_direction: str, signal_score: int) -> tuple:
         """
         判断是否应该跳过反向信号
 
-        Big4否决权:
-        - 强度>=70时完全禁止逆向开仓
-        - 避免在强趋势中逆势开仓导致连续止损
+        Big4否决权 (V5.2):
+        - 只要Big4方向确定（BULLISH/BEARISH），完全禁止逆向开仓
+        - 避免逆势开仓导致连续止损
 
         Args:
             signal_direction: 信号方向 ('LONG' | 'SHORT')
@@ -141,11 +141,8 @@ class BreakoutSignalBooster:
         if signal_direction == self.big4_direction:
             return False, None
 
-        # 🔥 反向信号：强度>=70时完全禁止（强力否决）
-        if self.big4_strength >= 70:
-            return True, f"🚫 Big4强力否决: {self.big4_direction}(强度{self.big4_strength:.0f}) 禁止{signal_direction}信号"
-
-        return False, None
+        # 🚫 反向信号：完全禁止（无论强度如何）
+        return True, f"🚫 Big4完全否决: {self.big4_direction}(强度{self.big4_strength:.0f}) 禁止{signal_direction}信号"
 
     def get_status(self) -> Dict:
         """
