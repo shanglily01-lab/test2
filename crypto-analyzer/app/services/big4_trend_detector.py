@@ -113,58 +113,45 @@ class Big4TrendDetector:
 
         conn.close()
 
-        # 🔥 综合判断 - 优化逻辑（2026-02-21）
-        # 目标：BTC不能单独判断趋势，必须配合ETH/BNB/SOL任一同向
-        # 1. BTC必须非NEUTRAL
-        # 2. ETH/BNB/SOL至少一个与BTC同向
-        # 3. 权重差阈值>=50%
+        # 🔥 综合判断 - 简化逻辑（2026-02-21）
+        # 只看权重，不再要求BTC配合其他币种
+        # 权重阈值: >45%
 
         btc_signal = results.get('BTC/USDT', {}).get('signal', 'NEUTRAL')
         eth_signal = results.get('ETH/USDT', {}).get('signal', 'NEUTRAL')
         bnb_signal = results.get('BNB/USDT', {}).get('signal', 'NEUTRAL')
         sol_signal = results.get('SOL/USDT', {}).get('signal', 'NEUTRAL')
 
-        # 检查是否有其他币种与BTC同向
-        has_support = False
-        support_coins = []
+        # 统计支持的币种（用于显示）
+        bullish_coins = []
+        bearish_coins = []
         if btc_signal == 'BULLISH':
-            if eth_signal == 'BULLISH':
-                has_support = True
-                support_coins.append('ETH')
-            if bnb_signal == 'BULLISH':
-                has_support = True
-                support_coins.append('BNB')
-            if sol_signal == 'BULLISH':
-                has_support = True
-                support_coins.append('SOL')
+            bullish_coins.append('BTC')
         elif btc_signal == 'BEARISH':
-            if eth_signal == 'BEARISH':
-                has_support = True
-                support_coins.append('ETH')
-            if bnb_signal == 'BEARISH':
-                has_support = True
-                support_coins.append('BNB')
-            if sol_signal == 'BEARISH':
-                has_support = True
-                support_coins.append('SOL')
+            bearish_coins.append('BTC')
+        if eth_signal == 'BULLISH':
+            bullish_coins.append('ETH')
+        elif eth_signal == 'BEARISH':
+            bearish_coins.append('ETH')
+        if bnb_signal == 'BULLISH':
+            bullish_coins.append('BNB')
+        elif bnb_signal == 'BEARISH':
+            bearish_coins.append('BNB')
+        if sol_signal == 'BULLISH':
+            bullish_coins.append('SOL')
+        elif sol_signal == 'BEARISH':
+            bearish_coins.append('SOL')
 
-        # 🔥 综合判断：BTC明确 + 有支持币种 + 权重>=50%
-        if btc_signal == 'BULLISH' and has_support and bullish_weight >= 0.50:
+        # 🔥 综合判断：只看权重>45%
+        if bullish_weight > 0.45:
             overall_signal = 'BULLISH'
-            recommendation = f"BTC+{'+'.join(support_coins)}共振看涨(权重{bullish_weight*100:.0f}%)，建议优先考虑多单机会"
-        elif btc_signal == 'BEARISH' and has_support and bearish_weight >= 0.50:
+            recommendation = f"{'+'.join(bullish_coins)}看涨(权重{bullish_weight*100:.0f}%)，建议优先考虑多单机会"
+        elif bearish_weight > 0.45:
             overall_signal = 'BEARISH'
-            recommendation = f"BTC+{'+'.join(support_coins)}共振看跌(权重{bearish_weight*100:.0f}%)，建议优先考虑空单机会"
-
-        # 🔥 其他情况：NEUTRAL
+            recommendation = f"{'+'.join(bearish_coins)}看跌(权重{bearish_weight*100:.0f}%)，建议优先考虑空单机会"
         else:
             overall_signal = 'NEUTRAL'
-            if btc_signal == 'NEUTRAL':
-                recommendation = f"BTC方向不明(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望"
-            elif not has_support:
-                recommendation = f"BTC{btc_signal}但无其他币种支持(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望"
-            else:
-                recommendation = f"权重不足(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望或减少仓位"
+            recommendation = f"趋势不明(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望"
 
         # 🔥 如果紧急干预激活，覆盖recommendation
         if emergency_intervention['block_long']:
