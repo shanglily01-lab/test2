@@ -465,31 +465,36 @@ class SmartExitOptimizer:
 
         MIN_HOLD_MINUTES = 30  # 30分钟最小持仓时间
 
+        # 计算ROI（考虑杠杆后的真实收益率）
+        leverage = float(position.get('leverage', 1))
+        roi_pct = profit_pct * leverage
+
         # === 优先级1: 极端亏损兜底止损（无需等待30分钟）===
-        if profit_pct <= -3.0:
-            return True, f"极端亏损止损(亏损{profit_pct:.2f}%≥3.0%)"
+        # 改为基于ROI判断，ROI亏损≥10%立即止损
+        if roi_pct <= -10.0:
+            return True, f"极端亏损止损(ROI{roi_pct:.2f}%≤-10%, 价格变化{profit_pct:.2f}%)"
 
         # === 开仓30分钟后启动智能监控 ===
         if hold_minutes >= MIN_HOLD_MINUTES:
 
-            # === 优先级2: 智能亏损监控 ===
-            # 策略A: 亏损≥2% + 2根5M K线无好转
-            if profit_pct <= -2.0:
+            # === 优先级2: 智能亏损监控（基于ROI）===
+            # 策略A: ROI亏损≥4% + 2根5M K线无好转
+            if roi_pct <= -4.0:
                 no_improvement = await self._check_5m_no_improvement(position_id, position_side)
                 if no_improvement:
-                    return True, f"亏损2%+5M无好转(亏损{profit_pct:.2f}%)"
+                    return True, f"亏损ROI{roi_pct:.2f}%+5M无好转(价格变化{profit_pct:.2f}%)"
 
-            # 策略B: 亏损≥1% + 2根15M K线无持续好转
-            elif profit_pct <= -1.0:
+            # 策略B: ROI亏损≥2% + 2根15M K线无持续好转
+            elif roi_pct <= -2.0:
                 no_sustained = await self._check_15m_no_sustained_improvement(position_id, position_side)
                 if no_sustained:
-                    return True, f"亏损1%+15M无持续好转(亏损{profit_pct:.2f}%)"
+                    return True, f"亏损ROI{roi_pct:.2f}%+15M无持续好转(价格变化{profit_pct:.2f}%)"
 
-            # === 优先级3: 移动止盈（盈利≥2%时追踪回撤0.5%）===
-            TRAILING_STOP_PROFIT_THRESHOLD = 2.0
+            # === 优先级3: 移动止盈（ROI盈利≥10%时追踪回撤0.5%）===
+            TRAILING_STOP_ROI_THRESHOLD = 10.0  # ROI盈利阈值
             TRAILING_STOP_DRAWDOWN_PCT = 0.5
 
-            if profit_pct >= TRAILING_STOP_PROFIT_THRESHOLD:
+            if roi_pct >= TRAILING_STOP_ROI_THRESHOLD:
                 max_profit_price = position.get('max_profit_price')
 
                 if max_profit_price and float(max_profit_price) > 0:
@@ -505,7 +510,7 @@ class SmartExitOptimizer:
 
                     # 触发移动止盈
                     if drawdown_pct >= TRAILING_STOP_DRAWDOWN_PCT:
-                        return True, f"移动止盈(盈利{profit_pct:.2f}%,回撤{drawdown_pct:.2f}%)"
+                        return True, f"移动止盈(ROI{roi_pct:.2f}%,回撤{drawdown_pct:.2f}%,价格变化{profit_pct:.2f}%)"
 
         # ========== 智能平仓逻辑（计划平仓前30分钟）==========
         planned_close_time = position['planned_close_time']
@@ -526,13 +531,13 @@ class SmartExitOptimizer:
         # 而是在 _monitor_position 中调用 _smart_batch_exit 处理平仓
         # 这个方法现在主要用于兜底逻辑
 
-        # 兜底逻辑1: 超高盈利立即全部平仓
-        if profit_pct >= 5.0:
-            return True, f"超高盈利全部平仓(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
+        # 兜底逻辑1: 超高盈利立即全部平仓（改为基于ROI）
+        if roi_pct >= 25.0:
+            return True, f"超高盈利全部平仓(ROI {roi_pct:.2f}%, 价格变化{profit_pct:.2f}%)"
 
-        # 兜底逻辑2: 巨额亏损立即全部平仓
-        if profit_pct <= -3.0:
-            return True, f"巨额亏损全部平仓(价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
+        # 兜底逻辑2: 巨额亏损立即全部平仓（改为基于ROI）
+        if roi_pct <= -10.0:
+            return True, f"巨额亏损全部平仓(ROI {roi_pct:.2f}%, 价格变化{profit_pct:.2f}%)"
 
         # 默认：不平仓（由智能平仓处理）
         return False, ""
@@ -1144,7 +1149,7 @@ class SmartExitOptimizer:
 
         return False
 
-    async def _check_top_bottom(self, symbol: str, position_side: str, entry_price: float) -> tuple:
+    async def _check_top_bottom(self, symbol: str, position_side: str, entry_price: float, leverage: float = 1.0) -> tuple:
         """
         检查是否触发顶底识别
 
@@ -1152,6 +1157,7 @@ class SmartExitOptimizer:
             symbol: 交易对
             position_side: 持仓方向（LONG/SHORT）
             entry_price: 开仓价格
+            leverage: 杠杆倍数（默认1倍）
 
         Returns:
             (is_top_bottom: bool, reason: str)
@@ -1168,6 +1174,9 @@ class SmartExitOptimizer:
             else:  # SHORT
                 profit_pct = ((entry_price - current_price) / entry_price) * 100
 
+            # 计算ROI（考虑杠杆）
+            roi_pct = profit_pct * leverage
+
             # 获取1h和4h K线强度
             strength_1h = self.signal_analyzer.analyze_kline_strength(symbol, '1h', 24)
             strength_4h = self.signal_analyzer.analyze_kline_strength(symbol, '4h', 24)
@@ -1175,29 +1184,29 @@ class SmartExitOptimizer:
             if not strength_1h or not strength_4h:
                 return False, ""
 
-            # 顶部识别（针对LONG持仓）
+            # 顶部识别（针对LONG持仓）- 改为基于ROI
             if position_side == 'LONG':
-                # 条件1: 有盈利（至少2%）
-                has_profit = profit_pct >= 2.0
+                # 条件1: 有盈利（ROI至少10%）
+                has_profit = roi_pct >= 10.0
 
                 # 条件2: 1h和4h都转为强烈看空
                 strong_bearish_1h = strength_1h.get('net_power', 0) <= -5
                 strong_bearish_4h = strength_4h.get('net_power', 0) <= -3
 
                 if has_profit and strong_bearish_1h and strong_bearish_4h:
-                    return True, f"顶部识别(盈利{profit_pct:.1f}%+强烈看空)"
+                    return True, f"顶部识别(ROI盈利{roi_pct:.1f}%+强烈看空,价格{profit_pct:.1f}%)"
 
-            # 底部识别（针对SHORT持仓）
+            # 底部识别（针对SHORT持仓）- 改为基于ROI
             elif position_side == 'SHORT':
-                # 条件1: 有盈利（至少2%）
-                has_profit = profit_pct >= 2.0
+                # 条件1: 有盈利（ROI至少10%）
+                has_profit = roi_pct >= 10.0
 
                 # 条件2: 1h和4h都转为强烈看多
                 strong_bullish_1h = strength_1h.get('net_power', 0) >= 5
                 strong_bullish_4h = strength_4h.get('net_power', 0) >= 3
 
                 if has_profit and strong_bullish_1h and strong_bullish_4h:
-                    return True, f"底部识别(盈利{profit_pct:.1f}%+强烈看多)"
+                    return True, f"底部识别(ROI盈利{roi_pct:.1f}%+强烈看多,价格{profit_pct:.1f}%)"
 
             return False, ""
 
@@ -1259,44 +1268,46 @@ class SmartExitOptimizer:
             # 只在极端情况下立即止损，正常亏损由智能监控策略处理
 
             pnl_pct = profit_info.get('profit_pct', 0)
+            roi_pct = pnl_pct * leverage  # 计算ROI（考虑杠杆）
 
-            # 极端亏损立即止损（兜底保护）
-            if pnl_pct <= -3.0:
-                # 亏损>=3%，立即止损（防止继续扩大）
+            # 极端亏损立即止损（兜底保护）- 改为基于ROI
+            if roi_pct <= -10.0:
+                # ROI亏损>=10%，立即止损（防止继续扩大）
                 logger.warning(
                     f"🛑 持仓{position_id} {symbol} {position_side} 触发极端亏损止损 | "
-                    f"亏损{pnl_pct:.2f}% >= 3.0%，立即止损"
+                    f"ROI亏损{roi_pct:.2f}% ≤ -10% (价格变化{pnl_pct:.2f}%)，立即止损"
                 )
-                return ('极端亏损止损(≥3%)', 1.0)
+                return ('极端亏损止损(ROI≤-10%)', 1.0)
 
             # ============================================================
             # === 优先级1.5: 智能亏损监控（30分钟后启动）===
             # ============================================================
-            # 策略A: 亏损≥2% + 2根5M K线无好转 → 立即平仓
-            # 策略B: 亏损≥1% + 2根15M K线无持续好转 → 平仓
+            # 策略A: ROI亏损≥4% + 2根5M K线无好转 → 立即平仓
+            # 策略B: ROI亏损≥2% + 2根15M K线无持续好转 → 平仓
 
             if hold_minutes >= MIN_HOLD_MINUTES:
                 pnl_pct = profit_info.get('profit_pct', 0)
+                roi_pct = pnl_pct * leverage  # ROI = 价格变化 × 杠杆
 
-                # 策略A: 亏损≥2% + 2根5M无好转
-                if pnl_pct <= -2.0:
+                # 策略A: ROI亏损≥4% + 2根5M无好转
+                if roi_pct <= -4.0:
                     no_improvement = await self._check_5m_no_improvement(position_id, position_side)
                     if no_improvement:
                         logger.warning(
                             f"🚨 持仓{position_id} {symbol} {position_side} 触发智能亏损监控-策略A | "
-                            f"亏损{pnl_pct:.2f}% >= 2% + 2根5M K线无好转，立即平仓"
+                            f"ROI亏损{roi_pct:.2f}% ≤ -4% + 2根5M K线无好转，立即平仓 (价格变化{pnl_pct:.2f}%)"
                         )
-                        return ('亏损2%+5M无好转', 1.0)
+                        return ('亏损ROI4%+5M无好转', 1.0)
 
-                # 策略B: 亏损≥1% + 2根15M无持续好转
-                elif pnl_pct <= -1.0:
+                # 策略B: ROI亏损≥2% + 2根15M无持续好转
+                elif roi_pct <= -2.0:
                     no_sustained = await self._check_15m_no_sustained_improvement(position_id, position_side)
                     if no_sustained:
                         logger.warning(
                             f"⚠️ 持仓{position_id} {symbol} {position_side} 触发智能亏损监控-策略B | "
-                            f"亏损{pnl_pct:.2f}% >= 1% + 2根15M K线无持续好转，平仓"
+                            f"ROI亏损{roi_pct:.2f}% ≤ -2% + 2根15M K线无持续好转，平仓 (价格变化{pnl_pct:.2f}%)"
                         )
-                        return ('亏损1%+15M无持续好转', 1.0)
+                        return ('亏损ROI2%+15M无持续好转', 1.0)
 
             # ============================================================
             # === 优先级1.6: 提前止损优化 (ROI亏损-10%时重点监控) ===
@@ -1382,17 +1393,18 @@ class SmartExitOptimizer:
                         return ('固定止盈', 1.0)
 
             # ============================================================
-            # === 优先级3: 移动止盈（30分钟后启动，盈利≥2%时追踪）===
+            # === 优先级3: 移动止盈（30分钟后启动，ROI盈利≥10%时追踪）===
             # ============================================================
             TRAILING_STOP_START_MINUTES = 30  # 30分钟后开始监控
-            TRAILING_STOP_PROFIT_THRESHOLD = 2.0  # 盈利≥2%时启动移动止盈
+            TRAILING_STOP_ROI_THRESHOLD = 10.0  # ROI盈利≥10%时启动移动止盈
             TRAILING_STOP_DRAWDOWN_PCT = 0.5  # 回撤0.5%时平仓
 
             if hold_minutes >= TRAILING_STOP_START_MINUTES:
                 current_profit_pct = profit_info.get('profit_pct', 0)
+                current_roi_pct = current_profit_pct * leverage  # 计算ROI
 
-                # 启动条件：盈利≥2%
-                if current_profit_pct >= TRAILING_STOP_PROFIT_THRESHOLD:
+                # 启动条件：ROI盈利≥10%
+                if current_roi_pct >= TRAILING_STOP_ROI_THRESHOLD:
                     max_profit_price = position.get('max_profit_price')
 
                     if max_profit_price and float(max_profit_price) > 0:
@@ -1410,11 +1422,11 @@ class SmartExitOptimizer:
                         # 触发移动止盈
                         if drawdown_pct >= TRAILING_STOP_DRAWDOWN_PCT:
                             logger.info(
-                                f"📈 [移动止盈] 持仓{position_id} {symbol} {position_side} 盈利{current_profit_pct:.2f}% | "
+                                f"📈 [移动止盈] 持仓{position_id} {symbol} {position_side} ROI盈利{current_roi_pct:.2f}% (价格{current_profit_pct:.2f}%) | "
                                 f"价格从最高点回撤{drawdown_pct:.2f}%≥{TRAILING_STOP_DRAWDOWN_PCT}%，触发平仓 | "
                                 f"最高价${max_profit_price:.6f} → 当前价${current_price:.6f}"
                             )
-                            return (f'移动止盈(回撤{drawdown_pct:.1f}%)', 1.0)
+                            return (f'移动止盈(ROI{current_roi_pct:.1f}%,回撤{drawdown_pct:.1f}%)', 1.0)
 
             # ============================================================
             # === 在此之后的所有平仓检查都需要满足最小持仓时间(30分钟) ===
@@ -1428,7 +1440,7 @@ class SmartExitOptimizer:
             # === 优先级4: 智能顶底识别 ===
             # ============================================================
             # 注: 已满足30分钟最小持仓时间,现在可以检查顶底
-            is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price)
+            is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price, leverage)
             if is_top_bottom:
                 logger.info(
                     f"🔝 持仓{position_id} {symbol}触发顶底识别: {tb_reason} | "
@@ -1524,14 +1536,17 @@ class SmartExitOptimizer:
 
             # === 亏损 + 强度反转（止损，全平） ===
             # 注意: 这个检查在1小时限制之后,所以不会过早触发
-            if profit_info['profit_pct'] < -1.0:
-                # 亏损>1%，检查K线方向是否反转
+            # 改为基于ROI判断
+            pnl_pct = profit_info['profit_pct']
+            roi_pct = pnl_pct * leverage
+            if roi_pct < -2.0:
+                # ROI亏损>2%，检查K线方向是否反转
                 if current_kline['direction'] != 'NEUTRAL' and current_kline['direction'] != direction:
                     logger.warning(
-                        f"⚠️ 持仓{position_id} {symbol}亏损>1%且K线方向反转 | "
-                        f"当前方向{current_kline['direction']} vs 持仓{direction}"
+                        f"⚠️ 持仓{position_id} {symbol}ROI亏损{roi_pct:.2f}%>2%且K线方向反转 | "
+                        f"当前方向{current_kline['direction']} vs 持仓{direction} (价格变化{pnl_pct:.2f}%)"
                     )
-                    return ('亏损>1%+方向反转', 1.0)
+                    return ('亏损ROI>2%+方向反转', 1.0)
 
             # === 禁用盈利平仓，让利润奔跑 ===
             # 注: 盈利单不再平仓，由固定止盈8%或顶底识别触发全部平仓
