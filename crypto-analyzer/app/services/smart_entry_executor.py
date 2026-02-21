@@ -341,8 +341,9 @@ class SmartEntryExecutor:
             # 冻结资金
             cursor.execute("""
                 UPDATE futures_trading_accounts
-                SET available_balance = available_balance - %s,
-                    frozen_balance = frozen_balance + %s
+                SET current_balance = current_balance - %s,
+                    frozen_balance = frozen_balance + %s,
+                    updated_at = NOW()
                 WHERE id = %s
             """, (margin, margin, self.account_id))
 
