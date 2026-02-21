@@ -1506,19 +1506,21 @@ class SmartTraderService:
             if strategy == 'bollinger_mean_reversion':
                 entry_reason = f"[震荡市] {entry_reason}"
 
-            # 插入持仓记录 (包含动态超时字段)
+            # 插入持仓记录 (包含动态超时字段和计划平仓时间)
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
                  entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
-                 source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+                 planned_close_time, source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s,
+                        DATE_ADD(NOW(), INTERVAL %s MINUTE), 'smart_trader', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, side, quantity, current_price, self.leverage,
                 notional_value, margin, stop_loss, take_profit,
                 signal_combination_key, entry_reason, entry_score, signal_components_json,
-                base_timeout_minutes, timeout_at
+                base_timeout_minutes, timeout_at,
+                base_timeout_minutes  # planned_close_time = NOW() + max_hold_minutes
             ))
 
             # 获取持仓ID

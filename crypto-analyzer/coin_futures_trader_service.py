@@ -1881,13 +1881,15 @@ class CoinFuturesTraderService:
                 (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
                  leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
                  entry_signal_type, entry_score, signal_components, max_hold_minutes, timeout_at,
-                 source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, 'smart_trader', 'open', NOW(), NOW())
+                 planned_close_time, source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s,
+                        DATE_ADD(NOW(), INTERVAL %s MINUTE), 'smart_trader', 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, side, quantity, current_price, current_price,
                 self.leverage, notional_value, margin, stop_loss, take_profit,
                 signal_combination_key, entry_score, signal_components_json,
-                base_timeout_minutes, timeout_at
+                base_timeout_minutes, timeout_at,
+                base_timeout_minutes  # planned_close_time = NOW() + max_hold_minutes
             ))
 
             # 获取刚插入的持仓ID
