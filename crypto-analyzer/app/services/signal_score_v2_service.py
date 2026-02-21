@@ -283,88 +283,99 @@ class SignalScoreV2Service:
                 }
 
         # 有Big4数据，进行共振检查
-        coin_total = abs(coin_score['total_score'])
-        big4_total = abs(big4_score['total_score'])
+        # 🔥 使用带符号的原始评分，而不是绝对值
+        # 同向时共振增强，反向时互相削弱
+        coin_raw_score = coin_score['total_score']  # 带符号：正数=LONG，负数=SHORT
+        big4_raw_score = big4_score['total_score']  # 带符号：正数=BULLISH，负数=BEARISH
 
         min_symbol_score = self.config.get('min_symbol_score', 15)
         min_big4_score = self.config.get('min_big4_score', 10)
         resonance_threshold = self.config.get('resonance_threshold', 25)
-        require_same_direction = self.config.get('require_same_direction', True)
 
-        # 检查1: 代币评分是否达标
-        if coin_total < min_symbol_score:
+        # 检查1: 代币评分强度是否达标（用绝对值）
+        coin_strength = abs(coin_raw_score)
+        if coin_strength < min_symbol_score:
             return {
                 'passed': False,
-                'reason': f'{symbol} 评分{coin_score["total_score"]}不达标（需>={min_symbol_score}）',
+                'reason': f'{symbol} 评分强度{coin_strength}不达标（需>={min_symbol_score}）',
                 'coin_score': coin_score,
                 'big4_score': big4_score,
                 'details': {
-                    'coin_total': coin_total,
+                    'coin_strength': coin_strength,
                     'min_symbol_score': min_symbol_score
                 }
             }
 
-        # 检查2: Big4评分是否达标
-        if big4_total < min_big4_score:
+        # 检查2: Big4评分强度是否达标（用绝对值）
+        big4_strength = abs(big4_raw_score)
+        if big4_strength < min_big4_score:
             return {
                 'passed': False,
-                'reason': f'Big4评分{big4_score["total_score"]}不达标（需>={min_big4_score}）',
+                'reason': f'Big4评分强度{big4_strength}不达标（需>={min_big4_score}）',
                 'coin_score': coin_score,
                 'big4_score': big4_score,
                 'details': {
-                    'big4_total': big4_total,
+                    'big4_strength': big4_strength,
                     'min_big4_score': min_big4_score
                 }
             }
 
-        # 检查3: 方向是否一致（如果要求）
-        if require_same_direction:
-            # 🔥 只有Big4极强(>70)时才强制要求方向一致，否则允许逆势交易
-            big4_is_strong = big4_total > 70
+        # 检查3: Big4强度>=70时，禁止反向开仓（已在scan_all中处理）
+        # 这里不再检查方向冲突，因为已经在前面过滤了
 
-            if big4_is_strong:
-                # Big4极强时，必须方向一致
-                if big4_score['direction'] != signal_direction:
-                    return {
-                        'passed': False,
-                        'reason': f'Big4极强({big4_score["total_score"]:+.0f})且方向冲突：Big4 {big4_score["direction"]} vs 信号{signal_direction}',
-                        'coin_score': coin_score,
-                        'big4_score': big4_score,
-                        'details': {'big4_strong_block': True}
-                    }
+        # 检查4: 共振总分是否达标（带符号相加）
+        # 同向：-35 + (-36) = -71（增强）✅
+        # 反向：-35 + 36 = 1（削弱）❌
+        resonance_score = coin_raw_score + big4_raw_score
+        resonance_strength = abs(resonance_score)  # 共振强度（绝对值）
+
+        if resonance_strength < resonance_threshold:
+            # 判断是同向削弱还是反向抵消
+            same_direction = (coin_raw_score > 0 and big4_raw_score > 0) or \
+                           (coin_raw_score < 0 and big4_raw_score < 0)
+            if same_direction:
+                reason = f'共振强度{resonance_strength}不足（需>={resonance_threshold}）| {coin_raw_score:+d} + {big4_raw_score:+d} = {resonance_score:+d}'
             else:
-                # Big4不够强，允许逆势交易，不检查方向
-                pass
+                reason = f'方向相反互相抵消（{coin_raw_score:+d} + {big4_raw_score:+d} = {resonance_score:+d}），共振强度{resonance_strength}<{resonance_threshold}'
 
-        # 检查4: 共振总分是否达标
-        resonance_score = coin_total + big4_total
-        if resonance_score < resonance_threshold:
             return {
                 'passed': False,
-                'reason': f'共振总分{resonance_score}不达标（需>={resonance_threshold}）',
+                'reason': reason,
                 'coin_score': coin_score,
                 'big4_score': big4_score,
                 'details': {
-                    'coin_total': coin_total,
-                    'big4_total': big4_total,
+                    'coin_raw_score': coin_raw_score,
+                    'big4_raw_score': big4_raw_score,
                     'resonance_score': resonance_score,
-                    'resonance_threshold': resonance_threshold
+                    'resonance_strength': resonance_strength,
+                    'resonance_threshold': resonance_threshold,
+                    'same_direction': same_direction
                 }
             }
 
         # 所有检查通过
+        # 判断是同向增强还是反向但强度足够
+        same_direction = (coin_raw_score > 0 and big4_raw_score > 0) or \
+                       (coin_raw_score < 0 and big4_raw_score < 0)
+        if same_direction:
+            reason = f'✅ 同向共振: {symbol}({coin_raw_score:+d}) + Big4({big4_raw_score:+d}) = {resonance_score:+d}，强度{resonance_strength}>={resonance_threshold}'
+        else:
+            reason = f'✅ 反向但强度足够: {symbol}({coin_raw_score:+d}) + Big4({big4_raw_score:+d}) = {resonance_score:+d}，强度{resonance_strength}>={resonance_threshold}'
+
         return {
             'passed': True,
-            'reason': f'✅ 共振通过: {symbol}({coin_score["total_score"]}) + Big4({big4_score["total_score"]}) = {resonance_score} (>={resonance_threshold})',
+            'reason': reason,
             'coin_score': coin_score,
             'big4_score': big4_score,
             'details': {
-                'coin_total': coin_total,
-                'big4_total': big4_total,
+                'coin_raw_score': coin_raw_score,
+                'big4_raw_score': big4_raw_score,
                 'resonance_score': resonance_score,
+                'resonance_strength': resonance_strength,
                 'coin_direction': coin_score['direction'],
                 'big4_direction': big4_score['direction'],
-                'signal_direction': signal_direction
+                'signal_direction': signal_direction,
+                'same_direction': same_direction
             }
         }
 
