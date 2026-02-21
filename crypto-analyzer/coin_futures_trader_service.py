@@ -3512,10 +3512,11 @@ class CoinFuturesTraderService:
                         # Big4过滤已禁用（测试模式）
                         logger.debug(f"[BIG4-DISABLED] {symbol} Big4过滤已禁用，直接使用原始信号 (测试模式)")
 
-                    # 检查同方向是否已有持仓
-                    if self.has_position(symbol, new_side):
-                        logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
-                        continue
+                    # 🔥 已移除"同方向只能1个持仓"的限制，支持分批建仓（多个独立持仓）
+                    # 每批建仓都是独立的持仓记录，可以有多个同方向持仓
+                    # if self.has_position(symbol, new_side):
+                    #     logger.info(f"[SKIP] {symbol} {new_side}方向已有持仓")
+                    #     continue
 
                     # 检查是否刚刚平仓(1小时冷却期)
                     if self.check_recent_close(symbol, new_side, cooldown_minutes=15):
