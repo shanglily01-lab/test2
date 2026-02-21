@@ -138,7 +138,12 @@ class SmartFuturesCollector:
                     data = await response.json()
                     if data and len(data) > 0:
                         klines = []
-                        for kline in data:
+                        # 🔥 修复：只处理已完成的K线（排除最后一根未完成的）
+                        # 对于5m/15m，limit=2，只取第一根（已完成）
+                        # 对于1h/1d，limit>=50，取所有但排除最后一根
+                        completed_data = data[:-1] if len(data) > 1 else data
+
+                        for kline in completed_data:
                             klines.append({
                                 'symbol': f"{symbol[:-4]}/USDT",  # BTCUSDT -> BTC/USDT
                                 'timeframe': interval,
@@ -190,7 +195,10 @@ class SmartFuturesCollector:
                     data = await response.json()
                     if data and len(data) > 0:
                         klines = []
-                        for kline in data:
+                        # 🔥 修复：只处理已完成的K线（排除最后一根未完成的）
+                        completed_data = data[:-1] if len(data) > 1 else data
+
+                        for kline in completed_data:
                             # BTCUSD_PERP -> BTC/USD
                             base_symbol = symbol.replace('USD_PERP', '/USD')
                             klines.append({
@@ -440,9 +448,10 @@ class SmartFuturesCollector:
         logger.info(f"目标: {len(usdt_symbols)} 个U本位交易对 + {len(coin_symbols)} 个币本位交易对")
 
         # 定义所有时间周期及其采集规则
+        # 🔥 修复：5m/15m获取2根K线，只保存第一根（已完成的），丢弃第二根（未完成的）
         intervals = [
-            ('5m', 1),    # 5分钟K线，只要最新1条
-            ('15m', 1),   # 15分钟K线，只要最新1条
+            ('5m', 2),    # 5分钟K线，获取2根，只保存第1根（已完成）
+            ('15m', 2),   # 15分钟K线，获取2根，只保存第1根（已完成）
             ('1h', 100),  # 1小时K线，要100条（超级大脑需要）
             ('1d', 50)    # 1天K线，要50条（超级大脑需要）
         ]
