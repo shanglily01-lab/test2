@@ -23,6 +23,7 @@ from app.services.optimization_config import OptimizationConfig
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_exit_optimizer import SmartExitOptimizer
+from app.services.kline_pullback_entry_executor import KlinePullbackEntryExecutor
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.breakout_signal_booster import BreakoutSignalBooster
 from app.services.signal_blacklist_checker import SignalBlacklistChecker
@@ -905,6 +906,17 @@ class SmartTraderService:
             self.smart_exit_optimizer = None
             logger.info("⚠️ 智能平仓优化器未启用")
 
+        # 初始化K线回调建仓执行器（V2策略：等待15M阴线回调）
+        self.pullback_executor = KlinePullbackEntryExecutor(
+            db_config=self.db_config,
+            live_engine=self,
+            price_service=self.ws_service,
+            account_id=self.account_id,
+            brain=self.brain,
+            opt_config=self.opt_config
+        )
+        logger.info("✅ K线回调建仓执行器已启动 (V2: 15M阴线回调确认)")
+
         # 初始化Big4趋势检测器 (四大天王: BTC/ETH/BNB/SOL)
         self.big4_detector = Big4TrendDetector()
         self.big4_symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
@@ -1319,7 +1331,40 @@ class SmartTraderService:
             logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
             return False
 
-        # ========== 第三步：一次性开仓逻辑（已禁用分批建仓）==========
+        # ========== 第三步：K线回调建仓逻辑（V2策略）==========
+        # 使用KlinePullbackEntryExecutor，等待15M阴线回调后开仓
+        if self.pullback_executor and self.event_loop:
+            try:
+                # 准备信号字典
+                signal = {
+                    'symbol': symbol,
+                    'direction': side,
+                    'leverage': self.leverage,
+                    'signal_time': datetime.now(),  # 信号触发时间
+                    'strategy_id': 'smart_trader_v2',
+                    'trade_params': {
+                        'entry_score': opp.get('score', 0),
+                        'signal_components': opp.get('signal_components', {}),
+                        'signal_combination_key': self._generate_signal_combination_key(opp.get('signal_components', {}))
+                    }
+                }
+
+                # 在事件循环中创建异步任务（后台执行）
+                asyncio.run_coroutine_threadsafe(
+                    self.pullback_executor.execute_entry(signal),
+                    self.event_loop
+                )
+
+                logger.info(f"🚀 [V2-PULLBACK] {symbol} {side} K线回调建仓任务已启动 (等待15M阴线)")
+                logger.info(f"   📝 信号评分: {opp.get('score', 0)} | 信号组合: {signal['trade_params']['signal_combination_key']}")
+                return True
+
+            except Exception as e:
+                logger.error(f"❌ [V2-PULLBACK-ERROR] {symbol} 启动回调任务失败: {e}")
+                logger.error(f"   回退到直接开仓模式")
+                # 失败时回退到直接开仓
+
+        # ========== 回退：一次性开仓逻辑（V1策略，用于回退）==========
         try:
 
             # 优先从 WebSocket 获取实时价格
