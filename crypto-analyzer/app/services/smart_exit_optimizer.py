@@ -318,33 +318,28 @@ class SmartExitOptimizer:
             {'profit_pct': float, 'profit_usdt': float, 'current_price': float}
         """
         # 验证必要字段
-        avg_entry_price_val = position.get('avg_entry_price')
+        entry_price_val = position.get('entry_price')
         position_size_val = position.get('position_size')
 
-        # 如果 avg_entry_price 为空，尝试使用 entry_price 作为备用
-        if avg_entry_price_val is None or avg_entry_price_val == '':
-            entry_price_val = position.get('entry_price')
-            if entry_price_val is not None and entry_price_val != '':
-                avg_entry_price_val = entry_price_val
-                logger.debug(f"持仓 {position.get('id')} avg_entry_price为空，使用entry_price={entry_price_val}作为备用")
-            else:
-                raise ValueError(f"持仓 {position.get('id')} avg_entry_price 和 entry_price 都为空")
+        # 直接使用 entry_price（不再使用avg_entry_price）
+        if entry_price_val is None or entry_price_val == '':
+            raise ValueError(f"持仓 {position.get('id')} entry_price 为空")
 
         if position_size_val is None or position_size_val == '' or float(position_size_val) == 0:
             raise ValueError(f"持仓 {position.get('id')} position_size 为空或为0")
 
-        avg_entry_price = Decimal(str(avg_entry_price_val))
+        entry_price = Decimal(str(entry_price_val))
         position_size = Decimal(str(position_size_val))
         direction = position['direction']
 
         # 计算盈亏百分比
         if direction == 'LONG':
-            profit_pct = float((current_price - avg_entry_price) / avg_entry_price * 100)
+            profit_pct = float((current_price - entry_price) / entry_price * 100)
         else:  # SHORT
-            profit_pct = float((avg_entry_price - current_price) / avg_entry_price * 100)
+            profit_pct = float((entry_price - current_price) / entry_price * 100)
 
         # 计算盈亏金额（USDT）
-        profit_usdt = float(position_size * avg_entry_price * Decimal(str(profit_pct / 100)))
+        profit_usdt = float(position_size * entry_price * Decimal(str(profit_pct / 100)))
 
         return {
             'profit_pct': profit_pct,
