@@ -137,7 +137,7 @@ class SmartExitOptimizer:
                     logger.info(f"持仓 {position_id} 不存在，停止监控")
                     break
 
-                # 支持monitoring status='open'和'building'（分批建仓中）
+                # 支持monitoring status='open'
                 if position['status'] not in ('open', 'building'):
                     logger.info(f"持仓 {position_id} 已关闭 (status={position['status']})，停止监控")
                     break
@@ -196,7 +196,7 @@ class SmartExitOptimizer:
                         break
 
                 # 检查智能平仓
-                exit_completed = await self._smart_batch_exit(
+                exit_completed = await self._smart_exit(
                     position_id, position, current_price, profit_info
                 )
 
@@ -515,7 +515,7 @@ class SmartExitOptimizer:
         # ========== 智能平仓逻辑（计划平仓前30分钟）==========
         planned_close_time = position['planned_close_time']
 
-        # 如果没有设置计划平仓时间（恢复的分批建仓持仓），只检查止损止盈，不执行智能平仓
+        # 如果没有设置计划平仓时间，只检查止损止盈，不执行智能平仓
         if planned_close_time is None:
             return False, ""
 
@@ -528,7 +528,7 @@ class SmartExitOptimizer:
 
         # ========== 到达监控窗口，使用智能平仓 ==========
         # 注意：这里不再直接返回平仓决策
-        # 而是在 _monitor_position 中调用 _smart_batch_exit 处理平仓
+        # 而是在 _monitor_position 中调用 _smart_exit 处理平仓
         # 这个方法现在主要用于兜底逻辑
 
         # 兜底逻辑1: 超高盈利立即全部平仓（改为基于ROI）
@@ -542,7 +542,7 @@ class SmartExitOptimizer:
         # 默认：不平仓（由智能平仓处理）
         return False, ""
 
-    async def _smart_batch_exit(
+    async def _smart_exit(
         self,
         position_id: int,
         position: Dict,
@@ -552,7 +552,7 @@ class SmartExitOptimizer:
         """
         智能平仓逻辑（计划平仓前30分钟）
 
-        优化后策略：
+        策略：
         1. T-30启动监控，T-20完成价格基线（10分钟采样）
         2. T-20到T+0寻找最佳价格，一次性平仓100%
         3. T+0（planned_close_time）必须强制执行
@@ -574,7 +574,7 @@ class SmartExitOptimizer:
         """
         planned_close_time = position['planned_close_time']
 
-        # 如果没有设置计划平仓时间（恢复的分批建仓持仓），不执行智能平仓
+        # 如果没有设置计划平仓时间，不执行智能平仓
         if planned_close_time is None:
             return False
 

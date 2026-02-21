@@ -23,12 +23,9 @@ from app.services.optimization_config import OptimizationConfig
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_exit_optimizer import SmartExitOptimizer
-from app.services.smart_entry_executor import SmartEntryExecutor
-from app.services.kline_pullback_entry_executor import KlinePullbackEntryExecutor
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.breakout_signal_booster import BreakoutSignalBooster
 from app.services.signal_blacklist_checker import SignalBlacklistChecker
-from app.services.signal_score_v2_service import SignalScoreV2Service
 from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
@@ -233,22 +230,8 @@ class SmartDecisionBrain:
                 }
                 logger.info(f"   📊 评分权重: 使用默认权重")
 
-            # 8. 初始化V2评分服务
-            try:
-                score_v2_config = config.get('signals', {}).get('resonance_filter', {})
-                self.score_v2_service = SignalScoreV2Service(self.db_config, score_v2_config)
-
-                if score_v2_config.get('enabled', True):
-                    logger.info(f"   ✅ V2评分过滤已启用:")
-                    logger.info(f"      代币最低评分: {score_v2_config.get('min_symbol_score', 15)}")
-                    logger.info(f"      Big4最低评分: {score_v2_config.get('min_big4_score', 10)}")
-                    logger.info(f"      要求方向一致: {score_v2_config.get('require_same_direction', True)}")
-                    logger.info(f"      共振阈值: {score_v2_config.get('resonance_threshold', 25)}")
-                else:
-                    logger.info(f"   ⚠️  V2评分过滤已禁用")
-            except Exception as v2_error:
-                logger.warning(f"   ⚠️  V2评分服务初始化失败: {v2_error}, 将继续使用传统信号过滤")
-                self.score_v2_service = None
+            # V2评分过滤已彻底移除（2026-02-21）
+            self.score_v2_service = None
 
         except Exception as e:
             logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
@@ -879,16 +862,12 @@ class SmartTraderService:
             self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
 
             # 🔥 从数据库读取系统配置（优先级高于config.yaml）
-            from app.services.system_settings_loader import get_big4_filter_enabled, get_batch_entry_strategy
+            from app.services.system_settings_loader import get_big4_filter_enabled
 
             # Big4过滤器配置
             big4_enabled_from_db = get_big4_filter_enabled()
             self.big4_filter_config = {'enabled': big4_enabled_from_db}
             logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
-
-            # K线回调建仓策略配置
-            self.batch_entry_strategy = get_batch_entry_strategy()
-            logger.info(f"📊 建仓策略: {self.batch_entry_strategy} ({'V2回调' if self.batch_entry_strategy == 'kline_pullback' else 'V1直接'})")
 
         # 初始化智能平仓优化器
         if self.smart_exit_config.get('enabled'):
@@ -901,26 +880,6 @@ class SmartTraderService:
         else:
             self.smart_exit_optimizer = None
             logger.info("⚠️ 智能平仓优化器未启用")
-
-        # 初始化价格采样建仓执行器（V1策略：15分钟价格采样找最优点）
-        self.smart_entry_executor = SmartEntryExecutor(
-            db_config=self.db_config,
-            live_engine=self,
-            price_service=self.ws_service,
-            account_id=self.account_id
-        )
-        logger.info("✅ 价格采样建仓执行器已启动 (V1: 15分钟价格采样最优点)")
-
-        # 初始化K线回调建仓执行器（V2策略：等待15M阴线回调）
-        self.pullback_executor = KlinePullbackEntryExecutor(
-            db_config=self.db_config,
-            live_engine=self,
-            price_service=self.ws_service,
-            account_id=self.account_id,
-            brain=self.brain,
-            opt_config=self.opt_config
-        )
-        logger.info("✅ K线回调建仓执行器已启动 (V2: 15M阴线回调确认)")
 
         # 初始化Big4趋势检测器 (四大天王: BTC/ETH/BNB/SOL)
         self.big4_detector = Big4TrendDetector()
@@ -1330,80 +1289,13 @@ class SmartTraderService:
         # 防杀跌过滤容易误杀破位追空信号，与Big4机制冲突
         # 移除日期: 2026-02-09
 
-        # ========== 第二步：提前检查黑名单（分批建仓也要检查）==========
+        # ========== 第二步：提前检查黑名单 ==========
         rating_level = self.opt_config.get_symbol_rating_level(symbol)
         if rating_level == 3:
             logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
             return False
 
-        # ========== 第三步：根据数据库配置选择建仓策略 ==========
-        # batch_entry_strategy: 'kline_pullback' (V2) or 'price_percentile' (V1)
-
-        # V2策略: K线回调建仓（等待15M阴线）
-        if self.batch_entry_strategy == 'kline_pullback' and self.pullback_executor and self.event_loop:
-            try:
-                # 准备信号字典
-                signal = {
-                    'symbol': symbol,
-                    'direction': side,
-                    'leverage': self.leverage,
-                    'signal_time': datetime.now(),  # 信号触发时间
-                    'strategy_id': 'smart_trader_v2',
-                    'trade_params': {
-                        'entry_score': opp.get('score', 0),
-                        'signal_components': opp.get('signal_components', {}),
-                        'signal_combination_key': self._generate_signal_combination_key(opp.get('signal_components', {}))
-                    }
-                }
-
-                # 在事件循环中创建异步任务（后台执行）
-                asyncio.run_coroutine_threadsafe(
-                    self.pullback_executor.execute_entry(signal),
-                    self.event_loop
-                )
-
-                logger.info(f"🚀 [V2-PULLBACK] {symbol} {side} K线回调建仓任务已启动 (等待15M阴线)")
-                logger.info(f"   📝 信号评分: {opp.get('score', 0)} | 信号组合: {signal['trade_params']['signal_combination_key']}")
-                return True
-
-            except Exception as e:
-                logger.error(f"❌ [V2-PULLBACK-ERROR] {symbol} 启动回调任务失败: {e}")
-                logger.error(f"   回退到V1价格采样模式")
-                # 失败时回退到V1
-
-        # V1策略: 价格采样建仓（15分钟价格采样找最优点）
-        elif self.batch_entry_strategy == 'price_percentile' and self.smart_entry_executor and self.event_loop:
-            try:
-                # 准备信号字典
-                signal = {
-                    'symbol': symbol,
-                    'direction': side,
-                    'leverage': self.leverage,
-                    'signal_time': datetime.now(),
-                    'strategy_id': 'smart_trader_v1',
-                    'trade_params': {
-                        'entry_score': opp.get('score', 0),
-                        'signal_components': opp.get('signal_components', {}),
-                        'signal_combination_key': self._generate_signal_combination_key(opp.get('signal_components', {}))
-                    }
-                }
-
-                # 在事件循环中创建异步任务（后台执行）
-                asyncio.run_coroutine_threadsafe(
-                    self.smart_entry_executor.execute_entry(signal),
-                    self.event_loop
-                )
-
-                logger.info(f"🚀 [V1-PRICE-SAMPLING] {symbol} {side} 价格采样建仓任务已启动 (15分钟采样找最优点)")
-                logger.info(f"   📝 信号评分: {opp.get('score', 0)} | 信号组合: {signal['trade_params']['signal_combination_key']}")
-                return True
-
-            except Exception as e:
-                logger.error(f"❌ [V1-PRICE-SAMPLING-ERROR] {symbol} 启动采样任务失败: {e}")
-                logger.error(f"   回退到直接开仓模式")
-                # 失败时回退到直接开仓
-
-        # ========== 回退策略：一次性直接开仓（执行器不可用时使用）==========
+        # ========== 第三步：一次性直接开仓 ==========
         try:
 
             # 优先从 WebSocket 获取实时价格

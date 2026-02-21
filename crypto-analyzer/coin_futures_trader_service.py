@@ -22,11 +22,9 @@ from app.services.adaptive_optimizer import AdaptiveOptimizer
 from app.services.optimization_config import OptimizationConfig
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
-from app.services.smart_entry_executor import SmartEntryExecutor
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.signal_blacklist_checker import SignalBlacklistChecker
-from app.services.signal_score_v2_service import SignalScoreV2Service
 from app.trading.coin_futures_trading_engine import CoinFuturesTradingEngine
 from app.services.breakout_system import BreakoutSystem
 
@@ -298,22 +296,8 @@ class CoinFuturesDecisionBrain:
                 }
                 logger.info(f"   📊 评分权重: 使用默认权重")
 
-            # 8. 初始化V2评分服务
-            try:
-                score_v2_config = config.get('signals', {}).get('resonance_filter', {})
-                self.score_v2_service = SignalScoreV2Service(self.db_config, score_v2_config)
-
-                if score_v2_config.get('enabled', True):
-                    logger.info(f"   ✅ V2评分过滤已启用:")
-                    logger.info(f"      代币最低评分: {score_v2_config.get('min_symbol_score', 15)}")
-                    logger.info(f"      Big4最低评分: {score_v2_config.get('min_big4_score', 10)}")
-                    logger.info(f"      要求方向一致: {score_v2_config.get('require_same_direction', True)}")
-                    logger.info(f"      共振阈值: {score_v2_config.get('resonance_threshold', 25)}")
-                else:
-                    logger.info(f"   ⚠️  V2评分过滤已禁用")
-            except Exception as v2_error:
-                logger.warning(f"   ⚠️  V2评分服务初始化失败: {v2_error}, 将继续使用传统信号过滤")
-                self.score_v2_service = None
+            # V2评分过滤已彻底移除（2026-02-21）
+            self.score_v2_service = None
 
         except Exception as e:
             logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
@@ -1244,11 +1228,10 @@ class CoinFuturesTraderService:
         # 波动率配置更新器 (15M K线动态止盈)
         self.volatility_updater = VolatilityProfileUpdater(self.db_config)
 
-        # 加载分批建仓和智能平仓配置
+        # 加载智能平仓配置
         import yaml
         with open('config.yaml', 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
-            self.batch_entry_config = config.get('signals', {}).get('batch_entry', {'enabled': False})
             self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
 
             # 🔥 从数据库读取Big4过滤器配置（优先级高于config.yaml）
@@ -1256,12 +1239,6 @@ class CoinFuturesTraderService:
             big4_enabled_from_db = get_big4_filter_enabled()
             self.big4_filter_config = {'enabled': big4_enabled_from_db}
             logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
-
-        # 初始化智能分批建仓执行器（已禁用，改为一次性开仓）
-        # 保留配置读取，但不初始化执行器
-        self.smart_entry_executor = None
-        self.batch_entry_strategy = None
-        logger.info("⚠️ 智能分批建仓已禁用（币本位统一使用一次性开仓）")
 
         # 初始化智能平仓优化器
         if self.smart_exit_config.get('enabled'):
@@ -1909,119 +1886,6 @@ class CoinFuturesTraderService:
             logger.error(f"[ERROR] {symbol} 开仓失败: {e}")
             return False
 
-    async def _open_position_with_batch(self, opp: dict):
-        """使用智能分批建仓执行器开仓（信号已在调用前验证）"""
-        symbol = opp['symbol']
-        side = opp['side']
-
-        try:
-            # 注意：信号验证已在 open_position() 中完成，这里直接计算保证金
-            signal_components = opp.get('signal_components', {})
-
-            # 计算保证金（复用原有逻辑）
-            rating_level = self.opt_config.get_symbol_rating_level(symbol)
-            rating_config = self.opt_config.get_blacklist_config(rating_level)
-
-            if rating_level == 3:
-                logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
-                return False
-
-            rating_margin_multiplier = rating_config['margin_multiplier']
-            base_position_size = self.position_size_usdt * rating_margin_multiplier
-
-            # 根据Big4市场信号动态调整仓位倍数
-            try:
-                big4_result = self.get_big4_result()
-                market_signal = big4_result.get('overall_signal', 'NEUTRAL')
-
-                # 根据市场信号决定仓位倍数
-                if market_signal == 'BULLISH' and side == 'LONG':
-                    position_multiplier = 1.2  # 市场看多,做多加仓
-                    logger.info(f"[BIG4-POSITION] {symbol} 市场看多,做多仓位 × 1.2")
-                elif market_signal == 'BEARISH' and side == 'SHORT':
-                    position_multiplier = 1.2  # 市场看空,做空加仓
-                    logger.info(f"[BIG4-POSITION] {symbol} 市场看空,做空仓位 × 1.2")
-                else:
-                    position_multiplier = 1.0  # 其他情况正常仓位
-                    if market_signal != 'NEUTRAL':
-                        logger.info(f"[BIG4-POSITION] {symbol} 逆势信号,仓位 × 1.0 (市场{market_signal}, 开仓{side})")
-            except Exception as e:
-                logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
-                position_multiplier = 1.0
-
-            # 获取自适应参数
-            if side == 'LONG':
-                adaptive_params = self.brain.adaptive_long
-            else:
-                adaptive_params = self.brain.adaptive_short
-
-            adjusted_position_size = base_position_size * position_multiplier
-
-            # 🔥 获取信号触发时间：优先使用opp中的时间，否则使用当前时间
-            signal_time = opp.get('signal_time', datetime.now())
-
-            # 调用智能建仓执行器（作为后台任务，避免阻塞主循环）
-            entry_task = asyncio.create_task(self.smart_entry_executor.execute_entry({
-                'symbol': symbol,
-                'direction': side,
-                'total_margin': adjusted_position_size,
-                'leverage': self.leverage,
-                'strategy_id': 'smart_trader',
-                'signal_time': signal_time,  # 🔥 传入真实的信号触发时间
-                'trade_params': {
-                    'entry_score': opp.get('score', 0),
-                    'signal_components': signal_components,
-                    'adaptive_params': adaptive_params,
-                    'signal_combination_key': self._generate_signal_combination_key(signal_components)
-                }
-            }))
-
-            # 添加完成回调来启动智能平仓监控
-            # 明确捕获闭包变量
-            _symbol = symbol
-            _side = side
-            _smart_exit_optimizer = self.smart_exit_optimizer
-
-            def on_entry_complete(task):
-                try:
-                    entry_result = task.result()
-                    if entry_result['success']:
-                        position_id = entry_result['position_id']
-                        logger.info(
-                            f"✅ [BATCH_ENTRY_COMPLETE] {_symbol} {_side} | "
-                            f"持仓ID: {position_id} | "
-                            f"平均价格: ${entry_result['avg_price']:.4f} | "
-                            f"总数量: {entry_result['total_quantity']:.2f}"
-                        )
-
-                        # 启动智能平仓监控（如果启用）
-                        if _smart_exit_optimizer:
-                            try:
-                                loop = asyncio.get_event_loop()
-                                if loop.is_closed():
-                                    logger.warning(f"⚠️ 事件循环已关闭，无法启动智能平仓监控: 持仓{position_id}")
-                                else:
-                                    # 使用loop.create_task而非asyncio.create_task，确保使用同一个loop实例
-                                    loop.create_task(_smart_exit_optimizer.start_monitoring_position(position_id))
-                                    logger.info(f"✅ [SMART_EXIT] 已启动智能平仓监控: 持仓{position_id}")
-                            except (RuntimeError, Exception) as e:
-                                # 捕获所有异常，包括"Already closed"等事件循环相关错误
-                                logger.warning(f"⚠️ 无法启动智能平仓监控: {e}")
-                    else:
-                        logger.error(f"❌ [BATCH_ENTRY_FAILED] {_symbol} {_side} | {entry_result.get('error')}")
-                except Exception as e:
-                    logger.error(f"❌ [BATCH_ENTRY_CALLBACK_ERROR] {_symbol} {_side} | {e}")
-
-            entry_task.add_done_callback(on_entry_complete)
-            logger.info(f"🚀 [BATCH_ENTRY_STARTED] {symbol} {side} | 分批建仓已启动（后台运行60分钟）")
-
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ [BATCH_ENTRY_ERROR] {symbol} {side} | {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
 
     def _generate_signal_combination_key(self, signal_components: dict) -> str:
         """
