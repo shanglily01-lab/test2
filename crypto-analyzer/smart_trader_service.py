@@ -1621,7 +1621,6 @@ class SmartTraderService:
                 base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
 
             # 计算超时时间点 (UTC时间)
-            from datetime import datetime, timedelta
             timeout_at = datetime.utcnow() + timedelta(minutes=base_timeout_minutes)
 
             # 准备entry_reason
