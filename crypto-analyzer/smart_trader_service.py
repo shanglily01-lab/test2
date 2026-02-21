@@ -1692,7 +1692,6 @@ class SmartTraderService:
             # 启动智能平仓监控（统一平仓入口）
             if self.smart_exit_optimizer and self.event_loop:
                 try:
-                    import asyncio
                     asyncio.run_coroutine_threadsafe(
                         self.smart_exit_optimizer.start_monitoring_position(position_id),
                         self.event_loop
