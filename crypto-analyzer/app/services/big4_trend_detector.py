@@ -113,38 +113,58 @@ class Big4TrendDetector:
 
         conn.close()
 
-        # 🔥 综合判断 - 严格化逻辑（2026-02-13优化）
-        # 目标：减少信号切换频率，延长信号持续时间至3小时
-        # 1. BTC强制同向原则：BTC必须非NEUTRAL才能触发整体信号
-        # 2. 权重差阈值提高：从20%提高到50%
-        # 3. 只允许极强信号通过，避免震荡市频繁切换
+        # 🔥 综合判断 - 优化逻辑（2026-02-21）
+        # 目标：BTC不能单独判断趋势，必须配合ETH/BNB/SOL任一同向
+        # 1. BTC必须非NEUTRAL
+        # 2. ETH/BNB/SOL至少一个与BTC同向
+        # 3. 权重差阈值>=50%
 
         btc_signal = results.get('BTC/USDT', {}).get('signal', 'NEUTRAL')
+        eth_signal = results.get('ETH/USDT', {}).get('signal', 'NEUTRAL')
+        bnb_signal = results.get('BNB/USDT', {}).get('signal', 'NEUTRAL')
+        sol_signal = results.get('SOL/USDT', {}).get('signal', 'NEUTRAL')
 
-        # 🔥 规则1：BTC强势领涨/领跌（BTC明确+权重>=50%）
-        if btc_signal == 'BULLISH' and bullish_weight >= 0.50:
+        # 检查是否有其他币种与BTC同向
+        has_support = False
+        support_coins = []
+        if btc_signal == 'BULLISH':
+            if eth_signal == 'BULLISH':
+                has_support = True
+                support_coins.append('ETH')
+            if bnb_signal == 'BULLISH':
+                has_support = True
+                support_coins.append('BNB')
+            if sol_signal == 'BULLISH':
+                has_support = True
+                support_coins.append('SOL')
+        elif btc_signal == 'BEARISH':
+            if eth_signal == 'BEARISH':
+                has_support = True
+                support_coins.append('ETH')
+            if bnb_signal == 'BEARISH':
+                has_support = True
+                support_coins.append('BNB')
+            if sol_signal == 'BEARISH':
+                has_support = True
+                support_coins.append('SOL')
+
+        # 🔥 综合判断：BTC明确 + 有支持币种 + 权重>=50%
+        if btc_signal == 'BULLISH' and has_support and bullish_weight >= 0.50:
             overall_signal = 'BULLISH'
-            recommendation = f"BTC领涨(权重{bullish_weight*100:.0f}%)，市场看涨，建议优先考虑多单机会"
-        elif btc_signal == 'BEARISH' and bearish_weight >= 0.50:
+            recommendation = f"BTC+{'+'.join(support_coins)}共振看涨(权重{bullish_weight*100:.0f}%)，建议优先考虑多单机会"
+        elif btc_signal == 'BEARISH' and has_support and bearish_weight >= 0.50:
             overall_signal = 'BEARISH'
-            recommendation = f"BTC领跌(权重{bearish_weight*100:.0f}%)，市场看跌，建议优先考虑空单机会"
+            recommendation = f"BTC+{'+'.join(support_coins)}共振看跌(权重{bearish_weight*100:.0f}%)，建议优先考虑空单机会"
 
-        # 🔥 规则2：市场一致性极强（权重差≥50% 且 BTC非NEUTRAL）
-        # 防止BTC中性时，仅靠ETH触发整体信号
-        elif bullish_weight - bearish_weight >= 0.50 and btc_signal == 'BULLISH':
-            overall_signal = 'BULLISH'
-            recommendation = f"市场整体看涨(权重{bullish_weight*100:.0f}% vs {bearish_weight*100:.0f}%)，BTC同步，建议优先考虑多单机会"
-        elif bearish_weight - bullish_weight >= 0.50 and btc_signal == 'BEARISH':
-            overall_signal = 'BEARISH'
-            recommendation = f"市场整体看跌(权重{bearish_weight*100:.0f}% vs {bullish_weight*100:.0f}%)，BTC同步，建议优先考虑空单机会"
-
-        # 🔥 其他情况：NEUTRAL（包括BTC为NEUTRAL或权重差<50%）
+        # 🔥 其他情况：NEUTRAL
         else:
             overall_signal = 'NEUTRAL'
             if btc_signal == 'NEUTRAL':
                 recommendation = f"BTC方向不明(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望"
+            elif not has_support:
+                recommendation = f"BTC{btc_signal}但无其他币种支持(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望"
             else:
-                recommendation = f"市场分歧较大(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望或减少仓位"
+                recommendation = f"权重不足(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望或减少仓位"
 
         # 🔥 如果紧急干预激活，覆盖recommendation
         if emergency_intervention['block_long']:
@@ -177,21 +197,15 @@ class Big4TrendDetector:
         """
         分析单个币种的趋势（基于K线数量评分）
 
-        🔥 2026-02-13 最新优化：基于K线数量的简单评分系统
+        🔥 2026-02-21 最新优化：移除5M加分逻辑
 
         步骤:
         1. 1H (30根): 主趋势判断
         2. 15M (16根): 趋势确认
-        3. 5M (3根): 反向入场时机（大方向确认后，5M反向=入场机会）
 
         评分规则：
         - 1H: 阳线>=18根(强势40分) / >=16根(中等30分)
         - 15M: 阳线>=11根(强势30分) / >=9根(中等20分)
-        - 5M反向加分（渐进式）:
-          * 主趋势多头 + 5M 2根阴 = +5分（部分回调）
-          * 主趋势多头 + 5M 3根阴 = +10分（完全回调）
-          * 主趋势空头 + 5M 2根阳 = +5分（部分反弹）
-          * 主趋势空头 + 5M 3根阳 = +10分（完全反弹）
         - 开仓条件: 评分>=50分（中等行情也可做）
         """
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -202,14 +216,11 @@ class Big4TrendDetector:
         # 2. 分析15M K线 (16根)
         kline_15m = self._analyze_kline_count(cursor, symbol, '15m', 16)
 
-        # 3. 分析5M K线 (3根) - 用于反向入场
-        kline_5m = self._analyze_kline_count(cursor, symbol, '5m', 3)
-
         cursor.close()
 
-        # 4. 基于数量的评分判断（1H+15M+5M反向）
+        # 3. 基于数量的评分判断（1H+15M，不再使用5M）
         signal, strength, reason = self._generate_signal_by_count(
-            kline_1h, kline_15m, kline_5m
+            kline_1h, kline_15m
         )
 
         return {
@@ -217,8 +228,7 @@ class Big4TrendDetector:
             'strength': strength,
             'reason': reason,
             '1h_analysis': kline_1h,
-            '15m_analysis': kline_15m,
-            '5m_signal': kline_5m
+            '15m_analysis': kline_15m
         }
 
     def _analyze_kline_power(self, cursor, symbol: str, timeframe: str, count: int) -> Dict:
@@ -440,43 +450,31 @@ class Big4TrendDetector:
     def _generate_signal_by_count(
         self,
         kline_1h: Dict,
-        kline_15m: Dict,
-        kline_5m: Dict
+        kline_15m: Dict
     ) -> Tuple[str, int, str]:
         """
         基于K线数量生成信号（简化版）
 
-        🔥 2026-02-13最新：评分>=50分即可开仓（中等行情也做）
-        🔥 5M反向加分逻辑（渐进式）：大方向确认后，5M反向=好的入场机会
+        🔥 2026-02-21最新：移除5M反向加分逻辑，仅用1H+15M评分
 
         权重分配:
         - 1H: 强势40分 / 中等30分
         - 15M: 强势30分 / 中等20分
-        - 5M反向加分: 2根=5分 / 3根=10分（必须主趋势已确认）
 
         开仓条件:
         - 评分 >= 50分 → BULLISH/BEARISH
         - 评分 < 50分 → NEUTRAL（弱势行情不做）
-
-        5M反向加分逻辑（渐进式）:
-        - 主趋势多头(1H+15M>0) + 5M 2根阴 = +5分（部分回调）
-        - 主趋势多头(1H+15M>0) + 5M 3根阴 = +10分（完全回调）
-        - 主趋势空头(1H+15M<0) + 5M 2根阳 = +5分（部分反弹）
-        - 主趋势空头(1H+15M<0) + 5M 3根阳 = +10分（完全反弹）
-        - 主趋势中性或5M不满足 = 0分
 
         可能的开仓组合:
         - 1H强势(40) + 15M强势(30) = 70分 ✅
         - 1H强势(40) + 15M中等(20) = 60分 ✅
         - 1H中等(30) + 15M强势(30) = 60分 ✅
         - 1H中等(30) + 15M中等(20) = 50分 ✅
-        - 1H中等(30) + 15M中等(20) + 5M反向2根(5) = 55分 ✅（新增）
-        - 1H中等(30) + 15M中等(20) + 5M反向3根(10) = 60分 ✅
 
         返回: (信号方向, 强度0-100, 原因)
         """
-        # 先计算主趋势得分（1H+15M）
-        main_trend_score = kline_1h['score'] + kline_15m['score']
+        # 计算总得分（1H+15M）
+        signal_score = kline_1h['score'] + kline_15m['score']
         reasons = []
 
         # 1H分析
@@ -494,32 +492,6 @@ class Big4TrendDetector:
             reasons.append(f"15M{kline_15m['level']}空头({kline_15m['bearish_count']}阴:{kline_15m['bullish_count']}阳,{kline_15m['score']}分)")
         else:
             reasons.append(f"15M中性({kline_15m['bullish_count']}阳:{kline_15m['bearish_count']}阴)")
-
-        # 5M反向加分逻辑（渐进式：2根=5分，3根=10分）
-        five_m_bonus = 0
-        if main_trend_score > 0:  # 主趋势多头
-            # 看5M阴线数量（回调机会）
-            if kline_5m['bearish_count'] == 3:
-                five_m_bonus = 10
-                reasons.append(f"5M全阴(3根)回调，+10分入场机会")
-            elif kline_5m['bearish_count'] == 2:
-                five_m_bonus = 5
-                reasons.append(f"5M部分阴(2根)回调，+5分入场机会")
-            elif kline_5m['bearish_count'] == 1:
-                reasons.append(f"5M仅1根阴线，不加分")
-        elif main_trend_score < 0:  # 主趋势空头
-            # 看5M阳线数量（反弹机会）
-            if kline_5m['bullish_count'] == 3:
-                five_m_bonus = 10
-                reasons.append(f"5M全阳(3根)反弹，+10分入场机会")
-            elif kline_5m['bullish_count'] == 2:
-                five_m_bonus = 5
-                reasons.append(f"5M部分阳(2根)反弹，+5分入场机会")
-            elif kline_5m['bullish_count'] == 1:
-                reasons.append(f"5M仅1根阳线，不加分")
-
-        # 总分 = 主趋势 + 5M反向加分
-        signal_score = main_trend_score + five_m_bonus
 
         # 判断信号（门槛50分）
         if signal_score >= 50:
