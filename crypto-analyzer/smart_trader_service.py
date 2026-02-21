@@ -3028,9 +3028,9 @@ class SmartTraderService:
                         logger.info(f"[SKIP] {symbol} {new_side}方向已有{position_count}个持仓，达到上限(1)")
                         continue
 
-                    # 检查是否刚刚平仓(1小时冷却期)
+                    # 检查是否刚刚平仓(15分钟冷却期)
                     if self.check_recent_close(symbol, new_side, cooldown_minutes=15):
-                        logger.info(f"[SKIP] {symbol} {new_side}方向1小时内刚平仓,冷却中")
+                        logger.info(f"[SKIP] {symbol} {new_side}方向15分钟内刚平仓,冷却中")
                         continue
 
                     # 检查是否有反向持仓 - 如果有则跳过,不做对冲
