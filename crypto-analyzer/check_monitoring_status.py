@@ -110,13 +110,13 @@ else:
 
 print()
 
-# 4. 检查最近的平仓记录
+# 4. 检查最近的平仓记录（使用notes字段）
 cursor.execute("""
     SELECT
         id,
         symbol,
         position_side,
-        close_reason,
+        notes,
         close_time,
         created_at,
         TIMESTAMPDIFF(MINUTE, created_at, close_time) as holding_minutes
@@ -134,9 +134,10 @@ if recent_closes:
     print("-" * 100)
     for pos in recent_closes:
         close_time_str = pos['close_time'].strftime('%H:%M:%S') if pos['close_time'] else "未知"
+        notes = pos['notes'] if pos['notes'] else "无"
         print(f"  ID {pos['id']} | {pos['symbol']} {pos['position_side']} | "
               f"平仓时间{close_time_str} | 持仓{pos['holding_minutes']}分钟 | "
-              f"原因: {pos['close_reason']}")
+              f"备注: {notes[:50]}")  # 只显示前50个字符
 else:
     print("ℹ️  最近24小时没有平仓记录")
 
@@ -156,6 +157,9 @@ if overtime_positions:
     print("  3. 如果没在运行，启动服务:")
     print("     nohup python3 smart_trader_service.py > logs/smart_trader.log 2>&1 &")
     print()
+    print("  4. 手动平仓超时持仓:")
+    for pos in overtime_positions:
+        print(f"     # 持仓ID {pos['id']} - {pos['symbol']} {pos['position_side']}")
 
 cursor.close()
 conn.close()
