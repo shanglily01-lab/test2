@@ -217,6 +217,23 @@ class SignalScoreV2Service:
                 'details': {}
             }
 
+        # 🔥 检查数据是否过时（超过24小时），如果过时则忽略V2过滤
+        from datetime import datetime, timedelta
+        updated_at = coin_score.get('updated_at')
+        if updated_at:
+            if isinstance(updated_at, str):
+                updated_at = datetime.fromisoformat(updated_at)
+            age_hours = (datetime.now() - updated_at).total_seconds() / 3600
+            if age_hours > 24:
+                logger.warning(f"⚠️ {symbol} 评分数据过时（{age_hours:.1f}小时前更新），忽略V2过滤")
+                return {
+                    'passed': True,
+                    'reason': f'{symbol} 评分数据过时（{age_hours:.1f}h），自动通过',
+                    'coin_score': coin_score,
+                    'big4_score': None,
+                    'details': {'data_age_hours': age_hours}
+                }
+
         # 获取Big4评分
         big4_score = self.get_big4_score()
         if not big4_score:
