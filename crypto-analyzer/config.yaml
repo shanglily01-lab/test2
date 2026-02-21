@@ -303,7 +303,7 @@ signals:
     consecutive_klines_required: 2  # 需要连续几根反向K线
     whitelist_symbols: []
   resonance_filter:
-    enabled: false  # 禁用共振过滤（逻辑太复杂，数据不够实时）
+    enabled: true  # 启用共振过滤
     min_symbol_score: 15  # 代币最低评分（绝对值）
     min_big4_score: 10  # Big4最低评分（绝对值）
     require_same_direction: true  # 只有Big4极强(>70)时才强制方向一致
