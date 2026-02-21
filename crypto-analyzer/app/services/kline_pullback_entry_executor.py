@@ -521,88 +521,30 @@ class KlinePullbackEntryExecutor:
         await self._create_position_record(plan, price, batch_num)
 
     async def _create_position_record(self, plan: Dict, entry_price: Decimal, batch_num: int = 0):
-        """创建持仓记录 - 每批都创建独立的持仓记录"""
-        import json
-
+        """创建持仓记录 - 使用 BatchPositionManager 简化逻辑"""
         try:
-            conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor()
+            current_batch = plan['batches'][batch_num]
 
-            symbol = plan['symbol']
-            direction = plan['direction']
-            current_batch = plan['batches'][batch_num]  # 获取当前批次
-            signal_time = plan['signal_time']
-
-            # 准备batch_filled JSON（当前批次）
-            batch_filled_json = json.dumps({
-                'batches': [{
-                    'batch_num': batch_num,
-                    'ratio': current_batch['ratio'],
-                    'price': current_batch['price'],
-                    'time': current_batch['time'].isoformat(),
-                    'margin': current_batch['margin'],
-                    'quantity': current_batch['quantity'],
-                    'reason': current_batch['reason']
-                }]
-            })
-
-            # 准备batch_plan JSON
-            batch_plan_json = json.dumps(plan['batches'])
-
-            # 计算名义价值（quantity * entry_price）
-            notional_value = current_batch['quantity'] * float(entry_price)
-
-            # 重新计算止盈止损（基于第1批实际成交价格）
-            signal_components = plan['signal'].get('trade_params', {}).get('signal_components', {})
-            stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct = self._calculate_stop_take_prices(
-                symbol, direction, float(entry_price), signal_components
+            # 🔥 使用公共的 position_manager 创建持仓
+            position_id = self.position_manager.create_position(
+                symbol=plan['symbol'],
+                direction=plan['direction'],
+                quantity=Decimal(str(current_batch['quantity'])),
+                entry_price=entry_price,
+                margin=Decimal(str(current_batch['margin'])),
+                leverage=plan['leverage'],
+                batch_num=batch_num,
+                batch_ratio=current_batch['ratio'],
+                signal=plan['signal'],
+                signal_time=plan['signal_time'],
+                planned_close_time=plan.get('planned_close_time'),
+                source='smart_trader_batch_v2'
             )
 
-            # 🔥 INSERT新的持仓记录（每批都是独立的持仓，直接设置为'open'状态）
-            cursor.execute("""
-                INSERT INTO futures_positions
-                (account_id, symbol, position_side, quantity, entry_price, avg_entry_price,
-                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 stop_loss_pct, take_profit_pct,
-                 entry_signal_type, entry_score, signal_components,
-                 batch_plan, batch_filled, entry_signal_time, planned_close_time,
-                 signal_version, source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'v2', 'smart_trader_batch', 'open', NOW(), NOW())
-            """, (
-                self.account_id,
-                symbol,
-                direction,
-                current_batch['quantity'],
-                float(entry_price),
-                float(entry_price),  # avg_entry_price
-                plan['leverage'],
-                notional_value,
-                current_batch['margin'],
-                current_batch['time'],  # open_time使用当前批次成交时间
-                stop_loss_price,
-                take_profit_price,
-                stop_loss_pct,
-                take_profit_pct,
-                'kline_pullback_v2',
-                plan['signal'].get('trade_params', {}).get('entry_score', 0),
-                json.dumps(signal_components),
-                batch_plan_json,
-                batch_filled_json,
-                signal_time,  # entry_signal_time
-                plan.get('planned_close_time')  # 计划平仓时间
-            ))
-
-            position_id = cursor.lastrowid
-            # 🔥 不再保存到plan['position_id']，因为每批都是独立的持仓
-
-            conn.commit()
-            cursor.close()
-            conn.close()
-
-            logger.info(f"✅ {symbol} 第{batch_num+1}批建仓完成，创建独立持仓记录 | ID:{position_id}")
+            return position_id
 
         except Exception as e:
-            logger.error(f"❌ {symbol} 创建持仓记录失败: {e}")
+            logger.error(f"❌ {plan['symbol']} 创建持仓记录失败（第{batch_num+1}批）: {e}")
             raise
 
     # 🔥 已废弃：不再更新同一个持仓，每批都创建独立持仓
