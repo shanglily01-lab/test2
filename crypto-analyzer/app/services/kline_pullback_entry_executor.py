@@ -317,15 +317,18 @@ class KlinePullbackEntryExecutor:
 
                 if reverse_confirmed:
                     logger.info(f"✅ {symbol} 检测到{timeframe.upper()}反向K线 | 准备执行批次")
+                    logger.info(f"🔍 {symbol} 当前阶段: {plan['phase']} | 批次状态: {[b['filled'] for b in plan['batches']]}")
                     # 找到第一个未完成的批次，但要遵守阶段和时间规则
                     for batch_idx, batch in enumerate(plan['batches']):
                         if not batch['filled']:
                             # 第1批（batch 0）：只在15M阶段执行
                             if batch_idx == 0 and plan['phase'] != 'primary':
+                                logger.debug(f"⏭️ {symbol} 跳过第1批：当前阶段{plan['phase']}，需要primary")
                                 continue
 
                             # 第2批（batch 1）：只在5M阶段执行
                             if batch_idx == 1 and plan['phase'] != 'fallback':
+                                logger.debug(f"⏭️ {symbol} 跳过第2批：当前阶段{plan['phase']}，需要fallback")
                                 continue
 
                             # 第3批（batch 2）：需要第2批完成，且至少间隔5分钟
@@ -347,6 +350,9 @@ class KlinePullbackEntryExecutor:
                             reason = f"{timeframe.upper()}反向K线回调确认"
                             await self._execute_batch(plan, batch_idx, current_price, reason)
                             break
+                    else:
+                        # for循环正常结束（没有break），说明没有找到可执行的批次
+                        logger.debug(f"⏭️ {symbol} 所有批次都被跳过或已完成")
 
                 # 检查是否全部完成
                 if all(b['filled'] for b in plan['batches']):
