@@ -197,15 +197,17 @@ class Big4TrendDetector:
         """
         分析单个币种的趋势（基于K线数量评分）
 
-        🔥 2026-02-21 最新优化：移除5M加分逻辑
+        🔥 2026-02-21 最新优化：添加5M反向评分，用于回调/反弹确认
 
         步骤:
         1. 1H (30根): 主趋势判断
         2. 15M (16根): 趋势确认
+        3. 5M (3根): 反向回调/反弹确认
 
         评分规则：
         - 1H: 阳线>=18根(强势40分) / >=16根(中等30分)
         - 15M: 阳线>=11根(强势30分) / >=9根(中等20分)
+        - 5M反向: 3根反向K线(10分) / 2根反向(5分)
         - 开仓条件: 评分>=50分（中等行情也可做）
         """
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -216,11 +218,14 @@ class Big4TrendDetector:
         # 2. 分析15M K线 (16根)
         kline_15m = self._analyze_kline_count(cursor, symbol, '15m', 16)
 
+        # 3. 分析5M K线 (3根) - 用于反向回调/反弹确认
+        kline_5m = self._analyze_kline_count(cursor, symbol, '5m', 3)
+
         cursor.close()
 
-        # 3. 基于数量的评分判断（1H+15M，不再使用5M）
+        # 4. 基于数量的评分判断（1H+15M+5M反向）
         signal, strength, reason = self._generate_signal_by_count(
-            kline_1h, kline_15m
+            kline_1h, kline_15m, kline_5m
         )
 
         return {
@@ -228,7 +233,8 @@ class Big4TrendDetector:
             'strength': strength,
             'reason': reason,
             '1h_analysis': kline_1h,
-            '15m_analysis': kline_15m
+            '15m_analysis': kline_15m,
+            '5m_analysis': kline_5m
         }
 
     def _analyze_kline_power(self, cursor, symbol: str, timeframe: str, count: int) -> Dict:
@@ -416,7 +422,8 @@ class Big4TrendDetector:
                 level = 'MEDIUM'
 
         elif timeframe == '5m' and count == 3:
-            # 5M周期评分（不再用于Big4评分，仅用于破位检测）
+            # 5M周期反向评分（用于回调/反弹确认）
+            # 3根连续阴线或阳线
             if bullish_count == 3:
                 score = 10
                 level = 'STRONG'
@@ -450,16 +457,22 @@ class Big4TrendDetector:
     def _generate_signal_by_count(
         self,
         kline_1h: Dict,
-        kline_15m: Dict
+        kline_15m: Dict,
+        kline_5m: Dict = None
     ) -> Tuple[str, int, str]:
         """
         基于K线数量生成信号（简化版）
 
-        🔥 2026-02-21最新：移除5M反向加分逻辑，仅用1H+15M评分
+        🔥 2026-02-21最新：添加5M反向加分逻辑，用于回调/反弹确认
 
         权重分配:
         - 1H: 强势40分 / 中等30分
         - 15M: 强势30分 / 中等20分
+        - 5M反向: 3根反向(10分) / 2根反向(5分)
+
+        反向评分逻辑:
+        - 多头趋势(1H+15M>0) + 5M阴线(回调) → 加分（更好的入场时机）
+        - 空头趋势(1H+15M<0) + 5M阳线(反弹) → 加分（更好的入场时机）
 
         开仓条件:
         - 评分 >= 50分 → BULLISH/BEARISH
@@ -467,14 +480,15 @@ class Big4TrendDetector:
 
         可能的开仓组合:
         - 1H强势(40) + 15M强势(30) = 70分 ✅
-        - 1H强势(40) + 15M中等(20) = 60分 ✅
+        - 1H强势(40) + 15M中等(20) + 5M反向(10) = 70分 ✅
         - 1H中等(30) + 15M强势(30) = 60分 ✅
         - 1H中等(30) + 15M中等(20) = 50分 ✅
 
         返回: (信号方向, 强度0-100, 原因)
         """
-        # 计算总得分（1H+15M）
-        signal_score = kline_1h['score'] + kline_15m['score']
+        # 计算主趋势得分（1H+15M）
+        main_trend_score = kline_1h['score'] + kline_15m['score']
+        signal_score = main_trend_score
         reasons = []
 
         # 1H分析
@@ -492,6 +506,28 @@ class Big4TrendDetector:
             reasons.append(f"15M{kline_15m['level']}空头({kline_15m['bearish_count']}阴:{kline_15m['bullish_count']}阳,{kline_15m['score']}分)")
         else:
             reasons.append(f"15M中性({kline_15m['bullish_count']}阳:{kline_15m['bearish_count']}阴)")
+
+        # 🔥 5M反向评分（回调/反弹确认）
+        if kline_5m:
+            kline_5m_score = kline_5m['score']
+
+            # 反向加分逻辑
+            if main_trend_score > 0 and kline_5m_score < 0:
+                # 多头趋势 + 5M阴线回调 → 加分
+                reverse_bonus = abs(kline_5m_score)
+                signal_score += reverse_bonus
+                reasons.append(f"5M回调确认({kline_5m['bearish_count']}阴:{kline_5m['bullish_count']}阳,+{reverse_bonus}分)")
+            elif main_trend_score < 0 and kline_5m_score > 0:
+                # 空头趋势 + 5M阳线反弹 → 加分
+                reverse_bonus = abs(kline_5m_score)
+                signal_score -= reverse_bonus
+                reasons.append(f"5M反弹确认({kline_5m['bullish_count']}阳:{kline_5m['bearish_count']}阴,+{reverse_bonus}分)")
+            elif kline_5m_score != 0:
+                # 5M与主趋势同向，不加分（不是反向确认）
+                if kline_5m_score > 0:
+                    reasons.append(f"5M多头({kline_5m['bullish_count']}阳:{kline_5m['bearish_count']}阴,无加分)")
+                else:
+                    reasons.append(f"5M空头({kline_5m['bearish_count']}阴:{kline_5m['bullish_count']}阳,无加分)")
 
         # 判断信号（门槛50分）
         if signal_score >= 50:

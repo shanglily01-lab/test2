@@ -123,9 +123,9 @@ class BreakoutSignalBooster:
         """
         判断是否应该跳过反向信号
 
-        Big4否决权 (V5.2):
-        - 只要Big4方向确定（BULLISH/BEARISH），完全禁止逆向开仓
-        - 避免逆势开仓导致连续止损
+        Big4否决权 (V5.3):
+        - 当Big4强度>=70分时，完全禁止逆向开仓
+        - 强度<70分时，允许逆向开仓但评分会被扣分
 
         Args:
             signal_direction: 信号方向 ('LONG' | 'SHORT')
@@ -141,8 +141,12 @@ class BreakoutSignalBooster:
         if signal_direction == self.big4_direction:
             return False, None
 
-        # 🚫 反向信号：完全禁止（无论强度如何）
-        return True, f"🚫 Big4完全否决: {self.big4_direction}(强度{self.big4_strength:.0f}) 禁止{signal_direction}信号"
+        # 🚫 反向信号：只有强度>=70才完全禁止
+        if self.big4_strength >= 70:
+            return True, f"🚫 Big4完全否决: {self.big4_direction}(强度{self.big4_strength:.0f}>=70) 禁止{signal_direction}信号"
+
+        # 强度<70时，允许反向信号但会在boost_score中扣分
+        return False, None
 
     def get_status(self) -> Dict:
         """

@@ -768,21 +768,21 @@ class SmartDecisionBrain:
                     big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                     big4_strength = big4_result.get('signal_strength', 0)
 
-                    # Big4看空时，完全禁止开多
-                    if big4_signal == 'BEARISH' and signal_side == 'LONG':
-                        logger.debug(f"[BIG4-FILTER] {symbol} LONG信号被过滤（Big4看空）")
+                    # Big4看空时，只有强度>=70才完全禁止开多
+                    if big4_signal == 'BEARISH' and signal_side == 'LONG' and big4_strength >= 70:
+                        logger.debug(f"[BIG4-FILTER] {symbol} LONG信号被过滤（Big4看空强度{big4_strength:.0f}>=70）")
                         filtered_count += 1
                         continue
 
-                    # Big4看多时，完全禁止开空
-                    elif big4_signal == 'BULLISH' and signal_side == 'SHORT':
-                        logger.debug(f"[BIG4-FILTER] {symbol} SHORT信号被过滤（Big4看多）")
+                    # Big4看多时，只有强度>=70才完全禁止开空
+                    elif big4_signal == 'BULLISH' and signal_side == 'SHORT' and big4_strength >= 70:
+                        logger.debug(f"[BIG4-FILTER] {symbol} SHORT信号被过滤（Big4看多强度{big4_strength:.0f}>=70）")
                         filtered_count += 1
                         continue
 
                     # 方向一致时，应用Big4加分
-                    elif (big4_signal == 'BULLISH' and signal_side == 'LONG') or \
-                         (big4_signal == 'BEARISH' and signal_side == 'SHORT'):
+                    if (big4_signal == 'BULLISH' and signal_side == 'LONG') or \
+                       (big4_signal == 'BEARISH' and signal_side == 'SHORT'):
                         boost = min(20, int(big4_strength * 0.3))
                         result['score'] += boost
                         result['big4_boost'] = boost
