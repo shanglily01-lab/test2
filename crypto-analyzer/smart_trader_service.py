@@ -119,6 +119,15 @@ class SmartDecisionBrain:
             self.blacklist = list(new_blacklist)
             self.whitelist = list(new_whitelist)
 
+            # 重新加载Big4过滤器配置
+            from app.services.system_settings_loader import get_big4_filter_enabled
+            old_big4_enabled = self.big4_filter_config.get('enabled', True) if hasattr(self, 'big4_filter_config') else True
+            new_big4_enabled = get_big4_filter_enabled()
+
+            if old_big4_enabled != new_big4_enabled:
+                self.big4_filter_config = {'enabled': new_big4_enabled}
+                logger.info(f"[BIG4-CONFIG-UPDATE] Big4过滤器配置已更新: {'启用' if new_big4_enabled else '禁用'}")
+
             return len(blacklist_added) > 0 or len(blacklist_removed) > 0 or len(whitelist_added) > 0 or len(whitelist_removed) > 0
         except Exception as e:
             logger.error(f"[BLACKLIST-RELOAD-ERROR] 重新加载黑白名单失败: {e}")
@@ -804,8 +813,8 @@ class SmartDecisionBrain:
                 signal_side = result['side']
                 signal_score = result['score']
 
-                # 🔥 Big4方向过滤（提前应用）
-                if big4_result:
+                # 🔥 Big4方向过滤（提前应用）- 检查配置是否启用
+                if big4_result and self.big4_filter_config.get('enabled', True):
                     big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                     big4_strength = big4_result.get('signal_strength', 0)
 
