@@ -613,7 +613,7 @@ class SmartExitOptimizer:
             exit_plan = {
                 'symbol': position['symbol'],
                 'direction': position['direction'],
-                'entry_price': float(position['avg_entry_price']),
+                'entry_price': float(position['entry_price']),
                 'total_quantity': float(position['position_size']),
                 'monitoring_start_time': monitoring_start_time,
                 'planned_close_time': planned_close_time,
