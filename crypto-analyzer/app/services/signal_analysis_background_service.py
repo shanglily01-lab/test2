@@ -15,6 +15,7 @@ import os
 from dotenv import load_dotenv
 
 from app.services.signal_analysis_service import SignalAnalysisService
+from app.database.connection_pool import get_global_pool
 
 
 class SignalAnalysisBackgroundService:
@@ -40,6 +41,9 @@ class SignalAnalysisBackgroundService:
             'charset': 'utf8mb4',
             'cursorclass': None
         }
+
+        # 初始化数据库连接池
+        self.db_pool = get_global_pool(self.db_config, pool_size=3)
 
         # 加载配置
         with open(config_path, 'r', encoding='utf-8') as f:
@@ -100,70 +104,65 @@ class SignalAnalysisBackgroundService:
 
     def _save_to_database(self, report: dict):
         """保存分析结果到数据库（同步方法）"""
-        import pymysql
         import json
-
-        # 修复db_config，添加cursorclass
-        config = self.db_config.copy()
-        config['cursorclass'] = pymysql.cursors.DictCursor
-
-        conn = pymysql.connect(**config)
-        cursor = conn.cursor()
 
         stats = report['statistics']
         analysis_time = report['analysis_time']
 
-        try:
-            # 创建表（如果不存在）
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS signal_analysis_reports (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    analysis_time DATETIME NOT NULL,
-                    total_analyzed INT NOT NULL,
-                    has_position INT NOT NULL,
-                    should_trade INT NOT NULL,
-                    missed_opportunities INT NOT NULL,
-                    wrong_direction INT NOT NULL,
-                    correct_captures INT NOT NULL,
-                    capture_rate DECIMAL(5,2) NOT NULL,
-                    report_json TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    INDEX idx_analysis_time (analysis_time)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            ''')
+        # 使用连接池获取连接
+        with self.db_pool.get_connection() as conn:
+            cursor = conn.cursor()
 
-            # 序列化完整报告
-            report_json = json.dumps({
-                'top_opportunities': report['results'][:30],
-                'missed_opportunities': report['missed_opportunities'][:20]
-            }, ensure_ascii=False, default=str)
+            try:
+                # 创建表（如果不存在）
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS signal_analysis_reports (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        analysis_time DATETIME NOT NULL,
+                        total_analyzed INT NOT NULL,
+                        has_position INT NOT NULL,
+                        should_trade INT NOT NULL,
+                        missed_opportunities INT NOT NULL,
+                        wrong_direction INT NOT NULL,
+                        correct_captures INT NOT NULL,
+                        capture_rate DECIMAL(5,2) NOT NULL,
+                        report_json TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        INDEX idx_analysis_time (analysis_time)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                ''')
 
-            cursor.execute('''
-                INSERT INTO signal_analysis_reports
-                (analysis_time, total_analyzed, has_position, should_trade,
-                 missed_opportunities, wrong_direction, correct_captures, capture_rate, report_json)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ''', (
-                analysis_time,
-                stats['total_analyzed'],
-                stats['has_position'],
-                stats['should_trade'],
-                stats['missed'],
-                stats['wrong_direction'],
-                stats['correct_captures'],
-                stats['capture_rate'],
-                report_json
-            ))
+                # 序列化完整报告
+                report_json = json.dumps({
+                    'top_opportunities': report['results'][:30],
+                    'missed_opportunities': report['missed_opportunities'][:20]
+                }, ensure_ascii=False, default=str)
 
-            conn.commit()
-            logger.debug(f"✅ 分析报告已保存到数据库")
+                cursor.execute('''
+                    INSERT INTO signal_analysis_reports
+                    (analysis_time, total_analyzed, has_position, should_trade,
+                     missed_opportunities, wrong_direction, correct_captures, capture_rate, report_json)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ''', (
+                    analysis_time,
+                    stats['total_analyzed'],
+                    stats['has_position'],
+                    stats['should_trade'],
+                    stats['missed'],
+                    stats['wrong_direction'],
+                    stats['correct_captures'],
+                    stats['capture_rate'],
+                    report_json
+                ))
 
-        except Exception as e:
-            logger.error(f"保存报告到数据库失败: {e}")
-            conn.rollback()
-        finally:
-            cursor.close()
-            conn.close()
+                conn.commit()
+                logger.debug(f"✅ 分析报告已保存到数据库")
+
+            except Exception as e:
+                logger.error(f"保存报告到数据库失败: {e}")
+                conn.rollback()
+            finally:
+                cursor.close()
 
     async def run_loop(self, interval_hours: int = 6):
         """

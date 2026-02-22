@@ -8,6 +8,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import logging
+from app.database.connection_pool import get_global_pool
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ class RangeMarketDetector:
 
     def __init__(self, db_config: dict):
         self.db_config = db_config
+        self.db_pool = get_global_pool(db_config, pool_size=5)
 
     def is_ranging_market(self, big4_signal: str, big4_strength: float) -> bool:
         """
@@ -57,11 +59,11 @@ class RangeMarketDetector:
             区间信息字典或None
         """
         try:
-            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
-            cursor = conn.cursor()
+            with self.db_pool.get_connection() as conn:
+                cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # 获取历史K线数据
-            cursor.execute("""
+                # 获取历史K线数据
+                cursor.execute("""
                 SELECT
                     high_price, low_price, close_price, volume,
                     open_time
@@ -69,68 +71,67 @@ class RangeMarketDetector:
                 WHERE symbol = %s
                 AND timeframe = %s
                 AND exchange = 'binance_futures'
-                AND open_time >= %s
-                ORDER BY open_time ASC
-            """, (
-                symbol,
-                timeframe,
-                int((datetime.now() - timedelta(hours=lookback_hours)).timestamp() * 1000)
-            ))
+                    AND open_time >= %s
+                    ORDER BY open_time ASC
+                """, (
+                    symbol,
+                    timeframe,
+                    int((datetime.now() - timedelta(hours=lookback_hours)).timestamp() * 1000)
+                ))
 
-            klines = cursor.fetchall()
-            cursor.close()
-            conn.close()
+                klines = cursor.fetchall()
+                cursor.close()
 
-            if len(klines) < 10:
-                return None
+                if len(klines) < 10:
+                    return None
 
-            # 提取高低点
-            highs = np.array([float(k['high_price']) for k in klines])
-            lows = np.array([float(k['low_price']) for k in klines])
-            closes = np.array([float(k['close_price']) for k in klines])
+                # 提取高低点
+                highs = np.array([float(k['high_price']) for k in klines])
+                lows = np.array([float(k['low_price']) for k in klines])
+                closes = np.array([float(k['close_price']) for k in klines])
 
-            # 计算关键价位
-            recent_high = np.max(highs[-20:])  # 最近20根K线最高价
-            recent_low = np.min(lows[-20:])    # 最近20根K线最低价
-            current_price = closes[-1]
+                # 计算关键价位
+                recent_high = np.max(highs[-20:])  # 最近20根K线最高价
+                recent_low = np.min(lows[-20:])    # 最近20根K线最低价
+                current_price = closes[-1]
 
-            # 计算区间幅度
-            range_pct = ((recent_high - recent_low) / recent_low) * 100
+                # 计算区间幅度
+                range_pct = ((recent_high - recent_low) / recent_low) * 100
 
-            # 只有区间幅度在3-15%之间才认为是有效震荡区间
-            if range_pct < 3 or range_pct > 15:
-                return None
+                # 只有区间幅度在3-15%之间才认为是有效震荡区间
+                if range_pct < 3 or range_pct > 15:
+                    return None
 
-            # 计算支撑阻力位触及次数
-            support_touches = self._count_touches(lows, recent_low, tolerance=0.02)
-            resistance_touches = self._count_touches(highs, recent_high, tolerance=0.02)
+                # 计算支撑阻力位触及次数
+                support_touches = self._count_touches(lows, recent_low, tolerance=0.02)
+                resistance_touches = self._count_touches(highs, recent_high, tolerance=0.02)
 
-            # 至少要有2次触及才算有效
-            if support_touches < 2 or resistance_touches < 2:
-                return None
+                # 至少要有2次触及才算有效
+                if support_touches < 2 or resistance_touches < 2:
+                    return None
 
-            # 计算可信度分数
-            confidence = self._calculate_confidence(
-                support_touches,
-                resistance_touches,
-                range_pct,
-                current_price,
-                recent_low,
-                recent_high
-            )
+                # 计算可信度分数
+                confidence = self._calculate_confidence(
+                    support_touches,
+                    resistance_touches,
+                    range_pct,
+                    current_price,
+                    recent_low,
+                    recent_high
+                )
 
-            return {
-                'symbol': symbol,
-                'timeframe': timeframe,
-                'support_price': recent_low,
-                'resistance_price': recent_high,
-                'range_pct': round(range_pct, 2),
-                'current_price': current_price,
-                'support_touches': support_touches,
-                'resistance_touches': resistance_touches,
-                'confidence_score': round(confidence, 2),
-                'is_valid': confidence >= 60  # 可信度>=60才算有效
-            }
+                return {
+                    'symbol': symbol,
+                    'timeframe': timeframe,
+                    'support_price': recent_low,
+                    'resistance_price': recent_high,
+                    'range_pct': round(range_pct, 2),
+                    'current_price': current_price,
+                    'support_touches': support_touches,
+                    'resistance_touches': resistance_touches,
+                    'confidence_score': round(confidence, 2),
+                    'is_valid': confidence >= 60  # 可信度>=60才算有效
+                }
 
         except Exception as e:
             logger.error(f"检测支撑阻力区间失败 {symbol}: {e}")
@@ -217,46 +218,45 @@ class RangeMarketDetector:
             return None
 
         try:
-            conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor()
+            with self.db_pool.get_connection() as conn:
+                cursor = conn.cursor()
 
-            # 先停用该币种的旧区间
-            cursor.execute("""
-                UPDATE range_market_zones
-                SET is_active = FALSE
-                WHERE symbol = %s
-                AND timeframe = %s
-                AND is_active = TRUE
-            """, (zone['symbol'], zone['timeframe']))
+                # 先停用该币种的旧区间
+                cursor.execute("""
+                    UPDATE range_market_zones
+                    SET is_active = FALSE
+                    WHERE symbol = %s
+                    AND timeframe = %s
+                    AND is_active = TRUE
+                """, (zone['symbol'], zone['timeframe']))
 
-            # 插入新区间
-            cursor.execute("""
-                INSERT INTO range_market_zones (
-                    symbol, timeframe,
-                    support_price, resistance_price, range_pct,
-                    touch_count, confidence_score,
-                    is_active, detected_at, expires_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(),
-                    DATE_ADD(NOW(), INTERVAL 24 HOUR)
-                )
-            """, (
-                zone['symbol'],
-                zone['timeframe'],
-                zone['support_price'],
-                zone['resistance_price'],
-                zone['range_pct'],
-                zone['support_touches'] + zone['resistance_touches'],
-                zone['confidence_score']
-            ))
+                # 插入新区间
+                cursor.execute("""
+                    INSERT INTO range_market_zones (
+                        symbol, timeframe,
+                        support_price, resistance_price, range_pct,
+                        touch_count, confidence_score,
+                        is_active, detected_at, expires_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, TRUE, NOW(),
+                        DATE_ADD(NOW(), INTERVAL 24 HOUR)
+                    )
+                """, (
+                    zone['symbol'],
+                    zone['timeframe'],
+                    zone['support_price'],
+                    zone['resistance_price'],
+                    zone['range_pct'],
+                    zone['support_touches'] + zone['resistance_touches'],
+                    zone['confidence_score']
+                ))
 
-            zone_id = cursor.lastrowid
-            conn.commit()
-            cursor.close()
-            conn.close()
+                zone_id = cursor.lastrowid
+                conn.commit()
+                cursor.close()
 
-            logger.info(f"✅ 保存震荡区间: {zone['symbol']} [{zone['support_price']:.4f} - {zone['resistance_price']:.4f}] 可信度:{zone['confidence_score']}")
-            return zone_id
+                logger.info(f"✅ 保存震荡区间: {zone['symbol']} [{zone['support_price']:.4f} - {zone['resistance_price']:.4f}] 可信度:{zone['confidence_score']}")
+                return zone_id
 
         except Exception as e:
             logger.error(f"保存区间失败: {e}")
@@ -265,24 +265,23 @@ class RangeMarketDetector:
     def get_active_zone(self, symbol: str) -> Optional[Dict]:
         """获取该币种当前有效的震荡区间"""
         try:
-            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
-            cursor = conn.cursor()
+            with self.db_pool.get_connection() as conn:
+                cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            cursor.execute("""
-                SELECT *
-                FROM range_market_zones
-                WHERE symbol = %s
-                AND is_active = TRUE
-                AND expires_at > NOW()
-                ORDER BY confidence_score DESC, detected_at DESC
-                LIMIT 1
-            """, (symbol,))
+                cursor.execute("""
+                    SELECT *
+                    FROM range_market_zones
+                    WHERE symbol = %s
+                    AND is_active = TRUE
+                    AND expires_at > NOW()
+                    ORDER BY confidence_score DESC, detected_at DESC
+                    LIMIT 1
+                """, (symbol,))
 
-            zone = cursor.fetchone()
-            cursor.close()
-            conn.close()
+                zone = cursor.fetchone()
+                cursor.close()
 
-            return zone
+                return zone
 
         except Exception as e:
             logger.error(f"获取震荡区间失败: {e}")

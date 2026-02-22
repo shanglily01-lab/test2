@@ -22,6 +22,7 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import json
+from app.database.connection_pool import get_global_pool
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ class MarketRegimeDetector:
             db_config: 数据库配置
         """
         self.db_config = db_config
+        self.db_pool = get_global_pool(db_config, pool_size=5)
         # 状态缓存：记录每个交易对的上一次状态
         self._regime_cache = {}  # {symbol_timeframe: {'type': str, 'score': float, 'count': int}}
         # BTC行情缓存
@@ -745,30 +747,21 @@ class MarketRegimeDetector:
     def _get_kline_data(self, symbol: str, timeframe: str) -> List[Dict]:
         """从数据库获取K线数据"""
         try:
-            connection = pymysql.connect(
-                host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
-                user=self.db_config.get('user', 'root'),
-                password=self.db_config.get('password', ''),
-                database=self.db_config.get('database', 'binance-data'),
-                charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
-            )
-
-            with connection.cursor() as cursor:
+            with self.db_pool.get_connection() as connection:
+                cursor = connection.cursor(pymysql.cursors.DictCursor)
                 cursor.execute("""
                     SELECT open_price, high_price, low_price, close_price, volume, timestamp
                     FROM kline_data
                     WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
                     ORDER BY timestamp DESC
                     LIMIT 100
-                """, (symbol, timeframe))
-                rows = cursor.fetchall()
+                    """, (symbol, timeframe))
+                    rows = cursor.fetchall()
 
-            connection.close()
+                    cursor.close()
 
-            # 反转为时间正序
-            return list(reversed(rows)) if rows else []
+                # 反转为时间正序
+                return list(reversed(rows)) if rows else []
 
         except Exception as e:
             logger.error(f"获取K线数据失败: {e}")
@@ -777,64 +770,56 @@ class MarketRegimeDetector:
     def _save_regime(self, result: Dict) -> bool:
         """保存行情检测结果到数据库"""
         try:
-            connection = pymysql.connect(
-                host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
-                user=self.db_config.get('user', 'root'),
-                password=self.db_config.get('password', ''),
-                database=self.db_config.get('database', 'binance-data'),
-                charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
-            )
+            with self.db_pool.get_connection() as connection:
+                cursor = connection.cursor(pymysql.cursors.DictCursor)
 
-            with connection.cursor() as cursor:
                 # 检查是否需要记录行情切换
                 cursor.execute("""
-                    SELECT regime_type, regime_score FROM market_regime
-                    WHERE symbol = %s AND timeframe = %s
-                    ORDER BY detected_at DESC LIMIT 1
-                """, (result['symbol'], result['timeframe']))
-                last_regime = cursor.fetchone()
+                        SELECT regime_type, regime_score FROM market_regime
+                        WHERE symbol = %s AND timeframe = %s
+                        ORDER BY detected_at DESC LIMIT 1
+                    """, (result['symbol'], result['timeframe']))
+                    last_regime = cursor.fetchone()
 
-                # 如果行情类型发生变化，记录切换日志
-                if last_regime and last_regime['regime_type'] != result['regime_type']:
+                    # 如果行情类型发生变化，记录切换日志
+                    if last_regime and last_regime['regime_type'] != result['regime_type']:
+                        cursor.execute("""
+                            INSERT INTO market_regime_changes
+                            (symbol, timeframe, old_regime, new_regime, old_score, new_score, changed_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                        """, (
+                            result['symbol'],
+                            result['timeframe'],
+                            last_regime['regime_type'],
+                            result['regime_type'],
+                            last_regime['regime_score'],
+                            result['regime_score']
+                        ))
+                        logger.info(f"📊 {result['symbol']} [{result['timeframe']}] 行情切换: "
+                                   f"{last_regime['regime_type']} → {result['regime_type']}")
+
+                    # 插入新的行情记录
                     cursor.execute("""
-                        INSERT INTO market_regime_changes
-                        (symbol, timeframe, old_regime, new_regime, old_score, new_score, changed_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                        INSERT INTO market_regime
+                        (symbol, timeframe, regime_type, regime_score, ema_diff_pct,
+                         adx_value, trend_bars, volatility, details, detected_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     """, (
                         result['symbol'],
                         result['timeframe'],
-                        last_regime['regime_type'],
                         result['regime_type'],
-                        last_regime['regime_score'],
-                        result['regime_score']
+                        result['regime_score'],
+                        result.get('ema_diff_pct'),
+                        result.get('adx_value'),
+                        result.get('trend_bars'),
+                        result.get('volatility'),
+                        json.dumps(result.get('details', {}), ensure_ascii=False)
                     ))
-                    logger.info(f"📊 {result['symbol']} [{result['timeframe']}] 行情切换: "
-                               f"{last_regime['regime_type']} → {result['regime_type']}")
 
-                # 插入新的行情记录
-                cursor.execute("""
-                    INSERT INTO market_regime
-                    (symbol, timeframe, regime_type, regime_score, ema_diff_pct,
-                     adx_value, trend_bars, volatility, details, detected_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                """, (
-                    result['symbol'],
-                    result['timeframe'],
-                    result['regime_type'],
-                    result['regime_score'],
-                    result.get('ema_diff_pct'),
-                    result.get('adx_value'),
-                    result.get('trend_bars'),
-                    result.get('volatility'),
-                    json.dumps(result.get('details', {}), ensure_ascii=False)
-                ))
+                    connection.commit()
+                    cursor.close()
 
-                connection.commit()
-
-            connection.close()
-            return True
+                return True
 
         except Exception as e:
             logger.error(f"保存行情检测结果失败: {e}")
@@ -852,17 +837,8 @@ class MarketRegimeDetector:
             参数配置字典，如果不存在则返回None
         """
         try:
-            connection = pymysql.connect(
-                host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
-                user=self.db_config.get('user', 'root'),
-                password=self.db_config.get('password', ''),
-                database=self.db_config.get('database', 'binance-data'),
-                charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
-            )
-
-            with connection.cursor() as cursor:
+            with self.db_pool.get_connection() as connection:
+                cursor = connection.cursor(pymysql.cursors.DictCursor)
                 cursor.execute("""
                     SELECT enabled, params, description
                     FROM strategy_regime_params
@@ -891,17 +867,8 @@ class MarketRegimeDetector:
     def get_latest_regime(self, symbol: str, timeframe: str = '15m') -> Optional[Dict]:
         """获取最新的行情类型"""
         try:
-            connection = pymysql.connect(
-                host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
-                user=self.db_config.get('user', 'root'),
-                password=self.db_config.get('password', ''),
-                database=self.db_config.get('database', 'binance-data'),
-                charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
-            )
-
-            with connection.cursor() as cursor:
+            with self.db_pool.get_connection() as connection:
+                cursor = connection.cursor(pymysql.cursors.DictCursor)
                 cursor.execute("""
                     SELECT * FROM market_regime
                     WHERE symbol = %s AND timeframe = %s

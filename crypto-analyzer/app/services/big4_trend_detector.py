@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Tuple
 import pymysql
 from dotenv import load_dotenv
 import os
+from app.database.connection_pool import get_global_pool
 # 加载环境变量
 load_dotenv()
 
@@ -35,6 +36,7 @@ class Big4TrendDetector:
             'database': os.getenv('DB_NAME', 'binance-data'),
             'charset': 'utf8mb4'
         }
+        self.db_pool = get_global_pool(self.db_config, pool_size=5)
 
         # 🔥 紧急干预配置
         self.EMERGENCY_DETECTION_HOURS = 4  # 检测最近N小时的剧烈波动
@@ -74,7 +76,12 @@ class Big4TrendDetector:
             'timestamp': datetime
         }
         """
-        conn = pymysql.connect(**self.db_config)
+        with self.db_pool.get_connection() as conn:
+            results = self._detect_market_trend_internal(conn)
+        return results
+
+    def _detect_market_trend_internal(self, conn) -> Dict:
+        """Internal method with connection passed as parameter"""
         results = {}
 
         # 🔥 权重系统 (2026-02-12调整)
@@ -110,8 +117,6 @@ class Big4TrendDetector:
 
         # 🔥 紧急干预检测 (在分析完Big4后执行)
         emergency_intervention = self._detect_emergency_reversal(conn)
-
-        conn.close()
 
         # 🔥 综合判断 - 简化逻辑（2026-02-21）
         # 只看权重，不再要求BTC配合其他币种
@@ -1146,10 +1151,10 @@ class Big4TrendDetector:
         # 3. 保存反弹窗口到数据库 (独立于emergency intervention)
         if bounce_opportunity and bounce_symbols:
             try:
-                conn_write = pymysql.connect(**self.db_config)
-                cursor_write = conn_write.cursor()
+                with self.db_pool.get_connection() as conn_write:
+                    cursor_write = conn_write.cursor()
 
-                for symbol in bounce_symbols:
+                    for symbol in bounce_symbols:
                     # 获取该币种的1H K线信息
                     cursor_write.execute("""
                         SELECT open_price, close_price, low_price, high_price, open_time
@@ -1208,9 +1213,8 @@ class Big4TrendDetector:
 
                         logger.info(f"💾 反弹窗口已保存: {symbol} 下影{lower_shadow_pct:.1f}% 窗口至{window_end.strftime('%H:%M')}")
 
-                conn_write.commit()
-                cursor_write.close()
-                conn_write.close()
+                    conn_write.commit()
+                    cursor_write.close()
 
             except Exception as e:
                 logger.error(f"❌ 保存反弹窗口失败: {e}")
@@ -1223,10 +1227,10 @@ class Big4TrendDetector:
             expires_at = datetime.now() + timedelta(hours=self.BLOCK_DURATION_HOURS)
 
             try:
-                conn_write = pymysql.connect(**self.db_config)
-                cursor_write = conn_write.cursor()
+                with self.db_pool.get_connection() as conn_write:
+                    cursor_write = conn_write.cursor()
 
-                # 处理触底反弹 (优先级更高，先插入)
+                    # 处理触底反弹 (优先级更高，先插入)
                 if bottom_detected:
                     bottom_symbols = [s for s in trigger_symbols if '触底' in s]
                     bottom_details = f"触底反弹: {', '.join(bottom_symbols)}"
@@ -1260,9 +1264,8 @@ class Big4TrendDetector:
 
                     logger.warning(f"🚨 紧急干预已激活: {top_details} (禁止做多{self.BLOCK_DURATION_HOURS}小时)")
 
-                conn_write.commit()
-                cursor_write.close()
-                conn_write.close()
+                    conn_write.commit()
+                    cursor_write.close()
 
             except Exception as e:
                 logger.error(f"❌ 保存紧急干预失败: {e}")
@@ -1306,12 +1309,12 @@ class Big4TrendDetector:
     def _save_to_database(self, result: Dict):
         """保存检测结果到数据库"""
         try:
-            conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor()
+            with self.db_pool.get_connection() as conn:
+                cursor = conn.cursor()
 
-            details = result['details']
+                details = result['details']
 
-            cursor.execute("""
+                cursor.execute("""
                 INSERT INTO big4_trend_history (
                     overall_signal, signal_strength, bullish_count, bearish_count, recommendation,
                     btc_signal, btc_strength, btc_reason, btc_1h_dominant, btc_15m_dominant,
@@ -1353,15 +1356,14 @@ class Big4TrendDetector:
                 details['SOL/USDT']['signal'],
                 details['SOL/USDT']['strength'],
                 details['SOL/USDT']['reason'],
-                details['SOL/USDT']['1h_analysis']['dominant'],
-                details['SOL/USDT']['15m_analysis']['dominant']
-            ))
+                    details['SOL/USDT']['1h_analysis']['dominant'],
+                    details['SOL/USDT']['15m_analysis']['dominant']
+                ))
 
-            conn.commit()
-            cursor.close()
-            conn.close()
+                conn.commit()
+                cursor.close()
 
-            logger.info(f"✅ Big4趋势已保存: {result['overall_signal']} (强度: {result['signal_strength']:.0f})")
+                logger.info(f"✅ Big4趋势已保存: {result['overall_signal']} (强度: {result['signal_strength']:.0f})")
 
         except Exception as e:
             logger.error(f"❌ 保存Big4趋势失败: {e}")

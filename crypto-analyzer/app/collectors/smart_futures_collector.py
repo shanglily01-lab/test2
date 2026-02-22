@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 import pymysql
 from decimal import Decimal
+from app.database.connection_pool import get_global_pool
 
 
 class SmartFuturesCollector:
@@ -35,6 +36,9 @@ class SmartFuturesCollector:
             db_config: 数据库配置
         """
         self.db_config = db_config
+
+        # 初始化数据库连接池
+        self.db_pool = get_global_pool(db_config, pool_size=5)
 
         # U本位合约API
         self.usdt_base_url = "https://fapi.binance.com"
@@ -53,9 +57,6 @@ class SmartFuturesCollector:
 
         logger.info("✅ 初始化智能合约数据采集器（分层采集策略，支持U本位+币本位）")
 
-    def _get_connection(self):
-        """获取数据库连接"""
-        return pymysql.connect(**self.db_config, autocommit=False)
 
     def should_collect_interval(self, interval: str) -> bool:
         """
@@ -308,60 +309,60 @@ class SmartFuturesCollector:
         if not klines:
             return 0
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        # 使用连接池获取连接
+        with self.db_pool.get_connection() as conn:
+            cursor = conn.cursor()
 
-        try:
-            sql = """
-                INSERT INTO kline_data (
-                    symbol, exchange, timeframe, open_time, close_time, timestamp,
-                    open_price, high_price, low_price, close_price,
-                    volume, quote_volume, number_of_trades,
-                    taker_buy_base_volume, taker_buy_quote_volume,
-                    created_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s,
-                    %s, %s, %s,
-                    %s, %s,
-                    NOW()
-                )
-                ON DUPLICATE KEY UPDATE
-                    open_price = VALUES(open_price),
-                    high_price = VALUES(high_price),
-                    low_price = VALUES(low_price),
-                    close_price = VALUES(close_price),
-                    volume = VALUES(volume),
-                    quote_volume = VALUES(quote_volume),
-                    number_of_trades = VALUES(number_of_trades),
-                    taker_buy_base_volume = VALUES(taker_buy_base_volume),
-                    taker_buy_quote_volume = VALUES(taker_buy_quote_volume)
-            """
+            try:
+                sql = """
+                    INSERT INTO kline_data (
+                        symbol, exchange, timeframe, open_time, close_time, timestamp,
+                        open_price, high_price, low_price, close_price,
+                        volume, quote_volume, number_of_trades,
+                        taker_buy_base_volume, taker_buy_quote_volume,
+                        created_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s,
+                        NOW()
+                    )
+                    ON DUPLICATE KEY UPDATE
+                        open_price = VALUES(open_price),
+                        high_price = VALUES(high_price),
+                        low_price = VALUES(low_price),
+                        close_price = VALUES(close_price),
+                        volume = VALUES(volume),
+                        quote_volume = VALUES(quote_volume),
+                        number_of_trades = VALUES(number_of_trades),
+                        taker_buy_base_volume = VALUES(taker_buy_base_volume),
+                        taker_buy_quote_volume = VALUES(taker_buy_quote_volume)
+                """
 
-            values = []
-            for k in klines:
-                # 确定exchange类型: U本位或币本位
-                exchange = 'binance_coin_futures' if k.get('contract_type') == 'coin_futures' else 'binance_futures'
-                values.append((
-                    k['symbol'], exchange, k['timeframe'], k['open_time'], k['close_time'], k['timestamp'],
-                    float(k['open_price']), float(k['high_price']), float(k['low_price']), float(k['close_price']),
-                    float(k['volume']), float(k['quote_volume']), k['number_of_trades'],
-                    float(k['taker_buy_base_volume']), float(k['taker_buy_quote_volume'])
-                ))
+                values = []
+                for k in klines:
+                    # 确定exchange类型: U本位或币本位
+                    exchange = 'binance_coin_futures' if k.get('contract_type') == 'coin_futures' else 'binance_futures'
+                    values.append((
+                        k['symbol'], exchange, k['timeframe'], k['open_time'], k['close_time'], k['timestamp'],
+                        float(k['open_price']), float(k['high_price']), float(k['low_price']), float(k['close_price']),
+                        float(k['volume']), float(k['quote_volume']), k['number_of_trades'],
+                        float(k['taker_buy_base_volume']), float(k['taker_buy_quote_volume'])
+                    ))
 
-            cursor.executemany(sql, values)
-            conn.commit()
+                cursor.executemany(sql, values)
+                conn.commit()
 
-            inserted = cursor.rowcount
-            return inserted
+                inserted = cursor.rowcount
+                return inserted
 
-        except Exception as e:
-            conn.rollback()
-            logger.error(f"保存K线数据失败: {e}")
-            return 0
-        finally:
-            cursor.close()
-            conn.close()
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"保存K线数据失败: {e}")
+                return 0
+            finally:
+                cursor.close()
 
     def get_trading_symbols(self) -> List[str]:
         """

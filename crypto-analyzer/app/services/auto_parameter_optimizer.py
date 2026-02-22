@@ -15,6 +15,7 @@ from typing import Dict, List, Optional
 from loguru import logger
 import pymysql
 import json
+from app.database.connection_pool import get_global_pool
 
 
 class AutoParameterOptimizer:
@@ -28,7 +29,7 @@ class AutoParameterOptimizer:
             db_config: 数据库配置
         """
         self.db_config = db_config
-        self.connection = None
+        self.db_pool = get_global_pool(db_config, pool_size=5)
 
         # 当前参数（初始值）
         self.current_params = {
@@ -61,19 +62,6 @@ class AutoParameterOptimizer:
 
         logger.info("✅ 自动参数优化器已初始化")
 
-    def _get_connection(self):
-        """获取数据库连接"""
-        if self.connection is None or not self.connection.open:
-            self.connection = pymysql.connect(
-                host=self.db_config.get('host', 'localhost'),
-                port=self.db_config.get('port', 3306),
-                user=self.db_config.get('user', 'root'),
-                password=self.db_config.get('password', ''),
-                database=self.db_config.get('database', 'binance-data'),
-                charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
-            )
-        return self.connection
 
     async def optimize_based_on_review(self, review_date: str) -> Dict[str, any]:
         """
@@ -125,22 +113,22 @@ class AutoParameterOptimizer:
         Returns:
             复盘报告字典
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self.db_pool.get_connection() as conn:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        cursor.execute("""
-            SELECT report_json
-            FROM daily_review_reports
-            WHERE date = %s
-        """, (review_date,))
+            cursor.execute("""
+                SELECT report_json
+                FROM daily_review_reports
+                WHERE date = %s
+            """, (review_date,))
 
-        result = cursor.fetchone()
-        cursor.close()
+            result = cursor.fetchone()
+            cursor.close()
 
-        if result:
-            return json.loads(result['report_json'])
+            if result:
+                return json.loads(result['report_json'])
 
-        return None
+            return None
 
     def _analyze_performance_metrics(self, report: Dict) -> Dict[str, float]:
         """
@@ -306,54 +294,54 @@ class AutoParameterOptimizer:
 
         try:
             # 创建参数调整历史表
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS parameter_adjustments (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    adjustment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    param_group VARCHAR(100),
-                    param_name VARCHAR(100),
-                    old_value VARCHAR(100),
-                    new_value VARCHAR(100),
-                    reason TEXT,
-                    applied BOOLEAN DEFAULT TRUE
-                )
-            """)
-
-            for adj in adjustments:
-                # 更新内存中的参数
-                if adj['param_group'] in self.current_params:
-                    if adj['param_name'] in self.current_params[adj['param_group']]:
-                        self.current_params[adj['param_group']][adj['param_name']] = adj['new_value']
-
-                # 记录到数据库
                 cursor.execute("""
-                    INSERT INTO parameter_adjustments
-                    (param_group, param_name, old_value, new_value, reason)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (
-                    adj['param_group'],
-                    adj['param_name'],
-                    str(adj['old_value']),
-                    str(adj['new_value']),
-                    adj['reason']
-                ))
+                    CREATE TABLE IF NOT EXISTS parameter_adjustments (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        adjustment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        param_group VARCHAR(100),
+                        param_name VARCHAR(100),
+                        old_value VARCHAR(100),
+                        new_value VARCHAR(100),
+                        reason TEXT,
+                        applied BOOLEAN DEFAULT TRUE
+                    )
+                """)
 
-                logger.info(
-                    f"✏️  调整参数: {adj['param_group']}.{adj['param_name']} | "
-                    f"{adj['old_value']} → {adj['new_value']} | "
-                    f"原因: {adj['reason']}"
-                )
+                for adj in adjustments:
+                    # 更新内存中的参数
+                    if adj['param_group'] in self.current_params:
+                        if adj['param_name'] in self.current_params[adj['param_group']]:
+                            self.current_params[adj['param_group']][adj['param_name']] = adj['new_value']
 
-            conn.commit()
+                    # 记录到数据库
+                    cursor.execute("""
+                        INSERT INTO parameter_adjustments
+                        (param_group, param_name, old_value, new_value, reason)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (
+                        adj['param_group'],
+                        adj['param_name'],
+                        str(adj['old_value']),
+                        str(adj['new_value']),
+                        adj['reason']
+                    ))
 
-            # 保存当前参数到文件（可选）
-            self._save_params_to_file()
+                    logger.info(
+                        f"✏️  调整参数: {adj['param_group']}.{adj['param_name']} | "
+                        f"{adj['old_value']} → {adj['new_value']} | "
+                        f"原因: {adj['reason']}"
+                    )
 
-        except Exception as e:
-            logger.error(f"应用参数调整失败: {e}")
-            conn.rollback()
-        finally:
-            cursor.close()
+                conn.commit()
+
+                # 保存当前参数到文件（可选）
+                self._save_params_to_file()
+
+            except Exception as e:
+                logger.error(f"应用参数调整失败: {e}")
+                conn.rollback()
+            finally:
+                cursor.close()
 
     def _save_params_to_file(self):
         """保存参数到文件"""
@@ -387,10 +375,10 @@ class AutoParameterOptimizer:
         Returns:
             调整历史列表
         """
-        conn = self._get_connection()
-        cursor = conn.cursor()
+        with self.db_pool.get_connection() as conn:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-        cursor.execute("""
+            cursor.execute("""
             SELECT *
             FROM parameter_adjustments
             WHERE adjustment_date >= DATE_SUB(NOW(), INTERVAL %s DAY)
