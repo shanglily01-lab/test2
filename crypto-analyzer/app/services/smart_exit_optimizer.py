@@ -296,7 +296,7 @@ class SmartExitOptimizer:
                         rest_price = float(data['price'])
 
                     if rest_price > 0:
-                        logger.info(f"{symbol} 降级到REST API价格: {rest_price}")
+                        logger.debug(f"{symbol} 降级到REST API价格: {rest_price}")
                         return Decimal(str(rest_price))
         except Exception as e:
             logger.warning(f"{symbol} REST API获取失败: {e}")
