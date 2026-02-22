@@ -955,7 +955,9 @@ class SmartExitOptimizer:
     async def _get_http_session(self):
         """获取或创建HTTP session（复用以提升性能）"""
         if self._http_session is None or self._http_session.closed:
-            self._http_session = aiohttp.ClientSession()
+            # 创建连接器，限制并发连接数避免过载
+            connector = aiohttp.TCPConnector(limit=50, limit_per_host=10)
+            self._http_session = aiohttp.ClientSession(connector=connector)
         return self._http_session
 
     async def _fetch_latest_kline(self, symbol: str, interval: str, limit: int = 1):
@@ -985,7 +987,7 @@ class SmartExitOptimizer:
             async with session.get(
                 api_url,
                 params={'symbol': symbol_for_api, 'interval': interval, 'limit': limit},
-                timeout=aiohttp.ClientTimeout(total=3)
+                timeout=aiohttp.ClientTimeout(total=10)  # 增加超时时间到10秒
             ) as response:
                 if response.status == 200:
                     data = await response.json()
@@ -1003,22 +1005,14 @@ class SmartExitOptimizer:
                             })
                         return klines
                 else:
-                    # HTTP错误：交易对不存在或API错误，使用DEBUG级别避免刷屏
-                    logger.debug(f"获取{symbol} {interval} K线失败: HTTP {response.status}")
+                    # 记录非200状态码
+                    logger.warning(f"获取{symbol} {interval} K线失败: HTTP {response.status}")
                     return None
         except asyncio.TimeoutError:
-            # 超时错误：网络问题，使用DEBUG级别
-            logger.debug(f"获取{symbol} {interval} K线超时")
+            logger.warning(f"获取{symbol} {interval} K线超时（10秒）")
             return None
         except Exception as e:
-            # 其他异常：可能是严重问题，使用WARNING级别
-            error_str = str(e)
-            if 'Invalid symbol' in error_str or 'symbol' in error_str.lower():
-                # 交易对不存在，使用DEBUG级别
-                logger.debug(f"获取{symbol} {interval} K线失败: 交易对不存在或格式错误")
-            else:
-                # 其他未知错误，使用WARNING级别
-                logger.warning(f"获取{symbol} {interval} K线失败: {e}")
+            logger.warning(f"获取{symbol} {interval} K线失败: {type(e).__name__}: {e}")
             return None
 
     async def _check_5m_no_improvement(self, position_id: int, position_side: str) -> bool:
