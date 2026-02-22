@@ -157,8 +157,8 @@ class KlinePullbackEntryExecutor:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT close FROM futures_klines
-                WHERE symbol = %s AND interval = '5m' AND exchange = 'binance_futures'
+                SELECT close_price FROM kline_data
+                WHERE symbol = %s AND timeframe = '5m'
                 ORDER BY open_time DESC
                 LIMIT 1
             """, (symbol,))
@@ -301,14 +301,16 @@ class KlinePullbackEntryExecutor:
                 base_time = signal_time + timedelta(minutes=self.primary_window_minutes)
 
             # 获取基准时间后的最近2根K线
+            # open_time是毫秒时间戳，需要转换
+            base_timestamp = int(base_time.timestamp() * 1000)
             cursor.execute("""
                 SELECT open_time, open_price, close_price
-                FROM futures_klines
+                FROM kline_data
                 WHERE symbol = %s AND timeframe = %s
                 AND open_time >= %s
                 ORDER BY open_time DESC
                 LIMIT 2
-            """, (symbol, timeframe, base_time))
+            """, (symbol, timeframe, base_timestamp))
 
             klines = cursor.fetchall()
             conn.close()
