@@ -91,27 +91,25 @@ class CoinFuturesKlineFetcher:
             # 准备插入数据
             insert_count = 0
             for candle in ohlcv:
-                timestamp, open_price, high, low, close, volume = candle
+                open_time, open_price, high, low, close, volume = candle
 
                 # 转换时间戳为datetime
-                dt = datetime.fromtimestamp(timestamp / 1000)
+                dt = datetime.fromtimestamp(open_time / 1000)
 
                 # 插入数据（使用ON DUPLICATE KEY UPDATE避免重复）
                 cursor.execute("""
                     INSERT INTO kline_data
-                    (symbol, timeframe, timestamp, open, high, low, close, volume, account_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (symbol, exchange, timeframe, open_time, timestamp, open_price, high_price, low_price, close_price, volume, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON DUPLICATE KEY UPDATE
-                        open = VALUES(open),
-                        high = VALUES(high),
-                        low = VALUES(low),
-                        close = VALUES(close),
-                        volume = VALUES(volume),
-                        updated_at = CURRENT_TIMESTAMP
+                        open_price = VALUES(open_price),
+                        high_price = VALUES(high_price),
+                        low_price = VALUES(low_price),
+                        close_price = VALUES(close_price),
+                        volume = VALUES(volume)
                 """, (
-                    symbol, timeframe, dt,
-                    open_price, high, low, close, volume,
-                    3  # 币本位账户ID
+                    symbol, 'binance', timeframe, open_time, dt,
+                    open_price, high, low, close, volume
                 ))
                 insert_count += 1
 
