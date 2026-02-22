@@ -275,7 +275,7 @@ class SmartDecisionBrain:
             # 🔥 修复: 初始化score_v2_service（异常情况下也需要）
             try:
                 self.score_v2_service = SignalScoreV2Service(
-                    db_config=db_config,
+                    db_config=self.db_config,
                     score_config={'enabled': True, 'min_symbol_score': 15}
                 )
                 logger.info(f"   ✅ V2评分过滤服务已初始化（降级模式）")
