@@ -92,17 +92,9 @@ class SmartDecisionBrain:
             old_blacklist = set(self.blacklist) if hasattr(self, 'blacklist') else set()
             new_blacklist = set([row['symbol'] for row in blacklist_rows]) if blacklist_rows else set()
 
-            # 重新加载扫描池（rating_level <= 2）
-            cursor.execute("""
-                SELECT symbol FROM trading_symbol_rating
-                WHERE rating_level <= 2
-                ORDER BY rating_level, symbol
-            """)
-            whitelist_rows = cursor.fetchall()
-            db_whitelist = set([row['symbol'] for row in whitelist_rows]) if whitelist_rows else set()
-
+            # 扫描池 = config.yaml 的所有交易对（不过滤）
             old_whitelist = set(self.whitelist) if hasattr(self, 'whitelist') else set()
-            new_whitelist = all_symbols & db_whitelist  # config.yaml交易对 AND 数据库扫描池
+            new_whitelist = all_symbols
 
             cursor.close()
 
@@ -115,7 +107,7 @@ class SmartDecisionBrain:
             if blacklist_removed:
                 logger.info(f"[BLACKLIST-UPDATE] ➖ 移除黑名单: {', '.join(sorted(blacklist_removed))}")
 
-            # 记录扫描池变化
+            # 记录扫描池变化（config.yaml变化）
             whitelist_added = new_whitelist - old_whitelist
             whitelist_removed = old_whitelist - new_whitelist
 
@@ -205,19 +197,8 @@ class SmartDecisionBrain:
                 # 如果表不存在，使用空字典
                 self.signal_blacklist = {}
 
-            # 6. 从数据库加载扫描池（rating_level <= 2 的交易对，包含白名单+黑名单1-2级）
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT symbol FROM trading_symbol_rating
-                WHERE rating_level <= 2
-                ORDER BY rating_level, symbol
-            """)
-            whitelist_rows = cursor.fetchall()
-            db_whitelist = [row['symbol'] for row in whitelist_rows] if whitelist_rows else []
-            cursor.close()
-
-            # 只扫描既在config.yaml中又在数据库扫描池中的交易对
-            self.whitelist = [s for s in all_symbols if s in db_whitelist]
+            # 6. 扫描池 = config.yaml 中的所有交易对
+            self.whitelist = all_symbols
 
             logger.info(f"✅ 从数据库加载配置:")
             logger.info(f"   总交易对: {len(all_symbols)}")
