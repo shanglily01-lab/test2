@@ -962,6 +962,13 @@ class CoinFuturesDecisionBrain:
             # ========== 移除1D信号 (4小时持仓不需要1D趋势) ==========
             # 已移除: trend_1d_bull, trend_1d_bear
 
+            # 打印V1评分日志（无论是否达标）
+            max_score = max(long_score, short_score)
+            if max_score > 0:
+                signal_names = ', '.join(signal_components.keys()) if signal_components else '无'
+                达标状态 = '✅达标' if max_score >= self.threshold else f'❌未达标(阈值{self.threshold})'
+                logger.info(f"📊 {symbol:<12} V1评分 多【{long_score}分】空【{short_score}分】信号【{signal_names}】 {达标状态}")
+
             # 选择得分更高的方向 (只要达到阈值就可以)
             if long_score >= self.threshold or short_score >= self.threshold:
                 if long_score >= short_score:
