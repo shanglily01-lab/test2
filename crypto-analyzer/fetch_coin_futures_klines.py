@@ -43,17 +43,21 @@ class CoinFuturesKlineFetcher:
         config = load_config()
         self.db_config = config['database']['mysql']
 
-        # 币本位合约交易对列表（USD结尾，不是USDT）
-        # 注意：币本位使用USD而不是USDT
-        self.symbols = [
-            'BTC/USD', 'ETH/USD', 'BNB/USD', 'SOL/USD',
-            'XRP/USD', 'ADA/USD', 'DOGE/USD', 'AVAX/USD',
-            'DOT/USD', 'LINK/USD', 'ATOM/USD', 'UNI/USD',
-            'LTC/USD', 'BCH/USD', 'FIL/USD', 'NEAR/USD',
-            'AAVE/USD', 'ALGO/USD', 'APT/USD', 'ETC/USD',
-            'OP/USD', 'SAND/USD', 'SUI/USD', 'TRX/USD',
-            'WIF/USD', 'WLD/USD', 'XLM/USD', 'ENS/USD'
-        ]
+        # 从config.yaml读取币本位交易对列表
+        coin_symbols = config.get('coin_futures_symbols', [])
+
+        # 转换格式：BTCUSD_PERP -> BTC/USD
+        self.symbols = []
+        for symbol in coin_symbols:
+            # 移除 _PERP 后缀
+            base_symbol = symbol.replace('_PERP', '')
+            # 插入斜杠：BTCUSD -> BTC/USD
+            # 假设基础货币是3个字符（BTC/ETH等）
+            if len(base_symbol) >= 6:
+                formatted = f"{base_symbol[:-3]}/{base_symbol[-3:]}"
+                self.symbols.append(formatted)
+
+        logger.info(f"📊 从config.yaml加载 {len(self.symbols)} 个币本位交易对")
 
         # 初始化交易所
         self.exchange = None
