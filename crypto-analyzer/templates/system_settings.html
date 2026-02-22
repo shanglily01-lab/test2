@@ -409,8 +409,8 @@ Loading...
                     document.getElementById('big4Toggle').checked = big4Enabled;
                     document.getElementById('big4Status').textContent = big4Enabled ? '✅ 已启用' : '❌ 已禁用';
 
-                    // 更新当前配置显示
-                    document.getElementById('currentSettings').textContent = JSON.stringify(data, null, 2);
+                    // 获取交易方向和交易服务状态，合并到配置显示
+                    await updateCurrentSettingsDisplay(data);
                 } else {
                     showAlert('加载配置失败', 'danger');
                 }
@@ -423,6 +423,39 @@ Loading...
 
             // 加载交易服务状态
             loadTradingServices();
+        }
+
+        // 更新当前配置状态显示（合并所有配置）
+        async function updateCurrentSettingsDisplay(systemSettings) {
+            try {
+                // 获取交易方向设置
+                const directionResponse = await fetch(`${API_BASE}/trading-direction`);
+                const directionResult = await directionResponse.json();
+
+                // 获取交易服务状态
+                const servicesResponse = await fetch(`${API_BASE}/trading-services`);
+                const servicesResult = await servicesResponse.json();
+
+                // 合并所有配置
+                const allSettings = {
+                    ...systemSettings,
+                    trading_direction: directionResult.success ? {
+                        allow_long: { value: directionResult.data.allow_long.value, description: '允许做多' },
+                        allow_short: { value: directionResult.data.allow_short.value, description: '允许做空' }
+                    } : {},
+                    trading_services: servicesResult.success ? {
+                        usdt_futures: { value: servicesResult.data.usdt_futures_enabled, description: 'U本位合约交易' },
+                        coin_futures: { value: servicesResult.data.coin_futures_enabled, description: '币本位合约交易' },
+                        live_trading: { value: servicesResult.data.live_trading_enabled, description: '实盘合约服务' }
+                    } : {}
+                };
+
+                // 更新显示
+                document.getElementById('currentSettings').textContent = JSON.stringify(allSettings, null, 2);
+            } catch (error) {
+                // 如果获取失败，只显示系统设置
+                document.getElementById('currentSettings').textContent = JSON.stringify(systemSettings, null, 2);
+            }
         }
 
         // 加载交易方向设置
