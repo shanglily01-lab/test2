@@ -732,7 +732,7 @@ class CoinFuturesDecisionBrain:
             klines_15m = self.load_klines(symbol, '15m', 96)  # 24小时的15分钟K线
 
             if len(klines_1d) < 30 or len(klines_1h) < 72 or len(klines_15m) < 48:  # 至少需要72小时(3天)数据
-                logger.debug(f"⚠️ {symbol:<12} K线数据不足 1D:{len(klines_1d)}/30 1H:{len(klines_1h)}/72 15M:{len(klines_15m)}/48")
+                logger.info(f"⚠️ {symbol:<12} K线数据不足 1D:{len(klines_1d)}/30 1H:{len(klines_1h)}/72 15M:{len(klines_15m)}/48")
                 return None
 
             current = klines_1h[-1]['close']
