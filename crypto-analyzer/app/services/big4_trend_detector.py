@@ -147,8 +147,18 @@ class Big4TrendDetector:
         elif sol_signal == 'BEARISH':
             bearish_coins.append('SOL')
 
-        # 🔥 综合判断：只看权重>45%
-        if bullish_weight > 0.45:
+        # 🔥 新逻辑：3个同向=强趋势，禁止反向开仓
+        if bullish_count >= 3:
+            overall_signal = 'STRONG_BULLISH'
+            recommendation = f"{'+'.join(bullish_coins)}看涨({bullish_count}/4，权重{bullish_weight*100:.0f}%)，🚫禁止做空"
+            emergency_intervention['block_short'] = True
+            emergency_intervention['details'] = f"Big4中{bullish_count}个看涨，强多头趋势"
+        elif bearish_count >= 3:
+            overall_signal = 'STRONG_BEARISH'
+            recommendation = f"{'+'.join(bearish_coins)}看跌({bearish_count}/4，权重{bearish_weight*100:.0f}%)，🚫禁止做多"
+            emergency_intervention['block_long'] = True
+            emergency_intervention['details'] = f"Big4中{bearish_count}个看跌，强空头趋势"
+        elif bullish_weight > 0.45:
             overall_signal = 'BULLISH'
             recommendation = f"{'+'.join(bullish_coins)}看涨(权重{bullish_weight*100:.0f}%)，建议优先考虑多单机会"
         elif bearish_weight > 0.45:
@@ -158,10 +168,10 @@ class Big4TrendDetector:
             overall_signal = 'NEUTRAL'
             recommendation = f"趋势不明(多:{bullish_weight*100:.0f}% 空:{bearish_weight*100:.0f}%)，建议观望"
 
-        # 🔥 如果紧急干预激活，覆盖recommendation
-        if emergency_intervention['block_long']:
+        # 🔥 如果紧急干预激活，覆盖recommendation（触顶/触底优先级最高）
+        if emergency_intervention.get('block_long') and bullish_count < 3:
             recommendation = f"⚠️ 触顶反转风险 - 禁止做多 | {recommendation}"
-        if emergency_intervention['block_short']:
+        if emergency_intervention.get('block_short') and bearish_count < 3:
             recommendation = f"⚠️ 触底反弹风险 - 禁止做空 | {recommendation}"
 
         # 已按权重累加，不需要再除以数量（权重总和=1.0）
