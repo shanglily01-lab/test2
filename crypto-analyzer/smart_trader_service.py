@@ -70,35 +70,66 @@ class SmartDecisionBrain:
         # V2评分服务已在_load_config()中初始化
 
     def _reload_blacklist(self):
-        """重新加载黑名单（运行时调用）"""
+        """重新加载黑名单和白名单（每5分钟运行）"""
         try:
+            import yaml
+
+            # 重新加载config.yaml中的交易对列表
+            with open('config.yaml', 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                all_symbols = set(config.get('symbols', []))
+
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # 重新加载黑名单标识（rating_level 1-2，用于小仓位）
             cursor.execute("""
                 SELECT symbol FROM trading_symbol_rating
-                WHERE rating_level >= 1
+                WHERE rating_level >= 1 AND rating_level < 3
                 ORDER BY rating_level DESC, updated_at DESC
             """)
             blacklist_rows = cursor.fetchall()
             old_blacklist = set(self.blacklist) if hasattr(self, 'blacklist') else set()
             new_blacklist = set([row['symbol'] for row in blacklist_rows]) if blacklist_rows else set()
 
-            # 记录黑名单变化
-            added = new_blacklist - old_blacklist
-            removed = old_blacklist - new_blacklist
+            # 重新加载扫描池（rating_level <= 2）
+            cursor.execute("""
+                SELECT symbol FROM trading_symbol_rating
+                WHERE rating_level <= 2
+                ORDER BY rating_level, symbol
+            """)
+            whitelist_rows = cursor.fetchall()
+            db_whitelist = set([row['symbol'] for row in whitelist_rows]) if whitelist_rows else set()
 
-            if added:
-                logger.info(f"[BLACKLIST-UPDATE] ➕ 新增黑名单: {', '.join(added)}")
-            if removed:
-                logger.info(f"[BLACKLIST-UPDATE] ➖ 移除黑名单: {', '.join(removed)}")
+            old_whitelist = set(self.whitelist) if hasattr(self, 'whitelist') else set()
+            new_whitelist = all_symbols & db_whitelist  # config.yaml交易对 AND 数据库扫描池
 
-            self.blacklist = list(new_blacklist)
             cursor.close()
 
-            return len(added) > 0 or len(removed) > 0  # 返回是否有变化
+            # 记录黑名单变化
+            blacklist_added = new_blacklist - old_blacklist
+            blacklist_removed = old_blacklist - new_blacklist
+
+            if blacklist_added:
+                logger.info(f"[BLACKLIST-UPDATE] ➕ 新增黑名单: {', '.join(sorted(blacklist_added))}")
+            if blacklist_removed:
+                logger.info(f"[BLACKLIST-UPDATE] ➖ 移除黑名单: {', '.join(sorted(blacklist_removed))}")
+
+            # 记录扫描池变化
+            whitelist_added = new_whitelist - old_whitelist
+            whitelist_removed = old_whitelist - new_whitelist
+
+            if whitelist_added:
+                logger.info(f"[WHITELIST-UPDATE] ➕ 新增扫描池: {', '.join(sorted(whitelist_added))}")
+            if whitelist_removed:
+                logger.info(f"[WHITELIST-UPDATE] ➖ 移除扫描池: {', '.join(sorted(whitelist_removed))}")
+
+            self.blacklist = list(new_blacklist)
+            self.whitelist = list(new_whitelist)
+
+            return len(blacklist_added) > 0 or len(blacklist_removed) > 0 or len(whitelist_added) > 0 or len(whitelist_removed) > 0
         except Exception as e:
-            logger.error(f"[BLACKLIST-RELOAD-ERROR] 重新加载黑名单失败: {e}")
+            logger.error(f"[BLACKLIST-RELOAD-ERROR] 重新加载黑白名单失败: {e}")
             return False
 
     def _load_config(self):
