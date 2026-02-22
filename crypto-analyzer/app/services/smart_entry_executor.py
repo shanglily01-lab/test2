@@ -317,9 +317,23 @@ class SmartEntryExecutor:
             entry_score = signal.get('trade_params', {}).get('entry_score', 0)
             entry_reason = f"V1价格采样 | 评分:{entry_score}"
 
-            # 插入持仓记录
+            # 🔥 防重复开仓：插入前再次检查是否已有持仓
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT COUNT(*) FROM futures_positions
+                WHERE symbol = %s AND position_side = %s
+                AND status = 'open' AND account_id = %s
+            """, (symbol, direction, self.account_id))
+
+            existing_count = cursor.fetchone()[0]
+            if existing_count > 0:
+                conn.close()
+                logger.warning(f"⚠️ {symbol} {direction} 已有{existing_count}个持仓，放弃本次开仓（防重复）")
+                return {'success': False, 'reason': '已有持仓，防止重复开仓'}
+
+            # 插入持仓记录
             cursor.execute("""
                 INSERT INTO futures_positions
                 (account_id, symbol, position_side, quantity, entry_price,
