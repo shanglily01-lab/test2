@@ -645,19 +645,7 @@ class SmartDecisionBrain:
             # ========== 移除1D信号 (4小时持仓不需要1D趋势) ==========
             # 已移除: trend_1d_bull, trend_1d_bear
 
-            # 📊 输出V1评分日志 (无论是否达标)
-            max_score = max(long_score, short_score)
-            if max_score > 0:
-                # 显示触发的信号组成
-                signal_names = ', '.join(signal_components.keys()) if signal_components else '无'
-                if long_score > short_score:
-                    logger.info(f"📊 [V1评分] {symbol:<12} LONG评分:{long_score:>3} (SHORT:{short_score:>3}) | 阈值:{self.threshold} | {'✅达标' if long_score >= self.threshold else '❌未达标'}")
-                    if signal_components:
-                        logger.info(f"   └─ 触发信号: {signal_names}")
-                else:
-                    logger.info(f"📊 [V1评分] {symbol:<12} SHORT评分:{short_score:>3} (LONG:{long_score:>3}) | 阈值:{self.threshold} | {'✅达标' if short_score >= self.threshold else '❌未达标'}")
-                    if signal_components:
-                        logger.info(f"   └─ 触发信号: {signal_names}")
+            # V1评分计算完成，稍后与V2一起打印
 
             # 选择得分更高的方向 (只要达到阈值就可以)
             if long_score >= self.threshold or short_score >= self.threshold:
@@ -725,21 +713,31 @@ class SmartDecisionBrain:
                     return None
 
                 # 🔥 V2协同过滤：方向一致性检查 + 强度验证
+                v2_direction = 'N/A'
+                v2_score = 0
+                v2_passed = '未启用'
+
                 if self.score_v2_service:
                     v2_result = self.score_v2_service.check_score_filter(symbol, side)
 
-                    # 显示V2过滤结果
-                    logger.info(f"🔍 [V2过滤] {symbol} {side} | {v2_result['reason']}")
-
-                    # 显示V2详细评分（如果有coin_score数据）
+                    # 提取V2数据
                     if v2_result.get('coin_score'):
                         coin = v2_result['coin_score']
-                        logger.info(f"   └─ V2详情: H1={coin.get('h1_score', 0):+d} ({coin.get('h1_level', 'N/A')}) | "
-                                   f"M15={coin.get('m15_score', 0):+d} ({coin.get('m15_level', 'N/A')}) | "
-                                   f"总分={coin.get('total_score', 0):+d}")
+                        v2_direction = '多' if coin.get('direction') == 'LONG' else '空' if coin.get('direction') == 'SHORT' else '中性'
+                        v2_score = coin.get('total_score', 0)
+
+                    v2_passed = '✅通过' if v2_result['passed'] else f"❌不通过({v2_result['reason']})"
+
+                    # 打印合并日志：V1评分 + V2趋势 + 协同过滤
+                    signal_names = ', '.join(signal_components.keys()) if signal_components else '无'
+                    logger.info(f"📊 {symbol:<12} V1评分 多【{long_score}分】空【{short_score}分】信号【{signal_names}】，V2 趋势【{v2_direction}】分数：{v2_score:+d}，协同过滤 【{v2_passed}】")
 
                     if not v2_result['passed']:
                         return None
+                else:
+                    # 没有V2服务，只打印V1
+                    signal_names = ', '.join(signal_components.keys()) if signal_components else '无'
+                    logger.info(f"📊 {symbol:<12} V1评分 多【{long_score}分】空【{short_score}分】信号【{signal_names}】，V2趋势【未启用】")
 
                 # 🔥 新增: 禁止高风险位置交易（代码层面强制）
                 if side == 'LONG' and 'position_high' in signal_components:
@@ -802,10 +800,9 @@ class SmartDecisionBrain:
         for symbol in self.whitelist:
             result = self.analyze(symbol, big4_result=big4_result)
             if result:
-                # ✅ 通过V1+V2验证的信号
+                # ✅ 通过V1+V2验证的信号（详细日志已在analyze()中打印）
                 signal_side = result['side']
                 signal_score = result['score']
-                logger.info(f"✅ [通过验证] {symbol} {signal_side} | V1评分:{signal_score} | 信号组合:{result.get('signal_type', 'N/A')}")
 
                 # 🔥 Big4方向过滤（提前应用）
                 if big4_result:
