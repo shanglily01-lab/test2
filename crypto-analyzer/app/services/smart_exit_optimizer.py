@@ -478,17 +478,17 @@ class SmartExitOptimizer:
         if hold_minutes >= MIN_HOLD_MINUTES:
 
             # === 优先级2: 智能亏损监控（基于ROI）===
-            # 策略A: ROI亏损≥4% + 2根5M K线无好转
-            if roi_pct <= -4.0:
-                no_improvement = await self._check_5m_no_improvement(position_id, position_side)
+            # 策略A: ROI亏损≥2% + 1根5M K线无好转（快速止损）
+            if roi_pct <= -2.0:
+                no_improvement = await self._check_5m_no_improvement_single(position_id, position_side)
                 if no_improvement:
                     return True, f"亏损ROI{roi_pct:.2f}%+5M无好转(价格变化{profit_pct:.2f}%)"
 
-            # 策略B: ROI亏损≥2% + 2根15M K线无持续好转
-            elif roi_pct <= -2.0:
-                no_sustained = await self._check_15m_no_sustained_improvement(position_id, position_side)
-                if no_sustained:
-                    return True, f"亏损ROI{roi_pct:.2f}%+15M无持续好转(价格变化{profit_pct:.2f}%)"
+            # 策略B: ROI亏损≥1.5% + 2根5M K线连续无好转（谨慎止损）
+            elif roi_pct <= -1.5:
+                no_improvement = await self._check_5m_no_improvement(position_id, position_side)
+                if no_improvement:
+                    return True, f"亏损ROI{roi_pct:.2f}%+2根5M连续无好转(价格变化{profit_pct:.2f}%)"
 
             # === 优先级3: 移动止盈（ROI盈利≥10%时追踪回撤0.5%）===
             TRAILING_STOP_ROI_THRESHOLD = 10.0  # ROI盈利阈值
@@ -1015,9 +1015,43 @@ class SmartExitOptimizer:
             logger.warning(f"获取{symbol} {interval} K线失败: {type(e).__name__}: {e}")
             return None
 
+    async def _check_5m_no_improvement_single(self, position_id: int, position_side: str) -> bool:
+        """
+        检查最新1根5M K线是否无好转（快速止损）
+
+        Args:
+            position_id: 持仓ID
+            position_side: 持仓方向（LONG/SHORT）
+
+        Returns:
+            是否无好转
+        """
+        if position_id not in self.kline_5m_buffer:
+            return False
+
+        buffer = self.kline_5m_buffer[position_id]
+        if len(buffer) < 1:
+            return False
+
+        latest_candle = buffer[-1]
+
+        # 判断最新K线是否朝不利方向发展
+        if position_side == 'LONG':
+            # 多仓: 期待阳线，如果是阴线则无好转
+            if latest_candle['close'] < latest_candle['open']:
+                logger.debug(f"持仓{position_id} LONG 5M阴线无好转: {latest_candle['open']:.6f} -> {latest_candle['close']:.6f}")
+                return True
+        else:  # SHORT
+            # 空仓: 期待阴线，如果是阳线则无好转
+            if latest_candle['close'] > latest_candle['open']:
+                logger.debug(f"持仓{position_id} SHORT 5M阳线无好转: {latest_candle['open']:.6f} -> {latest_candle['close']:.6f}")
+                return True
+
+        return False
+
     async def _check_5m_no_improvement(self, position_id: int, position_side: str) -> bool:
         """
-        检查2根5M K线是否无好转
+        检查连续2根5M K线是否无好转（谨慎止损）
 
         Args:
             position_id: 持仓ID
@@ -1037,14 +1071,14 @@ class SmartExitOptimizer:
 
         # 判断是否持续恶化或无明显好转
         if position_side == 'LONG':
-            # 多仓: 期待价格上涨
+            # 多仓: 期待价格上涨，如果连续2根收盘价不涨则无好转
             if candle_2['close'] <= candle_1['close']:
-                logger.debug(f"持仓{position_id} LONG 5M无好转: {candle_1['close']:.6f} -> {candle_2['close']:.6f}")
+                logger.debug(f"持仓{position_id} LONG 2根5M无好转: {candle_1['close']:.6f} -> {candle_2['close']:.6f}")
                 return True  # 继续下跌或横盘
         else:  # SHORT
-            # 空仓: 期待价格下跌
+            # 空仓: 期待价格下跌，如果连续2根收盘价不跌则无好转
             if candle_2['close'] >= candle_1['close']:
-                logger.debug(f"持仓{position_id} SHORT 5M无好转: {candle_1['close']:.6f} -> {candle_2['close']:.6f}")
+                logger.debug(f"持仓{position_id} SHORT 2根5M无好转: {candle_1['close']:.6f} -> {candle_2['close']:.6f}")
                 return True  # 继续上涨或横盘
 
         return False
