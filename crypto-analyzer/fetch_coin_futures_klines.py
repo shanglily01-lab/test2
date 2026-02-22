@@ -46,16 +46,8 @@ class CoinFuturesKlineFetcher:
         # 从config.yaml读取币本位交易对列表
         coin_symbols = config.get('coin_futures_symbols', [])
 
-        # 转换格式：BTCUSD_PERP -> BTC/USD
-        self.symbols = []
-        for symbol in coin_symbols:
-            # 移除 _PERP 后缀
-            base_symbol = symbol.replace('_PERP', '')
-            # 插入斜杠：BTCUSD -> BTC/USD
-            # 假设基础货币是3个字符（BTC/ETH等）
-            if len(base_symbol) >= 6:
-                formatted = f"{base_symbol[:-3]}/{base_symbol[-3:]}"
-                self.symbols.append(formatted)
+        # 转换格式：BTCUSD_PERP -> BTC/USD（与币本位服务保持一致）
+        self.symbols = [s.replace('USD_PERP', '/USD') for s in coin_symbols]
 
         logger.info(f"📊 从config.yaml加载 {len(self.symbols)} 个币本位交易对")
 
@@ -121,7 +113,7 @@ class CoinFuturesKlineFetcher:
                         close_price = VALUES(close_price),
                         volume = VALUES(volume)
                 """, (
-                    symbol, 'binance', timeframe, open_time, dt,
+                    symbol, 'binance_futures', timeframe, open_time, dt,
                     open_price, high, low, close, volume
                 ))
                 insert_count += 1
