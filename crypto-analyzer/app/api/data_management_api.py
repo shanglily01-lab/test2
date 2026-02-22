@@ -125,8 +125,8 @@ def get_db_connection(retry_count=3):
                         charset='utf8mb4',
                         cursorclass=DictCursor,
                         connect_timeout=10,
-                        read_timeout=30,
-                        write_timeout=30,
+                        read_timeout=120,
+                        write_timeout=60,
                         autocommit=False
                     )
                     # 验证连接
@@ -154,8 +154,8 @@ def get_db_connection(retry_count=3):
                 charset='utf8mb4',
                 cursorclass=DictCursor,
                 connect_timeout=10,
-                read_timeout=30,
-                write_timeout=30,
+                read_timeout=120,
+                write_timeout=60,
                 autocommit=False
             )
             conn.ping(reconnect=False)

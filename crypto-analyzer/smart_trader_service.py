@@ -1210,11 +1210,11 @@ class SmartTraderService:
         rating_level = self.opt_config.get_symbol_rating_level(symbol)
 
         if rating_level == 0:
-            return 200.0  # 白名单/默认
+            return 400.0  # 白名单/默认
         elif rating_level == 1:
-            return 50.0   # 黑名单1级
+            return 100.0  # 黑名单1级
         elif rating_level == 2:
-            return 30.0   # 黑名单2级
+            return 50.0   # 黑名单2级
         else:
             return 0.0    # 黑名单3级 - 禁止交易
 

@@ -1300,14 +1300,14 @@ class CoinFuturesTraderService:
 
         # 根据评级等级设置每批保证金
         if rating_level == 0:
-            # 白名单/默认：200U每批
-            return 200.0
+            # 白名单/默认：400U每批
+            return 400.0
         elif rating_level == 1:
-            # 黑名单1级：50U每批
-            return 50.0
+            # 黑名单1级：100U每批
+            return 100.0
         elif rating_level == 2:
-            # 黑名单2级：30U每批
-            return 30.0
+            # 黑名单2级：50U每批
+            return 50.0
         else:
             # 黑名单3级：不交易
             return 0.0
