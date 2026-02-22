@@ -455,8 +455,8 @@ async def update_trading_services(data: TradingServicesUpdate):
         if data.usdt_futures_enabled is not None:
             value = 1 if data.usdt_futures_enabled else 0
             cursor.execute("""
-                INSERT INTO adaptive_params (param_key, param_value, description, updated_by, updated_at)
-                VALUES ('usdt_futures_enabled', %s, 'U本位合约交易开关', 'web_ui', NOW())
+                INSERT INTO adaptive_params (param_key, param_value, param_type, description, updated_by, updated_at)
+                VALUES ('usdt_futures_enabled', %s, 'system', 'U本位合约交易开关', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
                     param_value = VALUES(param_value),
                     updated_by = 'web_ui',
@@ -468,8 +468,8 @@ async def update_trading_services(data: TradingServicesUpdate):
         if data.coin_futures_enabled is not None:
             value = 1 if data.coin_futures_enabled else 0
             cursor.execute("""
-                INSERT INTO adaptive_params (param_key, param_value, description, updated_by, updated_at)
-                VALUES ('coin_futures_enabled', %s, '币本位合约交易开关', 'web_ui', NOW())
+                INSERT INTO adaptive_params (param_key, param_value, param_type, description, updated_by, updated_at)
+                VALUES ('coin_futures_enabled', %s, 'system', '币本位合约交易开关', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
                     param_value = VALUES(param_value),
                     updated_by = 'web_ui',
@@ -481,8 +481,8 @@ async def update_trading_services(data: TradingServicesUpdate):
         if data.live_trading_enabled is not None:
             value = 1 if data.live_trading_enabled else 0
             cursor.execute("""
-                INSERT INTO adaptive_params (param_key, param_value, description, updated_by, updated_at)
-                VALUES ('live_trading_enabled', %s, '实盘合约服务开关', 'web_ui', NOW())
+                INSERT INTO adaptive_params (param_key, param_value, param_type, description, updated_by, updated_at)
+                VALUES ('live_trading_enabled', %s, 'system', '实盘合约服务开关', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
                     param_value = VALUES(param_value),
                     updated_by = 'web_ui',
