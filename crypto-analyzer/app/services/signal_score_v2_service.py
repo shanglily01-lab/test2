@@ -136,14 +136,16 @@ class SignalScoreV2Service:
 
                 # 映射overall_signal到direction
                 direction_map = {
+                    'STRONG_BULLISH': 'LONG',
                     'BULLISH': 'LONG',
+                    'STRONG_BEARISH': 'SHORT',
                     'BEARISH': 'SHORT',
                     'NEUTRAL': 'NEUTRAL'
                 }
                 direction = direction_map.get(overall_signal, 'NEUTRAL')
 
                 # 根据signal判断正负
-                if overall_signal == 'BEARISH':
+                if overall_signal in ('BEARISH', 'STRONG_BEARISH'):
                     total_score = -signal_strength
                 else:
                     total_score = signal_strength
