@@ -273,6 +273,12 @@ class SmartDecisionBrain:
             )
             logger.info(f"   ✅ V2评分过滤服务已初始化")
 
+            # 8. 初始化Big4过滤器配置
+            from app.services.system_settings_loader import get_big4_filter_enabled
+            big4_enabled = get_big4_filter_enabled()
+            self.big4_filter_config = {'enabled': big4_enabled}
+            logger.info(f"   ✅ Big4过滤器: {'启用' if big4_enabled else '禁用'}")
+
         except Exception as e:
             import traceback
             logger.error(f"❌ 读取数据库配置失败，使用默认14个交易对")
@@ -319,6 +325,16 @@ class SmartDecisionBrain:
             except Exception as v2_error:
                 logger.error(f"   ❌ V2评分过滤服务初始化失败: {v2_error}")
                 self.score_v2_service = None
+
+            # 🔥 修复: 初始化big4_filter_config（异常情况下也需要）
+            try:
+                from app.services.system_settings_loader import get_big4_filter_enabled
+                big4_enabled = get_big4_filter_enabled()
+                self.big4_filter_config = {'enabled': big4_enabled}
+                logger.info(f"   ✅ Big4过滤器: {'启用' if big4_enabled else '禁用'}（降级模式）")
+            except Exception as big4_error:
+                logger.error(f"   ❌ Big4过滤器配置初始化失败: {big4_error}")
+                self.big4_filter_config = {'enabled': True}  # 默认启用
 
     def reload_config(self):
         """重新加载配置 - 供外部调用"""
@@ -824,15 +840,15 @@ class SmartDecisionBrain:
                         filtered_count += 1
                         continue
 
-                    # Big4看空时，只有强度>=70才完全禁止开多
-                    if big4_signal == 'BEARISH' and signal_side == 'LONG' and big4_strength >= 70:
-                        logger.info(f"🚫 [Big4过滤] {symbol} LONG | Big4看空强度{big4_strength:.0f}>=70")
+                    # Big4看空时，只有强度>=60才完全禁止开多
+                    if big4_signal == 'BEARISH' and signal_side == 'LONG' and big4_strength >= 60:
+                        logger.info(f"🚫 [Big4过滤] {symbol} LONG | Big4看空强度{big4_strength:.0f}>=60")
                         filtered_count += 1
                         continue
 
-                    # Big4看多时，只有强度>=70才完全禁止开空
-                    if big4_signal == 'BULLISH' and signal_side == 'SHORT' and big4_strength >= 70:
-                        logger.info(f"🚫 [Big4过滤] {symbol} SHORT | Big4看多强度{big4_strength:.0f}>=70")
+                    # Big4看多时，只有强度>=60才完全禁止开空
+                    if big4_signal == 'BULLISH' and signal_side == 'SHORT' and big4_strength >= 60:
+                        logger.info(f"🚫 [Big4过滤] {symbol} SHORT | Big4看多强度{big4_strength:.0f}>=60")
                         filtered_count += 1
                         continue
 
