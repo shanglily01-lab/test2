@@ -62,7 +62,7 @@ class SmartDecisionBrain:
         # 从config.yaml加载配置
         self._load_config()
 
-        self.threshold = 55  # 开仓阈值 (从35提高到55分,防止开仓过多,理论最大232分,55分≈24%强度)
+        self.threshold = 60  # 开仓阈值 (强信号过滤,理论最大232分,60分≈26%强度)
 
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
         self.blacklist_checker = SignalBlacklistChecker(db_config, cache_minutes=5)
@@ -272,6 +272,16 @@ class SmartDecisionBrain:
                 'breakout_long': {'long': 20, 'short': 0},
                 'breakdown_short': {'long': 0, 'short': 20}
             }
+            # 🔥 修复: 初始化score_v2_service（异常情况下也需要）
+            try:
+                self.score_v2_service = SignalScoreV2Service(
+                    db_config=db_config,
+                    score_config={'enabled': True, 'min_symbol_score': 15}
+                )
+                logger.info(f"   ✅ V2评分过滤服务已初始化（降级模式）")
+            except Exception as v2_error:
+                logger.error(f"   ❌ V2评分过滤服务初始化失败: {v2_error}")
+                self.score_v2_service = None
 
     def reload_config(self):
         """重新加载配置 - 供外部调用"""
