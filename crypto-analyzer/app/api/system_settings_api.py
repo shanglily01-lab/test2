@@ -46,6 +46,13 @@ class TradingDirectionUpdate(BaseModel):
     allow_short: Optional[bool] = None
 
 
+class TradingServicesUpdate(BaseModel):
+    """交易服务状态更新"""
+    usdt_futures_enabled: Optional[bool] = None
+    coin_futures_enabled: Optional[bool] = None
+    live_trading_enabled: Optional[bool] = None
+
+
 @router.get("/settings")
 async def get_system_settings():
     """
@@ -381,4 +388,125 @@ async def update_setting(key: str, data: SystemSetting):
 
     except Exception as e:
         logger.error(f"更新配置项 {key} 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trading-services")
+async def get_trading_services():
+    """
+    获取交易服务状态
+
+    Returns:
+        各交易服务的启停状态
+    """
+    try:
+        db_config = get_db_config()
+        conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT param_key, param_value
+            FROM adaptive_params
+            WHERE param_key IN ('usdt_futures_enabled', 'coin_futures_enabled', 'live_trading_enabled')
+        """)
+
+        settings = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        # 转换为字典格式
+        result = {
+            'usdt_futures_enabled': True,  # 默认值
+            'coin_futures_enabled': True,
+            'live_trading_enabled': True
+        }
+
+        for setting in settings:
+            result[setting['param_key']] = int(float(setting['param_value'])) == 1
+
+        return {
+            'success': True,
+            'data': result
+        }
+
+    except Exception as e:
+        logger.error(f"获取交易服务状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/trading-services")
+async def update_trading_services(data: TradingServicesUpdate):
+    """
+    更新交易服务状态
+
+    Args:
+        data: 交易服务状态更新数据
+
+    Returns:
+        更新结果
+    """
+    try:
+        db_config = get_db_config()
+        conn = pymysql.connect(**db_config)
+        cursor = conn.cursor()
+
+        updates = []
+
+        if data.usdt_futures_enabled is not None:
+            value = 1 if data.usdt_futures_enabled else 0
+            cursor.execute("""
+                INSERT INTO adaptive_params (param_key, param_value, description, updated_by, updated_at)
+                VALUES ('usdt_futures_enabled', %s, 'U本位合约交易开关', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    param_value = VALUES(param_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            status = '✅ 启动' if data.usdt_futures_enabled else '⏸️ 暂停'
+            updates.append(f"U本位合约: {status}")
+
+        if data.coin_futures_enabled is not None:
+            value = 1 if data.coin_futures_enabled else 0
+            cursor.execute("""
+                INSERT INTO adaptive_params (param_key, param_value, description, updated_by, updated_at)
+                VALUES ('coin_futures_enabled', %s, '币本位合约交易开关', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    param_value = VALUES(param_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            status = '✅ 启动' if data.coin_futures_enabled else '⏸️ 暂停'
+            updates.append(f"币本位合约: {status}")
+
+        if data.live_trading_enabled is not None:
+            value = 1 if data.live_trading_enabled else 0
+            cursor.execute("""
+                INSERT INTO adaptive_params (param_key, param_value, description, updated_by, updated_at)
+                VALUES ('live_trading_enabled', %s, '实盘合约服务开关', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    param_value = VALUES(param_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            status = '✅ 启动' if data.live_trading_enabled else '⏸️ 暂停'
+            updates.append(f"实盘合约服务: {status}")
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        update_msg = ', '.join(updates)
+        logger.info(f"✅ 交易服务状态已更新: {update_msg}")
+
+        return {
+            'success': True,
+            'message': '交易服务状态已更新',
+            'data': {
+                'updates': updates,
+                'note': '配置实时生效'
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"更新交易服务状态失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
