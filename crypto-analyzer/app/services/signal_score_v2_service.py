@@ -282,14 +282,12 @@ class SignalScoreV2Service:
                     }
                 }
 
-        # 有Big4数据，进行共振检查
-        # 🔥 使用带符号的原始评分，而不是绝对值
-        # 同向时共振增强，反向时互相削弱
+        # 🔥 新逻辑：V1占绝对主力，V2只做协同确认
+        # V2检查：1）方向必须与V1一致 2）单币强度>=15
+        # 不做Big4共振检查，Big4过滤在后续流程中处理
         coin_raw_score = coin_score['total_score']  # 带符号：正数=LONG，负数=SHORT
-        big4_raw_score = big4_score['total_score']  # 带符号：正数=BULLISH，负数=BEARISH
 
-        # 🔥 检查0: V1信号方向和V2评分方向是否匹配
-        # V1说SHORT，但V2评分是LONG（+40），这种矛盾应该拒绝
+        # 检查1: V1信号方向和V2评分方向是否一致
         if coin_score['direction'] != signal_direction:
             return {
                 'passed': False,
@@ -303,16 +301,14 @@ class SignalScoreV2Service:
                 }
             }
 
-        min_symbol_score = self.config.get('min_symbol_score', 15)
-        min_big4_score = self.config.get('min_big4_score', 10)
-        resonance_threshold = self.config.get('resonance_threshold', 25)
+        # 检查2: V2单币评分强度是否达标（使用绝对值，因为负数表示SHORT方向的强度）
+        min_symbol_score = self.config.get('min_symbol_score', 15)  # V2协同确认阈值
+        coin_strength = abs(coin_raw_score)  # 使用绝对值判断强度
 
-        # 检查1: 代币评分强度是否达标（用绝对值）
-        coin_strength = abs(coin_raw_score)
         if coin_strength < min_symbol_score:
             return {
                 'passed': False,
-                'reason': f'{symbol} 评分强度{coin_strength}不达标（需>={min_symbol_score}）',
+                'reason': f'{symbol} V2评分强度{coin_strength}不达标（需>={min_symbol_score}）',
                 'coin_score': coin_score,
                 'big4_score': big4_score,
                 'details': {
@@ -321,61 +317,8 @@ class SignalScoreV2Service:
                 }
             }
 
-        # 检查2: Big4评分强度是否达标（用绝对值）
-        big4_strength = abs(big4_raw_score)
-        if big4_strength < min_big4_score:
-            return {
-                'passed': False,
-                'reason': f'Big4评分强度{big4_strength}不达标（需>={min_big4_score}）',
-                'coin_score': coin_score,
-                'big4_score': big4_score,
-                'details': {
-                    'big4_strength': big4_strength,
-                    'min_big4_score': min_big4_score
-                }
-            }
-
-        # 检查3: Big4强度>=70时，禁止反向开仓（已在scan_all中处理）
-        # 这里不再检查方向冲突，因为已经在前面过滤了
-
-        # 检查4: 共振总分是否达标（带符号相加）
-        # 同向：-35 + (-36) = -71（增强）✅
-        # 反向：-35 + 36 = 1（削弱）❌
-        resonance_score = coin_raw_score + big4_raw_score
-        resonance_strength = abs(resonance_score)  # 共振强度（绝对值）
-
-        if resonance_strength < resonance_threshold:
-            # 判断是同向削弱还是反向抵消
-            same_direction = (coin_raw_score > 0 and big4_raw_score > 0) or \
-                           (coin_raw_score < 0 and big4_raw_score < 0)
-            if same_direction:
-                reason = f'共振强度{resonance_strength}不足（需>={resonance_threshold}）| {coin_raw_score:+d} + {big4_raw_score:+d} = {resonance_score:+d}'
-            else:
-                reason = f'方向相反互相抵消（{coin_raw_score:+d} + {big4_raw_score:+d} = {resonance_score:+d}），共振强度{resonance_strength}<{resonance_threshold}'
-
-            return {
-                'passed': False,
-                'reason': reason,
-                'coin_score': coin_score,
-                'big4_score': big4_score,
-                'details': {
-                    'coin_raw_score': coin_raw_score,
-                    'big4_raw_score': big4_raw_score,
-                    'resonance_score': resonance_score,
-                    'resonance_strength': resonance_strength,
-                    'resonance_threshold': resonance_threshold,
-                    'same_direction': same_direction
-                }
-            }
-
-        # 所有检查通过
-        # 判断是同向增强还是反向但强度足够
-        same_direction = (coin_raw_score > 0 and big4_raw_score > 0) or \
-                       (coin_raw_score < 0 and big4_raw_score < 0)
-        if same_direction:
-            reason = f'✅ 同向共振: {symbol}({coin_raw_score:+d}) + Big4({big4_raw_score:+d}) = {resonance_score:+d}，强度{resonance_strength}>={resonance_threshold}'
-        else:
-            reason = f'✅ 反向但强度足够: {symbol}({coin_raw_score:+d}) + Big4({big4_raw_score:+d}) = {resonance_score:+d}，强度{resonance_strength}>={resonance_threshold}'
+        # 所有检查通过 - V1主导，V2协同确认
+        reason = f'✅ V2协同确认: {symbol} V2评分{coin_raw_score:+d}（强度{coin_strength}），方向{coin_score["direction"]}与V1一致'
 
         return {
             'passed': True,
@@ -384,13 +327,10 @@ class SignalScoreV2Service:
             'big4_score': big4_score,
             'details': {
                 'coin_raw_score': coin_raw_score,
-                'big4_raw_score': big4_raw_score,
-                'resonance_score': resonance_score,
-                'resonance_strength': resonance_strength,
+                'coin_strength': coin_strength,
                 'coin_direction': coin_score['direction'],
-                'big4_direction': big4_score['direction'],
                 'signal_direction': signal_direction,
-                'same_direction': same_direction
+                'v2_filter_mode': 'simple'  # 简化模式：只检查V2单币强度和方向
             }
         }
 

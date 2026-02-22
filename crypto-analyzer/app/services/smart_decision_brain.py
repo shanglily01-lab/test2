@@ -64,7 +64,7 @@ class SmartDecisionBrain:
         ]
 
         # 决策阈值
-        self.threshold = 30  # 最低30分才开仓
+        self.threshold = 60  # 最低60分才开仓（强信号）
 
         logger.info(f"✅ 智能决策大脑已初始化 | 白名单币种: {len(self.whitelist_long)}个 | 黑名单币种: {len(self.blacklist)}个 | 阈值: {self.threshold}分")
 

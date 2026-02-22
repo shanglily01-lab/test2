@@ -509,6 +509,30 @@ async def lifespan(app: FastAPI):
         schedule.every().day.at("00:00").do(run_12h_retrospective)
         schedule.every().day.at("12:00").do(run_12h_retrospective)
 
+        # 定义动态调度任务：更新所有币种评分
+        def run_coin_score_update():
+            """执行update_all_coin_scores存储过程（每5分钟）"""
+            try:
+                import pymysql
+                conn = pymysql.connect(**db_config)
+                cursor = conn.cursor()
+
+                logger.debug("🔄 执行动态调度：update_all_coin_scores")
+                cursor.execute("CALL update_all_coin_scores()")
+                conn.commit()
+
+                cursor.close()
+                conn.close()
+                logger.debug("✅ 动态调度执行完成")
+
+            except Exception as e:
+                logger.error(f"❌ 动态调度失败: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+
+        # 配置动态调度：每5分钟执行一次
+        schedule.every(5).minutes.do(run_coin_score_update)
+
         # 创建后台任务运行调度器
         async def schedule_runner():
             """运行调度器"""
@@ -519,6 +543,7 @@ async def lifespan(app: FastAPI):
         daily_optimizer_task = asyncio.create_task(schedule_runner())
         logger.info("✅ 超级大脑自我优化服务已启动（每4小时执行一次）")
         logger.info("✅ 12小时复盘分析服务已启动（每天00:00和12:00执行）")
+        logger.info("✅ 动态调度服务已启动（每5分钟执行update_all_coin_scores）")
 
     except Exception as e:
         logger.warning(f"⚠️  启动超级大脑优化服务失败: {e}")
