@@ -703,12 +703,26 @@ class CoinFuturesDecisionBrain:
                    low_price as low, close_price as close,
                    volume
             FROM kline_data
-            WHERE symbol = %s AND timeframe = %s AND exchange = 'binance_futures'
+            WHERE symbol = %s AND timeframe = %s AND exchange = %s
             AND open_time >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 60 DAY)) * 1000
             ORDER BY open_time DESC LIMIT %s
         """
-        cursor.execute(query, (symbol, timeframe, limit))
+
+        # 先尝试币本位数据
+        cursor.execute(query, (symbol, timeframe, 'binance_futures', limit))
         klines = list(cursor.fetchall())
+
+        # 如果币本位数据不足，尝试使用U本位数据
+        if len(klines) < limit * 0.8:  # 少于80%的数据量就fallback
+            # 转换symbol格式：BTC/USD -> BTCUSDT
+            usdt_symbol = symbol.replace('/USD', 'USDT')
+            cursor.execute(query, (usdt_symbol, timeframe, 'binance_futures', limit))
+            usdt_klines = list(cursor.fetchall())
+
+            if len(usdt_klines) > len(klines):
+                logger.info(f"📊 {symbol} 使用U本位数据fallback ({usdt_symbol})")
+                klines = usdt_klines
+
         cursor.close()
 
         klines.reverse()
