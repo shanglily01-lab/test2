@@ -36,18 +36,22 @@ class MySQLConnectionPool:
     def _create_connection(self):
         """创建新的数据库连接"""
         try:
-            conn = pymysql.connect(
-                **self.db_config,
-                charset='utf8mb4',
-                cursorclass=DictCursor,
-                autocommit=False,
-                # 连接保活参数
-                connect_timeout=10,
-                read_timeout=30,
-                write_timeout=30,
-                # 使用 init_command 保持连接活跃
-                init_command="SET SESSION wait_timeout=28800"
-            )
+            # 复制配置，避免修改原始配置
+            config = self.db_config.copy()
+
+            # 设置默认值（如果配置中没有）
+            config.setdefault('charset', 'utf8mb4')
+            config.setdefault('autocommit', False)
+            config.setdefault('connect_timeout', 10)
+            config.setdefault('read_timeout', 30)
+            config.setdefault('write_timeout', 30)
+            config.setdefault('init_command', "SET SESSION wait_timeout=28800")
+
+            # cursorclass 单独设置（不能用 setdefault，因为可能是 None）
+            if 'cursorclass' not in config or config['cursorclass'] is None:
+                config['cursorclass'] = DictCursor
+
+            conn = pymysql.connect(**config)
             logger.debug("创建新的数据库连接")
             return conn
         except Exception as e:

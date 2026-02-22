@@ -3,6 +3,7 @@
 """检查当前Big4评分（实时K线版本）"""
 import sys
 import os
+from dotenv import load_dotenv
 
 # 设置UTF-8输出
 if sys.platform == 'win32':
@@ -11,6 +12,9 @@ if sys.platform == 'win32':
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(__file__))
+
+# 加载环境变量
+load_dotenv()
 
 from app.services.big4_trend_detector import Big4TrendDetector
 from datetime import datetime

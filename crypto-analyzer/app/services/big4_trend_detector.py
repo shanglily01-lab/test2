@@ -1155,8 +1155,8 @@ class Big4TrendDetector:
                     cursor_write = conn_write.cursor()
 
                     for symbol in bounce_symbols:
-                    # 获取该币种的1H K线信息
-                    cursor_write.execute("""
+                        # 获取该币种的1H K线信息
+                        cursor_write.execute("""
                         SELECT open_price, close_price, low_price, high_price, open_time
                         FROM kline_data
                         WHERE symbol = %s
@@ -1164,54 +1164,54 @@ class Big4TrendDetector:
                         AND exchange = 'binance_futures'
                         ORDER BY open_time DESC
                         LIMIT 1
-                    """, (symbol,))
+                        """, (symbol,))
 
-                    h1_data = cursor_write.fetchone()
-                    if not h1_data:
-                        continue
+                        h1_data = cursor_write.fetchone()
+                        if not h1_data:
+                            continue
 
-                    open_p = float(h1_data[0])
-                    close_p = float(h1_data[1])
-                    low_p = float(h1_data[2])
-                    h1_open_time = h1_data[4]
+                        open_p = float(h1_data[0])
+                        close_p = float(h1_data[1])
+                        low_p = float(h1_data[2])
+                        h1_open_time = h1_data[4]
 
-                    body_low = min(open_p, close_p)
-                    lower_shadow_pct = (body_low - low_p) / low_p * 100 if low_p > 0 else 0
+                        body_low = min(open_p, close_p)
+                        lower_shadow_pct = (body_low - low_p) / low_p * 100 if low_p > 0 else 0
 
-                    # 计算触发时间
-                    h1_ts = int(h1_open_time) / 1000 if int(h1_open_time) > 9999999999 else int(h1_open_time)
-                    trigger_time = datetime.fromtimestamp(h1_ts)
-                    window_start = trigger_time
-                    window_end = trigger_time + timedelta(minutes=45)
+                        # 计算触发时间
+                        h1_ts = int(h1_open_time) / 1000 if int(h1_open_time) > 9999999999 else int(h1_open_time)
+                        trigger_time = datetime.fromtimestamp(h1_ts)
+                        window_start = trigger_time
+                        window_end = trigger_time + timedelta(minutes=45)
 
-                    # 检查是否已存在未过期的bounce_window
-                    cursor_write.execute("""
-                        SELECT id FROM bounce_window
-                        WHERE account_id = 2
-                        AND trading_type = 'usdt_futures'
-                        AND symbol = %s
-                        AND window_end > NOW()
-                        AND bounce_entered = FALSE
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    """, (symbol,))
-
-                    existing_window = cursor_write.fetchone()
-
-                    if not existing_window:
-                        # 创建新的bounce window
+                        # 检查是否已存在未过期的bounce_window
                         cursor_write.execute("""
-                            INSERT INTO bounce_window
-                            (account_id, trading_type, symbol, trigger_time, window_start, window_end,
-                             lower_shadow_pct, trigger_price, bounce_entered, notes, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, NOW())
-                        """, (
-                            2, 'usdt_futures', symbol, trigger_time, window_start, window_end,
-                            lower_shadow_pct, close_p,
-                            f"1H下影线{lower_shadow_pct:.2f}%, 45分钟反弹窗口"
-                        ))
+                            SELECT id FROM bounce_window
+                            WHERE account_id = 2
+                            AND trading_type = 'usdt_futures'
+                            AND symbol = %s
+                            AND window_end > NOW()
+                            AND bounce_entered = FALSE
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                        """, (symbol,))
 
-                        logger.info(f"💾 反弹窗口已保存: {symbol} 下影{lower_shadow_pct:.1f}% 窗口至{window_end.strftime('%H:%M')}")
+                        existing_window = cursor_write.fetchone()
+
+                        if not existing_window:
+                            # 创建新的bounce window
+                            cursor_write.execute("""
+                                INSERT INTO bounce_window
+                                (account_id, trading_type, symbol, trigger_time, window_start, window_end,
+                                 lower_shadow_pct, trigger_price, bounce_entered, notes, created_at)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, FALSE, %s, NOW())
+                            """, (
+                                2, 'usdt_futures', symbol, trigger_time, window_start, window_end,
+                                lower_shadow_pct, close_p,
+                                f"1H下影线{lower_shadow_pct:.2f}%, 45分钟反弹窗口"
+                            ))
+
+                            logger.info(f"💾 反弹窗口已保存: {symbol} 下影{lower_shadow_pct:.1f}% 窗口至{window_end.strftime('%H:%M')}")
 
                     conn_write.commit()
                     cursor_write.close()
