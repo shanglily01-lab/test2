@@ -302,9 +302,9 @@ class KlinePullbackEntryExecutor:
 
             # 获取基准时间后的最近2根K线
             cursor.execute("""
-                SELECT open_time, open, close
+                SELECT open_time, open_price, close_price
                 FROM futures_klines
-                WHERE symbol = %s AND interval = %s AND exchange = 'binance_futures'
+                WHERE symbol = %s AND timeframe = %s
                 AND open_time >= %s
                 ORDER BY open_time DESC
                 LIMIT 2
@@ -317,8 +317,8 @@ class KlinePullbackEntryExecutor:
                 return False, "数据不足"
 
             latest_kline = klines[0]
-            is_green = latest_kline['close'] > latest_kline['open']  # 阳线
-            is_red = latest_kline['close'] < latest_kline['open']    # 阴线
+            is_green = latest_kline['close_price'] > latest_kline['open_price']  # 阳线
+            is_red = latest_kline['close_price'] < latest_kline['open_price']    # 阴线
 
             # 做多：等待阴线回调
             if direction == 'LONG' and is_red:
