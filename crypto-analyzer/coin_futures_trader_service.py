@@ -714,8 +714,8 @@ class CoinFuturesDecisionBrain:
 
         # 如果币本位数据不足，尝试使用U本位数据
         if len(klines) < limit * 0.8:  # 少于80%的数据量就fallback
-            # 转换symbol格式：BTC/USD -> BTCUSDT
-            usdt_symbol = symbol.replace('/USD', 'USDT')
+            # 转换symbol格式：BTC/USD -> BTC/USDT（保持斜杠）
+            usdt_symbol = symbol.replace('/USD', '/USDT')
             cursor.execute(query, (usdt_symbol, timeframe, 'binance_futures', limit))
             usdt_klines = list(cursor.fetchall())
 
