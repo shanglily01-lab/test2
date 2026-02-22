@@ -1062,12 +1062,12 @@ class SmartTraderService:
 
             close_price, open_time = result
 
-            # 检查数据新鲜度: 5m K线数据不能超过10分钟前
+            # 检查数据新鲜度: 5m K线数据不能超过15分钟前
             import time
             current_timestamp_ms = int(time.time() * 1000)
             data_age_minutes = (current_timestamp_ms - open_time) / 1000 / 60
 
-            if data_age_minutes > 10:
+            if data_age_minutes > 15:
                 logger.warning(
                     f"[DATA_STALE] {symbol} K线数据过时! "
                     f"最新K线时间: {data_age_minutes:.1f}分钟前, 拒绝使用"
