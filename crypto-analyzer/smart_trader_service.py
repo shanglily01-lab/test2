@@ -28,6 +28,7 @@ from app.services.kline_pullback_entry_executor import KlinePullbackEntryExecuto
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.breakout_signal_booster import BreakoutSignalBooster
 from app.services.signal_blacklist_checker import SignalBlacklistChecker
+from app.services.signal_score_v2_service import SignalScoreV2Service
 from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
@@ -232,8 +233,13 @@ class SmartDecisionBrain:
                 }
                 logger.info(f"   📊 评分权重: 使用默认权重")
 
-            # V2评分过滤已彻底移除（2026-02-21）
-            self.score_v2_service = None
+            # V2评分过滤服务（协同确认）
+            resonance_config = config.get('signals', {}).get('resonance_filter', {})
+            self.score_v2_service = SignalScoreV2Service(
+                db_config=db_config,
+                score_config=resonance_config
+            )
+            logger.info(f"   ✅ V2评分过滤服务已初始化")
 
         except Exception as e:
             logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
@@ -673,6 +679,15 @@ class SmartDecisionBrain:
                 if not is_valid:
                     logger.error(f"🚫 {symbol} 信号方向矛盾: {contradiction_reason} | 信号:{signal_combination_key} | 方向:{side}")
                     return None
+
+                # 🔥 V2协同过滤：方向一致性检查 + 强度验证
+                if self.score_v2_service:
+                    v2_result = self.score_v2_service.check_score_filter(symbol, side)
+                    if not v2_result['passed']:
+                        logger.info(f"🔍 [V2过滤] {symbol} {side} | {v2_result['reason']}")
+                        return None
+                    else:
+                        logger.info(f"🔍 [V2过滤] {symbol} {side} | {v2_result['reason']}")
 
                 # 🔥 新增: 禁止高风险位置交易（代码层面强制）
                 if side == 'LONG' and 'position_high' in signal_components:
