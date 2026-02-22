@@ -314,11 +314,20 @@ class KlinePullbackEntryExecutor:
             conn.close()
 
             if len(klines) < 1:
+                logger.debug(f"⚠️ {symbol} {timeframe.upper()} 数据不足，base_time={base_time}")
                 return False, "数据不足"
 
             latest_kline = klines[0]
             is_green = latest_kline['close_price'] > latest_kline['open_price']  # 阳线
             is_red = latest_kline['close_price'] < latest_kline['open_price']    # 阴线
+
+            # 调试日志：显示最新K线信息
+            kline_type = "🟢阳线" if is_green else "🔴阴线" if is_red else "⚪️十字星"
+            logger.debug(
+                f"📊 {symbol} {timeframe.upper()} 最新K线: {kline_type} | "
+                f"开:{latest_kline['open_price']:.6f} 收:{latest_kline['close_price']:.6f} | "
+                f"时间:{latest_kline['open_time']}"
+            )
 
             # 做多：等待阴线回调
             if direction == 'LONG' and is_red:
