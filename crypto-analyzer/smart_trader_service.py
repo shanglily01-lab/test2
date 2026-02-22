@@ -278,7 +278,7 @@ class SmartDecisionBrain:
             # V2评分过滤服务（协同确认）
             resonance_config = config.get('signals', {}).get('resonance_filter', {})
             self.score_v2_service = SignalScoreV2Service(
-                db_config=db_config,
+                db_config=self.db_config,
                 score_config=resonance_config
             )
             logger.info(f"   ✅ V2评分过滤服务已初始化")
