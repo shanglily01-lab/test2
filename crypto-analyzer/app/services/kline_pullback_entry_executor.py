@@ -291,8 +291,8 @@ class KlinePullbackEntryExecutor:
             (是否确认, 原因描述)
         """
         try:
-            conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor(dictionary=True)
+            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
+            cursor = conn.cursor()
 
             # 根据阶段确定检测基准时间
             if phase == 'primary':
