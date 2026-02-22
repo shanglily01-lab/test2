@@ -41,7 +41,7 @@ class MySQLConnectionPool:
 
             # 设置默认值（如果配置中没有）
             config.setdefault('charset', 'utf8mb4')
-            config.setdefault('autocommit', False)
+            config.setdefault('autocommit', True)  # 改为自动提交，避免死锁
             config.setdefault('connect_timeout', 10)
             config.setdefault('read_timeout', 30)
             config.setdefault('write_timeout', 30)
@@ -111,6 +111,12 @@ class MySQLConnectionPool:
     def _return_connection(self, conn):
         """将连接归还到池中"""
         with self.lock:
+            # 清理事务状态，避免死锁
+            try:
+                conn.rollback()  # 回滚任何未完成的事务
+            except:
+                pass
+
             if len(self.connections) < self.pool_size:
                 if self._is_connection_alive(conn):
                     self.connections.append(conn)
