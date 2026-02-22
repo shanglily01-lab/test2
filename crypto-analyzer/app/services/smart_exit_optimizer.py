@@ -477,18 +477,18 @@ class SmartExitOptimizer:
         # === 开仓30分钟后启动智能监控 ===
         if hold_minutes >= MIN_HOLD_MINUTES:
 
-            # === 优先级2: 智能亏损监控（基于ROI）===
-            # 策略A: ROI亏损≥2% + 1根5M K线无好转（快速止损）
-            if roi_pct <= -2.0:
+            # === 优先级2: 智能亏损监控（基于价格变化）===
+            # 策略A: 价格亏损≥2% + 1根5M K线无好转（快速止损）
+            if profit_pct <= -2.0:
                 no_improvement = await self._check_5m_no_improvement_single(position_id, position_side)
                 if no_improvement:
-                    return True, f"亏损ROI{roi_pct:.2f}%+5M无好转(价格变化{profit_pct:.2f}%)"
+                    return True, f"价格亏损{profit_pct:.2f}%+5M无好转(ROI{roi_pct:.2f}%)"
 
-            # 策略B: ROI亏损≥1.5% + 2根5M K线连续无好转（谨慎止损）
-            elif roi_pct <= -1.5:
+            # 策略B: 价格亏损≥1.5% + 2根5M K线连续无好转（谨慎止损）
+            elif profit_pct <= -1.5:
                 no_improvement = await self._check_5m_no_improvement(position_id, position_side)
                 if no_improvement:
-                    return True, f"亏损ROI{roi_pct:.2f}%+2根5M连续无好转(价格变化{profit_pct:.2f}%)"
+                    return True, f"价格亏损{profit_pct:.2f}%+2根5M连续无好转(ROI{roi_pct:.2f}%)"
 
             # === 优先级3: 移动止盈（ROI盈利≥10%时追踪回撤0.5%）===
             TRAILING_STOP_ROI_THRESHOLD = 10.0  # ROI盈利阈值
