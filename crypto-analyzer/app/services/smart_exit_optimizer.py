@@ -1002,8 +1002,23 @@ class SmartExitOptimizer:
                                 'close_time': datetime.fromtimestamp(kline[6] / 1000)
                             })
                         return klines
+                else:
+                    # HTTP错误：交易对不存在或API错误，使用DEBUG级别避免刷屏
+                    logger.debug(f"获取{symbol} {interval} K线失败: HTTP {response.status}")
+                    return None
+        except asyncio.TimeoutError:
+            # 超时错误：网络问题，使用DEBUG级别
+            logger.debug(f"获取{symbol} {interval} K线超时")
+            return None
         except Exception as e:
-            logger.warning(f"获取{symbol} {interval} K线失败: {e}")
+            # 其他异常：可能是严重问题，使用WARNING级别
+            error_str = str(e)
+            if 'Invalid symbol' in error_str or 'symbol' in error_str.lower():
+                # 交易对不存在，使用DEBUG级别
+                logger.debug(f"获取{symbol} {interval} K线失败: 交易对不存在或格式错误")
+            else:
+                # 其他未知错误，使用WARNING级别
+                logger.warning(f"获取{symbol} {interval} K线失败: {e}")
             return None
 
     async def _check_5m_no_improvement(self, position_id: int, position_side: str) -> bool:
