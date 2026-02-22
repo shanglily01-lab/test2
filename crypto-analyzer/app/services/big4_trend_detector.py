@@ -150,21 +150,21 @@ class Big4TrendDetector:
         # 已按权重累加，不需要再除以数量（权重总和=1.0）
         avg_strength = total_strength
 
-        # 🔥 新逻辑：3个同向=强趋势 OR 得分>70，禁止反向开仓
-        if bullish_count >= 3 or (bullish_weight > 0.45 and avg_strength > 70):
+        # 🔥 新逻辑：3个同向=强趋势 OR 得分>60，禁止反向开仓
+        if bullish_count >= 3 or (bullish_weight > 0.45 and avg_strength > 60):
             overall_signal = 'STRONG_BULLISH'
             if bullish_count >= 3:
                 recommendation = f"{'+'.join(bullish_coins)}看涨({bullish_count}/4，权重{bullish_weight*100:.0f}%，强度{avg_strength:.0f})，🚫禁止做空"
             else:
-                recommendation = f"{'+'.join(bullish_coins)}看涨(强度{avg_strength:.0f}>70，权重{bullish_weight*100:.0f}%)，🚫禁止做空"
+                recommendation = f"{'+'.join(bullish_coins)}看涨(强度{avg_strength:.0f}>60，权重{bullish_weight*100:.0f}%)，🚫禁止做空"
             emergency_intervention['block_short'] = True
             emergency_intervention['details'] = f"Big4强多头趋势({bullish_count}/4，强度{avg_strength:.0f})"
-        elif bearish_count >= 3 or (bearish_weight > 0.45 and avg_strength > 70):
+        elif bearish_count >= 3 or (bearish_weight > 0.45 and avg_strength > 60):
             overall_signal = 'STRONG_BEARISH'
             if bearish_count >= 3:
                 recommendation = f"{'+'.join(bearish_coins)}看跌({bearish_count}/4，权重{bearish_weight*100:.0f}%，强度{avg_strength:.0f})，🚫禁止做多"
             else:
-                recommendation = f"{'+'.join(bearish_coins)}看跌(强度{avg_strength:.0f}>70，权重{bearish_weight*100:.0f}%)，🚫禁止做多"
+                recommendation = f"{'+'.join(bearish_coins)}看跌(强度{avg_strength:.0f}>60，权重{bearish_weight*100:.0f}%)，🚫禁止做多"
             emergency_intervention['block_long'] = True
             emergency_intervention['details'] = f"Big4强空头趋势({bearish_count}/4，强度{avg_strength:.0f})"
         elif bullish_weight > 0.45:
