@@ -67,21 +67,6 @@ class SmartEntryExecutor:
         else:
             return 0.0  # 黑名单3级
 
-    def _delete_building_position(self, building_position_id: int):
-        """删除失败的building状态持仓记录"""
-        try:
-            conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor()
-            cursor.execute("""
-                DELETE FROM futures_positions
-                WHERE id = %s AND status = 'building'
-            """, (building_position_id,))
-            conn.commit()
-            conn.close()
-            logger.info(f"🗑️ 已删除失败的building记录 ID:{building_position_id}")
-        except Exception as e:
-            logger.error(f"❌ 删除building记录失败: {e}")
-
     def _calculate_stop_take_prices(self, symbol: str, direction: str, current_price: float, signal_components: dict) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
         """计算止盈止损价格和百分比"""
         if not self.brain or not self.opt_config:
@@ -202,38 +187,6 @@ class SmartEntryExecutor:
         logger.info(f"   策略: 15分钟价格采样找最优点 | 90分位数阈值")
         logger.info(f"💰 保证金: {margin}U (评级等级: {self.opt_config.get_symbol_rating_level(symbol)})")
 
-        # 🔥 防重复开仓：立即插入building状态占位记录
-        signal_components = signal.get('trade_params', {}).get('signal_components', {})
-        if signal_components:
-            sorted_signals = sorted(signal_components.keys())
-            signal_combination_key = "TREND_" + " + ".join(sorted_signals)
-        else:
-            signal_combination_key = "TREND_unknown"
-
-        entry_score = signal.get('trade_params', {}).get('entry_score', 0)
-
-        conn = pymysql.connect(**self.db_config)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO futures_positions
-            (account_id, symbol, position_side, quantity, entry_price,
-             leverage, notional_value, margin, open_time,
-             entry_signal_type, entry_reason, entry_score, signal_components,
-             source, status, created_at, updated_at)
-            VALUES (%s, %s, %s, 0, 0, %s, 0, %s, NOW(), %s, %s, %s, %s,
-                    'smart_trader', 'building', NOW(), NOW())
-        """, (
-            self.account_id, symbol, direction, signal.get('leverage', 5), margin,
-            signal_combination_key, f"V1价格采样中 | 评分:{entry_score}",
-            entry_score, json.dumps(signal_components) if signal_components else None
-        ))
-
-        building_position_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-
-        logger.info(f"🔒 {symbol} 已创建building状态占位记录 ID:{building_position_id}，防止重复开仓")
-
         # 确保symbol已订阅到WebSocket价格服务
         if self.price_service and hasattr(self.price_service, 'subscribe'):
             try:
@@ -266,7 +219,7 @@ class SmartEntryExecutor:
                         if optimal:
                             logger.info(f"✅ {symbol} 找到最优入场点: {reason}")
                             return await self._execute_single_entry(
-                                symbol, direction, margin, signal, current_price, building_position_id
+                                symbol, direction, margin, signal, current_price
                             )
 
                 await asyncio.sleep(self.sample_interval_seconds)
@@ -276,20 +229,16 @@ class SmartEntryExecutor:
                 final_price = price_samples[-1]
                 logger.info(f"⏱️ {symbol} 15分钟采样结束，使用最终价格开仓: ${final_price:.4f}")
                 return await self._execute_single_entry(
-                    symbol, direction, margin, signal, final_price, building_position_id
+                    symbol, direction, margin, signal, final_price
                 )
             else:
                 logger.error(f"❌ {symbol} 采样失败，无有效价格")
-                # 删除building记录
-                self._delete_building_position(building_position_id)
                 return {'success': False, 'error': '无有效价格'}
 
         except Exception as e:
             logger.error(f"❌ {symbol} 价格采样建仓执行出错: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            # 删除building记录
-            self._delete_building_position(building_position_id)
             return {'success': False, 'error': str(e)}
 
     def _check_optimal_entry(self, price_samples: list, current_price: float, direction: str) -> Tuple[bool, str]:
@@ -326,7 +275,7 @@ class SmartEntryExecutor:
 
     async def _execute_single_entry(
         self, symbol: str, direction: str, margin: float,
-        signal: Dict, entry_price: float, building_position_id: int = None
+        signal: Dict, entry_price: float
     ) -> Dict:
         """
         执行一次性开仓
@@ -368,50 +317,26 @@ class SmartEntryExecutor:
             entry_score = signal.get('trade_params', {}).get('entry_score', 0)
             entry_reason = f"V1价格采样 | 评分:{entry_score}"
 
+            # 插入持仓记录
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO futures_positions
+                (account_id, symbol, position_side, quantity, entry_price,
+                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
+                 entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
+                 planned_close_time, source, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        'smart_trader', 'open', NOW(), NOW())
+            """, (
+                self.account_id, symbol, direction, quantity, entry_price, leverage,
+                notional_value, margin, stop_loss_price, take_profit_price,
+                signal_combination_key, entry_reason, entry_score,
+                json.dumps(signal_components) if signal_components else None,
+                max_hold_minutes, timeout_at, planned_close_time
+            ))
 
-            # 🔥 如果有building记录，更新它；否则插入新记录
-            if building_position_id:
-                # 更新building记录为正式开仓
-                cursor.execute("""
-                    UPDATE futures_positions
-                    SET quantity = %s, entry_price = %s,
-                        leverage = %s, notional_value = %s,
-                        stop_loss_price = %s, take_profit_price = %s,
-                        entry_signal_type = %s, entry_reason = %s,
-                        max_hold_minutes = %s, timeout_at = %s,
-                        planned_close_time = %s,
-                        status = 'open', updated_at = NOW()
-                    WHERE id = %s
-                """, (
-                    quantity, entry_price, leverage, notional_value,
-                    stop_loss_price, take_profit_price,
-                    signal_combination_key, entry_reason,
-                    max_hold_minutes, timeout_at, planned_close_time,
-                    building_position_id
-                ))
-                position_id = building_position_id
-                logger.debug(f"🔄 {symbol} 更新building记录 ID:{building_position_id} 为正式开仓")
-            else:
-                # 回退：直接插入新记录（不应该发生，但保留兼容性）
-                cursor.execute("""
-                    INSERT INTO futures_positions
-                    (account_id, symbol, position_side, quantity, entry_price,
-                     leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                     entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
-                     planned_close_time, source, status, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                            'smart_trader', 'open', NOW(), NOW())
-                """, (
-                    self.account_id, symbol, direction, quantity, entry_price, leverage,
-                    notional_value, margin, stop_loss_price, take_profit_price,
-                    signal_combination_key, entry_reason, entry_score,
-                    json.dumps(signal_components) if signal_components else None,
-                    max_hold_minutes, timeout_at, planned_close_time
-                ))
-                position_id = cursor.lastrowid
-                logger.warning(f"⚠️ {symbol} 未提供building_position_id，直接插入新记录")
+            position_id = cursor.lastrowid
 
             # 冻结资金
             cursor.execute("""
