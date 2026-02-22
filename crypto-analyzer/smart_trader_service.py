@@ -2708,6 +2708,7 @@ class SmartTraderService:
         """主循环"""
         last_smart_exit_check = datetime.now()
         last_blacklist_reload = datetime.now()
+        last_config_reload = datetime.now()
 
         while self.running:
             try:
@@ -2719,6 +2720,20 @@ class SmartTraderService:
                 if (now - last_blacklist_reload).total_seconds() >= 300:  # 5分钟
                     self.brain._reload_blacklist()
                     last_blacklist_reload = now
+
+                # 0.6. 定期重新加载Big4配置 (每5分钟检查数据库)
+                if (now - last_config_reload).total_seconds() >= 300:
+                    try:
+                        from app.services.system_settings_loader import get_big4_filter_enabled
+                        old_big4_enabled = self.big4_filter_config.get('enabled', True)
+                        new_big4_enabled = get_big4_filter_enabled()
+
+                        if old_big4_enabled != new_big4_enabled:
+                            self.big4_filter_config = {'enabled': new_big4_enabled}
+                            logger.info(f"🔄 [BIG4-CONFIG-UPDATE] Big4过滤器配置已更新: {'启用✅' if new_big4_enabled else '禁用❌'}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ [CONFIG-RELOAD] 重新加载Big4配置失败: {e}")
+                    last_config_reload = now
 
                 # 注意：止盈止损、超时检查已统一迁移到SmartExitOptimizer
                 # 1. [已停用] 检查止盈止损 -> 由SmartExitOptimizer处理

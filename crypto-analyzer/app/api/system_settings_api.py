@@ -229,7 +229,7 @@ async def update_big4_filter(data: Big4FilterUpdate):
             'message': f'Big4过滤器{status_text}',
             'data': {
                 'enabled': data.enabled,
-                'note': '需要重启服务才能生效'
+                'note': '配置将在5分钟内自动生效，无需重启服务'
             }
         }
 
