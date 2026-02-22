@@ -732,6 +732,7 @@ class CoinFuturesDecisionBrain:
             klines_15m = self.load_klines(symbol, '15m', 96)  # 24小时的15分钟K线
 
             if len(klines_1d) < 30 or len(klines_1h) < 72 or len(klines_15m) < 48:  # 至少需要72小时(3天)数据
+                logger.debug(f"⚠️ {symbol:<12} K线数据不足 1D:{len(klines_1d)}/30 1H:{len(klines_1h)}/72 15M:{len(klines_15m)}/48")
                 return None
 
             current = klines_1h[-1]['close']
@@ -1136,11 +1137,20 @@ class CoinFuturesDecisionBrain:
 
     def scan_all(self):
         """扫描所有币种"""
+        logger.info(f"\n{'='*80}")
+        logger.info(f"🔍 开始扫描 {len(self.whitelist)} 个交易对 | 开仓阈值: {self.threshold}分")
+        logger.info(f"{'='*80}")
+
         opportunities = []
         for symbol in self.whitelist:
             result = self.analyze(symbol)
             if result:
                 opportunities.append(result)
+
+        logger.info(f"{'='*80}")
+        logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个")
+        logger.info(f"{'='*80}\n")
+
         return opportunities
 
     def _validate_signal_direction(self, signal_components: dict, side: str) -> tuple:
