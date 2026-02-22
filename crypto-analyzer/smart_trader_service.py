@@ -1359,11 +1359,12 @@ class SmartTraderService:
 
             except Exception as e:
                 logger.error(f"❌ [V2-PULLBACK-ERROR] {symbol} 启动回调任务失败: {e}")
-                logger.error(f"   回退到V1价格采样模式")
-                # 失败时回退到V1
+                import traceback
+                logger.error(traceback.format_exc())
+                return False  # 避免继续执行回退策略造成重复下单
 
         # V1策略: 价格采样建仓（15分钟价格采样找最优点，一次性开仓）
-        elif self.batch_entry_strategy == 'price_percentile' and self.smart_entry_executor and self.event_loop:
+        if self.batch_entry_strategy == 'price_percentile' and self.smart_entry_executor and self.event_loop:
             try:
                 # 准备信号字典
                 signal = {
@@ -1391,8 +1392,9 @@ class SmartTraderService:
 
             except Exception as e:
                 logger.error(f"❌ [V1-PRICE-SAMPLING-ERROR] {symbol} 启动采样任务失败: {e}")
-                logger.error(f"   回退到直接开仓模式")
-                # 失败时回退到直接开仓
+                import traceback
+                logger.error(traceback.format_exc())
+                return False  # 避免继续执行回退策略造成重复下单
 
         # ========== 回退策略：一次性直接开仓（执行器不可用时使用）==========
         try:
