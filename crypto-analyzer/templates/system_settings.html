@@ -225,6 +225,54 @@
             </div>
         </div>
 
+        <!-- 交易方向控制 -->
+        <div class="settings-card">
+            <div class="setting-item">
+                <div class="setting-header">🎯 交易方向控制</div>
+                <div class="setting-description">
+                    控制系统是否允许做多或做空（实时生效，最长延迟5分钟）
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center justify-content-between p-3" style="background: #0f3460; border-radius: 8px;">
+                            <div>
+                                <strong style="color: #4ecca3;">📈 允许做多 (LONG)</strong>
+                                <div class="small text-muted mt-1">启用后可以执行做多交易</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="allowLongToggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center justify-content-between p-3" style="background: #0f3460; border-radius: 8px;">
+                            <div>
+                                <strong style="color: #4ecca3;">📉 允许做空 (SHORT)</strong>
+                                <div class="small text-muted mt-1">启用后可以执行做空交易</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="allowShortToggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="alert alert-info" style="background: #0f3460; border-color: #4ecca3; color: #eee;">
+                        <strong>当前状态:</strong>
+                        <span id="directionStatus">Loading...</span>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" onclick="updateTradingDirection()">
+                    💾 保存交易方向设置
+                </button>
+            </div>
+        </div>
+
         <!-- 当前配置状态 -->
         <div class="settings-card">
             <div class="setting-item">
@@ -301,6 +349,48 @@ Loading...
             } catch (error) {
                 showAlert('加载配置出错: ' + error.message, 'danger');
             }
+
+            // 加载交易方向设置
+            loadTradingDirection();
+        }
+
+        // 加载交易方向设置
+        async function loadTradingDirection() {
+            try {
+                const response = await fetch(`${API_BASE}/trading-direction`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const data = result.data;
+
+                    // 更新开关状态
+                    const allowLong = data.allow_long.value;
+                    const allowShort = data.allow_short.value;
+
+                    document.getElementById('allowLongToggle').checked = allowLong;
+                    document.getElementById('allowShortToggle').checked = allowShort;
+
+                    // 更新状态显示
+                    updateDirectionStatus(allowLong, allowShort);
+                }
+            } catch (error) {
+                console.error('加载交易方向设置失败:', error);
+            }
+        }
+
+        // 更新交易方向状态显示
+        function updateDirectionStatus(allowLong, allowShort) {
+            let statusText = '';
+            if (allowLong && allowShort) {
+                statusText = '✅ 允许做多 + ✅ 允许做空';
+            } else if (allowLong && !allowShort) {
+                statusText = '✅ 允许做多 + ❌ 禁止做空（仅做多模式）';
+            } else if (!allowLong && allowShort) {
+                statusText = '❌ 禁止做多 + ✅ 允许做空（仅做空模式）';
+            } else {
+                statusText = '❌ 禁止做多 + ❌ 禁止做空（不执行任何交易）';
+            }
+            document.getElementById('directionStatus').textContent = statusText;
         }
 
         // 更新策略
@@ -347,6 +437,37 @@ Loading...
                 if (result.success) {
                     showAlert(`✅ ${result.message}<br><small>${result.data.note}</small>`, 'success');
                     document.getElementById('big4Status').textContent = enabled ? '✅ 已启用' : '❌ 已禁用';
+                    loadSettings();
+                } else {
+                    showAlert('更新失败', 'danger');
+                }
+            } catch (error) {
+                showAlert('更新出错: ' + error.message, 'danger');
+            }
+        }
+
+        // 更新交易方向设置
+        async function updateTradingDirection() {
+            const allowLong = document.getElementById('allowLongToggle').checked;
+            const allowShort = document.getElementById('allowShortToggle').checked;
+
+            try {
+                const response = await fetch(`${API_BASE}/trading-direction`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        allow_long: allowLong,
+                        allow_short: allowShort
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(`✅ ${result.message}<br><small>${result.data.note}</small>`, 'success');
+                    updateDirectionStatus(allowLong, allowShort);
                     loadSettings();
                 } else {
                     showAlert('更新失败', 'danger');

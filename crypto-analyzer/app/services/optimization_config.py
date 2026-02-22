@@ -285,6 +285,48 @@ class OptimizationConfig:
         }
 
     # ============================================================
+    # 交易方向控制
+    # ============================================================
+
+    def is_long_allowed(self) -> bool:
+        """
+        检查是否允许做多
+
+        Returns:
+            True=允许做多, False=禁止做多
+        """
+        allow_long = self.get_param('allow_long', 1)
+        return int(allow_long) == 1
+
+    def is_short_allowed(self) -> bool:
+        """
+        检查是否允许做空
+
+        Returns:
+            True=允许做空, False=禁止做空
+        """
+        allow_short = self.get_param('allow_short', 1)
+        return int(allow_short) == 1
+
+    def is_direction_allowed(self, direction: str) -> bool:
+        """
+        检查指定方向是否允许交易
+
+        Args:
+            direction: 交易方向 'LONG' 或 'SHORT'
+
+        Returns:
+            True=允许, False=禁止
+        """
+        if direction == 'LONG':
+            return self.is_long_allowed()
+        elif direction == 'SHORT':
+            return self.is_short_allowed()
+        else:
+            logger.warning(f"未知交易方向: {direction}")
+            return False
+
+    # ============================================================
     # 交易对评级管理
     # ============================================================
 

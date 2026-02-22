@@ -1310,6 +1310,12 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后15分钟冷却期内")
             return False
 
+        # 新增验证: 检查交易方向是否允许
+        if not self.opt_config.is_direction_allowed(side):
+            direction_name = "做多" if side == "LONG" else "做空"
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 系统已禁止{direction_name}")
+            return False
+
         # 🔥 V5.1优化: 移除防追高/防杀跌过滤
         # 原因: Big4触底检测已提供全局保护（禁止做空2小时）
         # 防杀跌过滤容易误杀破位追空信号，与Big4机制冲突

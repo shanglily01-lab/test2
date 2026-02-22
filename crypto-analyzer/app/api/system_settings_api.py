@@ -40,6 +40,12 @@ class Big4FilterUpdate(BaseModel):
     enabled: bool
 
 
+class TradingDirectionUpdate(BaseModel):
+    """交易方向更新"""
+    allow_long: Optional[bool] = None
+    allow_short: Optional[bool] = None
+
+
 @router.get("/settings")
 async def get_system_settings():
     """
@@ -222,6 +228,112 @@ async def update_big4_filter(data: Big4FilterUpdate):
 
     except Exception as e:
         logger.error(f"更新Big4过滤器失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/trading-direction")
+async def get_trading_direction():
+    """
+    获取交易方向设置
+
+    Returns:
+        交易方向设置
+    """
+    try:
+        db_config = get_db_config()
+        conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT param_key, param_value, description
+            FROM adaptive_params
+            WHERE param_key IN ('allow_long', 'allow_short')
+            ORDER BY param_key
+        """)
+
+        settings = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        # 转换为字典格式
+        result = {}
+        for setting in settings:
+            result[setting['param_key']] = {
+                'value': int(float(setting['param_value'])) == 1,
+                'description': setting['description']
+            }
+
+        # 如果没有找到设置，使用默认值
+        if 'allow_long' not in result:
+            result['allow_long'] = {'value': True, 'description': '是否允许做多'}
+        if 'allow_short' not in result:
+            result['allow_short'] = {'value': True, 'description': '是否允许做空'}
+
+        return {
+            'success': True,
+            'data': result
+        }
+
+    except Exception as e:
+        logger.error(f"获取交易方向设置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/trading-direction")
+async def update_trading_direction(data: TradingDirectionUpdate):
+    """
+    更新交易方向设置
+
+    Args:
+        data: 交易方向更新数据
+
+    Returns:
+        更新结果
+    """
+    try:
+        db_config = get_db_config()
+        conn = pymysql.connect(**db_config)
+        cursor = conn.cursor()
+
+        updates = []
+        if data.allow_long is not None:
+            value = 1 if data.allow_long else 0
+            cursor.execute("""
+                UPDATE adaptive_params
+                SET param_value = %s, updated_by = 'web_ui', updated_at = NOW()
+                WHERE param_key = 'allow_long'
+            """, (value,))
+            updates.append(f"做多: {'允许' if data.allow_long else '禁止'}")
+
+        if data.allow_short is not None:
+            value = 1 if data.allow_short else 0
+            cursor.execute("""
+                UPDATE adaptive_params
+                SET param_value = %s, updated_by = 'web_ui', updated_at = NOW()
+                WHERE param_key = 'allow_short'
+            """, (value,))
+            updates.append(f"做空: {'允许' if data.allow_short else '禁止'}")
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        update_msg = ', '.join(updates)
+        logger.info(f"✅ 交易方向已更新: {update_msg}")
+
+        return {
+            'success': True,
+            'message': f'交易方向已更新',
+            'data': {
+                'allow_long': data.allow_long,
+                'allow_short': data.allow_short,
+                'updates': updates,
+                'note': '配置实时生效，最长延迟5分钟（缓存刷新）'
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"更新交易方向设置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
