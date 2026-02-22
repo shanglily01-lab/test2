@@ -802,33 +802,38 @@ class SmartDecisionBrain:
         for symbol in self.whitelist:
             result = self.analyze(symbol, big4_result=big4_result)
             if result:
+                # ✅ 通过V1+V2验证的信号
+                signal_side = result['side']
+                signal_score = result['score']
+                logger.info(f"✅ [通过验证] {symbol} {signal_side} | V1评分:{signal_score} | 信号组合:{result.get('signal_type', 'N/A')}")
+
                 # 🔥 Big4方向过滤（提前应用）
                 if big4_result:
-                    signal_side = result['side']
                     big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                     big4_strength = big4_result.get('signal_strength', 0)
 
                     # 🔥 Big4中性时，不允许开仓（市场方向不明确）
                     if big4_signal == 'NEUTRAL':
-                        logger.debug(f"[BIG4-FILTER] {symbol} {signal_side}信号被过滤（Big4中性，市场方向不明确）")
+                        logger.info(f"🚫 [Big4过滤] {symbol} {signal_side} | Big4中性(强度{big4_strength:.0f})，市场方向不明确")
                         filtered_count += 1
                         continue
 
                     # Big4看空时，只有强度>=70才完全禁止开多
                     if big4_signal == 'BEARISH' and signal_side == 'LONG' and big4_strength >= 70:
-                        logger.debug(f"[BIG4-FILTER] {symbol} LONG信号被过滤（Big4看空强度{big4_strength:.0f}>=70）")
+                        logger.info(f"🚫 [Big4过滤] {symbol} LONG | Big4看空强度{big4_strength:.0f}>=70")
                         filtered_count += 1
                         continue
 
                     # Big4看多时，只有强度>=70才完全禁止开空
                     if big4_signal == 'BULLISH' and signal_side == 'SHORT' and big4_strength >= 70:
-                        logger.debug(f"[BIG4-FILTER] {symbol} SHORT信号被过滤（Big4看多强度{big4_strength:.0f}>=70）")
+                        logger.info(f"🚫 [Big4过滤] {symbol} SHORT | Big4看多强度{big4_strength:.0f}>=70")
                         filtered_count += 1
                         continue
 
                     # 🔥 V1主导评分，Big4只做方向过滤
                     # 不给同向信号加分，保持V1评分的纯粹性
 
+                logger.info(f"🎯 [最终入选] {symbol} {signal_side} | V1评分:{signal_score} | Big4:{big4_signal}({big4_strength:.0f})")
                 opportunities.append(result)
 
         logger.info(f"{'='*100}")
