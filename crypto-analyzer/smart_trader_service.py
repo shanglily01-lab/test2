@@ -174,8 +174,20 @@ class SmartDecisionBrain:
                 # 如果表不存在，使用空字典
                 self.signal_blacklist = {}
 
-            # 6. 所有交易对都可以交易（不过滤黑名单）
-            self.whitelist = all_symbols
+            # 6. 从数据库加载白名单（rating_level = 0 的交易对）
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT symbol FROM trading_symbol_rating
+                WHERE rating_level = 0
+                ORDER BY symbol
+            """)
+            whitelist_rows = cursor.fetchall()
+            self.whitelist = [row['symbol'] for row in whitelist_rows] if whitelist_rows else []
+            cursor.close()
+
+            # 如果数据库没有白名单，使用config.yaml中存在且不在黑名单中的交易对
+            if not self.whitelist:
+                self.whitelist = [s for s in all_symbols if s not in self.blacklist]
 
             logger.info(f"✅ 从数据库加载配置:")
             logger.info(f"   总交易对: {len(all_symbols)}")
