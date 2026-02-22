@@ -284,7 +284,12 @@ class SmartDecisionBrain:
             logger.info(f"   ✅ V2评分过滤服务已初始化")
 
         except Exception as e:
-            logger.error(f"读取数据库配置失败: {e}, 使用默认配置")
+            import traceback
+            logger.error(f"❌ 读取数据库配置失败，使用默认14个交易对")
+            logger.error(f"   错误类型: {type(e).__name__}")
+            logger.error(f"   错误信息: {e}")
+            logger.error(f"   当前工作目录: {os.getcwd()}")
+            logger.error(f"   详细堆栈:\n{traceback.format_exc()}")
             self.whitelist = [
                 'BCH/USDT', 'LDO/USDT', 'ENA/USDT', 'WIF/USDT', 'TAO/USDT',
                 'DASH/USDT', 'ETC/USDT', 'VIRTUAL/USDT', 'NEAR/USDT',
