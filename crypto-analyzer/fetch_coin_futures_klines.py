@@ -54,10 +54,11 @@ class CoinFuturesKlineFetcher:
         self.exchange = ccxt.binance({
             'enableRateLimit': True,
             'options': {
-                'defaultType': 'delivery',  # 币本位合约
+                'defaultType': 'future',  # 币本位合约
+                'defaultSubType': 'inverse',  # 反向合约（币本位）
             }
         })
-        logger.info("✅ 已连接到Binance币本位合约API")
+        logger.info("✅ 已连接到Binance币本位合约API (Inverse Perpetual)")
 
     async def fetch_and_save_klines(self, symbol: str, timeframe: str, limit: int):
         """
@@ -69,8 +70,9 @@ class CoinFuturesKlineFetcher:
             limit: 拉取数量
         """
         try:
-            # 拉取K线数据
-            ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            # 拉取币本位合约K线数据
+            params = {'subType': 'inverse'}  # 显式指定币本位合约
+            ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit, params=params)
 
             if not ohlcv:
                 logger.warning(f"⚠️ {symbol} {timeframe} 无数据")
