@@ -1385,12 +1385,24 @@ class SmartTraderService:
                 }
 
                 # 在事件循环中创建异步任务（后台执行）
-                asyncio.run_coroutine_threadsafe(
+                future = asyncio.run_coroutine_threadsafe(
                     self.pullback_executor.execute_entry(signal),
                     self.event_loop
                 )
+                # 添加回调处理任务结果（避免静默失败）
+                def handle_entry_result(f):
+                    try:
+                        result = f.result()
+                        if not result.get('success'):
+                            logger.warning(f"❌ {symbol} 回调建仓失败: {result.get('error', 'Unknown')}")
+                    except Exception as e:
+                        logger.error(f"❌ {symbol} 回调建仓任务异常: {e}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                future.add_done_callback(handle_entry_result)
 
-                logger.info(f"🚀 [V2-PULLBACK] {symbol} {side} K线回调建仓任务已启动 (等待15M阴线，一次性开仓)")
+                kline_desc = "阴线" if side == "LONG" else "阳线"
+                logger.info(f"🚀 [V2-PULLBACK] {symbol} {side} K线回调建仓任务已启动 (等待15M{kline_desc}，一次性开仓)")
                 logger.info(f"   📝 信号评分: {opp.get('score', 0)} | 信号组合: {signal['trade_params']['signal_combination_key']}")
                 return True
 
