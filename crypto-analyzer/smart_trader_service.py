@@ -119,15 +119,6 @@ class SmartDecisionBrain:
             self.blacklist = list(new_blacklist)
             self.whitelist = list(new_whitelist)
 
-            # 重新加载Big4过滤器配置
-            from app.services.system_settings_loader import get_big4_filter_enabled
-            old_big4_enabled = self.big4_filter_config.get('enabled', True) if hasattr(self, 'big4_filter_config') else True
-            new_big4_enabled = get_big4_filter_enabled()
-
-            if old_big4_enabled != new_big4_enabled:
-                self.big4_filter_config = {'enabled': new_big4_enabled}
-                logger.info(f"[BIG4-CONFIG-UPDATE] Big4过滤器配置已更新: {'启用' if new_big4_enabled else '禁用'}")
-
             return len(blacklist_added) > 0 or len(blacklist_removed) > 0 or len(whitelist_added) > 0 or len(whitelist_removed) > 0
         except Exception as e:
             logger.error(f"[BLACKLIST-RELOAD-ERROR] 重新加载黑白名单失败: {e}")
@@ -273,12 +264,6 @@ class SmartDecisionBrain:
             )
             logger.info(f"   ✅ V2评分过滤服务已初始化")
 
-            # 8. 初始化Big4过滤器配置
-            from app.services.system_settings_loader import get_big4_filter_enabled
-            big4_enabled = get_big4_filter_enabled()
-            self.big4_filter_config = {'enabled': big4_enabled}
-            logger.info(f"   ✅ Big4过滤器: {'启用' if big4_enabled else '禁用'}")
-
         except Exception as e:
             import traceback
             logger.error(f"❌ 读取数据库配置失败，使用默认14个交易对")
@@ -325,16 +310,6 @@ class SmartDecisionBrain:
             except Exception as v2_error:
                 logger.error(f"   ❌ V2评分过滤服务初始化失败: {v2_error}")
                 self.score_v2_service = None
-
-            # 🔥 修复: 初始化big4_filter_config（异常情况下也需要）
-            try:
-                from app.services.system_settings_loader import get_big4_filter_enabled
-                big4_enabled = get_big4_filter_enabled()
-                self.big4_filter_config = {'enabled': big4_enabled}
-                logger.info(f"   ✅ Big4过滤器: {'启用' if big4_enabled else '禁用'}（降级模式）")
-            except Exception as big4_error:
-                logger.error(f"   ❌ Big4过滤器配置初始化失败: {big4_error}")
-                self.big4_filter_config = {'enabled': True}  # 默认启用
 
     def reload_config(self):
         """重新加载配置 - 供外部调用"""
@@ -797,11 +772,12 @@ class SmartDecisionBrain:
             logger.error(f"{symbol} 分析失败: {e}")
             return None
 
-    def scan_all(self, big4_result: dict = None):
+    def scan_all(self, big4_result: dict = None, big4_filter_enabled: bool = True):
         """扫描所有币种
 
         Args:
             big4_result: Big4趋势结果 (由SmartTraderService传入)
+            big4_filter_enabled: Big4过滤器是否启用 (由SmartTraderService传入)
         """
         # 每次扫描前重新加载黑名单,确保运行时添加的黑名单立即生效
         self._reload_blacklist()
@@ -829,31 +805,19 @@ class SmartDecisionBrain:
                 signal_side = result['side']
                 signal_score = result['score']
 
-                # 🔥 Big4方向过滤（提前应用）- 检查配置是否启用
-                if big4_result and self.big4_filter_config.get('enabled', True):
-                    big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
-                    big4_strength = big4_result.get('signal_strength', 0)
+                # 🔥 Big4紧急干预过滤（使用detector中已设置的block标志）
+                if big4_result and big4_filter_enabled:
+                    emergency = big4_result.get('emergency_intervention', {})
 
-                    # 🔥 Big4中性时，不允许开仓（市场方向不明确）
-                    if big4_signal == 'NEUTRAL':
-                        logger.info(f"🚫 [Big4过滤] {symbol} {signal_side} | Big4中性(强度{big4_strength:.0f})，市场方向不明确")
+                    if emergency.get('block_long', False) and signal_side == 'LONG':
+                        logger.info(f"🚫 [Big4过滤] {symbol} LONG | {emergency.get('details', 'Big4强趋势阻止做多')}")
                         filtered_count += 1
                         continue
 
-                    # Big4看空时，只有强度>=60才完全禁止开多
-                    if big4_signal == 'BEARISH' and signal_side == 'LONG' and big4_strength >= 60:
-                        logger.info(f"🚫 [Big4过滤] {symbol} LONG | Big4看空强度{big4_strength:.0f}>=60")
+                    if emergency.get('block_short', False) and signal_side == 'SHORT':
+                        logger.info(f"🚫 [Big4过滤] {symbol} SHORT | {emergency.get('details', 'Big4强趋势阻止做空')}")
                         filtered_count += 1
                         continue
-
-                    # Big4看多时，只有强度>=60才完全禁止开空
-                    if big4_signal == 'BULLISH' and signal_side == 'SHORT' and big4_strength >= 60:
-                        logger.info(f"🚫 [Big4过滤] {symbol} SHORT | Big4看多强度{big4_strength:.0f}>=60")
-                        filtered_count += 1
-                        continue
-
-                    # 🔥 V1主导评分，Big4只做方向过滤
-                    # 不给同向信号加分，保持V1评分的纯粹性
 
                 logger.info(f"🎯 [最终入选] {symbol} {signal_side} | V1评分:{signal_score} | Big4:{big4_signal}({big4_strength:.0f})")
                 opportunities.append(result)
@@ -2795,7 +2759,10 @@ class SmartTraderService:
 
                 # 获取Big4结果并扫描趋势信号
                 big4_result = self.get_big4_result()
-                opportunities = self.brain.scan_all(big4_result=big4_result)
+                opportunities = self.brain.scan_all(
+                    big4_result=big4_result,
+                    big4_filter_enabled=self.big4_filter_config.get('enabled', True)
+                )
                 logger.info(f"[TREND-SCAN] 趋势模式扫描完成, 找到 {len(opportunities)} 个机会")
 
                 if not opportunities:
