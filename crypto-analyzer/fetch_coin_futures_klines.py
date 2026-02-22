@@ -43,16 +43,8 @@ class CoinFuturesKlineFetcher:
         config = load_config()
         self.db_config = config['database']['mysql']
 
-        # 币本位交易对列表（从config.yaml加载）
-        self.symbols = [
-            'BTC/USD', 'ETH/USD', 'BNB/USD', 'SOL/USD',
-            'XRP/USD', 'ADA/USD', 'DOGE/USD', 'AVAX/USD',
-            'DOT/USD', 'LINK/USD', 'ATOM/USD', 'UNI/USD',
-            'LTC/USD', 'BCH/USD', 'FIL/USD', 'NEAR/USD',
-            'AAVE/USD', 'ALGO/USD', 'APT/USD', 'ETC/USD',
-            'OP/USD', 'SAND/USD', 'SUI/USD', 'TRX/USD',
-            'WIF/USD', 'WLD/USD', 'XLM/USD', 'ENS/USD'
-        ]
+        # 从config.yaml加载交易对列表
+        self.symbols = config.get('symbols', [])
 
         # 初始化交易所
         self.exchange = None
