@@ -778,12 +778,11 @@ class SmartDecisionBrain:
             logger.error(f"{symbol} 分析失败: {e}")
             return None
 
-    def scan_all(self, big4_result: dict = None, big4_filter_enabled: bool = True):
+    def scan_all(self, big4_result: dict = None):
         """扫描所有币种
 
         Args:
-            big4_result: Big4趋势结果 (由SmartTraderService传入)
-            big4_filter_enabled: Big4过滤器是否启用
+            big4_result: Big4趋势结果 (由SmartTraderService传入，仅用于日志显示)
         """
         # 每次扫描前重新加载黑名单,确保运行时添加的黑名单立即生效
         self._reload_blacklist()
@@ -802,33 +801,14 @@ class SmartDecisionBrain:
         logger.info(f"{'='*100}")
 
         opportunities = []
-        filtered_count = 0
 
         for symbol in self.whitelist:
             result = self.analyze(symbol, big4_result=big4_result)
             if result:
-                signal_side = result['side']
-                signal_score = result['score']
-
-                # 🔥 Big4紧急干预过滤（使用detector中已设置的block标志）
-                if big4_result and big4_filter_enabled:
-                    emergency = big4_result.get('emergency_intervention', {})
-
-                    if emergency.get('block_long', False) and signal_side == 'LONG':
-                        logger.info(f"🚫 [Big4过滤] {symbol} LONG | {emergency.get('details', 'Big4强趋势阻止做多')}")
-                        filtered_count += 1
-                        continue
-
-                    if emergency.get('block_short', False) and signal_side == 'SHORT':
-                        logger.info(f"🚫 [Big4过滤] {symbol} SHORT | {emergency.get('details', 'Big4强趋势阻止做空')}")
-                        filtered_count += 1
-                        continue
-
-                logger.info(f"🎯 [最终入选] {symbol} {signal_side} | V1评分:{signal_score} | Big4:{big4_signal}({big4_strength:.0f})")
                 opportunities.append(result)
 
         logger.info(f"{'='*100}")
-        logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个 | Big4过滤: {filtered_count} 个 | Big4状态: {big4_signal}(强度{big4_strength:.0f})")
+        logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个 | Big4状态: {big4_signal}(强度{big4_strength:.0f})")
         logger.info(f"{'='*100}\n")
 
         return opportunities
@@ -2791,10 +2771,7 @@ class SmartTraderService:
 
                 # 获取Big4结果并扫描趋势信号
                 big4_result = self.get_big4_result()
-                opportunities = self.brain.scan_all(
-                    big4_result=big4_result,
-                    big4_filter_enabled=self.big4_filter_config.get('enabled', True)
-                )
+                opportunities = self.brain.scan_all(big4_result=big4_result)
                 logger.info(f"[TREND-SCAN] 趋势模式扫描完成, 找到 {len(opportunities)} 个机会")
 
                 if not opportunities:
@@ -3050,16 +3027,16 @@ class SmartTraderService:
                                             latest_close = float(recent_klines[0]['close_price'])
                                             recovery_pct = (latest_close - period_low) / period_low * 100
 
-                                            if recovery_pct < 3.0:
+                                            if recovery_pct < 2.0:
                                                 all_recovered = False
                                                 break
 
                                     cursor_check.close()
 
-                                    # 如果所有Big4都已反弹3%+，解除禁止做空
+                                    # 如果所有Big4都已反弹2%+，解除禁止做空
                                     if all_recovered:
                                         should_block_short = False
-                                        logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已反弹3%+，解除做空限制")
+                                        logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已反弹2%+，解除做空限制")
 
                                 except Exception as check_error:
                                     logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
@@ -3088,7 +3065,7 @@ class SmartTraderService:
                                             latest_close = float(recent_klines[0]['close_price'])
                                             cooldown_pct = (latest_close - period_high) / period_high * 100
 
-                                            if cooldown_pct > -3.0:
+                                            if cooldown_pct > -2.0:
                                                 all_cooled = False
                                                 break
 
@@ -3096,7 +3073,7 @@ class SmartTraderService:
 
                                     if all_cooled:
                                         should_block_long = False
-                                        logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已回调3%+，解除做多限制")
+                                        logger.info(f"✅ [SMART-RELEASE] {symbol} 市场已回调2%+，解除做多限制")
 
                                 except Exception as check_error:
                                     logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
