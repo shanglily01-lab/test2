@@ -63,6 +63,7 @@ class SmartDecisionBrain:
         self._load_config()
 
         self.threshold = 60  # 开仓阈值 (强信号过滤,理论最大232分,60分≈26%强度)
+        self.max_threshold = 150  # 🔥 评分上限：拒绝150+分信号(数据显示高分=追涨杀跌=亏损)
 
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
         self.blacklist_checker = SignalBlacklistChecker(db_config, cache_minutes=5)
@@ -655,6 +656,11 @@ class SmartDecisionBrain:
                 else:
                     side = 'SHORT'
                     score = short_score
+
+                # 🔥 新增：拒绝过高评分的信号（数据显示150+分的信号胜率32.8%，平均亏损-4.82U/单）
+                if score > self.max_threshold:
+                    logger.warning(f"{symbol} 评分{score}过高(>{self.max_threshold})，历史数据显示高分信号易追涨杀跌，跳过")
+                    return None
 
                 # 🔥 关键修复: 清理signal_components,只保留与最终方向一致的信号
                 # 定义多头和空头信号 (已移除1D信号和EMA信号)
