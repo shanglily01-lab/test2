@@ -886,7 +886,7 @@ class Big4TrendDetector:
 
             # 如果反弹窗口已结束，检查市场是否已经恢复
             if not active_bounce_window and bottom_detected:
-                # 检查Big4是否已经反弹完成（反弹超过3%）
+                # 检查Big4是否已经反弹完成（反弹超过2%）
                 market_recovered = True
                 for symbol in BIG4_SYMBOLS:
                     cursor.execute("""
@@ -905,15 +905,15 @@ class Big4TrendDetector:
                         latest_close = float(recent_klines[0]['close_price'])
                         recovery_pct = (latest_close - period_low) / period_low * 100
 
-                        # 如果任一币种未完成3%反弹，认为市场尚未恢复
-                        if recovery_pct < 3.0:
+                        # 如果任一币种未完成2%反弹，认为市场尚未恢复
+                        if recovery_pct < 2.0:
                             market_recovered = False
                             break
 
                 # 如果市场已恢复，解除禁止做空限制
                 if market_recovered:
                     block_short = False
-                    reasons.append("✅ 市场已反弹3%+，解除做空限制")
+                    reasons.append("✅ 市场已反弹2%+，解除做空限制")
 
             # 同理检查触顶是否已回调完成
             if not active_bounce_window and top_detected:
