@@ -483,8 +483,8 @@ class CoinFuturesDecisionBrain:
             time_spread = max(min_indices) - min(min_indices)
             time_sync = time_spread <= 2
 
-            # 条件2: 至少3个币种反弹>=5% (优化: 从3%提高到5%，避免过早触发)
-            strong_bounce_count = sum(1 for b in bounces if b >= 5.0)
+            # 条件2: 至少3个币种反弹>=2% (优化: 从5%降低到2%，捕捉慢速弱反弹)
+            strong_bounce_count = sum(1 for b in bounces if b >= 2.0)
 
             # 条件3: 触底时间在4小时内 (使用最早触底时间)
             import time
@@ -501,7 +501,7 @@ class CoinFuturesDecisionBrain:
                 ])
 
                 reason = (f"Big4同步触底反转: 时间偏差{time_spread}根K线(≤30分钟), "
-                         f"{strong_bounce_count}/4币种反弹≥5%, 平均反弹{avg_bounce:.1f}%, "
+                         f"{strong_bounce_count}/4币种反弹≥2%, 平均反弹{avg_bounce:.1f}%, "
                          f"触底{hours_since_bottom:.1f}小时内 ({details})")
 
                 logger.warning(f"🚫 [BIG4-BOTTOM] {reason}, 阻止做空")
