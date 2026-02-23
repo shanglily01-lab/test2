@@ -483,8 +483,8 @@ class CoinFuturesDecisionBrain:
             time_spread = max(min_indices) - min(min_indices)
             time_sync = time_spread <= 2
 
-            # 条件2: 至少3个币种反弹>=2% (优化: 从5%降低到2%，捕捉慢速弱反弹)
-            strong_bounce_count = sum(1 for b in bounces if b >= 2.0)
+            # 条件2: 至少3个币种反弹>=5% (优化: 从3%提高到5%，避免过早触发)
+            strong_bounce_count = sum(1 for b in bounces if b >= 5.0)
 
             # 条件3: 触底时间在4小时内 (使用最早触底时间)
             import time
@@ -501,7 +501,7 @@ class CoinFuturesDecisionBrain:
                 ])
 
                 reason = (f"Big4同步触底反转: 时间偏差{time_spread}根K线(≤30分钟), "
-                         f"{strong_bounce_count}/4币种反弹≥2%, 平均反弹{avg_bounce:.1f}%, "
+                         f"{strong_bounce_count}/4币种反弹≥5%, 平均反弹{avg_bounce:.1f}%, "
                          f"触底{hours_since_bottom:.1f}小时内 ({details})")
 
                 logger.warning(f"🚫 [BIG4-BOTTOM] {reason}, 阻止做空")
@@ -735,8 +735,13 @@ class CoinFuturesDecisionBrain:
 
         return klines
 
-    def analyze(self, symbol: str):
-        """分析并决策 - 支持做多和做空 (主要使用1小时K线)"""
+    def analyze(self, symbol: str, big4_result: dict = None):
+        """分析并决策 - 支持做多和做空 (主要使用1小时K线)
+
+        Args:
+            symbol: 交易对
+            big4_result: Big4趋势结果 (包含emergency_intervention)
+        """
         if symbol not in self.whitelist:
             return None
 
@@ -1058,41 +1063,18 @@ class CoinFuturesDecisionBrain:
                     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
                     return None
 
-                # 🔥 紧急干预检查: 如果处于紧急干预期,禁止开新仓
-                import time
+                # 🔥 Big4紧急干预过滤（使用detector中已设置的block标志）
+                if big4_result:
+                    emergency = big4_result.get('emergency_intervention', {})
 
-                # 检查底部反转干预
-                if side == 'SHORT' and self.emergency_bottom_reversal_time:
-                    hours_since_emergency = (time.time() - self.emergency_bottom_reversal_time) / 3600
-                    if hours_since_emergency <= self.emergency_block_duration_hours:
-                        logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 底部反转紧急干预中({hours_since_emergency:.1f}h/{self.emergency_block_duration_hours}h),禁止做空")
-                        return None
-                    else:
-                        # 超过干预时间,清除标志
-                        self.emergency_bottom_reversal_time = None
-
-                # 检查顶部反转干预
-                if side == 'LONG' and self.emergency_top_reversal_time:
-                    hours_since_emergency = (time.time() - self.emergency_top_reversal_time) / 3600
-                    if hours_since_emergency <= self.emergency_block_duration_hours:
-                        logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 顶部反转紧急干预中({hours_since_emergency:.1f}h/{self.emergency_block_duration_hours}h),禁止做多")
-                        return None
-                    else:
-                        # 超过干预时间,清除标志
-                        self.emergency_top_reversal_time = None
-
-                # 🔥 新增: Big4同步触底保护 - 检测Big4是否同步触底反转
-                if side == 'SHORT':
-                    should_block, reversal_reason = self.detect_big4_bottom_reversal(side)
-                    if should_block:
-                        logger.warning(f"🚫 {symbol} {reversal_reason}, 阻止做空")
+                    if emergency.get('block_long', False) and side == 'LONG':
+                        details = emergency.get('details', 'Big4紧急干预阻止做多')
+                        logger.warning(f"🚫 [Big4紧急干预] {symbol} LONG | {details}")
                         return None
 
-                # 🔥 新增: Big4同步见顶保护 - 检测Big4是否同步见顶反转
-                if side == 'LONG':
-                    should_block, reversal_reason = self.detect_big4_top_reversal(side)
-                    if should_block:
-                        logger.warning(f"🚫 {symbol} {reversal_reason}, 阻止做多")
+                    if emergency.get('block_short', False) and side == 'SHORT':
+                        details = emergency.get('details', 'Big4紧急干预阻止做空')
+                        logger.warning(f"🚫 [Big4紧急干预] {symbol} SHORT | {details}")
                         return None
 
                 # 🔥 破位系统加权
@@ -1149,15 +1131,19 @@ class CoinFuturesDecisionBrain:
             logger.error(f"{symbol} 分析失败: {e}")
             return None
 
-    def scan_all(self):
-        """扫描所有币种"""
+    def scan_all(self, big4_result: dict = None):
+        """扫描所有币种
+
+        Args:
+            big4_result: Big4趋势结果 (由CoinFuturesTraderService传入)
+        """
         logger.info(f"\n{'='*80}")
         logger.info(f"🔍 开始扫描 {len(self.whitelist)} 个交易对 | 开仓阈值: {self.threshold}分")
         logger.info(f"{'='*80}")
 
         opportunities = []
         for symbol in self.whitelist:
-            result = self.analyze(symbol)
+            result = self.analyze(symbol, big4_result=big4_result)
             if result:
                 opportunities.append(result)
 
@@ -3249,9 +3235,16 @@ class CoinFuturesTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5. 扫描机会
+                # 5. 获取Big4结果（用于紧急干预和市场信号）
+                big4_result = None
+                try:
+                    big4_result = self.get_big4_result()
+                except Exception as e:
+                    logger.warning(f"[BIG4-ERROR] 获取Big4结果失败: {e}")
+
+                # 5.1. 扫描机会（传入Big4结果）
                 logger.info(f"[SCAN] 扫描 {len(self.brain.whitelist)} 个币种...")
-                opportunities = self.brain.scan_all()
+                opportunities = self.brain.scan_all(big4_result=big4_result)
 
                 if not opportunities:
                     logger.info("[SCAN] 无交易机会")
@@ -3265,9 +3258,8 @@ class CoinFuturesTraderService:
                     continue
 
                 # 5.6. 🔥 检查Big4市场信号 - NEUTRAL时停止开仓（可配置禁用）
-                if self.big4_filter_config.get('enabled', True):
+                if self.big4_filter_config.get('enabled', True) and big4_result:
                     try:
-                        big4_result = self.get_big4_result()
                         big4_market_signal = big4_result.get('overall_signal', 'NEUTRAL')
                         big4_market_strength = big4_result.get('signal_strength', 0)
 
