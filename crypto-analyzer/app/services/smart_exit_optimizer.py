@@ -40,11 +40,27 @@ class SmartExitOptimizer:
 
         # 数据库连接池（增加池大小以支持多个并发监控任务）
         # 每个监控任务每秒需要1个连接，预留20个连接支持20个并发持仓监控
+        # 配置超时参数，防止死锁导致无限等待
+        db_config_with_timeout = db_config.copy()
+        db_config_with_timeout['connection_timeout'] = 10  # 🔥 连接超时10秒
+        db_config_with_timeout['pool_timeout'] = 30        # 🔥 等待连接池可用的超时30秒
+        # 🔥 设置InnoDB锁等待超时为5秒，防止并发更新死锁
+        db_config_with_timeout['autocommit'] = True        # 自动提交，避免长事务
+
+        # 注意：mysql.connector不支持init_command，需要在每次获取连接后手动设置
         self.db_pool = pooling.MySQLConnectionPool(
             pool_name="exit_optimizer_pool",
             pool_size=20,
-            **db_config
+            **db_config_with_timeout
         )
+
+    def _get_pool_connection(self):
+        """从连接池获取连接，并设置InnoDB锁等待超时"""
+        conn = self._get_pool_connection()
+        cursor = conn.cursor()
+        cursor.execute("SET SESSION innodb_lock_wait_timeout = 5")
+        cursor.close()
+        return conn
 
         # 监控状态
         self.monitoring_tasks: Dict[str, asyncio.Task] = {}  # position_id -> task
@@ -222,7 +238,7 @@ class SmartExitOptimizer:
             持仓字典
         """
         try:
-            conn = self.db_pool.get_connection()
+            conn = self._get_pool_connection()
             cursor = conn.cursor(dictionary=True)
 
             cursor.execute("""
@@ -356,7 +372,7 @@ class SmartExitOptimizer:
             profit_info: 盈亏信息
         """
         try:
-            conn = self.db_pool.get_connection()
+            conn = self._get_pool_connection()
             cursor = conn.cursor(dictionary=True)
 
             # 获取当前最高盈利
@@ -836,7 +852,7 @@ class SmartExitOptimizer:
             close_reason: 平仓原因
         """
         try:
-            conn = self.db_pool.get_connection()
+            conn = self._get_pool_connection()
             cursor = conn.cursor()
 
             cursor.execute("""

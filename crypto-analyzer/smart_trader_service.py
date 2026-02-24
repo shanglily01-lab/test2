@@ -331,6 +331,9 @@ class SmartDecisionBrain:
                 read_timeout=30,     # 🔥 读取超时30秒
                 write_timeout=30     # 🔥 写入超时30秒
             )
+            # 🔥 设置InnoDB锁等待超时为5秒
+            with self.connection.cursor() as cursor:
+                cursor.execute("SET SESSION innodb_lock_wait_timeout = 5")
         else:
             try:
                 self.connection.ping(reconnect=True)
@@ -343,6 +346,9 @@ class SmartDecisionBrain:
                     read_timeout=30,     # 🔥 读取超时30秒
                     write_timeout=30     # 🔥 写入超时30秒
                 )
+                # 🔥 设置InnoDB锁等待超时为5秒
+                with self.connection.cursor() as cursor:
+                    cursor.execute("SET SESSION innodb_lock_wait_timeout = 5")
         return self.connection
 
     def check_anti_fomo_filter(self, symbol: str, current_price: float, side: str) -> tuple:
@@ -990,6 +996,9 @@ class SmartTraderService:
                 read_timeout=30,     # 🔥 读取超时30秒
                 write_timeout=30     # 🔥 写入超时30秒
             )
+            # 🔥 设置InnoDB锁等待超时为5秒，防止死锁长时间阻塞
+            with self.connection.cursor() as cursor:
+                cursor.execute("SET SESSION innodb_lock_wait_timeout = 5")
         else:
             try:
                 self.connection.ping(reconnect=True)
@@ -1001,6 +1010,9 @@ class SmartTraderService:
                     read_timeout=30,     # 🔥 读取超时30秒
                     write_timeout=30     # 🔥 写入超时30秒
                 )
+                # 🔥 设置InnoDB锁等待超时为5秒
+                with self.connection.cursor() as cursor:
+                    cursor.execute("SET SESSION innodb_lock_wait_timeout = 5")
         return self.connection
 
     def check_trading_enabled(self) -> bool:
@@ -1703,14 +1715,7 @@ class SmartTraderService:
             # 获取持仓ID
             position_id = cursor.lastrowid
 
-            # 冻结资金 (开仓时扣除可用余额，增加冻结余额)
-            cursor.execute("""
-                UPDATE futures_trading_accounts
-                SET current_balance = current_balance - %s,
-                    frozen_balance = frozen_balance + %s,
-                    updated_at = NOW()
-                WHERE id = %s
-            """, (margin, margin, self.account_id))
+            # 🔥 账户余额改为定时计算，避免并发更新死锁
 
             cursor.close()
 
@@ -2018,27 +2023,7 @@ class SmartTraderService:
                                 current_price, f"HEDGE-{long_pos['id']}", datetime.utcnow(), datetime.utcnow()
                             ))
 
-                            # Update account balance
-                            cursor.execute("""
-                                UPDATE futures_trading_accounts
-                                SET current_balance = current_balance + %s + %s,
-                                    frozen_balance = frozen_balance - %s,
-                                    realized_pnl = realized_pnl + %s,
-                                    total_trades = total_trades + 1,
-                                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
-                                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
-                                WHERE id = %s
-                            """, (
-                                float(margin), float(long_pos['realized_pnl']), float(margin),
-                                float(long_pos['realized_pnl']), float(long_pos['realized_pnl']), float(long_pos['realized_pnl']),
-                                self.account_id
-                            ))
-
-                            cursor.execute("""
-                                UPDATE futures_trading_accounts
-                                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
-                                WHERE id = %s
-                            """, (self.account_id,))
+                            # 🔥 账户统计改为定时计算，避免并发更新死锁
 
                         # SHORT亏损>1%, LONG盈利 -> 平掉SHORT
                         elif short_pos['pnl_pct'] < -1 and long_pos['pnl_pct'] > 0:
@@ -2123,27 +2108,7 @@ class SmartTraderService:
                                 current_price, order_id, datetime.utcnow(), datetime.utcnow()
                             ))
 
-                            # Update account balance
-                            cursor.execute("""
-                                UPDATE futures_trading_accounts
-                                SET current_balance = current_balance + %s + %s,
-                                    frozen_balance = frozen_balance - %s,
-                                    realized_pnl = realized_pnl + %s,
-                                    total_trades = total_trades + 1,
-                                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
-                                    losing_trades = losing_trades + IF(%s < 0, 1, 0)
-                                WHERE id = %s
-                            """, (
-                                float(margin), float(short_pos['realized_pnl']), float(margin),
-                                float(short_pos['realized_pnl']), float(short_pos['realized_pnl']), float(short_pos['realized_pnl']),
-                                self.account_id
-                            ))
-
-                            cursor.execute("""
-                                UPDATE futures_trading_accounts
-                                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
-                                WHERE id = %s
-                            """, (self.account_id,))
+                            # 🔥 账户统计改为定时计算，避免并发更新死锁
 
             cursor.close()
 
@@ -2310,27 +2275,9 @@ class SmartTraderService:
                     current_price, order_id, datetime.utcnow(), datetime.utcnow()
                 ))
 
-                # Update account balance
-                cursor.execute("""
-                    UPDATE futures_trading_accounts
-                    SET current_balance = current_balance + %s + %s,
-                        frozen_balance = frozen_balance - %s,
-                        realized_pnl = realized_pnl + %s,
-                        total_trades = total_trades + 1,
-                        winning_trades = winning_trades + IF(%s > 0, 1, 0),
-                        losing_trades = losing_trades + IF(%s < 0, 1, 0)
-                    WHERE id = %s
-                """, (
-                    float(margin), float(realized_pnl), float(margin),
-                    float(realized_pnl), float(realized_pnl), float(realized_pnl),
-                    self.account_id
-                ))
-
-                cursor.execute("""
-                    UPDATE futures_trading_accounts
-                    SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
-                    WHERE id = %s
-                """, (self.account_id,))
+                # 🔥 账户统计改为定时计算，避免并发更新死锁
+                # 不再实时更新 futures_trading_accounts
+                # 由 update_account_stats.py 每5分钟统一计算
 
             cursor.close()
             return True
@@ -3166,6 +3113,22 @@ async def async_main():
     # 初始化智能平仓监控
     if service.smart_exit_optimizer:
         await service._start_smart_exit_monitoring()
+
+    # 🔥 启动账户统计定时更新任务（每5分钟）
+    async def update_account_stats_task():
+        """每5分钟更新一次账户统计"""
+        from update_account_stats import update_account_statistics
+        while True:
+            try:
+                await asyncio.sleep(300)  # 5分钟 = 300秒
+                logger.info("🔄 定时更新账户统计...")
+                await asyncio.get_event_loop().run_in_executor(None, update_account_statistics)
+            except Exception as e:
+                logger.error(f"❌ 账户统计更新失败: {e}")
+
+    # 创建后台任务
+    asyncio.create_task(update_account_stats_task())
+    logger.info("✅ 账户统计定时更新任务已启动（每5分钟）")
 
     # 在事件循环中运行同步的主循环
     loop = asyncio.get_event_loop()
