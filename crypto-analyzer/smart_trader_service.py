@@ -1389,6 +1389,11 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 系统已禁止{direction_name}")
             return False
 
+        # 🔥 新增验证: 检查是否在盈利Top 50交易对中
+        if not self.is_symbol_in_top_performers(symbol):
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 不在盈利Top 50交易对中")
+            return False
+
         # 🔥 V5.1优化: 移除防追高/防杀跌过滤
         # 原因: Big4触底检测已提供全局保护（禁止做空2小时）
         # 防杀跌过滤容易误杀破位追空信号，与Big4机制冲突
@@ -2165,6 +2170,30 @@ class SmartTraderService:
             return result[0] > 0 if result else False
         except:
             return False
+
+    def is_symbol_in_top_performers(self, symbol: str) -> bool:
+        """
+        检查交易对是否在盈利Top 50列表中
+        返回True表示在列表中,允许开仓
+        返回False表示不在列表中,拒绝开仓
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT COUNT(*) FROM top_performing_symbols
+                WHERE symbol = %s
+            """, (symbol,))
+
+            result = cursor.fetchone()
+            cursor.close()
+
+            return result[0] > 0 if result else False
+        except Exception as e:
+            # 如果表不存在或查询失败，默认允许开仓（向后兼容）
+            logger.warning(f"检查Top 50列表失败: {e}, 默认允许开仓")
+            return True
 
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
         """关闭指定交易对和方向的持仓"""
@@ -3129,6 +3158,47 @@ async def async_main():
     # 创建后台任务
     asyncio.create_task(update_account_stats_task())
     logger.info("✅ 账户统计定时更新任务已启动（每5分钟）")
+
+    # 🔥 启动盈利Top 50交易对定时更新任务（每天凌晨2点）
+    async def update_top_performers_task():
+        """每天凌晨2点更新盈利Top 50交易对"""
+        from update_top_performers import update_top_performing_symbols
+        import time as time_module
+        from datetime import datetime, time
+
+        while True:
+            try:
+                # 计算距离下次凌晨2点的秒数
+                now = datetime.now()
+                target_time = datetime.combine(now.date(), time(2, 0))  # 今天凌晨2点
+                if now >= target_time:
+                    # 如果已经过了今天凌晨2点，目标改为明天凌晨2点
+                    target_time = datetime.combine(now.date() + timedelta(days=1), time(2, 0))
+
+                seconds_until_target = (target_time - now).total_seconds()
+                logger.info(f"⏰ Top 50更新任务将在 {seconds_until_target/3600:.1f} 小时后执行（{target_time}）")
+
+                # 等待到凌晨2点
+                await asyncio.sleep(seconds_until_target)
+
+                # 执行更新
+                logger.info("🔄 开始更新盈利Top 50交易对...")
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    update_top_performing_symbols,
+                    2,  # account_id=2 (U本位)
+                    50  # top_n=50
+                )
+                logger.info("✅ Top 50更新完成")
+
+            except Exception as e:
+                logger.error(f"❌ Top 50更新失败: {e}")
+                # 失败后等待1小时再重试
+                await asyncio.sleep(3600)
+
+    # 创建后台任务
+    asyncio.create_task(update_top_performers_task())
+    logger.info("✅ Top 50定时更新任务已启动（每天凌晨2点）")
 
     # 在事件循环中运行同步的主循环
     loop = asyncio.get_event_loop()
