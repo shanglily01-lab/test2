@@ -1017,7 +1017,7 @@ class SmartTraderService:
 
     def check_trading_enabled(self) -> bool:
         """
-        检查交易是否启用
+        检查交易是否启用（从system_settings表读取）
 
         Returns:
             bool: True=交易启用, False=交易停止
@@ -1026,21 +1026,26 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
-            # account_id=2 对应 U本位合约
+            # 从 system_settings 表读取 u_futures_trading_enabled
             cursor.execute("""
-                SELECT trading_enabled
-                FROM trading_control
-                WHERE account_id = %s AND trading_type = 'usdt_futures'
-            """, (self.account_id,))
+                SELECT setting_value
+                FROM system_settings
+                WHERE setting_key = 'u_futures_trading_enabled'
+            """)
 
             result = cursor.fetchone()
             cursor.close()
 
             if result:
-                return result['trading_enabled']
+                # setting_value 可能是字符串 '1'/'0' 或布尔值
+                value = result['setting_value']
+                if isinstance(value, str):
+                    return value in ('1', 'true', 'True', 'yes')
+                else:
+                    return bool(value)
             else:
                 # 如果数据库中没有记录，默认启用
-                logger.warning(f"[TRADING-CONTROL] 未找到交易控制记录(account_id={self.account_id}), 默认启用")
+                logger.warning(f"[TRADING-CONTROL] 未找到U本位交易控制设置(u_futures_trading_enabled), 默认启用")
                 return True
 
         except Exception as e:
