@@ -701,15 +701,10 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 注册交易控制API路由
-try:
-    from app.api.trading_control_api import router as trading_control_router
-    app.include_router(trading_control_router)
-    logger.info("✅ 交易控制API路由已注册 (/api/trading-control)")
-except Exception as e:
-    logger.warning(f"⚠️  交易控制API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
+# 🔥 trading_control_api 已废弃，功能已整合到 system_settings_api
+# 交易开关现在通过 /api/system/settings 接口管理
+# - u_futures_trading_enabled: U本位开仓开关
+# - coin_futures_trading_enabled: 币本位开仓开关
 
 # 注册系统配置API路由
 try:
