@@ -326,7 +326,10 @@ class SmartDecisionBrain:
             self.connection = pymysql.connect(
                 **self.db_config,
                 charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
+                cursorclass=pymysql.cursors.DictCursor,
+                connect_timeout=10,  # 🔥 连接超时10秒
+                read_timeout=30,     # 🔥 读取超时30秒
+                write_timeout=30     # 🔥 写入超时30秒
             )
         else:
             try:
@@ -335,7 +338,10 @@ class SmartDecisionBrain:
                 self.connection = pymysql.connect(
                     **self.db_config,
                     charset='utf8mb4',
-                    cursorclass=pymysql.cursors.DictCursor
+                    cursorclass=pymysql.cursors.DictCursor,
+                    connect_timeout=10,  # 🔥 连接超时10秒
+                    read_timeout=30,     # 🔥 读取超时30秒
+                    write_timeout=30     # 🔥 写入超时30秒
                 )
         return self.connection
 
@@ -977,12 +983,24 @@ class SmartTraderService:
 
     def _get_connection(self):
         if self.connection is None or not self.connection.open:
-            self.connection = pymysql.connect(**self.db_config, autocommit=True)
+            self.connection = pymysql.connect(
+                **self.db_config,
+                autocommit=True,
+                connect_timeout=10,  # 🔥 连接超时10秒
+                read_timeout=30,     # 🔥 读取超时30秒
+                write_timeout=30     # 🔥 写入超时30秒
+            )
         else:
             try:
                 self.connection.ping(reconnect=True)
             except:
-                self.connection = pymysql.connect(**self.db_config, autocommit=True)
+                self.connection = pymysql.connect(
+                    **self.db_config,
+                    autocommit=True,
+                    connect_timeout=10,  # 🔥 连接超时10秒
+                    read_timeout=30,     # 🔥 读取超时30秒
+                    write_timeout=30     # 🔥 写入超时30秒
+                )
         return self.connection
 
     def check_trading_enabled(self) -> bool:
