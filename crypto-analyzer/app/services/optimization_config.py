@@ -56,10 +56,21 @@ class OptimizationConfig:
         conn = self._get_connection()
         cursor = conn.cursor()
 
+        # 1. 从 adaptive_params 读取优化参数
         cursor.execute("SELECT param_key, param_value FROM adaptive_params")
         rows = cursor.fetchall()
-
         self._param_cache = {row['param_key']: float(row['param_value']) for row in rows}
+
+        # 2. 从 system_settings 读取系统配置（allow_long, allow_short 等）
+        cursor.execute("""
+            SELECT setting_key, setting_value
+            FROM system_settings
+            WHERE setting_key IN ('allow_long', 'allow_short')
+        """)
+        system_rows = cursor.fetchall()
+        for row in system_rows:
+            self._param_cache[row['setting_key']] = float(row['setting_value'])
+
         self._cache_time = datetime.now()
 
         cursor.close()
@@ -95,11 +106,25 @@ class OptimizationConfig:
         cursor = conn.cursor()
 
         try:
-            cursor.execute("""
-                UPDATE adaptive_params
-                SET param_value = %s, updated_by = %s, updated_at = NOW()
-                WHERE param_key = %s
-            """, (value, updated_by, key))
+            # allow_long 和 allow_short 保存到 system_settings 表
+            if key in ('allow_long', 'allow_short'):
+                cursor.execute("""
+                    INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                    VALUES (%s, %s, %s, %s, NOW())
+                    ON DUPLICATE KEY UPDATE
+                        setting_value = VALUES(setting_value),
+                        updated_by = VALUES(updated_by),
+                        updated_at = NOW()
+                """, (key, str(value),
+                      f"是否允许{'做多' if key == 'allow_long' else '做空'} (1=允许, 0=禁止)",
+                      updated_by))
+            else:
+                # 其他优化参数保存到 adaptive_params 表
+                cursor.execute("""
+                    UPDATE adaptive_params
+                    SET param_value = %s, updated_by = %s, updated_at = NOW()
+                    WHERE param_key = %s
+                """, (value, updated_by, key))
 
             conn.commit()
 

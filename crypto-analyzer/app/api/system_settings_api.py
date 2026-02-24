@@ -252,10 +252,10 @@ async def get_trading_direction():
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT param_key, param_value, description
-            FROM adaptive_params
-            WHERE param_key IN ('allow_long', 'allow_short')
-            ORDER BY param_key
+            SELECT setting_key, setting_value, description
+            FROM system_settings
+            WHERE setting_key IN ('allow_long', 'allow_short')
+            ORDER BY setting_key
         """)
 
         settings = cursor.fetchall()
@@ -265,8 +265,8 @@ async def get_trading_direction():
         # 转换为字典格式
         result = {}
         for setting in settings:
-            result[setting['param_key']] = {
-                'value': int(float(setting['param_value'])) == 1,
+            result[setting['setting_key']] = {
+                'value': int(float(setting['setting_value'])) == 1,
                 'description': setting['description']
             }
 
@@ -304,20 +304,26 @@ async def update_trading_direction(data: TradingDirectionUpdate):
 
         updates = []
         if data.allow_long is not None:
-            value = 1 if data.allow_long else 0
+            value = '1' if data.allow_long else '0'
             cursor.execute("""
-                UPDATE adaptive_params
-                SET param_value = %s, updated_by = 'web_ui', updated_at = NOW()
-                WHERE param_key = 'allow_long'
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('allow_long', %s, '是否允许做多 (1=允许, 0=禁止)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
             """, (value,))
             updates.append(f"做多: {'允许' if data.allow_long else '禁止'}")
 
         if data.allow_short is not None:
-            value = 1 if data.allow_short else 0
+            value = '1' if data.allow_short else '0'
             cursor.execute("""
-                UPDATE adaptive_params
-                SET param_value = %s, updated_by = 'web_ui', updated_at = NOW()
-                WHERE param_key = 'allow_short'
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('allow_short', %s, '是否允许做空 (1=允许, 0=禁止)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
             """, (value,))
             updates.append(f"做空: {'允许' if data.allow_short else '禁止'}")
 
@@ -405,16 +411,22 @@ async def get_trading_services():
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT param_key, param_value
-            FROM adaptive_params
-            WHERE param_key IN ('usdt_futures_enabled', 'coin_futures_enabled', 'live_trading_enabled')
+            SELECT setting_key, setting_value
+            FROM system_settings
+            WHERE setting_key IN ('u_futures_trading_enabled', 'coin_futures_trading_enabled', 'live_trading_enabled')
         """)
 
         settings = cursor.fetchall()
         cursor.close()
         conn.close()
 
-        # 转换为字典格式
+        # 转换为字典格式（键名映射为前端使用的格式）
+        key_mapping = {
+            'u_futures_trading_enabled': 'usdt_futures_enabled',
+            'coin_futures_trading_enabled': 'coin_futures_enabled',
+            'live_trading_enabled': 'live_trading_enabled'
+        }
+
         result = {
             'usdt_futures_enabled': True,  # 默认值
             'coin_futures_enabled': True,
@@ -422,7 +434,9 @@ async def get_trading_services():
         }
 
         for setting in settings:
-            result[setting['param_key']] = int(float(setting['param_value'])) == 1
+            db_key = setting['setting_key']
+            frontend_key = key_mapping.get(db_key, db_key)
+            result[frontend_key] = int(float(setting['setting_value'])) == 1
 
         return {
             'success': True,
@@ -453,12 +467,12 @@ async def update_trading_services(data: TradingServicesUpdate):
         updates = []
 
         if data.usdt_futures_enabled is not None:
-            value = 1 if data.usdt_futures_enabled else 0
+            value = '1' if data.usdt_futures_enabled else '0'
             cursor.execute("""
-                INSERT INTO adaptive_params (param_key, param_value, param_type, description, updated_by, updated_at)
-                VALUES ('usdt_futures_enabled', %s, 'system', 'U本位合约交易开关', 'web_ui', NOW())
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('u_futures_trading_enabled', %s, 'U本位合约开仓开关 (1=启用, 0=禁用)', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
-                    param_value = VALUES(param_value),
+                    setting_value = VALUES(setting_value),
                     updated_by = 'web_ui',
                     updated_at = NOW()
             """, (value,))
@@ -466,12 +480,12 @@ async def update_trading_services(data: TradingServicesUpdate):
             updates.append(f"U本位合约: {status}")
 
         if data.coin_futures_enabled is not None:
-            value = 1 if data.coin_futures_enabled else 0
+            value = '1' if data.coin_futures_enabled else '0'
             cursor.execute("""
-                INSERT INTO adaptive_params (param_key, param_value, param_type, description, updated_by, updated_at)
-                VALUES ('coin_futures_enabled', %s, 'system', '币本位合约交易开关', 'web_ui', NOW())
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('coin_futures_trading_enabled', %s, '币本位合约开仓开关 (1=启用, 0=禁用)', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
-                    param_value = VALUES(param_value),
+                    setting_value = VALUES(setting_value),
                     updated_by = 'web_ui',
                     updated_at = NOW()
             """, (value,))
@@ -479,12 +493,12 @@ async def update_trading_services(data: TradingServicesUpdate):
             updates.append(f"币本位合约: {status}")
 
         if data.live_trading_enabled is not None:
-            value = 1 if data.live_trading_enabled else 0
+            value = '1' if data.live_trading_enabled else '0'
             cursor.execute("""
-                INSERT INTO adaptive_params (param_key, param_value, param_type, description, updated_by, updated_at)
-                VALUES ('live_trading_enabled', %s, 'system', '实盘合约服务开关', 'web_ui', NOW())
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('live_trading_enabled', %s, '实盘交易开关 (1=启用, 0=禁用)', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
-                    param_value = VALUES(param_value),
+                    setting_value = VALUES(setting_value),
                     updated_by = 'web_ui',
                     updated_at = NOW()
             """, (value,))
