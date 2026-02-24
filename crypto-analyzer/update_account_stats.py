@@ -9,11 +9,22 @@ from loguru import logger
 from datetime import datetime
 import sys
 import os
+from dotenv import load_dotenv
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import MYSQL_CONFIG
+# 加载环境变量
+load_dotenv()
+
+# 数据库配置（从环境变量读取）
+MYSQL_CONFIG = {
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'port': int(os.getenv('DB_PORT', '3306')),
+    'user': os.getenv('DB_USER', 'root'),
+    'password': os.getenv('DB_PASSWORD', ''),
+    'database': os.getenv('DB_NAME', 'binance-data')
+}
 
 
 def update_account_statistics(account_id: int = None):
@@ -33,9 +44,6 @@ def update_account_statistics(account_id: int = None):
             write_timeout=30
         )
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-        # 设置锁等待超时
-        cursor.execute("SET SESSION innodb_lock_wait_timeout = 5")
 
         # 获取需要更新的账户列表
         if account_id:
