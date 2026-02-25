@@ -1702,6 +1702,12 @@ class CoinFuturesTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后1小时冷却期内")
             return False
 
+        # 新增验证: 检查交易方向是否允许
+        if not self.opt_config.is_direction_allowed(side):
+            direction_name = "做多" if side == "LONG" else "做空"
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 系统已禁止{direction_name}")
+            return False
+
         # 新增验证: 防追高/追跌过滤
         current_price = self.ws_service.get_price(symbol)
         if current_price:
