@@ -315,23 +315,49 @@ class OptimizationConfig:
 
     def is_long_allowed(self) -> bool:
         """
-        检查是否允许做多
+        检查是否允许做多（直接查数据库，实时生效）
 
         Returns:
             True=允许做多, False=禁止做多
         """
-        allow_long = self.get_param('allow_long', 1)
-        return int(allow_long) == 1
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT setting_value FROM system_settings
+                WHERE setting_key = 'allow_long'
+            """)
+            result = cursor.fetchone()
+            cursor.close()
+            if result:
+                return result['setting_value'] in ('1', '1.0', 'true', 'True')
+            return True  # 默认允许
+        except Exception as e:
+            logger.warning(f"读取allow_long失败: {e}, 默认允许")
+            return True
 
     def is_short_allowed(self) -> bool:
         """
-        检查是否允许做空
+        检查是否允许做空（直接查数据库，实时生效）
 
         Returns:
             True=允许做空, False=禁止做空
         """
-        allow_short = self.get_param('allow_short', 1)
-        return int(allow_short) == 1
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT setting_value FROM system_settings
+                WHERE setting_key = 'allow_short'
+            """)
+            result = cursor.fetchone()
+            cursor.close()
+            if result:
+                return result['setting_value'] in ('1', '1.0', 'true', 'True')
+            return True  # 默认允许
+        except Exception as e:
+            logger.warning(f"读取allow_short失败: {e}, 默认允许")
+            return True
 
     def is_direction_allowed(self, direction: str) -> bool:
         """
