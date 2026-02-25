@@ -436,9 +436,13 @@ Loading...
                 const servicesResponse = await fetch(`${API_BASE}/trading-services`);
                 const servicesResult = await servicesResponse.json();
 
-                // 合并所有配置
+                // 合并所有配置（排除已放入嵌套结构的重复字段）
+                const duplicateKeys = ['allow_long', 'allow_short', 'u_futures_trading_enabled', 'coin_futures_trading_enabled', 'live_trading_enabled'];
+                const filteredSettings = Object.fromEntries(
+                    Object.entries(systemSettings).filter(([k]) => !duplicateKeys.includes(k))
+                );
                 const allSettings = {
-                    ...systemSettings,
+                    ...filteredSettings,
                     trading_direction: directionResult.success ? {
                         allow_long: { value: directionResult.data.allow_long.value, description: '允许做多' },
                         allow_short: { value: directionResult.data.allow_short.value, description: '允许做空' }
