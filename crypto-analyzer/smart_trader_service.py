@@ -514,7 +514,7 @@ class SmartDecisionBrain:
                 # 🔥 修复：当Big4强力看多时（牛市），高位是正常状态，不产生做空信号
                 # 避免牛市中position_high持续触发空头与V2多头冲突导致全部信号被拒绝
                 big4_bullish = (big4_result and
-                                big4_result.get('overall_signal') == 'LONG' and
+                                big4_result.get('overall_signal') == 'BULLISH' and
                                 big4_result.get('signal_strength', 0) >= 50)
                 if not big4_bullish:
                     weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
