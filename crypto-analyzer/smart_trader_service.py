@@ -511,10 +511,16 @@ class SmartDecisionBrain:
                     if weight['long'] > 0:
                         signal_components['position_low'] = weight['long']
             elif position_pct > 70:
-                weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
-                short_score += weight['short']
-                if weight['short'] > 0:
-                    signal_components['position_high'] = weight['short']
+                # 🔥 修复：当Big4强力看多时（牛市），高位是正常状态，不产生做空信号
+                # 避免牛市中position_high持续触发空头与V2多头冲突导致全部信号被拒绝
+                big4_bullish = (big4_result and
+                                big4_result.get('overall_signal') == 'LONG' and
+                                big4_result.get('signal_strength', 0) >= 50)
+                if not big4_bullish:
+                    weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
+                    short_score += weight['short']
+                    if weight['short'] > 0:
+                        signal_components['position_high'] = weight['short']
             else:
                 weight = self.scoring_weights.get('position_mid', {'long': 5, 'short': 5})
                 long_score += weight['long']
