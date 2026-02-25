@@ -666,14 +666,26 @@ class SmartDecisionBrain:
 
             # V1评分计算完成，稍后与V2一起打印
 
+            # 🔥 动态阈值：牛市时降低多头开仓门槛
+            # Big4强力看多时，中位区间volume_power_bull+volatility_high=40分也可开多
+            big4_bullish = (big4_result and
+                            big4_result.get('overall_signal') == 'BULLISH' and
+                            big4_result.get('signal_strength', 0) >= 50)
+            long_threshold = 40 if big4_bullish else self.threshold
+
             # 选择得分更高的方向 (只要达到阈值就可以)
-            if long_score >= self.threshold or short_score >= self.threshold:
-                if long_score >= short_score:
+            long_qualified = long_score >= long_threshold
+            short_qualified = short_score >= self.threshold
+            if long_qualified or short_qualified:
+                # 优先选择两个方向都满足各自阈值时评分更高的方向
+                # 若只有一个方向满足，选该方向；两个都满足，选分更高的
+                if long_qualified and short_qualified:
+                    side = 'LONG' if long_score >= short_score else 'SHORT'
+                elif long_qualified:
                     side = 'LONG'
-                    score = long_score
                 else:
                     side = 'SHORT'
-                    score = short_score
+                score = long_score if side == 'LONG' else short_score
 
                 # 🔥 新增：拒绝过高评分的信号（数据显示150+分的信号胜率32.8%，平均亏损-4.82U/单）
                 if score > self.max_threshold:
