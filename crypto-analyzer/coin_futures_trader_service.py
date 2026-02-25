@@ -152,7 +152,7 @@ class CoinFuturesDecisionBrain:
         # 从config.yaml加载配置
         self._load_config()
 
-        self.threshold = 25  # 开仓阈值（理论最大232分，25分≈11%强度）
+        self.threshold = 60  # 开仓阈值（理论最大232分，60分≈26%强度）
 
         # 🔥 紧急干预标志 - 底部/顶部反转时触发
         self.emergency_bottom_reversal_time = None  # 底部反转触发时间
