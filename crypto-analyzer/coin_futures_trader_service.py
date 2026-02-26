@@ -3295,8 +3295,8 @@ class CoinFuturesTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5.5. 盈利熔断检查：过去6小时总盈利超200U则自动禁止开仓（每6小时检测一次）
-                if self._check_profit_and_auto_disable(profit_threshold=200.0, window_hours=6):
+                # 5.5. 盈利熔断检查：过去4小时总盈利超200U则自动禁止开仓（每4小时检测一次）
+                if self._check_profit_and_auto_disable(profit_threshold=200.0, window_hours=4):
                     logger.warning("[PROFIT-GUARD] 盈利熔断已触发，停止本轮开仓，请检查后手动重新开启交易")
                     time.sleep(self.scan_interval)
                     continue

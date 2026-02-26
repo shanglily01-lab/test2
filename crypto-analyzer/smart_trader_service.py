@@ -2852,8 +2852,8 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5.5. 盈利熔断检查：过去6小时总盈利超1000U则自动禁止开仓
-                if self._check_profit_and_auto_disable(profit_threshold=1000.0, window_hours=6):
+                # 5.5. 盈利熔断检查：过去4小时总盈利超1000U则自动禁止开仓
+                if self._check_profit_and_auto_disable(profit_threshold=1000.0, window_hours=4):
                     logger.warning("[PROFIT-GUARD] 盈利熔断已触发，停止本轮开仓，请检查后手动重新开启交易")
                     time.sleep(self.scan_interval)
                     continue

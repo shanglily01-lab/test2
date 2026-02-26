@@ -498,7 +498,8 @@ Loading...
             } else {
                 statusText = '❌ 禁止做多 + ❌ 禁止做空（不执行任何交易）';
             }
-            document.getElementById('directionStatus').textContent = statusText;
+            const dirEl = document.getElementById('directionStatus');
+            if (dirEl) dirEl.textContent = statusText;
         }
 
         // 更新策略
