@@ -1071,21 +1071,22 @@ class SmartTraderService:
             logger.error(f"[TRADING-CONTROL] 检查交易状态失败: {e}, 默认启用")
             return True
 
-    def _check_profit_and_auto_disable(self, profit_threshold=1000.0, window_hours=6) -> bool:
+    def _check_profit_and_auto_disable(self, profit_threshold=1000.0, window_hours=6, check_interval_hours=4) -> bool:
         """
-        盈利熔断：6小时内总盈利超过阈值后自动禁止开仓
+        盈利熔断：统计窗口内总盈利超过阈值后自动禁止开仓
 
         逻辑：
-        - 检查最近6小时已平仓PNL总和
+        - 每 check_interval_hours 小时检测一次（默认4小时）
+        - 检查最近 window_hours 小时已平仓PNL总和（默认6小时）
         - 若超过 profit_threshold（默认1000U），说明刚经历大行情，市场随时可能反转
         - 立即将 u_futures_trading_enabled 设为 0，由用户手动重新开启
 
         Returns:
             True = 已触发熔断（调用方应停止本轮开仓）
         """
-        # 每6小时检测一次，避免每次扫描都查询
+        # 每 check_interval_hours 小时检测一次，避免每次扫描都查询
         last_check = getattr(self, '_profit_guard_last_check', None)
-        if last_check and (datetime.utcnow() - last_check).total_seconds() < window_hours * 3600:
+        if last_check and (datetime.utcnow() - last_check).total_seconds() < check_interval_hours * 3600:
             return False
         self._profit_guard_last_check = datetime.utcnow()
 
@@ -2852,8 +2853,8 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5.5. 盈利熔断检查：过去4小时总盈利超1000U则自动禁止开仓
-                if self._check_profit_and_auto_disable(profit_threshold=1000.0, window_hours=4):
+                # 5.5. 盈利熔断检查：每4小时检测一次，过去6小时总盈利超1000U则自动禁止开仓
+                if self._check_profit_and_auto_disable(profit_threshold=1000.0, window_hours=6, check_interval_hours=4):
                     logger.warning("[PROFIT-GUARD] 盈利熔断已触发，停止本轮开仓，请检查后手动重新开启交易")
                     time.sleep(self.scan_interval)
                     continue
