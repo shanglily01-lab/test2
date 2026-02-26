@@ -671,7 +671,7 @@ class SmartDecisionBrain:
             big4_bullish = (big4_result and
                             big4_result.get('overall_signal') == 'BULLISH' and
                             big4_result.get('signal_strength', 0) >= 50)
-            long_threshold = 55 if big4_bullish else self.threshold
+            long_threshold = 50 if big4_bullish else self.threshold
 
             # 选择得分更高的方向 (只要达到阈值就可以)
             long_qualified = long_score >= long_threshold
