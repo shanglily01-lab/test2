@@ -1015,7 +1015,7 @@ class CoinFuturesDecisionBrain:
             big4_bullish = (big4_result and
                             big4_result.get('overall_signal') == 'BULLISH' and
                             big4_result.get('signal_strength', 0) >= 50)
-            long_threshold = 40 if big4_bullish else self.threshold
+            long_threshold = 55 if big4_bullish else self.threshold
 
             # 打印V1评分日志（无论是否达标）
             max_score = max(long_score, short_score)
