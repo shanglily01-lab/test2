@@ -826,10 +826,15 @@ class CoinFuturesDecisionBrain:
                     if weight['long'] > 0:
                         signal_components['position_low'] = weight['long']
             elif position_pct > 70:
-                weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
-                short_score += weight['short']
-                if weight['short'] > 0:
-                    signal_components['position_high'] = weight['short']
+                # 🔥 修复：当Big4强力看多时（牛市），高位是正常状态，不产生做空信号
+                big4_bullish = (big4_result and
+                                big4_result.get('overall_signal') == 'BULLISH' and
+                                big4_result.get('signal_strength', 0) >= 50)
+                if not big4_bullish:
+                    weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
+                    short_score += weight['short']
+                    if weight['short'] > 0:
+                        signal_components['position_high'] = weight['short']
             else:
                 weight = self.scoring_weights.get('position_mid', {'long': 5, 'short': 5})
                 long_score += weight['long']
@@ -1006,21 +1011,30 @@ class CoinFuturesDecisionBrain:
             # ========== 移除1D信号 (4小时持仓不需要1D趋势) ==========
             # 已移除: trend_1d_bull, trend_1d_bear
 
+            # 🔥 动态阈值：牛市时降低多头开仓门槛
+            big4_bullish = (big4_result and
+                            big4_result.get('overall_signal') == 'BULLISH' and
+                            big4_result.get('signal_strength', 0) >= 50)
+            long_threshold = 40 if big4_bullish else self.threshold
+
             # 打印V1评分日志（无论是否达标）
             max_score = max(long_score, short_score)
             if max_score > 0:
                 signal_names = ', '.join(signal_components.keys()) if signal_components else '无'
-                达标状态 = '✅达标' if max_score >= self.threshold else f'❌未达标(阈值{self.threshold})'
+                达标状态 = '✅达标' if max_score >= long_threshold else f'❌未达标(阈值{long_threshold})'
                 logger.info(f"📊 {symbol:<12} V1评分 多【{long_score}分】空【{short_score}分】信号【{signal_names}】 {达标状态}")
 
-            # 选择得分更高的方向 (只要达到阈值就可以)
-            if long_score >= self.threshold or short_score >= self.threshold:
-                if long_score >= short_score:
+            # 选择得分更高的方向，LONG和SHORT使用各自阈值
+            long_qualified = long_score >= long_threshold
+            short_qualified = short_score >= self.threshold
+            if long_qualified or short_qualified:
+                if long_qualified and short_qualified:
+                    side = 'LONG' if long_score >= short_score else 'SHORT'
+                elif long_qualified:
                     side = 'LONG'
-                    score = long_score
                 else:
                     side = 'SHORT'
-                    score = short_score
+                score = long_score if side == 'LONG' else short_score
 
                 # 🔥 关键修复: 清理signal_components,只保留与最终方向一致的信号
                 # 定义多头和空头信号 (已移除1D信号和EMA信号)
