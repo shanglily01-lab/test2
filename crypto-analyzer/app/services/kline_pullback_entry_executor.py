@@ -5,7 +5,7 @@ K线回调建仓执行器 V2 (一次性开仓版本)
 核心策略：
 - 做多：等待1根反向阴线作为回调确认
 - 做空：等待1根反向阳线作为反弹确认
-- 两级降级：15M（0-30分钟）→ 5M（30-60分钟）
+- 单级确认：15M（0-30分钟），超时放弃
 - 纪律严明：宁愿错过，不追涨杀跌
 - 确认后立即一次性开仓100%，不分批
 """
@@ -52,7 +52,7 @@ class KlinePullbackEntryExecutor:
             self.opt_config = OptimizationConfig(db_config)
 
         # 时间窗口配置
-        self.total_window_minutes = 60  # 总时间窗口60分钟
+        self.total_window_minutes = 30  # 总时间窗口30分钟
         self.primary_window_minutes = 30  # 第一阶段30分钟（15M）
         self.check_interval_seconds = 60  # 每60秒检查一次（K线更新频率）
 
@@ -177,9 +177,8 @@ class KlinePullbackEntryExecutor:
 
         流程：
         1. 阶段1（0-30分钟）：监控15M K线，等待1根反向K线
-        2. 阶段2（30-60分钟）：切换到5M K线，等待1根反向K线
-        3. 检测到回调确认后，立即一次性开仓100%
-        4. 60分钟截止，如果未触发则放弃
+        2. 检测到回调确认后，立即一次性开仓100%
+        3. 30分钟截止，如果未触发则放弃
 
         Args:
             signal: 开仓信号 {
@@ -264,7 +263,7 @@ class KlinePullbackEntryExecutor:
                 await asyncio.sleep(self.check_interval_seconds)
 
             # 超时未触发
-            logger.warning(f"⏱️ {symbol} 60分钟窗口结束，未检测到回调确认，放弃建仓")
+            logger.warning(f"⏱️ {symbol} 30分钟窗口结束，未检测到回调确认，放弃建仓")
             return {'success': False, 'error': '超时未触发回调确认'}
 
         except Exception as e:
