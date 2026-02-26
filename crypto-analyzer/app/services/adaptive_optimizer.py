@@ -485,24 +485,11 @@ class AdaptiveOptimizer:
                         f"亏损${signal['total_pnl']:.2f} - {signal['recommendation']}"
                     )
 
-        # 4. 调整评分权重 (根据最近7天的表现)
+        # 4. 调整评分权重 - 已禁用，权重由人工维护，不再自动调整
+        # if apply_weights:
+        #     weight_results = self.weight_optimizer.adjust_weights(dry_run=False)
         if apply_weights:
-            try:
-                logger.info("🔧 开始调整信号评分权重...")
-                weight_results = self.weight_optimizer.adjust_weights(dry_run=False)
-
-                if weight_results.get('adjusted'):
-                    results['weights_adjusted'] = weight_results['adjusted']
-                    logger.info(f"✅ 评分权重已调整，共 {len(weight_results['adjusted'])} 个")
-
-                    # 打印调整详情
-                    self.weight_optimizer.print_adjustment_report(weight_results)
-                else:
-                    logger.info("📊 评分权重无需调整")
-
-            except Exception as e:
-                logger.error(f"❌ 调整评分权重失败: {e}")
-                results['warnings'].append(f"调整评分权重失败: {e}")
+            logger.info("📊 信号评分权重自动调整已禁用，跳过")
 
         return results
 
