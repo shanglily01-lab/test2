@@ -4226,173 +4226,157 @@ async def get_futures_by_symbol(symbol: str):
 @app.get("/api/retrospective-analysis/latest")
 async def get_latest_retrospective_analysis():
     """
-    获取最新的12小时复盘分析
+    实时计算过去12小时市场走势与交易盈亏分析
+    直接从 kline_data 和 futures_positions 查询，无需预计算
     """
     try:
         import pymysql
-        from datetime import datetime, timedelta
-        import json
+        from datetime import datetime, timedelta, timezone
 
-        # 读取数据库配置
-        env_path = project_root / '.env'
-        db_config = {}
-        if env_path.exists():
-            with open(env_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
-                        key, value = line.split('=', 1)
-                        if key.startswith('DB_'):
-                            db_key = key.replace('DB_', '').lower()
-                            db_config[db_key] = value
-
-        # 连接数据库
         conn = pymysql.connect(
-            host=db_config.get('host', 'localhost'),
-            port=int(db_config.get('port', 3306)),
-            user=db_config.get('user', 'root'),
-            password=db_config.get('password', ''),
-            database=db_config.get('name', 'binance-data'),
-            charset='utf8mb4'
+            host=os.getenv('DB_HOST', 'localhost'),
+            port=int(os.getenv('DB_PORT', 3306)),
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASSWORD', ''),
+            database=os.getenv('DB_NAME', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
         )
+        cursor = conn.cursor()
+        now_utc = datetime.utcnow()
+        since_utc = now_utc - timedelta(hours=12)
+        since_ts = int(since_utc.timestamp() * 1000)
 
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-        # 查询最新的复盘分析记录
+        # ── 1. BTC 1H K线（过去12小时逐小时走势）──
         cursor.execute("""
-            SELECT * FROM retrospective_analysis
-            ORDER BY analysis_time DESC
-            LIMIT 1
-        """)
+            SELECT open_time, open_price, high_price, low_price, close_price
+            FROM kline_data
+            WHERE symbol='BTC/USDT' AND timeframe='1h'
+              AND open_time >= %s
+            ORDER BY open_time ASC
+        """, (since_ts,))
+        btc_klines = cursor.fetchall()
 
-        result = cursor.fetchone()
-
-        if not result:
-            # 如果数据库中没有记录，返回空数据结构
-            return {
-                "market_analysis": {
-                    "BTC/USDT": {"price_change_pct": 0, "volatility": 0, "direction": "暂无数据", "bullish_count": 0, "bearish_count": 0},
-                    "ETH/USDT": {"price_change_pct": 0, "volatility": 0, "direction": "暂无数据", "bullish_count": 0, "bearish_count": 0},
-                    "BNB/USDT": {"price_change_pct": 0, "volatility": 0, "direction": "暂无数据", "bullish_count": 0, "bearish_count": 0},
-                    "SOL/USDT": {"price_change_pct": 0, "volatility": 0, "direction": "暂无数据", "bullish_count": 0, "bearish_count": 0}
-                },
-                "big4_signals": {
-                    "total_count": 0,
-                    "bullish_count": 0,
-                    "bearish_count": 0,
-                    "neutral_count": 0
-                },
-                "performance": {
-                    "total_trades": 0,
-                    "profit_trades": 0,
-                    "loss_trades": 0,
-                    "win_rate": 0,
-                    "total_pnl": 0
-                },
-                "loss_analysis": {
-                    "loss_trades": []
-                },
-                "suggestions": []
-            }
-
-        # 解析JSON字段
-        market_analysis_json = json.loads(result.get('market_analysis_json', '{}')) if result.get('market_analysis_json') else {}
-        trading_analysis_json = json.loads(result.get('trading_analysis_json', '{}')) if result.get('trading_analysis_json') else {}
-        loss_analysis_json = json.loads(result.get('loss_analysis_json', '{}')) if result.get('loss_analysis_json') else {}
-
-        # 构建市场分析数据
-        market_analysis = {
-            "BTC/USDT": {
-                "price_change_pct": float(result.get('btc_price_change_pct', 0) or 0),
-                "volatility": float(result.get('btc_volatility_pct', 0) or 0),
-                "direction": result.get('btc_direction', '暂无数据'),
-                "bullish_count": market_analysis_json.get('BTC/USDT', {}).get('bullish_count', 0),
-                "bearish_count": market_analysis_json.get('BTC/USDT', {}).get('bearish_count', 0)
-            },
-            "ETH/USDT": {
-                "price_change_pct": float(result.get('eth_price_change_pct', 0) or 0),
-                "volatility": float(result.get('eth_volatility_pct', 0) or 0),
-                "direction": result.get('eth_direction', '暂无数据'),
-                "bullish_count": market_analysis_json.get('ETH/USDT', {}).get('bullish_count', 0),
-                "bearish_count": market_analysis_json.get('ETH/USDT', {}).get('bearish_count', 0)
-            },
-            "BNB/USDT": {
-                "price_change_pct": float(result.get('bnb_price_change_pct', 0) or 0),
-                "volatility": float(result.get('bnb_volatility_pct', 0) or 0),
-                "direction": result.get('bnb_direction', '暂无数据'),
-                "bullish_count": market_analysis_json.get('BNB/USDT', {}).get('bullish_count', 0),
-                "bearish_count": market_analysis_json.get('BNB/USDT', {}).get('bearish_count', 0)
-            },
-            "SOL/USDT": {
-                "price_change_pct": float(result.get('sol_price_change_pct', 0) or 0),
-                "volatility": float(result.get('sol_volatility_pct', 0) or 0),
-                "direction": result.get('sol_direction', '暂无数据'),
-                "bullish_count": market_analysis_json.get('SOL/USDT', {}).get('bullish_count', 0),
-                "bearish_count": market_analysis_json.get('SOL/USDT', {}).get('bearish_count', 0)
-            }
-        }
-
-        # 构建Big4信号数据
-        big4_signals = {
-            "total_count": result.get('big4_signal_count', 0) or 0,
-            "bullish_count": result.get('big4_bullish_count', 0) or 0,
-            "bearish_count": result.get('big4_bearish_count', 0) or 0,
-            "neutral_count": result.get('big4_neutral_count', 0) or 0
-        }
-
-        # 构建交易表现数据
-        performance = {
-            "total_trades": result.get('total_trades', 0) or 0,
-            "profit_trades": result.get('profit_trades', 0) or 0,
-            "loss_trades": result.get('loss_trades', 0) or 0,
-            "win_rate": float(result.get('win_rate', 0) or 0),
-            "total_pnl": float(result.get('total_pnl', 0) or 0)
-        }
-
-        # 构建亏损分析数据
-        loss_analysis = {
-            "loss_trades": loss_analysis_json.get('loss_trades', [])
-        }
-
-        # 构建改进建议
-        suggestions = []
-        if result.get('counter_trend_trades', 0) > 0:
-            suggestions.append({
-                "issue": "逆势交易",
-                "count": result.get('counter_trend_trades'),
-                "suggestion": "避免在明确趋势中逆势开仓，等待趋势转折信号"
+        hourly_trend = []
+        for k in btc_klines:
+            open_p  = float(k['open_price'])
+            close_p = float(k['close_price'])
+            chg     = (close_p - open_p) / open_p * 100
+            if chg >= 1.5:
+                arrow = "强势上涨"
+            elif chg >= 0.3:
+                arrow = "温和上涨"
+            elif chg <= -1.5:
+                arrow = "强势下跌"
+            elif chg <= -0.3:
+                arrow = "温和下跌"
+            else:
+                arrow = "横盘震荡"
+            # 转换为北京时间
+            dt_cst = datetime.utcfromtimestamp(k['open_time'] / 1000) + timedelta(hours=8)
+            hourly_trend.append({
+                "hour_cst": dt_cst.strftime("%m-%d %H:%M"),
+                "open":  round(open_p, 1),
+                "close": round(close_p, 1),
+                "high":  round(float(k['high_price']), 1),
+                "low":   round(float(k['low_price']), 1),
+                "change_pct": round(chg, 2),
+                "direction": arrow
             })
-        if result.get('signal_mismatch_trades', 0) > 0:
-            suggestions.append({
-                "issue": "Big4信号不匹配",
-                "count": result.get('signal_mismatch_trades'),
-                "suggestion": "加强Big4信号与交易方向的一致性检查，避免信号矛盾时开仓"
-            })
-        if result.get('signal_lag_trades', 0) > 0:
-            suggestions.append({
-                "issue": "信号滞后",
-                "count": result.get('signal_lag_trades'),
-                "suggestion": "优化信号响应速度，考虑使用更短周期K线辅助判断"
-            })
-        if result.get('false_breakout_trades', 0) > 0:
-            suggestions.append({
-                "issue": "震荡市误判",
-                "count": result.get('false_breakout_trades'),
-                "suggestion": "增强震荡市识别能力，在波动率低时降低仓位或暂停交易"
-            })
+
+        # BTC整体汇总
+        if btc_klines:
+            btc_start = float(btc_klines[0]['open_price'])
+            btc_end   = float(btc_klines[-1]['close_price'])
+            btc_high  = max(float(k['high_price']) for k in btc_klines)
+            btc_low   = min(float(k['low_price'])  for k in btc_klines)
+            btc_chg   = round((btc_end - btc_start) / btc_start * 100, 2)
+            if btc_chg >= 3:
+                btc_dir = "强势上涨"
+            elif btc_chg >= 1:
+                btc_dir = "温和上涨"
+            elif btc_chg <= -3:
+                btc_dir = "强势下跌"
+            elif btc_chg <= -1:
+                btc_dir = "温和下跌"
+            else:
+                btc_dir = "横盘震荡"
+        else:
+            btc_start = btc_end = btc_high = btc_low = btc_chg = 0
+            btc_dir = "暂无数据"
+
+        # ── 2. 每小时交易盈亏（对应BTC每根K线时段）──
+        cursor.execute("""
+            SELECT
+                HOUR(CONVERT_TZ(open_time, '+00:00', '+08:00')) AS h,
+                DATE(CONVERT_TZ(open_time, '+00:00', '+08:00')) AS d,
+                COUNT(*) AS cnt,
+                SUM(realized_pnl) AS pnl,
+                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins
+            FROM futures_positions
+            WHERE open_time >= %s AND status = 'closed' AND account_id = 2
+            GROUP BY d, h
+            ORDER BY d, h
+        """, (since_ts,))
+        pnl_by_hour = {(r['d'].strftime('%Y-%m-%d'), r['h']): r for r in cursor.fetchall()}
+
+        # 将盈亏数据合并到 hourly_trend
+        for row in hourly_trend:
+            dt = datetime.strptime(row['hour_cst'], "%m-%d %H:%M")
+            year = now_utc.year
+            d_key = f"{year}-{dt.month:02d}-{dt.day:02d}"
+            h_key = dt.hour
+            pnl_row = pnl_by_hour.get((d_key, h_key))
+            if pnl_row:
+                row['trades'] = int(pnl_row['cnt'])
+                row['pnl']    = round(float(pnl_row['pnl'] or 0), 2)
+                row['wins']   = int(pnl_row['wins'])
+                row['win_rate'] = round(int(pnl_row['wins']) / int(pnl_row['cnt']) * 100, 1)
+            else:
+                row['trades'] = 0
+                row['pnl']    = 0
+                row['wins']   = 0
+                row['win_rate'] = 0
+
+        # ── 3. 12小时交易总体表现 ──
+        cursor.execute("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(realized_pnl) AS pnl,
+                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN realized_pnl <= 0 THEN 1 ELSE 0 END) AS losses
+            FROM futures_positions
+            WHERE open_time >= %s AND status = 'closed' AND account_id = 2
+        """, (since_ts,))
+        perf = cursor.fetchone()
+        total  = int(perf['total'] or 0)
+        total_pnl = round(float(perf['pnl'] or 0), 2)
+        wins   = int(perf['wins'] or 0)
+        losses = int(perf['losses'] or 0)
+        win_rate = round(wins / total * 100, 1) if total else 0
 
         cursor.close()
         conn.close()
 
         return {
-            "market_analysis": market_analysis,
-            "big4_signals": big4_signals,
-            "performance": performance,
-            "loss_analysis": loss_analysis,
-            "suggestions": suggestions,
-            "analysis_time": result.get('analysis_time').strftime('%Y-%m-%d %H:%M:%S') if result.get('analysis_time') else None,
-            "period_start": result.get('period_start').strftime('%Y-%m-%d %H:%M:%S') if result.get('period_start') else None,
-            "period_end": result.get('period_end').strftime('%Y-%m-%d %H:%M:%S') if result.get('period_end') else None
+            "generated_at": (now_utc + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M CST'),
+            "period": f"{(since_utc + timedelta(hours=8)).strftime('%m-%d %H:%M')} ~ {(now_utc + timedelta(hours=8)).strftime('%m-%d %H:%M')}",
+            "btc_summary": {
+                "start_price": round(btc_start, 1),
+                "end_price":   round(btc_end, 1),
+                "high":        round(btc_high, 1),
+                "low":         round(btc_low, 1),
+                "change_pct":  btc_chg,
+                "direction":   btc_dir
+            },
+            "hourly_trend": hourly_trend,
+            "performance": {
+                "total_trades":  total,
+                "profit_trades": wins,
+                "loss_trades":   losses,
+                "win_rate":      win_rate,
+                "total_pnl":     total_pnl
+            }
         }
 
     except Exception as e:

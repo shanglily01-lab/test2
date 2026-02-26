@@ -694,63 +694,50 @@
                             <div class="spinner"></div>
                         </div>
                         <div id="retrospectiveContent" style="display: none;">
-                            <!-- 市场走势分析 -->
-                            <div class="card" style="margin-bottom: 24px;">
+                            <!-- BTC总体走势 -->
+                            <div class="card" style="margin-bottom: 20px;">
                                 <div class="card-header">
-                                    <h4 class="card-title">
-                                        <i class="bi bi-graph-up"></i> 市场走势分析
-                                    </h4>
+                                    <h4 class="card-title"><i class="bi bi-graph-up"></i> BTC 12小时总体走势</h4>
+                                    <span id="retroPeriod" style="color:#888;font-size:13px;"></span>
                                 </div>
                                 <div class="card-body">
-                                    <div id="marketAnalysisGrid" class="stats-grid"></div>
+                                    <div id="btcSummaryGrid" class="stats-grid" style="grid-template-columns: repeat(5,1fr);"></div>
                                 </div>
                             </div>
 
-                            <!-- Big4信号分析 -->
-                            <div class="card" style="margin-bottom: 24px;">
+                            <!-- 逐小时走势 + 交易对照表 -->
+                            <div class="card" style="margin-bottom: 20px;">
                                 <div class="card-header">
-                                    <h4 class="card-title">
-                                        <i class="bi bi-broadcast"></i> Big4信号分析
-                                    </h4>
+                                    <h4 class="card-title"><i class="bi bi-table"></i> 逐小时走势与交易盈亏</h4>
                                 </div>
-                                <div class="card-body">
-                                    <div id="big4SignalAnalysis"></div>
+                                <div class="card-body" style="padding:0;">
+                                    <div style="overflow-x:auto;">
+                                        <table class="table table-sm" style="margin:0;font-size:13px;">
+                                            <thead>
+                                                <tr style="background:#1a1a2e;">
+                                                    <th>时间(CST)</th>
+                                                    <th>开盘</th>
+                                                    <th>收盘</th>
+                                                    <th>涨跌</th>
+                                                    <th>走势</th>
+                                                    <th>开仓数</th>
+                                                    <th>盈亏</th>
+                                                    <th>胜率</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="hourlyTrendTable"></tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- 交易表现分析 -->
-                            <div class="card" style="margin-bottom: 24px;">
-                                <div class="card-header">
-                                    <h4 class="card-title">
-                                        <i class="bi bi-bar-chart-line"></i> 交易表现分析
-                                    </h4>
-                                </div>
-                                <div class="card-body">
-                                    <div id="tradingPerformanceStats" class="stats-grid"></div>
-                                </div>
-                            </div>
-
-                            <!-- 亏损分析 -->
-                            <div class="card" style="margin-bottom: 24px;">
-                                <div class="card-header">
-                                    <h4 class="card-title">
-                                        <i class="bi bi-exclamation-triangle"></i> 亏损深度分析
-                                    </h4>
-                                </div>
-                                <div class="card-body">
-                                    <div id="lossAnalysis"></div>
-                                </div>
-                            </div>
-
-                            <!-- 改进建议 -->
+                            <!-- 12小时交易汇总 -->
                             <div class="card">
                                 <div class="card-header">
-                                    <h4 class="card-title">
-                                        <i class="bi bi-lightbulb"></i> 改进建议
-                                    </h4>
+                                    <h4 class="card-title"><i class="bi bi-bar-chart-line"></i> 12小时交易总体表现</h4>
                                 </div>
                                 <div class="card-body">
-                                    <div id="improvementSuggestions"></div>
+                                    <div id="retroPerformanceGrid" class="stats-grid" style="grid-template-columns: repeat(5,1fr);"></div>
                                 </div>
                             </div>
                         </div>
@@ -1724,15 +1711,14 @@
                 const response = await fetch('/api/retrospective-analysis/latest');
                 const data = await response.json();
 
-                if (!data || !data.market_analysis) {
+                if (!data || !data.btc_summary) {
                     throw new Error('暂无复盘分析数据');
                 }
 
-                renderMarketAnalysis(data.market_analysis);
-                renderBig4SignalAnalysis(data.big4_signals);
-                renderTradingPerformance(data.performance);
-                renderLossAnalysis(data.loss_analysis);
-                renderImprovementSuggestions(data.suggestions);
+                document.getElementById('retroPeriod').textContent = data.period || '';
+                renderBtcSummary(data.btc_summary);
+                renderHourlyTrend(data.hourly_trend || []);
+                renderRetroPerformance(data.performance);
 
                 content.style.display = 'block';
             } catch (error) {
@@ -1744,49 +1730,83 @@
             }
         }
 
-        function renderMarketAnalysis(marketData) {
-            const grid = document.getElementById('marketAnalysisGrid');
-            const symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT'];
-
-            grid.innerHTML = symbols.map(symbol => {
-                const data = marketData[symbol];
-                if (!data) return '';
-
-                const changeClass = data.price_change_pct >= 0 ? 'pnl-positive' : 'pnl-negative';
-
-                return `
-                    <div class="stat-card">
-                        <div class="stat-label">${symbol.split('/')[0]}</div>
-                        <div class="stat-value ${changeClass}">${formatNumber(data.price_change_pct, 2)}%</div>
-                        <div class="stat-label">波动率: ${formatNumber(data.volatility, 2)}%</div>
-                        <div class="stat-label">${data.direction}</div>
-                        <div class="stat-label">${data.bullish_count}阳 / ${data.bearish_count}阴</div>
+        function renderBtcSummary(s) {
+            const chgClass = s.change_pct >= 0 ? 'pnl-positive' : 'pnl-negative';
+            document.getElementById('btcSummaryGrid').innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">整体走势</div>
+                    <div class="stat-value ${chgClass}">${s.direction}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">12H涨跌</div>
+                    <div class="stat-value ${chgClass}">${s.change_pct > 0 ? '+' : ''}${s.change_pct}%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">期初价格</div>
+                    <div class="stat-value">${s.start_price.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">当前价格</div>
+                    <div class="stat-value">${s.end_price.toLocaleString()}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">区间 高/低</div>
+                    <div class="stat-value" style="font-size:13px;">
+                        <span class="pnl-positive">${s.high.toLocaleString()}</span> /
+                        <span class="pnl-negative">${s.low.toLocaleString()}</span>
                     </div>
+                </div>
+            `;
+        }
+
+        function renderHourlyTrend(rows) {
+            const tbody = document.getElementById('hourlyTrendTable');
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;">暂无数据</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(r => {
+                const chgClass = r.change_pct >= 0 ? 'pnl-positive' : 'pnl-negative';
+                const pnlClass = r.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                const dirColor = r.direction.includes('上涨') ? '#26a69a' : r.direction.includes('下跌') ? '#ef5350' : '#888';
+                return `
+                    <tr>
+                        <td style="font-weight:500;">${r.hour_cst}</td>
+                        <td>${r.open.toLocaleString()}</td>
+                        <td>${r.close.toLocaleString()}</td>
+                        <td class="${chgClass}">${r.change_pct > 0 ? '+' : ''}${r.change_pct}%</td>
+                        <td style="color:${dirColor};font-weight:500;">${r.direction}</td>
+                        <td>${r.trades > 0 ? r.trades + '笔' : '-'}</td>
+                        <td class="${pnlClass}">${r.pnl !== 0 ? (r.pnl > 0 ? '+' : '') + r.pnl + 'U' : '-'}</td>
+                        <td>${r.trades > 0 ? r.win_rate + '%' : '-'}</td>
+                    </tr>
                 `;
             }).join('');
         }
 
-        function renderBig4SignalAnalysis(signalData) {
-            const container = document.getElementById('big4SignalAnalysis');
-
-            container.innerHTML = `
-                <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
-                    <div class="stat-card">
-                        <div class="stat-label">总更新次数</div>
-                        <div class="stat-value">${signalData.total_count}次</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">BULLISH信号</div>
-                        <div class="stat-value pnl-positive">${signalData.bullish_count}次</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">BEARISH信号</div>
-                        <div class="stat-value pnl-negative">${signalData.bearish_count}次</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">NEUTRAL信号</div>
-                        <div class="stat-value">${signalData.neutral_count}次</div>
-                    </div>
+        function renderRetroPerformance(p) {
+            const pnlClass = p.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+            const wrClass  = p.win_rate >= 50 ? 'pnl-positive' : 'pnl-negative';
+            document.getElementById('retroPerformanceGrid').innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">总开仓</div>
+                    <div class="stat-value">${p.total_trades}笔</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">盈利</div>
+                    <div class="stat-value pnl-positive">${p.profit_trades}笔</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">亏损</div>
+                    <div class="stat-value pnl-negative">${p.loss_trades}笔</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">胜率</div>
+                    <div class="stat-value ${wrClass}">${p.win_rate}%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">总盈亏</div>
+                    <div class="stat-value ${pnlClass}">${p.total_pnl > 0 ? '+' : ''}${p.total_pnl}U</div>
                 </div>
             `;
         }
