@@ -294,54 +294,54 @@ class AutoParameterOptimizer:
 
         try:
             # 创建参数调整历史表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS parameter_adjustments (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    adjustment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    param_group VARCHAR(100),
+                    param_name VARCHAR(100),
+                    old_value VARCHAR(100),
+                    new_value VARCHAR(100),
+                    reason TEXT,
+                    applied BOOLEAN DEFAULT TRUE
+                )
+            """)
+
+            for adj in adjustments:
+                # 更新内存中的参数
+                if adj['param_group'] in self.current_params:
+                    if adj['param_name'] in self.current_params[adj['param_group']]:
+                        self.current_params[adj['param_group']][adj['param_name']] = adj['new_value']
+
+                # 记录到数据库
                 cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS parameter_adjustments (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        adjustment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        param_group VARCHAR(100),
-                        param_name VARCHAR(100),
-                        old_value VARCHAR(100),
-                        new_value VARCHAR(100),
-                        reason TEXT,
-                        applied BOOLEAN DEFAULT TRUE
-                    )
-                """)
+                    INSERT INTO parameter_adjustments
+                    (param_group, param_name, old_value, new_value, reason)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (
+                    adj['param_group'],
+                    adj['param_name'],
+                    str(adj['old_value']),
+                    str(adj['new_value']),
+                    adj['reason']
+                ))
 
-                for adj in adjustments:
-                    # 更新内存中的参数
-                    if adj['param_group'] in self.current_params:
-                        if adj['param_name'] in self.current_params[adj['param_group']]:
-                            self.current_params[adj['param_group']][adj['param_name']] = adj['new_value']
+                logger.info(
+                    f"✏️  调整参数: {adj['param_group']}.{adj['param_name']} | "
+                    f"{adj['old_value']} -> {adj['new_value']} | "
+                    f"原因: {adj['reason']}"
+                )
 
-                    # 记录到数据库
-                    cursor.execute("""
-                        INSERT INTO parameter_adjustments
-                        (param_group, param_name, old_value, new_value, reason)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (
-                        adj['param_group'],
-                        adj['param_name'],
-                        str(adj['old_value']),
-                        str(adj['new_value']),
-                        adj['reason']
-                    ))
+            conn.commit()
 
-                    logger.info(
-                        f"✏️  调整参数: {adj['param_group']}.{adj['param_name']} | "
-                        f"{adj['old_value']} → {adj['new_value']} | "
-                        f"原因: {adj['reason']}"
-                    )
+            # 保存当前参数到文件（可选）
+            self._save_params_to_file()
 
-                conn.commit()
-
-                # 保存当前参数到文件（可选）
-                self._save_params_to_file()
-
-            except Exception as e:
-                logger.error(f"应用参数调整失败: {e}")
-                conn.rollback()
-            finally:
-                cursor.close()
+        except Exception as e:
+            logger.error(f"应用参数调整失败: {e}")
+            conn.rollback()
+        finally:
+            cursor.close()
 
     def _save_params_to_file(self):
         """保存参数到文件"""
