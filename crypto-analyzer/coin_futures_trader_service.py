@@ -3225,6 +3225,16 @@ class CoinFuturesTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
+                # 5.4. 🕕 时间段禁止开仓（北京时间 06:00-09:00）
+                from datetime import timezone
+                now_cst = datetime.now(timezone.utc).astimezone(
+                    __import__('zoneinfo', fromlist=['ZoneInfo']).ZoneInfo('Asia/Shanghai')
+                )
+                if 6 <= now_cst.hour < 9:
+                    logger.info(f"[TIME-RESTRICT] ⏰ 北京时间 {now_cst.strftime('%H:%M')}，06:00-09:00 禁止开仓，跳过本轮扫描")
+                    time.sleep(self.scan_interval)
+                    continue
+
                 # 5.5. 检查交易控制开关
                 if not self.check_trading_enabled():
                     logger.info("[TRADING-DISABLED] ⏸️ 币本位合约交易已停止，跳过开仓（不影响已有持仓）")
