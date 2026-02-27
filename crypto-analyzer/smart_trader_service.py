@@ -3174,6 +3174,7 @@ class SmartTraderService:
                                                 break
 
                                     cursor_check.close()
+                                    conn_check.close()
 
                                     # 如果所有Big4都已反弹2%+，解除禁止做空
                                     if all_recovered:
@@ -3212,6 +3213,7 @@ class SmartTraderService:
                                                 break
 
                                     cursor_check.close()
+                                    conn_check.close()
 
                                     if all_cooled:
                                         should_block_long = False
