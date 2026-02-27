@@ -1103,6 +1103,15 @@ class CacheUpdateService:
 
     def _upsert_technical_indicators(self, **kwargs):
         """插入或更新技术指标"""
+        import math
+        # 将 nan/inf 替换为 None，防止写入 DECIMAL 字段报错
+        for k, v in kwargs.items():
+            try:
+                if v is not None and isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+                    kwargs[k] = None
+            except (TypeError, ValueError):
+                pass
+
         session = None
         try:
             session = self.db_service.get_session()
