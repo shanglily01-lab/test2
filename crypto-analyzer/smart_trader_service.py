@@ -3222,12 +3222,42 @@ class SmartTraderService:
                                 except Exception as check_error:
                                     logger.error(f"[SMART-RELEASE-ERROR] {symbol} 实时检查失败: {check_error}")
 
-                            # 执行最终的阻止判断
+                            # 执行最终的阻止判断：全局禁用方向，等待人工重新开启
                             if should_block_long and new_side == 'LONG':
-                                logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触顶反转风险,禁止做多 | {emergency.get('details', '')}")
+                                logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触顶反转风险,全局禁止做多 | {emergency.get('details', '')}")
+                                try:
+                                    _eb_conn = self._get_connection()
+                                    _eb_cur = _eb_conn.cursor()
+                                    _eb_cur.execute("""
+                                        INSERT INTO system_settings (setting_key, setting_value, description, updated_at)
+                                        VALUES ('allow_long', '0', '紧急干预:触顶回调风险，请手动重新开启', NOW())
+                                        ON DUPLICATE KEY UPDATE setting_value='0',
+                                            description='紧急干预:触顶回调风险，请手动重新开启', updated_at=NOW()
+                                    """)
+                                    _eb_conn.commit()
+                                    _eb_cur.close()
+                                    _eb_conn.close()
+                                    logger.warning("[EMERGENCY-BLOCK] ⛔ allow_long=0 已写入，请确认行情后手动重新开启做多")
+                                except Exception as _eb_err:
+                                    logger.error(f"[EMERGENCY-BLOCK] 写入allow_long失败: {_eb_err}")
                                 continue
                             if should_block_short and new_side == 'SHORT':
-                                logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触底反弹风险,禁止做空 | {emergency.get('details', '')}")
+                                logger.warning(f"🚨 [EMERGENCY-BLOCK] {symbol} 触底反弹风险,全局禁止做空 | {emergency.get('details', '')}")
+                                try:
+                                    _eb_conn = self._get_connection()
+                                    _eb_cur = _eb_conn.cursor()
+                                    _eb_cur.execute("""
+                                        INSERT INTO system_settings (setting_key, setting_value, description, updated_at)
+                                        VALUES ('allow_short', '0', '紧急干预:触底反弹风险，请手动重新开启', NOW())
+                                        ON DUPLICATE KEY UPDATE setting_value='0',
+                                            description='紧急干预:触底反弹风险，请手动重新开启', updated_at=NOW()
+                                    """)
+                                    _eb_conn.commit()
+                                    _eb_cur.close()
+                                    _eb_conn.close()
+                                    logger.warning("[EMERGENCY-BLOCK] ⛔ allow_short=0 已写入，请确认行情后手动重新开启做空")
+                                except Exception as _eb_err:
+                                    logger.error(f"[EMERGENCY-BLOCK] 写入allow_short失败: {_eb_err}")
                                 continue
 
                         except Exception as e:
