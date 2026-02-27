@@ -1128,6 +1128,62 @@ class SmartTraderService:
             logger.error(f"[PROFIT-GUARD] 盈利熔断检查失败: {e}")
             return False
 
+    def _check_loss_and_auto_disable(self, loss_threshold=300.0, window_hours=3, check_interval_hours=3) -> bool:
+        """
+        亏损熔断：统计窗口内总亏损超过阈值后自动禁止开仓
+
+        逻辑：
+        - 每 check_interval_hours 小时检测一次（默认3小时）
+        - 检查最近 window_hours 小时已平仓PNL总和（默认3小时）
+        - 若亏损超过 loss_threshold（默认300U），自动禁止开仓
+        - 立即将 u_futures_trading_enabled 设为 0，由用户手动重新开启
+
+        Returns:
+            True = 已触发熔断（调用方应停止本轮开仓）
+        """
+        last_check = getattr(self, '_loss_guard_last_check', None)
+        if last_check and (datetime.utcnow() - last_check).total_seconds() < check_interval_hours * 3600:
+            return False
+        self._loss_guard_last_check = datetime.utcnow()
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            since = datetime.utcnow() - timedelta(hours=window_hours)
+            cursor.execute("""
+                SELECT COALESCE(SUM(realized_pnl), 0)
+                FROM futures_positions
+                WHERE status = 'closed' AND account_id = %s
+                  AND close_time >= %s
+            """, (self.account_id, since))
+            pnl = float(cursor.fetchone()[0])
+
+            logger.info(f"[LOSS-GUARD] 过去{window_hours}h盈亏: {pnl:+.2f}U | 亏损熔断阈值: -{loss_threshold}U")
+
+            if pnl <= -loss_threshold:
+                cursor.execute("""
+                    UPDATE system_settings
+                    SET setting_value = '0',
+                        description = CONCAT('亏损熔断自动禁止: 过去3h亏损=', %s, 'U，请手动重新开启'),
+                        updated_at = NOW()
+                    WHERE setting_key = 'u_futures_trading_enabled'
+                """, (round(pnl, 1),))
+                conn.commit()
+                conn.close()
+                logger.warning(
+                    f"[LOSS-GUARD] 亏损熔断触发! 过去{window_hours}h亏损={pnl:+.1f}U "
+                    f"超过阈值-{loss_threshold}U => u_futures_trading_enabled=0，请手动重新开启"
+                )
+                return True
+
+            conn.close()
+            return False
+
+        except Exception as e:
+            logger.error(f"[LOSS-GUARD] 亏损熔断检查失败: {e}")
+            return False
+
     def get_big4_result(self):
         """
         获取Big4趋势结果 (实时检测模式)
@@ -2856,6 +2912,12 @@ class SmartTraderService:
                 # 5.5. 盈利熔断检查：每4小时检测一次，过去6小时总盈利超1000U则自动禁止开仓
                 if self._check_profit_and_auto_disable(profit_threshold=1000.0, window_hours=6, check_interval_hours=4):
                     logger.warning("[PROFIT-GUARD] 盈利熔断已触发，停止本轮开仓，请检查后手动重新开启交易")
+                    time.sleep(self.scan_interval)
+                    continue
+
+                # 5.5.1 亏损熔断检查：每3小时检测一次，过去3小时亏损超300U则自动禁止开仓
+                if self._check_loss_and_auto_disable(loss_threshold=300.0, window_hours=3, check_interval_hours=3):
+                    logger.warning("[LOSS-GUARD] 亏损熔断已触发，停止本轮开仓，请检查后手动重新开启交易")
                     time.sleep(self.scan_interval)
                     continue
 
