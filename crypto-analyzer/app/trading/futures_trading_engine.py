@@ -1224,8 +1224,20 @@ class FuturesTradingEngine:
             # ========== 同步实盘平仓 ==========
             # 检查是否需要同步实盘平仓
             try:
-                logger.info(f"[同步实盘] 检查是否需要同步: live_engine={self.live_engine is not None}, position_id={position_id}, symbol={symbol}, position_side={position_side}, strategy_id={position.get('strategy_id')}")
-                if self.live_engine:
+                # 先检查 live_trading_enabled 开关（控制模拟盘与实盘的关联）
+                live_trading_enabled = True
+                try:
+                    chk_cur = connection.cursor()
+                    chk_cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+                    row = chk_cur.fetchone()
+                    chk_cur.close()
+                    if row:
+                        live_trading_enabled = str(row.get('setting_value', '1')) in ('1', 'true', 'True', 'yes')
+                except Exception:
+                    pass
+
+                logger.info(f"[同步实盘] 检查是否需要同步: live_engine={self.live_engine is not None}, live_trading_enabled={live_trading_enabled}, position_id={position_id}, symbol={symbol}, position_side={position_side}, strategy_id={position.get('strategy_id')}")
+                if self.live_engine and live_trading_enabled:
                     # 首先检查策略配置（如果有 strategy_id）
                     should_sync = False
                     strategy_id = position.get('strategy_id')
