@@ -1359,16 +1359,16 @@
         
         // 重置投资建议刷新倒计时（每5分钟刷新一次）
         function resetRecommendationsRefreshCountdown() {
-            recommendationsRefreshCountdown = 300; // 5分钟 = 300秒
+            recommendationsRefreshCountdown = 120; // 2分钟 = 120秒
             if (recommendationsCountdownInterval) clearInterval(recommendationsCountdownInterval);
 
             recommendationsCountdownInterval = setInterval(() => {
                 recommendationsRefreshCountdown--;
-                
-                // 每5分钟刷新投资建议数据
+
+                // 每2分钟刷新投资建议数据
                 if (recommendationsRefreshCountdown <= 0) {
                     loadRecommendationsOnly();
-                    recommendationsRefreshCountdown = 300; // 重置倒计时
+                    recommendationsRefreshCountdown = 120; // 重置倒计时
                 }
             }, 1000);
         }

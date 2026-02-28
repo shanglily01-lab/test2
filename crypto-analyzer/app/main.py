@@ -90,7 +90,7 @@ _futures_signals_cache = None
 _futures_signals_cache_time = None
 _futures_signals_cache_lock = threading.Lock()
 
-TECHNICAL_SIGNALS_CACHE_TTL = 300  # 5分钟缓存
+TECHNICAL_SIGNALS_CACHE_TTL = 60  # 60秒缓存
 
 
 @asynccontextmanager
@@ -2611,20 +2611,12 @@ async def get_technical_signals():
         try:
             timeframes = ['15m', '1h', '1d']
 
-            # 🚀 优化: 使用单次批量查询替代嵌套循环
-            # 使用子查询获取每个(symbol, timeframe)组合的最新记录
+            # 🚀 优化: 直接查询（表有UNIQUE KEY uk_symbol_timeframe，每个(symbol,timeframe)只有1条）
             cursor.execute("""
-                SELECT t1.*
-                FROM technical_indicators_cache t1
-                INNER JOIN (
-                    SELECT symbol, timeframe, MAX(updated_at) as max_updated
-                    FROM technical_indicators_cache
-                    WHERE timeframe IN ('15m', '1h', '1d')
-                    GROUP BY symbol, timeframe
-                ) t2 ON t1.symbol = t2.symbol
-                    AND t1.timeframe = t2.timeframe
-                    AND t1.updated_at = t2.max_updated
-                ORDER BY t1.symbol, t1.timeframe
+                SELECT *
+                FROM technical_indicators_cache
+                WHERE timeframe IN ('15m', '1h', '1d')
+                ORDER BY symbol, timeframe
             """)
 
             all_results = cursor.fetchall()

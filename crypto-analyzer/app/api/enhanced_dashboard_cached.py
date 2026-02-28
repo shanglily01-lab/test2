@@ -205,8 +205,8 @@ class EnhancedDashboardCached:
                             updated_at = datetime.strptime(updated_at, '%Y-%m-%d %H:%M:%S')
                         age_seconds = (now - updated_at).total_seconds()
                     
-                    # 如果缓存超过30秒，标记为需要实时更新
-                    if age_seconds > 30:
+                    # 如果缓存超过90秒，标记为需要实时更新（price_stats_24h每60s更新一次）
+                    if age_seconds > 90:
                         symbols_need_realtime.append(row_dict['symbol'])
 
             # 从实时价格源获取需要更新的价格
@@ -215,15 +215,17 @@ class EnhancedDashboardCached:
                 # 优先使用 price_collector，如果没有则从数据库获取最新K线价格
                 if hasattr(self, 'price_collector') and self.price_collector:
                     try:
-                        for symbol in symbols_need_realtime:
+                        async def _fetch_one(sym):
                             try:
-                                price_info = await self.price_collector.fetch_best_price(symbol)
-                                if price_info:
-                                    realtime_prices[symbol] = float(price_info.get('price', 0))
-                                    logger.debug(f"🔄 实时更新 {symbol} 价格: {realtime_prices[symbol]}")
+                                info = await self.price_collector.fetch_best_price(sym)
+                                return sym, float(info.get('price', 0)) if info else None
                             except Exception as e:
-                                logger.warning(f"获取 {symbol} 实时价格失败: {e}")
-                                continue
+                                logger.warning(f"获取 {sym} 实时价格失败: {e}")
+                                return sym, None
+                        fetch_results = await asyncio.gather(*[_fetch_one(s) for s in symbols_need_realtime])
+                        for sym, price in fetch_results:
+                            if price:
+                                realtime_prices[sym] = price
                     except Exception as e:
                         logger.warning(f"批量获取实时价格失败: {e}")
                 else:

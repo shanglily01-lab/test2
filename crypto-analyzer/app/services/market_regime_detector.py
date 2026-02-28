@@ -756,9 +756,9 @@ class MarketRegimeDetector:
                     ORDER BY timestamp DESC
                     LIMIT 100
                     """, (symbol, timeframe))
-                    rows = cursor.fetchall()
+                rows = cursor.fetchall()
 
-                    cursor.close()
+                cursor.close()
 
                 # 反转为时间正序
                 return list(reversed(rows)) if rows else []
@@ -779,45 +779,45 @@ class MarketRegimeDetector:
                         WHERE symbol = %s AND timeframe = %s
                         ORDER BY detected_at DESC LIMIT 1
                     """, (result['symbol'], result['timeframe']))
-                    last_regime = cursor.fetchone()
+                last_regime = cursor.fetchone()
 
-                    # 如果行情类型发生变化，记录切换日志
-                    if last_regime and last_regime['regime_type'] != result['regime_type']:
-                        cursor.execute("""
-                            INSERT INTO market_regime_changes
-                            (symbol, timeframe, old_regime, new_regime, old_score, new_score, changed_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                        """, (
-                            result['symbol'],
-                            result['timeframe'],
-                            last_regime['regime_type'],
-                            result['regime_type'],
-                            last_regime['regime_score'],
-                            result['regime_score']
-                        ))
-                        logger.info(f"📊 {result['symbol']} [{result['timeframe']}] 行情切换: "
-                                   f"{last_regime['regime_type']} → {result['regime_type']}")
-
-                    # 插入新的行情记录
+                # 如果行情类型发生变化，记录切换日志
+                if last_regime and last_regime['regime_type'] != result['regime_type']:
                     cursor.execute("""
-                        INSERT INTO market_regime
-                        (symbol, timeframe, regime_type, regime_score, ema_diff_pct,
-                         adx_value, trend_bars, volatility, details, detected_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                        INSERT INTO market_regime_changes
+                        (symbol, timeframe, old_regime, new_regime, old_score, new_score, changed_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, NOW())
                     """, (
                         result['symbol'],
                         result['timeframe'],
+                        last_regime['regime_type'],
                         result['regime_type'],
-                        result['regime_score'],
-                        result.get('ema_diff_pct'),
-                        result.get('adx_value'),
-                        result.get('trend_bars'),
-                        result.get('volatility'),
-                        json.dumps(result.get('details', {}), ensure_ascii=False)
+                        last_regime['regime_score'],
+                        result['regime_score']
                     ))
+                    logger.info(f"📊 {result['symbol']} [{result['timeframe']}] 行情切换: "
+                               f"{last_regime['regime_type']} → {result['regime_type']}")
 
-                    connection.commit()
-                    cursor.close()
+                # 插入新的行情记录
+                cursor.execute("""
+                    INSERT INTO market_regime
+                    (symbol, timeframe, regime_type, regime_score, ema_diff_pct,
+                     adx_value, trend_bars, volatility, details, detected_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """, (
+                    result['symbol'],
+                    result['timeframe'],
+                    result['regime_type'],
+                    result['regime_score'],
+                    result.get('ema_diff_pct'),
+                    result.get('adx_value'),
+                    result.get('trend_bars'),
+                    result.get('volatility'),
+                    json.dumps(result.get('details', {}), ensure_ascii=False)
+                ))
+
+                connection.commit()
+                cursor.close()
 
                 return True
 
