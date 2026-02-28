@@ -1065,11 +1065,11 @@ class UnifiedDataScheduler:
         # 7. 缓存更新任务
         logger.info("\n  🚀 性能优化: 缓存自动更新")
 
-        # 价格缓存 - 移除高频更新，改为与5m数据同步
-        # schedule.every(15).seconds.do(
-        #     lambda: asyncio.run(self.update_price_cache())
-        # )
-        # logger.info("  ✓ 价格统计缓存 - 每 15 秒")
+        # 价格缓存 - 每1分钟更新
+        schedule.every(1).minutes.do(
+            lambda: asyncio.run(self.update_price_cache())
+        )
+        logger.info("  ✓ 价格统计缓存 (price_stats_24h) - 每 1 分钟")
 
         # 分析缓存 - 每5分钟
         schedule.every(5).minutes.do(
@@ -1259,8 +1259,9 @@ class UnifiedDataScheduler:
         try:
             logger.info(f"[{datetime.utcnow().strftime('%H:%M:%S')}] 开始更新分析缓存...")
 
-            # 并发更新4个分析缓存
+            # 并发更新5个缓存（含价格统计）
             await asyncio.gather(
+                self.cache_service.update_price_stats_cache(self.symbols),
                 self.cache_service.update_technical_indicators_cache(self.symbols),
                 self.cache_service.update_news_sentiment_aggregation(self.symbols),
                 self.cache_service.update_funding_rate_stats(self.symbols),
