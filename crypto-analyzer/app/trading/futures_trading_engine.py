@@ -900,7 +900,7 @@ class FuturesTradingEngine:
             database=self.db_config.get('database', 'binance-data'),
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
-            autocommit=False
+            autocommit=True
         )
 
         cursor = connection.cursor()
@@ -1122,44 +1122,41 @@ class FuturesTradingEngine:
                 (float(released_margin), account_id)
             )
 
-            # 再从 futures_positions 重新计算账户余额和已实现盈亏
+            # 再更新账户余额和已实现盈亏
+            # 先用独立SELECT算出汇总值（避免UPDATE内嵌子查询跨表锁，防死锁）
             cursor.execute(
-                """UPDATE futures_trading_accounts a
-                SET a.realized_pnl = (
-                        SELECT COALESCE(SUM(p.realized_pnl), 0)
-                        FROM futures_positions p
-                        WHERE p.account_id = a.id AND p.status = 'closed'
-                    ),
-                    a.current_balance = a.initial_balance + (
-                        SELECT COALESCE(SUM(p.realized_pnl), 0)
-                        FROM futures_positions p
-                        WHERE p.account_id = a.id AND p.status = 'closed'
-                    ),
-                    a.total_trades = a.total_trades + 1,
-                    a.winning_trades = a.winning_trades + IF(%s > 0, 1, 0),
-                    a.losing_trades = a.losing_trades + IF(%s < 0, 1, 0)
-                WHERE a.id = %s""",
-                (float(realized_pnl), float(realized_pnl), account_id)
+                "SELECT COALESCE(SUM(realized_pnl), 0) as total_pnl FROM futures_positions WHERE account_id=%s AND status='closed'",
+                (account_id,)
             )
-            
-            # 更新胜率
+            total_realized_pnl = float(cursor.fetchone()['total_pnl'])
+
             cursor.execute(
                 """UPDATE futures_trading_accounts
-                SET win_rate = (winning_trades / GREATEST(total_trades, 1)) * 100
+                SET realized_pnl = %s,
+                    current_balance = initial_balance + %s,
+                    total_trades = total_trades + 1,
+                    winning_trades = winning_trades + IF(%s > 0, 1, 0),
+                    losing_trades = losing_trades + IF(%s < 0, 1, 0),
+                    win_rate = (winning_trades + IF(%s > 0, 1, 0)) / GREATEST(total_trades + 1, 1) * 100
                 WHERE id = %s""",
-                (account_id,)
+                (total_realized_pnl, total_realized_pnl,
+                 float(realized_pnl), float(realized_pnl), float(realized_pnl),
+                 account_id)
             )
 
             # 9. 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
+            # 先单独查未实现盈亏，再UPDATE（避免跨表子查询锁）
             cursor.execute(
-                """UPDATE futures_trading_accounts a
-                SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
-                    SELECT SUM(p.unrealized_pnl) 
-                    FROM futures_positions p 
-                    WHERE p.account_id = a.id AND p.status = 'open'
-                ), 0)
-                WHERE a.id = %s""",
+                "SELECT COALESCE(SUM(unrealized_pnl), 0) as total_unrealized FROM futures_positions WHERE account_id=%s AND status='open'",
                 (account_id,)
+            )
+            total_unrealized = float(cursor.fetchone()['total_unrealized'])
+
+            cursor.execute(
+                """UPDATE futures_trading_accounts
+                SET total_equity = current_balance + frozen_balance + %s
+                WHERE id = %s""",
+                (total_unrealized, account_id)
             )
             
             # 获取变化后的账户余额信息（用于资金管理记录）
