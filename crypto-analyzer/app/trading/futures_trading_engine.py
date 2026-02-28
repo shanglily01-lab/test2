@@ -871,7 +871,8 @@ class FuturesTradingEngine:
         position_id: int,
         close_quantity: Optional[Decimal] = None,  # 🔥 保留参数以兼容旧代码，但总是全部平仓
         reason: str = 'manual',
-        close_price: Optional[Decimal] = None
+        close_price: Optional[Decimal] = None,
+        _deadlock_retry: int = 0
     ) -> Dict:
         """
         平仓（全部平仓）
@@ -899,9 +900,9 @@ class FuturesTradingEngine:
             database=self.db_config.get('database', 'binance-data'),
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
-            autocommit=True
+            autocommit=False
         )
-        
+
         cursor = connection.cursor()
 
         try:
@@ -1358,6 +1359,13 @@ class FuturesTradingEngine:
                     connection.rollback()
                 except:
                     pass
+            # 死锁自动重试（最多2次）
+            if isinstance(e, pymysql.err.OperationalError) and e.args[0] == 1213 and _deadlock_retry < 2:
+                import time, random
+                wait = random.uniform(0.1, 0.4) * (_deadlock_retry + 1)
+                logger.warning(f"[DEADLOCK] 平仓死锁，{wait:.2f}s后重试({_deadlock_retry + 1}/2): position_id={position_id}")
+                time.sleep(wait)
+                return self.close_position(position_id, close_quantity, reason, close_price, _deadlock_retry=_deadlock_retry + 1)
             logger.error(f"平仓失败: {e}")
             import traceback
             logger.error(traceback.format_exc())

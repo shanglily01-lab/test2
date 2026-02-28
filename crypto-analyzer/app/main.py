@@ -4230,7 +4230,7 @@ async def get_latest_retrospective_analysis():
     直接从 kline_data 和 futures_positions 查询，无需预计算
     """
     try:
-        import pymysql
+        import pymysql, os
         from datetime import datetime, timedelta, timezone
 
         conn = pymysql.connect(
