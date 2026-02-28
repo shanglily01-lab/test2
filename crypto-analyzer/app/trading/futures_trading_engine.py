@@ -1237,8 +1237,9 @@ class FuturesTradingEngine:
                 except Exception:
                     pass
 
-                logger.info(f"[同步实盘] 检查是否需要同步: live_engine={self.live_engine is not None}, live_trading_enabled={live_trading_enabled}, position_id={position_id}, symbol={symbol}, position_side={position_side}, strategy_id={position.get('strategy_id')}")
-                if self.live_engine and live_trading_enabled:
+                if not (self.live_engine and live_trading_enabled):
+                    logger.debug(f"[同步实盘] 跳过: live_engine={self.live_engine is not None}, live_trading_enabled={live_trading_enabled}")
+                elif self.live_engine and live_trading_enabled:
                     # 首先检查策略配置（如果有 strategy_id）
                     should_sync = False
                     strategy_id = position.get('strategy_id')

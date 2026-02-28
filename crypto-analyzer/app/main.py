@@ -802,15 +802,13 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 技术信号API路由
-try:
-    from app.api.technical_signals_api import router as technical_signals_router
-    app.include_router(technical_signals_router)
-    logger.info("✅ 技术信号API路由已注册（/api/technical-signals）")
-except Exception as e:
-    logger.warning(f"⚠️  技术信号API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
+# 技术信号API路由 - 已禁用旧版路由（N+1查询），使用main.py内的优化版本（batch query + 60s缓存）
+# try:
+#     from app.api.technical_signals_api import router as technical_signals_router
+#     app.include_router(technical_signals_router)
+#     logger.info("✅ 技术信号API路由已注册（/api/technical-signals）")
+# except Exception as e:
+#     logger.warning(f"⚠️  技术信号API路由注册失败: {e}")
 
 # 评级管理API路由
 try:
