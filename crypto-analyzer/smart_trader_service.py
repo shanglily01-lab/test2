@@ -1114,15 +1114,14 @@ class SmartTraderService:
                         updated_at = NOW()
                     WHERE setting_key = 'u_futures_trading_enabled'
                 """, (round(pnl_6h, 1),))
-                conn.commit()
-                conn.close()
+                cursor.close()
                 logger.warning(
                     f"[PROFIT-GUARD] 盈利熔断触发! 过去{window_hours}h盈利={pnl_6h:+.1f}U "
                     f"超过阈值{profit_threshold}U => u_futures_trading_enabled=0，请手动重新开启"
                 )
                 return True
 
-            conn.close()
+            cursor.close()
             return False
 
         except Exception as e:
@@ -1170,15 +1169,14 @@ class SmartTraderService:
                         updated_at = NOW()
                     WHERE setting_key = 'u_futures_trading_enabled'
                 """, (round(pnl, 1),))
-                conn.commit()
-                conn.close()
+                cursor.close()
                 logger.warning(
                     f"[LOSS-GUARD] 亏损熔断触发! 过去{window_hours}h亏损={pnl:+.1f}U "
                     f"超过阈值-{loss_threshold}U => u_futures_trading_enabled=0，请手动重新开启"
                 )
                 return True
 
-            conn.close()
+            cursor.close()
             return False
 
         except Exception as e:
