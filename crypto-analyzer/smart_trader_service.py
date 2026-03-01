@@ -1053,6 +1053,7 @@ class SmartTraderService:
 
             result = cursor.fetchone()
             cursor.close()
+            conn.close()
 
             if result:
                 # setting_value 可能是字符串 '1'/'0' 或布尔值
@@ -2871,6 +2872,13 @@ class SmartTraderService:
                         logger.warning(f"⚠️ [CONFIG-RELOAD] 重新加载Big4配置失败: {e}")
                     last_config_reload = now
 
+                # 0.7. 🔒 提前检查交易开关（最高优先级）
+                # 如果U本位交易已关闭，直接跳过本轮所有扫描和开仓逻辑
+                if not self.check_trading_enabled():
+                    logger.info("[TRADING-DISABLED] ⏸️ U本位合约交易已停止，跳过本轮扫描")
+                    time.sleep(self.scan_interval)
+                    continue
+
                 # 注意：止盈止损、超时检查已统一迁移到SmartExitOptimizer
                 # 1. [已停用] 检查止盈止损 -> 由SmartExitOptimizer处理
                 # self.check_stop_loss_take_profit()
@@ -2918,12 +2926,6 @@ class SmartTraderService:
                 # 5.5.1 亏损熔断检查：每3小时检测一次，过去3小时亏损超300U则自动禁止开仓
                 if self._check_loss_and_auto_disable(loss_threshold=300.0, window_hours=3, check_interval_hours=3):
                     logger.warning("[LOSS-GUARD] 亏损熔断已触发，停止本轮开仓，请检查后手动重新开启交易")
-                    time.sleep(self.scan_interval)
-                    continue
-
-                # 5.6. 检查交易控制开关
-                if not self.check_trading_enabled():
-                    logger.info("[TRADING-DISABLED] ⏸️ U本位合约交易已停止，跳过开仓（不影响已有持仓）")
                     time.sleep(self.scan_interval)
                     continue
 
