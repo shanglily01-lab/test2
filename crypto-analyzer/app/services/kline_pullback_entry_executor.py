@@ -375,7 +375,8 @@ class KlinePullbackEntryExecutor:
                     logger.warning(f"[TRADING-DISABLED] {symbol} 回调确认触发但交易已禁止，放弃开仓")
                     return {'success': False, 'reason': '交易开关已关闭'}
             except Exception as chk_err:
-                logger.warning(f"[TRADING-DISABLED] 检查交易开关失败: {chk_err}，继续执行")
+                logger.warning(f"[TRADING-DISABLED] 检查交易开关失败: {chk_err}，默认禁止开单")
+                return {'success': False, 'reason': f'检查交易开关异常: {chk_err}'}
 
             # 获取当前价格
             current_price = await self._get_current_price(symbol)

@@ -1062,14 +1062,14 @@ class SmartTraderService:
                 else:
                     return bool(value)
             else:
-                # 如果数据库中没有记录，默认启用
-                logger.warning(f"[TRADING-CONTROL] 未找到U本位交易控制设置(u_futures_trading_enabled), 默认启用")
-                return True
+                # 如果数据库中没有记录，默认禁止（安全策略：查不到开关就不开单）
+                logger.warning(f"[TRADING-CONTROL] 未找到U本位交易控制设置(u_futures_trading_enabled), 默认禁止开单")
+                return False
 
         except Exception as e:
-            # 出错时默认启用，避免影响交易
-            logger.error(f"[TRADING-CONTROL] 检查交易状态失败: {e}, 默认启用")
-            return True
+            # 出错时默认禁止（安全策略：查不到开关就不开单，避免损失）
+            logger.error(f"[TRADING-CONTROL] 检查交易状态失败: {e}, 默认禁止开单")
+            return False
 
     def _check_profit_and_auto_disable(self, profit_threshold=1000.0, window_hours=6, check_interval_hours=4) -> bool:
         """
