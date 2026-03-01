@@ -153,6 +153,7 @@ class KlinePullbackEntryExecutor:
                 return float(price)
 
         # 回退到数据库
+        conn = None
         try:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
@@ -163,11 +164,13 @@ class KlinePullbackEntryExecutor:
                 LIMIT 1
             """, (symbol,))
             result = cursor.fetchone()
-            conn.close()
             if result:
                 return float(result[0])
         except Exception as e:
             logger.error(f"❌ 从数据库获取价格失败: {e}")
+        finally:
+            if conn:
+                conn.close()
 
         return None
 
@@ -289,6 +292,7 @@ class KlinePullbackEntryExecutor:
         Returns:
             (是否确认, 原因描述)
         """
+        conn = None
         try:
             conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
             cursor = conn.cursor()
@@ -312,7 +316,6 @@ class KlinePullbackEntryExecutor:
             """, (symbol, timeframe, base_timestamp))
 
             klines = cursor.fetchall()
-            conn.close()
 
             if len(klines) < 1:
                 logger.debug(f"⚠️ {symbol} {timeframe.upper()} 数据不足，base_time={base_time}")
@@ -343,6 +346,9 @@ class KlinePullbackEntryExecutor:
         except Exception as e:
             logger.error(f"❌ 检查回调确认失败: {e}")
             return False, f"检查失败: {e}"
+        finally:
+            if conn:
+                conn.close()
 
     async def _execute_single_entry(
         self, symbol: str, direction: str, margin: float,
@@ -412,50 +418,51 @@ class KlinePullbackEntryExecutor:
 
             # 🔥 防重复开仓：插入前再次检查是否已有持仓
             conn = pymysql.connect(**self.db_config)
-            cursor = conn.cursor()
+            try:
+                cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT COUNT(*) FROM futures_positions
-                WHERE symbol = %s AND position_side = %s
-                AND status = 'open' AND account_id = %s
-            """, (symbol, direction, self.account_id))
+                cursor.execute("""
+                    SELECT COUNT(*) FROM futures_positions
+                    WHERE symbol = %s AND position_side = %s
+                    AND status = 'open' AND account_id = %s
+                """, (symbol, direction, self.account_id))
 
-            existing_count = cursor.fetchone()[0]
-            if existing_count > 0:
+                existing_count = cursor.fetchone()[0]
+                if existing_count > 0:
+                    logger.warning(f"⚠️ {symbol} {direction} 已有{existing_count}个持仓，放弃本次开仓（防重复）")
+                    return {'success': False, 'reason': '已有持仓，防止重复开仓'}
+
+                # 插入持仓记录
+                cursor.execute("""
+                    INSERT INTO futures_positions
+                    (account_id, symbol, position_side, quantity, entry_price,
+                     leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
+                     entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
+                     planned_close_time, source, status, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                            'smart_trader', 'open', NOW(), NOW())
+                """, (
+                    self.account_id, symbol, direction, quantity, current_price, leverage,
+                    notional_value, margin, stop_loss_price, take_profit_price,
+                    signal_combination_key, entry_reason, entry_score,
+                    json.dumps(signal_components) if signal_components else None,
+                    max_hold_minutes, timeout_at, planned_close_time
+                ))
+
+                position_id = cursor.lastrowid
+
+                # 冻结资金
+                cursor.execute("""
+                    UPDATE futures_trading_accounts
+                    SET current_balance = current_balance - %s,
+                        frozen_balance = frozen_balance + %s,
+                        updated_at = NOW()
+                    WHERE id = %s
+                """, (margin, margin, self.account_id))
+
+                conn.commit()
+            finally:
                 conn.close()
-                logger.warning(f"⚠️ {symbol} {direction} 已有{existing_count}个持仓，放弃本次开仓（防重复）")
-                return {'success': False, 'reason': '已有持仓，防止重复开仓'}
-
-            # 插入持仓记录
-            cursor.execute("""
-                INSERT INTO futures_positions
-                (account_id, symbol, position_side, quantity, entry_price,
-                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
-                 planned_close_time, source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        'smart_trader', 'open', NOW(), NOW())
-            """, (
-                self.account_id, symbol, direction, quantity, current_price, leverage,
-                notional_value, margin, stop_loss_price, take_profit_price,
-                signal_combination_key, entry_reason, entry_score,
-                json.dumps(signal_components) if signal_components else None,
-                max_hold_minutes, timeout_at, planned_close_time
-            ))
-
-            position_id = cursor.lastrowid
-
-            # 冻结资金
-            cursor.execute("""
-                UPDATE futures_trading_accounts
-                SET current_balance = current_balance - %s,
-                    frozen_balance = frozen_balance + %s,
-                    updated_at = NOW()
-                WHERE id = %s
-            """, (margin, margin, self.account_id))
-
-            conn.commit()
-            conn.close()
 
             logger.info(f"✅ {symbol} 一次性开仓完成 | 持仓ID:{position_id} | 价格:${current_price:.4f} | 保证金:{margin}U")
 
