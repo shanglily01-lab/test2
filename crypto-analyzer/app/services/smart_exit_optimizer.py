@@ -1350,15 +1350,15 @@ class SmartExitOptimizer:
                         )
                         return ('亏损ROI4%+5M无好转', 1.0)
 
-                # 策略B: ROI亏损≥2% + 2根15M无持续好转
+                # 策略B: ROI亏损≥2% + 连续2根5M无好转
                 elif roi_pct <= -2.0:
-                    no_sustained = await self._check_15m_no_sustained_improvement(position_id, position_side)
+                    no_sustained = await self._check_5m_no_improvement(position_id, position_side)
                     if no_sustained:
                         logger.warning(
                             f"⚠️ 持仓{position_id} {symbol} {position_side} 触发智能亏损监控-策略B | "
-                            f"ROI亏损{roi_pct:.2f}% ≤ -2% + 2根15M K线无持续好转，平仓 (价格变化{pnl_pct:.2f}%)"
+                            f"ROI亏损{roi_pct:.2f}% ≤ -2% + 连续2根5M无好转，平仓 (价格变化{pnl_pct:.2f}%)"
                         )
-                        return ('亏损ROI2%+15M无持续好转', 1.0)
+                        return ('亏损ROI2%+5M无好转', 1.0)
 
             # ============================================================
             # === 优先级1.6: 提前止损优化 (ROI亏损-10%时重点监控) ===
