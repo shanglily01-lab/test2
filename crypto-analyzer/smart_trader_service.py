@@ -1041,6 +1041,8 @@ class SmartTraderService:
             bool: True=交易启用, False=交易停止
         """
         try:
+            # 注意: _get_connection() 返回单例连接 self.connection，不应调用 conn.close()
+            # 单例连接通过 ping(reconnect=True) 自动保活，无需每次重建
             conn = self._get_connection()
             cursor = conn.cursor(pymysql.cursors.DictCursor)
 
@@ -1053,23 +1055,33 @@ class SmartTraderService:
 
             result = cursor.fetchone()
             cursor.close()
-            conn.close()
+            # ⚠️ 不调用 conn.close() — conn 是单例 self.connection，关闭会强迫每5秒重建TCP连接
 
             if result:
                 # setting_value 可能是字符串 '1'/'0' 或布尔值
                 value = result['setting_value']
                 if isinstance(value, str):
-                    return value in ('1', 'true', 'True', 'yes')
+                    enabled = value in ('1', 'true', 'True', 'yes')
                 else:
-                    return bool(value)
+                    enabled = bool(value)
+                # 缓存上次成功读取的值，用于连接失败时的兜底
+                self._last_trading_enabled = enabled
+                self._last_trading_enabled_at = datetime.now()
+                return enabled
             else:
                 # 如果数据库中没有记录，默认禁止（安全策略：查不到开关就不开单）
                 logger.warning(f"[TRADING-CONTROL] 未找到U本位交易控制设置(u_futures_trading_enabled), 默认禁止开单")
                 return False
 
         except Exception as e:
-            # 出错时默认禁止（安全策略：查不到开关就不开单，避免损失）
-            logger.error(f"[TRADING-CONTROL] 检查交易状态失败: {e}, 默认禁止开单")
+            # 连接失败时，优先使用缓存值（60秒内有效），避免短暂DB断线就停止交易
+            cached = getattr(self, '_last_trading_enabled', None)
+            cached_at = getattr(self, '_last_trading_enabled_at', None)
+            if cached is not None and cached_at and (datetime.now() - cached_at).total_seconds() < 60:
+                logger.warning(f"[TRADING-CONTROL] 检查交易状态失败({e}), 使用缓存值: {'开启' if cached else '关闭'}")
+                return cached
+            # 缓存过期或无缓存，默认禁止
+            logger.error(f"[TRADING-CONTROL] 检查交易状态失败: {e}, 缓存已过期，默认禁止开单")
             return False
 
     def _check_profit_and_auto_disable(self, profit_threshold=1000.0, window_hours=6, check_interval_hours=4) -> bool:
@@ -3174,7 +3186,7 @@ class SmartTraderService:
                                                 break
 
                                     cursor_check.close()
-                                    conn_check.close()
+                                    # ⚠️ 不调用 conn_check.close()，conn_check 是单例 self.connection
 
                                     # 如果所有Big4都已反弹2%+，解除禁止做空
                                     if all_recovered:
@@ -3213,7 +3225,7 @@ class SmartTraderService:
                                                 break
 
                                     cursor_check.close()
-                                    conn_check.close()
+                                    # ⚠️ 不调用 conn_check.close()，conn_check 是单例 self.connection
 
                                     if all_cooled:
                                         should_block_long = False
@@ -3236,7 +3248,7 @@ class SmartTraderService:
                                     """)
                                     _eb_conn.commit()
                                     _eb_cur.close()
-                                    _eb_conn.close()
+                                    # ⚠️ 不调用 _eb_conn.close()，是单例 self.connection
                                     logger.warning("[EMERGENCY-BLOCK] ⛔ allow_long=0 已写入，请确认行情后手动重新开启做多")
                                 except Exception as _eb_err:
                                     logger.error(f"[EMERGENCY-BLOCK] 写入allow_long失败: {_eb_err}")
@@ -3254,7 +3266,7 @@ class SmartTraderService:
                                     """)
                                     _eb_conn.commit()
                                     _eb_cur.close()
-                                    _eb_conn.close()
+                                    # ⚠️ 不调用 _eb_conn.close()，是单例 self.connection
                                     logger.warning("[EMERGENCY-BLOCK] ⛔ allow_short=0 已写入，请确认行情后手动重新开启做空")
                                 except Exception as _eb_err:
                                     logger.error(f"[EMERGENCY-BLOCK] 写入allow_short失败: {_eb_err}")
