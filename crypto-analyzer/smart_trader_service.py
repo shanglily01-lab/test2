@@ -2933,8 +2933,8 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5.5.1 亏损熔断检查：每3小时检测一次，过去3小时亏损超300U则自动禁止开仓
-                if self._check_loss_and_auto_disable(loss_threshold=300.0, window_hours=3, check_interval_hours=3):
+                # 5.5.1 亏损熔断检查：每30分钟检测一次，过去3小时亏损超300U则自动禁止开仓
+                if self._check_loss_and_auto_disable(loss_threshold=300.0, window_hours=3, check_interval_hours=0.5):
                     logger.warning("[LOSS-GUARD] 亏损熔断已触发，停止本轮开仓，请检查后手动重新开启交易")
                     time.sleep(self.scan_interval)
                     continue
