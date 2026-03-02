@@ -1,0 +1,172 @@
+/*
+ * AlphaFlow - Mobile Responsive Overrides
+ * 适用于所有页面的手机端适配
+ */
+
+/* ==================== 平板 (≤1024px) ==================== */
+@media (max-width: 1024px) {
+    .nav-link {
+        padding: 0.5rem 1rem;
+        font-size: 14px !important;
+    }
+}
+
+/* ==================== 手机横屏 / 小平板 (≤768px) ==================== */
+@media (max-width: 768px) {
+    /* 容器内边距收窄 */
+    .container {
+        padding: var(--spacing-md) !important;
+    }
+
+    /* 标题字号缩小 */
+    .header-title {
+        font-size: 18px !important;
+    }
+    .header-subtitle {
+        font-size: 12px;
+    }
+
+    /* 导航链接更紧凑 */
+    .nav-container {
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+    .nav-links {
+        gap: 4px !important;
+    }
+    .nav-link {
+        padding: 0.4rem 0.75rem !important;
+        font-size: 13px !important;
+    }
+
+    /* 卡片内边距减小 */
+    .card {
+        padding: var(--spacing-md) !important;
+        margin-bottom: var(--spacing-md) !important;
+    }
+    .card-header {
+        flex-wrap: wrap;
+        gap: var(--spacing-sm);
+    }
+    .card-title {
+        font-size: 15px !important;
+    }
+
+    /* 统计卡片网格：最小宽度缩小 */
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+        gap: var(--spacing-sm) !important;
+    }
+    .stat-value {
+        font-size: 16px !important;
+    }
+    .stat-label {
+        font-size: 11px !important;
+    }
+
+    /* 表格：确保横向滚动，缩小字号 */
+    .table-container {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+    table {
+        min-width: 600px; /* 防止列被压缩过细 */
+    }
+    th, td {
+        padding: var(--spacing-sm) !important;
+        font-size: 11px !important;
+        white-space: nowrap;
+    }
+
+    /* 弹窗：限制最大宽度为屏幕宽度 */
+    .modal-dialog {
+        min-width: unset !important;
+        width: 92vw !important;
+        max-width: 92vw !important;
+    }
+
+    /* Toast 通知 */
+    .toast {
+        min-width: unset !important;
+        max-width: 90vw !important;
+        right: 12px !important;
+        bottom: 12px !important;
+    }
+
+    /* 顶部操作按钮区 */
+    .header-actions {
+        flex-wrap: wrap;
+        gap: var(--spacing-sm) !important;
+    }
+    .header-content {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+
+    /* K线条形图标签适配 */
+    .kline-bar-label {
+        min-width: 60px !important;
+        font-size: 11px !important;
+    }
+    .kline-bar-value {
+        min-width: 44px !important;
+        font-size: 11px !important;
+    }
+
+    /* 按钮组 */
+    .btn {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    /* 交易页面布局（已在各页面媒体查询中覆盖，此处作为后备）*/
+    .trading-layout {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* ==================== 手机竖屏 (≤480px) ==================== */
+@media (max-width: 480px) {
+    /* 容器无边距 */
+    .container {
+        padding: var(--spacing-sm) !important;
+    }
+
+    /* 标题更小 */
+    .header-title {
+        font-size: 15px !important;
+    }
+
+    /* 导航折行，每行2-3个 */
+    .nav-link {
+        padding: 0.35rem 0.6rem !important;
+        font-size: 12px !important;
+    }
+
+    /* 统计网格2列 */
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+    /* 卡片padding最小化 */
+    .card {
+        padding: var(--spacing-sm) !important;
+        border-radius: var(--radius-md) !important;
+    }
+
+    /* 弹窗全宽 */
+    .modal-dialog {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        border-radius: var(--radius-lg) !important;
+    }
+
+    /* header flex调整 */
+    .header {
+        padding: var(--spacing-md) !important;
+    }
+
+    /* 隐藏不重要的文字 */
+    .header-subtitle {
+        display: none;
+    }
+}
