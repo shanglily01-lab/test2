@@ -26,12 +26,14 @@
         font-size: 12px;
     }
 
-    /* 导航链接更紧凑 */
+    /* 导航链接：强制保持横向换行，禁止变成竖列 */
+    .nav-links {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 4px !important;
+    }
     .nav-container {
         padding: var(--spacing-sm) var(--spacing-md);
-    }
-    .nav-links {
-        gap: 4px !important;
     }
     .nav-link {
         padding: 0.4rem 0.75rem !important;
@@ -61,6 +63,27 @@
     }
     .stat-label {
         font-size: 11px !important;
+    }
+
+    /* ===== 交易页面持仓/交易记录卡片 ===== */
+    /* 移动端不需要固定高度，让页面自然伸展，整体滚动 */
+    .positions-card,
+    .trades-card {
+        min-height: unset !important;  /* 取消 1000px/800px 的固定高度 */
+        height: auto !important;
+        overflow: visible !important;  /* 允许子元素横向滚动 */
+    }
+    .positions-card .card-body,
+    .trades-card .card-body {
+        overflow: visible !important;  /* 同上，不内部滚动，整页滚动 */
+        min-height: unset !important;
+    }
+    /* 持仓/交易记录包装容器也取消固定高度 */
+    .positions-trades-wrapper {
+        height: auto !important;
+    }
+    .trading-panel-wrapper {
+        height: auto !important;
     }
 
     /* 表格：确保横向滚动，缩小字号 */
@@ -118,7 +141,7 @@
         font-size: 12px;
     }
 
-    /* 交易页面布局（已在各页面媒体查询中覆盖，此处作为后备）*/
+    /* 交易页面布局单列 */
     .trading-layout {
         grid-template-columns: 1fr !important;
     }
