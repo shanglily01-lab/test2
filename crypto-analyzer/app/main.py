@@ -817,13 +817,13 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 技术信号API路由 - 已禁用旧版路由（N+1查询），使用main.py内的优化版本（batch query + 60s缓存）
-# try:
-#     from app.api.technical_signals_api import router as technical_signals_router
-#     app.include_router(technical_signals_router)
-#     logger.info("✅ 技术信号API路由已注册（/api/technical-signals）")
-# except Exception as e:
-#     logger.warning(f"⚠️  技术信号API路由注册失败: {e}")
+# 技术信号API路由 - 存储过程缓存版（极速，直接读 technical_signals_cache 表）
+try:
+    from app.api.technical_signals_api import router as technical_signals_router
+    app.include_router(technical_signals_router)
+    logger.info("✅ 技术信号API路由已注册（/api/technical-signals）")
+except Exception as e:
+    logger.warning(f"⚠️  技术信号API路由注册失败: {e}")
 
 # 评级管理API路由
 try:
@@ -2595,138 +2595,8 @@ async def get_technical_indicators(symbol: str = None, timeframe: str = '1h'):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/technical-signals")
-async def get_technical_signals():
-    """
-    获取所有交易对的技术信号（15m, 1h, 1d）
-    包含 EMA, MACD, RSI, BOLL 等技术指标和技术评分
-
-    Returns:
-        各交易对在不同时间周期的技术指标数据
-    """
-    global _technical_signals_cache, _technical_signals_cache_time
-
-    # 检查缓存
-    with _technical_signals_cache_lock:
-        if _technical_signals_cache is not None and _technical_signals_cache_time is not None:
-            cache_age = (datetime.utcnow() - _technical_signals_cache_time).total_seconds()
-            if cache_age < TECHNICAL_SIGNALS_CACHE_TTL:
-                logger.debug(f"✅ 使用缓存的技术信号数据 (缓存年龄: {cache_age:.0f}秒)")
-                return _technical_signals_cache
-
-    try:
-        import pymysql
-        
-        db_config = config.get('database', {}).get('mysql', {})
-        connection = pymysql.connect(**db_config)
-        cursor = connection.cursor(pymysql.cursors.DictCursor)
-        
-        try:
-            timeframes = ['15m', '1h', '1d']
-
-            # 🚀 优化: 直接查询（表有UNIQUE KEY uk_symbol_timeframe，每个(symbol,timeframe)只有1条）
-            cursor.execute("""
-                SELECT *
-                FROM technical_indicators_cache
-                WHERE timeframe IN ('15m', '1h', '1d')
-                ORDER BY symbol, timeframe
-            """)
-
-            all_results = cursor.fetchall()
-
-            # 组织数据结构
-            symbols_data = {}
-            for result in all_results:
-                symbol = result['symbol']
-                timeframe = result['timeframe']
-
-                if symbol not in symbols_data:
-                    symbols_data[symbol] = {}
-
-                symbols_data[symbol][timeframe] = {
-                    'rsi_value': float(result['rsi_value']) if result.get('rsi_value') else None,
-                    'rsi_signal': result.get('rsi_signal'),
-                    'macd_value': float(result['macd_value']) if result.get('macd_value') else None,
-                    'macd_signal_line': float(result['macd_signal_line']) if result.get('macd_signal_line') else None,
-                    'macd_histogram': float(result['macd_histogram']) if result.get('macd_histogram') else None,
-                    'macd_trend': result.get('macd_trend'),
-                    'ema_short': float(result['ema_short']) if result.get('ema_short') else None,
-                    'ema_long': float(result['ema_long']) if result.get('ema_long') else None,
-                    'ema_trend': result.get('ema_trend'),
-                    'bb_upper': float(result['bb_upper']) if result.get('bb_upper') else None,
-                    'bb_middle': float(result['bb_middle']) if result.get('bb_middle') else None,
-                    'bb_lower': float(result['bb_lower']) if result.get('bb_lower') else None,
-                    'bb_position': result.get('bb_position'),
-                    'bb_width': float(result['bb_width']) if result.get('bb_width') else None,
-                    'kdj_k': float(result['kdj_k']) if result.get('kdj_k') else None,
-                    'kdj_d': float(result['kdj_d']) if result.get('kdj_d') else None,
-                    'kdj_j': float(result['kdj_j']) if result.get('kdj_j') else None,
-                    'kdj_signal': result.get('kdj_signal'),
-                    'technical_score': float(result['technical_score']) if result.get('technical_score') else None,
-                    'technical_signal': result.get('technical_signal'),
-                    'volume_ratio': float(result['volume_ratio']) if result.get('volume_ratio') else None,
-                    'updated_at': result['updated_at'].isoformat() if result.get('updated_at') else None
-                }
-            
-            # 转换为列表格式，便于前端显示
-            # 只返回至少有一个时间周期有数据的交易对
-            signals_list = []
-            for symbol, timeframes_data in symbols_data.items():
-                # 至少有一个时间周期有数据才添加到列表
-                if timeframes_data.get('15m') or timeframes_data.get('1h') or timeframes_data.get('1d'):
-                    signals_list.append({
-                        'symbol': symbol,
-                        '15m': timeframes_data.get('15m'),
-                        '1h': timeframes_data.get('1h'),
-                        '1d': timeframes_data.get('1d')
-                    })
-            
-            # 批量获取价格数据
-            if signals_list:
-                symbols_list = [item['symbol'] for item in signals_list]
-                placeholders = ','.join(['%s'] * len(symbols_list))
-                cursor.execute(
-                    f"""SELECT symbol, current_price, change_24h, updated_at
-                    FROM price_stats_24h 
-                    WHERE symbol IN ({placeholders})""",
-                    symbols_list
-                )
-                price_data = cursor.fetchall()
-                price_map = {row['symbol']: row for row in price_data}
-                
-                # 将价格数据添加到每个交易对
-                for item in signals_list:
-                    price_info = price_map.get(item['symbol'])
-                    if price_info:
-                        item['current_price'] = float(price_info['current_price']) if price_info.get('current_price') else None
-                        item['change_24h'] = float(price_info['change_24h']) if price_info.get('change_24h') else None
-                    else:
-                        item['current_price'] = None
-                        item['change_24h'] = None
-
-            result = {
-                'success': True,
-                'data': signals_list,
-                'total': len(signals_list)
-            }
-
-            # 更新缓存
-            with _technical_signals_cache_lock:
-                _technical_signals_cache = result
-                _technical_signals_cache_time = datetime.utcnow()
-                logger.debug(f"✅ 技术信号数据已缓存 ({len(signals_list)} 条记录)")
-
-            return result
-            
-        finally:
-            cursor.close()
-            connection.close()
-            
-    except Exception as e:
-        logger.error(f"获取技术信号失败: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+# /api/technical-signals 由 technical_signals_api.py 路由提供（存储过程缓存版）
+# 原旧版实现（读 technical_indicators_cache 表，EMA/MACD/RSI格式）已废弃
 
 
 @app.get("/api/trend-analysis")
