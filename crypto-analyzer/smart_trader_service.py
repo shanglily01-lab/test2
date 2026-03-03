@@ -996,6 +996,19 @@ class SmartTraderService:
 
         logger.info("🔱 Big4趋势检测器已启动 (实时检测模式)")
 
+        # Telegram 通知（熔断/告警直接调用 self.telegram_notifier.send_message(...)）
+        from app.services.trade_notifier import TradeNotifier as _TradeNotifier
+        self.telegram_notifier = _TradeNotifier({
+            'notifications': {
+                'telegram': {
+                    'enabled': bool(os.getenv('TELEGRAM_BOT_TOKEN')),
+                    'bot_token': os.getenv('TELEGRAM_BOT_TOKEN', ''),
+                    'chat_id': os.getenv('TELEGRAM_CHAT_ID', ''),
+                    'notify_events': ['all']
+                }
+            }
+        })
+
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
         logger.info(f"账户ID: {self.account_id}")

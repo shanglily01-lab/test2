@@ -1322,6 +1322,19 @@ class CoinFuturesTraderService:
         logger.info("🔱 Big4趋势检测器已启动 (15分钟检测, 1小时缓存)")
         logger.info("📊 交易模式: 固定趋势模式 (已禁用自动切换)")
 
+        # Telegram 通知（熔断/告警直接调用 self.telegram_notifier.send_message(...)）
+        from app.services.trade_notifier import TradeNotifier as _TradeNotifier
+        self.telegram_notifier = _TradeNotifier({
+            'notifications': {
+                'telegram': {
+                    'enabled': bool(os.getenv('TELEGRAM_BOT_TOKEN')),
+                    'bot_token': os.getenv('TELEGRAM_BOT_TOKEN', ''),
+                    'chat_id': os.getenv('TELEGRAM_CHAT_ID', ''),
+                    'notify_events': ['all']
+                }
+            }
+        })
+
         logger.info("=" * 60)
         logger.info("币本位合约智能自动交易服务已启动")
         logger.info(f"账户ID: {self.account_id}")

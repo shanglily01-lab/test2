@@ -81,6 +81,10 @@ class TradeNotifier:
             logger.warning(f"Telegram通知发送失败: {e}")
             return False
 
+    def send_message(self, text: str) -> bool:
+        """发送纯文本消息（熔断/告警等场景直接调用）"""
+        return self._send_telegram(text, parse_mode='HTML')
+
     def notify_open_position(
         self,
         symbol: str,
