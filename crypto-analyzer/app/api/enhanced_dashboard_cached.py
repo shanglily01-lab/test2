@@ -534,190 +534,91 @@ class EnhancedDashboardCached:
 
     async def _get_hyperliquid_from_cache(self) -> Dict:
         """
-        从Hyperliquid聚合表读取数据（超快）
-
-        Returns:
-            聪明钱数据
+        从预计算缓存表读取聪明钱数据（存储过程版，极速）
+        dashboard_hl_summary + dashboard_hl_recent_trades 由存储过程每5分钟刷新
         """
+        _empty = {'monitored_wallets': 0, 'active_wallets': 0, 'total_volume_24h': 0,
+                  'recent_trades': [], 'top_coins': []}
         session = None
         try:
             session = self.db_service.get_session()
 
-            # 获取活跃监控钱包总数
-            result = session.execute(text("""
-                SELECT COUNT(*) as count
-                FROM hyperliquid_monitored_wallets
-                WHERE is_monitoring = 1
-            """))
-            row = result.fetchone()
-            monitored_count = row[0] if row else 0
+            # 读汇总（单行）
+            summary_row = session.execute(text(
+                "SELECT monitored_count, active_wallets_24h, total_volume_24h FROM dashboard_hl_summary WHERE id = 1"
+            )).fetchone()
 
-            # 获取Top币种（按净流入排序）
-            result = session.execute(text("""
-                SELECT
-                    symbol as coin,
-                    net_flow,
-                    total_volume,
-                    long_trades,
-                    short_trades,
-                    active_wallets,
-                    hyperliquid_signal as direction
+            monitored_count      = int(summary_row[0]) if summary_row else 0
+            active_wallets_count = int(summary_row[1]) if summary_row else 0
+            total_volume_24h     = float(summary_row[2]) if summary_row else 0.0
+
+            # 读 Top 币种（已有聚合表，快）
+            top_coins_rows = session.execute(text("""
+                SELECT symbol AS coin, net_flow, total_volume
                 FROM hyperliquid_symbol_aggregation
                 WHERE period = '24h'
                 ORDER BY ABS(net_flow) DESC
                 LIMIT 20
-            """))
-            top_coins_data = result.fetchall()
+            """)).fetchall()
 
-            # 获取最近大额交易（优化版本：减少时间范围，添加索引提示）
-            from datetime import timedelta
-            cutoff_time = datetime.utcnow() - timedelta(hours=24)  # 减少到24小时以提高性能
-            
-            # 先统计24小时内有交易的钱包数（活跃钱包）
-            active_wallets_result = session.execute(text("""
-                SELECT COUNT(DISTINCT t.address) as active_count
-                FROM hyperliquid_wallet_trades t
-                INNER JOIN (
-                    SELECT address FROM hyperliquid_monitored_wallets WHERE is_monitoring = 1
-                ) w_filter ON t.address = w_filter.address
-                WHERE t.trade_time >= :cutoff_time
-            """), {"cutoff_time": cutoff_time})
-            active_wallets_row = active_wallets_result.fetchone()
-            active_wallets_count = active_wallets_row[0] if active_wallets_row else 0
-            
-            # 优化查询：使用子查询先过滤监控钱包，减少JOIN数据量
-            result = session.execute(text("""
-                SELECT
-                    t.id,
-                    t.address,
-                    t.coin,
-                    t.side,
-                    t.price,
-                    t.size,
-                    ROUND(t.notional_usd, 2) as notional_usd,
-                    t.closed_pnl,
-                    t.trade_time,
-                    w.label as wallet_label,
-                    t.trader_id,
-                    -- 简化：直接使用估算杠杆（根据持仓金额），避免复杂的子查询
-                    CASE 
-                        WHEN t.notional_usd > 100000 THEN 10.0
-                        WHEN t.notional_usd > 50000 THEN 5.0
-                        WHEN t.notional_usd > 10000 THEN 3.0
-                        ELSE 1.0
-                    END as leverage
-                FROM hyperliquid_wallet_trades t
-                INNER JOIN (
-                    SELECT address FROM hyperliquid_monitored_wallets WHERE is_monitoring = 1
-                ) w_filter ON t.address = w_filter.address
-                LEFT JOIN hyperliquid_monitored_wallets w ON t.address = w.address
-                WHERE t.trade_time >= :cutoff_time
-                ORDER BY t.trade_time DESC
-                LIMIT 50
-            """), {"cutoff_time": cutoff_time})
+            # 读近50条交易快照
+            trades_rows = session.execute(text("""
+                SELECT address, wallet_label, coin, side, price, size,
+                       notional_usd, closed_pnl, leverage, trade_time
+                FROM dashboard_hl_recent_trades
+                ORDER BY trade_time DESC
+            """)).fetchall()
 
-            trades_data = result.fetchall()
-            
-            # 调试：检查杠杆数据
-            if trades_data:
-                logger.debug(f"获取到 {len(trades_data)} 条交易记录，活跃钱包: {active_wallets_count} 个")
-                sample_trade = dict(trades_data[0]._mapping) if hasattr(trades_data[0], '_mapping') else dict(trades_data[0])
-                logger.debug(f"示例交易杠杆: {sample_trade.get('leverage', 'N/A')}")
-
-            # 格式化数据
-            recent_trades = []
             from app.services.hyperliquid_token_mapper import get_token_mapper
             token_mapper = get_token_mapper()
 
-            for trade in trades_data:
-                trade_dict = dict(trade._mapping) if hasattr(trade, '_mapping') else dict(trade)
-                coin_display = token_mapper.format_symbol(trade_dict['coin'])
-                wallet_label = trade_dict.get('wallet_label', 'Unknown')
+            recent_trades = []
+            for t in trades_rows:
+                td = dict(t._mapping) if hasattr(t, '_mapping') else dict(t)
+                wallet_label = td.get('wallet_label') or ''
                 if not wallet_label or wallet_label == 'None':
-                    wallet_label = trade_dict.get('address', 'Unknown')[:10] + '...'
-
+                    wallet_label = (td.get('address') or 'Unknown')[:10] + '...'
                 recent_trades.append({
                     'wallet_label': wallet_label,
-                    'coin': coin_display,
-                    'coin_raw': trade_dict['coin'],
-                    'side': trade_dict['side'],
-                    'size': float(trade_dict.get('size', 0)),  # 下单数量
-                    'leverage': float(trade_dict.get('leverage', 1)),  # 合约倍数
-                    'notional_usd': float(trade_dict['notional_usd']),  # 持仓金额
-                    'price': float(trade_dict['price']),
-                    'closed_pnl': float(trade_dict['closed_pnl']),
-                    'trade_time': trade_dict['trade_time'].strftime('%Y-%m-%d %H:%M')
+                    'coin':         token_mapper.format_symbol(td['coin']),
+                    'coin_raw':     td['coin'],
+                    'side':         td['side'],
+                    'size':         float(td.get('size', 0)),
+                    'leverage':     float(td.get('leverage', 1)),
+                    'notional_usd': float(td.get('notional_usd', 0)),
+                    'price':        float(td.get('price', 0)),
+                    'closed_pnl':   float(td.get('closed_pnl', 0)),
+                    'trade_time':   td['trade_time'].strftime('%Y-%m-%d %H:%M') if td.get('trade_time') else '',
                 })
 
-            # 计算总交易量
-            top_coins_list = [dict(row._mapping) if hasattr(row, '_mapping') else dict(row) for row in top_coins_data]
-            total_volume = sum(float(row['total_volume']) for row in top_coins_list)
-
-            # 格式化Top币种
             top_coins = []
-            for row in top_coins_list:
+            for r in top_coins_rows:
+                rd = dict(r._mapping) if hasattr(r, '_mapping') else dict(r)
+                net_flow = float(rd.get('net_flow', 0))
                 top_coins.append({
-                    'coin': row['coin'],
-                    'net_flow': float(row['net_flow']),
-                    'direction': 'bullish' if float(row['net_flow']) > 0 else 'bearish'
+                    'coin':      rd['coin'],
+                    'net_flow':  net_flow,
+                    'direction': 'bullish' if net_flow > 0 else 'bearish',
                 })
 
-            result = {
+            logger.debug(f"✅ Hyperliquid缓存读取完成（{len(recent_trades)} 条交易）")
+            return {
                 'monitored_wallets': monitored_count,
-                'active_wallets': active_wallets_count,  # 24小时内有交易的钱包数
-                'total_volume_24h': total_volume,
-                'recent_trades': recent_trades[:50],
-                'top_coins': top_coins
+                'active_wallets':    active_wallets_count,
+                'total_volume_24h':  total_volume_24h,
+                'recent_trades':     recent_trades,
+                'top_coins':         top_coins,
             }
 
-            logger.debug(f"✅ 从缓存读取Hyperliquid数据")
-            return result
-
-        except (OperationalError, SQLTimeoutError) as e:
-            # 处理数据库超时或连接错误
-            error_msg = str(e)
-            if 'timeout' in error_msg.lower() or 'Lost connection' in error_msg:
-                logger.warning(f"⚠️ Hyperliquid数据查询超时，返回空数据: {error_msg[:100]}")
-            else:
-                logger.error(f"从缓存读取Hyperliquid数据失败（数据库错误）: {error_msg[:100]}")
-            return {
-                'monitored_wallets': 0,
-                'active_wallets': 0,
-                'total_volume_24h': 0,
-                'recent_trades': [],
-                'top_coins': []
-            }
-        except pymysql.err.OperationalError as e:
-            # 处理PyMySQL特定的超时错误
-            error_code, error_msg = e.args
-            if error_code == 2013:  # Lost connection to MySQL server during query
-                logger.warning(f"⚠️ Hyperliquid数据查询超时（MySQL连接丢失），返回空数据")
-            else:
-                logger.error(f"从缓存读取Hyperliquid数据失败（PyMySQL错误 {error_code}）: {error_msg[:100]}")
-            return {
-                'monitored_wallets': 0,
-                'active_wallets': 0,
-                'total_volume_24h': 0,
-                'recent_trades': [],
-                'top_coins': []
-            }
         except Exception as e:
             logger.error(f"从缓存读取Hyperliquid数据失败: {e}")
-            import traceback
-            traceback.print_exc()
-            return {
-                'monitored_wallets': 0,
-                'active_wallets': 0,
-                'total_volume_24h': 0,
-                'recent_trades': [],
-                'top_coins': []
-            }
+            return _empty
         finally:
             if session:
                 try:
                     session.close()
                 except Exception:
-                    pass  # 忽略关闭连接时的错误
+                    pass
 
     async def _get_system_stats(self) -> Dict:
         """

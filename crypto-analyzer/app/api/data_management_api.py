@@ -339,285 +339,123 @@ def _check_status_active(latest_time, threshold_seconds):
 @router.get("/statistics")
 async def get_data_statistics():
     """
-    获取所有数据表的统计信息（优化版本）
-    包括记录数、最新数据时间、数据范围等
-    对于大表使用近似计数和索引优化查询
+    获取所有数据表的统计信息（存储过程缓存版：直接读 data_management_stats_cache 表）
+    存储过程 update_data_management_stats_cache() 每5分钟刷新缓存
     """
     global _statistics_cache, _statistics_cache_time
 
-    # 检查缓存是否有效
+    # Python层缓存（30秒），避免同一时间多次请求打到数据库
     with _statistics_cache_lock:
         if _statistics_cache is not None and _statistics_cache_time is not None:
             cache_age = (datetime.utcnow() - _statistics_cache_time).total_seconds()
-            if cache_age < STATISTICS_CACHE_TTL:
-                logger.debug(f"使用缓存的数据统计 (缓存年龄: {cache_age:.0f}秒)")
+            if cache_age < 30:
+                logger.debug(f"使用内存缓存数据统计 (缓存年龄: {cache_age:.0f}秒)")
                 return _statistics_cache
 
     try:
+        large_tables = {'price_data', 'kline_data'}
+
+        # 静态元数据（label/description/category 由 Python 维护，不进入存储过程）
+        tables = [
+            {'name': 'price_data',                    'label': '实时价格',    'description': '交易所实时价格数据',      'is_binance': True,  'category': '市场数据'},
+            {'name': 'kline_data',                    'label': 'K线数据',     'description': '多周期K线数据',           'is_binance': True,  'category': '市场数据'},
+            {'name': 'orderbook_data',                'label': '订单簿',      'description': '订单簿深度数据',          'is_binance': True,  'category': '市场数据'},
+            {'name': 'trade_data',                    'label': '成交记录',    'description': '历史成交数据',            'is_binance': True,  'category': '市场数据'},
+            {'name': 'funding_rate_data',             'label': '资金费率',    'description': '合约资金费率数据',        'is_binance': True,  'category': '合约数据'},
+            {'name': 'futures_open_interest',         'label': '持仓量',      'description': '合约持仓量数据',          'is_binance': True,  'category': '合约数据'},
+            {'name': 'futures_long_short_ratio',      'label': '多空比',      'description': '合约多空比数据',          'is_binance': True,  'category': '合约数据'},
+            {'name': 'futures_liquidations',          'label': '清算数据',    'description': '合约清算记录',            'is_binance': True,  'category': '合约数据'},
+            {'name': 'futures_positions',             'label': '合约持仓',    'description': 'U本位合约持仓记录',       'is_binance': False, 'category': 'U本位合约'},
+            {'name': 'futures_orders',                'label': '合约订单',    'description': 'U本位合约订单记录',       'is_binance': False, 'category': 'U本位合约'},
+            {'name': 'futures_trades',                'label': '合约成交',    'description': 'U本位合约成交记录',       'is_binance': False, 'category': 'U本位合约'},
+            {'name': 'futures_trading_accounts',      'label': '合约账户',    'description': 'U本位合约账户信息',       'is_binance': False, 'category': 'U本位合约'},
+            {'name': 'live_futures_positions',        'label': '实盘持仓',    'description': '实盘合约持仓记录',        'is_binance': False, 'category': '实盘合约'},
+            {'name': 'live_futures_orders',           'label': '实盘订单',    'description': '实盘合约订单记录',        'is_binance': False, 'category': '实盘合约'},
+            {'name': 'live_futures_trades',           'label': '实盘成交',    'description': '实盘合约成交记录',        'is_binance': False, 'category': '实盘合约'},
+            {'name': 'live_trading_accounts',         'label': '实盘账户',    'description': '实盘合约账户信息',        'is_binance': False, 'category': '实盘合约'},
+            {'name': 'live_trading_logs',             'label': '实盘日志',    'description': '实盘交易日志',            'is_binance': False, 'category': '实盘合约'},
+            {'name': 'paper_trading_positions',       'label': '现货持仓',    'description': '现货持仓记录',            'is_binance': False, 'category': '现货交易'},
+            {'name': 'paper_trading_orders',          'label': '现货订单',    'description': '现货订单记录',            'is_binance': False, 'category': '现货交易'},
+            {'name': 'paper_trading_trades',          'label': '现货成交',    'description': '现货成交记录',            'is_binance': False, 'category': '现货交易'},
+            {'name': 'paper_trading_accounts',        'label': '现货账户',    'description': '现货账户信息',            'is_binance': False, 'category': '现货交易'},
+            {'name': 'ema_signals',                   'label': 'EMA信号',     'description': 'EMA技术指标信号',         'is_binance': False, 'category': '信号分析'},
+            {'name': 'signal_blacklist',              'label': '信号黑名单',  'description': '失败信号黑名单',          'is_binance': False, 'category': '信号分析'},
+            {'name': 'signal_component_performance',  'label': '信号组件性能','description': '信号组件统计',            'is_binance': False, 'category': '信号分析'},
+            {'name': 'investment_recommendations',    'label': '投资建议',    'description': 'AI投资建议',              'is_binance': False, 'category': '信号分析'},
+            {'name': 'trading_symbol_rating',         'label': '币种评级',    'description': '交易对评分',              'is_binance': False, 'category': '信号分析'},
+            {'name': 'crypto_etf_flows',              'label': 'ETF流向',     'description': '加密货币ETF资金流向',     'is_binance': False, 'category': 'ETF数据'},
+            {'name': 'crypto_etf_products',           'label': 'ETF产品',     'description': 'ETF产品信息',             'is_binance': False, 'category': 'ETF数据'},
+            {'name': 'crypto_etf_events',             'label': 'ETF事件',     'description': 'ETF重要事件',             'is_binance': False, 'category': 'ETF数据'},
+            {'name': 'crypto_etf_daily_summary',      'label': 'ETF日度汇总', 'description': 'ETF每日统计',             'is_binance': False, 'category': 'ETF数据'},
+            {'name': 'corporate_treasury_companies',  'label': '企业信息',    'description': '持有加密货币的企业',      'is_binance': False, 'category': '企业金库'},
+            {'name': 'corporate_treasury_purchases',  'label': '企业买入',    'description': '企业加密资产买入记录',    'is_binance': False, 'category': '企业金库'},
+            {'name': 'corporate_treasury_financing',  'label': '企业融资',    'description': '企业融资数据',            'is_binance': False, 'category': '企业金库'},
+            {'name': 'corporate_treasury_summary',    'label': '企业汇总',    'description': '企业持仓汇总',            'is_binance': False, 'category': '企业金库'},
+            {'name': 'blockchain_gas_daily',          'label': 'Gas日度',     'description': '区块链Gas每日统计',       'is_binance': False, 'category': 'Gas数据'},
+            {'name': 'blockchain_gas_daily_summary',  'label': 'Gas汇总',     'description': 'Gas数据日度汇总',         'is_binance': False, 'category': 'Gas数据'},
+            {'name': 'hyperliquid_traders',           'label': 'HL交易员',    'description': 'Hyperliquid交易员',       'is_binance': False, 'category': 'Hyperliquid'},
+            {'name': 'hyperliquid_wallet_positions',  'label': 'HL持仓',      'description': 'HL钱包持仓',              'is_binance': False, 'category': 'Hyperliquid'},
+            {'name': 'hyperliquid_wallet_trades',     'label': 'HL交易',      'description': 'HL钱包交易',              'is_binance': False, 'category': 'Hyperliquid'},
+            {'name': 'hyperliquid_monthly_performance','label': 'HL月度',     'description': 'HL月度表现',              'is_binance': False, 'category': 'Hyperliquid'},
+            {'name': 'market_regime',                 'label': '市场状态',    'description': '市场行情状态',            'is_binance': False, 'category': '市场分析'},
+            {'name': 'market_observations',           'label': '市场观察',    'description': '市场观察记录',            'is_binance': False, 'category': '市场分析'},
+            {'name': 'news_data',                     'label': '新闻数据',    'description': '加密货币新闻',            'is_binance': False, 'category': '市场分析'},
+            {'name': 'adaptive_params',               'label': '自适应参数',  'description': '策略自适应参数',          'is_binance': False, 'category': '系统配置'},
+            {'name': 'symbol_volatility_profile',     'label': '波动率配置',  'description': '币种波动率',              'is_binance': False, 'category': '系统配置'},
+            {'name': 'users',                         'label': '用户表',      'description': '系统用户信息',            'is_binance': False, 'category': '系统管理'},
+        ]
+
         with DBConnection() as conn:
             cursor = conn.cursor()
-            
-            # 定义所有数据表及其描述
-            # 大表列表：使用近似计数和优化查询
-            large_tables = {'price_data', 'kline_data'}
-            
-            # 时区说明：
-            # - Binance数据（price_data, kline_data, funding_rate_data等）：UTC时间（UTC+0）
-            # - 其他数据（ETF、企业金库、新闻、信号等）：本地时间（UTC+8）
-            tables = [
-            # 基础市场数据
-            {'name': 'price_data', 'label': '实时价格', 'description': '交易所实时价格数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '市场数据'},
-            {'name': 'kline_data', 'label': 'K线数据', 'description': '多周期K线数据', 'time_field': 'open_time', 'is_timestamp_ms': True, 'is_binance': True, 'category': '市场数据'},
-            {'name': 'orderbook_data', 'label': '订单簿', 'description': '订单簿深度数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '市场数据'},
-            {'name': 'trade_data', 'label': '成交记录', 'description': '历史成交数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '市场数据'},
 
-            # 合约数据
-            {'name': 'funding_rate_data', 'label': '资金费率', 'description': '合约资金费率数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '合约数据'},
-            {'name': 'futures_open_interest', 'label': '持仓量', 'description': '合约持仓量数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '合约数据'},
-            {'name': 'futures_long_short_ratio', 'label': '多空比', 'description': '合约多空比数据', 'time_field': 'timestamp', 'is_binance': True, 'category': '合约数据'},
-            {'name': 'futures_liquidations', 'label': '清算数据', 'description': '合约清算记录', 'time_field': 'timestamp', 'is_binance': True, 'category': '合约数据'},
+            # 一条 SELECT 读取缓存表（存储过程每5分钟刷新）
+            cursor.execute("SELECT table_name, row_count, size_mb, latest_time, oldest_time FROM data_management_stats_cache")
+            cache_rows = {row['table_name']: row for row in cursor.fetchall()}
 
-            # U本位合约交易
-            {'name': 'futures_positions', 'label': '合约持仓', 'description': 'U本位合约持仓记录', 'time_field': 'created_at', 'is_binance': False, 'category': 'U本位合约'},
-            {'name': 'futures_orders', 'label': '合约订单', 'description': 'U本位合约订单记录', 'time_field': 'created_at', 'is_binance': False, 'category': 'U本位合约'},
-            {'name': 'futures_trades', 'label': '合约成交', 'description': 'U本位合约成交记录', 'time_field': 'timestamp', 'is_binance': False, 'category': 'U本位合约'},
-            {'name': 'futures_trading_accounts', 'label': '合约账户', 'description': 'U本位合约账户信息', 'time_field': 'created_at', 'is_binance': False, 'category': 'U本位合约'},
-
-            # 实盘合约交易
-            {'name': 'live_futures_positions', 'label': '实盘持仓', 'description': '实盘合约持仓记录', 'time_field': 'created_at', 'is_binance': False, 'category': '实盘合约'},
-            {'name': 'live_futures_orders', 'label': '实盘订单', 'description': '实盘合约订单记录', 'time_field': 'created_at', 'is_binance': False, 'category': '实盘合约'},
-            {'name': 'live_futures_trades', 'label': '实盘成交', 'description': '实盘合约成交记录', 'time_field': 'timestamp', 'is_binance': False, 'category': '实盘合约'},
-            {'name': 'live_trading_accounts', 'label': '实盘账户', 'description': '实盘合约账户信息', 'time_field': 'created_at', 'is_binance': False, 'category': '实盘合约'},
-            {'name': 'live_trading_logs', 'label': '实盘日志', 'description': '实盘交易日志', 'time_field': 'created_at', 'is_binance': False, 'category': '实盘合约'},
-
-            # 现货交易
-            {'name': 'paper_trading_positions', 'label': '现货持仓', 'description': '现货持仓记录', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
-            {'name': 'paper_trading_orders', 'label': '现货订单', 'description': '现货订单记录', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
-            {'name': 'paper_trading_trades', 'label': '现货成交', 'description': '现货成交记录', 'time_field': 'timestamp', 'is_binance': False, 'category': '现货交易'},
-            {'name': 'paper_trading_accounts', 'label': '现货账户', 'description': '现货账户信息', 'time_field': 'created_at', 'is_binance': False, 'category': '现货交易'},
-
-            # 信号与分析
-            {'name': 'ema_signals', 'label': 'EMA信号', 'description': 'EMA技术指标信号', 'time_field': 'timestamp', 'is_binance': False, 'category': '信号分析'},
-            {'name': 'signal_blacklist', 'label': '信号黑名单', 'description': '失败信号黑名单', 'time_field': 'created_at', 'is_binance': False, 'category': '信号分析'},
-            {'name': 'signal_component_performance', 'label': '信号组件性能', 'description': '信号组件统计', 'time_field': 'updated_at', 'is_binance': False, 'category': '信号分析'},
-            {'name': 'investment_recommendations', 'label': '投资建议', 'description': 'AI投资建议', 'time_field': 'created_at', 'is_binance': False, 'category': '信号分析'},
-            {'name': 'trading_symbol_rating', 'label': '币种评级', 'description': '交易对评分', 'time_field': 'updated_at', 'is_binance': False, 'category': '信号分析'},
-
-            # ETF数据
-            {'name': 'crypto_etf_flows', 'label': 'ETF流向', 'description': '加密货币ETF资金流向', 'time_field': 'date', 'is_binance': False, 'category': 'ETF数据'},
-            {'name': 'crypto_etf_products', 'label': 'ETF产品', 'description': 'ETF产品信息', 'time_field': 'updated_at', 'is_binance': False, 'category': 'ETF数据'},
-            {'name': 'crypto_etf_events', 'label': 'ETF事件', 'description': 'ETF重要事件', 'time_field': 'event_date', 'is_binance': False, 'category': 'ETF数据'},
-            {'name': 'crypto_etf_daily_summary', 'label': 'ETF日度汇总', 'description': 'ETF每日统计', 'time_field': 'date', 'is_binance': False, 'category': 'ETF数据'},
-
-            # 企业金库
-            {'name': 'corporate_treasury_companies', 'label': '企业信息', 'description': '持有加密货币的企业', 'time_field': 'updated_at', 'is_binance': False, 'category': '企业金库'},
-            {'name': 'corporate_treasury_purchases', 'label': '企业买入', 'description': '企业加密资产买入记录', 'time_field': 'date', 'is_binance': False, 'category': '企业金库'},
-            {'name': 'corporate_treasury_financing', 'label': '企业融资', 'description': '企业融资数据', 'time_field': 'date', 'is_binance': False, 'category': '企业金库'},
-            {'name': 'corporate_treasury_summary', 'label': '企业汇总', 'description': '企业持仓汇总', 'time_field': 'updated_at', 'is_binance': False, 'category': '企业金库'},
-
-            # Gas数据
-            {'name': 'blockchain_gas_daily', 'label': 'Gas日度', 'description': '区块链Gas每日统计', 'time_field': 'date', 'is_binance': False, 'category': 'Gas数据'},
-            {'name': 'blockchain_gas_daily_summary', 'label': 'Gas汇总', 'description': 'Gas数据日度汇总', 'time_field': 'date', 'is_binance': False, 'category': 'Gas数据'},
-
-            # Hyperliquid数据
-            {'name': 'hyperliquid_traders', 'label': 'HL交易员', 'description': 'Hyperliquid交易员', 'time_field': 'updated_at', 'is_binance': False, 'category': 'Hyperliquid'},
-            {'name': 'hyperliquid_wallet_positions', 'label': 'HL持仓', 'description': 'HL钱包持仓', 'time_field': 'timestamp', 'is_binance': False, 'category': 'Hyperliquid'},
-            {'name': 'hyperliquid_wallet_trades', 'label': 'HL交易', 'description': 'HL钱包交易', 'time_field': 'timestamp', 'is_binance': False, 'category': 'Hyperliquid'},
-            {'name': 'hyperliquid_monthly_performance', 'label': 'HL月度', 'description': 'HL月度表现', 'time_field': 'month', 'is_binance': False, 'category': 'Hyperliquid'},
-
-            # 市场观察
-            {'name': 'market_regime', 'label': '市场状态', 'description': '市场行情状态', 'time_field': 'timestamp', 'is_binance': False, 'category': '市场分析'},
-            {'name': 'market_observations', 'label': '市场观察', 'description': '市场观察记录', 'time_field': 'created_at', 'is_binance': False, 'category': '市场分析'},
-            {'name': 'news_data', 'label': '新闻数据', 'description': '加密货币新闻', 'time_field': 'created_at', 'is_binance': False, 'category': '市场分析'},
-
-            # 系统配置
-            {'name': 'adaptive_params', 'label': '自适应参数', 'description': '策略自适应参数', 'time_field': 'updated_at', 'is_binance': False, 'category': '系统配置'},
-            {'name': 'trading_symbol_rating', 'label': '交易对评级', 'description': '交易对黑白名单评级', 'time_field': 'created_at', 'is_binance': False, 'category': '系统配置'},
-            {'name': 'symbol_volatility_profile', 'label': '波动率配置', 'description': '币种波动率', 'time_field': 'updated_at', 'is_binance': False, 'category': '系统配置'},
-            {'name': 'users', 'label': '用户表', 'description': '系统用户信息', 'time_field': 'created_at', 'is_binance': False, 'category': '系统管理'},
-        ]
-        
-        # 先一次性获取所有表的大小和行数估算（从 information_schema）
-        table_names = [f"'{t['name']}'" for t in tables]
-        if not table_names:
-            return {
-                'success': True,
-                'data': {
-                    'tables': [],
-                    'summary': {
-                        'total_tables': 0,
-                        'total_records': 0,
-                        'total_size_mb': 0
-                    }
-                }
-            }
-        
-        # 获取当前数据库名（从配置中读取，更可靠）
-        db_config = get_db_config()
-        database_name = db_config.get('database', 'binance-data')
-        
-        cursor.execute("""
-            SELECT 
-                TABLE_NAME as table_name,
-                ROUND(((DATA_LENGTH + INDEX_LENGTH) / 1024 / 1024), 2) AS size_mb,
-                TABLE_ROWS as estimated_rows
-            FROM information_schema.TABLES 
-            WHERE TABLE_SCHEMA = %s
-            AND TABLE_NAME IN ({})
-        """.format(','.join(table_names)), (database_name,))
-        
-        table_info_map = {}
-        for row in cursor.fetchall():
-            # 确保使用字典访问方式（DictCursor）
-            if isinstance(row, dict):
-                # 处理可能的字段名大小写问题（DictCursor 会使用别名）
-                table_name = row.get('table_name') or row.get('TABLE_NAME')
-                size_mb = row.get('size_mb') or row.get('SIZE_MB') or 0
-                estimated_rows = row.get('estimated_rows') or row.get('ESTIMATED_ROWS') or 0
-            else:
-                # 如果是元组，按位置访问
-                table_name = row[0] if len(row) > 0 else None
-                size_mb = row[1] if len(row) > 1 else 0
-                estimated_rows = row[2] if len(row) > 2 else 0
-            
-            if table_name:
-                table_info_map[table_name] = {
-                    'size_mb': float(size_mb) if size_mb else 0,
-                    'estimated_rows': int(estimated_rows) if estimated_rows else 0
-                }
-        
-        statistics = []
-        
-        for table in tables:
+        # 缓存表为空时（首次部署），触发同步刷新
+        if not cache_rows:
+            logger.info("[DataMgmtCache] 缓存表为空，触发同步刷新...")
             try:
-                table_name = table['name']
-                
-                # 检查表是否存在
-                if table_name not in table_info_map:
-                    statistics.append({
-                        **table,
-                        'exists': False,
-                        'count': 0,
-                        'latest_time': None,
-                        'oldest_time': None,
-                        'size_mb': 0
-                    })
-                    continue
-                
-                table_info = table_info_map[table_name]
-                size_mb = table_info['size_mb']
-                
-                # 对于大表，使用估算行数；对于小表，使用精确计数
-                if table_name in large_tables:
-                    # 大表：使用估算值（更快）
-                    count = table_info['estimated_rows']
-                    count_approx = True
-                else:
-                    # 小表：使用精确计数
-                    try:
-                        cursor.execute(f"SELECT COUNT(*) as count FROM {table_name}")
-                        count_result = cursor.fetchone()
-                        count = count_result['count'] if count_result else 0
-                        count_approx = False
-                    except:
-                        count = table_info['estimated_rows']
-                        count_approx = True
-                
-                # 获取最新和最早的时间戳（使用索引字段）
-                latest_time = None
-                oldest_time = None
-                time_field = table.get('time_field', 'timestamp')
-                is_timestamp_ms = table.get('is_timestamp_ms', False)
-                is_binance = table.get('is_binance', False)  # 是否是Binance数据（UTC时间）
-                
-                try:
-                    if is_timestamp_ms and time_field == 'open_time':
-                        # kline_data 表的 open_time 是毫秒时间戳
-                        cursor.execute("""
-                            SELECT 
-                                FROM_UNIXTIME(MAX(open_time)/1000) as max_time,
-                                FROM_UNIXTIME(MIN(open_time)/1000) as min_time
-                            FROM kline_data
-                            WHERE open_time IS NOT NULL
-                        """)
-                    else:
-                        # 其他表使用标准时间字段，使用索引优化
-                        cursor.execute(f"""
-                            SELECT 
-                                MAX({time_field}) as max_time,
-                                MIN({time_field}) as min_time
-                            FROM {table_name}
-                            WHERE {time_field} IS NOT NULL
-                        """)
-                    
-                    time_result = cursor.fetchone()
-                    if time_result and time_result.get('max_time'):
-                        max_time = time_result['max_time']
-                        min_time = time_result['min_time']
-                        
-                        # 格式化时间戳，统一使用数据库存储的时间（本地时间UTC+8）
-                        # 所有数据统一标记为本地时间（+08:00），不再区分Binance和其他数据
-                        if hasattr(max_time, 'isoformat'):
-                            # 统一标记为本地时间（UTC+8）
-                            latest_time = max_time.isoformat()
-                            if not latest_time.endswith(('Z', '+', '-')):
-                                latest_time = latest_time + '+08:00'
-                            elif latest_time.endswith('Z'):
-                                # 如果是UTC时间，转换为本地时间标记
-                                latest_time = latest_time.replace('Z', '+08:00')
-                            
-                            if min_time:
-                                oldest_time = min_time.isoformat()
-                                if not oldest_time.endswith(('Z', '+', '-')):
-                                    oldest_time = oldest_time + '+08:00'
-                                elif oldest_time.endswith('Z'):
-                                    oldest_time = oldest_time.replace('Z', '+08:00')
-                            else:
-                                oldest_time = None
-                        else:
-                            # 字符串格式（DATE类型）
-                            latest_time = str(max_time)
-                            if not latest_time.endswith(('Z', '+', '-', 'T')):
-                                latest_time = latest_time + 'T00:00:00+08:00'
-                            elif latest_time.endswith('Z'):
-                                latest_time = latest_time.replace('Z', '+08:00')
-                            
-                            if min_time:
-                                oldest_time = str(min_time)
-                                if not oldest_time.endswith(('Z', '+', '-', 'T')):
-                                    oldest_time = oldest_time + 'T00:00:00+08:00'
-                                elif oldest_time.endswith('Z'):
-                                    oldest_time = oldest_time.replace('Z', '+08:00')
-                            else:
-                                oldest_time = None
-                except Exception as e:
-                    logger.debug(f"获取 {table_name} 时间失败: {e}")
-                    # 尝试其他时间字段
-                    for field in ['timestamp', 'created_at', 'updated_at', 'open_time', 'trade_time', 'date']:
-                        if field == time_field:
-                            continue
-                        try:
-                            cursor.execute(f"SELECT MAX({field}) as max_time, MIN({field}) as min_time FROM {table_name} WHERE {field} IS NOT NULL")
-                            time_result = cursor.fetchone()
-                            if time_result and time_result.get('max_time'):
-                                latest_time = time_result['max_time'].isoformat() if hasattr(time_result['max_time'], 'isoformat') else str(time_result['max_time'])
-                                oldest_time = time_result['min_time'].isoformat() if hasattr(time_result['min_time'], 'isoformat') else str(time_result['min_time'])
-                                break
-                        except:
-                            continue
-                
+                import pymysql as _pymysql
+                _db = get_db_config()
+                _conn = _pymysql.connect(**_db, cursorclass=_pymysql.cursors.DictCursor, autocommit=True)
+                _cur = _conn.cursor()
+                _cur.execute("CALL update_data_management_stats_cache()")
+                _cur.close()
+                _conn.close()
+                # 再查一次
+                with DBConnection() as conn2:
+                    cur2 = conn2.cursor()
+                    cur2.execute("SELECT table_name, row_count, size_mb, latest_time, oldest_time FROM data_management_stats_cache")
+                    cache_rows = {row['table_name']: row for row in cur2.fetchall()}
+            except Exception as _e:
+                logger.error(f"[DataMgmtCache] 同步刷新失败: {_e}")
+
+        def _fmt_time(dt):
+            if dt is None:
+                return None
+            s = dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
+            if not s.endswith(('+', '-', 'Z')) and 'T' in s:
+                s += '+08:00'
+            elif 'T' not in s and s:
+                s = s + 'T00:00:00+08:00'
+            return s
+
+        statistics = []
+        for table in tables:
+            name = table['name']
+            cached = cache_rows.get(name)
+            if cached:
                 statistics.append({
                     **table,
                     'exists': True,
-                    'count': count,
-                    'count_approx': count_approx if table_name in large_tables else False,
-                    'latest_time': latest_time,
-                    'oldest_time': oldest_time,
-                    'size_mb': size_mb
+                    'count': int(cached['row_count'] or 0),
+                    'count_approx': name in large_tables,
+                    'latest_time': _fmt_time(cached['latest_time']),
+                    'oldest_time': _fmt_time(cached['oldest_time']),
+                    'size_mb': float(cached['size_mb'] or 0),
                 })
-                
-            except Exception as e:
-                logger.error(f"获取表 {table['name']} 统计信息失败: {e}")
+            else:
                 statistics.append({
                     **table,
                     'exists': False,
@@ -625,12 +463,10 @@ async def get_data_statistics():
                     'latest_time': None,
                     'oldest_time': None,
                     'size_mb': 0,
-                    'error': str(e)
                 })
-        
-        # 计算总计
+
         total_count = sum(s['count'] for s in statistics)
-        total_size = sum(s['size_mb'] for s in statistics)
+        total_size  = sum(s['size_mb'] for s in statistics)
 
         result = {
             'success': True,
@@ -644,14 +480,13 @@ async def get_data_statistics():
             }
         }
 
-        # 更新缓存
         with _statistics_cache_lock:
             _statistics_cache = result
             _statistics_cache_time = datetime.utcnow()
-            logger.debug("数据统计已缓存")
+            logger.debug("数据统计已写入内存缓存")
 
         return result
-        
+
     except Exception as e:
         logger.error(f"获取数据统计失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取数据统计失败: {str(e)}")
