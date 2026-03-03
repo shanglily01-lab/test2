@@ -1,7 +1,7 @@
 """
-每日更新盈利Top 50交易对
-从历史持仓数据中统计每个交易对的表现，选出Top 50
-U本位开仓将只在这50个交易对中进行
+每日更新盈利Top 30交易对
+从历史持仓数据中统计每个交易对的表现，选出Top 30
+U本位开仓将只在这30个交易对中进行
 """
 
 import pymysql
@@ -27,7 +27,7 @@ MYSQL_CONFIG = {
 }
 
 
-def update_top_performing_symbols(account_id: int = 2, top_n: int = 50):
+def update_top_performing_symbols(account_id: int = 2, top_n: int = 30):
     """
     更新盈利Top N交易对
 
@@ -170,7 +170,7 @@ def update_top_performing_symbols(account_id: int = 2, top_n: int = 50):
 
 
 if __name__ == '__main__':
-    """直接执行时更新U本位Top 50"""
-    logger.info("🚀 开始更新盈利Top 50交易对...")
-    update_top_performing_symbols(account_id=2, top_n=50)
+    """直接执行时更新U本位Top 30"""
+    logger.info("🚀 开始更新盈利Top 30交易对...")
+    update_top_performing_symbols(account_id=2, top_n=30)
     logger.info("🎉 更新完成！")

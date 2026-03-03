@@ -3371,9 +3371,9 @@ async def async_main():
     asyncio.create_task(update_account_stats_task())
     logger.info("✅ 账户统计定时更新任务已启动（每5分钟）")
 
-    # 🔥 启动盈利Top 50交易对定时更新任务（每天凌晨2点）
+    # 🔥 启动盈利Top 30交易对定时更新任务（每天凌晨2点）
     async def update_top_performers_task():
-        """每天凌晨2点更新盈利Top 50交易对"""
+        """每天凌晨2点更新盈利Top 30交易对"""
         from update_top_performers import update_top_performing_symbols
         import time as time_module
         from datetime import datetime, time
@@ -3388,29 +3388,29 @@ async def async_main():
                     target_time = datetime.combine(now.date() + timedelta(days=1), time(2, 0))
 
                 seconds_until_target = (target_time - now).total_seconds()
-                logger.info(f"⏰ Top 50更新任务将在 {seconds_until_target/3600:.1f} 小时后执行（{target_time}）")
+                logger.info(f"⏰ Top 30更新任务将在 {seconds_until_target/3600:.1f} 小时后执行（{target_time}）")
 
                 # 等待到凌晨2点
                 await asyncio.sleep(seconds_until_target)
 
                 # 执行更新
-                logger.info("🔄 开始更新盈利Top 50交易对...")
+                logger.info("🔄 开始更新盈利Top 30交易对...")
                 await asyncio.get_event_loop().run_in_executor(
                     None,
                     update_top_performing_symbols,
                     2,  # account_id=2 (U本位)
-                    50  # top_n=50
+                    30  # top_n=30
                 )
-                logger.info("✅ Top 50更新完成")
+                logger.info("✅ Top 30更新完成")
 
             except Exception as e:
-                logger.error(f"❌ Top 50更新失败: {e}")
+                logger.error(f"❌ Top 30更新失败: {e}")
                 # 失败后等待1小时再重试
                 await asyncio.sleep(3600)
 
     # 创建后台任务
     asyncio.create_task(update_top_performers_task())
-    logger.info("✅ Top 50定时更新任务已启动（每天凌晨2点）")
+    logger.info("✅ Top 30定时更新任务已启动（每天凌晨2点）")
 
     # 在事件循环中运行同步的主循环
     loop = asyncio.get_event_loop()
