@@ -120,25 +120,6 @@ async def get_technical_signals(symbols: Optional[str] = None):
         cursor.close()
         conn.close()
 
-        # 缓存表为空时（首次部署），同步刷新一次
-        if not rows:
-            logger.info("[TechSignalCache] 缓存表为空，触发同步刷新...")
-            refresh_technical_signals_cache()
-
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute(f"""
-                SELECT symbol, window_label, timeframe,
-                       total_klines, bullish_count, bearish_count,
-                       bullish_pct, bearish_pct, avg_bullish_strength, avg_bearish_strength,
-                       total_volume, trend, updated_at
-                FROM technical_signals_cache
-                WHERE symbol IN ({placeholders})
-            """, all_symbols)
-            rows = cursor.fetchall()
-            cursor.close()
-            conn.close()
-
         # 整理数据：{symbol: {window_label: {timeframe: stats}}}
         data_map: Dict[str, Dict[str, Dict]] = {}
         for row in rows:

@@ -412,25 +412,6 @@ async def get_data_statistics():
             cursor.execute("SELECT table_name, row_count, size_mb, latest_time, oldest_time FROM data_management_stats_cache")
             cache_rows = {row['table_name']: row for row in cursor.fetchall()}
 
-        # 缓存表为空时（首次部署），触发同步刷新
-        if not cache_rows:
-            logger.info("[DataMgmtCache] 缓存表为空，触发同步刷新...")
-            try:
-                import pymysql as _pymysql
-                _db = get_db_config()
-                _conn = _pymysql.connect(**_db, cursorclass=_pymysql.cursors.DictCursor, autocommit=True)
-                _cur = _conn.cursor()
-                _cur.execute("CALL update_data_management_stats_cache()")
-                _cur.close()
-                _conn.close()
-                # 再查一次
-                with DBConnection() as conn2:
-                    cur2 = conn2.cursor()
-                    cur2.execute("SELECT table_name, row_count, size_mb, latest_time, oldest_time FROM data_management_stats_cache")
-                    cache_rows = {row['table_name']: row for row in cur2.fetchall()}
-            except Exception as _e:
-                logger.error(f"[DataMgmtCache] 同步刷新失败: {_e}")
-
         def _fmt_time(dt):
             if dt is None:
                 return None
