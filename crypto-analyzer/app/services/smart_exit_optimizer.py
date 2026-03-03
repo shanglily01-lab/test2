@@ -357,54 +357,53 @@ class SmartExitOptimizer:
 
     async def _update_max_profit(self, position_id: int, profit_info: Dict):
         """
-        更新最高盈利记录
-
-        Args:
-            position_id: 持仓ID
-            profit_info: 盈亏信息
+        更新最高盈利记录（原子操作，避免一键平仓时锁等待超时）
         """
+        conn = None
+        cursor = None
         try:
             conn = self._get_pool_connection()
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor()
 
-            # 获取当前最高盈利
+            # 短锁等待超时(2s)：平仓时行锁被占用则快速失败，不阻塞监控循环
+            cursor.execute("SET innodb_lock_wait_timeout = 2")
+
+            # 原子条件更新：仅在盈利更高且仓位仍开放时写入，无需先 SELECT
             cursor.execute("""
-                SELECT max_profit_pct
-                FROM futures_positions
+                UPDATE futures_positions
+                SET
+                    max_profit_pct   = %s,
+                    max_profit_price = %s,
+                    max_profit_time  = NOW()
                 WHERE id = %s
-            """, (position_id,))
-
-            result = cursor.fetchone()
-            current_max = float(result['max_profit_pct']) if result and result['max_profit_pct'] else 0.0
-
-            # 如果当前盈利更高，更新记录
-            if profit_info['profit_pct'] > current_max:
-                cursor.execute("""
-                    UPDATE futures_positions
-                    SET
-                        max_profit_pct = %s,
-                        max_profit_price = %s,
-                        max_profit_time = %s
-                    WHERE id = %s
-                """, (
-                    profit_info['profit_pct'],
-                    profit_info['current_price'],
-                    datetime.now(),
-                    position_id
-                ))
-
-                conn.commit()
-
-                logger.debug(
-                    f"📈 更新最高盈利: 持仓{position_id} "
-                    f"{current_max:.2f}% -> {profit_info['profit_pct']:.2f}%"
-                )
-
-            cursor.close()
-            conn.close()
+                  AND status = 'open'
+                  AND (max_profit_pct IS NULL OR max_profit_pct < %s)
+            """, (
+                profit_info['profit_pct'],
+                profit_info['current_price'],
+                position_id,
+                profit_info['profit_pct']
+            ))
+            conn.commit()
 
         except Exception as e:
-            logger.error(f"更新最高盈利失败: {e}")
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            logger.debug(f"更新最高盈利跳过: 持仓{position_id} - {e}")
+        finally:
+            if cursor:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     async def _check_exit_conditions(
         self,

@@ -95,8 +95,9 @@ class CacheUpdateService:
                 except Exception as e:
                     logger.debug(f"从ticker API获取{symbol}数据失败，将使用K线数据: {e}")
                 
-                # 获取当前价格
-                latest_kline = self.db_service.get_latest_kline(symbol, '1m')
+                # 获取当前价格（优先 1m K线，回退到 5m K线，因为 1m 采集已停用）
+                latest_kline = (self.db_service.get_latest_kline(symbol, '1m') or
+                                self.db_service.get_latest_kline(symbol, '5m'))
                 if not latest_kline:
                     continue
 

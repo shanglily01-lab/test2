@@ -168,122 +168,103 @@ class EnhancedDashboardCached:
 
     async def _get_prices_from_cache(self, symbols: List[str]) -> List[Dict]:
         """
-        从价格统计缓存表读取价格数据（超快）
-        如果缓存数据超过30秒，则从实时价格源获取最新价格
-
-        Returns:
-            价格列表
+        实时价格来自 kline_data (5m K线)，由 fast_collector_service.py 每5分钟更新。
+        change_24h 通过与 24h 前K线对比计算。
+        high/low/volume/trend 来自 price_stats_24h（允许略旧）。
         """
-        from datetime import datetime, timedelta
-        
         prices = []
         session = None
 
         try:
             session = self.db_service.get_session()
+            placeholders = ','.join([f':s{i}' for i in range(len(symbols))])
+            params = {f's{i}': sym for i, sym in enumerate(symbols)}
 
-            # 一次性查询所有币种的价格统计
-            placeholders = ','.join([f':symbol{i}' for i in range(len(symbols))])
-            sql = text(f"""
-                SELECT
-                    symbol,
-                    current_price,
-                    change_24h,
-                    high_24h,
-                    low_24h,
-                    volume_24h,
-                    quote_volume_24h,
-                    trend,
-                    updated_at
+            # ── Step 1: 从 kline_data 取最新 5m K线（当前价格）
+            cur_rows = session.execute(text(f"""
+                SELECT kd.symbol, kd.close_price, kd.open_time
+                FROM kline_data kd
+                INNER JOIN (
+                    SELECT symbol, MAX(open_time) AS max_ot
+                    FROM kline_data
+                    WHERE symbol IN ({placeholders}) AND timeframe = '5m'
+                    GROUP BY symbol
+                ) t ON kd.symbol = t.symbol AND kd.open_time = t.max_ot AND kd.timeframe = '5m'
+            """), params).fetchall()
+
+            cur_map = {}
+            for row in cur_rows:
+                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                cur_map[rd['symbol']] = rd
+
+            # ── Step 2: 从 kline_data 取 24h 前的 5m K线（用于计算涨跌幅）
+            ago_rows = session.execute(text(f"""
+                SELECT kd.symbol, kd.close_price AS price_ago
+                FROM kline_data kd
+                INNER JOIN (
+                    SELECT symbol, MAX(open_time) AS max_ot
+                    FROM kline_data
+                    WHERE symbol IN ({placeholders}) AND timeframe = '5m'
+                      AND open_time <= (UNIX_TIMESTAMP() * 1000 - 86400000)
+                    GROUP BY symbol
+                ) t ON kd.symbol = t.symbol AND kd.open_time = t.max_ot AND kd.timeframe = '5m'
+            """), params).fetchall()
+
+            ago_map = {}
+            for row in ago_rows:
+                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                ago_map[rd['symbol']] = rd
+
+            # ── Step 3: 从 price_stats_24h 取 24h 统计（high/low/volume/trend）
+            stats_rows = session.execute(text(f"""
+                SELECT symbol, high_24h, low_24h, volume_24h, quote_volume_24h, trend
                 FROM price_stats_24h
                 WHERE symbol IN ({placeholders})
-                ORDER BY change_24h DESC
-            """)
+            """), params).fetchall()
 
-            # 创建参数字典
-            params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
-            results = session.execute(sql, params).fetchall()
+            stats_map = {}
+            for row in stats_rows:
+                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                stats_map[rd['symbol']] = rd
 
-            # 检查哪些价格需要实时更新（超过30秒）
-            now = datetime.utcnow()
-            symbols_need_realtime = []
-            
-            for row in results:
-                row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                updated_at = row_dict.get('updated_at')
-                
-                if updated_at:
-                    # 如果updated_at是datetime对象，直接比较
-                    if isinstance(updated_at, datetime):
-                        age_seconds = (now - updated_at).total_seconds()
-                    else:
-                        # 如果是字符串，转换为datetime
-                        if isinstance(updated_at, str):
-                            updated_at = datetime.strptime(updated_at, '%Y-%m-%d %H:%M:%S')
-                        age_seconds = (now - updated_at).total_seconds()
-                    
-                    # 如果缓存超过90秒，标记为需要实时更新（price_stats_24h每60s更新一次）
-                    if age_seconds > 90:
-                        symbols_need_realtime.append(row_dict['symbol'])
+            # ── Step 4: 合并
+            for sym in symbols:
+                cur = cur_map.get(sym)
+                if not cur:
+                    continue
+                ago = ago_map.get(sym, {})
+                st  = stats_map.get(sym, {})
 
-            # 从实时价格源获取需要更新的价格
-            realtime_prices = {}
-            if symbols_need_realtime:
-                # 优先使用 price_collector，如果没有则从数据库获取最新K线价格
-                if hasattr(self, 'price_collector') and self.price_collector:
-                    try:
-                        async def _fetch_one(sym):
-                            try:
-                                info = await self.price_collector.fetch_best_price(sym)
-                                return sym, float(info.get('price', 0)) if info else None
-                            except Exception as e:
-                                logger.warning(f"获取 {sym} 实时价格失败: {e}")
-                                return sym, None
-                        fetch_results = await asyncio.gather(*[_fetch_one(s) for s in symbols_need_realtime])
-                        for sym, price in fetch_results:
-                            if price:
-                                realtime_prices[sym] = price
-                    except Exception as e:
-                        logger.warning(f"批量获取实时价格失败: {e}")
+                current_price = float(cur['close_price'])
+                price_ago = float(ago['price_ago']) if ago.get('price_ago') else None
+                if price_ago and price_ago > 0:
+                    change_24h = (current_price - price_ago) / price_ago * 100
                 else:
-                    # 从数据库获取最新1分钟K线价格作为实时价格
-                    try:
-                        for symbol in symbols_need_realtime:
-                            latest_kline = self.db_service.get_latest_kline(symbol, '1m')
-                            if latest_kline:
-                                realtime_prices[symbol] = float(latest_kline.close_price)
-                                logger.debug(f"🔄 从数据库实时更新 {symbol} 价格: {realtime_prices[symbol]}")
-                    except Exception as e:
-                        logger.warning(f"从数据库获取实时价格失败: {e}")
+                    change_24h = float(st.get('change_24h') or 0)
 
-            for row in results:
-                row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                symbol = row_dict['symbol']
-                
-                # 如果从实时源获取到了新价格，使用实时价格
-                current_price = float(row_dict['current_price'])
-                if symbol in realtime_prices:
-                    current_price = realtime_prices[symbol]
+                # open_time 是毫秒时间戳
+                ot = cur.get('open_time')
+                ts_str = (datetime.utcfromtimestamp(ot / 1000).strftime('%Y-%m-%d %H:%M:%S')
+                          if ot else '')
 
-                price_data = {
-                    'symbol': symbol.replace('/USDT', ''),
-                    'full_symbol': symbol,
-                    'price': current_price,
-                    'change_24h': float(row_dict['change_24h']) if row_dict['change_24h'] else 0,
-                    'volume_24h': float(row_dict['volume_24h']) if row_dict['volume_24h'] else 0,
-                    'quote_volume_24h': float(row_dict['quote_volume_24h']) if row_dict['quote_volume_24h'] else 0,
-                    'high_24h': float(row_dict['high_24h']) if row_dict['high_24h'] else 0,
-                    'low_24h': float(row_dict['low_24h']) if row_dict['low_24h'] else 0,
-                    'trend': row_dict['trend'],
-                    'timestamp': row_dict['updated_at'].strftime('%Y-%m-%d %H:%M:%S') if row_dict['updated_at'] else ''
-                }
+                prices.append({
+                    'symbol':          sym.replace('/USDT', ''),
+                    'full_symbol':     sym,
+                    'price':           current_price,
+                    'change_24h':      round(change_24h, 4),
+                    'volume_24h':      float(st['volume_24h'])       if st.get('volume_24h')       else 0,
+                    'quote_volume_24h':float(st['quote_volume_24h'])  if st.get('quote_volume_24h')  else 0,
+                    'high_24h':        float(st['high_24h'])          if st.get('high_24h')          else 0,
+                    'low_24h':         float(st['low_24h'])           if st.get('low_24h')           else 0,
+                    'trend':           st.get('trend', 'sideways'),
+                    'timestamp':       ts_str
+                })
 
-                prices.append(price_data)
-
-            # logger.debug(f"✅ 从缓存读取 {len(prices)} 个币种价格")  # 减少日志输出
+            prices.sort(key=lambda x: x['change_24h'], reverse=True)
+            logger.debug(f"✅ 价格读取完成: {len(prices)} 个币种（kline_data 5m实时）")
 
         except Exception as e:
-            logger.error(f"从缓存读取价格失败: {e}")
+            logger.error(f"读取价格失败: {e}")
             import traceback
             traceback.print_exc()
         finally:
