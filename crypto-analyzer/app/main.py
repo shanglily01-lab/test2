@@ -509,91 +509,42 @@ async def lifespan(app: FastAPI):
         schedule.every().day.at("00:00").do(run_12h_retrospective)
         schedule.every().day.at("12:00").do(run_12h_retrospective)
 
-        # ── 同步任务函数定义（在线程池中执行，不直接调用）────────────────────────
+        # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
+        # 每个存储过程调用都在独立 OS 子进程中运行；
+        # asyncio.sleep 期间事件循环可自由处理 HTTP 请求；
+        # 子进程慢/卡不会占用主进程线程池，也不影响其他任务。
+        _call_proc_script = str(project_root / "scripts" / "call_proc.py")
 
-        def run_coin_score_update():
-            """执行update_all_coin_scores存储过程"""
-            try:
-                import pymysql
-                conn = pymysql.connect(**db_config)
-                cursor = conn.cursor()
-                logger.debug("🔄 执行动态调度：update_all_coin_scores")
-                cursor.execute("CALL update_all_coin_scores()")
-                conn.commit()
-                cursor.close()
-                conn.close()
-                logger.debug("✅ 动态调度执行完成")
-            except Exception as e:
-                logger.error(f"❌ 动态调度失败: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
-
-        def run_technical_signals_cache_update():
-            try:
-                from app.api.technical_signals_api import refresh_technical_signals_cache
-                refresh_technical_signals_cache()
-            except Exception as e:
-                logger.error(f"❌ 技术信号缓存刷新失败: {e}")
-
-        def run_data_management_stats_update():
-            try:
-                import pymysql as _pymysql
-                conn = _pymysql.connect(**db_config)
-                cursor = conn.cursor()
-                cursor.execute("CALL update_data_management_stats_cache()")
-                conn.commit()
-                cursor.close()
-                conn.close()
-                logger.debug("✅ 数据管理统计缓存已刷新")
-            except Exception as e:
-                logger.error(f"❌ 数据管理统计缓存刷新失败: {e}")
-
-        def run_dashboard_hyperliquid_update():
-            try:
-                import pymysql as _pymysql
-                conn = _pymysql.connect(**db_config)
-                cursor = conn.cursor()
-                cursor.execute("CALL update_dashboard_hyperliquid_cache()")
-                conn.commit()
-                cursor.close()
-                conn.close()
-                logger.debug("✅ Dashboard聪明钱缓存已刷新")
-            except Exception as e:
-                logger.error(f"❌ Dashboard聪明钱缓存刷新失败: {e}")
-
-        def run_collection_status_update():
-            try:
-                import pymysql as _pymysql
-                conn = _pymysql.connect(**db_config)
-                cursor = conn.cursor()
-                cursor.execute("CALL update_collection_status_cache()")
-                conn.commit()
-                cursor.close()
-                conn.close()
-                logger.debug("✅ 数据采集情况缓存已刷新")
-            except Exception as e:
-                logger.error(f"❌ 数据采集情况缓存刷新失败: {e}")
-
-        # ── 独立异步周期任务（每个任务有自己的事件循环，互不阻塞）─────────────────
-        # 原理：asyncio.sleep 期间事件循环可处理其他请求；
-        #       run_in_executor 将阻塞的 DB 操作放入线程池，主线程不卡顿；
-        #       每个任务独立，A 任务慢不影响 B 任务的下次触发时间。
-
-        async def _periodic(func, interval_seconds, name):
-            """独立周期后台任务：sleep → 线程池执行 → sleep → ..."""
-            loop = asyncio.get_event_loop()
+        async def _periodic(proc_name, interval_seconds, name):
+            """独立周期后台任务：sleep → 子进程执行存储过程 → sleep → ..."""
             while True:
                 await asyncio.sleep(interval_seconds)
                 try:
-                    await loop.run_in_executor(None, func)
+                    proc = await asyncio.create_subprocess_exec(
+                        sys.executable, _call_proc_script, proc_name,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.PIPE,
+                        cwd=str(project_root)
+                    )
+                    _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+                    if proc.returncode != 0 and stderr:
+                        logger.warning(f"⚠️ 周期任务 [{name}]: {stderr.decode(errors='replace')[:300]}")
+                    else:
+                        logger.debug(f"✅ 周期任务 [{name}] 完成")
+                except asyncio.TimeoutError:
+                    logger.warning(f"⚠️ 周期任务 [{name}] 超时，已终止")
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
                 except Exception as e:
                     logger.error(f"❌ 周期任务 [{name}] 异常: {e}")
 
-        asyncio.create_task(_periodic(run_coin_score_update,              5 * 60,    "评分更新(5m)"))
-        asyncio.create_task(_periodic(run_technical_signals_cache_update, 15 * 60,   "技术信号缓存(15m)"))
-        asyncio.create_task(_periodic(run_dashboard_hyperliquid_update,   30 * 60,   "Dashboard聪明钱(30m)"))
-        asyncio.create_task(_periodic(run_data_management_stats_update,   2 * 3600,  "数据管理统计(2h)"))
-        asyncio.create_task(_periodic(run_collection_status_update,       2 * 3600,  "数据采集情况(2h)"))
+        asyncio.create_task(_periodic("update_all_coin_scores",            5 * 60,   "评分更新(5m)"))
+        asyncio.create_task(_periodic("update_technical_signals_cache",    15 * 60,  "技术信号缓存(15m)"))
+        asyncio.create_task(_periodic("update_dashboard_hyperliquid_cache",30 * 60,  "Dashboard聪明钱(30m)"))
+        asyncio.create_task(_periodic("update_data_management_stats_cache",2 * 3600, "数据管理统计(2h)"))
+        asyncio.create_task(_periodic("update_collection_status_cache",    2 * 3600, "数据采集情况(2h)"))
 
         # schedule 仅保留用于定时点任务（每天00:00和12:00的复盘分析）
         async def schedule_runner():
@@ -606,7 +557,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(schedule_runner())
         logger.info("✅ 超级大脑自我优化服务已启动（每4小时执行一次）")
         logger.info("✅ 12小时复盘分析服务已启动（每天00:00和12:00执行）")
-        logger.info("✅ 异步周期调度已启动：评分5m / 技术信号15m / Dashboard聪明钱30m / 数据管理&采集情况2h")
+        logger.info("✅ 子进程周期调度已启动：评分5m / 技术信号15m / Dashboard聪明钱30m / 数据管理&采集情况2h")
 
     except Exception as e:
         logger.warning(f"⚠️  启动超级大脑优化服务失败: {e}")
