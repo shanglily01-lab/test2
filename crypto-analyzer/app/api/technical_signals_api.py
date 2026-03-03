@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-技术信号API - 提供K线统计和技术分析
+技术信号API - 缓存表版（极速）
+
+优化：原来每次请求对每个交易对执行 8 条 SQL → 50币种 = 400+ 次查询
+     现在：后台每5分钟刷新一次 technical_signals_cache 表（3条聚合SQL）
+           前端请求直接 SELECT * FROM technical_signals_cache，毫秒级响应
 """
 
 from fastapi import APIRouter, HTTPException
@@ -16,6 +20,23 @@ load_dotenv()
 
 router = APIRouter()
 
+# ===================== 模块级配置缓存 =====================
+_config_symbols: Optional[List[str]] = None
+_config_symbols_time: Optional[datetime] = None
+
+
+def _get_config_symbols() -> List[str]:
+    """读取config.yaml中的交易对列表（5分钟内复用，减少磁盘IO）"""
+    global _config_symbols, _config_symbols_time
+    now = datetime.now()
+    if _config_symbols is None or (now - _config_symbols_time).total_seconds() > 300:
+        import yaml
+        with open('config.yaml', 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        _config_symbols = config.get('symbols', [])
+        _config_symbols_time = now
+    return _config_symbols
+
 
 def get_db_connection():
     """获取数据库连接"""
@@ -25,14 +46,164 @@ def get_db_connection():
         user=os.getenv('DB_USER'),
         password=os.getenv('DB_PASSWORD'),
         database=os.getenv('DB_NAME'),
-        cursorclass=pymysql.cursors.DictCursor
+        cursorclass=pymysql.cursors.DictCursor,
+        autocommit=True,
+        connect_timeout=10,
+        read_timeout=30,
+        write_timeout=30
     )
 
 
+# ===================== 统计计算工具 =====================
+def _calc_stats(row: Dict) -> Optional[Dict]:
+    """从SQL聚合行计算阳线/阴线统计结构"""
+    total = int(row.get('total_klines') or 0)
+    if not total:
+        return None
+    bullish = int(row.get('bullish_count') or 0)
+    bearish = int(row.get('bearish_count') or 0)
+    bullish_pct = bullish / total * 100
+    bearish_pct = bearish / total * 100
+    avg_bullish = (float(row.get('bullish_strength_sum') or 0) / bullish) if bullish else 0
+    avg_bearish = (float(row.get('bearish_strength_sum') or 0) / bearish) if bearish else 0
+
+    if bullish_pct >= 65:
+        trend = "强势上涨"
+    elif bullish_pct >= 55:
+        trend = "上涨"
+    elif bearish_pct >= 65:
+        trend = "强势下跌"
+    elif bearish_pct >= 55:
+        trend = "下跌"
+    else:
+        trend = "震荡"
+
+    return {
+        "total_klines": total,
+        "bullish_count": bullish,
+        "bearish_count": bearish,
+        "bullish_pct": round(bullish_pct, 2),
+        "bearish_pct": round(bearish_pct, 2),
+        "avg_bullish_strength": round(avg_bullish, 4),
+        "avg_bearish_strength": round(avg_bearish, 4),
+        "total_volume": round(float(row.get('total_volume') or 0), 2),
+        "trend": trend
+    }
+
+
+# ===================== 缓存表维护 =====================
+_CACHE_TABLE_SQL = """
+    CREATE TABLE IF NOT EXISTS technical_signals_cache (
+        symbol       VARCHAR(20)    NOT NULL,
+        window_label VARCHAR(10)    NOT NULL,
+        timeframe    VARCHAR(10)    NOT NULL,
+        total_klines INT            DEFAULT 0,
+        bullish_count INT           DEFAULT 0,
+        bearish_count INT           DEFAULT 0,
+        bullish_pct   DECIMAL(5,2)  DEFAULT 0,
+        bearish_pct   DECIMAL(5,2)  DEFAULT 0,
+        avg_bullish_strength DECIMAL(12,6) DEFAULT 0,
+        avg_bearish_strength DECIMAL(12,6) DEFAULT 0,
+        total_volume  DECIMAL(20,4) DEFAULT 0,
+        trend         VARCHAR(20)   DEFAULT '震荡',
+        updated_at    DATETIME      NOT NULL,
+        PRIMARY KEY (symbol, window_label, timeframe)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+"""
+
+_WINDOWS = [
+    # (窗口标签, 要查询的timeframe列表, 时间范围)
+    ('24h', ['1h', '15m', '5m'], timedelta(hours=24)),
+    ('4h',  ['15m', '5m', '1m'], timedelta(hours=4)),
+    ('1h',  ['5m', '1m'],         timedelta(hours=1)),
+]
+
+
+def refresh_technical_signals_cache():
+    """
+    刷新 technical_signals_cache 表。
+    3条聚合SQL取代原来400+条查询。
+    由 app/main.py 调度器每5分钟调用一次。
+    """
+    symbols = _get_config_symbols()
+    if not symbols:
+        logger.warning("[TechSignalCache] config.yaml中没有交易对")
+        return
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 首次运行时建表
+        cursor.execute(_CACHE_TABLE_SQL)
+
+        now = datetime.now()
+        sym_placeholders = ','.join(['%s'] * len(symbols))
+
+        rows_to_insert = []
+
+        for window_label, timeframes, delta in _WINDOWS:
+            since = now - delta
+            tf_placeholders = ','.join(['%s'] * len(timeframes))
+
+            cursor.execute(f"""
+                SELECT symbol, timeframe,
+                    COUNT(*) AS total_klines,
+                    SUM(CASE WHEN close_price > open_price THEN 1 ELSE 0 END) AS bullish_count,
+                    SUM(CASE WHEN close_price < open_price THEN 1 ELSE 0 END) AS bearish_count,
+                    SUM(volume) AS total_volume,
+                    SUM(CASE WHEN close_price > open_price
+                        THEN (close_price - open_price) / open_price * 100 * volume
+                        ELSE 0 END) AS bullish_strength_sum,
+                    SUM(CASE WHEN close_price < open_price
+                        THEN (open_price - close_price) / open_price * 100 * volume
+                        ELSE 0 END) AS bearish_strength_sum
+                FROM kline_data
+                WHERE symbol IN ({sym_placeholders})
+                  AND timeframe IN ({tf_placeholders})
+                  AND timestamp >= %s
+                GROUP BY symbol, timeframe
+            """, (*symbols, *timeframes, since))
+
+            for row in cursor.fetchall():
+                stats = _calc_stats(row)
+                if stats:
+                    rows_to_insert.append((
+                        row['symbol'], window_label, row['timeframe'],
+                        stats['total_klines'], stats['bullish_count'], stats['bearish_count'],
+                        stats['bullish_pct'], stats['bearish_pct'],
+                        stats['avg_bullish_strength'], stats['avg_bearish_strength'],
+                        stats['total_volume'], stats['trend'],
+                        now
+                    ))
+
+        if rows_to_insert:
+            cursor.executemany("""
+                REPLACE INTO technical_signals_cache
+                    (symbol, window_label, timeframe, total_klines, bullish_count, bearish_count,
+                     bullish_pct, bearish_pct, avg_bullish_strength, avg_bearish_strength,
+                     total_volume, trend, updated_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, rows_to_insert)
+            logger.debug(f"[TechSignalCache] 刷新完成，写入 {len(rows_to_insert)} 行")
+
+        cursor.close()
+
+    except Exception as e:
+        logger.error(f"[TechSignalCache] 刷新失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+    finally:
+        if conn:
+            conn.close()
+
+
+# ===================== API 端点 =====================
 @router.get("/api/technical-signals")
 async def get_technical_signals(symbols: Optional[str] = None):
     """
-    获取技术信号分析数据
+    获取技术信号分析数据（从缓存表读取，极速响应）
 
     包含:
     - 24H内 1H/15M/5M K线阳阴线统计
@@ -40,204 +211,102 @@ async def get_technical_signals(symbols: Optional[str] = None):
     - 1H内 K线评估与统计
     """
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # 从config.yaml获取交易对列表
-        import yaml
-        with open('config.yaml', 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-            all_symbols = config.get('symbols', [])
-
-        # 如果提供了symbols参数,过滤交易对
+        all_symbols = _get_config_symbols()
         if symbols:
             symbol_list = symbols.split(',')
             all_symbols = [s for s in all_symbols if s in symbol_list]
 
-        results = []
+        if not all_symbols:
+            return {"success": True, "data": [], "total": 0, "timestamp": datetime.now().isoformat()}
 
-        for symbol in all_symbols:
-            try:
-                signal_data = analyze_symbol(cursor, symbol)
-                if signal_data:
-                    results.append(signal_data)
-            except Exception as e:
-                logger.error(f"分析 {symbol} 失败: {e}")
-                continue
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
+        placeholders = ','.join(['%s'] * len(all_symbols))
+
+        # 从缓存表读取（极速）
+        cursor.execute(f"""
+            SELECT symbol, window_label, timeframe,
+                   total_klines, bullish_count, bearish_count,
+                   bullish_pct, bearish_pct, avg_bullish_strength, avg_bearish_strength,
+                   total_volume, trend, updated_at
+            FROM technical_signals_cache
+            WHERE symbol IN ({placeholders})
+        """, all_symbols)
+
+        rows = cursor.fetchall()
         cursor.close()
         conn.close()
 
+        # 缓存表为空时（首次部署），同步刷新一次
+        if not rows:
+            logger.info("[TechSignalCache] 缓存表为空，触发同步刷新...")
+            refresh_technical_signals_cache()
+
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(f"""
+                SELECT symbol, window_label, timeframe,
+                       total_klines, bullish_count, bearish_count,
+                       bullish_pct, bearish_pct, avg_bullish_strength, avg_bearish_strength,
+                       total_volume, trend, updated_at
+                FROM technical_signals_cache
+                WHERE symbol IN ({placeholders})
+            """, all_symbols)
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+        # 整理数据：{symbol: {window_label: {timeframe: stats}}}
+        data_map: Dict[str, Dict[str, Dict]] = {}
+        for row in rows:
+            s  = row['symbol']
+            wl = row['window_label']
+            tf = row['timeframe']
+            data_map.setdefault(s, {}).setdefault(wl, {})[tf] = {
+                "total_klines":          int(row['total_klines'] or 0),
+                "bullish_count":         int(row['bullish_count'] or 0),
+                "bearish_count":         int(row['bearish_count'] or 0),
+                "bullish_pct":           float(row['bullish_pct'] or 0),
+                "bearish_pct":           float(row['bearish_pct'] or 0),
+                "avg_bullish_strength":  float(row['avg_bullish_strength'] or 0),
+                "avg_bearish_strength":  float(row['avg_bearish_strength'] or 0),
+                "total_volume":          float(row['total_volume'] or 0),
+                "trend":                 row['trend'],
+            }
+
+        results = []
+        ts = datetime.now().isoformat()
+        for symbol in all_symbols:
+            if symbol not in data_map:
+                continue
+            d = data_map[symbol]
+            results.append({
+                "symbol":    symbol,
+                "stats_24h": {
+                    "1h":  d.get('24h', {}).get('1h'),
+                    "15m": d.get('24h', {}).get('15m'),
+                    "5m":  d.get('24h', {}).get('5m'),
+                },
+                "stats_4h": {
+                    "15m": d.get('4h', {}).get('15m'),
+                    "5m":  d.get('4h', {}).get('5m'),
+                    "1m":  d.get('4h', {}).get('1m'),
+                },
+                "stats_1h": {
+                    "5m": d.get('1h', {}).get('5m'),
+                    "1m": d.get('1h', {}).get('1m'),
+                },
+                "updated_at": ts,
+            })
+
         return {
-            "success": True,
-            "data": results,
-            "total": len(results),
-            "timestamp": datetime.now().isoformat()
+            "success":   True,
+            "data":      results,
+            "total":     len(results),
+            "timestamp": ts,
         }
 
     except Exception as e:
         logger.error(f"获取技术信号失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-def analyze_symbol(cursor, symbol: str) -> Optional[Dict]:
-    """分析单个交易对的技术信号"""
-
-    # 1. 24H内的K线统计
-    stats_24h = get_kline_stats_24h(cursor, symbol)
-
-    # 2. 4H内的K线评估
-    stats_4h = get_kline_stats_4h(cursor, symbol)
-
-    # 3. 1H内的K线评估
-    stats_1h = get_kline_stats_1h(cursor, symbol)
-
-    # 如果没有任何数据,返回None
-    if not any([stats_24h, stats_4h, stats_1h]):
-        return None
-
-    return {
-        "symbol": symbol,
-        "stats_24h": stats_24h or {},
-        "stats_4h": stats_4h or {},
-        "stats_1h": stats_1h or {},
-        "updated_at": datetime.now().isoformat()
-    }
-
-
-def get_kline_stats_24h(cursor, symbol: str) -> Optional[Dict]:
-    """获取24H内的1H/15M/5M K线统计"""
-
-    time_24h_ago = datetime.now() - timedelta(hours=24)
-
-    stats = {}
-
-    # 统计1H K线(24H内应该有24根)
-    stats['1h'] = get_timeframe_stats(cursor, symbol, '1h', time_24h_ago)
-
-    # 统计15M K线(24H内应该有96根)
-    stats['15m'] = get_timeframe_stats(cursor, symbol, '15m', time_24h_ago)
-
-    # 统计5M K线(24H内应该有288根)
-    stats['5m'] = get_timeframe_stats(cursor, symbol, '5m', time_24h_ago)
-
-    return stats if any(stats.values()) else None
-
-
-def get_kline_stats_4h(cursor, symbol: str) -> Optional[Dict]:
-    """获取4H内的K线统计"""
-
-    time_4h_ago = datetime.now() - timedelta(hours=4)
-
-    # 4H内主要看15M和5M
-    stats = {}
-    stats['15m'] = get_timeframe_stats(cursor, symbol, '15m', time_4h_ago)
-    stats['5m'] = get_timeframe_stats(cursor, symbol, '5m', time_4h_ago)
-    stats['1m'] = get_timeframe_stats(cursor, symbol, '1m', time_4h_ago)
-
-    return stats if any(stats.values()) else None
-
-
-def get_kline_stats_1h(cursor, symbol: str) -> Optional[Dict]:
-    """获取1H内的K线统计"""
-
-    time_1h_ago = datetime.now() - timedelta(hours=1)
-
-    # 1H内主要看5M和1M
-    stats = {}
-    stats['5m'] = get_timeframe_stats(cursor, symbol, '5m', time_1h_ago)
-    stats['1m'] = get_timeframe_stats(cursor, symbol, '1m', time_1h_ago)
-
-    return stats if any(stats.values()) else None
-
-
-def get_timeframe_stats(cursor, symbol: str, timeframe: str, start_time: datetime) -> Optional[Dict]:
-    """获取指定时间框架的K线统计"""
-
-    try:
-        # 查询K线数据
-        cursor.execute("""
-            SELECT
-                open_price,
-                high_price,
-                low_price,
-                close_price,
-                volume,
-                timestamp
-            FROM kline_data
-            WHERE symbol = %s
-            AND timeframe = %s
-            AND timestamp >= %s
-            ORDER BY timestamp ASC
-        """, (symbol, timeframe, start_time))
-
-        klines = cursor.fetchall()
-
-        if not klines:
-            return None
-
-        # 统计阳线和阴线
-        bullish_count = 0  # 阳线数量
-        bearish_count = 0  # 阴线数量
-
-        bullish_strength = 0  # 阳线力度(涨幅 * 成交量)
-        bearish_strength = 0  # 阴线力度(跌幅 * 成交量)
-
-        total_volume = 0
-
-        for kline in klines:
-            open_p = float(kline['open_price'])
-            close_p = float(kline['close_price'])
-            high_p = float(kline['high_price'])
-            low_p = float(kline['low_price'])
-            volume = float(kline['volume'])
-
-            total_volume += volume
-
-            # 判断阳线还是阴线
-            if close_p > open_p:
-                bullish_count += 1
-                # 阳线力度 = 涨幅% * 成交量
-                change_pct = (close_p - open_p) / open_p * 100
-                bullish_strength += change_pct * volume
-            elif close_p < open_p:
-                bearish_count += 1
-                # 阴线力度 = 跌幅% * 成交量
-                change_pct = (open_p - close_p) / open_p * 100
-                bearish_strength += change_pct * volume
-
-        total_count = len(klines)
-        bullish_pct = bullish_count / total_count * 100 if total_count > 0 else 0
-        bearish_pct = bearish_count / total_count * 100 if total_count > 0 else 0
-
-        # 计算平均力度
-        avg_bullish_strength = bullish_strength / bullish_count if bullish_count > 0 else 0
-        avg_bearish_strength = bearish_strength / bearish_count if bearish_count > 0 else 0
-
-        # 整体趋势判断
-        if bullish_pct >= 65:
-            trend = "强势上涨"
-        elif bullish_pct >= 55:
-            trend = "上涨"
-        elif bearish_pct >= 65:
-            trend = "强势下跌"
-        elif bearish_pct >= 55:
-            trend = "下跌"
-        else:
-            trend = "震荡"
-
-        return {
-            "total_klines": total_count,
-            "bullish_count": bullish_count,
-            "bearish_count": bearish_count,
-            "bullish_pct": round(bullish_pct, 2),
-            "bearish_pct": round(bearish_pct, 2),
-            "avg_bullish_strength": round(avg_bullish_strength, 4),
-            "avg_bearish_strength": round(avg_bearish_strength, 4),
-            "total_volume": round(total_volume, 2),
-            "trend": trend
-        }
-
-    except Exception as e:
-        logger.error(f"获取 {symbol} {timeframe} K线统计失败: {e}")
-        return None

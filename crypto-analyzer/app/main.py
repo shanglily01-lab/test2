@@ -533,6 +533,21 @@ async def lifespan(app: FastAPI):
         # 配置动态调度：每5分钟执行一次
         schedule.every(5).minutes.do(run_coin_score_update)
 
+        # 每5分钟刷新技术信号缓存表（3条聚合SQL取代400+查询）
+        def run_technical_signals_cache_update():
+            try:
+                from app.api.technical_signals_api import refresh_technical_signals_cache
+                refresh_technical_signals_cache()
+            except Exception as e:
+                logger.error(f"❌ 技术信号缓存刷新失败: {e}")
+
+        schedule.every(5).minutes.do(run_technical_signals_cache_update)
+        # 启动时立即刷新一次，确保缓存表有数据
+        try:
+            run_technical_signals_cache_update()
+        except Exception as e:
+            logger.warning(f"⚠️ 首次技术信号缓存刷新失败: {e}")
+
         # 创建后台任务运行调度器
         async def schedule_runner():
             """运行调度器"""
