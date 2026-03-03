@@ -100,6 +100,23 @@ class EnhancedDashboardCached:
             logger.error(traceback.format_exc())
             futures = []
 
+        # 将 prices 合并到 futures（避免在 _get_futures_from_cache 内部重复查价格）
+        if isinstance(prices, list) and isinstance(futures, list) and prices:
+            prices_map = {p.get('full_symbol', ''): p for p in prices}
+            for item in futures:
+                sym = item.get('full_symbol', '')
+                if sym in prices_map:
+                    pi = prices_map[sym]
+                    item['price']           = pi.get('price', 0)
+                    item['current_price']   = pi.get('price', 0)
+                    item['change_24h']      = pi.get('change_24h', 0)
+                    item['price_change_24h']= pi.get('change_24h', 0)
+                    item['volume_24h']      = pi.get('volume_24h', 0)
+
+        # news_24h 直接从已获取的新闻列表计算，无需额外 DB 查询
+        if isinstance(stats, dict):
+            stats['news_24h'] = len(news) if isinstance(news, list) else 0
+
         # 统计信号
         signal_stats = self._calculate_signal_stats(recommendations)
 
@@ -622,39 +639,12 @@ class EnhancedDashboardCached:
 
     async def _get_system_stats(self) -> Dict:
         """
-        获取系统统计
-
-        Returns:
-            统计数据
+        获取系统统计（无 DB 查询，news_24h 由 get_dashboard_data 从已获取的新闻列表填充）
         """
-        try:
-            # 优化：不查询所有新闻，只统计数量（避免加载大量数据）
-            try:
-                session = self.db_service.get_session()
-                try:
-                    from datetime import timedelta, timezone
-                    from sqlalchemy import func
-                    from app.database.models import NewsData
-                    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
-                    cutoff_time = cutoff_time.replace(tzinfo=None)
-                    news_count = session.query(func.count(NewsData.id)).filter(
-                        NewsData.published_datetime >= cutoff_time
-                    ).scalar() or 0
-                finally:
-                    session.close()
-            except:
-                news_count = 0
-            
-            stats = {
-                'total_symbols': len(self.config.get('symbols', [])),
-                'news_24h': news_count,
-            }
-
-            return stats
-
-        except Exception as e:
-            logger.error(f"获取系统统计失败: {e}")
-            return {}
+        return {
+            'total_symbols': len(self.config.get('symbols', [])),
+            'news_24h': 0,  # 由 get_dashboard_data 在 gather 完成后用 len(news) 填充
+        }
 
     def _calculate_signal_stats(self, recommendations: List[Dict]) -> Dict:
         """统计信号分布"""
@@ -699,10 +689,9 @@ class EnhancedDashboardCached:
 
     async def _get_futures_from_cache(self, symbols: List[str]) -> List[Dict]:
         """
-        从资金费率缓存表读取合约数据（持仓量、多空比、资金费率）
-
-        Returns:
-            合约数据列表
+        从资金费率缓存表读取合约数据，并用 2 条批量 SQL 补充持仓量和多空比
+        （原来是 N×2 条循环查询，现在是固定 3 条查询）
+        价格数据由 get_dashboard_data 在 gather 完成后统一合并，不在此重复查询。
         """
         futures_data = []
         session = None
@@ -710,94 +699,115 @@ class EnhancedDashboardCached:
         try:
             session = self.db_service.get_session()
 
-            # 从 funding_rate_stats 缓存表批量读取
+            # ── Step 1: funding_rate_stats 缓存表（极快）──────────────────────
             placeholders = ','.join([f':symbol{i}' for i in range(len(symbols))])
-            sql = text(f"""
-                SELECT
-                    symbol,
-                    current_rate,
-                    current_rate_pct,
-                    trend,
-                    market_sentiment
+            params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
+            results = session.execute(text(f"""
+                SELECT symbol, current_rate, current_rate_pct, trend, market_sentiment
                 FROM funding_rate_stats
                 WHERE symbol IN ({placeholders})
-            """)
-
-            params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
-            results = session.execute(sql, params).fetchall()
+            """), params).fetchall()
 
             for row in results:
                 row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
                 symbol = row_dict['symbol']
-
                 futures_data.append({
                     'symbol': symbol.replace('/USDT', ''),
                     'full_symbol': symbol,
-                    'open_interest': 0,  # 缓存表中没有持仓量，设为0
-                    'long_short_ratio': 0,  # 缓存表中没有多空比，设为0
+                    'open_interest': 0,
+                    'long_short_ratio': 0,
                     'funding_rate': float(row_dict['current_rate']) if row_dict.get('current_rate') else 0,
                     'funding_rate_pct': float(row_dict['current_rate_pct']) if row_dict.get('current_rate_pct') else 0,
                     'trend': row_dict.get('trend', 'neutral'),
                     'market_sentiment': row_dict.get('market_sentiment', 'normal')
                 })
 
-            logger.debug(f"✅ 从缓存读取 {len(futures_data)} 个资金费率数据")
+            if not futures_data:
+                return futures_data
+
+            # ── Step 2: 批量查持仓量 + 多空比（2 条 SQL 替代 N×2 循环）──────────
+            # 同时包含 BTC/USDT 和 BTCUSDT 两种格式，兼容不同数据源写入方式
+            all_syms = []
+            sym_map = {}   # 'BTCUSDT' -> 'BTC/USDT'
+            for sym in symbols:
+                all_syms.append(sym)
+                sym_map[sym] = sym
+                no_slash = sym.replace('/', '')
+                all_syms.append(no_slash)
+                sym_map[no_slash] = sym
+
+            ph2 = ','.join([f':s{i}' for i in range(len(all_syms))])
+            p2  = {f's{i}': s for i, s in enumerate(all_syms)}
+
+            # 持仓量：每个 symbol 取最新一行
+            oi_rows = session.execute(text(f"""
+                SELECT f.symbol, f.open_interest
+                FROM futures_open_interest f
+                JOIN (
+                    SELECT symbol, MAX(timestamp) AS max_ts
+                    FROM futures_open_interest
+                    WHERE symbol IN ({ph2}) AND exchange = 'binance_futures'
+                    GROUP BY symbol
+                ) t ON f.symbol = t.symbol AND f.timestamp = t.max_ts
+                WHERE f.exchange = 'binance_futures'
+            """), p2).fetchall()
+
+            oi_map = {}
+            for row in oi_rows:
+                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                orig = sym_map.get(rd['symbol'])
+                if orig:
+                    oi_map[orig] = float(rd['open_interest']) if rd.get('open_interest') else 0
+
+            # 多空比：每个 symbol 取最新一行
+            lsr_rows = session.execute(text(f"""
+                SELECT f.symbol, f.long_account, f.short_account, f.long_short_ratio,
+                       f.long_position, f.short_position, f.long_short_position_ratio
+                FROM futures_long_short_ratio f
+                JOIN (
+                    SELECT symbol, MAX(timestamp) AS max_ts
+                    FROM futures_long_short_ratio
+                    WHERE symbol IN ({ph2})
+                    GROUP BY symbol
+                ) t ON f.symbol = t.symbol AND f.timestamp = t.max_ts
+            """), p2).fetchall()
+
+            lsr_map = {}
+            for row in lsr_rows:
+                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                orig = sym_map.get(rd['symbol'])
+                if orig:
+                    lsr_map[orig] = rd
+
+            # ── Step 3: 将批量结果合并到 futures_data ─────────────────────────
+            for item in futures_data:
+                sym = item['full_symbol']
+                item['open_interest'] = oi_map.get(sym, 0)
+                if sym in lsr_map:
+                    rd = lsr_map[sym]
+                    item['long_short_account_ratio'] = float(rd.get('long_short_ratio') or 0)
+                    item['long_account']  = float(rd.get('long_account')  or 0)
+                    item['short_account'] = float(rd.get('short_account') or 0)
+                    if rd.get('long_short_position_ratio'):
+                        item['long_short_position_ratio'] = float(rd['long_short_position_ratio'])
+                        item['long_position']  = float(rd.get('long_position')  or 0)
+                        item['short_position'] = float(rd.get('short_position') or 0)
+                    else:
+                        item['long_short_position_ratio'] = 0
+                else:
+                    item['long_short_account_ratio']  = 0
+                    item['long_short_position_ratio'] = 0
+
+            logger.debug(f"✅ 合约数据批量读取完成: {len(futures_data)} 个币种")
 
         except Exception as e:
-            logger.error(f"从缓存读取资金费率数据失败: {e}")
+            logger.error(f"从缓存读取合约数据失败: {e}")
             import traceback
             traceback.print_exc()
         finally:
             if session:
                 session.close()
 
-        # 获取价格数据（用于补充合约数据中的价格和涨跌幅）
-        prices_data = await self._get_prices_from_cache(symbols)
-        # 使用 full_symbol 作为键，因为合约数据使用 full_symbol
-        prices_map = {p.get('full_symbol', p['symbol']): p for p in prices_data} if prices_data else {}
-        
-        # 补充持仓量、多空比和价格数据（从原始表读取）
-        for item in futures_data:
-            try:
-                symbol = item['full_symbol']
-                data = self.db_service.get_latest_futures_data(symbol)
-
-                if data:
-                    item['open_interest'] = float(data.get('open_interest', 0)) if data.get('open_interest') else 0
-
-                    # 账户数比
-                    if data.get('long_short_ratio'):
-                        item['long_short_account_ratio'] = data['long_short_ratio'].get('ratio', 0)
-                        item['long_account'] = data['long_short_ratio'].get('long_account', 0)
-                        item['short_account'] = data['long_short_ratio'].get('short_account', 0)
-                    else:
-                        item['long_short_account_ratio'] = 0
-
-                    # 持仓量比（新增）
-                    if data.get('long_short_position_ratio'):
-                        item['long_short_position_ratio'] = data['long_short_position_ratio'].get('ratio', 0)
-                        item['long_position'] = data['long_short_position_ratio'].get('long_position', 0)
-                        item['short_position'] = data['long_short_position_ratio'].get('short_position', 0)
-                    else:
-                        item['long_short_position_ratio'] = 0
-                
-                # 补充价格和涨跌幅信息（从价格缓存中获取）
-                # 使用 full_symbol 匹配
-                if symbol in prices_map:
-                    price_info = prices_map[symbol]
-                    item['price'] = price_info.get('price', 0)
-                    item['current_price'] = price_info.get('price', 0)
-                    item['change_24h'] = price_info.get('change_24h', 0)
-                    item['price_change_24h'] = price_info.get('change_24h', 0)
-                    item['volume_24h'] = price_info.get('volume_24h', 0)
-                else:
-                    # 如果匹配失败，记录警告
-                    logger.debug(f"未找到 {symbol} 的价格数据，prices_map keys: {list(prices_map.keys())[:5] if prices_map else 'empty'}")
-            except Exception as e:
-                logger.warning(f"获取{symbol}持仓量和多空比失败: {e}")
-                continue
-
-        logger.debug(f"✅ 完整合约数据获取完成: {len(futures_data)} 个币种（含持仓量、多空比和价格）")
         return futures_data
 
 

@@ -594,9 +594,11 @@ async def lifespan(app: FastAPI):
 
         # 创建后台任务运行调度器
         async def schedule_runner():
-            """运行调度器"""
+            """运行调度器 — 用 run_in_executor 避免阻塞事件循环"""
+            loop = asyncio.get_event_loop()
             while True:
-                schedule.run_pending()
+                # 在线程池中运行同步调度任务，不阻塞 FastAPI 处理前端请求
+                await loop.run_in_executor(None, schedule.run_pending)
                 await asyncio.sleep(60)  # 每分钟检查一次
 
         daily_optimizer_task = asyncio.create_task(schedule_runner())
