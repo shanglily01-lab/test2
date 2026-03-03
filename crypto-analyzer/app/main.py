@@ -576,6 +576,22 @@ async def lifespan(app: FastAPI):
 
         schedule.every(5).minutes.do(run_dashboard_hyperliquid_update)
 
+        # 每5分钟刷新数据采集情况缓存（取代12条串行查询/请求的模式）
+        def run_collection_status_update():
+            try:
+                import pymysql as _pymysql
+                conn = _pymysql.connect(**db_config)
+                cursor = conn.cursor()
+                cursor.execute("CALL update_collection_status_cache()")
+                conn.commit()
+                cursor.close()
+                conn.close()
+                logger.debug("✅ 数据采集情况缓存已刷新")
+            except Exception as e:
+                logger.error(f"❌ 数据采集情况缓存刷新失败: {e}")
+
+        schedule.every(5).minutes.do(run_collection_status_update)
+
         # 创建后台任务运行调度器
         async def schedule_runner():
             """运行调度器"""

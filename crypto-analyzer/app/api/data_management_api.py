@@ -31,7 +31,7 @@ _db_config = None
 _collection_status_cache = None
 _collection_status_cache_time = None
 _collection_status_cache_lock = threading.Lock()
-COLLECTION_STATUS_CACHE_TTL = 300  # 缓存5分钟
+COLLECTION_STATUS_CACHE_TTL = 30   # 30秒内命中缓存（防并发），实际数据由存储过程每5分钟刷新
 
 # statistics缓存（数据统计不需要实时更新，缓存5分钟）
 _statistics_cache = None
@@ -703,519 +703,196 @@ def _ensure_connection(conn):
 @router.get("/collection-status")
 async def get_collection_status():
     """
-    获取各类数据的采集情况
-    包括实时数据、合约数据、新闻数据等的最新采集时间
-    使用5分钟缓存以提升性能
+    获取各类数据的采集情况 — 直接读取 collection_status_cache 缓存表（存储过程每5分钟刷新）
     """
     global _collection_status_cache, _collection_status_cache_time
 
-    # 检查缓存是否有效
+    # 30秒内命中缓存直接返回（防并发）
     with _collection_status_cache_lock:
         if _collection_status_cache is not None and _collection_status_cache_time is not None:
             cache_age = (datetime.utcnow() - _collection_status_cache_time).total_seconds()
             if cache_age < COLLECTION_STATUS_CACHE_TTL:
-                logger.debug(f"使用缓存的数据采集情况 (缓存年龄: {cache_age:.0f}秒)")
                 return _collection_status_cache
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        collection_status = []
-        
-        # 1. 实时价格数据采集情况
-        try:
-            conn = _ensure_connection(conn)
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as count,
-                    MAX(timestamp) as latest_time,
-                    MIN(timestamp) as oldest_time,
-                    COUNT(DISTINCT symbol) as symbol_count,
-                    COUNT(DISTINCT exchange) as exchange_count
-                FROM price_data
-            """)
-            price_result = cursor.fetchone()
-            collection_status.append({
-                'type': '实时价格数据',
-                'category': 'market_data',
-                'icon': 'bi-graph-up',
-                'description': '各交易所的实时价格数据',
-                'count': price_result['count'] if price_result else 0,
-                'latest_time': price_result['latest_time'].isoformat() if price_result and price_result['latest_time'] else None,
-                'oldest_time': price_result['oldest_time'].isoformat() if price_result and price_result['oldest_time'] else None,
-                'symbol_count': price_result['symbol_count'] if price_result else 0,
-                'exchange_count': price_result['exchange_count'] if price_result else 0,
-                'status': _check_status_active(price_result['latest_time'], 600) if price_result and price_result['latest_time'] else 'inactive'  # 价格数据每1分钟采集，阈值设为10分钟
-            })
-        except Exception as e:
-            logger.error(f"获取实时价格数据采集情况失败: {e}")
-            collection_status.append({
-                'type': '实时价格数据',
-                'category': 'market_data',
-                'icon': 'bi-graph-up',
-                'description': '各交易所的实时价格数据',
-                'status': 'error',
-                'error': str(e)
-            })
-        
-        # 2. K线数据采集情况（优化：一次查询获取所有信息）
-        try:
-            conn = _ensure_connection(conn)
-            cursor = conn.cursor()
-
-            # 一次查询获取所有统计信息和各时间周期的最新时间
-            cursor.execute("""
-                SELECT
-                    COUNT(*) as count,
-                    COUNT(DISTINCT symbol) as symbol_count,
-                    COUNT(DISTINCT timeframe) as timeframe_count,
-                    MAX(CASE WHEN created_at IS NOT NULL THEN created_at ELSE timestamp END) as latest_time,
-                    MIN(CASE WHEN created_at IS NOT NULL THEN created_at ELSE timestamp END) as oldest_time,
-                    MAX(CASE WHEN timeframe = '1m' AND created_at IS NOT NULL THEN created_at END) as latest_1m,
-                    MAX(CASE WHEN timeframe = '5m' AND created_at IS NOT NULL THEN created_at END) as latest_5m,
-                    MAX(CASE WHEN timeframe = '15m' AND created_at IS NOT NULL THEN created_at END) as latest_15m,
-                    MAX(CASE WHEN timeframe = '1h' AND created_at IS NOT NULL THEN created_at END) as latest_1h,
-                    MAX(CASE WHEN timeframe = '1d' AND created_at IS NOT NULL THEN created_at END) as latest_1d
-                FROM kline_data
-            """)
-            kline_result = cursor.fetchone()
-
-            # 根据各时间周期判断状态（优先级从高到低）
-            status = 'inactive'
-            thresholds = [
-                ('latest_1m', 600),      # 1分钟: 10分钟阈值
-                ('latest_5m', 1800),     # 5分钟: 30分钟阈值
-                ('latest_15m', 3600),    # 15分钟: 1小时阈值
-                ('latest_1h', 10800),    # 1小时: 3小时阈值
-                ('latest_1d', 172800)    # 1天: 2天阈值
-            ]
-
-            for field, threshold in thresholds:
-                if kline_result and kline_result[field]:
-                    check_status = _check_status_active(kline_result[field], threshold)
-                    if check_status == 'active':
-                        status = 'active'
-                        break
-                    elif check_status == 'warning' and status == 'inactive':
-                        status = 'warning'
-
-            # 如果所有时间周期都没有created_at，回退到timestamp
-            if status == 'inactive' and kline_result and kline_result['latest_time']:
-                status = _check_status_active(kline_result['latest_time'], 1800)
-
-            display_time = kline_result['latest_time'] if kline_result else None
-            
-            collection_status.append({
-                'type': 'K线数据',
-                'category': 'market_data',
-                'icon': 'bi-bar-chart',
-                'description': '不同时间周期的K线数据',
-                'count': kline_result['count'] if kline_result else 0,
-                'latest_time': display_time.isoformat() if display_time else None,
-                'oldest_time': kline_result['oldest_time'].isoformat() if kline_result and kline_result['oldest_time'] else None,
-                'symbol_count': kline_result['symbol_count'] if kline_result else 0,
-                'timeframe_count': kline_result['timeframe_count'] if kline_result else 0,
-                'status': status
-            })
-        except Exception as e:
-            logger.error(f"获取K线数据采集情况失败: {e}")
-            import traceback
-            traceback.print_exc()
-            collection_status.append({
-                'type': 'K线数据',
-                'category': 'market_data',
-                'icon': 'bi-bar-chart',
-                'description': '不同时间周期的K线数据',
-                'status': 'error',
-                'error': str(e)
-            })
-        
-        # 3. 合约数据采集情况
-        try:
-            conn = _ensure_connection(conn)
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as count,
-                    MAX(timestamp) as latest_time,
-                    MIN(timestamp) as oldest_time
-                FROM futures_open_interest
-            """)
-            futures_result = cursor.fetchone()
-            collection_status.append({
-                'type': '合约数据',
-                'category': 'futures_data',
-                'icon': 'bi-graph-up-arrow',
-                'description': '合约持仓量、资金费率、多空比等数据',
-                'count': futures_result['count'] if futures_result else 0,
-                'latest_time': futures_result['latest_time'].isoformat() if futures_result and futures_result['latest_time'] else None,
-                'oldest_time': futures_result['oldest_time'].isoformat() if futures_result and futures_result['oldest_time'] else None,
-                'status': _check_status_active(futures_result['latest_time'], 1200) if futures_result and futures_result['latest_time'] else 'inactive'  # 合约数据每1分钟采集，阈值设为20分钟
-            })
-        except Exception as e:
-            logger.error(f"获取合约数据采集情况失败: {e}")
-            collection_status.append({
-                'type': '合约数据',
-                'category': 'futures_data',
-                'icon': 'bi-graph-up-arrow',
-                'description': '合约持仓量、资金费率、多空比等数据',
-                'status': 'error',
-                'error': str(e)
-            })
-        
-        # 4. 新闻数据采集情况
-        try:
-            conn = _ensure_connection(conn)
-            cursor = conn.cursor()
-            # 新闻数据表使用published_datetime字段，如果没有则使用created_at
-            try:
-                cursor.execute("""
-                    SELECT 
-                        COUNT(*) as count,
-                        MAX(published_datetime) as latest_time,
-                        MIN(published_datetime) as oldest_time,
-                        COUNT(DISTINCT source) as source_count
-                    FROM news_data
-                """)
-            except:
-                # 如果published_datetime字段不存在或出错，使用created_at
-                cursor.execute("""
-                    SELECT 
-                        COUNT(*) as count,
-                        MAX(created_at) as latest_time,
-                        MIN(created_at) as oldest_time,
-                        COUNT(DISTINCT source) as source_count
-                    FROM news_data
-                """)
-            news_result = cursor.fetchone()
-            collection_status.append({
-                'type': '新闻数据',
-                'category': 'news_data',
-                'icon': 'bi-newspaper',
-                'description': '加密货币相关新闻',
-                'count': news_result['count'] if news_result else 0,
-                'latest_time': news_result['latest_time'].isoformat() if news_result and news_result['latest_time'] else None,
-                'oldest_time': news_result['oldest_time'].isoformat() if news_result and news_result['oldest_time'] else None,
-                'source_count': news_result['source_count'] if news_result else 0,
-                'status': _check_status_active(news_result['latest_time'], 3600) if news_result and news_result['latest_time'] else 'inactive'
-            })
-        except Exception as e:
-            logger.error(f"获取新闻数据采集情况失败: {e}")
-            import traceback
-            traceback.print_exc()
-            collection_status.append({
-                'type': '新闻数据',
-                'category': 'news_data',
-                'icon': 'bi-newspaper',
-                'description': '加密货币相关新闻',
-                'status': 'error',
-                'error': str(e)
-            })
-        
-        # 5. ETF数据情况
-        try:
-            conn = _ensure_connection(conn)
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as count,
-                    MAX(trade_date) as latest_time,
-                    MIN(trade_date) as oldest_time,
-                    COUNT(DISTINCT ticker) as etf_count
-                FROM crypto_etf_flows
-            """)
-            etf_result = cursor.fetchone()
-            
-            # ETF数据是手动导入的，不是自动采集的
-            # 状态判断：如果有数据且最近30天内有更新，显示为active；如果有数据但较旧，显示为warning；如果没有数据，显示为inactive
-            status = 'inactive'
-            if etf_result and etf_result['count'] > 0:
-                if etf_result['latest_time']:
-                    # 检查最新更新时间是否在30天内
-                    latest_time = etf_result['latest_time']
-                    # latest_time已经是date对象（从数据库查询返回）
-                    if latest_time:
-                        # 计算时间差（秒）
-                        if isinstance(latest_time, date):
-                            latest_datetime = datetime.combine(latest_time, datetime.min.time())
-                        else:
-                            latest_datetime = latest_time
-                        time_diff = (datetime.utcnow() - latest_datetime).total_seconds()
-                        if time_diff < 2592000:  # 30天 = 2592000秒
-                            status = 'active'
-                        else:
-                            status = 'warning'  # 数据较旧
-                    else:
-                        status = 'active'  # 有数据但没有更新时间字段
-                else:
-                    status = 'active'  # 有数据但没有更新时间字段
-            
-            collection_status.append({
-                'type': 'ETF数据',
-                'category': 'etf_data',
-                'icon': 'bi-pie-chart',
-                'description': '加密货币ETF资金流向数据（手动导入）',
-                'count': etf_result['count'] if etf_result else 0,
-                'latest_time': etf_result['latest_time'].isoformat() if etf_result and etf_result['latest_time'] else None,
-                'oldest_time': etf_result['oldest_time'].isoformat() if etf_result and etf_result['oldest_time'] else None,
-                'etf_count': etf_result['etf_count'] if etf_result else 0,
-                'status': status
-            })
-        except Exception as e:
-            logger.error(f"获取ETF数据情况失败: {e}")
-            collection_status.append({
-                'type': 'ETF数据',
-                'category': 'etf_data',
-                'icon': 'bi-pie-chart',
-                'description': '加密货币ETF资金流向数据',
-                'status': 'error',
-                'error': str(e)
-            })
-        
-        # 6. 企业金库数据情况
-        try:
-            conn = _ensure_connection(conn)
-            cursor = conn.cursor()
-            # 企业金库数据包括两个表：持仓记录(purchases)和融资记录(financing)
-            # 检查持仓记录表（主要数据）
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as count,
-                    MAX(updated_at) as latest_time,
-                    MIN(created_at) as oldest_time,
-                    COUNT(DISTINCT company_id) as company_count
-                FROM corporate_treasury_purchases
-            """)
-            purchases_result = cursor.fetchone()
-            
-            # 检查融资记录表
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as count,
-                    MAX(updated_at) as latest_time,
-                    MIN(created_at) as oldest_time,
-                    COUNT(DISTINCT company_id) as company_count
-                FROM corporate_treasury_financing
-            """)
-            financing_result = cursor.fetchone()
-            
-            # 合并两个表的数据
-            total_count = (purchases_result['count'] if purchases_result else 0) + (financing_result['count'] if financing_result else 0)
-            total_company_count = max(
-                purchases_result['company_count'] if purchases_result else 0,
-                financing_result['company_count'] if financing_result else 0
-            )
-            
-            # 获取最新的更新时间（从两个表中取最新的）
-            latest_time = None
-            if purchases_result and purchases_result['latest_time']:
-                latest_time = purchases_result['latest_time']
-            if financing_result and financing_result['latest_time']:
-                if not latest_time or financing_result['latest_time'] > latest_time:
-                    latest_time = financing_result['latest_time']
-            
-            # 获取最早的创建时间
-            oldest_time = None
-            if purchases_result and purchases_result['oldest_time']:
-                oldest_time = purchases_result['oldest_time']
-            if financing_result and financing_result['oldest_time']:
-                if not oldest_time or financing_result['oldest_time'] < oldest_time:
-                    oldest_time = financing_result['oldest_time']
-            
-            # 企业金库数据是手动导入的，不是自动采集的
-            # 状态判断：如果有数据且最近30天内有更新，显示为active；如果有数据但较旧，显示为warning；如果没有数据，显示为inactive
-            status = 'inactive'
-            if total_count > 0:
-                if latest_time:
-                    # 检查最新更新时间是否在30天内
-                    # latest_time已经是datetime对象（从数据库查询返回）
-                    # 计算时间差（秒）
-                    time_diff = (datetime.utcnow() - latest_time).total_seconds()
-                    if time_diff < 2592000:  # 30天 = 2592000秒
-                        status = 'active'
-                    else:
-                        status = 'warning'  # 数据较旧
-                else:
-                    status = 'active'  # 有数据但没有更新时间字段
-            
-            collection_status.append({
-                'type': '企业金库数据',
-                'category': 'treasury_data',
-                'icon': 'bi-building',
-                'description': '企业持仓和融资记录数据（手动导入）',
-                'count': total_count,
-                'latest_time': latest_time.isoformat() if latest_time else None,
-                'oldest_time': oldest_time.isoformat() if oldest_time else None,
-                'company_count': total_company_count,
-                'status': status
-            })
-        except Exception as e:
-            logger.error(f"获取企业金库数据情况失败: {e}")
-            collection_status.append({
-                'type': '企业金库数据',
-                'category': 'treasury_data',
-                'icon': 'bi-building',
-                'description': '企业融资记录数据',
-                'status': 'error',
-                'error': str(e)
-            })
-        
-        # 7. Hyperliquid聪明钱数据情况
-        try:
-            conn = _ensure_connection(conn)
-            cursor = conn.cursor()
-            # 检查hyperliquid_wallet_trades表
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as count,
-                    MAX(trade_time) as latest_time,
-                    MIN(trade_time) as oldest_time,
-                    COUNT(DISTINCT address) as wallet_count,
-                    COUNT(DISTINCT coin) as coin_count
-                FROM hyperliquid_wallet_trades
-            """)
-            hyperliquid_trades_result = cursor.fetchone()
-            
-            # 检查hyperliquid_traders表
-            cursor.execute("""
-                SELECT COUNT(*) as trader_count
-                FROM hyperliquid_traders
-            """)
-            hyperliquid_traders_result = cursor.fetchone()
-            
-            # 检查hyperliquid_monitored_wallets表
-            cursor.execute("""
-                SELECT COUNT(*) as monitored_count
-                FROM hyperliquid_monitored_wallets
-                WHERE is_monitoring = TRUE
-            """)
-            hyperliquid_monitored_result = cursor.fetchone()
-            
-            collection_status.append({
-                'type': 'Hyperliquid聪明钱',
-                'category': 'smart_money',
-                'icon': 'bi-lightning-charge',
-                'description': 'Hyperliquid平台聪明钱交易数据',
-                'count': hyperliquid_trades_result['count'] if hyperliquid_trades_result else 0,
-                'latest_time': hyperliquid_trades_result['latest_time'].isoformat() if hyperliquid_trades_result and hyperliquid_trades_result['latest_time'] else None,
-                'oldest_time': hyperliquid_trades_result['oldest_time'].isoformat() if hyperliquid_trades_result and hyperliquid_trades_result['oldest_time'] else None,
-                'wallet_count': hyperliquid_trades_result['wallet_count'] if hyperliquid_trades_result else 0,
-                'trader_count': hyperliquid_traders_result['trader_count'] if hyperliquid_traders_result else 0,
-                'monitored_count': hyperliquid_monitored_result['monitored_count'] if hyperliquid_monitored_result else 0,
-                'coin_count': hyperliquid_trades_result['coin_count'] if hyperliquid_trades_result else 0,
-                'status': _check_status_active(hyperliquid_trades_result['latest_time'], 86400) if hyperliquid_trades_result and hyperliquid_trades_result['latest_time'] else 'inactive'  # 24小时阈值
-            })
-        except Exception as e:
-            logger.error(f"获取Hyperliquid聪明钱数据情况失败: {e}")
-            import traceback
-            traceback.print_exc()
-            collection_status.append({
-                'type': 'Hyperliquid聪明钱',
-                'category': 'smart_money',
-                'icon': 'bi-lightning-charge',
-                'description': 'Hyperliquid平台聪明钱交易数据',
-                'status': 'error',
-                'error': str(e)
-            })
-        
-        # 8. 链上聪明钱数据情况
-        try:
-            conn = _ensure_connection(conn)
-            cursor = conn.cursor()
-            # 检查smart_money_transactions表
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as count,
-                    MAX(timestamp) as latest_time,
-                    MIN(timestamp) as oldest_time,
-                    COUNT(DISTINCT address) as wallet_count,
-                    COUNT(DISTINCT token_symbol) as token_count,
-                    COUNT(DISTINCT blockchain) as blockchain_count
-                FROM smart_money_transactions
-            """)
-            smart_money_tx_result = cursor.fetchone()
-            
-            # 检查smart_money_signals表
-            cursor.execute("""
-                SELECT 
-                    COUNT(*) as signal_count,
-                    MAX(timestamp) as latest_signal_time,
-                    COUNT(DISTINCT token_symbol) as signal_token_count
-                FROM smart_money_signals
-                WHERE is_active = TRUE
-            """)
-            smart_money_signal_result = cursor.fetchone()
-            
-            # 检查smart_money_addresses表
-            cursor.execute("""
-                SELECT COUNT(*) as address_count
-                FROM smart_money_addresses
-            """)
-            smart_money_address_result = cursor.fetchone()
-            
-            collection_status.append({
-                'type': '链上聪明钱',
-                'category': 'smart_money',
-                'icon': 'bi-wallet2',
-                'description': '链上聪明钱交易和信号数据',
-                'count': smart_money_tx_result['count'] if smart_money_tx_result else 0,
-                'latest_time': smart_money_tx_result['latest_time'].isoformat() if smart_money_tx_result and smart_money_tx_result['latest_time'] else None,
-                'oldest_time': smart_money_tx_result['oldest_time'].isoformat() if smart_money_tx_result and smart_money_tx_result['oldest_time'] else None,
-                'wallet_count': smart_money_tx_result['wallet_count'] if smart_money_tx_result else 0,
-                'address_count': smart_money_address_result['address_count'] if smart_money_address_result else 0,
-                'token_count': smart_money_tx_result['token_count'] if smart_money_tx_result else 0,
-                'blockchain_count': smart_money_tx_result['blockchain_count'] if smart_money_tx_result else 0,
-                'signal_count': smart_money_signal_result['signal_count'] if smart_money_signal_result else 0,
-                'latest_signal_time': smart_money_signal_result['latest_signal_time'].isoformat() if smart_money_signal_result and smart_money_signal_result['latest_signal_time'] else None,
-                'status': _check_status_active(smart_money_tx_result['latest_time'], 86400) if smart_money_tx_result and smart_money_tx_result['latest_time'] else 'inactive'  # 24小时阈值
-            })
-        except Exception as e:
-            logger.error(f"获取链上聪明钱数据情况失败: {e}")
-            import traceback
-            traceback.print_exc()
-            collection_status.append({
-                'type': '链上聪明钱',
-                'category': 'smart_money',
-                'icon': 'bi-wallet2',
-                'description': '链上聪明钱交易和信号数据',
-                'status': 'error',
-                'error': str(e)
-            })
-        
-        # 关闭游标，归还连接到池中
-        if 'cursor' in locals() and cursor:
-            cursor.close()
+        cursor.execute("SELECT * FROM collection_status_cache")
+        rows = {r['type_key']: r for r in cursor.fetchall()}
+        cursor.close()
         return_db_connection(conn)
+        conn = None
 
-        # 准备返回结果
-        result = {
-            'success': True,
-            'data': collection_status
-        }
+        collection_status = []
 
-        # 更新缓存
+        # 1. 实时价格数据
+        r = rows.get('price', {})
+        collection_status.append({
+            'type': '实时价格数据',
+            'category': 'market_data',
+            'icon': 'bi-graph-up',
+            'description': '各交易所的实时价格数据',
+            'count': r.get('total_count', 0),
+            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
+            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'symbol_count': r.get('symbol_count', 0),
+            'exchange_count': r.get('exchange_count', 0),
+            'status': _check_status_active(r['latest_time'], 600) if r.get('latest_time') else 'inactive'
+        })
+
+        # 2. K线数据（多时间周期状态判断）
+        r = rows.get('kline', {})
+        status = 'inactive'
+        kline_thresholds = [
+            ('kline_latest_1m',  600),
+            ('kline_latest_5m',  1800),
+            ('kline_latest_15m', 3600),
+            ('kline_latest_1h',  10800),
+            ('kline_latest_1d',  172800),
+        ]
+        for field, threshold in kline_thresholds:
+            t = r.get(field)
+            if t:
+                check = _check_status_active(t, threshold)
+                if check == 'active':
+                    status = 'active'
+                    break
+                elif check == 'warning' and status == 'inactive':
+                    status = 'warning'
+        if status == 'inactive' and r.get('latest_time'):
+            status = _check_status_active(r['latest_time'], 1800)
+        collection_status.append({
+            'type': 'K线数据',
+            'category': 'market_data',
+            'icon': 'bi-bar-chart',
+            'description': '不同时间周期的K线数据',
+            'count': r.get('total_count', 0),
+            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
+            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'symbol_count': r.get('symbol_count', 0),
+            'timeframe_count': r.get('timeframe_count', 0),
+            'status': status
+        })
+
+        # 3. 合约数据
+        r = rows.get('futures', {})
+        collection_status.append({
+            'type': '合约数据',
+            'category': 'futures_data',
+            'icon': 'bi-graph-up-arrow',
+            'description': '合约持仓量、资金费率、多空比等数据',
+            'count': r.get('total_count', 0),
+            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
+            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'status': _check_status_active(r['latest_time'], 1200) if r.get('latest_time') else 'inactive'
+        })
+
+        # 4. 新闻数据
+        r = rows.get('news', {})
+        collection_status.append({
+            'type': '新闻数据',
+            'category': 'news_data',
+            'icon': 'bi-newspaper',
+            'description': '加密货币相关新闻',
+            'count': r.get('total_count', 0),
+            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
+            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'source_count': r.get('source_count', 0),
+            'status': _check_status_active(r['latest_time'], 3600) if r.get('latest_time') else 'inactive'
+        })
+
+        # 5. ETF数据（手动导入，30天阈值）
+        r = rows.get('etf', {})
+        etf_status = 'inactive'
+        if r.get('total_count', 0) > 0:
+            if r.get('latest_time'):
+                time_diff = (datetime.utcnow() - r['latest_time']).total_seconds()
+                etf_status = 'active' if time_diff < 2592000 else 'warning'
+            else:
+                etf_status = 'active'
+        collection_status.append({
+            'type': 'ETF数据',
+            'category': 'etf_data',
+            'icon': 'bi-pie-chart',
+            'description': '加密货币ETF资金流向数据（手动导入）',
+            'count': r.get('total_count', 0),
+            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
+            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'etf_count': r.get('etf_count', 0),
+            'status': etf_status
+        })
+
+        # 6. 企业金库数据（手动导入，30天阈值）
+        r = rows.get('treasury', {})
+        treasury_status = 'inactive'
+        if r.get('total_count', 0) > 0:
+            if r.get('latest_time'):
+                time_diff = (datetime.utcnow() - r['latest_time']).total_seconds()
+                treasury_status = 'active' if time_diff < 2592000 else 'warning'
+            else:
+                treasury_status = 'active'
+        collection_status.append({
+            'type': '企业金库数据',
+            'category': 'treasury_data',
+            'icon': 'bi-building',
+            'description': '企业持仓和融资记录数据（手动导入）',
+            'count': r.get('total_count', 0),
+            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
+            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'company_count': r.get('company_count', 0),
+            'status': treasury_status
+        })
+
+        # 7. Hyperliquid聪明钱
+        r = rows.get('hyperliquid', {})
+        collection_status.append({
+            'type': 'Hyperliquid聪明钱',
+            'category': 'smart_money',
+            'icon': 'bi-lightning-charge',
+            'description': 'Hyperliquid平台聪明钱交易数据',
+            'count': r.get('total_count', 0),
+            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
+            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'wallet_count': r.get('wallet_count', 0),
+            'trader_count': r.get('trader_count', 0),
+            'monitored_count': r.get('monitored_count', 0),
+            'coin_count': r.get('coin_count', 0),
+            'status': _check_status_active(r['latest_time'], 86400) if r.get('latest_time') else 'inactive'
+        })
+
+        # 8. 链上聪明钱
+        r = rows.get('smart_money', {})
+        collection_status.append({
+            'type': '链上聪明钱',
+            'category': 'smart_money',
+            'icon': 'bi-wallet2',
+            'description': '链上聪明钱交易和信号数据',
+            'count': r.get('total_count', 0),
+            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
+            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'wallet_count': r.get('wallet_count', 0),
+            'address_count': r.get('address_count', 0),
+            'token_count': r.get('token_count', 0),
+            'blockchain_count': r.get('blockchain_count', 0),
+            'signal_count': r.get('signal_count', 0),
+            'latest_signal_time': r['latest_signal_time'].isoformat() if r.get('latest_signal_time') else None,
+            'status': _check_status_active(r['latest_time'], 86400) if r.get('latest_time') else 'inactive'
+        })
+
+        result = {'success': True, 'data': collection_status}
+
         with _collection_status_cache_lock:
             _collection_status_cache = result
             _collection_status_cache_time = datetime.utcnow()
-            logger.debug("已更新数据采集情况缓存")
 
         return result
-        
+
     except Exception as e:
         logger.error(f"获取数据采集情况失败: {e}")
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取数据采集情况失败: {str(e)}")
     finally:
-        # 确保连接被正确归还或关闭
         if conn:
-            try:
-                if 'cursor' in locals() and cursor:
-                    cursor.close()
-            except:
-                pass
             return_db_connection(conn)
 
 
