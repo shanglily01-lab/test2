@@ -168,325 +168,232 @@ class EnhancedDashboardCached:
 
     async def _get_prices_from_cache(self, symbols: List[str]) -> List[Dict]:
         """
-        实时价格来自 kline_data (5m K线)，由 fast_collector_service.py 每5分钟更新。
-        change_24h 通过与 24h 前K线对比计算。
-        high/low/volume/trend 来自 price_stats_24h（允许略旧）。
+        实时价格来自 kline_data (5m K线)；change_24h 与24h前K线对比计算；
+        high/low/volume/trend 来自 price_stats_24h。
+        全部 DB 操作放入线程池，事件循环不阻塞。
         """
-        prices = []
-        session = None
-
-        try:
+        def _query():
+            prices = []
             session = self.db_service.get_session()
-            placeholders = ','.join([f':s{i}' for i in range(len(symbols))])
-            params = {f's{i}': sym for i, sym in enumerate(symbols)}
+            try:
+                placeholders = ','.join([f':s{i}' for i in range(len(symbols))])
+                params = {f's{i}': sym for i, sym in enumerate(symbols)}
 
-            # ── Step 1: 从 kline_data 取最新 5m K线（当前价格）
-            cur_rows = session.execute(text(f"""
-                SELECT kd.symbol, kd.close_price, kd.open_time
-                FROM kline_data kd
-                INNER JOIN (
-                    SELECT symbol, MAX(open_time) AS max_ot
-                    FROM kline_data
-                    WHERE symbol IN ({placeholders}) AND timeframe = '5m'
-                    GROUP BY symbol
-                ) t ON kd.symbol = t.symbol AND kd.open_time = t.max_ot AND kd.timeframe = '5m'
-            """), params).fetchall()
+                cur_rows = session.execute(text(f"""
+                    SELECT kd.symbol, kd.close_price, kd.open_time
+                    FROM kline_data kd
+                    INNER JOIN (
+                        SELECT symbol, MAX(open_time) AS max_ot
+                        FROM kline_data
+                        WHERE symbol IN ({placeholders}) AND timeframe = '5m'
+                        GROUP BY symbol
+                    ) t ON kd.symbol = t.symbol AND kd.open_time = t.max_ot AND kd.timeframe = '5m'
+                """), params).fetchall()
 
-            cur_map = {}
-            for row in cur_rows:
-                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                cur_map[rd['symbol']] = rd
+                ago_rows = session.execute(text(f"""
+                    SELECT kd.symbol, kd.close_price AS price_ago
+                    FROM kline_data kd
+                    INNER JOIN (
+                        SELECT symbol, MAX(open_time) AS max_ot
+                        FROM kline_data
+                        WHERE symbol IN ({placeholders}) AND timeframe = '5m'
+                          AND open_time <= (UNIX_TIMESTAMP() * 1000 - 86400000)
+                        GROUP BY symbol
+                    ) t ON kd.symbol = t.symbol AND kd.open_time = t.max_ot AND kd.timeframe = '5m'
+                """), params).fetchall()
 
-            # ── Step 2: 从 kline_data 取 24h 前的 5m K线（用于计算涨跌幅）
-            ago_rows = session.execute(text(f"""
-                SELECT kd.symbol, kd.close_price AS price_ago
-                FROM kline_data kd
-                INNER JOIN (
-                    SELECT symbol, MAX(open_time) AS max_ot
-                    FROM kline_data
-                    WHERE symbol IN ({placeholders}) AND timeframe = '5m'
-                      AND open_time <= (UNIX_TIMESTAMP() * 1000 - 86400000)
-                    GROUP BY symbol
-                ) t ON kd.symbol = t.symbol AND kd.open_time = t.max_ot AND kd.timeframe = '5m'
-            """), params).fetchall()
+                stats_rows = session.execute(text(f"""
+                    SELECT symbol, high_24h, low_24h, volume_24h, quote_volume_24h, trend
+                    FROM price_stats_24h
+                    WHERE symbol IN ({placeholders})
+                """), params).fetchall()
 
-            ago_map = {}
-            for row in ago_rows:
-                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                ago_map[rd['symbol']] = rd
+                cur_map   = {dict(r._mapping if hasattr(r,'_mapping') else r)['symbol']: dict(r._mapping if hasattr(r,'_mapping') else r) for r in cur_rows}
+                ago_map   = {dict(r._mapping if hasattr(r,'_mapping') else r)['symbol']: dict(r._mapping if hasattr(r,'_mapping') else r) for r in ago_rows}
+                stats_map = {dict(r._mapping if hasattr(r,'_mapping') else r)['symbol']: dict(r._mapping if hasattr(r,'_mapping') else r) for r in stats_rows}
 
-            # ── Step 3: 从 price_stats_24h 取 24h 统计（high/low/volume/trend）
-            stats_rows = session.execute(text(f"""
-                SELECT symbol, high_24h, low_24h, volume_24h, quote_volume_24h, trend
-                FROM price_stats_24h
-                WHERE symbol IN ({placeholders})
-            """), params).fetchall()
+                for sym in symbols:
+                    cur = cur_map.get(sym)
+                    if not cur:
+                        continue
+                    ago = ago_map.get(sym, {})
+                    st  = stats_map.get(sym, {})
 
-            stats_map = {}
-            for row in stats_rows:
-                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                stats_map[rd['symbol']] = rd
+                    current_price = float(cur['close_price'])
+                    price_ago = float(ago['price_ago']) if ago.get('price_ago') else None
+                    change_24h = ((current_price - price_ago) / price_ago * 100
+                                  if price_ago and price_ago > 0
+                                  else float(st.get('change_24h') or 0))
 
-            # ── Step 4: 合并
-            for sym in symbols:
-                cur = cur_map.get(sym)
-                if not cur:
-                    continue
-                ago = ago_map.get(sym, {})
-                st  = stats_map.get(sym, {})
+                    ot = cur.get('open_time')
+                    ts_str = (datetime.utcfromtimestamp(ot / 1000).strftime('%Y-%m-%d %H:%M:%S') if ot else '')
 
-                current_price = float(cur['close_price'])
-                price_ago = float(ago['price_ago']) if ago.get('price_ago') else None
-                if price_ago and price_ago > 0:
-                    change_24h = (current_price - price_ago) / price_ago * 100
-                else:
-                    change_24h = float(st.get('change_24h') or 0)
+                    prices.append({
+                        'symbol':          sym.replace('/USDT', ''),
+                        'full_symbol':     sym,
+                        'price':           current_price,
+                        'change_24h':      round(change_24h, 4),
+                        'volume_24h':      float(st['volume_24h'])       if st.get('volume_24h')       else 0,
+                        'quote_volume_24h':float(st['quote_volume_24h'])  if st.get('quote_volume_24h')  else 0,
+                        'high_24h':        float(st['high_24h'])          if st.get('high_24h')          else 0,
+                        'low_24h':         float(st['low_24h'])           if st.get('low_24h')           else 0,
+                        'trend':           st.get('trend', 'sideways'),
+                        'timestamp':       ts_str,
+                    })
 
-                # open_time 是毫秒时间戳
-                ot = cur.get('open_time')
-                ts_str = (datetime.utcfromtimestamp(ot / 1000).strftime('%Y-%m-%d %H:%M:%S')
-                          if ot else '')
-
-                prices.append({
-                    'symbol':          sym.replace('/USDT', ''),
-                    'full_symbol':     sym,
-                    'price':           current_price,
-                    'change_24h':      round(change_24h, 4),
-                    'volume_24h':      float(st['volume_24h'])       if st.get('volume_24h')       else 0,
-                    'quote_volume_24h':float(st['quote_volume_24h'])  if st.get('quote_volume_24h')  else 0,
-                    'high_24h':        float(st['high_24h'])          if st.get('high_24h')          else 0,
-                    'low_24h':         float(st['low_24h'])           if st.get('low_24h')           else 0,
-                    'trend':           st.get('trend', 'sideways'),
-                    'timestamp':       ts_str
-                })
-
-            prices.sort(key=lambda x: x['change_24h'], reverse=True)
-            logger.debug(f"✅ 价格读取完成: {len(prices)} 个币种（kline_data 5m实时）")
-
-        except Exception as e:
-            logger.error(f"读取价格失败: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            if session:
+                prices.sort(key=lambda x: x['change_24h'], reverse=True)
+                return prices
+            finally:
                 session.close()
 
-        return prices
+        try:
+            return await asyncio.to_thread(_query)
+        except Exception as e:
+            logger.error(f"读取价格失败: {e}")
+            return []
 
     async def _get_recommendations_from_cache(self, symbols: List[str]) -> List[Dict]:
         """
-        从投资建议缓存表读取推荐数据（超快）
-        确保所有配置的交易对都返回，即使没有缓存数据也返回默认值
-
-        Returns:
-            建议列表
+        从投资建议缓存表读取推荐数据；资金费率合并在同一线程查询。
+        全部 DB 操作放入线程池，事件循环不阻塞。
         """
-        recommendations = []
-        session = None
-        cached_symbols = set()  # 记录已从缓存获取的交易对
+        def _query():
+            session = self.db_service.get_session()
+            try:
+                placeholders = ','.join([f':symbol{i}' for i in range(len(symbols))])
+                params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
+
+                results = session.execute(text(f"""
+                    SELECT symbol, total_score, technical_score, news_score,
+                           funding_score, hyperliquid_score, ethereum_score,
+                           `signal`, confidence, current_price, entry_price,
+                           stop_loss, take_profit, risk_level, risk_factors, reasons,
+                           has_technical, has_news, has_funding, has_hyperliquid,
+                           has_ethereum, data_completeness, updated_at
+                    FROM investment_recommendations_cache
+                    WHERE symbol IN ({placeholders})
+                    ORDER BY confidence DESC
+                """), params).fetchall()
+
+                # 资金费率合并在同一线程，避免额外往返
+                fr_rows = session.execute(text(f"""
+                    SELECT symbol, current_rate, current_rate_pct, trend, market_sentiment
+                    FROM funding_rate_stats
+                    WHERE symbol IN ({placeholders})
+                """), params).fetchall()
+                funding_rates = {}
+                for row in fr_rows:
+                    rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                    funding_rates[rd['symbol']] = {
+                        'funding_rate':     float(rd['current_rate']),
+                        'funding_rate_pct': float(rd['current_rate_pct']),
+                        'trend':            rd['trend'],
+                        'market_sentiment': rd['market_sentiment'],
+                    }
+                return results, funding_rates
+            finally:
+                session.close()
 
         try:
-            session = self.db_service.get_session()
-
-            # 一次性查询所有币种的投资建议
-            placeholders = ','.join([f':symbol{i}' for i in range(len(symbols))])
-            sql = text(f"""
-                SELECT
-                    symbol,
-                    total_score,
-                    technical_score,
-                    news_score,
-                    funding_score,
-                    hyperliquid_score,
-                    ethereum_score,
-                    `signal`,
-                    confidence,
-                    current_price,
-                    entry_price,
-                    stop_loss,
-                    take_profit,
-                    risk_level,
-                    risk_factors,
-                    reasons,
-                    has_technical,
-                    has_news,
-                    has_funding,
-                    has_hyperliquid,
-                    has_ethereum,
-                    data_completeness,
-                    updated_at
-                FROM investment_recommendations_cache
-                WHERE symbol IN ({placeholders})
-                ORDER BY confidence DESC
-            """)
-
-            params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
-            results = session.execute(sql, params).fetchall()
-
-            # 同时获取资金费率信息
-            funding_rates = await self._get_funding_rates_batch(symbols)
-
-            for row in results:
-                import json
-
-                # Convert Row to dict
-                row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                symbol = row_dict['symbol']
-                cached_symbols.add(symbol)
-
-                # 格式化信号生成时间
-                signal_time = ''
-                if row_dict.get('updated_at'):
-                    if isinstance(row_dict['updated_at'], datetime):
-                        signal_time = row_dict['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
-                    else:
-                        signal_time = str(row_dict['updated_at'])
-                
-                recommendations.append({
-                    'symbol': symbol.replace('/USDT', ''),
-                    'full_symbol': symbol,
-                    'signal': row_dict['signal'],
-                    'confidence': float(row_dict['confidence']) if row_dict['confidence'] else 0,
-                    'current_price': float(row_dict['current_price']) if row_dict['current_price'] else 0,
-                    'entry_price': float(row_dict['entry_price']) if row_dict['entry_price'] else 0,
-                    'stop_loss': float(row_dict['stop_loss']) if row_dict['stop_loss'] else 0,
-                    'take_profit': float(row_dict['take_profit']) if row_dict['take_profit'] else 0,
-                    'reasons': json.loads(row_dict['reasons']) if row_dict['reasons'] else [],
-                    'risk_level': row_dict['risk_level'] or 'MEDIUM',
-                    'risk_factors': json.loads(row_dict['risk_factors']) if row_dict['risk_factors'] else [],
-                    'scores': {
-                        'total': float(row_dict['total_score']) if row_dict['total_score'] else 50,
-                        'technical': float(row_dict['technical_score']) if row_dict['technical_score'] else 50,
-                        'news': float(row_dict['news_score']) if row_dict['news_score'] else 50,
-                        'funding': float(row_dict['funding_score']) if row_dict['funding_score'] else 50,
-                        'hyperliquid': float(row_dict['hyperliquid_score']) if row_dict['hyperliquid_score'] else 50,
-                        'ethereum': float(row_dict['ethereum_score']) if row_dict['ethereum_score'] else 50,
-                        'etf': float(row_dict['etf_score']) if row_dict.get('etf_score') else 50,
-                    },
-                    'data_sources': {
-                        'technical': bool(row_dict['has_technical']),
-                        'news': bool(row_dict['has_news']),
-                        'funding': bool(row_dict['has_funding']),
-                        'hyperliquid': bool(row_dict['has_hyperliquid']),
-                        'ethereum': bool(row_dict['has_ethereum']),
-                        'etf': bool(row_dict.get('has_etf')),
-                    },
-                    'data_completeness': float(row_dict['data_completeness']) if row_dict['data_completeness'] else 0,
-                    'funding_rate': funding_rates.get(symbol),
-                    'signal_time': signal_time  # 信号生成时间
-                })
-
-            # 为没有缓存数据的交易对创建默认建议
-            for symbol in symbols:
-                if symbol not in cached_symbols:
-                    recommendations.append({
-                        'symbol': symbol.replace('/USDT', ''),
-                        'full_symbol': symbol,
-                        'signal': '持有',
-                        'confidence': 0,
-                        'current_price': 0,
-                        'entry_price': 0,
-                        'stop_loss': 0,
-                        'take_profit': 0,
-                        'reasons': ['数据不足，无法生成投资建议'],
-                        'risk_level': 'UNKNOWN',
-                        'risk_factors': ['缺少价格数据'],
-                        'scores': {
-                            'total': 50,
-                            'technical': 50,
-                            'news': 50,
-                            'funding': 50,
-                            'hyperliquid': 50,
-                            'ethereum': 50,
-                            'etf': 50,
-                        },
-                        'data_sources': {
-                            'technical': False,
-                            'news': False,
-                            'funding': False,
-                            'hyperliquid': False,
-                            'ethereum': False,
-                            'etf': False,
-                        },
-                        'data_completeness': 0,
-                        'funding_rate': None
-                    })
-
-            logger.debug(f"✅ 从缓存读取 {len([r for r in recommendations if r['current_price'] > 0])} 个有效投资建议，{len([r for r in recommendations if r['current_price'] == 0])} 个数据不足的交易对")
-
+            db_results, funding_rates = await asyncio.to_thread(_query)
         except Exception as e:
-            logger.error(f"从缓存读取投资建议失败: {e}")
-            import traceback
-            traceback.print_exc()
-            # 如果查询失败，至少返回所有交易对的默认值
-            for symbol in symbols:
+            logger.error(f"获取建议失败: {e}")
+            return []
+
+        import json
+        recommendations = []
+        cached_symbols = set()
+
+        for row in db_results:
+            row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+            symbol = row_dict['symbol']
+            cached_symbols.add(symbol)
+
+            signal_time = ''
+            if row_dict.get('updated_at'):
+                signal_time = (row_dict['updated_at'].strftime('%Y-%m-%d %H:%M:%S')
+                               if isinstance(row_dict['updated_at'], datetime)
+                               else str(row_dict['updated_at']))
+
+            recommendations.append({
+                'symbol':           symbol.replace('/USDT', ''),
+                'full_symbol':      symbol,
+                'signal':           row_dict['signal'],
+                'confidence':       float(row_dict['confidence']) if row_dict['confidence'] else 0,
+                'current_price':    float(row_dict['current_price']) if row_dict['current_price'] else 0,
+                'entry_price':      float(row_dict['entry_price']) if row_dict['entry_price'] else 0,
+                'stop_loss':        float(row_dict['stop_loss']) if row_dict['stop_loss'] else 0,
+                'take_profit':      float(row_dict['take_profit']) if row_dict['take_profit'] else 0,
+                'reasons':          json.loads(row_dict['reasons']) if row_dict['reasons'] else [],
+                'risk_level':       row_dict['risk_level'] or 'MEDIUM',
+                'risk_factors':     json.loads(row_dict['risk_factors']) if row_dict['risk_factors'] else [],
+                'scores': {
+                    'total':      float(row_dict['total_score']) if row_dict['total_score'] else 50,
+                    'technical':  float(row_dict['technical_score']) if row_dict['technical_score'] else 50,
+                    'news':       float(row_dict['news_score']) if row_dict['news_score'] else 50,
+                    'funding':    float(row_dict['funding_score']) if row_dict['funding_score'] else 50,
+                    'hyperliquid':float(row_dict['hyperliquid_score']) if row_dict['hyperliquid_score'] else 50,
+                    'ethereum':   float(row_dict['ethereum_score']) if row_dict['ethereum_score'] else 50,
+                    'etf':        float(row_dict['etf_score']) if row_dict.get('etf_score') else 50,
+                },
+                'data_sources': {
+                    'technical':   bool(row_dict['has_technical']),
+                    'news':        bool(row_dict['has_news']),
+                    'funding':     bool(row_dict['has_funding']),
+                    'hyperliquid': bool(row_dict['has_hyperliquid']),
+                    'ethereum':    bool(row_dict['has_ethereum']),
+                    'etf':         bool(row_dict.get('has_etf')),
+                },
+                'data_completeness': float(row_dict['data_completeness']) if row_dict['data_completeness'] else 0,
+                'funding_rate':      funding_rates.get(symbol),
+                'signal_time':       signal_time,
+            })
+
+        # 为没有缓存数据的交易对返回默认值
+        for symbol in symbols:
+            if symbol not in cached_symbols:
                 recommendations.append({
-                    'symbol': symbol.replace('/USDT', ''),
-                    'full_symbol': symbol,
-                    'signal': '持有',
-                    'confidence': 0,
-                    'current_price': 0,
-                    'entry_price': 0,
-                    'stop_loss': 0,
-                    'take_profit': 0,
-                    'reasons': ['数据获取失败'],
-                    'risk_level': 'UNKNOWN',
-                    'risk_factors': [],
-                    'scores': {'total': 50, 'technical': 50, 'news': 50, 'funding': 50, 'hyperliquid': 50, 'ethereum': 50, 'etf': 50},
-                    'data_sources': {'technical': False, 'news': False, 'funding': False, 'hyperliquid': False, 'ethereum': False, 'etf': False},
-                    'data_completeness': 0,
-                    'funding_rate': None
+                    'symbol': symbol.replace('/USDT', ''), 'full_symbol': symbol,
+                    'signal': '持有', 'confidence': 0, 'current_price': 0,
+                    'entry_price': 0, 'stop_loss': 0, 'take_profit': 0,
+                    'reasons': ['数据不足，无法生成投资建议'], 'risk_level': 'UNKNOWN',
+                    'risk_factors': ['缺少价格数据'],
+                    'scores': {'total':50,'technical':50,'news':50,'funding':50,'hyperliquid':50,'ethereum':50,'etf':50},
+                    'data_sources': {'technical':False,'news':False,'funding':False,'hyperliquid':False,'ethereum':False,'etf':False},
+                    'data_completeness': 0, 'funding_rate': None,
                 })
-        finally:
-            if session:
-                session.close()
 
         return recommendations
 
     async def _get_funding_rates_batch(self, symbols: List[str]) -> Dict:
-        """批量获取资金费率"""
-        funding_rates = {}
-        session = None
-
-        try:
+        """批量获取资金费率（线程池执行）"""
+        def _query():
             session = self.db_service.get_session()
-
-            placeholders = ','.join([f':symbol{i}' for i in range(len(symbols))])
-            sql = text(f"""
-                SELECT symbol, current_rate, current_rate_pct, trend, market_sentiment
-                FROM funding_rate_stats
-                WHERE symbol IN ({placeholders})
-            """)
-
-            params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
-            results = session.execute(sql, params).fetchall()
-
-            for row in results:
-                row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                funding_rates[row_dict['symbol']] = {
-                    'funding_rate': float(row_dict['current_rate']),
-                    'funding_rate_pct': float(row_dict['current_rate_pct']),
-                    'trend': row_dict['trend'],
-                    'market_sentiment': row_dict['market_sentiment']
-                }
-
+            try:
+                placeholders = ','.join([f':symbol{i}' for i in range(len(symbols))])
+                params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
+                rows = session.execute(text(f"""
+                    SELECT symbol, current_rate, current_rate_pct, trend, market_sentiment
+                    FROM funding_rate_stats WHERE symbol IN ({placeholders})
+                """), params).fetchall()
+                return {dict(r._mapping if hasattr(r,'_mapping') else r)['symbol']: {
+                    'funding_rate':     float(dict(r._mapping if hasattr(r,'_mapping') else r)['current_rate']),
+                    'funding_rate_pct': float(dict(r._mapping if hasattr(r,'_mapping') else r)['current_rate_pct']),
+                    'trend':            dict(r._mapping if hasattr(r,'_mapping') else r)['trend'],
+                    'market_sentiment': dict(r._mapping if hasattr(r,'_mapping') else r)['market_sentiment'],
+                } for r in rows}
+            finally:
+                session.close()
+        try:
+            return await asyncio.to_thread(_query)
         except Exception as e:
             logger.warning(f"批量获取资金费率失败: {e}")
-        finally:
-            if session:
-                session.close()
-
-        return funding_rates
+            return {}
 
     async def _get_news_from_db(self, limit: int = 20) -> List[Dict]:
-        """
-        获取最新新闻（直接从数据库读取，新闻更新频率低）
-
-        Returns:
-            新闻列表
-        """
+        """获取最新新闻（线程池执行，不阻塞事件循环）"""
         try:
-            news_list = self.db_service.get_recent_news(hours=24, limit=limit)
+            news_list = await asyncio.to_thread(self.db_service.get_recent_news, 24, None, limit)
 
             result = []
             for news in news_list:
@@ -531,92 +438,76 @@ class EnhancedDashboardCached:
             return []
 
     async def _get_hyperliquid_from_cache(self) -> Dict:
-        """
-        从预计算缓存表读取聪明钱数据（存储过程版，极速）
-        dashboard_hl_summary + dashboard_hl_recent_trades 由存储过程每5分钟刷新
-        """
+        """从预计算缓存表读取聪明钱数据（线程池执行，不阻塞事件循环）"""
         _empty = {'monitored_wallets': 0, 'active_wallets': 0, 'total_volume_24h': 0,
                   'recent_trades': [], 'top_coins': []}
-        session = None
-        try:
-            session = self.db_service.get_session()
 
-            # 读汇总（单行）
-            summary_row = session.execute(text(
-                "SELECT monitored_count, active_wallets_24h, total_volume_24h FROM dashboard_hl_summary WHERE id = 1"
-            )).fetchone()
-
-            monitored_count      = int(summary_row[0]) if summary_row else 0
-            active_wallets_count = int(summary_row[1]) if summary_row else 0
-            total_volume_24h     = float(summary_row[2]) if summary_row else 0.0
-
-            # 读 Top 币种（已有聚合表，快）
-            top_coins_rows = session.execute(text("""
-                SELECT symbol AS coin, net_flow, total_volume
-                FROM hyperliquid_symbol_aggregation
-                WHERE period = '24h'
-                ORDER BY ABS(net_flow) DESC
-                LIMIT 20
-            """)).fetchall()
-
-            # 读近50条交易快照
-            trades_rows = session.execute(text("""
-                SELECT address, wallet_label, coin, side, price, size,
-                       notional_usd, closed_pnl, leverage, trade_time
-                FROM dashboard_hl_recent_trades
-                ORDER BY trade_time DESC
-            """)).fetchall()
-
+        def _query():
             from app.services.hyperliquid_token_mapper import get_token_mapper
             token_mapper = get_token_mapper()
+            session = self.db_service.get_session()
+            try:
+                summary_row = session.execute(text(
+                    "SELECT monitored_count, active_wallets_24h, total_volume_24h FROM dashboard_hl_summary WHERE id = 1"
+                )).fetchone()
 
-            recent_trades = []
-            for t in trades_rows:
-                td = dict(t._mapping) if hasattr(t, '_mapping') else dict(t)
-                wallet_label = td.get('wallet_label') or ''
-                if not wallet_label or wallet_label == 'None':
-                    wallet_label = (td.get('address') or 'Unknown')[:10] + '...'
-                recent_trades.append({
-                    'wallet_label': wallet_label,
-                    'coin':         token_mapper.format_symbol(td['coin']),
-                    'coin_raw':     td['coin'],
-                    'side':         td['side'],
-                    'size':         float(td.get('size', 0)),
-                    'leverage':     float(td.get('leverage', 1)),
-                    'notional_usd': float(td.get('notional_usd', 0)),
-                    'price':        float(td.get('price', 0)),
-                    'closed_pnl':   float(td.get('closed_pnl', 0)),
-                    'trade_time':   td['trade_time'].strftime('%Y-%m-%d %H:%M') if td.get('trade_time') else '',
-                })
+                top_coins_rows = session.execute(text("""
+                    SELECT symbol AS coin, net_flow, total_volume
+                    FROM hyperliquid_symbol_aggregation
+                    WHERE period = '24h' ORDER BY ABS(net_flow) DESC LIMIT 20
+                """)).fetchall()
 
-            top_coins = []
-            for r in top_coins_rows:
-                rd = dict(r._mapping) if hasattr(r, '_mapping') else dict(r)
-                net_flow = float(rd.get('net_flow', 0))
-                top_coins.append({
-                    'coin':      rd['coin'],
-                    'net_flow':  net_flow,
-                    'direction': 'bullish' if net_flow > 0 else 'bearish',
-                })
+                trades_rows = session.execute(text("""
+                    SELECT address, wallet_label, coin, side, price, size,
+                           notional_usd, closed_pnl, leverage, trade_time
+                    FROM dashboard_hl_recent_trades ORDER BY trade_time DESC
+                """)).fetchall()
 
-            logger.debug(f"✅ Hyperliquid缓存读取完成（{len(recent_trades)} 条交易）")
-            return {
-                'monitored_wallets': monitored_count,
-                'active_wallets':    active_wallets_count,
-                'total_volume_24h':  total_volume_24h,
-                'recent_trades':     recent_trades,
-                'top_coins':         top_coins,
-            }
+                monitored_count      = int(summary_row[0]) if summary_row else 0
+                active_wallets_count = int(summary_row[1]) if summary_row else 0
+                total_volume_24h     = float(summary_row[2]) if summary_row else 0.0
 
+                recent_trades = []
+                for t in trades_rows:
+                    td = dict(t._mapping) if hasattr(t, '_mapping') else dict(t)
+                    wallet_label = td.get('wallet_label') or ''
+                    if not wallet_label or wallet_label == 'None':
+                        wallet_label = (td.get('address') or 'Unknown')[:10] + '...'
+                    recent_trades.append({
+                        'wallet_label': wallet_label,
+                        'coin':         token_mapper.format_symbol(td['coin']),
+                        'coin_raw':     td['coin'],
+                        'side':         td['side'],
+                        'size':         float(td.get('size', 0)),
+                        'leverage':     float(td.get('leverage', 1)),
+                        'notional_usd': float(td.get('notional_usd', 0)),
+                        'price':        float(td.get('price', 0)),
+                        'closed_pnl':   float(td.get('closed_pnl', 0)),
+                        'trade_time':   td['trade_time'].strftime('%Y-%m-%d %H:%M') if td.get('trade_time') else '',
+                    })
+
+                top_coins = []
+                for r in top_coins_rows:
+                    rd = dict(r._mapping) if hasattr(r, '_mapping') else dict(r)
+                    net_flow = float(rd.get('net_flow', 0))
+                    top_coins.append({'coin': rd['coin'], 'net_flow': net_flow,
+                                      'direction': 'bullish' if net_flow > 0 else 'bearish'})
+
+                return {
+                    'monitored_wallets': monitored_count,
+                    'active_wallets':    active_wallets_count,
+                    'total_volume_24h':  total_volume_24h,
+                    'recent_trades':     recent_trades,
+                    'top_coins':         top_coins,
+                }
+            finally:
+                session.close()
+
+        try:
+            return await asyncio.to_thread(_query)
         except Exception as e:
             logger.error(f"从缓存读取Hyperliquid数据失败: {e}")
             return _empty
-        finally:
-            if session:
-                try:
-                    session.close()
-                except Exception:
-                    pass
 
     async def _get_system_stats(self) -> Dict:
         """
@@ -670,126 +561,95 @@ class EnhancedDashboardCached:
 
     async def _get_futures_from_cache(self, symbols: List[str]) -> List[Dict]:
         """
-        从资金费率缓存表读取合约数据，并用 2 条批量 SQL 补充持仓量和多空比
-        （原来是 N×2 条循环查询，现在是固定 3 条查询）
-        价格数据由 get_dashboard_data 在 gather 完成后统一合并，不在此重复查询。
+        从资金费率缓存表读取合约数据 + 批量补充持仓量和多空比（3条SQL）。
+        全部 DB 操作放入线程池，事件循环不阻塞。
         """
-        futures_data = []
-        session = None
-
-        try:
+        def _query():
             session = self.db_service.get_session()
+            try:
+                placeholders = ','.join([f':symbol{i}' for i in range(len(symbols))])
+                params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
 
-            # ── Step 1: funding_rate_stats 缓存表（极快）──────────────────────
-            placeholders = ','.join([f':symbol{i}' for i in range(len(symbols))])
-            params = {f'symbol{i}': sym for i, sym in enumerate(symbols)}
-            results = session.execute(text(f"""
-                SELECT symbol, current_rate, current_rate_pct, trend, market_sentiment
-                FROM funding_rate_stats
-                WHERE symbol IN ({placeholders})
-            """), params).fetchall()
+                results = session.execute(text(f"""
+                    SELECT symbol, current_rate, current_rate_pct, trend, market_sentiment
+                    FROM funding_rate_stats WHERE symbol IN ({placeholders})
+                """), params).fetchall()
 
-            for row in results:
-                row_dict = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                symbol = row_dict['symbol']
-                futures_data.append({
-                    'symbol': symbol.replace('/USDT', ''),
-                    'full_symbol': symbol,
-                    'open_interest': 0,
-                    'long_short_ratio': 0,
-                    'funding_rate': float(row_dict['current_rate']) if row_dict.get('current_rate') else 0,
-                    'funding_rate_pct': float(row_dict['current_rate_pct']) if row_dict.get('current_rate_pct') else 0,
-                    'trend': row_dict.get('trend', 'neutral'),
-                    'market_sentiment': row_dict.get('market_sentiment', 'normal')
-                })
+                futures_data = []
+                for row in results:
+                    rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
+                    symbol = rd['symbol']
+                    futures_data.append({
+                        'symbol':           symbol.replace('/USDT', ''),
+                        'full_symbol':      symbol,
+                        'open_interest':    0,
+                        'long_short_ratio': 0,
+                        'funding_rate':     float(rd['current_rate']) if rd.get('current_rate') else 0,
+                        'funding_rate_pct': float(rd['current_rate_pct']) if rd.get('current_rate_pct') else 0,
+                        'trend':            rd.get('trend', 'neutral'),
+                        'market_sentiment': rd.get('market_sentiment', 'normal'),
+                    })
 
-            if not futures_data:
-                return futures_data
+                if not futures_data:
+                    return futures_data
 
-            # ── Step 2: 批量查持仓量 + 多空比（2 条 SQL 替代 N×2 循环）──────────
-            # 同时包含 BTC/USDT 和 BTCUSDT 两种格式，兼容不同数据源写入方式
-            all_syms = []
-            sym_map = {}   # 'BTCUSDT' -> 'BTC/USDT'
-            for sym in symbols:
-                all_syms.append(sym)
-                sym_map[sym] = sym
-                no_slash = sym.replace('/', '')
-                all_syms.append(no_slash)
-                sym_map[no_slash] = sym
+                all_syms, sym_map = [], {}
+                for sym in symbols:
+                    all_syms.append(sym);          sym_map[sym] = sym
+                    ns = sym.replace('/', '');      all_syms.append(ns); sym_map[ns] = sym
 
-            ph2 = ','.join([f':s{i}' for i in range(len(all_syms))])
-            p2  = {f's{i}': s for i, s in enumerate(all_syms)}
+                ph2 = ','.join([f':s{i}' for i in range(len(all_syms))])
+                p2  = {f's{i}': s for i, s in enumerate(all_syms)}
 
-            # 持仓量：每个 symbol 取最新一行
-            oi_rows = session.execute(text(f"""
-                SELECT f.symbol, f.open_interest
-                FROM futures_open_interest f
-                JOIN (
-                    SELECT symbol, MAX(timestamp) AS max_ts
-                    FROM futures_open_interest
-                    WHERE symbol IN ({ph2}) AND exchange = 'binance_futures'
-                    GROUP BY symbol
-                ) t ON f.symbol = t.symbol AND f.timestamp = t.max_ts
-                WHERE f.exchange = 'binance_futures'
-            """), p2).fetchall()
+                oi_rows = session.execute(text(f"""
+                    SELECT f.symbol, f.open_interest
+                    FROM futures_open_interest f
+                    JOIN (SELECT symbol, MAX(timestamp) AS max_ts FROM futures_open_interest
+                          WHERE symbol IN ({ph2}) AND exchange = 'binance_futures' GROUP BY symbol) t
+                    ON f.symbol = t.symbol AND f.timestamp = t.max_ts
+                    WHERE f.exchange = 'binance_futures'
+                """), p2).fetchall()
 
-            oi_map = {}
-            for row in oi_rows:
-                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                orig = sym_map.get(rd['symbol'])
-                if orig:
-                    oi_map[orig] = float(rd['open_interest']) if rd.get('open_interest') else 0
+                lsr_rows = session.execute(text(f"""
+                    SELECT f.symbol, f.long_account, f.short_account, f.long_short_ratio,
+                           f.long_position, f.short_position, f.long_short_position_ratio
+                    FROM futures_long_short_ratio f
+                    JOIN (SELECT symbol, MAX(timestamp) AS max_ts FROM futures_long_short_ratio
+                          WHERE symbol IN ({ph2}) GROUP BY symbol) t
+                    ON f.symbol = t.symbol AND f.timestamp = t.max_ts
+                """), p2).fetchall()
 
-            # 多空比：每个 symbol 取最新一行
-            lsr_rows = session.execute(text(f"""
-                SELECT f.symbol, f.long_account, f.short_account, f.long_short_ratio,
-                       f.long_position, f.short_position, f.long_short_position_ratio
-                FROM futures_long_short_ratio f
-                JOIN (
-                    SELECT symbol, MAX(timestamp) AS max_ts
-                    FROM futures_long_short_ratio
-                    WHERE symbol IN ({ph2})
-                    GROUP BY symbol
-                ) t ON f.symbol = t.symbol AND f.timestamp = t.max_ts
-            """), p2).fetchall()
+                oi_map  = {sym_map[dict(r._mapping if hasattr(r,'_mapping') else r)['symbol']]:
+                           float(dict(r._mapping if hasattr(r,'_mapping') else r).get('open_interest') or 0)
+                           for r in oi_rows if sym_map.get(dict(r._mapping if hasattr(r,'_mapping') else r)['symbol'])}
+                lsr_map = {sym_map[dict(r._mapping if hasattr(r,'_mapping') else r)['symbol']]:
+                           dict(r._mapping if hasattr(r,'_mapping') else r)
+                           for r in lsr_rows if sym_map.get(dict(r._mapping if hasattr(r,'_mapping') else r)['symbol'])}
 
-            lsr_map = {}
-            for row in lsr_rows:
-                rd = dict(row._mapping) if hasattr(row, '_mapping') else dict(row)
-                orig = sym_map.get(rd['symbol'])
-                if orig:
-                    lsr_map[orig] = rd
-
-            # ── Step 3: 将批量结果合并到 futures_data ─────────────────────────
-            for item in futures_data:
-                sym = item['full_symbol']
-                item['open_interest'] = oi_map.get(sym, 0)
-                if sym in lsr_map:
-                    rd = lsr_map[sym]
-                    item['long_short_account_ratio'] = float(rd.get('long_short_ratio') or 0)
-                    item['long_account']  = float(rd.get('long_account')  or 0)
-                    item['short_account'] = float(rd.get('short_account') or 0)
-                    if rd.get('long_short_position_ratio'):
-                        item['long_short_position_ratio'] = float(rd['long_short_position_ratio'])
-                        item['long_position']  = float(rd.get('long_position')  or 0)
-                        item['short_position'] = float(rd.get('short_position') or 0)
+                for item in futures_data:
+                    sym = item['full_symbol']
+                    item['open_interest'] = oi_map.get(sym, 0)
+                    if sym in lsr_map:
+                        rd = lsr_map[sym]
+                        item['long_short_account_ratio']  = float(rd.get('long_short_ratio') or 0)
+                        item['long_account']              = float(rd.get('long_account') or 0)
+                        item['short_account']             = float(rd.get('short_account') or 0)
+                        item['long_short_position_ratio'] = float(rd.get('long_short_position_ratio') or 0)
+                        item['long_position']             = float(rd.get('long_position') or 0)
+                        item['short_position']            = float(rd.get('short_position') or 0)
                     else:
+                        item['long_short_account_ratio']  = 0
                         item['long_short_position_ratio'] = 0
-                else:
-                    item['long_short_account_ratio']  = 0
-                    item['long_short_position_ratio'] = 0
 
-            logger.debug(f"✅ 合约数据批量读取完成: {len(futures_data)} 个币种")
-
-        except Exception as e:
-            logger.error(f"从缓存读取合约数据失败: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
-            if session:
+                return futures_data
+            finally:
                 session.close()
 
-        return futures_data
+        try:
+            return await asyncio.to_thread(_query)
+        except Exception as e:
+            logger.error(f"从缓存读取合约数据失败: {e}")
+            return []
 
 
 
