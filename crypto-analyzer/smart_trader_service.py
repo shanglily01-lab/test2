@@ -1569,10 +1569,10 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 系统已禁止{direction_name}")
             return False
 
-        # 🔥 新增验证: 检查是否在盈利Top 50交易对中（暂时注释，观察一段时间）
-        # if not self.is_symbol_in_top_performers(symbol):
-        #     logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 不在盈利Top 50交易对中")
-        #     return False
+        # 🔥 新增验证: 检查是否在盈利Top 30交易对中
+        if not self.is_symbol_in_top_performers(symbol):
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 不在盈利Top 30交易对中")
+            return False
 
         # 🔥 V5.1优化: 移除防追高/防杀跌过滤
         # 原因: Big4触底检测已提供全局保护（禁止做空2小时）
