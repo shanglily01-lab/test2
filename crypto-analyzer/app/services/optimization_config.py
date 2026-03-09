@@ -320,7 +320,6 @@ class OptimizationConfig:
         Returns:
             True=允许做多, False=禁止做多
         """
-        conn = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -336,12 +335,6 @@ class OptimizationConfig:
         except Exception as e:
             logger.warning(f"读取allow_long失败: {e}, 默认允许")
             return True
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except:
-                    pass
 
     def is_short_allowed(self) -> bool:
         """
@@ -350,7 +343,6 @@ class OptimizationConfig:
         Returns:
             True=允许做空, False=禁止做空
         """
-        conn = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -366,12 +358,6 @@ class OptimizationConfig:
         except Exception as e:
             logger.warning(f"读取allow_short失败: {e}, 默认允许")
             return True
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except:
-                    pass
 
     def is_direction_allowed(self, direction: str) -> bool:
         """
