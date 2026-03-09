@@ -27,6 +27,29 @@
             /* 实盘特有：金色主题色 */
             --live-gold: #FFD700; --live-gold-bg: rgba(255, 215, 0, 0.1);
         }
+        /* 账号栏 */
+        .account-bar { display: flex; align-items: center; gap: var(--spacing-md); flex-wrap: wrap; }
+        .account-bar .user-chip { display: flex; align-items: center; gap: 6px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-full); padding: 6px 14px; font-size: 13px; color: var(--text-secondary); }
+        .account-bar .user-chip .user-icon { color: var(--live-gold); }
+        .account-select { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); padding: 6px 12px; font-size: 13px; cursor: pointer; }
+        .account-select:focus { outline: none; border-color: var(--live-gold); }
+        /* 添加账号弹窗 */
+        .account-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .account-modal { background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-xl); padding: var(--spacing-2xl); width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+        .account-modal-title { font-size: 18px; font-weight: 700; color: var(--live-gold); margin-bottom: var(--spacing-xl); display: flex; align-items: center; gap: 8px; }
+        .tab-buttons { display: flex; gap: 4px; background: var(--bg-tertiary); border-radius: var(--radius-md); padding: 4px; margin-bottom: var(--spacing-xl); }
+        .tab-btn { flex: 1; padding: 8px; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; background: transparent; color: var(--text-secondary); transition: all var(--transition-base); }
+        .tab-btn.active { background: var(--live-gold); color: #000; }
+        .step-item { display: flex; gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
+        .step-num { width: 32px; height: 32px; border-radius: 50%; background: var(--live-gold); color: #000; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .step-content { flex: 1; }
+        .step-title { font-weight: 600; color: var(--text-primary); margin-bottom: 6px; font-size: 14px; }
+        .step-desc { color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+        .step-desc a { color: var(--live-gold); }
+        .step-tip { background: var(--live-gold-bg); border: 1px solid rgba(255,215,0,0.3); border-radius: var(--radius-md); padding: var(--spacing-md); margin-top: 8px; font-size: 12px; color: var(--warning-yellow); }
+        .no-account-hint { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
+        .no-account-hint .hint-icon { font-size: 48px; margin-bottom: var(--spacing-lg); }
+        .no-account-hint .hint-text { margin-bottom: var(--spacing-xl); }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
         .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
@@ -272,6 +295,22 @@
                 </div>
             </div>
             <div class="header-actions">
+                <!-- 账号栏 -->
+                <div class="account-bar">
+                    <div class="user-chip">
+                        <i class="bi bi-person-circle user-icon"></i>
+                        <span id="userNameDisplay">加载中...</span>
+                    </div>
+                    <select class="account-select" id="accountSelect" onchange="onAccountChange()" title="选择币安账号">
+                        <option value="0">自动选取账号</option>
+                    </select>
+                    <button class="btn btn-sm btn-secondary" onclick="openAddAccountModal()" title="添加币安账号">
+                        <i class="bi bi-plus-circle"></i> 添加账号
+                    </button>
+                    <button class="btn btn-sm btn-ghost" onclick="logout()" title="退出登录">
+                        <i class="bi bi-box-arrow-right"></i>
+                    </button>
+                </div>
                 <button class="btn btn-secondary" onclick="testConnection()">
                     <i class="bi bi-wifi"></i> 测试连接
                 </button>
@@ -556,6 +595,100 @@
         </div>
     </div>
 
+    <!-- 添加账号弹窗 -->
+    <div id="addAccountModal" class="account-modal-overlay" style="display:none;">
+        <div class="account-modal">
+            <div class="account-modal-title">
+                <i class="bi bi-key"></i> 添加币安账号
+            </div>
+            <div class="tab-buttons">
+                <button class="tab-btn active" id="tabGuideBtn" onclick="showAccountTab('guide')">
+                    <i class="bi bi-info-circle"></i> 设置指引
+                </button>
+                <button class="tab-btn" id="tabFormBtn" onclick="showAccountTab('form')">
+                    <i class="bi bi-pencil-square"></i> 填写信息
+                </button>
+            </div>
+
+            <!-- 设置指引 Tab -->
+            <div id="tabGuide">
+                <div class="step-item">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <div class="step-title">登录币安，进入 API 管理</div>
+                        <div class="step-desc">
+                            登录 <a href="https://www.binance.com" target="_blank">binance.com</a> → 右上角头像 → <strong>账户中心</strong> → 左侧菜单 <strong>API 管理</strong> → 点击「创建 API」
+                            <div class="step-tip">💡 如果您使用币安 APP，可以在「安全中心 → API 管理」中找到此功能</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-item">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <div class="step-title">设置权限</div>
+                        <div class="step-desc">
+                            创建 API 后，在权限设置页面：
+                            <ul style="margin: 8px 0 0 16px; line-height: 2;">
+                                <li>✅ 勾选「<strong>启用读取</strong>」（必须）</li>
+                                <li>✅ 勾选「<strong>启用合约</strong>」（开仓平仓必须）</li>
+                                <li>❌ <strong>不要勾选</strong>「启用提现」（安全风险）</li>
+                            </ul>
+                            <div class="step-tip">⚠️ 为安全起见，建议在「IP 访问限制」中填写本服务器的 IP 地址</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step-item">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <div class="step-title">复制 API Key 和 Secret Key</div>
+                        <div class="step-desc">
+                            保存 API 后，系统会显示 <strong>API Key</strong> 和 <strong>Secret Key</strong>。<br>
+                            Secret Key 只显示一次，请立即复制保存。<br>
+                            然后点击右侧「填写信息」标签，将两个 Key 粘贴进去。
+                            <div class="step-tip">🔒 您的 API Key 在我们系统中经过 AES 加密存储，不会以明文保存</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align: right; margin-top: 8px;">
+                    <button class="btn btn-primary btn-sm" onclick="showAccountTab('form')">
+                        下一步：填写信息 <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 填写信息 Tab -->
+            <div id="tabForm" style="display:none;">
+                <div class="form-group">
+                    <label class="form-label">账户名称 <span style="color:var(--danger-red)">*</span></label>
+                    <input type="text" class="form-control" id="newAccountName" placeholder="例如：主账户、合约专用" maxlength="50">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">API Key <span style="color:var(--danger-red)">*</span></label>
+                    <input type="text" class="form-control" id="newApiKey" placeholder="粘贴您的 API Key" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Secret Key <span style="color:var(--danger-red)">*</span></label>
+                    <div style="position:relative;">
+                        <input type="password" class="form-control" id="newApiSecret" placeholder="粘贴您的 Secret Key" autocomplete="new-password" style="padding-right: 44px;">
+                        <button type="button" onclick="toggleSecretVisibility()" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:16px;">
+                            <i class="bi bi-eye" id="secretEyeIcon"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="testConnectionResult" style="margin-bottom: var(--spacing-lg); display:none;"></div>
+                <div style="display:flex; gap: var(--spacing-md); justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="closeAddAccountModal()">取消</button>
+                    <button class="btn btn-secondary" onclick="testNewAccountConnection()" id="testConnBtn">
+                        <i class="bi bi-wifi"></i> 测试连接
+                    </button>
+                    <button class="btn btn-primary" onclick="saveNewAccount()" id="saveAccountBtn">
+                        <i class="bi bi-check2-circle"></i> 保存账号
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // API基础路径
         const API_BASE = '/api/live-trading';
@@ -563,8 +696,245 @@
         // 当前价格
         let currentPrice = 0;
 
+        // ==================== 认证与账号管理 ====================
+
+        function getToken() { return localStorage.getItem('access_token'); }
+        function getApiKeyId() { return parseInt(localStorage.getItem('active_api_key_id') || '0'); }
+
+        // 带 JWT 认证的 fetch 封装
+        async function authFetch(url, options = {}) {
+            const token = getToken();
+            if (!token) {
+                window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                throw new Error('未登录');
+            }
+            const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...(options.headers || {}) };
+            const resp = await fetch(url, { ...options, headers });
+            if (resp.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                throw new Error('登录已过期');
+            }
+            return resp;
+        }
+
+        // 在 URL 中附加 api_key_id 参数
+        function withApiKey(url) {
+            const id = getApiKeyId();
+            const sep = url.includes('?') ? '&' : '?';
+            return id > 0 ? `${url}${sep}api_key_id=${id}` : url;
+        }
+
+        function logout() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('active_api_key_id');
+            window.location.href = '/login';
+        }
+
+        function onAccountChange() {
+            const val = document.getElementById('accountSelect').value;
+            localStorage.setItem('active_api_key_id', val || '0');
+            // 切换后刷新所有数据
+            Promise.all([testConnection(), loadAccountBalance(), loadPositions(), loadOrders()]);
+        }
+
+        async function loadMyAccounts() {
+            try {
+                const resp = await authFetch(`${API_BASE}/my-accounts`);
+                const data = await resp.json();
+                if (!data.success) return;
+
+                // 显示用户名
+                document.getElementById('userNameDisplay').textContent = data.username || '用户';
+
+                // 填充账号下拉框
+                const sel = document.getElementById('accountSelect');
+                const savedId = getApiKeyId();
+                sel.innerHTML = '<option value="0">自动选取</option>';
+                (data.accounts || []).forEach(acc => {
+                    const opt = document.createElement('option');
+                    opt.value = acc.id;
+                    opt.textContent = acc.account_name + (acc.is_testnet ? ' [测试网]' : '');
+                    if (acc.id == savedId) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+
+                // 如果没有账号，提示添加
+                if (data.accounts.length === 0) {
+                    showNoAccountHint();
+                }
+            } catch (e) {
+                console.error('加载账号列表失败:', e);
+            }
+        }
+
+        function showNoAccountHint() {
+            const warn = document.querySelector('.live-warning-banner');
+            if (warn && !document.getElementById('noAccountHint')) {
+                const hint = document.createElement('div');
+                hint.id = 'noAccountHint';
+                hint.className = 'no-account-hint card';
+                hint.innerHTML = `
+                    <div class="hint-icon">🔑</div>
+                    <div class="hint-text" style="font-size:15px; color: var(--warning-yellow);">
+                        您还没有配置币安账号，无法使用实盘交易功能
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddAccountModal()">
+                        <i class="bi bi-plus-circle"></i> 立即添加币安账号
+                    </button>
+                `;
+                warn.after(hint);
+            }
+        }
+
+        // ==================== 添加账号弹窗 ====================
+
+        function openAddAccountModal() {
+            document.getElementById('addAccountModal').style.display = 'flex';
+            showAccountTab('guide');
+        }
+
+        function closeAddAccountModal() {
+            document.getElementById('addAccountModal').style.display = 'none';
+            document.getElementById('newAccountName').value = '';
+            document.getElementById('newApiKey').value = '';
+            document.getElementById('newApiSecret').value = '';
+            document.getElementById('testConnectionResult').style.display = 'none';
+        }
+
+        function showAccountTab(tab) {
+            document.getElementById('tabGuide').style.display = tab === 'guide' ? 'block' : 'none';
+            document.getElementById('tabForm').style.display  = tab === 'form'  ? 'block' : 'none';
+            document.getElementById('tabGuideBtn').className = 'tab-btn' + (tab === 'guide' ? ' active' : '');
+            document.getElementById('tabFormBtn').className  = 'tab-btn' + (tab === 'form'  ? ' active' : '');
+        }
+
+        function toggleSecretVisibility() {
+            const inp = document.getElementById('newApiSecret');
+            const icon = document.getElementById('secretEyeIcon');
+            if (inp.type === 'password') {
+                inp.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                inp.type = 'password';
+                icon.className = 'bi bi-eye';
+            }
+        }
+
+        async function testNewAccountConnection() {
+            const apiKey    = document.getElementById('newApiKey').value.trim();
+            const apiSecret = document.getElementById('newApiSecret').value.trim();
+            const resultDiv = document.getElementById('testConnectionResult');
+
+            if (!apiKey || !apiSecret) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<div class="badge badge-danger" style="padding:8px 12px;">请先填写 API Key 和 Secret Key</div>';
+                return;
+            }
+
+            const btn = document.getElementById('testConnBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 验证中...';
+            resultDiv.style.display = 'none';
+
+            try {
+                const token = getToken();
+                const resp = await fetch('/api/api-keys/verify-raw', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ exchange: 'binance', api_key: apiKey, api_secret: apiSecret })
+                });
+                const data = await resp.json();
+                resultDiv.style.display = 'block';
+                if (data.success) {
+                    const bal = data.balance;
+                    resultDiv.innerHTML = `<div style="background:var(--success-green-bg);color:var(--success-green);border-radius:8px;padding:10px 14px;">
+                        ✅ 连接成功！余额: ${bal ? (parseFloat(bal.balance||0).toFixed(2) + ' USDT') : '获取中...'}
+                    </div>`;
+                } else {
+                    resultDiv.innerHTML = `<div style="background:var(--danger-red-bg);color:var(--danger-red);border-radius:8px;padding:10px 14px;">
+                        ❌ 验证失败: ${data.error || data.detail || '请检查 API Key 是否正确及权限是否足够'}
+                    </div>`;
+                }
+            } catch (e) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = `<div style="background:var(--danger-red-bg);color:var(--danger-red);border-radius:8px;padding:10px 14px;">❌ 网络错误: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-wifi"></i> 测试连接';
+            }
+        }
+
+        async function saveNewAccount() {
+            const accountName = document.getElementById('newAccountName').value.trim();
+            const apiKey      = document.getElementById('newApiKey').value.trim();
+            const apiSecret   = document.getElementById('newApiSecret').value.trim();
+
+            if (!accountName) { showToast('请填写账户名称', 'error'); return; }
+            if (!apiKey)      { showToast('请填写 API Key', 'error'); return; }
+            if (!apiSecret)   { showToast('请填写 Secret Key', 'error'); return; }
+
+            const btn = document.getElementById('saveAccountBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 保存中...';
+
+            try {
+                const token = getToken();
+                const resp = await fetch('/api/api-keys/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({
+                        exchange: 'binance',
+                        account_name: accountName,
+                        api_key: apiKey,
+                        api_secret: apiSecret,
+                        permissions: 'futures',
+                        is_testnet: false,
+                        max_position_value: 10000,
+                        max_daily_loss: 500,
+                        max_leverage: 20
+                    })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showToast(`账号「${accountName}」已保存！`, 'success');
+                    closeAddAccountModal();
+                    await loadMyAccounts();
+                    // 自动选中新账号
+                    if (data.api_key_id) {
+                        localStorage.setItem('active_api_key_id', data.api_key_id);
+                        document.getElementById('accountSelect').value = data.api_key_id;
+                    }
+                    // 移除无账号提示
+                    const hint = document.getElementById('noAccountHint');
+                    if (hint) hint.remove();
+                    // 刷新数据
+                    setTimeout(() => Promise.all([testConnection(), loadAccountBalance(), loadPositions(), loadOrders()]), 500);
+                } else {
+                    showToast('保存失败: ' + (data.detail || data.message || JSON.stringify(data)), 'error');
+                }
+            } catch (e) {
+                showToast('保存请求失败: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check2-circle"></i> 保存账号';
+            }
+        }
+
+        // ==================== 初始化 ====================
+
         // 初始化
         document.addEventListener('DOMContentLoaded', async function() {
+            // 登录检查
+            if (!getToken()) {
+                window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                return;
+            }
+
+            // 加载账号列表
+            await loadMyAccounts();
+
             // 并行加载所有数据，加速页面初始化
             await Promise.all([
                 testConnection(),
@@ -589,7 +959,7 @@
             statusText.textContent = '检测中...';
 
             try {
-                const response = await fetch(`${API_BASE}/test-connection`);
+                const response = await authFetch(withApiKey(`${API_BASE}/test-connection`));
                 const data = await response.json();
 
                 if (data.success) {
@@ -620,7 +990,7 @@
         // 加载账户余额
         async function loadAccountBalance() {
             try {
-                const response = await fetch(`${API_BASE}/account/balance`);
+                const response = await authFetch(withApiKey(`${API_BASE}/account/balance`));
                 const data = await response.json();
 
                 document.getElementById('accountLoading').style.display = 'none';
@@ -654,7 +1024,7 @@
         // 加载持仓
         async function loadPositions() {
             try {
-                const response = await fetch(`${API_BASE}/positions`);
+                const response = await authFetch(withApiKey(`${API_BASE}/positions`));
                 const data = await response.json();
 
                 document.getElementById('positionsLoading').style.display = 'none';
@@ -710,7 +1080,7 @@
         // 加载挂单
         async function loadOrders() {
             try {
-                const response = await fetch(`${API_BASE}/orders`);
+                const response = await authFetch(withApiKey(`${API_BASE}/orders`));
                 const data = await response.json();
 
                 document.getElementById('ordersLoading').style.display = 'none';
@@ -899,10 +1269,10 @@
             if (!confirmed) return;
 
             try {
-                const response = await fetch(`${API_BASE}/open`, {
+                const response = await authFetch(`${API_BASE}/open`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        api_key_id: getApiKeyId(),
                         account_id: 1,
                         symbol: symbol,
                         position_side: positionSide,
@@ -956,10 +1326,10 @@
             showToast('正在执行平仓...', 'info');
 
             try {
-                const response = await fetch(`${API_BASE}/close-by-symbol`, {
+                const response = await authFetch(`${API_BASE}/close-by-symbol`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        api_key_id: getApiKeyId(),
                         symbol: symbol,
                         position_side: positionSide,
                         reason: 'manual'
@@ -995,10 +1365,9 @@
             if (!confirmed) return;
 
             try {
-                const response = await fetch(`${API_BASE}/order`, {
+                const response = await authFetch(`${API_BASE}/order`, {
                     method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ symbol, order_id: orderId })
+                    body: JSON.stringify({ api_key_id: getApiKeyId(), symbol, order_id: orderId })
                 });
 
                 const data = await response.json();
@@ -1031,7 +1400,7 @@
             if (!confirmed) return;
 
             try {
-                const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(symbol)}`, {
+                const response = await authFetch(withApiKey(`${API_BASE}/orders/${encodeURIComponent(symbol)}`), {
                     method: 'DELETE'
                 });
 

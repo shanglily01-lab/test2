@@ -310,6 +310,46 @@ class APIKeyService:
             logger.error(f"删除API密钥失败: {e}")
             return {'success': False, 'error': str(e)}
 
+    def get_api_key_by_id(self, user_id: int, api_key_id: int) -> Optional[Dict]:
+        """
+        通过ID获取API密钥（解密后），同时验证归属关系
+
+        Args:
+            user_id: 用户ID（用于权限验证）
+            api_key_id: user_api_keys.id
+
+        Returns:
+            解密后的密钥字典，或 None
+        """
+        try:
+            conn = self._get_connection()
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """SELECT * FROM user_api_keys
+                        WHERE id = %s AND user_id = %s AND status = 'active'""",
+                        (api_key_id, user_id)
+                    )
+                    row = cursor.fetchone()
+                    if not row:
+                        return None
+                    return {
+                        'id': row['id'],
+                        'user_id': row['user_id'],
+                        'exchange': row['exchange'],
+                        'account_name': row['account_name'],
+                        'api_key': self._decrypt(row['api_key']),
+                        'api_secret': self._decrypt(row['api_secret']),
+                        'permissions': row['permissions'],
+                        'is_testnet': bool(row['is_testnet']),
+                        'status': row['status']
+                    }
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.error(f"通过ID获取API密钥失败: {e}")
+            return None
+
     def update_last_used(self, api_key_id: int):
         """更新最后使用时间"""
         try:

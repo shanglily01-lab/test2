@@ -161,6 +161,48 @@ async def verify_api_key(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class VerifyRawRequest(BaseModel):
+    """直接验证原始 API 密钥（用于保存前测试）"""
+    exchange: str = Field(default='binance', description='交易所')
+    api_key: str = Field(..., min_length=10, description='API Key')
+    api_secret: str = Field(..., min_length=10, description='API Secret')
+
+
+@router.post("/verify-raw")
+async def verify_api_key_raw(
+    request: VerifyRawRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    验证原始 API Key / Secret 是否有效（不需要先保存，用于填写后即时测试）
+    """
+    try:
+        if request.exchange == 'binance':
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            from app.api.live_trading_api import get_db_config
+            temp_engine = BinanceFuturesEngine(
+                get_db_config(),
+                api_key=request.api_key,
+                api_secret=request.api_secret
+            )
+            balance = temp_engine.get_account_balance()
+            if balance and balance.get('success'):
+                return {
+                    'success': True,
+                    'balance': {
+                        'balance': float(balance.get('balance', 0)),
+                        'available': float(balance.get('available', 0))
+                    }
+                }
+            else:
+                return {'success': False, 'error': balance.get('error', '无法获取账户信息，请检查 API 权限')}
+        else:
+            return {'success': False, 'error': f'暂不支持 {request.exchange}'}
+    except Exception as e:
+        logger.error(f"验证原始API密钥失败: {e}")
+        return {'success': False, 'error': str(e)}
+
+
 @router.get("/has-key")
 async def has_api_key(
     exchange: str = 'binance',
