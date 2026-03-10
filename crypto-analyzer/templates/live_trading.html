@@ -596,10 +596,11 @@
     </div>
 
     <!-- 添加账号弹窗 -->
-    <div id="addAccountModal" class="account-modal-overlay" style="display:none;">
+    <div id="addAccountModal" class="account-modal-overlay" style="display:none;" onclick="if(event.target===this)closeAddAccountModal()">
         <div class="account-modal">
-            <div class="account-modal-title">
-                <i class="bi bi-key"></i> 添加币安账号
+            <div class="account-modal-title" style="justify-content: space-between;">
+                <span><i class="bi bi-key"></i> 添加币安账号</span>
+                <button onclick="closeAddAccountModal()" style="background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;line-height:1;" title="关闭">&times;</button>
             </div>
             <div class="tab-buttons">
                 <button class="tab-btn active" id="tabGuideBtn" onclick="showAccountTab('guide')">
@@ -633,7 +634,7 @@
                                 <li>✅ 勾选「<strong>启用合约</strong>」（开仓平仓必须）</li>
                                 <li>❌ <strong>不要勾选</strong>「启用提现」（安全风险）</li>
                             </ul>
-                            <div class="step-tip">⚠️ 为安全起见，建议在「IP 访问限制」中填写本服务器的 IP 地址</div>
+                            <div class="step-tip">⚠️ 为安全起见，建议在「IP 访问限制」中填写本服务器的 IP 地址：<strong id="serverIpHint" style="color:var(--live-gold);"></strong></div>
                         </div>
                     </div>
                 </div>
@@ -675,6 +676,16 @@
                         </button>
                     </div>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">服务器 IP（填入币安 IP 白名单）</label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <input type="text" class="form-control" id="serverIpField" readonly style="font-family:monospace;background:var(--bg-tertiary);color:var(--live-gold);">
+                        <button type="button" onclick="copyServerIp()" class="btn btn-secondary btn-sm" style="white-space:nowrap;">
+                            <i class="bi bi-clipboard"></i> 复制
+                        </button>
+                    </div>
+                    <div class="form-hint">在币安 API 管理页面的「IP 访问限制」中粘贴此地址</div>
+                </div>
                 <div id="testConnectionResult" style="margin-bottom: var(--spacing-lg); display:none;"></div>
                 <div style="display:flex; gap: var(--spacing-md); justify-content: flex-end;">
                     <button class="btn btn-secondary" onclick="closeAddAccountModal()">取消</button>
@@ -701,19 +712,46 @@
         function getToken() { return localStorage.getItem('access_token'); }
         function getApiKeyId() { return parseInt(localStorage.getItem('active_api_key_id') || '0'); }
 
-        // 带 JWT 认证的 fetch 封装
+        // 自动刷新 access_token
+        async function tryRefreshToken() {
+            const refreshToken = localStorage.getItem('refresh_token');
+            if (!refreshToken) return false;
+            try {
+                const res = await fetch('/api/auth/refresh', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refresh_token: refreshToken })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.access_token) {
+                        localStorage.setItem('access_token', data.access_token);
+                        return true;
+                    }
+                }
+            } catch (e) {}
+            return false;
+        }
+
+        // 带 JWT 认证的 fetch 封装（401时自动refresh）
         async function authFetch(url, options = {}) {
             const token = getToken();
             if (!token) {
                 window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
                 throw new Error('未登录');
             }
-            const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...(options.headers || {}) };
-            const resp = await fetch(url, { ...options, headers });
+            const makeHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}`, ...(options.headers || {}) });
+            let resp = await fetch(url, { ...options, headers: makeHeaders() });
             if (resp.status === 401) {
-                localStorage.removeItem('access_token');
-                window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
-                throw new Error('登录已过期');
+                // 尝试用 refresh_token 换新 access_token
+                const refreshed = await tryRefreshToken();
+                if (refreshed) {
+                    resp = await fetch(url, { ...options, headers: makeHeaders() });
+                } else {
+                    localStorage.removeItem('access_token');
+                    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                    throw new Error('登录已过期');
+                }
             }
             return resp;
         }
@@ -790,7 +828,21 @@
 
         // ==================== 添加账号弹窗 ====================
 
+        function copyServerIp() {
+            const ip = document.getElementById('serverIpField').value;
+            navigator.clipboard.writeText(ip).then(() => {
+                const btn = event.target.closest('button');
+                const orig = btn.innerHTML;
+                btn.innerHTML = '<i class="bi bi-check2"></i> 已复制';
+                setTimeout(() => btn.innerHTML = orig, 2000);
+            });
+        }
+
         function openAddAccountModal() {
+            // 填充服务器 IP（从当前访问地址取 hostname/IP）
+            const serverIp = window.location.hostname;
+            document.getElementById('serverIpField').value = serverIp;
+            document.getElementById('serverIpHint').textContent = serverIp;
             document.getElementById('addAccountModal').style.display = 'flex';
             showAccountTab('guide');
         }

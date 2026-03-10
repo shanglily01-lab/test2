@@ -31,7 +31,7 @@ class AuthService:
         self.db_config = db_config
         self.secret_key = jwt_config.get('secret_key', 'your-secret-key-change-in-production')
         self.algorithm = jwt_config.get('algorithm', 'HS256')
-        self.access_token_expire_minutes = jwt_config.get('access_token_expire_minutes', 15)
+        self.access_token_expire_minutes = jwt_config.get('access_token_expire_minutes', 1440)  # 默认24小时
         self.refresh_token_expire_days = jwt_config.get('refresh_token_expire_days', 30)
 
     def _get_connection(self):
