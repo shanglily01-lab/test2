@@ -33,4 +33,6 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # 将 sub (string) 转为 user_id (int)，方便调用方直接使用
+    payload['user_id'] = int(payload['sub'])
     return payload
