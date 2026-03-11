@@ -50,20 +50,10 @@ def get_live_engine():
     return _live_engine
 
 
-def _get_system_engine():
-    """获取系统默认引擎（使用 config/env 中的 API Key，无需 user_api_keys）"""
-    cache_key = ('system', 0)
-    if cache_key not in _engine_cache:
-        from app.trading.binance_futures_engine import BinanceFuturesEngine
-        _engine_cache[cache_key] = BinanceFuturesEngine(get_db_config())
-        logger.info("[实盘] 系统默认引擎已创建（使用 config/env API Key）")
-    return _engine_cache[cache_key]
-
-
 def get_user_engine(user_id: int, api_key_id: int):
     """
     根据用户ID和API密钥ID获取（或创建）对应的交易引擎实例。
-    若用户未配置 user_api_keys，自动 fallback 到系统 API Key（config/env）。
+    用户必须先在实盘页面添加自己的币安 API Key 才能使用。
 
     Args:
         user_id: 当前登录用户ID
@@ -75,19 +65,16 @@ def get_user_engine(user_id: int, api_key_id: int):
     from app.trading.binance_futures_engine import BinanceFuturesEngine
 
     service = get_api_key_service()
+    if not service:
+        raise HTTPException(status_code=500, detail="API密钥服务未初始化")
 
     if api_key_id == 0:
-        # 优先查用户自己配置的账号
-        keys = service.get_api_key(user_id, exchange='binance') if service else None
+        keys = service.get_api_key(user_id, exchange='binance')
         if not keys:
-            # 没有用户账号 → 使用系统 API Key（admin 模式）
-            logger.info(f"[实盘] 用户 {user_id} 无自定义账号，使用系统 API Key")
-            return _get_system_engine()
+            raise HTTPException(status_code=400, detail="未配置币安账号，请先在实盘页面添加币安 API Key")
         api_key_id = keys['id']
         key_info = keys
     else:
-        if not service:
-            raise HTTPException(status_code=500, detail="API密钥服务未初始化")
         key_info = service.get_api_key_by_id(user_id, api_key_id)
         if not key_info:
             raise HTTPException(status_code=400, detail="API密钥不存在或无权限访问")
@@ -101,10 +88,8 @@ def get_user_engine(user_id: int, api_key_id: int):
         )
         logger.info(f"[实盘] 用户 {user_id} 账号 '{key_info['account_name']}' 引擎已创建")
 
-    # 更新最后使用时间
     try:
-        if service:
-            service.update_last_used(api_key_id)
+        service.update_last_used(api_key_id)
     except Exception:
         pass
 
@@ -174,19 +159,6 @@ async def get_my_accounts(current_user: dict = Depends(get_current_user)):
         if service:
             keys = service.get_user_api_keys(current_user['user_id'])
             binance_keys = [k for k in keys if k.get('exchange', '').lower() == 'binance']
-
-        # 若用户没有配置任何账号，补一个系统默认账号占位
-        if not binance_keys:
-            binance_keys = [{
-                'id': 0,
-                'exchange': 'binance',
-                'account_name': '系统默认账号',
-                'permissions': 'spot,futures',
-                'is_testnet': False,
-                'status': 'active',
-                'last_used_at': None,
-                'created_at': None
-            }]
 
         return {
             'success': True,
