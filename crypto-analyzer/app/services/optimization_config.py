@@ -315,51 +315,63 @@ class OptimizationConfig:
     # 交易方向控制
     # ============================================================
 
+    def _read_system_setting(self, key: str) -> Optional[str]:
+        """
+        读取系统配置项——每次使用独立的新连接，避免共享连接缓存/旧事务快照污染。
+
+        Returns:
+            setting_value 字符串，未找到时返回 None
+        """
+        conn = None
+        try:
+            conn = pymysql.connect(
+                **self.db_config,
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True,
+            )
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT setting_value FROM system_settings WHERE setting_key = %s",
+                    (key,)
+                )
+                row = cur.fetchone()
+            return row['setting_value'] if row else None
+        except Exception as e:
+            logger.warning(f"读取系统配置 {key} 失败: {e}")
+            return None
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
     def is_long_allowed(self) -> bool:
         """
-        检查是否允许做多（直接查数据库，实时生效）
+        检查是否允许做多（独立连接查数据库，实时生效）
 
         Returns:
             True=允许做多, False=禁止做多
         """
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT setting_value FROM system_settings
-                WHERE setting_key = 'allow_long'
-            """)
-            result = cursor.fetchone()
-            cursor.close()
-            if result:
-                return result['setting_value'] in ('1', '1.0', 'true', 'True')
-            return True  # 默认允许
-        except Exception as e:
-            logger.warning(f"读取allow_long失败: {e}, 默认允许")
+        val = self._read_system_setting('allow_long')
+        if val is None:
+            logger.warning("读取allow_long失败或未配置, 默认允许")
             return True
+        return val in ('1', '1.0', 'true', 'True')
 
     def is_short_allowed(self) -> bool:
         """
-        检查是否允许做空（直接查数据库，实时生效）
+        检查是否允许做空（独立连接查数据库，实时生效）
 
         Returns:
             True=允许做空, False=禁止做空
         """
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT setting_value FROM system_settings
-                WHERE setting_key = 'allow_short'
-            """)
-            result = cursor.fetchone()
-            cursor.close()
-            if result:
-                return result['setting_value'] in ('1', '1.0', 'true', 'True')
-            return True  # 默认允许
-        except Exception as e:
-            logger.warning(f"读取allow_short失败: {e}, 默认允许")
+        val = self._read_system_setting('allow_short')
+        if val is None:
+            logger.warning("读取allow_short失败或未配置, 默认允许")
             return True
+        return val in ('1', '1.0', 'true', 'True')
 
     def is_direction_allowed(self, direction: str) -> bool:
         """
