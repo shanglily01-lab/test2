@@ -368,18 +368,25 @@ class KlinePullbackEntryExecutor:
             开仓结果
         """
         try:
-            # 开仓前最后检查交易开关（防止主循环已禁止但执行器任务仍在运行）
+            # 开仓前最后检查交易开关 + 方向开关（防止主循环已禁止但执行器任务仍在运行）
             try:
-                conn_chk = pymysql.connect(**self.db_config)
+                conn_chk = pymysql.connect(**self.db_config, autocommit=True)
                 cur_chk = conn_chk.cursor()
+                direction_key = 'allow_long' if direction == 'LONG' else 'allow_short'
                 cur_chk.execute(
-                    "SELECT setting_value FROM system_settings WHERE setting_key='u_futures_trading_enabled'"
+                    "SELECT setting_key, setting_value FROM system_settings "
+                    "WHERE setting_key IN ('u_futures_trading_enabled', %s)",
+                    (direction_key,)
                 )
-                row = cur_chk.fetchone()
+                rows = {r[0]: r[1] for r in cur_chk.fetchall()}
                 conn_chk.close()
-                if row and str(row[0]) not in ('1', 'true', 'True', 'yes'):
+                if rows.get('u_futures_trading_enabled', '1') not in ('1', 'true', 'True', 'yes'):
                     logger.warning(f"[TRADING-DISABLED] {symbol} 回调确认触发但交易已禁止，放弃开仓")
                     return {'success': False, 'reason': '交易开关已关闭'}
+                direction_name = '做多' if direction == 'LONG' else '做空'
+                if rows.get(direction_key, '1') not in ('1', 'true', 'True', 'yes'):
+                    logger.warning(f"[DIRECTION-DISABLED] {symbol} {direction} 回调确认触发但系统已禁止{direction_name}，放弃开仓")
+                    return {'success': False, 'reason': f'系统已禁止{direction_name}'}
             except Exception as chk_err:
                 logger.warning(f"[TRADING-DISABLED] 检查交易开关失败: {chk_err}，默认禁止开单")
                 return {'success': False, 'reason': f'检查交易开关异常: {chk_err}'}

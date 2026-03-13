@@ -38,7 +38,8 @@ class OptimizationConfig:
             self.connection = pymysql.connect(
                 **self.db_config,
                 charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True,
             )
         else:
             try:
@@ -47,7 +48,8 @@ class OptimizationConfig:
                 self.connection = pymysql.connect(
                     **self.db_config,
                     charset='utf8mb4',
-                    cursorclass=pymysql.cursors.DictCursor
+                    cursorclass=pymysql.cursors.DictCursor,
+                    autocommit=True,
                 )
         return self.connection
 
