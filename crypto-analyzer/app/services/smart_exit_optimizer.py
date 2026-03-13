@@ -1442,10 +1442,11 @@ class SmartExitOptimizer:
             # ============================================================
             # === 优先级7: 3小时绝对时间强制平仓 ===
             # ============================================================
-            max_hold_minutes = position.get('max_hold_minutes') or 180  # 默认3小时强制平仓
+            max_hold_minutes = position.get('max_hold_minutes') or 180
             if hold_minutes >= max_hold_minutes:
-                logger.warning(f"⏰ 持仓{position_id} {symbol}已持有{hold_hours:.1f}小时，触发3小时强制平仓")
-                return ('持仓时长到期(3小时强制平仓)', 1.0)
+                hold_hours_cfg = max_hold_minutes / 60
+                logger.warning(f"⏰ 持仓{position_id} {symbol}已持有{hold_hours:.1f}小时，触发{hold_hours_cfg:.0f}小时强制平仓")
+                return (f'持仓时长到期({hold_hours_cfg:.0f}小时强制平仓)', 1.0)
 
             # ============================================================
             # === 优先级8: K线强度衰减检查（智能平仓） ===

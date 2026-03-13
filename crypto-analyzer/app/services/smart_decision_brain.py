@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 import pymysql
 from app.services.breakout_system import BreakoutSystem
+from app.services.optimization_config import OptimizationConfig
 
 
 class SmartDecisionBrain:
@@ -27,6 +28,7 @@ class SmartDecisionBrain:
         self.db_config = db_config
         self.connection = None
         self.exchange = exchange
+        self.opt_config = OptimizationConfig(db_config)
 
         # 初始化破位系统
         if exchange:
@@ -492,8 +494,10 @@ class SmartDecisionBrain:
             }
 
             if decision:
-                # 统一3小时持仓 - 边际收益递减，避免利润回吐
-                max_hold_minutes = 180  # 3小时统一持仓时间
+                # 从系统配置读取持仓时间（实时生效，无需重启）
+                _mh_val = self.opt_config._read_system_setting('max_hold_hours')
+                _mh_hours = max(3, min(8, int(_mh_val or 3)))
+                max_hold_minutes = _mh_hours * 60
 
                 # 添加交易参数
                 result['trade_params'] = {
