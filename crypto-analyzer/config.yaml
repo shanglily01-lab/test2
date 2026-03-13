@@ -326,6 +326,7 @@ signals:
       fixed_amount: 400
       mode: fixed
       percent: 1
+  max_hold_hours: 3  # 最大持仓时间（小时），范围 3~8
   risk:
     live_max_position_usdt: 400
     max_position: 0.5

@@ -935,6 +935,10 @@ class SmartTraderService:
         with open('config.yaml', 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
             self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
+            # 最大持仓时间（分钟），从 config.yaml signals.max_hold_hours 读取，默认3小时，范围3~8h
+            raw_hours = config.get('signals', {}).get('max_hold_hours', 3)
+            self.max_hold_minutes = max(180, min(480, int(raw_hours) * 60))
+            logger.info(f"⏱️ 最大持仓时间: {self.max_hold_minutes}分钟 ({self.max_hold_minutes//60}小时)")
 
             # 🔥 从数据库读取系统配置（优先级高于config.yaml）
             from app.services.system_settings_loader import get_big4_filter_enabled, get_batch_entry_strategy
@@ -976,7 +980,8 @@ class SmartTraderService:
             price_service=self.ws_service,
             account_id=self.account_id,
             brain=self.brain,
-            opt_config=self.opt_config
+            opt_config=self.opt_config,
+            max_hold_minutes=self.max_hold_minutes
         )
         logger.info("✅ K线回调建仓执行器已启动 (V2: 15M阴线回调，一次性开仓)")
 
@@ -1869,8 +1874,8 @@ class SmartTraderService:
                 base_timeout_minutes = range_max_hold_hours * 60
                 logger.info(f"[RANGE_TIMEOUT] {symbol} 震荡市最大持仓时间: {base_timeout_minutes}分钟")
             else:
-                # 趋势模式: 使用动态超时时间
-                base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
+                # 趋势模式: 使用 config.yaml signals.max_hold_hours 配置的持仓时间
+                base_timeout_minutes = self.max_hold_minutes
 
             # 计算超时时间点 (UTC时间)
             timeout_at = datetime.utcnow() + timedelta(minutes=base_timeout_minutes)

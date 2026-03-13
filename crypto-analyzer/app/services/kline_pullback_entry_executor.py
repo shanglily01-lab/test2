@@ -23,7 +23,7 @@ from app.services.optimization_config import OptimizationConfig
 class KlinePullbackEntryExecutor:
     """K线回调建仓执行器（一次性开仓）"""
 
-    def __init__(self, db_config: dict, live_engine, price_service, account_id=None, brain=None, opt_config=None):
+    def __init__(self, db_config: dict, live_engine, price_service, account_id=None, brain=None, opt_config=None, max_hold_minutes: int = 180):
         """
         初始化执行器
 
@@ -34,6 +34,7 @@ class KlinePullbackEntryExecutor:
             account_id: 账户ID
             brain: 智能大脑（用于获取自适应参数）
             opt_config: 优化配置（用于获取波动率配置）
+            max_hold_minutes: 最大持仓时间（分钟），由 config.yaml signals.max_hold_hours 传入
         """
         self.db_config = db_config
         self.live_engine = live_engine
@@ -50,6 +51,9 @@ class KlinePullbackEntryExecutor:
         # 如果仍没有opt_config，创建新实例
         if not self.opt_config:
             self.opt_config = OptimizationConfig(db_config)
+
+        # 最大持仓时间（由外部配置传入，范围 180~480 分钟）
+        self.max_hold_minutes = max(180, min(480, max_hold_minutes))
 
         # 时间窗口配置
         self.total_window_minutes = 30  # 总时间窗口30分钟
@@ -414,8 +418,8 @@ class KlinePullbackEntryExecutor:
             else:
                 signal_combination_key = "TREND_unknown"
 
-            # 计算超时和计划平仓时间
-            max_hold_minutes = 180  # 3小时
+            # 计算超时和计划平仓时间（由 config.yaml signals.max_hold_hours 控制）
+            max_hold_minutes = self.max_hold_minutes
             timeout_at = datetime.utcnow() + timedelta(minutes=max_hold_minutes)
             planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
 
