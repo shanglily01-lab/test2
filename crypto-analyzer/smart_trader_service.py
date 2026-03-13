@@ -2702,30 +2702,25 @@ class SmartTraderService:
             logger.error(traceback.format_exc())
 
     def _check_and_restart_smart_exit_optimizer(self):
-        """检查SmartExitOptimizer健康状态，发现问题立即重启"""
+        """SmartExitOptimizer健康检查 - 增量对账（不再全量重启，避免竞争条件）"""
         try:
             if not self.smart_exit_optimizer or not self.event_loop:
                 logger.warning("⚠️ SmartExitOptimizer未初始化")
                 return
 
-            # ========== 检查1: 监控任务数量是否匹配 ==========
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 获取数据库中的开仓持仓数量
+            # 获取DB中所有open持仓的ID（精确对比，不只是数量）
             cursor.execute("""
-                SELECT COUNT(*) as count
+                SELECT id
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
             """, (self.account_id,))
+            db_position_ids = {row[0] for row in cursor.fetchall()}
 
-            db_count = cursor.fetchone()[0]
-
-            # 获取SmartExitOptimizer中的监控任务数量
-            monitoring_count = len(self.smart_exit_optimizer.monitoring_tasks)
-
-            # ========== 检查2: 是否有超时未平仓的持仓 ==========
+            # 检查超时未平仓持仓（真正的异常）
             cursor.execute("""
                 SELECT COUNT(*) as count
                 FROM futures_positions
@@ -2734,66 +2729,59 @@ class SmartTraderService:
                 AND planned_close_time IS NOT NULL
                 AND NOW() > planned_close_time
             """, (self.account_id,))
-
             timeout_count = cursor.fetchone()[0]
-
             cursor.close()
 
-            # ========== 判断是否需要重启 ==========
-            need_restart = False
-            restart_reason = ""
+            monitoring_ids = set(self.smart_exit_optimizer.monitoring_tasks.keys())
 
-            # 情况1: 监控任务数量不匹配
-            if db_count != monitoring_count:
-                need_restart = True
-                restart_reason = (
-                    f"监控任务数量不匹配 (数据库{db_count}个持仓, "
-                    f"SmartExitOptimizer监控{monitoring_count}个)"
-                )
+            # 在DB中但未被监控的持仓 → 补充启动监控
+            to_add = db_position_ids - monitoring_ids
+            # 在监控中但DB已无记录的持仓 → 停止冗余监控（finally已处理大部分）
+            to_remove = monitoring_ids - db_position_ids
 
-            # 情况2: 有超时持仓（说明SmartExitOptimizer没有正常工作）
+            for pid in to_add:
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        self.smart_exit_optimizer.start_monitoring_position(pid),
+                        self.event_loop
+                    )
+                    logger.info(f"[HEALTH-CHECK] 补充监控: 持仓{pid}")
+                except Exception as e:
+                    logger.error(f"[HEALTH-CHECK] 补充监控失败: 持仓{pid} | {e}")
+
+            for pid in to_remove:
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        self.smart_exit_optimizer.stop_monitoring_position(pid),
+                        self.event_loop
+                    )
+                    logger.info(f"[HEALTH-CHECK] 停止冗余监控: 持仓{pid}")
+                except Exception as e:
+                    logger.error(f"[HEALTH-CHECK] 停止冗余监控失败: 持仓{pid} | {e}")
+
+            # 只有超时持仓才是真正异常，才发告警
             if timeout_count > 0:
-                need_restart = True
-                if restart_reason:
-                    restart_reason += f"; 发现{timeout_count}个超时未平仓持仓"
-                else:
-                    restart_reason = f"发现{timeout_count}个超时未平仓持仓"
-
-            # ========== 执行重启 ==========
-            if need_restart:
-                logger.error(
-                    f"❌ SmartExitOptimizer异常: {restart_reason}\n"
-                    f"   立即重启SmartExitOptimizer..."
-                )
-
-                # 发送告警
+                logger.error(f"❌ 发现{timeout_count}个超时未平仓持仓，SmartExitOptimizer可能异常")
                 if hasattr(self, 'telegram_notifier') and self.telegram_notifier:
                     try:
                         self.telegram_notifier.send_message(
-                            f"⚠️ SmartExitOptimizer自动重启\n\n"
-                            f"原因: {restart_reason}\n"
+                            f"⚠️ 发现{timeout_count}个超时未平仓持仓\n\n"
                             f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                            f"操作: 正在重启监控..."
+                            f"请人工检查SmartExitOptimizer是否正常运行！"
                         )
                     except Exception as e:
                         logger.warning(f"发送Telegram告警失败: {e}")
 
-                # 重启SmartExitOptimizer的监控
-                asyncio.run_coroutine_threadsafe(
-                    self._restart_smart_exit_monitoring(),
-                    self.event_loop
+            # 打印健康状态
+            if to_add or to_remove:
+                logger.info(
+                    f"[HEALTH-CHECK] 对账完成: +{len(to_add)}补充 -{len(to_remove)}移除 "
+                    f"| DB={len(db_position_ids)}, 监控={len(monitoring_ids)}"
                 )
-
-                logger.info("✅ SmartExitOptimizer重启完成")
-
-            else:
-                # 正常情况，偶尔打印健康状态
-                if datetime.now().minute % 10 == 0:  # 每10分钟打印一次
-                    logger.debug(
-                        f"💓 SmartExitOptimizer健康检查: "
-                        f"{monitoring_count}个持仓监控中, "
-                        f"{timeout_count}个超时持仓"
-                    )
+            elif datetime.now().minute % 10 == 0:
+                logger.debug(
+                    f"💓 SmartExitOptimizer健康: {len(monitoring_ids)}个持仓监控中"
+                )
 
         except Exception as e:
             logger.error(f"SmartExitOptimizer健康检查失败: {e}")

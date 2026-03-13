@@ -949,6 +949,18 @@ class Big4TrendDetector:
 
             combined_reason = ', '.join(reasons)
 
+            # 🔥 矛盾冲突检测: 若触底(block_short)和触顶(block_long)同时激活，
+            # 说明市场在极端震荡中先暴跌后暴涨，两个方向都封锁会导致系统完全停止交易。
+            # 逻辑上两者互相矛盾，自动解除双重封锁，恢复正常交易。
+            if block_long and block_short:
+                block_long = False
+                block_short = False
+                logger.warning(
+                    f"[EMERGENCY-CONFLICT] 触底反弹 + 触顶回调同时激活（逻辑矛盾），"
+                    f"双重封锁自动解除，恢复正常交易 | 原始原因: {combined_reason}"
+                )
+                combined_reason = f"触底+触顶冲突自动解除 | {combined_reason}"
+
             # 如果所有限制都已解除，返回空结果
             if not block_long and not block_short:
                 return {
