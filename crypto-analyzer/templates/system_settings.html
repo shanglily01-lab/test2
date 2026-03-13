@@ -225,6 +225,28 @@
             </div>
         </div>
 
+        <!-- 最大持仓时间 -->
+        <div class="settings-card">
+            <div class="setting-item">
+                <div class="setting-header">⏱️ 最大持仓时间</div>
+                <div class="setting-description">
+                    每笔交易的最大持仓时长，到期后由智能平仓处理（实时生效，下次开仓时读取，无需重启）
+                </div>
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <select id="maxHoldHoursSelect" class="form-select" style="width:160px; background:#0f3460; color:#eee; border-color:#4ecca3;">
+                        <option value="3">3 小时</option>
+                        <option value="4">4 小时</option>
+                        <option value="5">5 小时</option>
+                        <option value="6">6 小时</option>
+                        <option value="7">7 小时</option>
+                        <option value="8">8 小时</option>
+                    </select>
+                    <span id="maxHoldHoursStatus" class="small text-muted">Loading...</span>
+                </div>
+                <button class="btn btn-primary" onclick="updateMaxHoldHours()">💾 保存持仓时间</button>
+            </div>
+        </div>
+
         <!-- 交易方向控制 -->
         <div class="settings-card">
             <div class="setting-item">
@@ -664,8 +686,41 @@ Loading...
             document.getElementById('strategyV2').classList.remove('active');
         });
 
+        // 加载最大持仓时间
+        async function loadMaxHoldHours() {
+            try {
+                const res = await fetch(`${API_BASE}/max-hold-hours`);
+                const result = await res.json();
+                if (result.success) {
+                    const h = result.data.hours;
+                    document.getElementById('maxHoldHoursSelect').value = String(h);
+                    document.getElementById('maxHoldHoursStatus').textContent = `当前: ${h} 小时`;
+                }
+            } catch(e) { console.error('加载持仓时间失败:', e); }
+        }
+
+        // 更新最大持仓时间
+        async function updateMaxHoldHours() {
+            const hours = parseInt(document.getElementById('maxHoldHoursSelect').value);
+            try {
+                const res = await fetch(`${API_BASE}/max-hold-hours`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hours })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    showAlert(`✅ ${result.message}<br><small>${result.data.note}</small>`, 'success');
+                    document.getElementById('maxHoldHoursStatus').textContent = `当前: ${hours} 小时`;
+                } else {
+                    showAlert('更新失败', 'danger');
+                }
+            } catch(e) { showAlert('更新出错: ' + e.message, 'danger'); }
+        }
+
         // 页面加载时初始化
         loadSettings();
+        loadMaxHoldHours();
     </script>
 </body>
 </html>

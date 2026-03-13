@@ -1874,8 +1874,10 @@ class SmartTraderService:
                 base_timeout_minutes = range_max_hold_hours * 60
                 logger.info(f"[RANGE_TIMEOUT] {symbol} 震荡市最大持仓时间: {base_timeout_minutes}分钟")
             else:
-                # 趋势模式: 使用 config.yaml signals.max_hold_hours 配置的持仓时间
-                base_timeout_minutes = self.max_hold_minutes
+                # 趋势模式: 实时从DB读取 max_hold_hours（无需重启即可生效）
+                _mh_val = self.opt_config._read_system_setting('max_hold_hours')
+                _mh_hours = max(3, min(8, int(_mh_val or self.max_hold_minutes // 60)))
+                base_timeout_minutes = _mh_hours * 60
 
             # 计算超时时间点 (UTC时间)
             timeout_at = datetime.utcnow() + timedelta(minutes=base_timeout_minutes)
