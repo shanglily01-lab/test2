@@ -218,6 +218,12 @@ class SmartExitOptimizer:
             logger.info(f"监控任务被取消: 持仓 {position_id}")
         except Exception as e:
             logger.error(f"监控持仓 {position_id} 异常: {type(e).__name__}: {e}", exc_info=True)
+        finally:
+            # 任务自然结束或异常结束时，从 monitoring_tasks 中移除自己
+            # 避免健康检查因 db_count != monitoring_count 误触发重启
+            if position_id in self.monitoring_tasks:
+                del self.monitoring_tasks[position_id]
+                logger.debug(f"监控任务自清理: 持仓 {position_id}")
 
     async def _get_position(self, position_id: int) -> Optional[Dict]:
         """
