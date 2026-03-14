@@ -2947,6 +2947,20 @@ class SmartTraderService:
 
                 # 获取Big4结果并扫描趋势信号
                 big4_result = self.get_big4_result()
+
+                # 🔥 震荡市检测：多空拉锯时禁止开仓，避免两边被磨损
+                if big4_result and big4_result.get('is_choppy'):
+                    current_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                    choppy_info = big4_result.get('choppy_market', {})
+                    # 例外：出现强趋势信号时允许顺势开仓
+                    if current_signal in ('STRONG_BULLISH', 'STRONG_BEARISH'):
+                        logger.info(f"[CHOPPY-OVERRIDE] 检测到震荡市({choppy_info.get('reason', '')})，"
+                                    f"但当前{current_signal}强信号，允许顺势开仓")
+                    else:
+                        logger.warning(f"[CHOPPY-MARKET] {choppy_info.get('reason', '震荡市')}，暂停本轮开仓")
+                        time.sleep(self.scan_interval)
+                        continue
+
                 opportunities = self.brain.scan_all(big4_result=big4_result)
                 logger.info(f"[TREND-SCAN] 趋势模式扫描完成, 找到 {len(opportunities)} 个机会")
 

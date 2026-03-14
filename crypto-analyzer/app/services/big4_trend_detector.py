@@ -193,10 +193,77 @@ class Big4TrendDetector:
             'timestamp': datetime.now()
         }
 
+        # 🔥 震荡市检测
+        choppy_market = self._detect_choppy_market(conn)
+        result['is_choppy'] = choppy_market['is_choppy']
+        result['choppy_market'] = choppy_market
+
         # 记录到数据库
         self._save_to_database(result)
 
         return result
+
+    def _detect_choppy_market(self, conn, hours: int = 4) -> Dict:
+        """
+        检测过去N小时内市场是否处于震荡拉锯状态。
+
+        判断逻辑：
+        - 统计过去N小时内 BULLISH(含STRONG) 和 BEARISH(含STRONG) 的记录数
+        - 如果少数方向的记录数 > 多数方向的40%，则认为是震荡市
+        - 例外：如果当前信号是 STRONG_BULLISH 或 STRONG_BEARISH，不算震荡
+
+        Returns:
+            {
+                'is_choppy': bool,
+                'choppy_ratio': float,  # 少数/多数，越接近1越震荡
+                'bullish_count': int,
+                'bearish_count': int,
+                'reason': str
+            }
+        """
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+            cursor.execute("""
+                SELECT overall_signal, COUNT(*) as cnt
+                FROM big4_trend_history
+                WHERE created_at >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+                AND overall_signal IN ('BULLISH', 'BEARISH', 'STRONG_BULLISH', 'STRONG_BEARISH')
+                GROUP BY overall_signal
+            """, (hours,))
+            rows = cursor.fetchall()
+
+            bullish_count = sum(r['cnt'] for r in rows if r['overall_signal'] in ('BULLISH', 'STRONG_BULLISH'))
+            bearish_count = sum(r['cnt'] for r in rows if r['overall_signal'] in ('BEARISH', 'STRONG_BEARISH'))
+            total = bullish_count + bearish_count
+
+            if total < 50:
+                return {'is_choppy': False, 'choppy_ratio': 0, 'bullish_count': bullish_count,
+                        'bearish_count': bearish_count, 'reason': '数据不足，无法判断'}
+
+            if bullish_count == 0 or bearish_count == 0:
+                return {'is_choppy': False, 'choppy_ratio': 0, 'bullish_count': bullish_count,
+                        'bearish_count': bearish_count, 'reason': '单边趋势'}
+
+            ratio = min(bullish_count, bearish_count) / max(bullish_count, bearish_count)
+            dominant = 'BULLISH' if bullish_count >= bearish_count else 'BEARISH'
+            is_choppy = ratio > 0.4
+
+            reason = (
+                f"震荡拉锯: 多{bullish_count}条/空{bearish_count}条，平衡度{ratio:.2f}"
+                if is_choppy else
+                f"趋势明确({dominant}): 多{bullish_count}/空{bearish_count}，平衡度{ratio:.2f}"
+            )
+            return {
+                'is_choppy': is_choppy,
+                'choppy_ratio': round(ratio, 3),
+                'bullish_count': bullish_count,
+                'bearish_count': bearish_count,
+                'reason': reason
+            }
+        except Exception as e:
+            logger.warning(f"震荡市检测异常: {e}")
+            return {'is_choppy': False, 'choppy_ratio': 0, 'bullish_count': 0,
+                    'bearish_count': 0, 'reason': f'检测异常: {e}'}
 
     def _analyze_symbol(self, conn, symbol: str) -> Dict:
         """
