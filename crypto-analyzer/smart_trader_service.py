@@ -2536,10 +2536,10 @@ class SmartTraderService:
         获取当前资金费率（百分比）
         返回 None 表示无数据（放行，不阻拦）
         """
+        conn = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
-            # 取最近1条资金费率数据（按updated_at最新）
             cursor.execute("""
                 SELECT current_rate_pct
                 FROM funding_rate_stats
@@ -2549,13 +2549,15 @@ class SmartTraderService:
             """, (symbol,))
             row = cursor.fetchone()
             cursor.close()
-            conn.close()
             if row and row[0] is not None:
                 return float(row[0])
             return None
         except Exception as e:
             logger.debug(f"[FUNDING_RATE] {symbol} 获取资金费率失败: {e}")
             return None
+        finally:
+            if conn:
+                conn.close()
 
     def is_symbol_in_top_performers(self, symbol: str) -> bool:
         """
