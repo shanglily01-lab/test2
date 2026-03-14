@@ -32,6 +32,7 @@ from app.services.signal_score_v2_service import SignalScoreV2Service
 from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
+from app.services.big4_regime_monitor import Big4RegimeMonitor
 
 # 加载环境变量
 load_dotenv()
@@ -669,14 +670,36 @@ class SmartDecisionBrain:
             # 🔥 动态阈值：LONG阈值比SHORT更严格（LONG历史胜率更低）
             # Big4强力看多时（牛市）：LONG降至60，SHORT保持60
             # 普通行情：LONG提升至100（数据显示100+才是LONG盈利分水岭），SHORT保持60
-            big4_bullish = (big4_result and
-                            big4_result.get('overall_signal') == 'BULLISH' and
-                            big4_result.get('signal_strength', 0) >= 50)
-            long_threshold = 60 if big4_bullish else 100  # LONG普通行情需100分，牛市降60
+            _b4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
+            _b4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
+
+            # 🧠 群体极化防御：Big4强度越高，同向开仓门槛越高（防止羊群效应追涨杀跌）
+            # 强度越大说明市场越一致看多/空，此时才是最危险的反转时刻
+            _crowding_penalty = 0
+            if _b4_strength >= 70:
+                _crowding_penalty = 15  # 强烈群体效应（全市场共振）：+15分门槛
+            elif _b4_strength >= 55:
+                _crowding_penalty = 8   # 中度群体效应：+8分门槛
+
+            big4_bullish = (_b4_signal == 'BULLISH' and _b4_strength >= 50)
+            big4_bearish = (_b4_signal == 'BEARISH' and _b4_strength >= 50)
+
+            if big4_bullish:
+                long_threshold = 60 + _crowding_penalty   # 牛市基础60，群体效应惩罚
+            else:
+                long_threshold = 100  # 普通行情需100分
+
+            short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+
+            if _crowding_penalty > 0:
+                logger.debug(
+                    f"🧠 [CROWDING] Big4强度{_b4_strength:.0f}≥{'70' if _crowding_penalty==15 else '55'}，"
+                    f"群体效应惩罚+{_crowding_penalty}分 | LONG阈值={long_threshold} SHORT阈值={short_threshold_adj}"
+                )
 
             # 选择得分更高的方向 (只要达到阈值就可以)
             long_qualified = long_score >= long_threshold
-            short_qualified = short_score >= self.threshold
+            short_qualified = short_score >= short_threshold_adj
             if long_qualified or short_qualified:
                 # 优先选择两个方向都满足各自阈值时评分更高的方向
                 # 若只有一个方向满足，选该方向；两个都满足，选分更高的
@@ -705,6 +728,12 @@ class SmartDecisionBrain:
                     'trend_1h_bear', 'momentum_down_3pct', 'consecutive_bear'
                 }
                 neutral_signals = {'position_mid', 'volatility_high'}  # 中性信号可以在任何方向
+
+                # 🧠 确认偏误防御：统计反向信号数量（在清洗之前计算，此时signal_components含全部信号）
+                if side == 'LONG':
+                    counter_signal_count = sum(1 for sig in signal_components if sig in bearish_signals)
+                else:
+                    counter_signal_count = sum(1 for sig in signal_components if sig in bullish_signals)
 
                 # 过滤掉与方向相反的信号
                 cleaned_components = {}
@@ -807,7 +836,8 @@ class SmartDecisionBrain:
                     'current_price': current,
                     'signal_components': signal_components,  # 添加信号组成
                     'signal_type': signal_type,  # 添加信号类型，用于模式过滤
-                    'signal_time': datetime.now()  # 🔥 关键修复：记录信号产生的时间
+                    'signal_time': datetime.now(),  # 🔥 关键修复：记录信号产生的时间
+                    'counter_signals': counter_signal_count  # 🧠 确认偏误防御：反向信号数量
                 }
 
             return None
@@ -844,6 +874,25 @@ class SmartDecisionBrain:
             result = self.analyze(symbol, big4_result=big4_result)
             if result:
                 opportunities.append(result)
+
+        # 🧠 从众效应防御：≥80%同向 + ≥5个信号时，淘汰同向中评分低于(阈值+10)的信号
+        # 原理：市场高度一致时往往是情绪化追涨杀跌，此时降低同向开仓频率，等待更高确定性
+        if len(opportunities) >= 5:
+            long_count = sum(1 for o in opportunities if o['side'] == 'LONG')
+            short_count = len(opportunities) - long_count
+            dominant_pct = max(long_count, short_count) / len(opportunities)
+            if dominant_pct >= 0.8:
+                dominant_side = 'LONG' if long_count > short_count else 'SHORT'
+                herding_threshold = self.threshold + 10
+                before_count = len(opportunities)
+                opportunities = [
+                    o for o in opportunities
+                    if o['side'] != dominant_side or o['score'] >= herding_threshold
+                ]
+                logger.warning(
+                    f"🧠 [HERDING] {dominant_pct*100:.0f}%信号偏向{dominant_side}({long_count}多/{short_count}空)，"
+                    f"有效阈值提高至{herding_threshold}分: {before_count}→{len(opportunities)}个信号通过"
+                )
 
         logger.info(f"{'='*100}")
         logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个 | Big4状态: {big4_signal}(强度{big4_strength:.0f})")
@@ -937,6 +986,9 @@ class SmartTraderService:
 
         # 波动率配置更新器 (15M K线动态止盈)
         self.volatility_updater = VolatilityProfileUpdater(self.db_config)
+
+        # 市场状态监控器（操纵子原理：自动感知市场状态，切换allow_long/allow_short）
+        self.regime_monitor = Big4RegimeMonitor(self.db_config)
 
         # 加载智能平仓配置
         import yaml
@@ -1575,6 +1627,53 @@ class SmartTraderService:
         if self.check_recent_close(symbol, side, cooldown_minutes=15):
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后15分钟冷却期内")
             return False
+
+        # 🧠 生物学优化: 动作电位不应期（开仓后2小时内不再同向开仓）
+        # 例外: 紧急反弹信号(Big4触底)不受此限制，触底是强信号
+        if opp.get('signal_type') != 'EMERGENCY_BOUNCE':
+            if self.check_recent_open(symbol, side, cooldown_minutes=120):
+                logger.warning(f"[REFRACTORY] {symbol} {side} - 开仓不应期内(2小时)，拒绝重复开仓")
+                return False
+
+        # 🧠 生物学优化: 突触习惯化（连续亏损提高开仓门槛）
+        loss_multiplier = self.get_symbol_loss_multiplier(symbol, side)
+        if loss_multiplier < 1.0:
+            score = opp.get('score', 0)
+            effective_threshold = round(60 / loss_multiplier)
+            if score < effective_threshold:
+                consecutive = round((1.0 - loss_multiplier) / 0.1) + 1
+                logger.warning(
+                    f"[HABITUATION] {symbol} {side} - 连续{consecutive}次亏损，"
+                    f"有效阈值{effective_threshold}分，当前{score}分不足，拒绝开仓"
+                )
+                return False
+
+        # 🧠 确认偏误防御：反向信号≥3个时拒绝开仓（说明市场本身存在分歧，非一致看涨/跌）
+        counter_signals = opp.get('counter_signals', 0)
+        if counter_signals >= 3:
+            logger.warning(
+                f"[CONFIRMATION_BIAS] {symbol} {side} - {counter_signals}个反向信号存在，"
+                f"市场存在明显分歧，拒绝开仓（确认偏误防御）"
+            )
+            return False
+
+        # 🧠 群体极化防御-资金费率：资金费率极端时拒绝同向开仓（机构已经完成布局，散户追涨正在被割）
+        # LONG时资金费率>0.1%（散户过度看多，多头爆仓风险大）→ 拒绝
+        # SHORT时资金费率<-0.1%（散户过度看空，空头爆仓风险大）→ 拒绝
+        funding_rate_pct = self.get_funding_rate_pct(symbol)
+        if funding_rate_pct is not None:
+            if side == 'LONG' and funding_rate_pct > 0.1:
+                logger.warning(
+                    f"[FUNDING_VETO] {symbol} {side} - 资金费率{funding_rate_pct:.3f}%>0.1%，"
+                    f"散户过度看多，拒绝追多（群体极化防御）"
+                )
+                return False
+            elif side == 'SHORT' and funding_rate_pct < -0.1:
+                logger.warning(
+                    f"[FUNDING_VETO] {symbol} {side} - 资金费率{funding_rate_pct:.3f}%<-0.1%，"
+                    f"散户过度看空，拒绝追空（群体极化防御）"
+                )
+                return False
 
         # 新增验证: 检查交易方向是否允许
         if not self.opt_config.is_direction_allowed(side):
@@ -2366,6 +2465,98 @@ class SmartTraderService:
         except:
             return False
 
+    def check_recent_open(self, symbol: str, side: str, cooldown_minutes: int = 120):
+        """
+        检查同交易对同方向是否在开仓不应期内（神经元动作电位不应期原理）
+        开仓后N分钟内不允许同方向再次开仓，防止信号叠加风险
+        返回True表示在不应期中，不应再次开仓
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT COUNT(*) FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND account_id = %s
+                  AND created_at >= DATE_SUB(NOW(), INTERVAL %s MINUTE)
+            """, (symbol, side, self.account_id, cooldown_minutes))
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0] > 0 if result else False
+        except:
+            return False
+
+    def get_symbol_loss_multiplier(self, symbol: str, side: str) -> float:
+        """
+        获取symbol连败衰减系数（突触习惯化原理）
+        连续亏损会提高下次开仓的有效评分阈值，防止在持续亏损的币种上反复入场
+
+        连败次数 → 系数 → 有效阈值(60/系数)
+        0~1次   → 1.0  → 60分（无惩罚）
+        2次     → 0.9  → 67分
+        3次     → 0.8  → 75分
+        4次     → 0.7  → 86分
+        5次+    → 0.6  → 100分
+
+        一旦盈利，系数重置为1.0
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT profit_amount
+                FROM futures_positions
+                WHERE symbol = %s AND position_side = %s AND account_id = %s
+                  AND status = 'closed'
+                ORDER BY close_time DESC
+                LIMIT 5
+            """, (symbol, side, self.account_id))
+            rows = cursor.fetchall()
+            cursor.close()
+
+            if not rows:
+                return 1.0
+
+            # 从最新一笔开始，统计连续亏损次数（遇到盈利即停止）
+            consecutive_losses = 0
+            for row in rows:
+                profit = float(row[0]) if row[0] is not None else 0
+                if profit < 0:
+                    consecutive_losses += 1
+                else:
+                    break  # 盈利单出现，习惯化重置
+
+            multipliers = {0: 1.0, 1: 1.0, 2: 0.9, 3: 0.8, 4: 0.7}
+            return multipliers.get(consecutive_losses, 0.6)
+        except Exception as e:
+            logger.debug(f"[HABITUATION] {symbol} 获取连败系数失败: {e}")
+            return 1.0
+
+    def get_funding_rate_pct(self, symbol: str) -> float:
+        """
+        获取当前资金费率（百分比）
+        返回 None 表示无数据（放行，不阻拦）
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            # 取最近1条资金费率数据（按updated_at最新）
+            cursor.execute("""
+                SELECT current_rate_pct
+                FROM funding_rate_stats
+                WHERE symbol = %s
+                ORDER BY updated_at DESC
+                LIMIT 1
+            """, (symbol,))
+            row = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            if row and row[0] is not None:
+                return float(row[0])
+            return None
+        except Exception as e:
+            logger.debug(f"[FUNDING_RATE] {symbol} 获取资金费率失败: {e}")
+            return None
+
     def is_symbol_in_top_performers(self, symbol: str) -> bool:
         """
         检查交易对是否在盈利Top 50列表中
@@ -2892,6 +3083,7 @@ class SmartTraderService:
         last_smart_exit_check = datetime.now()
         last_blacklist_reload = datetime.now()
         last_config_reload = datetime.now()
+        last_regime_check = datetime.now()  # 市场状态机检测（每小时一次）
 
         while self.running:
             try:
@@ -2903,6 +3095,15 @@ class SmartTraderService:
                 if (now - last_blacklist_reload).total_seconds() >= 300:  # 5分钟
                     self.brain._reload_blacklist()
                     last_blacklist_reload = now
+
+                # 0.55. 市场状态机检测（每小时一次，操纵子原理）
+                # 根据Big4过去48H趋势分布自动更新allow_long/allow_short
+                if (now - last_regime_check).total_seconds() >= 3600:
+                    try:
+                        self.regime_monitor.run_detection()
+                    except Exception as e:
+                        logger.warning(f"⚠️ [BIG4-REGIME] 市场状态检测失败: {e}")
+                    last_regime_check = now
 
                 # 0.6. 定期重新加载Big4配置 (每5分钟检查数据库)
                 if (now - last_config_reload).total_seconds() >= 300:

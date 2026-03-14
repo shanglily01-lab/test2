@@ -73,6 +73,10 @@ class SmartExitOptimizer:
         # === HTTP Session 复用（性能优化）===
         self._http_session: Optional[aiohttp.ClientSession] = None
 
+        # 分阶段超时 - 亏损持续时间追踪（生物学负反馈：需持续亏损才平仓，非瞬时亏损）
+        # key: "position_id:hour_checkpoint"，value: 首次触发该档位亏损的时间
+        self._loss_onset_times: Dict[str, datetime] = {}
+
     def _get_pool_connection(self):
         """从连接池获取连接，并设置InnoDB锁等待超时"""
         conn = self.db_pool.get_connection()
@@ -224,6 +228,10 @@ class SmartExitOptimizer:
             if position_id in self.monitoring_tasks:
                 del self.monitoring_tasks[position_id]
                 logger.debug(f"监控任务自清理: 持仓 {position_id}")
+            # 清理该持仓的亏损计时记录，防止内存泄漏
+            keys_to_delete = [k for k in self._loss_onset_times if k.startswith(f"{position_id}:")]
+            for k in keys_to_delete:
+                del self._loss_onset_times[k]
 
     async def _get_position(self, position_id: int) -> Optional[Dict]:
         """
@@ -1445,6 +1453,40 @@ class SmartExitOptimizer:
                     return (f'动态超时({max_hold_minutes}min)', 1.0)
 
             # ============================================================
+            # === 优先级5.5: 信号衰减检查（沉没成本防御）===
+            # ============================================================
+            # 原理：如果V2 K线评分方向已强力反转，应果断止损，而非因"已持这么久了"而继续持有
+            # 触发条件：当前亏损 + V2方向与持仓方向相反 + V2强度为strong（非偶发波动）
+            try:
+                _decay_pnl_pct = profit_info.get('profit_pct', 0) / 100.0
+                if _decay_pnl_pct < 0:  # 只在亏损时才触发（盈利时继续持有）
+                    conn = self.db_pool.get_connection()
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "SELECT direction, strength_level FROM coin_kline_scores WHERE symbol = %s LIMIT 1",
+                            (symbol,)
+                        )
+                        row = cursor.fetchone()
+                        cursor.close()
+                    finally:
+                        conn.close()
+                    if row:
+                        v2_direction = row[0]   # 'LONG' or 'SHORT' or 'NEUTRAL'
+                        v2_strength = row[1]    # 'strong', 'moderate', 'weak'
+                        # 方向反转 + 强度strong → 信号衰减，立即平仓
+                        opposite_direction = ('SHORT' if position_side == 'LONG' else 'LONG')
+                        if v2_direction == opposite_direction and v2_strength == 'strong':
+                            logger.warning(
+                                f"🧠 [SIGNAL_DECAY] 持仓{position_id} {symbol} {position_side} "
+                                f"亏损{pnl_pct*100:.2f}%，V2方向已强力反转({v2_direction} strong)，"
+                                f"信号完全衰减，沉没成本防御触发平仓"
+                            )
+                            return (f'信号衰减(V2强力反转{v2_direction})', 1.0)
+            except Exception as _e:
+                logger.debug(f"[SIGNAL_DECAY] {symbol} 检查失败: {_e}")
+
+            # ============================================================
             # === 优先级6: 分阶段超时检查（1h/2h/3h/4h不同亏损阈值） ===
             # ============================================================
             # 获取分阶段超时阈值配置
@@ -1466,13 +1508,34 @@ class SmartExitOptimizer:
 
             for hour_checkpoint, loss_threshold in sorted(staged_thresholds.items()):
                 if hold_hours >= hour_checkpoint:
+                    onset_key = f"{position_id}:{hour_checkpoint}"
                     if pnl_pct < loss_threshold:
-                        logger.warning(
-                            f"⏱️ 持仓{position_id} {symbol}触发分阶段超时 | "
-                            f"持仓{hold_hours:.1f}h >= {hour_checkpoint}h | "
-                            f"亏损{pnl_pct*100:.2f}% < {loss_threshold*100:.2f}%"
-                        )
-                        return (f'分阶段超时{hour_checkpoint}H(亏损{pnl_pct*100:.1f}%)', 1.0)
+                        now_ts = datetime.now()
+                        if onset_key not in self._loss_onset_times:
+                            # 首次触发该档位亏损，开始计时，本轮不平仓
+                            self._loss_onset_times[onset_key] = now_ts
+                            logger.info(
+                                f"⏳ 持仓{position_id} {symbol} [{hour_checkpoint}h档] "
+                                f"亏损{pnl_pct*100:.2f}%开始计时，需持续30分钟才触发平仓"
+                            )
+                        else:
+                            loss_duration_min = (now_ts - self._loss_onset_times[onset_key]).total_seconds() / 60
+                            if loss_duration_min >= 30:
+                                logger.warning(
+                                    f"⏱️ 持仓{position_id} {symbol}触发分阶段超时 | "
+                                    f"持仓{hold_hours:.1f}h >= {hour_checkpoint}h | "
+                                    f"亏损{pnl_pct*100:.2f}%持续{loss_duration_min:.0f}分钟"
+                                )
+                                return (f'分阶段超时{hour_checkpoint}H(亏损{pnl_pct*100:.1f}%持续{loss_duration_min:.0f}分)', 1.0)
+                            else:
+                                logger.info(
+                                    f"⏳ {symbol} [{hour_checkpoint}h档] 亏损持续{loss_duration_min:.0f}/30分钟，继续等待..."
+                                )
+                    else:
+                        # 亏损恢复，清除该档位计时（习惯化重置）
+                        if onset_key in self._loss_onset_times:
+                            del self._loss_onset_times[onset_key]
+                            logger.info(f"✅ {symbol} [{hour_checkpoint}h档] 亏损已恢复，重置计时器")
 
             # ============================================================
             # === 优先级7: 3小时绝对时间强制平仓 ===

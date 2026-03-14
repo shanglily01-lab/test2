@@ -485,11 +485,19 @@ class AdaptiveOptimizer:
                         f"亏损${signal['total_pnl']:.2f} - {signal['recommendation']}"
                     )
 
-        # 4. 调整评分权重 - 已禁用，权重由人工维护，不再自动调整
-        # if apply_weights:
-        #     weight_results = self.weight_optimizer.adjust_weights(dry_run=False)
+        # 4. 调整评分权重 - P3修复：重新启用（基本归因错误修正）
+        # 原理：系统亏损≠纯粹市场问题，信号权重本身可能失效，需让数据说话
+        # 约束：每次最多±3分(内置)，绝对范围[5,30]，需≥5笔样本才调整
         if apply_weights:
-            logger.info("📊 信号评分权重自动调整已禁用，跳过")
+            try:
+                weight_results = self.weight_optimizer.adjust_weights(dry_run=False)
+                adjusted = weight_results.get('adjusted', [])
+                if adjusted:
+                    logger.info(f"📊 信号权重自适应调整: {len(adjusted)}个组件更新 | {[a.get('component','?') for a in adjusted[:5]]}")
+                else:
+                    logger.info("📊 信号权重检查完成，无需调整（样本不足或表现稳定）")
+            except Exception as _we:
+                logger.error(f"📊 信号权重自适应调整失败（不影响交易）: {_we}")
 
         return results
 
