@@ -666,12 +666,13 @@ class SmartDecisionBrain:
 
             # V1评分计算完成，稍后与V2一起打印
 
-            # 🔥 动态阈值：牛市时降低多头开仓门槛
-            # Big4强力看多时，中位区间volume_power_bull+volatility_high=40分也可开多
+            # 🔥 动态阈值：LONG阈值比SHORT更严格（LONG历史胜率更低）
+            # Big4强力看多时（牛市）：LONG降至60，SHORT保持60
+            # 普通行情：LONG提升至80（减少低质量追涨），SHORT保持60
             big4_bullish = (big4_result and
                             big4_result.get('overall_signal') == 'BULLISH' and
                             big4_result.get('signal_strength', 0) >= 50)
-            long_threshold = 50 if big4_bullish else self.threshold
+            long_threshold = 60 if big4_bullish else 80  # LONG普通行情需80分，牛市降60
 
             # 选择得分更高的方向 (只要达到阈值就可以)
             long_qualified = long_score >= long_threshold
@@ -784,10 +785,17 @@ class SmartDecisionBrain:
                     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
                     return None
 
-                # 🔥 Big4方向过滤（简化版）：只在强度>=70时禁止反向
-                # V1技术指标评分作为主导，Big4只做简单的方向过滤
-                # 移除V2共振检查（V1和V2维度不同，强行共振没有意义）
-                # Big4方向过滤已在scan_all()中处理，这里不需要额外检查
+                # 🔥 Big4方向过滤：Big4强势时禁止逆势交易
+                # Big4 BULLISH（强度>=40）→ 禁止做空；Big4 BEARISH（强度>=40）→ 禁止做多
+                if big4_result:
+                    _b4_signal = big4_result.get('overall_signal', 'NEUTRAL')
+                    _b4_strength = big4_result.get('signal_strength', 0)
+                    if _b4_signal == 'BULLISH' and _b4_strength >= 40 and side == 'SHORT':
+                        logger.info(f"🚫 {symbol} Big4看多(强度{_b4_strength:.0f}≥40)，禁止逆势做空")
+                        return None
+                    if _b4_signal == 'BEARISH' and _b4_strength >= 40 and side == 'LONG':
+                        logger.info(f"🚫 {symbol} Big4看空(强度{_b4_strength:.0f}≥40)，禁止逆势做多")
+                        return None
 
                 # 生成signal_type用于模式匹配
                 signal_type = f"TREND_{signal_combination_key}_{side}_{int(score)}"
