@@ -668,11 +668,11 @@ class SmartDecisionBrain:
 
             # 🔥 动态阈值：LONG阈值比SHORT更严格（LONG历史胜率更低）
             # Big4强力看多时（牛市）：LONG降至60，SHORT保持60
-            # 普通行情：LONG提升至80（减少低质量追涨），SHORT保持60
+            # 普通行情：LONG提升至100（数据显示100+才是LONG盈利分水岭），SHORT保持60
             big4_bullish = (big4_result and
                             big4_result.get('overall_signal') == 'BULLISH' and
                             big4_result.get('signal_strength', 0) >= 50)
-            long_threshold = 60 if big4_bullish else 80  # LONG普通行情需80分，牛市降60
+            long_threshold = 60 if big4_bullish else 100  # LONG普通行情需100分，牛市降60
 
             # 选择得分更高的方向 (只要达到阈值就可以)
             long_qualified = long_score >= long_threshold
