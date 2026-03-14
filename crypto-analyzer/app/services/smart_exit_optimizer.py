@@ -476,32 +476,36 @@ class SmartExitOptimizer:
         entry_time = position.get('entry_signal_time') or position.get('open_time') or datetime.now()
         hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
 
-        MIN_HOLD_MINUTES = 30  # 30分钟最小持仓时间
+        MIN_HOLD_MINUTES = 60  # 60分钟最小持仓时间（原30分钟，延长以减少被假突破割肉）
 
         # 计算ROI（考虑杠杆后的真实收益率）
         leverage = float(position.get('leverage', 1))
         roi_pct = profit_pct * leverage
 
-        # === 优先级1: 极端亏损兜底止损（无需等待30分钟）===
+        # === 优先级1: 极端亏损兜底止损（无需等待60分钟）===
         # 改为基于ROI判断，ROI亏损≥10%立即止损
         if roi_pct <= -10.0:
             return True, f"极端亏损止损(ROI{roi_pct:.2f}%≤-10%, 价格变化{profit_pct:.2f}%)"
 
-        # === 开仓30分钟后启动智能监控 ===
+        # === 开仓60分钟后启动智能监控 ===
         if hold_minutes >= MIN_HOLD_MINUTES:
 
-            # === 优先级2: 智能亏损监控（基于价格变化）===
-            # 策略A: 价格亏损≥2% + 1根5M K线无好转（快速止损）
-            if profit_pct <= -2.0:
-                no_improvement = await self._check_5m_no_improvement_single(position_id, position_side)
-                if no_improvement:
-                    return True, f"价格亏损{profit_pct:.2f}%+5M无好转(ROI{roi_pct:.2f}%)"
-
-            # 策略B: 价格亏损≥1.5% + 2根5M K线连续无好转（谨慎止损）
-            elif profit_pct <= -1.5:
-                no_improvement = await self._check_5m_no_improvement(position_id, position_side)
-                if no_improvement:
-                    return True, f"价格亏损{profit_pct:.2f}%+2根5M连续无好转(ROI{roi_pct:.2f}%)"
+            # === 优先级2: 趋势反转止损（基于16根5M K线方向投票）===
+            # 逻辑: 亏损时统计最近16根5M K线，≥9根逆向 → 趋势已反转 → 立即平仓
+            #       7~8根逆向 → 趋势不明朗 → 继续等待
+            #       < 7根逆向 → 方向仍合理 → 不干预
+            if profit_pct < 0:
+                against_count = await self._count_against_direction_5m(position_id, position_side)
+                if against_count >= 9:
+                    logger.info(
+                        f"📊 持仓{position_id} {position_side} 趋势反转: "
+                        f"{against_count}/16根5M K线逆向, 价格{profit_pct:.2f}%, ROI{roi_pct:.2f}%"
+                    )
+                    return True, f"趋势反转({against_count}/16根K线逆向,价格{profit_pct:.2f}%,ROI{roi_pct:.2f}%)"
+                elif against_count >= 7:
+                    logger.debug(
+                        f"持仓{position_id} {position_side} 趋势不明朗({against_count}/16逆向)，继续等待"
+                    )
 
             # === 优先级3: 移动止盈（ROI盈利≥10%时追踪回撤0.5%）===
             TRAILING_STOP_ROI_THRESHOLD = 10.0  # ROI盈利阈值
@@ -914,8 +918,8 @@ class SmartExitOptimizer:
 
             # === 更新5M K线缓冲区 ===
             if position_id not in self.kline_5m_buffer:
-                # 首次初始化：获取最近3根5M K线
-                klines = await self._fetch_latest_kline(symbol, '5m', limit=3)
+                # 首次初始化：获取最近20根5M K线（用于趋势统计）
+                klines = await self._fetch_latest_kline(symbol, '5m', limit=20)
                 if klines:
                     self.kline_5m_buffer[position_id] = klines
                     self.last_5m_check[position_id] = now
@@ -930,9 +934,9 @@ class SmartExitOptimizer:
                     if len(self.kline_5m_buffer[position_id]) == 0 or \
                        latest_kline['close_time'] > self.kline_5m_buffer[position_id][-1]['close_time']:
                         self.kline_5m_buffer[position_id].append(latest_kline)
-                        # 只保留最近3根
-                        if len(self.kline_5m_buffer[position_id]) > 3:
-                            self.kline_5m_buffer[position_id] = self.kline_5m_buffer[position_id][-3:]
+                        # 只保留最近20根（覆盖100分钟，足够趋势统计）
+                        if len(self.kline_5m_buffer[position_id]) > 20:
+                            self.kline_5m_buffer[position_id] = self.kline_5m_buffer[position_id][-20:]
                         logger.debug(f"更新5M K线: 持仓{position_id}，收盘时间{latest_kline['close_time']}")
 
                     self.last_5m_check[position_id] = now
@@ -1027,6 +1031,37 @@ class SmartExitOptimizer:
         except Exception as e:
             logger.warning(f"获取{symbol} {interval} K线失败: {type(e).__name__}: {e}")
             return None
+
+    async def _count_against_direction_5m(self, position_id: int, position_side: str) -> int:
+        """
+        统计最近16根5M K线中，与持仓方向相反的K线数量。
+
+        用于趋势反转判断：
+          ≥ 10/16（62.5%）逆向 → 趋势已反转，立即平仓
+          8~9/16              → 趋势不明朗，继续等待
+          < 8/16              → 方向未变，不干预
+
+        Args:
+            position_id: 持仓ID
+            position_side: 持仓方向（LONG/SHORT）
+
+        Returns:
+            逆向K线根数，缓冲区不足16根时返回 -1（表示数据不足，不触发）
+        """
+        if position_id not in self.kline_5m_buffer:
+            return -1
+        buffer = self.kline_5m_buffer[position_id]
+        if len(buffer) < 16:
+            return -1  # 数据不足，不触发
+
+        last_16 = buffer[-16:]
+        against_count = 0
+        for candle in last_16:
+            if position_side == 'LONG' and candle['close'] < candle['open']:
+                against_count += 1
+            elif position_side == 'SHORT' and candle['close'] > candle['open']:
+                against_count += 1
+        return against_count
 
     async def _check_5m_no_improvement_single(self, position_id: int, position_side: str) -> bool:
         """
@@ -1315,8 +1350,8 @@ class SmartExitOptimizer:
             # ============================================================
             # === 优先级0: 最小持仓时间限制 (30分钟) ===
             # ============================================================
-            # 开仓30分钟内只允许止损和止盈,不允许其他原因平仓
-            MIN_HOLD_MINUTES = 30  # 30分钟最小持仓时间
+            # 开仓60分钟内只允许止损和止盈,不允许其他原因平仓
+            MIN_HOLD_MINUTES = 60  # 60分钟最小持仓时间（原30分钟，延长以减少假突破割肉）
 
             # ============================================================
             # === 优先级1: 极端亏损兜底止损（风控底线，无需等待最小持仓时间） ===
