@@ -150,21 +150,24 @@ class Big4TrendDetector:
         # 已按权重累加，不需要再除以数量（权重总和=1.0）
         avg_strength = total_strength
 
-        # 🔥 强趋势逻辑：只看得分>70（移除3个同向判断）
-        if bullish_weight > 0.45 and avg_strength > 70:
+        # 🔥 趋势判断：要求多币种共振，避免BTC独涨/独跌误判方向
+        # STRONG: 权重>70%（BTC+ETH同向，即80%）+ 强度>70
+        # BULLISH/BEARISH: 权重>60%（BTC+任一其他，或ETH+BNB+SOL同向）
+        # 旧阈值45%允许BTC单独触发（50%>45%），现已修正
+        if bullish_weight > 0.70 and avg_strength > 70:
             overall_signal = 'STRONG_BULLISH'
             recommendation = f"{'+'.join(bullish_coins)}看涨(强度{avg_strength:.0f}>70，权重{bullish_weight*100:.0f}%)，🚫禁止做空"
             emergency_intervention['block_short'] = True
             emergency_intervention['details'] = f"Big4强多头趋势(强度{avg_strength:.0f}>70)"
-        elif bearish_weight > 0.45 and avg_strength > 70:
+        elif bearish_weight > 0.70 and avg_strength > 70:
             overall_signal = 'STRONG_BEARISH'
             recommendation = f"{'+'.join(bearish_coins)}看跌(强度{avg_strength:.0f}>70，权重{bearish_weight*100:.0f}%)，🚫禁止做多"
             emergency_intervention['block_long'] = True
             emergency_intervention['details'] = f"Big4强空头趋势(强度{avg_strength:.0f}>70)"
-        elif bullish_weight > 0.45:
+        elif bullish_weight > 0.60:
             overall_signal = 'BULLISH'
             recommendation = f"{'+'.join(bullish_coins)}看涨(权重{bullish_weight*100:.0f}%，强度{avg_strength:.0f})，建议优先考虑多单机会"
-        elif bearish_weight > 0.45:
+        elif bearish_weight > 0.60:
             overall_signal = 'BEARISH'
             recommendation = f"{'+'.join(bearish_coins)}看跌(权重{bearish_weight*100:.0f}%，强度{avg_strength:.0f})，建议优先考虑空单机会"
         else:
