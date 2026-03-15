@@ -875,51 +875,27 @@ class SmartDecisionBrain:
             if result:
                 opportunities.append(result)
 
-        # 🧠 从众效应防御：≥80%同向 + ≥5个信号时，分级提高阈值（按偏斜程度加力）
-        # 原理：偏斜越严重说明市场情绪越极端，惩罚越重；全市场崩盘时需要更强的信号才能入场
-        # 80~89%: +15  |  90~99%: +30  |  100%: 只取分数最高的 TOP 5
-        if len(opportunities) >= 5:
+        # 🧠 从众效应防御：Big4 NEUTRAL + ≥80%同向 + ≥5个信号时，提高阈值
+        # 前提条件：仅在 Big4 为 NEUTRAL 时生效
+        # Big4 明确看多/空时，同向信号多是正常现象，不应惩罚
+        # Big4 NEUTRAL 时大量同向信号才是情绪化追涨/杀跌的特征
+        if len(opportunities) >= 5 and big4_signal == 'NEUTRAL':
             long_count = sum(1 for o in opportunities if o['side'] == 'LONG')
             short_count = len(opportunities) - long_count
             dominant_pct = max(long_count, short_count) / len(opportunities)
             if dominant_pct >= 0.8:
                 dominant_side = 'LONG' if long_count > short_count else 'SHORT'
+                herding_threshold = self.threshold + 10
                 before_count = len(opportunities)
-
-                if dominant_pct >= 1.0:
-                    # 100% 同向：全市场共振/崩盘，只保留分数最高的 TOP 5
-                    same_dir = sorted(
-                        [o for o in opportunities if o['side'] == dominant_side],
-                        key=lambda x: x['score'], reverse=True
-                    )[:5]
-                    other_dir = [o for o in opportunities if o['side'] != dominant_side]
-                    opportunities = same_dir + other_dir
-                    logger.warning(
-                        f"🧠 [HERDING-EXTREME] 100%信号偏向{dominant_side}({before_count}个)，"
-                        f"全市场情绪极端，仅保留TOP5高分信号: {before_count}→{len(opportunities)}个"
-                    )
-                elif dominant_pct >= 0.9:
-                    # 90~99% 同向：严重偏斜，阈值 +30
-                    herding_threshold = self.threshold + 30
-                    opportunities = [
-                        o for o in opportunities
-                        if o['side'] != dominant_side or o['score'] >= herding_threshold
-                    ]
-                    logger.warning(
-                        f"🧠 [HERDING-HEAVY] {dominant_pct*100:.0f}%信号偏{dominant_side}({long_count}多/{short_count}空)，"
-                        f"阈值+30至{herding_threshold}分: {before_count}→{len(opportunities)}个"
-                    )
-                else:
-                    # 80~89% 同向：中度偏斜，阈值 +15
-                    herding_threshold = self.threshold + 15
-                    opportunities = [
-                        o for o in opportunities
-                        if o['side'] != dominant_side or o['score'] >= herding_threshold
-                    ]
-                    logger.warning(
-                        f"🧠 [HERDING] {dominant_pct*100:.0f}%信号偏{dominant_side}({long_count}多/{short_count}空)，"
-                        f"阈值+15至{herding_threshold}分: {before_count}→{len(opportunities)}个"
-                    )
+                opportunities = [
+                    o for o in opportunities
+                    if o['side'] != dominant_side or o['score'] >= herding_threshold
+                ]
+                logger.warning(
+                    f"🧠 [HERDING] Big4 NEUTRAL下{dominant_pct*100:.0f}%信号偏{dominant_side}"
+                    f"({long_count}多/{short_count}空)，阈值+10至{herding_threshold}分: "
+                    f"{before_count}→{len(opportunities)}个"
+                )
 
         logger.info(f"{'='*100}")
         logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个 | Big4状态: {big4_signal}(强度{big4_strength:.0f})")
