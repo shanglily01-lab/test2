@@ -554,7 +554,7 @@ class SmartDecisionBrain:
             bullish_1h = sum(1 for k in klines_1h[-24:] if k['close'] > k['open'])
             bearish_1h = 24 - bullish_1h
 
-            if bullish_1h >= 16:  # 阳线>=16根(66.7%)（修复：原62.5%门槛过低，震荡市误触发）
+            if bullish_1h >= 15:  # 阳线>=15根(62.5%) — 牛市顺势，不需过严
                 weight = self.scoring_weights.get('trend_1h_bull', {'long': 20, 'short': 0})
                 long_score += weight['long']
                 if weight['long'] > 0:
@@ -666,6 +666,18 @@ class SmartDecisionBrain:
                     signal_components['breakdown_short'] = weight['short']
                     logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}, 15M净力量={net_power_15m}")
 
+            # 10. Big4强力多头趋势延续信号
+            # 当BTC/ETH/BNB/SOL全部强力看多（STRONG_BULLISH），且自身有上涨动量，
+            # 给予趋势延续加分（顺势操作，防止牛市反复错过入场）
+            if (big4_result and big4_result.get('overall_signal') == 'STRONG_BULLISH' and
+                    big4_result.get('signal_strength', 0) >= 50 and
+                    gain_24h > 2 and position_pct > 50):
+                weight = self.scoring_weights.get('big4_strong_bull_cont', {'long': 15, 'short': 0})
+                long_score += weight['long']
+                if weight['long'] > 0:
+                    signal_components['big4_strong_bull_cont'] = weight['long']
+                    logger.info(f"{symbol} Big4强力牛市延续: signal_strength={big4_result.get('signal_strength',0):.0f}, gain_24h={gain_24h:.2f}%")
+
             # ========== 移除EMA评分 (已有Big4市场趋势判断) ==========
             # 已移除: ema_bull, ema_bear
             # Big4 (BTC/ETH/BNB/SOL) 市场趋势判断已足够,EMA评分多余
@@ -683,17 +695,19 @@ class SmartDecisionBrain:
             _b4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
 
             # 🧠 群体极化防御：Big4强度越高，同向开仓门槛越高（防止羊群效应追涨杀跌）
+            # 例外：STRONG_BULLISH/STRONG_BEARISH时四大币一致，属于真实趋势而非羊群效应，不惩罚
             _crowding_penalty = 0
-            if _b4_strength >= 70:
-                _crowding_penalty = 15
-            elif _b4_strength >= 55:
-                _crowding_penalty = 8
+            if _b4_signal not in ('STRONG_BULLISH', 'STRONG_BEARISH'):
+                if _b4_strength >= 70:
+                    _crowding_penalty = 15
+                elif _b4_strength >= 55:
+                    _crowding_penalty = 8
 
-            big4_bullish = (_b4_signal == 'BULLISH' and _b4_strength >= 50)
-            big4_bearish = (_b4_signal == 'BEARISH' and _b4_strength >= 50)
+            big4_bullish = (_b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 50)
+            big4_bearish = (_b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 50)
 
             if big4_bullish:
-                long_threshold = 60 + _crowding_penalty   # 牛市：基础60 + 群体惩罚
+                long_threshold = 60 + _crowding_penalty   # 牛市：基础60 + 群体惩罚(STRONG_BULLISH时=0)
             elif big4_bearish:
                 long_threshold = 100                       # 熊市：严控做多
             else:
@@ -731,7 +745,7 @@ class SmartDecisionBrain:
                 # 🔥 修复 (2026-02-11): position_low应该是多头信号, position_high应该是空头信号
                 bullish_signals = {
                     'position_low', 'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
-                    'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull'
+                    'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull', 'big4_strong_bull_cont'
                 }
                 bearish_signals = {
                     'position_high', 'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
