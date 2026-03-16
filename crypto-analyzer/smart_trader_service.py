@@ -878,6 +878,26 @@ class SmartDecisionBrain:
         # 每次扫描前重新加载黑名单,确保运行时添加的黑名单立即生效
         self._reload_blacklist()
 
+        # K线数据新鲜度检查：防止采集服务崩溃时基于过时数据开仓
+        try:
+            _stale_conn = self._get_connection()
+            _stale_cur = _stale_conn.cursor()
+            _stale_cur.execute(
+                "SELECT MAX(open_time) FROM kline_data WHERE timeframe='1h' AND exchange='binance_futures'"
+            )
+            _stale_row = _stale_cur.fetchone()
+            _stale_cur.close()
+            if _stale_row and _stale_row[0]:
+                _age_hours = (time.time() * 1000 - _stale_row[0]) / 3600000
+                if _age_hours > 2:
+                    logger.error(
+                        f"[STALE_DATA] ⚠️ K线数据已 {_age_hours:.1f}h 未更新！"
+                        f"采集服务可能已崩溃，跳过本轮扫描以避免基于过时数据开仓。"
+                    )
+                    return []
+        except Exception as _e:
+            logger.warning(f"检查K线新鲜度失败（放行）: {_e}")
+
         logger.info(f"\n{'='*100}")
         logger.info(f"🔍 开始扫描 {len(self.whitelist)} 个交易对 | 开仓阈值: {self.threshold}分")
 

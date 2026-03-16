@@ -546,6 +546,39 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_periodic("update_data_management_stats_cache",2 * 3600, "数据管理统计(2h)"))
         asyncio.create_task(_periodic("update_collection_status_cache",    2 * 3600, "数据采集情况(2h)"))
 
+        # ── 采集服务守护进程（fast_collector_service.py watchdog）────────────────
+        _collector_script = str(project_root / "fast_collector_service.py")
+
+        async def _collector_watchdog():
+            """每5分钟检查 fast_collector_service.py 是否运行，崩溃时自动重启"""
+            await asyncio.sleep(30)  # 启动延迟，等待主服务稳定
+            while True:
+                try:
+                    check = await asyncio.create_subprocess_exec(
+                        "pgrep", "-f", "fast_collector_service.py",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await check.wait()
+                    if check.returncode != 0:
+                        logger.warning("⚠️ [WATCHDOG] fast_collector_service.py 未运行，正在重启...")
+                        restart_proc = await asyncio.create_subprocess_exec(
+                            sys.executable, _collector_script,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL,
+                            cwd=str(project_root),
+                            start_new_session=True,
+                        )
+                        logger.info(f"✅ [WATCHDOG] fast_collector_service.py 已重启，PID={restart_proc.pid}")
+                    else:
+                        logger.debug("✅ [WATCHDOG] fast_collector_service.py 运行正常")
+                except Exception as e:
+                    logger.error(f"❌ [WATCHDOG] 检查采集服务失败: {e}")
+                await asyncio.sleep(5 * 60)
+
+        asyncio.create_task(_collector_watchdog())
+        logger.info("✅ 采集服务守护进程已启动（每5分钟检查 fast_collector_service.py）")
+
         # schedule 仅保留用于定时点任务（每天00:00和12:00的复盘分析）
         async def schedule_runner():
             """运行 schedule 中的定时点任务（复盘分析），在线程池执行避免阻塞"""
