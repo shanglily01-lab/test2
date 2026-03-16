@@ -667,27 +667,29 @@ class SmartDecisionBrain:
 
             # V1评分计算完成，稍后与V2一起打印
 
-            # 🔥 动态阈值：LONG阈值比SHORT更严格（LONG历史胜率更低）
-            # Big4强力看多时（牛市）：LONG降至60，SHORT保持60
-            # 普通行情：LONG提升至100（数据显示100+才是LONG盈利分水岭），SHORT保持60
+            # 🔥 动态阈值：三段式设计（牛市/中性/熊市）
+            # Big4 BULLISH(≥50)  → LONG=60,  SHORT=60   (顺势做多)
+            # Big4 NEUTRAL       → LONG=75,  SHORT=60   (中性偏保守做多)
+            # Big4 BEARISH(≥50)  → LONG=100, SHORT=60   (熊市严控做多)
             _b4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
             _b4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
 
             # 🧠 群体极化防御：Big4强度越高，同向开仓门槛越高（防止羊群效应追涨杀跌）
-            # 强度越大说明市场越一致看多/空，此时才是最危险的反转时刻
             _crowding_penalty = 0
             if _b4_strength >= 70:
-                _crowding_penalty = 15  # 强烈群体效应（全市场共振）：+15分门槛
+                _crowding_penalty = 15
             elif _b4_strength >= 55:
-                _crowding_penalty = 8   # 中度群体效应：+8分门槛
+                _crowding_penalty = 8
 
             big4_bullish = (_b4_signal == 'BULLISH' and _b4_strength >= 50)
             big4_bearish = (_b4_signal == 'BEARISH' and _b4_strength >= 50)
 
             if big4_bullish:
-                long_threshold = 60 + _crowding_penalty   # 牛市基础60，群体效应惩罚
+                long_threshold = 60 + _crowding_penalty   # 牛市：基础60 + 群体惩罚
+            elif big4_bearish:
+                long_threshold = 100                       # 熊市：严控做多
             else:
-                long_threshold = 100  # 普通行情需100分
+                long_threshold = 75                        # 中性行情：75分（原100太严苛，实质禁止做多）
 
             short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
 
