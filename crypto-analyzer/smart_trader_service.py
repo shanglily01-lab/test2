@@ -475,14 +475,15 @@ class SmartDecisionBrain:
 
             # ========== 1小时K线分析 (主要) ==========
 
-            # 1. 位置评分 - 使用72小时(3天)高低点
-            high_72h = max(k['high'] for k in klines_1h[-72:])
-            low_72h = min(k['low'] for k in klines_1h[-72:])
+            # 1. 位置评分 - 使用100小时(4天+)高低点（修复：原72H在强趋势中误判，改为用全部100H数据）
+            _pos_candles = klines_1h[-100:]  # 最多100H，避免强趋势持续压低/抬高position_pct
+            high_100h = max(k['high'] for k in _pos_candles)
+            low_100h = min(k['low'] for k in _pos_candles)
 
-            if high_72h == low_72h:
+            if high_100h == low_100h:
                 position_pct = 50
             else:
-                position_pct = (current - low_72h) / (high_72h - low_72h) * 100
+                position_pct = (current - low_100h) / (high_100h - low_100h) * 100
 
             # 提前计算1H量能（在位置判断之前）
             volumes_1h = [k['volume'] for k in klines_1h[-24:]]
@@ -493,7 +494,7 @@ class SmartDecisionBrain:
 
             for k in klines_1h[-24:]:
                 is_bull = k['close'] > k['open']
-                is_high_volume = k['volume'] > avg_volume_1h * 1.2  # 成交量 > 1.2倍平均量
+                is_high_volume = k['volume'] > avg_volume_1h * 1.5  # 成交量 > 1.5倍平均量（修复：原1.2倍噪声过多）
 
                 if is_bull and is_high_volume:
                     strong_bull_1h += 1
@@ -523,11 +524,18 @@ class SmartDecisionBrain:
                     if weight['short'] > 0:
                         signal_components['position_high'] = weight['short']
             else:
+                # 修复：position_mid不再双向加分（无方向意义），改为只加给当前量能主导方向
+                # 如果双方量能相当（差值<2），则不加分（中性行情，无倾向）
                 weight = self.scoring_weights.get('position_mid', {'long': 5, 'short': 5})
-                long_score += weight['long']
-                short_score += weight['short']
-                if weight['long'] > 0:
-                    signal_components['position_mid'] = weight['long']
+                if net_power_1h >= 2:  # 量能偏多，加给多头
+                    long_score += weight['long']
+                    if weight['long'] > 0:
+                        signal_components['position_mid'] = weight['long']
+                elif net_power_1h <= -2:  # 量能偏空，加给空头
+                    short_score += weight['short']
+                    if weight['short'] > 0:
+                        signal_components['position_mid'] = weight['short']
+                # 否则不加分（净力量不明显，中性不提供有效信息）
 
             # 2. 短期动量 - 最近24小时涨幅
             gain_24h = (current - klines_1h[-24]['close']) / klines_1h[-24]['close'] * 100
@@ -546,12 +554,12 @@ class SmartDecisionBrain:
             bullish_1h = sum(1 for k in klines_1h[-24:] if k['close'] > k['open'])
             bearish_1h = 24 - bullish_1h
 
-            if bullish_1h >= 15:  # 阳线>=15根(62.5%)
+            if bullish_1h >= 16:  # 阳线>=16根(66.7%)（修复：原62.5%门槛过低，震荡市误触发）
                 weight = self.scoring_weights.get('trend_1h_bull', {'long': 20, 'short': 0})
                 long_score += weight['long']
                 if weight['long'] > 0:
                     signal_components['trend_1h_bull'] = weight['long']
-            elif bearish_1h >= 15:  # 阴线>=15根(62.5%)
+            elif bearish_1h >= 16:  # 阴线>=16根(66.7%)
                 weight = self.scoring_weights.get('trend_1h_bear', {'long': 0, 'short': 20})
                 short_score += weight['short']
                 if weight['short'] > 0:
@@ -608,7 +616,7 @@ class SmartDecisionBrain:
 
             for k in klines_15m[-24:]:
                 is_bull = k['close'] > k['open']
-                is_high_volume = k['volume'] > avg_volume_15m * 1.2
+                is_high_volume = k['volume'] > avg_volume_15m * 1.5  # 修复：与1H统一使用1.5倍
 
                 if is_bull and is_high_volume:
                     strong_bull_15m += 1
@@ -650,13 +658,13 @@ class SmartDecisionBrain:
 
             # 9. 破位追空信号: position_low + 强力量能空头 → 可以做空
             # 历史数据验证: 643笔订单, 55.8%胜率, $5736盈利 (最赚钱的信号之一)
-            # 触发条件: 价格低位 + 强力空头量能
-            if position_pct < 30 and (net_power_1h <= -2 or (net_power_1h <= -2 and net_power_15m <= -2)):
+            # 触发条件: 价格低位 + 1H和15M双重空头量能确认（修复：原条件逻辑冗余，实为只检查1H）
+            if position_pct < 30 and net_power_1h <= -2 and net_power_15m <= -2:
                 weight = self.scoring_weights.get('breakdown_short', {'long': 0, 'short': 20})
                 short_score += weight['short']
                 if weight['short'] > 0:
                     signal_components['breakdown_short'] = weight['short']
-                    logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}")
+                    logger.info(f"{symbol} 破位追空: position={position_pct:.1f}%, 1H净力量={net_power_1h}, 15M净力量={net_power_15m}")
 
             # ========== 移除EMA评分 (已有Big4市场趋势判断) ==========
             # 已移除: ema_bull, ema_bear
@@ -801,7 +809,20 @@ class SmartDecisionBrain:
                     logger.info(f"📊 {symbol:<12} V1评分 多【{long_score}分】空【{short_score}分】信号【{signal_names}】，V2 趋势【{v2_direction}】分数：{v2_score:+d}，协同过滤 【{v2_passed}】")
 
                     if not v2_result['passed']:
-                        return None
+                        # 🔥 修复：软阻断（原硬阻断在趋势转折点误杀高置信信号）
+                        # V2方向冲突时要求V1分数高出当前阈值25分才允许通过（趋势转折期V2滞后5-15分钟）
+                        current_threshold = long_threshold if side == 'LONG' else short_threshold_adj
+                        v2_conflict_threshold = current_threshold + 25
+                        # 仅方向冲突时允许软阻断，强度不足仍然拒绝
+                        is_direction_conflict = v2_result.get('details', {}).get('direction_mismatch', False)
+                        if is_direction_conflict and score >= v2_conflict_threshold:
+                            logger.warning(
+                                f"🔶 [V2_OVERRIDE] {symbol} {side} V2方向冲突但V1得分{score}≥{v2_conflict_threshold}分"
+                                f"（阈值{current_threshold}+25），趋势转折期谨慎放行"
+                            )
+                            # 继续执行（不return None）
+                        else:
+                            return None
                 else:
                     # 没有V2服务，只打印V1
                     signal_names = ', '.join(signal_components.keys()) if signal_components else '无'

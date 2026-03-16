@@ -3,7 +3,7 @@
 信号评分V2服务
 基于数据库预计算的K线评分进行信号过滤
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, List
 import pymysql
 from loguru import logger
@@ -20,7 +20,8 @@ class SignalScoreV2Service:
             score_config: 评分配置（来自config.yaml的resonance_filter部分）
         """
         self.db_config = db_config
-        self.connection = None
+        # 修复：移除单一持久连接（会因MySQL wait_timeout静默断开）
+        # 改为每次查询创建新连接并在finally中关闭
 
         # 默认配置
         default_config = {
@@ -36,11 +37,9 @@ class SignalScoreV2Service:
 
         logger.info(f"信号评分V2服务已初始化，配置: {self.config}")
 
-    def _get_connection(self):
-        """获取数据库连接"""
-        if self.connection is None or not self.connection.open:
-            self.connection = pymysql.connect(**self.db_config)
-        return self.connection
+    def _new_connection(self):
+        """创建新数据库连接（每次调用返回新连接，调用方负责关闭）"""
+        return pymysql.connect(**self.db_config)
 
     def get_coin_score(self, symbol: str) -> Optional[Dict]:
         """获取代币评分
@@ -57,10 +56,10 @@ class SignalScoreV2Service:
             query_symbol = symbol.replace('/USD', '/USDT')
             logger.debug(f"币本位交易对 {symbol} 使用 {query_symbol} 的评分数据")
 
-        conn = self._get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
+        conn = None
         try:
+            conn = self._new_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
             cursor.execute("""
                 SELECT
                     symbol,
@@ -99,8 +98,10 @@ class SignalScoreV2Service:
 
         except Exception as e:
             logger.error(f"❌ 获取 {symbol} 评分失败: {e}")
-            cursor.close()
             return None
+        finally:
+            if conn:
+                conn.close()
 
     def get_big4_score(self) -> Optional[Dict]:
         """获取Big4评分
@@ -108,10 +109,10 @@ class SignalScoreV2Service:
         Returns:
             Big4评分数据字典，如果没有数据则返回None
         """
-        conn = self._get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
+        conn = None
         try:
+            conn = self._new_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
             # 🔥 使用big4_trend_history表获取最新Big4趋势数据
             cursor.execute("""
                 SELECT
@@ -179,8 +180,10 @@ class SignalScoreV2Service:
 
         except Exception as e:
             logger.error(f"❌ 获取Big4评分失败: {e}")
-            cursor.close()
             return None
+        finally:
+            if conn:
+                conn.close()
 
     def check_score_filter(self, symbol: str, signal_direction: str) -> Dict:
         """检查代币评分是否通过过滤
@@ -220,7 +223,6 @@ class SignalScoreV2Service:
             }
 
         # 🔥 检查数据是否过时（超过15分钟），如果过时则忽略V2过滤
-        from datetime import datetime, timedelta, timezone
         updated_at = coin_score.get('updated_at')
         if updated_at:
             if isinstance(updated_at, str):
@@ -270,7 +272,7 @@ class SignalScoreV2Service:
                         'reason': f'{symbol} 方向不匹配：评分方向{coin_score["direction"]} vs 信号{signal_direction}',
                         'coin_score': coin_score,
                         'big4_score': None,
-                        'details': {}
+                        'details': {'direction_mismatch': True}
                     }
             else:
                 return {
@@ -342,20 +344,12 @@ class SignalScoreV2Service:
         min_score: Optional[int] = None,
         limit: int = 50
     ) -> List[Dict]:
-        """获取评分最高的交易对
-
-        Args:
-            direction: 过滤方向 ('LONG', 'SHORT', 'NEUTRAL')，None表示不过滤
-            min_score: 最低评分（绝对值），None表示不过滤
-            limit: 返回数量
-
-        Returns:
-            评分列表
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
+        """获取评分最高的交易对"""
+        conn = None
         try:
+            conn = self._new_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
             where_clauses = ["exchange = 'binance_futures'"]
             params = []
 
@@ -396,27 +390,18 @@ class SignalScoreV2Service:
 
         except Exception as e:
             logger.error(f"❌ 查询评分失败: {e}")
-            cursor.close()
             return []
+        finally:
+            if conn:
+                conn.close()
 
     def get_market_sentiment(self) -> Dict:
-        """获取市场整体情绪
-
-        Returns:
-            {
-                'total': int,  # 总数
-                'long_strong': int,  # 强多数量
-                'long_medium': int,  # 中多数量
-                'short_strong': int,  # 强空数量
-                'short_medium': int,  # 中空数量
-                'neutral': int,  # 中性数量
-                'sentiment': str  # 市场情绪描述
-            }
-        """
-        conn = self._get_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
-
+        """获取市场整体情绪"""
+        conn = None
         try:
+            conn = self._new_connection()
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
+
             cursor.execute("""
                 SELECT
                     direction,
@@ -474,14 +459,14 @@ class SignalScoreV2Service:
 
         except Exception as e:
             logger.error(f"❌ 获取市场情绪失败: {e}")
-            cursor.close()
             return {
                 'total': 0,
                 'sentiment': '未知'
             }
+        finally:
+            if conn:
+                conn.close()
 
     def close(self):
-        """关闭数据库连接"""
-        if self.connection and self.connection.open:
-            self.connection.close()
-            logger.info("数据库连接已关闭")
+        """兼容性方法（连接已改为按需创建，无需显式关闭）"""
+        pass
