@@ -509,6 +509,31 @@ async def lifespan(app: FastAPI):
         schedule.every().day.at("00:00").do(run_12h_retrospective)
         schedule.every().day.at("12:00").do(run_12h_retrospective)
 
+        # 每日复盘报告：每天00:00 UTC 执行，通过 Telegram 推送
+        def run_daily_review():
+            """每日复盘报告——市场涨跌榜 + 开单表现 + 策略诊断，Telegram推送"""
+            try:
+                logger.info("📊 开始执行每日复盘报告...")
+                result = subprocess.run(
+                    [sys.executable, str(project_root / 'app' / 'daily_review_report.py')],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    encoding='utf-8',
+                    errors='ignore',
+                    cwd=str(project_root),
+                )
+                if result.returncode == 0:
+                    logger.info("✅ 每日复盘报告已发送至 Telegram")
+                else:
+                    logger.error(f"❌ 每日复盘报告失败: {result.stderr[:300]}")
+            except subprocess.TimeoutExpired:
+                logger.error("❌ 每日复盘报告超时")
+            except Exception as e:
+                logger.error(f"❌ 每日复盘报告异常: {e}")
+
+        schedule.every().day.at("00:00").do(run_daily_review)
+
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
         # 每个存储过程调用都在独立 OS 子进程中运行；
         # asyncio.sleep 期间事件循环可自由处理 HTTP 请求；
