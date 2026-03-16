@@ -1483,7 +1483,10 @@ class CoinFuturesTraderService:
                     f"[PROFIT-GUARD] 盈利熔断触发! 过去{window_hours}h盈利={pnl_6h:+.1f}U "
                     f"超过阈值{profit_threshold}U => coin_futures_trading_enabled=0，请手动重新开启"
                 )
-                if hasattr(self, 'telegram_notifier') and self.telegram_notifier:
+                _last_notified = getattr(self, '_profit_guard_notified_at', None)
+                _cooldown_ok = (_last_notified is None or
+                                (datetime.utcnow() - _last_notified).total_seconds() >= 300)
+                if _cooldown_ok and hasattr(self, 'telegram_notifier') and self.telegram_notifier:
                     try:
                         self.telegram_notifier.send_message(
                             f"🔴 【币本位盈利熔断】已触发\n\n"
@@ -1491,11 +1494,13 @@ class CoinFuturesTraderService:
                             f"阈值: {profit_threshold}U\n"
                             f"币本位交易已自动停止，请手动重新开启"
                         )
+                        self._profit_guard_notified_at = datetime.utcnow()
                     except Exception:
                         pass
                 return True
 
             cursor.close()
+            self._profit_guard_notified_at = None  # 条件解除，重置冷却
             return False
 
         except Exception as e:
@@ -1548,7 +1553,10 @@ class CoinFuturesTraderService:
                     f"[LOSS-GUARD] 亏损熔断触发! 过去{window_hours}h亏损={pnl:+.1f}U "
                     f"超过阈值-{loss_threshold}U => coin_futures_trading_enabled=0，请手动重新开启"
                 )
-                if hasattr(self, 'telegram_notifier') and self.telegram_notifier:
+                _last_notified = getattr(self, '_loss_guard_notified_at', None)
+                _cooldown_ok = (_last_notified is None or
+                                (datetime.utcnow() - _last_notified).total_seconds() >= 300)
+                if _cooldown_ok and hasattr(self, 'telegram_notifier') and self.telegram_notifier:
                     try:
                         self.telegram_notifier.send_message(
                             f"🔴 【币本位亏损熔断】已触发\n\n"
@@ -1556,11 +1564,13 @@ class CoinFuturesTraderService:
                             f"阈值: -{loss_threshold}U\n"
                             f"币本位交易已自动停止，请手动重新开启"
                         )
+                        self._loss_guard_notified_at = datetime.utcnow()
                     except Exception:
                         pass
                 return True
 
             cursor.close()
+            self._loss_guard_notified_at = None  # 条件解除，重置冷却
             return False
 
         except Exception as e:
