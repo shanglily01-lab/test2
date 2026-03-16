@@ -516,7 +516,7 @@ class SmartDecisionBrain:
                 # 🔥 修复：当Big4强力看多时（牛市），高位是正常状态，不产生做空信号
                 # 避免牛市中position_high持续触发空头与V2多头冲突导致全部信号被拒绝
                 big4_bullish = (big4_result and
-                                big4_result.get('overall_signal') == 'BULLISH' and
+                                big4_result.get('overall_signal') in ('BULLISH', 'STRONG_BULLISH') and
                                 big4_result.get('signal_strength', 0) >= 50)
                 if not big4_bullish:
                     weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
@@ -842,11 +842,12 @@ class SmartDecisionBrain:
                 if big4_result:
                     _b4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                     _b4_strength = big4_result.get('signal_strength', 0)
-                    if _b4_signal == 'BULLISH' and _b4_strength >= 40 and side == 'SHORT':
-                        logger.info(f"🚫 {symbol} Big4看多(强度{_b4_strength:.0f}≥40)，禁止逆势做空")
+                    # 修复：同时处理 STRONG_BULLISH / STRONG_BEARISH
+                    if _b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 40 and side == 'SHORT':
+                        logger.info(f"🚫 {symbol} Big4看多{_b4_signal}(强度{_b4_strength:.0f}≥40)，禁止逆势做空")
                         return None
-                    if _b4_signal == 'BEARISH' and _b4_strength >= 40 and side == 'LONG':
-                        logger.info(f"🚫 {symbol} Big4看空(强度{_b4_strength:.0f}≥40)，禁止逆势做多")
+                    if _b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 40 and side == 'LONG':
+                        logger.info(f"🚫 {symbol} Big4看空{_b4_signal}(强度{_b4_strength:.0f}≥40)，禁止逆势做多")
                         return None
 
                 # 生成signal_type用于模式匹配

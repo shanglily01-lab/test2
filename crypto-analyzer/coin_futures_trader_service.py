@@ -828,7 +828,7 @@ class CoinFuturesDecisionBrain:
             elif position_pct > 70:
                 # 🔥 修复：当Big4强力看多时（牛市），高位是正常状态，不产生做空信号
                 big4_bullish = (big4_result and
-                                big4_result.get('overall_signal') == 'BULLISH' and
+                                big4_result.get('overall_signal') in ('BULLISH', 'STRONG_BULLISH') and
                                 big4_result.get('signal_strength', 0) >= 50)
                 if not big4_bullish:
                     weight = self.scoring_weights.get('position_high', {'long': 0, 'short': 20})
@@ -1013,7 +1013,7 @@ class CoinFuturesDecisionBrain:
 
             # 🔥 动态阈值：牛市时降低多头开仓门槛
             big4_bullish = (big4_result and
-                            big4_result.get('overall_signal') == 'BULLISH' and
+                            big4_result.get('overall_signal') in ('BULLISH', 'STRONG_BULLISH') and
                             big4_result.get('signal_strength', 0) >= 50)
             long_threshold = 50 if big4_bullish else self.threshold
 
@@ -3465,26 +3465,30 @@ class CoinFuturesTraderService:
                                 logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
                             # 🚫 完全禁止反方向开仓（无论强度如何）
-                            if symbol_signal == 'BEARISH' and new_side == 'LONG':
+                            # 修复：同时处理 STRONG_BULLISH / STRONG_BEARISH
+                            is_bullish_signal = symbol_signal in ('BULLISH', 'STRONG_BULLISH')
+                            is_bearish_signal = symbol_signal in ('BEARISH', 'STRONG_BEARISH')
+
+                            if is_bearish_signal and new_side == 'LONG':
                                 # Big4看空时，完全禁止开多
-                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看空(强度{signal_strength:.1f}), 完全禁止LONG信号 (原评分{new_score})")
+                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看空{symbol_signal}(强度{signal_strength:.1f}), 完全禁止LONG信号 (原评分{new_score})")
                                 continue
 
-                            elif symbol_signal == 'BULLISH' and new_side == 'SHORT':
+                            elif is_bullish_signal and new_side == 'SHORT':
                                 # Big4看多时，完全禁止开空
-                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看多(强度{signal_strength:.1f}), 完全禁止SHORT信号 (原评分{new_score})")
+                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看多{symbol_signal}(强度{signal_strength:.1f}), 完全禁止SHORT信号 (原评分{new_score})")
                                 continue
 
                             # 如果信号方向一致,提升评分
-                            elif symbol_signal == 'BULLISH' and new_side == 'LONG':
+                            elif is_bullish_signal and new_side == 'LONG':
                                 boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
                                 new_score = new_score + boost
-                                logger.info(f"[BIG4-BOOST] {symbol} 市场看多与LONG方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+                                logger.info(f"[BIG4-BOOST] {symbol} 市场看多{symbol_signal}与LONG方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
 
-                            elif symbol_signal == 'BEARISH' and new_side == 'SHORT':
+                            elif is_bearish_signal and new_side == 'SHORT':
                                 boost = min(20, int(signal_strength * 0.3))  # 最多提升20分
                                 new_score = new_score + boost
-                                logger.info(f"[BIG4-BOOST] {symbol} 市场看空与SHORT方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
+                                logger.info(f"[BIG4-BOOST] {symbol} 市场看空{symbol_signal}与SHORT方向一致, 评分提升: {opp['score']} -> {new_score} (+{boost})")
 
                             # 更新机会评分 (用于后续记录)
                             opp['score'] = new_score
