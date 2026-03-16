@@ -490,6 +490,163 @@ class DailyReviewReport:
         return "\n".join(lines)
 
     # ──────────────────────────────────────────────────────────────────────────
+    # 数据持久化
+    # ──────────────────────────────────────────────────────────────────────────
+    def save_to_db(self, movers: dict, trades: dict, missed: list, diag: dict):
+        """将分析结果写入 daily_review_reports + daily_review_signal_analysis"""
+        date_key = self.period_start.date()
+
+        # capture metrics（只统计涨跌>5%的大行情）
+        big_movers = [c for c in movers['top_gainers'] + movers['top_losers']
+                      if abs(c['change_pct']) > 5]
+        # 去重（top_gainers/top_losers 可能重叠）
+        seen = set()
+        unique_big = []
+        for c in big_movers:
+            if c['symbol'] not in seen:
+                seen.add(c['symbol'])
+                unique_big.append(c)
+        total_opp = len(unique_big)
+        captured  = total_opp - len(missed)
+        rate      = (captured / total_opp * 100) if total_opp > 0 else 100.0
+
+        # report_json（与 auto_parameter_optimizer.py 兼容结构）
+        report_json = {
+            'date':                str(date_key),
+            'capture_rate':        round(rate, 2),
+            'total_opportunities': total_opp,
+            'captured_count':      captured,
+            'missed_count':        len(missed),
+            'missed_opportunities': [
+                {
+                    'symbol':          c['symbol'],
+                    'price_change_pct': c['change_pct'],
+                    'move_type':       'pump' if c['change_pct'] > 0 else 'dump',
+                    'timeframe':       '1d',
+                }
+                for c in missed[:20]
+            ],
+            'signal_performances': [
+                {
+                    'signal_type': comp,
+                    'trade_count': cnt,
+                    'win_rate':    round(wr / 100.0, 4),
+                    'total_pnl':   0,
+                }
+                for comp, (cnt, wr) in diag['comp_stats'].items()
+            ],
+            'market_overview': {
+                'up_count':   movers['up_count'],
+                'down_count': movers['down_count'],
+                'total':      movers['total'],
+            },
+            'trading_summary': {
+                'total':           trades['total'],
+                'win_rate':        round(trades['win_rate'], 2),
+                'total_pnl':       round(trades['total_pnl'], 2),
+                'long_total':      trades.get('long_total', 0),
+                'short_total':     trades.get('short_total', 0),
+                'long_win_rate':   round(trades['long_wins'] / trades['long_total'] * 100, 2)
+                                   if trades.get('long_total') else 0,
+                'short_win_rate':  round(trades['short_wins'] / trades['short_total'] * 100, 2)
+                                   if trades.get('short_total') else 0,
+            },
+            'strategy_diagnosis': diag['tips'],
+        }
+
+        conn = self._conn()
+        try:
+            cur = conn.cursor()
+
+            # 主表 upsert
+            rj = json.dumps(report_json, ensure_ascii=False)
+            cur.execute("""
+                INSERT INTO daily_review_reports
+                    (date, report_json, total_opportunities, captured_count, missed_count, capture_rate)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    report_json=%s, total_opportunities=%s,
+                    captured_count=%s, missed_count=%s, capture_rate=%s, updated_at=NOW()
+            """, (
+                date_key, rj, total_opp, captured, len(missed), rate,
+                rj, total_opp, captured, len(missed), rate,
+            ))
+
+            # 信号组件明细
+            if diag['comp_stats']:
+                cur.execute("DELETE FROM daily_review_signal_analysis WHERE review_date = %s", (date_key,))
+                for comp, (cnt, wr) in diag['comp_stats'].items():
+                    wins = round(cnt * wr / 100)
+                    cur.execute("""
+                        INSERT INTO daily_review_signal_analysis
+                            (review_date, signal_type, total_trades, win_trades, loss_trades,
+                             win_rate, avg_pnl, long_trades, short_trades,
+                             avg_holding_minutes, captured_opportunities)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (date_key, comp, cnt, wins, cnt - wins, round(wr / 100.0, 4), 0.0, 0, 0, 0.0, 0))
+
+            conn.commit()
+            print(f"  [DB] 复盘数据存储完成 (date={date_key}, opp={total_opp}, captured={captured}, rate={rate:.1f}%)")
+        except Exception as e:
+            print(f"  [DB] 存储失败: {e}")
+        finally:
+            conn.close()
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # 自动权重优化
+    # ──────────────────────────────────────────────────────────────────────────
+    def run_weight_optimization(self) -> dict:
+        """调用 ScoringWeightOptimizer，基于近7日数据自动调整信号组件权重"""
+        try:
+            from app.services.scoring_weight_optimizer import ScoringWeightOptimizer
+            # 不传 charset，避免与 optimizer 内部 connect() 重复传参
+            opt_cfg = {k: v for k, v in self.db_cfg.items() if k != 'charset'}
+            optimizer = ScoringWeightOptimizer(opt_cfg)
+            result = optimizer.adjust_weights(dry_run=False)
+            print(f"  [OPT] 权重优化完成: 调整{len(result.get('adjusted', []))}个, 跳过{len(result.get('skipped', []))}个")
+            return result
+        except Exception as e:
+            print(f"  [OPT] 权重优化失败: {e}")
+            return {'adjusted': [], 'skipped': [], 'error': str(e)}
+
+    def _build_msg4_optimization(self, opt_result: dict) -> str:
+        import html as _html
+        lines = ["<b>信号权重自动优化</b>"]
+        adjusted = opt_result.get('adjusted', [])
+        skipped  = opt_result.get('skipped', [])
+        error    = opt_result.get('error')
+
+        if error:
+            lines.append(f"优化失败: {_html.escape(str(error)[:200])}")
+            return "\n".join(lines)
+
+        n_analyzed = len(adjusted) + len(skipped)
+        lines.append(f"分析了 {n_analyzed} 个信号组件（近7日数据）\n")
+
+        if adjusted:
+            lines.append(f"<b>调整 {len(adjusted)} 个组件权重:</b>")
+            for item in adjusted[:12]:
+                comp  = _html.escape(str(item.get('component', '')))
+                side  = item.get('side', '')
+                old_w = item.get('old_weight', 0)
+                new_w = item.get('new_weight', 0)
+                perf  = item.get('performance_score', 0)
+                wr    = item.get('win_rate', 0)
+                arrow = "[+]" if new_w > old_w else "[-]"
+                lines.append(
+                    f"  {arrow} {comp} ({side}) "
+                    f"{old_w:.0f} -&gt; <b>{new_w:.0f}</b>  "
+                    f"win={wr*100:.0f}% score={perf:.0f}"
+                )
+        else:
+            lines.append("本次无权重变动（数据不足或各组件表现正常）")
+
+        if skipped:
+            lines.append(f"\n跳过 {len(skipped)} 个组件（近7日样本不足5笔）")
+
+        return "\n".join(lines)
+
+    # ──────────────────────────────────────────────────────────────────────────
     # 主入口
     # ──────────────────────────────────────────────────────────────────────────
     def run(self):
@@ -512,18 +669,28 @@ class DailyReviewReport:
         diag = self.diagnose_strategy(len(missed))
         print(f"  策略诊断: 近7日{diag['total']}笔")
 
-        # 组装并发送3条消息
+        # Step 5: 持久化到数据库（供历史学习使用）
+        self.save_to_db(movers, trades, missed, diag)
+
+        # Step 6: 自动权重优化（基于近7日信号组件表现）
+        opt_result = self.run_weight_optimization()
+
+        # 组装并发送4条消息
         msg1 = self._build_msg1_market(movers)
         msg2 = self._build_msg2_trades(trades)
         msg3 = self._build_msg3_missed_strategy(missed, diag)
+        msg4 = self._build_msg4_optimization(opt_result)
 
         ok1 = _send_telegram(msg1)
         time.sleep(1)
         ok2 = _send_telegram(msg2)
         time.sleep(1)
         ok3 = _send_telegram(msg3)
+        time.sleep(1)
+        ok4 = _send_telegram(msg4)
 
-        status = "成功" if (ok1 and ok2 and ok3) else f"部分失败(msg1={ok1} msg2={ok2} msg3={ok3})"
+        status = "成功" if (ok1 and ok2 and ok3 and ok4) else \
+            f"部分失败(msg1={ok1} msg2={ok2} msg3={ok3} msg4={ok4})"
         print(f"[完成] Telegram 推送 {status}")
 
 
