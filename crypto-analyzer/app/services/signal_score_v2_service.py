@@ -214,12 +214,13 @@ class SignalScoreV2Service:
         # 获取代币评分
         coin_score = self.get_coin_score(symbol)
         if not coin_score:
+            # 无V2数据不等于反对，V1信号已足够，直接放行
             return {
-                'passed': False,
-                'reason': f'{symbol} 没有评分数据',
+                'passed': True,
+                'reason': f'{symbol} 无V2评分数据，依赖V1信号',
                 'coin_score': None,
                 'big4_score': None,
-                'details': {}
+                'details': {'no_v2_data': True}
             }
 
         # 🔥 检查数据是否过时（超过15分钟），如果过时则忽略V2过滤
@@ -291,8 +292,9 @@ class SignalScoreV2Service:
         # 不做Big4共振检查，Big4过滤在后续流程中处理
         coin_raw_score = coin_score['total_score']  # 带符号：正数=LONG，负数=SHORT
 
-        # 检查1: V1信号方向和V2评分方向是否一致
-        if coin_score['direction'] != signal_direction:
+        # 检查1: V2评分方向是否与V1方向相反（NEUTRAL=无观点，不算冲突）
+        opposite_dir = {'LONG': 'SHORT', 'SHORT': 'LONG'}
+        if coin_score['direction'] == opposite_dir.get(signal_direction):
             return {
                 'passed': False,
                 'reason': f'❌ V1/V2方向冲突: V1信号{signal_direction} vs V2评分{coin_score["direction"]}({coin_raw_score:+d})',
@@ -305,11 +307,11 @@ class SignalScoreV2Service:
                 }
             }
 
-        # 检查2: V2单币评分强度是否达标（使用绝对值，因为负数表示SHORT方向的强度）
+        # 检查2: 若V2与V1方向一致，还需强度达标；若V2为NEUTRAL则跳过强度检查（无观点≠反对）
         min_symbol_score = self.config.get('min_symbol_score', 15)  # V2协同确认阈值
         coin_strength = abs(coin_raw_score)  # 使用绝对值判断强度
 
-        if coin_strength < min_symbol_score:
+        if coin_score['direction'] == signal_direction and coin_strength < min_symbol_score:
             return {
                 'passed': False,
                 'reason': f'{symbol} V2评分强度{coin_strength}不达标（需>={min_symbol_score}）',
@@ -321,8 +323,11 @@ class SignalScoreV2Service:
                 }
             }
 
-        # 所有检查通过 - V1主导，V2协同确认
-        reason = f'✅ V2协同确认: {symbol} V2评分{coin_raw_score:+d}（强度{coin_strength}），方向{coin_score["direction"]}与V1一致'
+        # 所有检查通过 - V1主导，V2协同确认（或V2中性不反对）
+        v2_desc = f'V2评分{coin_raw_score:+d}（强度{coin_strength}），方向{coin_score["direction"]}与V1一致' \
+            if coin_score['direction'] == signal_direction \
+            else f'V2评分NEUTRAL，不反对V1方向'
+        reason = f'✅ V2协同确认: {symbol} {v2_desc}'
 
         return {
             'passed': True,
