@@ -138,8 +138,8 @@ for signal_key, stats in sorted_signals:
     print(f"{signal_type:<40} {side:<8} {count:<6} {closed:<6} {wins:<6} {losses:<6} {win_rate:<7.1f}% ${pnl:<11.2f} {avg_score:<10.1f}")
 
     # 记录最好和最差的信号
-    if closed >= 3:  # 至少3笔已平仓才算
-        if pnl < -50:
+    if closed >= 20:  # 至少20笔已平仓才有统计意义（原3笔太少，容易误伤）
+        if pnl < -100:
             worst_signals.append((signal_type, side, pnl, win_rate, count))
         elif pnl > 50:
             best_signals.append((signal_type, side, pnl, win_rate, count))
@@ -176,12 +176,13 @@ print()
 optimization_actions = []
 
 for signal_type, side, pnl, win_rate, count in worst_signals:
-    if win_rate < 30:
-        action = f"禁用 {signal_type} {side} 信号（胜率{win_rate:.1f}% < 30%，亏损${pnl:.2f}）"
+    if win_rate < 25:  # 原30%太宽松，改为25%（需要更严重才封禁）
+        action = f"禁用 {signal_type} {side} 信号（胜率{win_rate:.1f}% < 25%，亏损${pnl:.2f}）"
         optimization_actions.append({
             'action': 'BLACKLIST_SIGNAL',
             'signal_type': signal_type,
             'side': side,
+            'order_count': count,
             'reason': f"24H胜率{win_rate:.1f}%,亏损${pnl:.2f}"
         })
     elif win_rate < 40:

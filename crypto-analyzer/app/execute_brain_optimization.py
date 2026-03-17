@@ -64,6 +64,13 @@ for action in actions:
     reason = action['reason'][:200]  # 截断原因
 
     if action_type == 'BLACKLIST_SIGNAL':
+        # 🔥 安全门槛：从 reason 里提取样本数（格式: "24H胜率XX%,亏损$YY"），
+        # 但 reason 里没有 order_count，改从 action 字典里取（analyze脚本已存入 count）
+        order_count = action.get('order_count', 0)
+        if order_count < 20:
+            print(f"⚠️ 跳过黑名单写入: {signal_type} {side} 样本数{order_count}<20，等待更多数据")
+            continue
+
         # 禁用信号 - 添加到信号黑名单
         cursor.execute('''
             INSERT INTO signal_blacklist (signal_type, position_side, reason, is_active, created_at, updated_at)
