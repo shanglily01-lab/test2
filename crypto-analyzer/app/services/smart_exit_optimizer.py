@@ -499,15 +499,17 @@ class SmartExitOptimizer:
         if hold_minutes >= MIN_HOLD_MINUTES:
 
             # === 优先级2: 趋势反转止损（基于16根5M K线方向投票）===
-            # 逻辑: 亏损时统计最近16根5M K线，≥9根逆向 → 趋势已反转 → 立即平仓
-            #       7~8根逆向 → 趋势不明朗 → 继续等待
-            #       < 7根逆向 → 方向仍合理 → 不干预
+            # LONG: ≥11/16逆向 → 趋势反转（多头市场短周期震荡多，需更高确信度）
+            # SHORT: ≥9/16逆向 → 趋势反转（空单对反弹更敏感，保持原门槛）
+            #        7~8根逆向 → 趋势不明朗 → 继续等待
+            #        < 7根逆向 → 方向仍合理 → 不干预
             if profit_pct < 0:
                 against_count = await self._count_against_direction_5m(position_id, position_side)
-                if against_count >= 9:
+                reversal_threshold = 11 if position_side == 'LONG' else 9
+                if against_count >= reversal_threshold:
                     logger.info(
                         f"📊 持仓{position_id} {position_side} 趋势反转: "
-                        f"{against_count}/16根5M K线逆向, 价格{profit_pct:.2f}%, ROI{roi_pct:.2f}%"
+                        f"{against_count}/16根5M K线逆向(阈值{reversal_threshold}), 价格{profit_pct:.2f}%, ROI{roi_pct:.2f}%"
                     )
                     return True, f"趋势反转({against_count}/16根K线逆向,价格{profit_pct:.2f}%,ROI{roi_pct:.2f}%)"
                 elif against_count >= 7:

@@ -706,7 +706,11 @@ class SmartDecisionBrain:
             big4_bullish = (_b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 50)
             big4_bearish = (_b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 50)
 
-            if big4_bullish:
+            # 🔥 Big4过滤器关闭时，LONG阈值与SHORT对齐（公平测试裸信号质量）
+            # Big4过滤器启用时，仍使用三段式动态阈值保护多单方向
+            if not getattr(self, 'big4_filter_enabled', True):
+                long_threshold = self.threshold            # 过滤器关闭：LONG=SHORT=基础60
+            elif big4_bullish:
                 long_threshold = 60 + _crowding_penalty   # 牛市：基础60 + 群体惩罚(STRONG_BULLISH时=0)
             elif big4_bearish:
                 long_threshold = 100                       # 熊市：严控做多
@@ -1067,6 +1071,7 @@ class SmartTraderService:
             # Big4过滤器配置
             big4_enabled_from_db = get_big4_filter_enabled()
             self.big4_filter_config = {'enabled': big4_enabled_from_db}
+            self.brain.big4_filter_enabled = big4_enabled_from_db  # 同步到brain，使analyze()内动态阈值感知过滤器状态
             logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
 
             # K线回调建仓策略配置
@@ -3187,6 +3192,7 @@ class SmartTraderService:
 
                         if old_big4_enabled != new_big4_enabled:
                             self.big4_filter_config = {'enabled': new_big4_enabled}
+                            self.brain.big4_filter_enabled = new_big4_enabled  # 同步到brain
                             logger.info(f"🔄 [BIG4-CONFIG-UPDATE] Big4过滤器配置已更新: {'启用✅' if new_big4_enabled else '禁用❌'}")
                     except Exception as e:
                         logger.warning(f"⚠️ [CONFIG-RELOAD] 重新加载Big4配置失败: {e}")
