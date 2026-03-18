@@ -3179,12 +3179,18 @@ class CoinFuturesTraderService:
             need_restart = False
             restart_reason = ""
 
-            # 情况1: 监控任务数量不匹配
-            if db_count != monitoring_count:
+            # 情况1: 有持仓未被监控（危险）
+            # 注意: monitoring_count > db_count 是正常的（刚平仓还未清理），无需重启
+            if db_count > monitoring_count:
                 need_restart = True
                 restart_reason = (
                     f"监控任务数量不匹配 (数据库{db_count}个持仓, "
                     f"SmartExitOptimizer监控{monitoring_count}个)"
+                )
+            elif monitoring_count > db_count:
+                logger.debug(
+                    f"监控任务略多于持仓 ({monitoring_count}>{db_count})，"
+                    f"已平仓清理中，无需重启"
                 )
 
             # 情况2: 有超时持仓（说明SmartExitOptimizer没有正常工作）
