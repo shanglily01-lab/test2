@@ -136,13 +136,27 @@ class ScoringWeightOptimizer:
             logger.error(f"分析组件表现失败: {e}")
             return {}
 
-    def calculate_weight_adjustment(self, current_weight: float, performance_score: float) -> tuple:
+    # 关键信号组件的最低权重保护地板（防止优化器将核心信号压至无效）
+    # SHORT做空趋势信号：三者合计需能达到阈值60，每个最低15
+    COMPONENT_MIN_WEIGHTS = {
+        'breakdown_short':     15,  # 破位追空
+        'volume_power_bear':   15,  # 量能空头
+        'trend_1h_bear':       15,  # 1H下趋势
+        'volume_power_1h_bear':12,  # 1H量能空头
+        'consecutive_bear':    12,  # 连续阴线
+        # LONG对应信号已在24分附近，无需保护
+    }
+
+    def calculate_weight_adjustment(self, current_weight: float, performance_score: float,
+                                    component: str = '', side: str = '') -> tuple:
         """
         根据表现评分计算权重调整
 
         Args:
             current_weight: 当前权重
             performance_score: 表现评分 (-100 到 +100)
+            component: 信号组件名（用于查询最低保护地板）
+            side: 方向 LONG/SHORT
 
         Returns:
             (new_weight, adjustment): 新权重和调整量
@@ -159,8 +173,9 @@ class ScoringWeightOptimizer:
         else:
             adjustment = 0
 
-        # 应用调整，限制在 5-30 范围内
-        new_weight = max(5, min(30, current_weight + adjustment))
+        # 应用调整，使用组件最低保护地板（关键信号不低于保护值）
+        min_floor = self.COMPONENT_MIN_WEIGHTS.get(component, 5) if side == 'SHORT' else 5
+        new_weight = max(min_floor, min(30, current_weight + adjustment))
 
         return new_weight, adjustment
 
@@ -211,7 +226,8 @@ class ScoringWeightOptimizer:
                     if perf['total_orders'] >= 5:  # 至少5个订单才调整
                         new_weight, adjustment = self.calculate_weight_adjustment(
                             float(current['weight_long']),
-                            perf['performance_score']
+                            perf['performance_score'],
+                            component=component_name, side='LONG'
                         )
 
                         if adjustment != 0:
@@ -243,7 +259,8 @@ class ScoringWeightOptimizer:
                     if perf['total_orders'] >= 5:  # 至少5个订单才调整
                         new_weight, adjustment = self.calculate_weight_adjustment(
                             float(current['weight_short']),
-                            perf['performance_score']
+                            perf['performance_score'],
+                            component=component_name, side='SHORT'
                         )
 
                         if adjustment != 0:
