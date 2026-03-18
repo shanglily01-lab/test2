@@ -1459,17 +1459,24 @@ class SmartExitOptimizer:
             # ============================================================
             # 原理：如果V2 K线评分方向已强力反转，应果断止损，而非因"已持这么久了"而继续持有
             # 触发条件：当前亏损 + V2方向与持仓方向相反 + V2强度为strong（非偶发波动）
+            # Big4=BULLISH时LONG仓：要求ROI<-3%才触发（避免BULLISH行情中短暂回调被踢出）
             try:
                 _decay_pnl_pct = profit_info.get('profit_pct', 0) / 100.0
                 if _decay_pnl_pct < 0:  # 只在亏损时才触发（盈利时继续持有）
                     conn = self.db_pool.get_connection()
                     try:
                         cursor = conn.cursor()
+                        # 查V2评分
                         cursor.execute(
                             "SELECT direction, strength_level FROM coin_kline_scores WHERE symbol = %s LIMIT 1",
                             (symbol,)
                         )
                         row = cursor.fetchone()
+                        # 查Big4最新信号
+                        cursor.execute(
+                            "SELECT overall_signal FROM big4_trend_history ORDER BY created_at DESC LIMIT 1"
+                        )
+                        big4_row = cursor.fetchone()
                         cursor.close()
                     finally:
                         conn.close()
@@ -1479,12 +1486,30 @@ class SmartExitOptimizer:
                         # 方向反转 + 强度strong → 信号衰减，立即平仓
                         opposite_direction = ('SHORT' if position_side == 'LONG' else 'LONG')
                         if v2_direction == opposite_direction and v2_strength == 'strong':
-                            logger.warning(
-                                f"🧠 [SIGNAL_DECAY] 持仓{position_id} {symbol} {position_side} "
-                                f"亏损{pnl_pct*100:.2f}%，V2方向已强力反转({v2_direction} strong)，"
-                                f"信号完全衰减，沉没成本防御触发平仓"
-                            )
-                            return (f'信号衰减(V2强力反转{v2_direction})', 1.0)
+                            # Big4=BULLISH时做多仓位：要求ROI<-3%才触发，避免短暂回调被踢出
+                            big4_signal = big4_row[0] if big4_row else 'NEUTRAL'
+                            if position_side == 'LONG' and big4_signal in ('BULLISH', 'STRONG_BULLISH'):
+                                _decay_roi = _decay_pnl_pct * leverage
+                                if _decay_roi > -3.0:
+                                    logger.info(
+                                        f"[SIGNAL_DECAY] {symbol} LONG Big4={big4_signal}，"
+                                        f"V2反转SHORT但ROI={_decay_roi:.1f}%>-3%，跳过衰减平仓"
+                                    )
+                                    pass  # 不触发，继续持有
+                                else:
+                                    logger.warning(
+                                        f"🧠 [SIGNAL_DECAY] 持仓{position_id} {symbol} {position_side} "
+                                        f"亏损ROI{_decay_roi:.1f}%，V2方向已强力反转({v2_direction} strong)，"
+                                        f"Big4={big4_signal}但亏损已达触发门槛，信号衰减平仓"
+                                    )
+                                    return (f'信号衰减(V2强力反转{v2_direction})', 1.0)
+                            else:
+                                logger.warning(
+                                    f"🧠 [SIGNAL_DECAY] 持仓{position_id} {symbol} {position_side} "
+                                    f"亏损{pnl_pct*100:.2f}%，V2方向已强力反转({v2_direction} strong)，"
+                                    f"信号完全衰减，沉没成本防御触发平仓"
+                                )
+                                return (f'信号衰减(V2强力反转{v2_direction})', 1.0)
             except Exception as _e:
                 logger.debug(f"[SIGNAL_DECAY] {symbol} 检查失败: {_e}")
 

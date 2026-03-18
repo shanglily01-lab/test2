@@ -689,7 +689,7 @@ class SmartDecisionBrain:
 
             # 🔥 动态阈值：三段式设计（牛市/中性/熊市）
             # Big4 BULLISH(≥50)  → LONG=60,  SHORT=60   (顺势做多)
-            # Big4 NEUTRAL       → LONG=75,  SHORT=60   (中性偏保守做多)
+            # Big4 NEUTRAL       → LONG=65,  SHORT=60   (中性适度保守，V2协同过滤已提供质量保障)
             # Big4 BEARISH(≥50)  → LONG=100, SHORT=60   (熊市严控做多)
             _b4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
             _b4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
@@ -715,7 +715,7 @@ class SmartDecisionBrain:
             elif big4_bearish:
                 long_threshold = 100                       # 熊市：严控做多
             else:
-                long_threshold = 75                        # 中性行情：75分（原100太严苛，实质禁止做多）
+                long_threshold = 65                        # 中性行情：65分（V2协同过滤提供质量保障，无需高阈值）
 
             short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
 
@@ -947,7 +947,7 @@ class SmartDecisionBrain:
             dominant_pct = max(long_count, short_count) / len(opportunities)
             if dominant_pct >= 0.8:
                 dominant_side = 'LONG' if long_count > short_count else 'SHORT'
-                herding_threshold = self.threshold + 10
+                herding_threshold = self.threshold + 5
                 before_count = len(opportunities)
                 opportunities = [
                     o for o in opportunities
@@ -955,7 +955,7 @@ class SmartDecisionBrain:
                 ]
                 logger.warning(
                     f"🧠 [HERDING] Big4 NEUTRAL下{dominant_pct*100:.0f}%信号偏{dominant_side}"
-                    f"({long_count}多/{short_count}空)，阈值+10至{herding_threshold}分: "
+                    f"({long_count}多/{short_count}空)，阈值+5至{herding_threshold}分: "
                     f"{before_count}→{len(opportunities)}个"
                 )
 
@@ -1900,6 +1900,21 @@ class SmartTraderService:
                 if margin_per_batch == 0:
                     logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易 (Level{rating_level})")
                     return False
+
+                # 低分非主流LONG仓位减半：score≤65 且非主流币 → 200U，降低踩雷风险
+                _entry_score = opp.get('score', 100)
+                _MAINSTREAM = {
+                    'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
+                    'ADA/USDT', 'DOGE/USDT', 'AVAX/USDT', 'DOT/USDT', 'LINK/USDT',
+                    'UNI/USDT', 'LTC/USDT', 'ATOM/USDT', 'ETC/USDT', 'APT/USDT',
+                    'SUI/USDT', 'OP/USDT', 'ARB/USDT', 'NEAR/USDT', 'INJ/USDT',
+                }
+                if side == 'LONG' and _entry_score <= 65 and symbol not in _MAINSTREAM and margin_per_batch > 200:
+                    logger.info(
+                        f"[LOW_SCORE_GUARD] {symbol} LONG score={_entry_score}≤65 非主流币，"
+                        f"仓位 ${margin_per_batch:.0f} → $200"
+                    )
+                    margin_per_batch = 200.0
 
                 # 记录评级信息
                 rating_tag = f"[Level{rating_level}]" if rating_level > 0 else ""
