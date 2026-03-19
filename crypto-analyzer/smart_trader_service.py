@@ -706,18 +706,29 @@ class SmartDecisionBrain:
             big4_bullish = (_b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 50)
             big4_bearish = (_b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 50)
 
-            # 🔥 Big4过滤器关闭时，LONG阈值与SHORT对齐（公平测试裸信号质量）
-            # Big4过滤器启用时，仍使用三段式动态阈值保护多单方向
+            # 🔥 动态阈值：三段式设计（牛市/中性/熊市）
+            # Big4过滤器关闭时：使用"软调整"模式，仍读取Big4状态，但不硬封（不触发100分死门槛）
+            # Big4过滤器开启时：完整三段式保护，熊市LONG=100严控
             if not getattr(self, 'big4_filter_enabled', True):
-                long_threshold = self.threshold            # 过滤器关闭：LONG=SHORT=基础60
+                # 软调整：保护极端逆势，但不完全封死，继续采集信号数据
+                if big4_bearish:
+                    long_threshold = 75                    # 熊市：提高LONG门槛（软限制，非硬封）
+                    short_threshold_adj = self.threshold   # SHORT正常放行
+                elif big4_bullish:
+                    long_threshold = self.threshold        # 牛市：LONG正常
+                    short_threshold_adj = 75               # 牛市中追空提高门槛（防止高分SHORT被反弹扫损）
+                else:
+                    long_threshold = self.threshold        # 中性：双向正常
+                    short_threshold_adj = self.threshold
             elif big4_bullish:
                 long_threshold = 60 + _crowding_penalty   # 牛市：基础60 + 群体惩罚(STRONG_BULLISH时=0)
+                short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
             elif big4_bearish:
                 long_threshold = 100                       # 熊市：严控做多
+                short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
             else:
-                long_threshold = 65                        # 中性行情：65分（V2协同过滤提供质量保障，无需高阈值）
-
-            short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+                long_threshold = 65                        # 中性行情：65分
+                short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
 
             if _crowding_penalty > 0:
                 logger.debug(
