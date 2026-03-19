@@ -99,13 +99,59 @@
         .warn-banner { background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3);
                        border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--yellow);
                        margin: 8px 16px 0; }
+
+        /* Lock overlay */
+        #lockOverlay { position: fixed; inset: 0; background: var(--bg); z-index: 500;
+                       display: flex; flex-direction: column; align-items: center; justify-content: center;
+                       padding: 32px; gap: 20px; }
+        #lockOverlay .lock-icon { font-size: 52px; }
+        #lockOverlay h2 { font-size: 20px; font-weight: 700; }
+        #lockOverlay p  { font-size: 13px; color: var(--muted); text-align: center; }
+        #lockOverlay input { width: 100%; max-width: 320px; padding: 14px 16px;
+                             background: var(--item); color: var(--text); border: 1px solid var(--border);
+                             border-radius: var(--radius); font-size: 16px; text-align: center;
+                             letter-spacing: 4px; outline: none; }
+        #lockOverlay input:focus { border-color: var(--teal); }
+        #lockOverlay .lock-btn { width: 100%; max-width: 320px; padding: 14px;
+                                 background: var(--teal); color: #000; font-weight: 700;
+                                 font-size: 15px; border: none; border-radius: var(--radius); cursor: pointer; }
+        #lockOverlay .lock-btn:active { opacity: .85; }
+        #lockOverlay .lock-err { color: var(--red); font-size: 13px; min-height: 18px; }
+
+        /* Locked controls */
+        body.locked .save-btn { opacity: .35; cursor: not-allowed; }
+        body.locked select { opacity: .35; pointer-events: none; }
+        body.locked .toggle input { pointer-events: none; opacity: .5; }
+        body.locked .strategy-row { pointer-events: none; opacity: .5; }
     </style>
 </head>
 <body>
 
+<!-- Lock overlay -->
+<div id="lockOverlay">
+    <div class="lock-icon">🔒</div>
+    <h2 id="lockTitle">管理员验证</h2>
+    <p id="lockDesc">请输入管理员密码以修改系统设置</p>
+    <input type="password" id="lockInput" placeholder="••••••••" maxlength="32"
+           onkeydown="if(event.key==='Enter')submitLock()">
+    <div id="lockCurrWrap" style="display:none;width:100%;max-width:320px;">
+        <input type="password" id="lockCurrInput" placeholder="当前密码"
+               style="margin-bottom:8px;" maxlength="32">
+    </div>
+    <div id="lockConfirmWrap" style="display:none;width:100%;max-width:320px;">
+        <input type="password" id="lockConfirmInput" placeholder="确认新密码"
+               style="margin-top:8px;" maxlength="32">
+    </div>
+    <div class="lock-err" id="lockErr"></div>
+    <button class="lock-btn" id="lockBtn" onclick="submitLock()">解锁</button>
+</div>
+
 <div class="topbar">
     <h1>⚙️ 系统设置</h1>
-    <button class="refresh-btn" onclick="loadAll()">🔄 刷新</button>
+    <div style="display:flex;gap:8px;">
+        <button class="refresh-btn" onclick="lockPage()" title="锁定">🔒</button>
+        <button class="refresh-btn" onclick="loadAll()">🔄 刷新</button>
+    </div>
 </div>
 <div id="toast"></div>
 
@@ -236,6 +282,36 @@
     </div>
 </div>
 
+<!-- 修改密码 -->
+<div class="section" style="margin-top:16px;">
+    <div class="section-title">管理员密码</div>
+    <div class="card">
+        <div class="row" style="flex-direction:column;align-items:stretch;gap:10px;">
+            <div id="chgCurrRow">
+                <div class="row-sub" style="margin-bottom:6px;">当前密码</div>
+                <input type="password" id="chgCurr" placeholder="当前密码（首次设置可留空）"
+                       style="width:100%;padding:10px 12px;background:var(--item);color:var(--text);
+                              border:1px solid var(--border);border-radius:8px;font-size:14px;">
+            </div>
+            <div>
+                <div class="row-sub" style="margin-bottom:6px;">新密码（至少4位）</div>
+                <input type="password" id="chgNew" placeholder="新密码"
+                       style="width:100%;padding:10px 12px;background:var(--item);color:var(--text);
+                              border:1px solid var(--border);border-radius:8px;font-size:14px;">
+            </div>
+            <div>
+                <div class="row-sub" style="margin-bottom:6px;">确认新密码</div>
+                <input type="password" id="chgConfirm" placeholder="再次输入新密码"
+                       style="width:100%;padding:10px 12px;background:var(--item);color:var(--text);
+                              border:1px solid var(--border);border-radius:8px;font-size:14px;">
+            </div>
+        </div>
+        <div style="padding:12px 16px;">
+            <button class="save-btn secondary" onclick="changePassword()" id="chgPwdBtn">🔑 保存新密码</button>
+        </div>
+    </div>
+</div>
+
 <!-- Bottom nav -->
 <nav class="bottom-nav">
     <a href="/m/settings" class="nav-item active">
@@ -261,13 +337,132 @@
 
 <script>
 const SYS = '/api/system';
+const SESSION_KEY = 'admin_unlocked';
+let _lockMode = 'verify'; // 'verify' | 'setup'
 
+// ── Toast ──────────────────────────────────────────────────────────────────
 function toast(msg, type='ok') {
     const el = document.getElementById('toast');
     el.textContent = msg; el.className = 'show ' + type;
     setTimeout(() => el.className = '', 2200);
 }
 
+// ── Lock / Unlock ──────────────────────────────────────────────────────────
+function isUnlocked() { return sessionStorage.getItem(SESSION_KEY) === '1'; }
+
+function lockPage() {
+    sessionStorage.removeItem(SESSION_KEY);
+    document.body.classList.add('locked');
+    document.getElementById('lockOverlay').style.display = 'flex';
+    document.getElementById('lockInput').value = '';
+    document.getElementById('lockErr').textContent = '';
+}
+
+function unlockPage() {
+    sessionStorage.setItem(SESSION_KEY, '1');
+    document.body.classList.remove('locked');
+    document.getElementById('lockOverlay').style.display = 'none';
+}
+
+function requireUnlock() {
+    if (!isUnlocked()) { toast('🔒 请先解锁', 'err'); return false; }
+    return true;
+}
+
+async function checkPasswordExists() {
+    try {
+        const r = await fetch(`${SYS}/admin/verify-password`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({password:''})
+        }).then(r=>r.json());
+        return !r.needs_setup;
+    } catch { return true; }
+}
+
+async function submitLock() {
+    const btn = document.getElementById('lockBtn');
+    const errEl = document.getElementById('lockErr');
+    errEl.textContent = '';
+
+    if (_lockMode === 'setup') {
+        const pwd = document.getElementById('lockInput').value;
+        const confirm = document.getElementById('lockConfirmInput').value;
+        if (!pwd) { errEl.textContent = '请输入密码'; return; }
+        if (pwd !== confirm) { errEl.textContent = '两次密码不一致'; return; }
+        btn.textContent = '设置中…'; btn.disabled = true;
+        const r = await fetch(`${SYS}/admin/set-password`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({new_password: pwd})
+        }).then(r=>r.json());
+        btn.textContent = '确认'; btn.disabled = false;
+        if (r.success) { toast('✅ 管理员密码已设置'); unlockPage(); }
+        else errEl.textContent = r.error || '设置失败';
+    } else {
+        const pwd = document.getElementById('lockInput').value;
+        if (!pwd) { errEl.textContent = '请输入密码'; return; }
+        btn.textContent = '验证中…'; btn.disabled = true;
+        const r = await fetch(`${SYS}/admin/verify-password`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({password: pwd})
+        }).then(r=>r.json());
+        btn.disabled = false;
+        if (r.success) { unlockPage(); }
+        else if (r.needs_setup) {
+            _lockMode = 'setup';
+            document.getElementById('lockTitle').textContent = '首次设置密码';
+            document.getElementById('lockDesc').textContent = '请设置管理员密码（至少4位）';
+            document.getElementById('lockConfirmWrap').style.display = 'block';
+            document.getElementById('lockInput').placeholder = '新密码';
+            document.getElementById('lockBtn').textContent = '确认';
+            btn.textContent = '确认';
+        } else {
+            errEl.textContent = r.error || '密码错误';
+            btn.textContent = '解锁';
+            document.getElementById('lockInput').value = '';
+            document.getElementById('lockInput').focus();
+        }
+    }
+}
+
+async function initLock() {
+    if (isUnlocked()) { unlockPage(); return; }
+    document.body.classList.add('locked');
+    // Check if password exists
+    const exists = await checkPasswordExists();
+    if (!exists) {
+        _lockMode = 'setup';
+        document.getElementById('lockTitle').textContent = '首次设置密码';
+        document.getElementById('lockDesc').textContent = '请设置管理员密码以保护系统设置（至少4位）';
+        document.getElementById('lockConfirmWrap').style.display = 'block';
+        document.getElementById('lockInput').placeholder = '新密码';
+        document.getElementById('lockBtn').textContent = '确认';
+    }
+    setTimeout(() => document.getElementById('lockInput').focus(), 100);
+}
+
+// ── Change Password ────────────────────────────────────────────────────────
+async function changePassword() {
+    if (!requireUnlock()) return;
+    const curr = document.getElementById('chgCurr').value;
+    const nw   = document.getElementById('chgNew').value;
+    const conf = document.getElementById('chgConfirm').value;
+    if (nw.length < 4) { toast('新密码至少4位', 'err'); return; }
+    if (nw !== conf)   { toast('两次密码不一致', 'err'); return; }
+    const body = {new_password: nw};
+    if (curr) body.current_password = curr;
+    const r = await fetch(`${SYS}/admin/set-password`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+    }).then(r=>r.json());
+    if (r.success) {
+        toast('✅ 密码已更新');
+        document.getElementById('chgCurr').value = '';
+        document.getElementById('chgNew').value = '';
+        document.getElementById('chgConfirm').value = '';
+    } else toast('❌ ' + (r.error || '保存失败'), 'err');
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
 function setPill(id, on) {
     const el = document.getElementById(id);
     el.className = 'pill ' + (on ? 'on' : 'off');
@@ -277,12 +472,7 @@ function setPill(id, on) {
 function updateDirectionSummary() {
     const l = document.getElementById('longToggle').checked;
     const s = document.getElementById('shortToggle').checked;
-    const map = {
-        'tt': '✅ 多空双向',
-        'tf': '📈 仅做多',
-        'ft': '📉 仅做空',
-        'ff': '⛔ 停止交易'
-    };
+    const map = {'tt':'✅ 多空双向','tf':'📈 仅做多','ft':'📉 仅做空','ff':'⛔ 停止交易'};
     document.getElementById('directionSummary').textContent = map[(l?'t':'f')+(s?'t':'f')];
 }
 
@@ -301,6 +491,7 @@ function selectStrategy(val) {
     document.getElementById(val === 'kline_pullback' ? 'sv2' : 'sv1').classList.add('active');
 }
 
+// ── Load data ──────────────────────────────────────────────────────────────
 async function loadAll() {
     try {
         const [sysR, dirR, svcR, holdR] = await Promise.all([
@@ -309,16 +500,12 @@ async function loadAll() {
             fetch(`${SYS}/trading-services`).then(r=>r.json()),
             fetch(`${SYS}/max-hold-hours`).then(r=>r.json()),
         ]);
-
         if (sysR.success) {
-            // Big4
             const b4 = sysR.data.big4_filter_enabled?.value === 'true';
             document.getElementById('big4Toggle').checked = b4;
             document.getElementById('big4Status').className = 'pill ' + (b4 ? 'on' : 'off');
             document.getElementById('big4Status').innerHTML = `<span class="dot"></span>${b4 ? '已启用' : '已禁用'}`;
-            // Strategy
-            const strat = sysR.data.batch_entry_strategy?.value || 'kline_pullback';
-            selectStrategy(strat);
+            selectStrategy(sysR.data.batch_entry_strategy?.value || 'kline_pullback');
         }
         if (dirR.success) {
             const l = dirR.data.allow_long.value === true || dirR.data.allow_long.value === 'true';
@@ -342,7 +529,9 @@ async function loadAll() {
     } catch(e) { toast('加载失败: '+e.message, 'err'); }
 }
 
+// ── Save functions (all require unlock) ───────────────────────────────────
 async function saveServices() {
+    if (!requireUnlock()) return;
     const body = {
         usdt_futures_enabled: document.getElementById('usdtToggle').checked,
         coin_futures_enabled: document.getElementById('coinToggle').checked,
@@ -353,6 +542,7 @@ async function saveServices() {
 }
 
 async function saveDirection() {
+    if (!requireUnlock()) return;
     const body = {
         allow_long: document.getElementById('longToggle').checked,
         allow_short: document.getElementById('shortToggle').checked,
@@ -362,23 +552,28 @@ async function saveDirection() {
 }
 
 async function saveBig4() {
+    if (!requireUnlock()) return;
     const enabled = document.getElementById('big4Toggle').checked;
     const r = await fetch(`${SYS}/big4-filter`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})}).then(r=>r.json());
     if (r.success) { toast('✅ Big4设置已保存'); } else toast('❌ 保存失败', 'err');
 }
 
 async function saveHoldHours() {
+    if (!requireUnlock()) return;
     const hours = parseInt(document.getElementById('holdHours').value);
     const r = await fetch(`${SYS}/max-hold-hours`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({hours})}).then(r=>r.json());
     if (r.success) { toast(`✅ 持仓时间设为 ${hours}h`); } else toast('❌ 保存失败', 'err');
 }
 
 async function saveStrategy() {
+    if (!requireUnlock()) return;
     const strategy = document.querySelector('input[name="strat"]:checked').value;
     const r = await fetch(`${SYS}/batch-entry-strategy`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({strategy})}).then(r=>r.json());
     if (r.success) { toast('✅ 策略设置已保存'); } else toast('❌ 保存失败', 'err');
 }
 
+// ── Init ───────────────────────────────────────────────────────────────────
+initLock();
 loadAll();
 </script>
 </body>

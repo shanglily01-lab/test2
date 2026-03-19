@@ -2,10 +2,11 @@
 系统配置管理API
 提供V1/V2策略切换、Big4过滤器等系统配置的读取和更新
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import Dict, Optional
 import pymysql
+import hashlib
 import os
 from loguru import logger
 
@@ -572,4 +573,75 @@ async def update_max_hold_hours(data: MaxHoldHoursUpdate):
         }
     except Exception as e:
         logger.error(f"更新max_hold_hours失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Admin password ──────────────────────────────────────────────────────────
+
+def _hash_pwd(password: str) -> str:
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+
+@router.post("/admin/verify-password")
+async def verify_admin_password(request: Request):
+    """验证管理员密码"""
+    data = await request.json()
+    password = data.get('password', '')
+    if not password:
+        return {'success': False, 'error': '密码不能为空'}
+    try:
+        conn = pymysql.connect(**get_db_config())
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT setting_value FROM system_settings WHERE setting_key='admin_password'"
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not row:
+            return {'success': False, 'needs_setup': True}
+        if _hash_pwd(password) == row['setting_value']:
+            return {'success': True}
+        return {'success': False, 'error': '密码错误'}
+    except Exception as e:
+        logger.error(f"验证管理员密码失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/set-password")
+async def set_admin_password(request: Request):
+    """设置或修改管理员密码"""
+    data = await request.json()
+    new_password = data.get('new_password', '')
+    current_password = data.get('current_password', '')
+    if len(new_password) < 4:
+        return {'success': False, 'error': '密码至少4位'}
+    try:
+        conn = pymysql.connect(**get_db_config())
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT setting_value FROM system_settings WHERE setting_key='admin_password'"
+        )
+        row = cursor.fetchone()
+        if row:
+            # 已有密码，必须验证当前密码
+            if not current_password:
+                cursor.close(); conn.close()
+                return {'success': False, 'error': '请输入当前密码'}
+            if _hash_pwd(current_password) != row['setting_value']:
+                cursor.close(); conn.close()
+                return {'success': False, 'error': '当前密码错误'}
+        new_hash = _hash_pwd(new_password)
+        cursor.execute("""
+            INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+            VALUES ('admin_password', %s, '管理员密码(SHA256)', 'web_ui', NOW())
+            ON DUPLICATE KEY UPDATE setting_value=%s, updated_by='web_ui', updated_at=NOW()
+        """, (new_hash, new_hash))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        logger.info("✅ 管理员密码已更新")
+        return {'success': True, 'message': '密码已更新'}
+    except Exception as e:
+        logger.error(f"设置管理员密码失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
