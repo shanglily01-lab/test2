@@ -559,7 +559,7 @@ class SmartDecisionBrain:
                 long_score += weight['long']
                 if weight['long'] > 0:
                     signal_components['trend_1h_bull'] = weight['long']
-            elif bearish_1h >= 16:  # 阴线>=16根(66.7%)
+            elif bearish_1h >= 14:  # 阴线>=14根(58.3%)，明确空头趋势
                 weight = self.scoring_weights.get('trend_1h_bear', {'long': 0, 'short': 20})
                 short_score += weight['short']
                 if weight['short'] > 0:
@@ -596,8 +596,8 @@ class SmartDecisionBrain:
                 if weight['long'] > 0:
                     signal_components['consecutive_bull'] = weight['long']
 
-            # 连续阴线且下跌幅度适中(不在底部) - 强做空信号
-            elif bearish_10h >= 7 and gain_10h > -5 and position_pct > 30:
+            # 连续阴线 - 趋势空头信号（去除position_pct>30限制：低位连阴=趋势延续，非反弹保护）
+            elif bearish_10h >= 7 and gain_10h > -10:
                 weight = self.scoring_weights.get('consecutive_bear', {'long': 0, 'short': 15})
                 short_score += weight['short']
                 if weight['short'] > 0:
