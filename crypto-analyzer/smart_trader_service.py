@@ -977,6 +977,34 @@ class SmartDecisionBrain:
                         f"，恐慌=趋势确认，顺势放行全部{before_count}个SHORT信号"
                     )
 
+        # 🛑 崩后企稳检测：Big4刚从BEARISH转为NEUTRAL，禁止继续追空
+        # 场景：大跌后市场已企稳，但信号组件（阴线/量能）具有滞后性，仍显示空头偏多
+        # 历史证明：此场景中HIGH-SCORE SHORT胜率仅17.4%（3/16，亏-131U）
+        if big4_signal == 'NEUTRAL' and any(o['side'] == 'SHORT' for o in opportunities):
+            try:
+                _pc_cur = self._get_connection().cursor()
+                _pc_cur.execute("""
+                    SELECT
+                        SUM(CASE WHEN overall_signal IN ('BEARISH','STRONG_BEARISH') THEN 1 ELSE 0 END) as bearish_cnt,
+                        COUNT(*) as total_cnt
+                    FROM big4_trend_history
+                    WHERE created_at >= DATE_SUB(NOW(), INTERVAL 4 HOUR)
+                """)
+                _pc_row = _pc_cur.fetchone()
+                _pc_cur.close()
+                if _pc_row and _pc_row['total_cnt']:
+                    _bearish_ratio = (_pc_row['bearish_cnt'] or 0) / _pc_row['total_cnt']
+                    if _bearish_ratio >= 0.5:
+                        _short_before = sum(1 for o in opportunities if o['side'] == 'SHORT')
+                        opportunities = [o for o in opportunities if o['side'] != 'SHORT']
+                        logger.warning(
+                            f"🛑 [POST-CRASH] 近4H BEARISH占比{_bearish_ratio*100:.0f}%"
+                            f"，Big4已转NEUTRAL → 崩后企稳，禁止做空"
+                            f"，过滤{_short_before}个SHORT信号"
+                        )
+            except Exception as _e:
+                logger.warning(f"崩后企稳检测失败（放行）: {_e}")
+
         logger.info(f"{'='*100}")
         logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个 | Big4状态: {big4_signal}(强度{big4_strength:.0f})")
         logger.info(f"{'='*100}\n")
