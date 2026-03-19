@@ -947,17 +947,24 @@ class SmartDecisionBrain:
             dominant_pct = max(long_count, short_count) / len(opportunities)
             if dominant_pct >= 0.8:
                 dominant_side = 'LONG' if long_count > short_count else 'SHORT'
-                herding_threshold = self.threshold + 5
                 before_count = len(opportunities)
-                opportunities = [
-                    o for o in opportunities
-                    if o['side'] != dominant_side or o['score'] >= herding_threshold
-                ]
-                logger.warning(
-                    f"🧠 [HERDING] Big4 NEUTRAL下{dominant_pct*100:.0f}%信号偏{dominant_side}"
-                    f"({long_count}多/{short_count}空)，阈值+5至{herding_threshold}分: "
-                    f"{before_count}→{len(opportunities)}个"
-                )
+                if dominant_side == 'LONG':
+                    # 多头羊群 = FOMO追涨，提高LONG门槛压制低质量信号
+                    herding_threshold = self.threshold + 5
+                    opportunities = [
+                        o for o in opportunities
+                        if o['side'] != 'LONG' or o['score'] >= herding_threshold
+                    ]
+                    logger.warning(
+                        f"🧠 [HERDING-LONG] {dominant_pct*100:.0f}%偏多({long_count}多/{short_count}空)"
+                        f"，FOMO追涨，LONG门槛+5至{herding_threshold}分: {before_count}→{len(opportunities)}个"
+                    )
+                else:
+                    # 空头羊群 = 恐慌是趋势力量的体现，顺势放行所有SHORT，不设惩罚
+                    logger.info(
+                        f"🧠 [HERDING-SHORT] {dominant_pct*100:.0f}%偏空({long_count}多/{short_count}空)"
+                        f"，恐慌=趋势确认，顺势放行全部{before_count}个SHORT信号"
+                    )
 
         logger.info(f"{'='*100}")
         logger.info(f"✅ 扫描完成 | 合格信号: {len(opportunities)} 个 | Big4状态: {big4_signal}(强度{big4_strength:.0f})")

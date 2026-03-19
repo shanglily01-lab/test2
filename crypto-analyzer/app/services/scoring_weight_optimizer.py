@@ -139,7 +139,7 @@ class ScoringWeightOptimizer:
     # 关键信号组件的最低权重保护地板（防止优化器将核心信号压至无效）
     # SHORT做空趋势信号：三者合计需能达到阈值60，每个最低15
     COMPONENT_MIN_WEIGHTS = {
-        'breakdown_short':     15,  # 破位追空
+        'breakdown_short':     25,  # 破位追空（低位破位=高位做空等权，保护至25）
         'volume_power_bear':   15,  # 量能空头
         'trend_1h_bear':       15,  # 1H下趋势
         'volume_power_1h_bear':12,  # 1H量能空头
