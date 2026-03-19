@@ -587,8 +587,6 @@ async def verify_admin_password(request: Request):
     """验证管理员密码"""
     data = await request.json()
     password = data.get('password', '')
-    if not password:
-        return {'success': False, 'error': '密码不能为空'}
     try:
         conn = pymysql.connect(**get_db_config())
         cursor = conn.cursor(pymysql.cursors.DictCursor)
@@ -600,6 +598,8 @@ async def verify_admin_password(request: Request):
         conn.close()
         if not row:
             return {'success': False, 'needs_setup': True}
+        if not password:
+            return {'success': False, 'error': '密码不能为空'}
         if _hash_pwd(password) == row['setting_value']:
             return {'success': True}
         return {'success': False, 'error': '密码错误'}
