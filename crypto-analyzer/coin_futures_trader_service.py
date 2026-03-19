@@ -1011,11 +1011,18 @@ class CoinFuturesDecisionBrain:
             # ========== 移除1D信号 (4小时持仓不需要1D趋势) ==========
             # 已移除: trend_1d_bull, trend_1d_bear
 
-            # 🔥 动态阈值：牛市时降低多头开仓门槛
+            # 🔥 动态阈值：牛市时降低多头开仓门槛；NEUTRAL时按 neutral_bias 细分
             big4_bullish = (big4_result and
                             big4_result.get('overall_signal') in ('BULLISH', 'STRONG_BULLISH') and
                             big4_result.get('signal_strength', 0) >= 50)
-            long_threshold = 50 if big4_bullish else self.threshold
+            if big4_bullish:
+                long_threshold = 50
+            else:
+                _nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
+                if _nb == 'DOWN':
+                    long_threshold = self.threshold + 8   # 偏空：收紧LONG
+                else:
+                    long_threshold = self.threshold       # UP/FLAT：维持正常
 
             # 打印V1评分日志（无论是否达标）
             max_score = max(long_score, short_score)

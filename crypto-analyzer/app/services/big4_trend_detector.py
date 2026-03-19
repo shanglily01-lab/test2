@@ -98,9 +98,10 @@ class Big4TrendDetector:
         bullish_weight = 0  # 看涨权重总和
         bearish_weight = 0  # 看跌权重总和
         total_strength = 0
+        net_weighted_score = 0  # V2: 用于 neutral_bias 计算
 
         for symbol in BIG4_SYMBOLS:
-            analysis = self._analyze_symbol(conn, symbol)
+            analysis = self._analyze_symbol_v2(conn, symbol)
             results[symbol] = analysis
 
             weight = COIN_WEIGHTS.get(symbol, 0.25)  # 默认25%
@@ -114,6 +115,8 @@ class Big4TrendDetector:
 
             # 无论信号是什么，都按权重累加强度
             total_strength += analysis['strength'] * weight
+            # V2: 累加原始分（用于 neutral_bias）
+            net_weighted_score += analysis.get('raw_score', 0) * weight
 
         # 🔥 紧急干预检测 (在分析完Big4后执行)
         emergency_intervention = self._detect_emergency_reversal(conn)
@@ -200,6 +203,16 @@ class Big4TrendDetector:
         choppy_market = self._detect_choppy_market(conn)
         result['is_choppy'] = choppy_market['is_choppy']
         result['choppy_market'] = choppy_market
+
+        # V2: neutral_bias（不写DB，仅运行时使用）
+        if net_weighted_score >= 15:
+            neutral_bias = 'UP'
+        elif net_weighted_score <= -15:
+            neutral_bias = 'DOWN'
+        else:
+            neutral_bias = 'FLAT'
+        result['neutral_bias'] = neutral_bias
+        result['net_weighted_score'] = net_weighted_score
 
         # 记录到数据库
         self._save_to_database(result)
@@ -877,6 +890,110 @@ class Big4TrendDetector:
         reason = ' | '.join(reasons) if reasons else '无明显信号'
 
         return signal, strength, reason
+
+    # ─────────────────────────────────────────────────────────────────
+    # V2 算法：MA8/MA20偏差 + 4H动量（响应时间 4-6H，替代30H计数法）
+    # ─────────────────────────────────────────────────────────────────
+
+    def _calc_ma_trend(self, cursor, symbol: str) -> Dict:
+        """计算 MA8/MA20 偏差，返回评分（±40/±25/0）"""
+        cursor.execute("""
+            SELECT close_price FROM kline_data
+            WHERE symbol=%s AND timeframe='1h' AND exchange='binance_futures'
+            ORDER BY open_time DESC LIMIT 24
+        """, (symbol,))
+        rows = cursor.fetchall()
+        if len(rows) < 20:
+            return {'score': 0, 'level': 'FLAT', 'ma8': 0, 'ma20': 0, 'deviation': 0,
+                    'reason': 'MA数据不足'}
+
+        closes = [float(r['close_price']) for r in rows]  # 最新在前
+        ma8  = sum(closes[:8])  / 8
+        ma20 = sum(closes[:20]) / 20
+        deviation = (ma8 - ma20) / ma20 * 100  # 正=多头排列
+
+        if deviation > 2.0:
+            score, level = 40, 'STRONG_BULL'
+        elif deviation > 0.5:
+            score, level = 25, 'MILD_BULL'
+        elif deviation < -2.0:
+            score, level = -40, 'STRONG_BEAR'
+        elif deviation < -0.5:
+            score, level = -25, 'MILD_BEAR'
+        else:
+            score, level = 0, 'FLAT'
+
+        return {'score': score, 'level': level,
+                'ma8': ma8, 'ma20': ma20, 'deviation': deviation,
+                'reason': f'MA偏差{deviation:+.2f}%({level})'}
+
+    def _calc_momentum_4h(self, cursor, symbol: str) -> Dict:
+        """计算近3根4H K线的价格动量，返回评分（±30/±20/0）"""
+        cursor.execute("""
+            SELECT close_price FROM kline_data
+            WHERE symbol=%s AND timeframe='4h' AND exchange='binance_futures'
+            ORDER BY open_time DESC LIMIT 3
+        """, (symbol,))
+        rows = cursor.fetchall()
+        if len(rows) < 2:
+            return {'score': 0, 'level': 'FLAT', 'change': 0, 'reason': '4H动量数据不足'}
+
+        latest = float(rows[0]['close_price'])
+        prev   = float(rows[-1]['close_price'])   # 2或3根前
+        change = (latest - prev) / prev * 100
+
+        if change > 1.5:
+            score, level = 30, 'STRONG_UP'
+        elif change > 0.5:
+            score, level = 20, 'MILD_UP'
+        elif change < -1.5:
+            score, level = -30, 'STRONG_DOWN'
+        elif change < -0.5:
+            score, level = -20, 'MILD_DOWN'
+        else:
+            score, level = 0, 'FLAT'
+
+        return {'score': score, 'level': level, 'change': change,
+                'reason': f'4H动量{change:+.2f}%({level})'}
+
+    def _analyze_symbol_v2(self, conn, symbol: str) -> Dict:
+        """
+        V2单币分析：MA8/MA20偏差 + 4H动量
+        最大分值: MA±40 + 动量±30 = ±70
+        BULLISH/BEARISH 门槛: ±50
+        保留 1h_analysis/15m_analysis 字段以兼容 _save_to_database
+        """
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        ma    = self._calc_ma_trend(cursor, symbol)
+        mom4h = self._calc_momentum_4h(cursor, symbol)
+        cursor.close()
+
+        raw_score = ma['score'] + mom4h['score']
+
+        if raw_score >= 50:
+            signal = 'BULLISH'
+        elif raw_score <= -50:
+            signal = 'BEARISH'
+        else:
+            signal = 'NEUTRAL'
+
+        strength = min(abs(raw_score), 100)
+        reason   = f"{ma['reason']} | {mom4h['reason']}"
+
+        ma_dominant = 'BULL' if ma['score'] > 0 else ('BEAR' if ma['score'] < 0 else 'NEUTRAL')
+
+        return {
+            'signal': signal,
+            'strength': strength,
+            'raw_score': raw_score,
+            'reason': reason,
+            '1h_analysis': {'dominant': ma_dominant},
+            '15m_analysis': {'dominant': 'NEUTRAL'},
+            'ma': ma,
+            'momentum_4h': mom4h,
+        }
+
+    # ─────────────────────────────────────────────────────────────────
 
     def _detect_emergency_reversal(self, conn) -> Dict:
         """

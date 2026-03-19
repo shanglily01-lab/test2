@@ -718,8 +718,17 @@ class SmartDecisionBrain:
                     long_threshold = self.threshold        # 牛市：LONG正常
                     short_threshold_adj = 75               # 牛市中追空提高门槛（防止高分SHORT被反弹扫损）
                 else:
-                    long_threshold = self.threshold        # 中性：双向正常
-                    short_threshold_adj = self.threshold
+                    # 中性：使用 neutral_bias 细分（偏多/平衡/偏空）
+                    _nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
+                    if _nb == 'UP':
+                        long_threshold = self.threshold        # 60：偏多，LONG正常
+                        short_threshold_adj = self.threshold + 8  # 68：偏多，SHORT提高
+                    elif _nb == 'DOWN':
+                        long_threshold = self.threshold + 8   # 68：偏空，LONG提高
+                        short_threshold_adj = self.threshold  # 60：偏空，SHORT正常
+                    else:
+                        long_threshold = self.threshold        # FLAT：双向正常
+                        short_threshold_adj = self.threshold
             elif big4_bullish:
                 long_threshold = 60 + _crowding_penalty   # 牛市：基础60 + 群体惩罚(STRONG_BULLISH时=0)
                 short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
@@ -727,8 +736,17 @@ class SmartDecisionBrain:
                 long_threshold = 100                       # 熊市：严控做多
                 short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
             else:
-                long_threshold = 65                        # 中性行情：65分
-                short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+                # 中性行情：neutral_bias 细分
+                _nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
+                if _nb == 'UP':
+                    long_threshold = 60                    # 偏多：放宽LONG
+                    short_threshold_adj = 68               # 偏多：收紧SHORT
+                elif _nb == 'DOWN':
+                    long_threshold = 70                    # 偏空：收紧LONG
+                    short_threshold_adj = 60               # 偏空：放宽SHORT
+                else:
+                    long_threshold = 65                    # FLAT（原来逻辑）
+                    short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
 
             if _crowding_penalty > 0:
                 logger.debug(
