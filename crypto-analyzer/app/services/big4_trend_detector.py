@@ -928,7 +928,8 @@ class Big4TrendDetector:
                 'reason': f'MA偏差{deviation:+.2f}%({level})'}
 
     def _calc_momentum_4h(self, cursor, symbol: str) -> Dict:
-        """计算近3根4H K线的价格动量，返回评分（±30/±20/0）"""
+        """计算4H价格动量，返回评分（±30/±20/0）
+        优先用4H K线；若无则用1H第0根 vs 第4根（最近4小时变化）"""
         cursor.execute("""
             SELECT close_price FROM kline_data
             WHERE symbol=%s AND timeframe='4h' AND exchange='binance_futures'
@@ -936,7 +937,15 @@ class Big4TrendDetector:
         """, (symbol,))
         rows = cursor.fetchall()
         if len(rows) < 2:
-            return {'score': 0, 'level': 'FLAT', 'change': 0, 'reason': '4H动量数据不足'}
+            # fallback: 用1H数据取最近5根，计算4H跨度的价格变化
+            cursor.execute("""
+                SELECT close_price FROM kline_data
+                WHERE symbol=%s AND timeframe='1h' AND exchange='binance_futures'
+                ORDER BY open_time DESC LIMIT 5
+            """, (symbol,))
+            rows = cursor.fetchall()
+            if len(rows) < 5:
+                return {'score': 0, 'level': 'FLAT', 'change': 0, 'reason': '4H动量数据不足'}
 
         latest = float(rows[0]['close_price'])
         prev   = float(rows[-1]['close_price'])   # 2或3根前
