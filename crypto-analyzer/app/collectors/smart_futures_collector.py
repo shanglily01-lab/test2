@@ -104,6 +104,13 @@ class SmartFuturesCollector:
 
             return last_time < current_bar_time
 
+        elif interval == '4h':
+            # 计算当前4小时整点（0, 4, 8, 12, 16, 20）
+            current_bar_hour = (now.hour // 4) * 4
+            current_bar_time = now.replace(hour=current_bar_hour, minute=0, second=0, microsecond=0)
+
+            return last_time < current_bar_time
+
         elif interval == '1d':
             # 计算当前天00:00
             current_bar_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -454,6 +461,7 @@ class SmartFuturesCollector:
             ('5m', 2),    # 5分钟K线，获取2根，只保存第1根（已完成）
             ('15m', 2),   # 15分钟K线，获取2根，只保存第1根（已完成）
             ('1h', 100),  # 1小时K线，要100条（超级大脑需要）
+            ('4h', 10),   # 4小时K线，要10条（Big4动量判断）
             ('1d', 50)    # 1天K线，要50条（超级大脑需要）
         ]
 
