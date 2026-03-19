@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>实盘合约 · 手机版</title>
+    <style>
+        :root {
+            --bg: #0d1117; --card: #161b22; --item: #1c2128; --border: #30363d;
+            --gold: #f59e0b; --gold-dim: rgba(245,158,11,.15); --gold-border: rgba(245,158,11,.3);
+            --green: #10b981; --red: #ef4444; --blue: #3b82f6;
+            --text: #e6edf3; --muted: #8b949e;
+            --radius: 12px; --gap: 12px;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei',sans-serif;
+               background:var(--bg); color:var(--text); font-size:14px; padding-bottom:80px; }
+
+        /* Top bar */
+        .topbar { position:sticky; top:0; z-index:100; background:var(--card);
+                  border-bottom:2px solid var(--gold); padding:14px 16px;
+                  display:flex; align-items:center; justify-content:space-between; }
+        .topbar h1 { font-size:17px; font-weight:700; color:var(--gold); }
+        .topbar-right { display:flex; align-items:center; gap:8px; }
+        .live-badge { background:var(--gold-dim); border:1px solid var(--gold-border);
+                      color:var(--gold); font-size:11px; font-weight:700; padding:3px 8px;
+                      border-radius:20px; }
+        .refresh-btn { background:none; border:1px solid var(--border); color:var(--muted);
+                       padding:6px 12px; border-radius:8px; font-size:13px; cursor:pointer; }
+        .refresh-btn:active { background:var(--item); }
+
+        /* Toast */
+        #toast { position:fixed; top:70px; left:50%; transform:translateX(-50%);
+                 background:#1f2937; color:var(--text); padding:10px 20px;
+                 border-radius:20px; font-size:13px; z-index:999;
+                 opacity:0; transition:opacity .3s; pointer-events:none; white-space:nowrap; }
+        #toast.show { opacity:1; }
+        #toast.ok  { background:#064e3b; border:1px solid var(--green); }
+        #toast.err { background:#7f1d1d; border:1px solid var(--red); }
+
+        /* Account selector */
+        .account-bar { padding:10px 16px; display:flex; align-items:center; gap:8px;
+                        overflow-x:auto; -webkit-overflow-scrolling:touch; background:var(--card);
+                        border-bottom:1px solid var(--border); }
+        .account-btn { flex-shrink:0; padding:7px 14px; border-radius:20px; font-size:13px;
+                        font-weight:600; cursor:pointer; border:1px solid var(--border);
+                        background:var(--item); color:var(--muted); transition:.2s; }
+        .account-btn.active { background:var(--gold-dim); border-color:var(--gold-border); color:var(--gold); }
+        .account-btn:active { opacity:.7; }
+
+        /* Stats row */
+        .stats-row { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:12px 16px; }
+        .stat { background:var(--card); border:1px solid var(--border); border-radius:10px;
+                padding:12px 10px; text-align:center; }
+        .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+        .stat-value { font-size:17px; font-weight:700; font-family:monospace; }
+        .stat-value.pos { color:var(--green); }
+        .stat-value.neg { color:var(--red); }
+        .stat-value.gold { color:var(--gold); }
+
+        /* Balance card */
+        .balance-card { margin:0 16px 12px; background:var(--card); border:1px solid var(--gold-border);
+                         border-radius:var(--radius); padding:16px; }
+        .balance-title { font-size:11px; color:var(--gold); text-transform:uppercase;
+                          letter-spacing:.8px; margin-bottom:10px; font-weight:600; }
+        .balance-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .bal-field-label { font-size:11px; color:var(--muted); margin-bottom:3px; }
+        .bal-field-value { font-size:16px; font-weight:700; font-family:monospace; color:var(--gold); }
+
+        /* Section */
+        .section { padding:0 16px; }
+        .section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+        .section-title { font-size:11px; font-weight:600; color:var(--muted);
+                          text-transform:uppercase; letter-spacing:.8px; }
+
+        /* Position card */
+        .pos-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+                    margin-bottom:8px; overflow:hidden; }
+        .pos-head { display:flex; align-items:center; justify-content:space-between;
+                    padding:12px 14px; border-bottom:1px solid var(--border); }
+        .pos-symbol { font-size:15px; font-weight:700; }
+        .pos-badge { padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; text-transform:uppercase; }
+        .pos-badge.long  { background:rgba(16,185,129,.15); color:var(--green); }
+        .pos-badge.short { background:rgba(239,68,68,.12);  color:var(--red); }
+        .pos-body { padding:12px 14px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .pos-field-label { font-size:10px; color:var(--muted); margin-bottom:2px; }
+        .pos-field-value { font-size:13px; font-weight:600; font-family:monospace; }
+        .pnl-pos { color:var(--green); }
+        .pnl-neg { color:var(--red); }
+        .pos-foot { padding:10px 14px; border-top:1px solid var(--border); display:flex; gap:8px; }
+        .btn { flex:1; padding:10px; border:none; border-radius:8px; font-size:13px;
+               font-weight:600; cursor:pointer; }
+        .btn-close { background:rgba(239,68,68,.15); color:var(--red); border:1px solid rgba(239,68,68,.3); }
+        .btn-close:active { background:rgba(239,68,68,.3); }
+
+        /* Order card */
+        .order-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+                       padding:12px 14px; margin-bottom:8px; display:flex; align-items:center;
+                       justify-content:space-between; }
+        .order-info { flex:1; }
+        .order-symbol { font-size:14px; font-weight:700; }
+        .order-meta { font-size:12px; color:var(--muted); margin-top:2px; }
+        .order-cancel { padding:7px 14px; background:rgba(239,68,68,.15); color:var(--red);
+                         border:1px solid rgba(239,68,68,.3); border-radius:8px; font-size:12px;
+                         font-weight:600; cursor:pointer; flex-shrink:0; }
+
+        /* Empty */
+        .empty { text-align:center; padding:30px 20px; color:var(--muted); }
+        .empty-icon { font-size:36px; margin-bottom:8px; opacity:.5; }
+
+        /* Confirm dialog */
+        .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:200; }
+        .dialog { background:var(--card); border:1px solid var(--gold-border); border-radius:16px;
+                  width:88vw; max-width:340px; padding:24px 20px;
+                  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); }
+        .dialog h3 { font-size:16px; margin-bottom:10px; color:var(--gold); }
+        .dialog p { font-size:13px; color:var(--muted); margin-bottom:20px; }
+        .dialog-btns { display:flex; gap:10px; }
+        .dialog-btns button { flex:1; padding:11px; border-radius:8px; font-size:14px;
+                              font-weight:600; cursor:pointer; border:none; }
+        .btn-cancel { background:var(--item); color:var(--text); }
+        .btn-confirm { background:var(--red); color:#fff; }
+
+        /* Connection status */
+        .conn-status { display:flex; align-items:center; gap:6px; font-size:12px;
+                        color:var(--muted); padding:8px 16px; }
+        .dot { width:7px; height:7px; border-radius:50%; background:var(--red); }
+        .dot.on { background:var(--green); animation:pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+        /* Bottom nav */
+        .bottom-nav { position:fixed; bottom:0; left:0; right:0; background:var(--card);
+                      border-top:1px solid var(--border); display:flex; z-index:100; }
+        .nav-item { flex:1; display:flex; flex-direction:column; align-items:center;
+                    padding:10px 0 8px; text-decoration:none; color:var(--muted); font-size:10px; gap:4px; }
+        .nav-item.active { color:var(--gold); }
+        .nav-item svg { width:22px; height:22px; }
+
+        /* Warning */
+        .warn-banner { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3);
+                        border-radius:8px; padding:10px 14px; font-size:12px; color:var(--red);
+                        margin:0 16px 12px; }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <h1>🔴 实盘合约</h1>
+    <div class="topbar-right">
+        <span class="live-badge">LIVE</span>
+        <button class="refresh-btn" onclick="loadAll()">🔄</button>
+    </div>
+</div>
+<div id="toast"></div>
+
+<!-- Account selector -->
+<div class="account-bar" id="accountBar">
+    <span style="font-size:12px;color:var(--muted);flex-shrink:0;">账号:</span>
+    <div id="accountBtns" style="display:flex;gap:8px;"></div>
+</div>
+
+<!-- Connection status -->
+<div class="conn-status">
+    <span class="dot" id="connDot"></span>
+    <span id="connText">连接中…</span>
+    <span style="margin-left:auto;font-size:11px;" id="lastUpdate"></span>
+</div>
+
+<!-- Stats -->
+<div class="stats-row">
+    <div class="stat">
+        <div class="stat-label">持仓数</div>
+        <div class="stat-value gold" id="posCount">…</div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">未实现盈亏</div>
+        <div class="stat-value" id="totalPnl">…</div>
+    </div>
+    <div class="stat">
+        <div class="stat-label">保证金占用</div>
+        <div class="stat-value gold" id="totalMargin">…</div>
+    </div>
+</div>
+
+<!-- Balance -->
+<div class="balance-card" id="balanceCard" style="display:none;">
+    <div class="balance-title">账户余额</div>
+    <div class="balance-grid">
+        <div>
+            <div class="bal-field-label">总权益 (USDT)</div>
+            <div class="bal-field-value" id="totalEquity">—</div>
+        </div>
+        <div>
+            <div class="bal-field-label">可用保证金</div>
+            <div class="bal-field-value" id="availableMargin">—</div>
+        </div>
+    </div>
+</div>
+
+<!-- Positions -->
+<div class="section" style="margin-bottom:16px;">
+    <div class="section-header">
+        <div class="section-title">持仓列表</div>
+    </div>
+    <div id="positionsList"></div>
+</div>
+
+<!-- Pending orders -->
+<div class="section">
+    <div class="section-header">
+        <div class="section-title">挂单列表</div>
+        <button onclick="cancelAllOrders()" style="background:none;border:none;color:var(--red);font-size:12px;cursor:pointer;">全部撤单</button>
+    </div>
+    <div id="ordersList"></div>
+</div>
+
+<!-- Confirm dialog -->
+<div class="overlay" id="overlay" onclick="closeDialog()">
+    <div class="dialog" onclick="event.stopPropagation()">
+        <h3 id="dialogTitle">确认操作</h3>
+        <p id="dialogMsg">确认要执行此操作吗？</p>
+        <div class="dialog-btns">
+            <button class="btn-cancel" onclick="closeDialog()">取消</button>
+            <button class="btn-confirm" id="dialogConfirm">确认</button>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom nav -->
+<nav class="bottom-nav">
+    <a href="/m/settings" class="nav-item">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        设置
+    </a>
+    <a href="/m/futures" class="nav-item">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+        </svg>
+        U本位
+    </a>
+    <a href="/m/live" class="nav-item active">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+        实盘
+    </a>
+</nav>
+
+<script>
+const API = '/api/live-trading';
+let selectedApiKeyId = null;
+let pendingAction = null;
+let authToken = localStorage.getItem('auth_token') || '';
+
+function toast(msg, type='ok') {
+    const el=document.getElementById('toast');
+    el.textContent=msg; el.className='show '+type;
+    setTimeout(()=>el.className='',2500);
+}
+
+function fmt(n, d=2) { if(n==null||isNaN(n)) return '—'; return parseFloat(n).toFixed(d); }
+function fmtPnl(n) { const v=parseFloat(n)||0; return (v>=0?'+':'')+v.toFixed(2)+'U'; }
+
+function makeHeaders() {
+    const h = {'Content-Type':'application/json'};
+    if(authToken) h['Authorization']='Bearer '+authToken;
+    if(selectedApiKeyId) h['X-API-Key-ID']=String(selectedApiKeyId);
+    return h;
+}
+
+async function authFetch(url, opts={}) {
+    return fetch(url, {...opts, headers: makeHeaders()});
+}
+
+async function loadAccounts() {
+    try {
+        const r = await authFetch(`${API}/my-accounts`).then(r=>r.json());
+        const accounts = r.data || r.accounts || [];
+        const bar = document.getElementById('accountBtns');
+        if(!accounts.length) {
+            bar.innerHTML='<span style="color:var(--muted);font-size:12px;">无账号，请在PC端添加</span>';
+            return;
+        }
+        bar.innerHTML = accounts.map(a=>`
+            <button class="account-btn ${selectedApiKeyId===a.id?'active':''}"
+                    onclick="selectAccount(${a.id},'${a.account_name||a.exchange||'账号'+a.id}')">
+                ${a.account_name||a.exchange||'账号'+a.id}
+            </button>`).join('');
+        if(!selectedApiKeyId && accounts.length) {
+            selectAccount(accounts[0].id, accounts[0].account_name||'账号');
+        }
+    } catch(e) { console.log('账号加载失败',e); }
+}
+
+function selectAccount(id, name) {
+    selectedApiKeyId=id;
+    document.querySelectorAll('.account-btn').forEach(b=>{
+        b.classList.toggle('active', b.textContent.trim()===name);
+    });
+    loadAll();
+}
+
+async function loadBalance() {
+    try {
+        const r = await authFetch(`${API}/account/balance`).then(r=>r.json());
+        if(r.success && r.data) {
+            const d=r.data;
+            document.getElementById('balanceCard').style.display='block';
+            document.getElementById('totalEquity').textContent=fmt(d.total_wallet_balance||d.totalWalletBalance||d.balance,2);
+            document.getElementById('availableMargin').textContent=fmt(d.available_balance||d.availableBalance||d.free,2);
+            document.getElementById('connDot').className='dot on';
+            document.getElementById('connText').textContent='已连接';
+        }
+    } catch(e) {
+        document.getElementById('connDot').className='dot';
+        document.getElementById('connText').textContent='连接失败';
+    }
+}
+
+async function loadPositions() {
+    try {
+        const r = await authFetch(`${API}/positions`).then(r=>r.json());
+        if(!r.success) { document.getElementById('positionsList').innerHTML='<div class="empty"><div class="empty-icon">📭</div>无法加载持仓</div>'; return; }
+        const positions = r.data || [];
+        document.getElementById('posCount').textContent=positions.length;
+        document.getElementById('lastUpdate').textContent=new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+        if(!positions.length) {
+            document.getElementById('positionsList').innerHTML='<div class="empty"><div class="empty-icon">📭</div>暂无持仓</div>';
+            document.getElementById('totalPnl').textContent='0.00'; document.getElementById('totalPnl').className='stat-value';
+            document.getElementById('totalMargin').textContent='0.00';
+            return;
+        }
+
+        let totalPnl=0, totalMargin=0;
+        const html = positions.map(pos=>{
+            const upnl=parseFloat(pos.unrealized_pnl)||parseFloat(pos.unrealizedProfit)||0;
+            const margin=parseFloat(pos.margin)||parseFloat(pos.initialMargin)||0;
+            const ep=parseFloat(pos.entry_price||pos.entryPrice)||0;
+            const mp=parseFloat(pos.mark_price||pos.markPrice)||0;
+            const liq=parseFloat(pos.liquidation_price||pos.liquidationPrice)||0;
+            const lev=pos.leverage||'?';
+            const qty=parseFloat(pos.quantity||pos.positionAmt)||0;
+            const isLong=pos.position_side==='LONG'||(pos.positionSide||'').toUpperCase()==='LONG';
+            const symbol=pos.symbol||'';
+            totalPnl+=upnl; totalMargin+=margin;
+            const pnlCls=upnl>=0?'pnl-pos':'pnl-neg';
+
+            return `<div class="pos-card">
+              <div class="pos-head">
+                <span class="pos-symbol">${symbol.replace('USDT','').replace('/','')}</span>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span class="pos-badge ${isLong?'long':'short'}">${isLong?'做多':'做空'}</span>
+                  <span class="${pnlCls}" style="font-weight:700;font-size:15px;font-family:monospace;">${fmtPnl(upnl)}</span>
+                </div>
+              </div>
+              <div class="pos-body">
+                <div><div class="pos-field-label">开仓价</div><div class="pos-field-value">${fmt(ep,4)}</div></div>
+                <div><div class="pos-field-label">标记价</div><div class="pos-field-value">${fmt(mp,4)}</div></div>
+                <div><div class="pos-field-label">数量</div><div class="pos-field-value">${fmt(Math.abs(qty),4)}</div></div>
+                <div><div class="pos-field-label">杠杆</div><div class="pos-field-value" style="color:var(--gold)">${lev}x</div></div>
+                ${margin?`<div><div class="pos-field-label">保证金</div><div class="pos-field-value">${fmt(margin,2)}U</div></div>`:''}
+                ${liq?`<div><div class="pos-field-label">爆仓价</div><div class="pos-field-value" style="color:var(--red)">${fmt(liq,4)}</div></div>`:''}
+              </div>
+              <div class="pos-foot">
+                <button class="btn btn-close" onclick="confirmClose('${symbol}','${isLong?'LONG':'SHORT'}')">
+                  市价平仓
+                </button>
+              </div>
+            </div>`;
+        }).join('');
+
+        document.getElementById('positionsList').innerHTML=html;
+        const pEl=document.getElementById('totalPnl');
+        pEl.textContent=(totalPnl>=0?'+':'')+totalPnl.toFixed(2)+'U';
+        pEl.className='stat-value '+(totalPnl>=0?'pos':'neg');
+        document.getElementById('totalMargin').textContent=totalMargin.toFixed(2)+'U';
+    } catch(e) { console.error(e); }
+}
+
+async function loadOrders() {
+    try {
+        const r = await authFetch(`${API}/orders`).then(r=>r.json());
+        if(!r.success || !r.data?.length) {
+            document.getElementById('ordersList').innerHTML='<div class="empty"><div style="font-size:28px;opacity:.4">📋</div>暂无挂单</div>';
+            return;
+        }
+        const typeMap={'STOP_MARKET':'止损','TAKE_PROFIT_MARKET':'止盈','LIMIT':'限价','MARKET':'市价'};
+        document.getElementById('ordersList').innerHTML=r.data.map(o=>{
+            const price=parseFloat(o.price)||parseFloat(o.stopPrice)||0;
+            const typeLabel=typeMap[o.type]||o.type;
+            return `<div class="order-card">
+              <div class="order-info">
+                <div class="order-symbol">${o.symbol.replace('USDT','')}</div>
+                <div class="order-meta">${typeLabel} · ${o.side} · ${fmt(price,4)}</div>
+              </div>
+              <button class="order-cancel" onclick="confirmCancelOrder('${o.symbol}','${o.orderId}')">撤单</button>
+            </div>`;
+        }).join('');
+    } catch(e) {}
+}
+
+function confirmClose(symbol, side) {
+    pendingAction={type:'close',symbol,side};
+    document.getElementById('dialogTitle').textContent='确认平仓';
+    document.getElementById('dialogMsg').textContent=`确认市价平掉 ${symbol} ${side==='LONG'?'做多':'做空'} 仓位？`;
+    document.getElementById('dialogConfirm').onclick=doClose;
+    document.getElementById('overlay').style.display='block';
+}
+function confirmCancelOrder(symbol, orderId) {
+    pendingAction={type:'cancel',symbol,orderId};
+    document.getElementById('dialogTitle').textContent='确认撤单';
+    document.getElementById('dialogMsg').textContent=`确认撤销 ${symbol} 的这笔挂单？`;
+    document.getElementById('dialogConfirm').onclick=doCancelOrder;
+    document.getElementById('overlay').style.display='block';
+}
+function closeDialog() { document.getElementById('overlay').style.display='none'; pendingAction=null; }
+
+async function doClose() {
+    if(!pendingAction) return; closeDialog();
+    try {
+        const r=await authFetch(`${API}/close-by-symbol`,{
+            method:'POST',body:JSON.stringify({symbol:pendingAction.symbol,positionSide:pendingAction.side})
+        }).then(r=>r.json());
+        if(r.success) { toast('✅ 平仓指令已发送'); setTimeout(loadPositions,1500); }
+        else toast('❌ 平仓失败: '+(r.message||''),'err');
+    } catch(e) { toast('❌ 请求失败','err'); }
+}
+
+async function doCancelOrder() {
+    if(!pendingAction) return; closeDialog();
+    try {
+        const r=await authFetch(`${API}/order/${encodeURIComponent(pendingAction.symbol)}`,{
+            method:'DELETE',body:JSON.stringify({orderId:pendingAction.orderId})
+        }).then(r=>r.json());
+        if(r.success) { toast('✅ 撤单成功'); setTimeout(loadOrders,800); }
+        else toast('❌ 撤单失败','err');
+    } catch(e) { toast('❌ 请求失败','err'); }
+}
+
+async function cancelAllOrders() {
+    document.getElementById('dialogTitle').textContent='撤销全部挂单';
+    document.getElementById('dialogMsg').textContent='确认撤销所有挂单？此操作不可恢复。';
+    document.getElementById('dialogConfirm').onclick=async()=>{
+        closeDialog();
+        try {
+            const r=await authFetch(`${API}/orders/cancel-all`,{method:'DELETE'}).then(r=>r.json());
+            if(r.success) { toast('✅ 全部撤单成功'); setTimeout(loadOrders,800); }
+            else toast('❌ 撤单失败','err');
+        } catch(e) { toast('❌ 请求失败','err'); }
+    };
+    document.getElementById('overlay').style.display='block';
+}
+
+async function loadAll() {
+    await Promise.all([loadBalance(), loadPositions(), loadOrders()]);
+}
+
+// Init
+(async()=>{
+    // Try refresh token
+    try {
+        const r=await fetch('/api/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({token:authToken})}).then(r=>r.json());
+        if(r.access_token) { authToken=r.access_token; localStorage.setItem('auth_token',authToken); }
+    } catch(e){}
+    await loadAccounts();
+    if(selectedApiKeyId) await loadAll();
+})();
+
+setInterval(()=>{ if(selectedApiKeyId) loadAll(); }, 30000);
+</script>
+</body>
+</html>

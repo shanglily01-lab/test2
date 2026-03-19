@@ -1039,6 +1039,30 @@ async def auto_trading_page():
         raise HTTPException(status_code=404, detail="自动合约交易页面未找到")
 
 
+@app.get("/m/settings")
+async def mobile_settings_page():
+    """手机端系统设置页面"""
+    p = project_root / "templates" / "mobile_settings.html"
+    if p.exists(): return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="mobile_settings.html not found")
+
+
+@app.get("/m/futures")
+async def mobile_futures_page():
+    """手机端U本位合约页面"""
+    p = project_root / "templates" / "mobile_futures.html"
+    if p.exists(): return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="mobile_futures.html not found")
+
+
+@app.get("/m/live")
+async def mobile_live_page():
+    """手机端实盘合约页面"""
+    p = project_root / "templates" / "mobile_live.html"
+    if p.exists(): return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="mobile_live.html not found")
+
+
 @app.get("/health")
 async def health_check():
     """健康检查"""
