@@ -719,13 +719,6 @@ class SmartDecisionBrain:
 
             short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
 
-            # 🌐 山寨牛市调整：SHORT门槛+10 / NEUTRAL下LONG门槛降至60
-            if getattr(self, '_alt_bull_market', False):
-                short_threshold_adj += 10
-                if not getattr(self, 'big4_filter_enabled', True) or _b4_signal == 'NEUTRAL':
-                    # Big4 filter关闭(=60) 或 NEUTRAL(=65) 时，山寨牛市下降至60
-                    long_threshold = min(long_threshold, self.threshold)
-
             if _crowding_penalty > 0:
                 logger.debug(
                     f"🧠 [CROWDING] Big4强度{_b4_strength:.0f}≥{'70' if _crowding_penalty==15 else '55'}，"
@@ -923,34 +916,6 @@ class SmartDecisionBrain:
                     return []
         except Exception as _e:
             logger.warning(f"检查K线新鲜度失败（放行）: {_e}")
-
-        # 🌐 山寨市场广度检测：Big4=NEUTRAL时可能错过alt-season行情
-        # 若>60%品种上涨且均涨>3% → 山寨牛市：降低LONG门槛，提高SHORT门槛
-        try:
-            _mkt_conn = self._get_connection()
-            _mkt_cur = _mkt_conn.cursor()
-            _mkt_cur.execute("""
-                SELECT COUNT(*) as total,
-                       SUM(CASE WHEN trend IN ('up','strong_up') THEN 1 ELSE 0 END) as up_cnt,
-                       AVG(change_24h) as avg_chg
-                FROM price_stats_24h
-            """)
-            _mkt_row = _mkt_cur.fetchone()
-            _mkt_cur.close()
-            if _mkt_row and _mkt_row[0] and _mkt_row[0] > 0:
-                _up_pct = float(_mkt_row[1] or 0) / float(_mkt_row[0])
-                _avg_chg = float(_mkt_row[2] or 0)
-                self._alt_bull_market = (_up_pct > 0.60 and _avg_chg > 3.0)
-                if self._alt_bull_market:
-                    logger.info(
-                        f"🚀 [ALT_BULL] 山寨牛市检测：{_up_pct*100:.0f}%品种上涨，"
-                        f"均涨{_avg_chg:.1f}% → LONG阈值-5 / SHORT阈值+10"
-                    )
-            else:
-                self._alt_bull_market = False
-        except Exception as _e:
-            logger.debug(f"市场广度检测失败（放行）: {_e}")
-            self._alt_bull_market = False
 
         logger.info(f"\n{'='*100}")
         logger.info(f"🔍 开始扫描 {len(self.whitelist)} 个交易对 | 开仓阈值: {self.threshold}分")
