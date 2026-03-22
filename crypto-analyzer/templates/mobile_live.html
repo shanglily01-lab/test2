@@ -253,7 +253,11 @@
 const API = '/api/live-trading';
 let selectedApiKeyId = null;
 let pendingAction = null;
-let authToken = localStorage.getItem('auth_token') || '';
+// 优先用服务端注入的token，其次用localStorage缓存
+let authToken = (window.__ACCESS_TOKEN__ && window.__ACCESS_TOKEN__ !== 'undefined' && window.__ACCESS_TOKEN__ !== '')
+    ? window.__ACCESS_TOKEN__
+    : (localStorage.getItem('auth_token') || '');
+if (authToken) localStorage.setItem('auth_token', authToken);
 
 function toast(msg, type='ok') {
     const el=document.getElementById('toast');

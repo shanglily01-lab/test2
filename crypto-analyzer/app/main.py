@@ -1126,9 +1126,24 @@ async def mobile_live_page(request: Request):
     p = project_root / "templates" / "mobile_live.html"
     if not p.exists():
         raise HTTPException(status_code=404, detail="mobile_live.html not found")
+    # 同时生成 JWT token 注入页面，确保 authFetch 有效
+    from app.auth.auth_service import get_auth_service
+    import pymysql as _pymysql, os as _os
+    try:
+        _conn = _pymysql.connect(
+            host=_os.getenv("DB_HOST","localhost"), port=int(_os.getenv("DB_PORT",3306)),
+            user=_os.getenv("DB_USER","root"), password=_os.getenv("DB_PASSWORD",""),
+            database=_os.getenv("DB_NAME","binance-data"), cursorclass=_pymysql.cursors.DictCursor)
+        _cur = _conn.cursor()
+        _cur.execute("SELECT id, username, role FROM users WHERE id=%s", (user_id,))
+        _u = _cur.fetchone(); _cur.close(); _conn.close()
+        _auth = get_auth_service()
+        access_token = _auth.create_access_token(user_id=_u['id'], username=_u['username'], role=_u['role']) if _u else ''
+    except Exception:
+        access_token = ''
     html = p.read_text(encoding="utf-8")
-    # 注入用户信息到页面全局变量
-    inject = f'<script>window.__USER_ID__={user_id};window.__USER_ROLE__="{role}";</script>'
+    inject = (f'<script>window.__USER_ID__={user_id};window.__USER_ROLE__="{role}";'
+              f'window.__ACCESS_TOKEN__="{access_token}";</script>')
     html = html.replace("</head>", inject + "\n</head>", 1)
     from fastapi.responses import HTMLResponse
     return HTMLResponse(html)
