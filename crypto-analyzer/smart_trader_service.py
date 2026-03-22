@@ -354,16 +354,7 @@ class SmartDecisionBrain:
 
     def check_anti_fomo_filter(self, symbol: str, current_price: float, side: str) -> tuple:
         """
-        🔥 已废弃 (V5.1优化 - 2026-02-09)
-
-        防追高/追跌过滤器
-
-        废弃原因:
-        1. Big4触底检测已提供全局保护（禁止做空2小时）
-        2. 防杀跌过滤容易误杀破位追空信号
-        3. 与Big4紧急干预机制逻辑冲突
-
-        保留此方法仅供历史参考
+        防追高/防杀跌过滤器（V5.2重新启用 - 2026-03-22）
 
         做多防追高: 不在24H区间80%以上位置开多
         做空防杀跌: 不在24H区间20%以下位置开空
@@ -3746,6 +3737,18 @@ class SmartTraderService:
                     if self.has_position(symbol, opposite_side):
                         logger.info(f"[SKIP] {symbol} 已有{opposite_side}持仓,跳过{new_side}信号(不做对冲)")
                         continue
+
+                    # 🔥 防追高/防杀跌: 24H区间位置过滤
+                    current_price_for_check = opp.get('current_price') or opp.get('price', 0)
+                    if current_price_for_check > 0:
+                        anti_fomo_pass, anti_fomo_reason = self.check_anti_fomo_filter(
+                            symbol, current_price_for_check, new_side
+                        )
+                        if not anti_fomo_pass:
+                            logger.warning(f"🚫 [ANTI-FOMO] {symbol} {new_side} 跳过: {anti_fomo_reason}")
+                            continue
+                        else:
+                            logger.debug(f"[ANTI-FOMO] {symbol} {new_side} 通过: {anti_fomo_reason}")
 
                     # 正常开仓
                     self.open_position(opp)
