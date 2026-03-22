@@ -15,10 +15,10 @@ import asyncio
 import threading
 from datetime import datetime
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from loguru import logger
@@ -1039,9 +1039,48 @@ async def auto_trading_page():
         raise HTTPException(status_code=404, detail="自动合约交易页面未找到")
 
 
+def _check_admin_cookie(request: Request) -> bool:
+    """验证 admin_token cookie 是否有效"""
+    import hashlib, pymysql, os
+    token = request.cookies.get("admin_token", "")
+    if not token:
+        return False
+    try:
+        conn = pymysql.connect(
+            host=os.getenv("DB_HOST", "localhost"),
+            port=int(os.getenv("DB_PORT", 3306)),
+            user=os.getenv("DB_USER", "root"),
+            password=os.getenv("DB_PASSWORD", ""),
+            database=os.getenv("DB_NAME", "binance-data"),
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        cur = conn.cursor()
+        cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='admin_password'")
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not row:
+            return False
+        expected = hashlib.sha256(row["setting_value"].encode()).hexdigest()
+        return token == expected
+    except Exception:
+        return False
+
+
+@app.get("/m/login")
+async def mobile_login_page():
+    """手机端管理员登录页"""
+    p = project_root / "templates" / "mobile_login.html"
+    if p.exists():
+        return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="mobile_login.html not found")
+
+
 @app.get("/m/settings")
-async def mobile_settings_page():
-    """手机端系统设置页面"""
+async def mobile_settings_page(request: Request):
+    """手机端系统设置页面（仅admin可访问）"""
+    if not _check_admin_cookie(request):
+        return RedirectResponse(url="/m/login?next=/m/settings", status_code=302)
     p = project_root / "templates" / "mobile_settings.html"
     if p.exists(): return FileResponse(str(p))
     raise HTTPException(status_code=404, detail="mobile_settings.html not found")

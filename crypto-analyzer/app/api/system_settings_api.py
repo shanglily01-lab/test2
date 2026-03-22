@@ -3,6 +3,7 @@
 提供V1/V2策略切换、Big4过滤器等系统配置的读取和更新
 """
 from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Dict, Optional
 import pymysql
@@ -603,6 +604,34 @@ async def update_max_hold_hours(data: MaxHoldHoursUpdate):
 
 def _hash_pwd(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+
+@router.post("/admin/login")
+async def admin_login(request: Request):
+    """验证密码并写入 admin_token cookie（供 /m/settings 服务端校验）"""
+    data = await request.json()
+    password = data.get('password', '')
+    try:
+        conn = pymysql.connect(**get_db_config())
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key='admin_password'")
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not row:
+            return JSONResponse({'success': False, 'needs_setup': True})
+        if not password:
+            return JSONResponse({'success': False, 'error': '密码不能为空'})
+        if _hash_pwd(password) != row['setting_value']:
+            return JSONResponse({'success': False, 'error': '密码错误'})
+        # 生成 token = sha256(stored_hash)，服务端验证时重新计算
+        token = hashlib.sha256(row['setting_value'].encode()).hexdigest()
+        resp = JSONResponse({'success': True})
+        resp.set_cookie('admin_token', token, max_age=86400 * 7, httponly=True, samesite='lax')
+        return resp
+    except Exception as e:
+        logger.error(f"admin登录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/admin/verify-password")
