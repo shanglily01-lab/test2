@@ -370,16 +370,24 @@ class SmartEntryExecutor:
 
             # ========== 同步实盘开仓 ==========
             try:
-                conn_live = pymysql.connect(**self.db_config, autocommit=True)
-                cur_live = conn_live.cursor()
-                cur_live.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
-                row_live = cur_live.fetchone()
-                cur_live.close(); conn_live.close()
-                live_trading_enabled = row_live and str(row_live[0]).lower() in ('1', 'true', 'yes')
+                _c = pymysql.connect(**self.db_config, autocommit=True)
+                _cur = _c.cursor()
+                _cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+                _r = _cur.fetchone()
+                live_trading_enabled = _r and str(_r[0]).lower() in ('1', 'true', 'yes')
+                # 实盘同步必须是 TOP 30 交易对
+                _cur.execute("SELECT COUNT(*) FROM top_performing_symbols WHERE symbol=%s", (symbol,))
+                in_top30 = (_cur.fetchone() or [0])[0] > 0
+                _cur.close(); _c.close()
             except Exception:
                 live_trading_enabled = False
+                in_top30 = False
 
-            if live_trading_enabled:
+            if not live_trading_enabled:
+                pass  # 同步开关关闭
+            elif not in_top30:
+                logger.info(f"[同步实盘] {symbol} 不在TOP30列表，跳过实盘同步")
+            else:
                 try:
                     from app.services.api_key_service import get_api_key_service
                     from app.trading.binance_futures_engine import BinanceFuturesEngine
