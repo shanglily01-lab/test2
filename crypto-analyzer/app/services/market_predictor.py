@@ -244,6 +244,73 @@ class MarketPredictor:
             return None
 
     # ──────────────────────────────────────────
+    # 虚拟回测：平仓 / 开仓
+    # ──────────────────────────────────────────
+
+    def _get_current_price(self, cursor, symbol: str) -> Optional[float]:
+        """从 kline_data 取最新1M/5M收盘价作为当前价"""
+        for tf in ('1m', '5m', '15m', '1h'):
+            cursor.execute(
+                "SELECT close_price FROM kline_data "
+                "WHERE symbol=%s AND timeframe=%s AND exchange='binance_futures' "
+                "ORDER BY open_time DESC LIMIT 1",
+                (symbol, tf)
+            )
+            row = cursor.fetchone()
+            if row:
+                return float(row['close_price'])
+        return None
+
+    def _close_open_backtests(self, cursor, now: datetime) -> int:
+        """结算所有超过2.5小时的OPEN虚拟单，计算P&L"""
+        cutoff = now - timedelta(hours=2, minutes=30)
+        cursor.execute(
+            "SELECT id, symbol, direction, entry_price FROM prediction_backtest "
+            "WHERE status='OPEN' AND entry_time <= %s",
+            (cutoff,)
+        )
+        rows = cursor.fetchall()
+        closed = 0
+        for row in rows:
+            exit_price = self._get_current_price(cursor, row['symbol'])
+            if exit_price is None:
+                continue
+            entry = float(row['entry_price'])
+            if row['direction'] == 'BULLISH':
+                pnl_pct = (exit_price - entry) / entry * 5 * 100
+            else:
+                pnl_pct = (entry - exit_price) / entry * 5 * 100
+            pnl_usdt = pnl_pct / 100 * 100  # 100U 本金
+            cursor.execute(
+                "UPDATE prediction_backtest SET status='CLOSED', exit_price=%s, exit_time=%s, "
+                "pnl_pct=%s, pnl_usdt=%s WHERE id=%s",
+                (exit_price, now, round(pnl_pct, 4), round(pnl_usdt, 4), row['id'])
+            )
+            closed += 1
+        return closed
+
+    def _open_new_backtests(self, cursor, results: List[Dict], now: datetime) -> int:
+        """对 BULLISH/BEARISH 且 confidence>=40 的预测开虚拟单"""
+        opened = 0
+        for r in results:
+            if r['direction'] == 'NEUTRAL' or r['confidence'] < 40:
+                continue
+            entry_price = self._get_current_price(cursor, r['symbol'])
+            if entry_price is None:
+                continue
+            try:
+                cursor.execute(
+                    "INSERT INTO prediction_backtest "
+                    "(symbol, direction, confidence, entry_price, entry_time) "
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    (r['symbol'], r['direction'], r['confidence'], entry_price, now)
+                )
+                opened += 1
+            except Exception as e:
+                logger.error(f"[回测] {r['symbol']} 开虚拟单失败: {e}")
+        return opened
+
+    # ──────────────────────────────────────────
     # 批量运行 + 存储
     # ──────────────────────────────────────────
 
@@ -251,14 +318,41 @@ class MarketPredictor:
         now = datetime.utcnow()
         valid_until = now + timedelta(hours=4)
         saved = 0
+        all_results = []
 
         conn = self._get_conn()
         cursor = conn.cursor()
 
+        # ① 先结算上一轮到期的虚拟单
+        try:
+            closed = self._close_open_backtests(cursor, now)
+            if closed:
+                conn.commit()
+                # 打印近期回测统计
+                cursor.execute(
+                    "SELECT COUNT(*) AS cnt, "
+                    "SUM(CASE WHEN pnl_usdt>0 THEN 1 ELSE 0 END) AS wins, "
+                    "SUM(pnl_usdt) AS total_pnl "
+                    "FROM prediction_backtest WHERE status='CLOSED' "
+                    "AND exit_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+                )
+                stat = cursor.fetchone()
+                cnt = stat['cnt'] or 0
+                wins = stat['wins'] or 0
+                total_pnl = stat['total_pnl'] or 0.0
+                win_rate = wins / cnt * 100 if cnt > 0 else 0
+                logger.info(
+                    f"[回测] 结算{closed}单 | 近7日: {cnt}单 胜率{win_rate:.1f}% 总PnL={total_pnl:+.2f}U"
+                )
+        except Exception as e:
+            logger.error(f"[回测] 结算虚拟单失败: {e}")
+
+        # ② 运行预测
         for symbol in symbols:
             result = self.analyze(symbol)
             if not result:
                 continue
+            all_results.append(result)
             try:
                 cursor.execute("""
                     INSERT INTO market_prediction
@@ -274,7 +368,6 @@ class MarketPredictor:
                     symbol, now, result['direction'], result['confidence'], result['reasoning'],
                     result['trend_1h'], result['trend_15m'], result['rsi_1h'], result['adx_1h'],
                     result['key_level_support'], result['key_level_resistance'], valid_until,
-                    # ON DUPLICATE KEY UPDATE
                     now, result['direction'], result['confidence'], result['reasoning'],
                     result['trend_1h'], result['trend_15m'], result['rsi_1h'], result['adx_1h'],
                     result['key_level_support'], result['key_level_resistance'], valid_until,
@@ -282,6 +375,14 @@ class MarketPredictor:
                 saved += 1
             except Exception as e:
                 logger.error(f"[预测] {symbol} 存储失败: {e}")
+
+        # ③ 开新的虚拟单
+        try:
+            opened = self._open_new_backtests(cursor, all_results, now)
+            if opened:
+                logger.info(f"[回测] 新开{opened}个虚拟单（100U x5）")
+        except Exception as e:
+            logger.error(f"[回测] 开虚拟单失败: {e}")
 
         conn.commit()
         cursor.close()
