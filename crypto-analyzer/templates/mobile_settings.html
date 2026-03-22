@@ -233,8 +233,18 @@
                 <label class="toggle"><input type="checkbox" id="big4Toggle"><span class="slider"></span></label>
             </div>
         </div>
+        <div class="row">
+            <div>
+                <div class="row-label">🏆 Top 30 交易对过滤</div>
+                <div class="row-sub">仅开历史盈利前30的币种（实盘时开启）</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span id="top30Status" class="pill">…</span>
+                <label class="toggle"><input type="checkbox" id="top30Toggle"><span class="slider"></span></label>
+            </div>
+        </div>
         <div style="padding:12px 16px;">
-            <button class="save-btn" onclick="saveBig4()">💾 保存 Big4 设置</button>
+            <button class="save-btn" onclick="saveBig4()">💾 保存</button>
         </div>
     </div>
     <div class="card">
@@ -505,6 +515,9 @@ async function loadAll() {
             document.getElementById('big4Toggle').checked = b4;
             document.getElementById('big4Status').className = 'pill ' + (b4 ? 'on' : 'off');
             document.getElementById('big4Status').innerHTML = `<span class="dot"></span>${b4 ? '已启用' : '已禁用'}`;
+            const t30 = sysR.data.top30_filter_enabled?.value === 'true';
+            document.getElementById('top30Toggle').checked = t30;
+            setPill('top30Status', t30);
             selectStrategy(sysR.data.batch_entry_strategy?.value || 'kline_pullback');
         }
         if (dirR.success) {
@@ -554,8 +567,13 @@ async function saveDirection() {
 async function saveBig4() {
     if (!requireUnlock()) return;
     const enabled = document.getElementById('big4Toggle').checked;
-    const r = await fetch(`${SYS}/big4-filter`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})}).then(r=>r.json());
-    if (r.success) { toast('✅ Big4设置已保存'); } else toast('❌ 保存失败', 'err');
+    const top30 = document.getElementById('top30Toggle').checked;
+    const [r1, r2] = await Promise.all([
+        fetch(`${SYS}/big4-filter`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})}).then(r=>r.json()),
+        fetch(`${SYS}/top30-filter`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled: top30})}).then(r=>r.json()),
+    ]);
+    if (r1.success && r2.success) toast('✅ 设置已保存');
+    else toast('❌ 保存失败', 'err');
 }
 
 async function saveHoldHours() {

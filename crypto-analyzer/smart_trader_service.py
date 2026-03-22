@@ -1821,10 +1821,20 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 系统已禁止{direction_name}")
             return False
 
-        # 🔥 新增验证: 检查是否在盈利Top 30交易对中（暂时屏蔽）
-        # if not self.is_symbol_in_top_performers(symbol):
-        #     logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 不在盈利Top 30交易对中")
-        #     return False
+        # 🔥 Top 30过滤：由system_settings.top30_filter_enabled控制（实盘时开启）
+        try:
+            conn_t30 = self._get_connection()
+            cur_t30 = conn_t30.cursor()
+            cur_t30.execute("SELECT setting_value FROM system_settings WHERE setting_key='top30_filter_enabled'")
+            row_t30 = cur_t30.fetchone()
+            cur_t30.close()
+            conn_t30.close()
+            top30_enabled = row_t30 and str(row_t30.get('setting_value', 'false')).lower() == 'true'
+        except Exception:
+            top30_enabled = False
+        if top30_enabled and not self.is_symbol_in_top_performers(symbol):
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 不在盈利Top 30交易对中")
+            return False
 
         # 🔥 V5.1优化: 移除防追高/防杀跌过滤
         # 原因: Big4触底检测已提供全局保护（禁止做空2小时）
