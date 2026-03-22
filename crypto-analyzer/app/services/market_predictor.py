@@ -289,12 +289,23 @@ class MarketPredictor:
             closed += 1
         return closed
 
-    def _open_new_backtests(self, cursor, results: List[Dict], now: datetime) -> int:
-        """对 BULLISH/BEARISH 且 confidence>=40 的预测开虚拟单"""
+    def _open_new_backtests(self, cursor, results: List[Dict], now: datetime,
+                            max_open: int = 5) -> int:
+        """对 BULLISH/BEARISH 且 confidence>=40 的预测开虚拟单，最多同时持有 max_open 个"""
+        # 当前已有多少 OPEN 虚拟单
+        cursor.execute("SELECT COUNT(*) AS cnt FROM prediction_backtest WHERE status='OPEN'")
+        current_open = (cursor.fetchone() or {}).get('cnt', 0)
+
+        # 按置信度降序，优先开高分的
+        candidates = sorted(
+            [r for r in results if r['direction'] != 'NEUTRAL' and r['confidence'] >= 40],
+            key=lambda x: x['confidence'], reverse=True
+        )
+
         opened = 0
-        for r in results:
-            if r['direction'] == 'NEUTRAL' or r['confidence'] < 40:
-                continue
+        for r in candidates:
+            if current_open + opened >= max_open:
+                break
             entry_price = self._get_current_price(cursor, r['symbol'])
             if entry_price is None:
                 continue
