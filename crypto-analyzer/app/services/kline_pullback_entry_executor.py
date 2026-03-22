@@ -536,6 +536,18 @@ class KlinePullbackEntryExecutor:
                             )
                             if _result.get('success'):
                                 logger.info(f"[同步实盘] ✅ {symbol} {direction} 账号[{ak['account_name']}] 同步开仓成功 保证金={_margin:.2f}U 杠杆={_lev}x")
+                                try:
+                                    _notifier = getattr(self.live_engine, 'telegram_notifier', None)
+                                    if _notifier:
+                                        _notifier.notify_open_position(
+                                            symbol=symbol, direction=direction,
+                                            quantity=float(_qty), entry_price=current_price,
+                                            leverage=_lev, margin=_margin,
+                                            stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
+                                            take_profit_price=float(take_profit_price) if take_profit_price else None,
+                                            strategy_name=f'实盘同步[{ak["account_name"]}]'
+                                        )
+                                except Exception: pass
                             else:
                                 logger.error(f"[同步实盘] ❌ {symbol} {direction} 账号[{ak['account_name']}] 失败: {_result.get('error', _result.get('message', ''))}")
                         except Exception as _ex:

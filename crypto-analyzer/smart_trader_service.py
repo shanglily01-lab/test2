@@ -2892,6 +2892,19 @@ class SmartTraderService:
                             )
                             if _res.get('success'):
                                 logger.info(f"[同步实盘平仓] ✅ {symbol} {side} 账号[{ak['account_name']}] 平仓成功")
+                                try:
+                                    self.telegram_notifier.notify_close_position(
+                                        symbol=symbol, direction=side,
+                                        quantity=quantity,
+                                        entry_price=entry_price,
+                                        exit_price=current_price,
+                                        pnl=realized_pnl,
+                                        pnl_pct=pnl_pct,
+                                        reason=reason,
+                                        strategy_name=f'实盘同步[{ak["account_name"]}]',
+                                        is_paper=False
+                                    )
+                                except Exception: pass
                             else:
                                 logger.error(f"[同步实盘平仓] ❌ {symbol} {side} 账号[{ak['account_name']}] 失败: {_res.get('error','')}")
                         except Exception as _ex:
