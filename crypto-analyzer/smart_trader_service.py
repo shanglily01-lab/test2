@@ -745,6 +745,13 @@ class SmartDecisionBrain:
                     f"群体效应惩罚+{_crowding_penalty}分 | LONG阈值={long_threshold} SHORT阈值={short_threshold_adj}"
                 )
 
+            # 📈 ADX震荡市过滤：ADX<20 时阈值+10，减少震荡行情中的低质量信号
+            _adx_val = getattr(self, 'market_adx', 25.0)
+            if _adx_val < 20:
+                long_threshold += 10
+                short_threshold_adj += 10
+                logger.debug(f"[ADX-FILTER] {symbol} ADX={_adx_val:.1f}<20 震荡市，阈值+10 → LONG={long_threshold} SHORT={short_threshold_adj}")
+
             # 选择得分更高的方向 (只要达到阈值就可以)
             long_qualified = long_score >= long_threshold
             short_qualified = short_score >= short_threshold_adj
@@ -937,6 +944,46 @@ class SmartDecisionBrain:
                     return []
         except Exception as _e:
             logger.warning(f"检查K线新鲜度失败（放行）: {_e}")
+
+        # 📈 ADX市场状态检测（BTC 4H图，每轮扫描更新一次）
+        try:
+            _adx_conn = self._get_connection()
+            _adx_cur = _adx_conn.cursor()
+            _adx_cur.execute(
+                "SELECT high_price, low_price, close_price FROM kline_data "
+                "WHERE symbol='BTC/USDT' AND timeframe='4h' AND exchange='binance_futures' "
+                "ORDER BY open_time DESC LIMIT 30"
+            )
+            _adx_rows = list(reversed(_adx_cur.fetchall()))
+            _adx_cur.close()
+            if len(_adx_rows) >= 16:
+                _highs  = [float(r[0]) for r in _adx_rows]
+                _lows   = [float(r[1]) for r in _adx_rows]
+                _closes = [float(r[2]) for r in _adx_rows]
+                _tr_list, _plus_dm_list, _minus_dm_list = [], [], []
+                for _i in range(1, len(_closes)):
+                    _tr = max(_highs[_i]-_lows[_i], abs(_highs[_i]-_closes[_i-1]), abs(_lows[_i]-_closes[_i-1]))
+                    _tr_list.append(_tr)
+                    _pdm = max(0, _highs[_i]-_highs[_i-1]) if _highs[_i]-_highs[_i-1] > _lows[_i-1]-_lows[_i] else 0
+                    _mdm = max(0, _lows[_i-1]-_lows[_i]) if _lows[_i-1]-_lows[_i] > _highs[_i]-_highs[_i-1] else 0
+                    _plus_dm_list.append(_pdm)
+                    _minus_dm_list.append(_mdm)
+                _p = 14
+                _atr = sum(_tr_list[-_p:]) / _p
+                if _atr > 0:
+                    _pdi = sum(_plus_dm_list[-_p:]) / _p / _atr * 100
+                    _mdi = sum(_minus_dm_list[-_p:]) / _p / _atr * 100
+                    _ds  = _pdi + _mdi
+                    self.market_adx = abs(_pdi - _mdi) / _ds * 100 if _ds > 0 else 25.0
+                else:
+                    self.market_adx = 25.0
+            else:
+                self.market_adx = 25.0
+            _adx_label = "震荡市⚠️(阈值+10)" if self.market_adx < 20 else ("弱趋势" if self.market_adx < 30 else "趋势市")
+            logger.info(f"📈 [ADX] BTC 4H ADX={self.market_adx:.1f} → {_adx_label}")
+        except Exception as _adx_e:
+            logger.warning(f"[ADX] 计算失败，默认25: {_adx_e}")
+            self.market_adx = 25.0
 
         logger.info(f"\n{'='*100}")
         logger.info(f"🔍 开始扫描 {len(self.whitelist)} 个交易对 | 开仓阈值: {self.threshold}分")
