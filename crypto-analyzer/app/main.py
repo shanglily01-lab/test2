@@ -472,6 +472,7 @@ async def lifespan(app: FastAPI):
                 logger.info("🔍 开始执行12小时复盘分析...")
                 logger.info("=" * 80)
 
+                import subprocess
                 result = subprocess.run(
                     ['python', str(project_root / 'app' / '12h_retrospective_analysis.py')],
                     capture_output=True,
