@@ -3,7 +3,7 @@
 提供币安实盘合约交易的HTTP接口（支持多账号、JWT认证）
 """
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from decimal import Decimal
@@ -14,6 +14,17 @@ from app.api.auth_api import get_current_user
 from app.services.api_key_service import get_api_key_service
 
 router = APIRouter(prefix="/api/live-trading", tags=["实盘交易"])
+
+
+def resolve_api_key_id(request: Request, api_key_id: int = Query(0)) -> int:
+    """从 query param 或 X-API-Key-ID header 中读取 api_key_id，header 优先"""
+    if api_key_id == 0:
+        header_val = request.headers.get('X-API-Key-ID', '0')
+        try:
+            api_key_id = int(header_val)
+        except (ValueError, TypeError):
+            pass
+    return api_key_id
 
 # 全局变量
 _live_engine = None
@@ -175,7 +186,7 @@ async def get_my_accounts(current_user: dict = Depends(get_current_user)):
 
 @router.get("/test-connection")
 async def test_connection(
-    api_key_id: int = Query(0, description="API密钥ID，0表示自动选取"),
+    api_key_id: int = Depends(resolve_api_key_id),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -214,7 +225,7 @@ async def test_connection(
 
 @router.get("/account/balance")
 async def get_account_balance(
-    api_key_id: int = Query(0, description="API密钥ID"),
+    api_key_id: int = Depends(resolve_api_key_id),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -247,7 +258,7 @@ async def get_account_balance(
 
 @router.get("/account/info")
 async def get_account_info(
-    api_key_id: int = Query(0, description="API密钥ID"),
+    api_key_id: int = Depends(resolve_api_key_id),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -369,7 +380,7 @@ async def set_leverage(
 
 @router.get("/positions")
 async def get_positions(
-    api_key_id: int = Query(0, description="API密钥ID"),
+    api_key_id: int = Depends(resolve_api_key_id),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -798,7 +809,7 @@ async def set_stop_loss_take_profit(
 @router.get("/orders")
 async def get_open_orders(
     symbol: Optional[str] = None,
-    api_key_id: int = Query(0, description="API密钥ID"),
+    api_key_id: int = Depends(resolve_api_key_id),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -869,7 +880,7 @@ async def cancel_order(
 @router.delete("/orders/{symbol}")
 async def cancel_all_orders(
     symbol: str,
-    api_key_id: int = Query(0, description="API密钥ID"),
+    api_key_id: int = Depends(resolve_api_key_id),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -942,7 +953,7 @@ async def get_live_accounts():
 
 @router.post("/accounts/sync")
 async def sync_account_balance(
-    api_key_id: int = Query(0, description="API密钥ID"),
+    api_key_id: int = Depends(resolve_api_key_id),
     account_id: int = Query(1, description="live_trading_accounts ID"),
     current_user: dict = Depends(get_current_user)
 ):
@@ -1106,7 +1117,7 @@ async def update_risk_config(account_id: int, request: RiskConfigRequest):
 
 @router.post("/sync-from-binance")
 async def sync_from_binance(
-    api_key_id: int = Query(0, description="API密钥ID"),
+    api_key_id: int = Depends(resolve_api_key_id),
     account_id: int = Query(1, description="live_trading_accounts ID"),
     current_user: dict = Depends(get_current_user)
 ):
