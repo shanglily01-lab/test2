@@ -1058,7 +1058,12 @@ def _parse_mobile_session(request: Request):
 
 
 def _check_admin_cookie(request: Request) -> bool:
-    """验证 admin_token cookie 是否有效"""
+    """验证是否为admin：优先检查 mobile_session(role=admin)，其次检查旧 admin_token"""
+    # 方式1：mobile_session cookie（新登录方式）
+    user_id, role = _parse_mobile_session(request)
+    if user_id is not None and role == 'admin':
+        return True
+    # 方式2：旧 admin_token cookie（system_settings.admin_password）
     import hashlib, pymysql, os
     token = request.cookies.get("admin_token", "")
     if not token:
