@@ -293,13 +293,43 @@
         </div>
     </div>
 
+    <!-- 编辑弹窗 -->
+    <div id="editModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center;">
+        <div style="background:var(--bg-card); border:1px solid var(--border-default); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:420px; margin:20px;">
+            <h3 style="font-size:16px; font-weight:700; margin-bottom:20px; display:flex; align-items:center; gap:8px;">
+                <i class="bi bi-pencil-square" style="color:var(--primary-blue);"></i>
+                编辑风控设置 — <span id="editAccountName"></span>
+            </h3>
+            <input type="hidden" id="editKeyId">
+            <div class="form-row" style="margin-bottom:16px;">
+                <div class="form-group">
+                    <label class="form-label">最大杠杆</label>
+                    <input type="number" class="form-control" id="editMaxLeverage" min="1" max="125">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">最大持仓 (USDT)</label>
+                    <input type="number" class="form-control" id="editMaxPosition" min="0">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom:20px;">
+                <label class="form-label">最大日亏损 (USDT)</label>
+                <input type="number" class="form-control" id="editMaxDailyLoss" min="0">
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button class="btn btn-secondary" onclick="closeEdit()">取消</button>
+                <button class="btn btn-primary" onclick="saveEdit()"><i class="bi bi-save"></i> 保存</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // 页面加载时检查登录状态
         document.addEventListener('DOMContentLoaded', function() {
-            if (!Auth.requireLogin()) {
-                return;
-            }
+            if (!Auth.requireLogin()) return;
             loadApiKeys();
+            document.getElementById('editModal').addEventListener('click', function(e) {
+                if (e.target === this) closeEdit();
+            });
         });
 
         // 切换密钥显示
@@ -369,8 +399,11 @@
                                 <td style="font-size: 12px;">${lastUsed}</td>
                                 <td>
                                     <div class="action-buttons">
-                                        <button class="btn btn-outline btn-icon" onclick="verifyApiKey(${key.id}, '${key.exchange}')" title="验证密钥">
-                                            <i class="bi bi-check-circle"></i>
+                                        <button class="btn btn-outline btn-sm" onclick="verifyApiKey(${key.id}, '${key.exchange}')">
+                                            <i class="bi bi-wifi"></i> 测试连接
+                                        </button>
+                                        <button class="btn btn-secondary btn-sm" onclick="openEdit(${key.id}, '${key.account_name}', ${key.max_leverage}, ${key.max_position_value}, ${key.max_daily_loss})">
+                                            <i class="bi bi-pencil"></i> 编辑
                                         </button>
                                         <button class="btn btn-danger btn-icon" onclick="deleteApiKey(${key.id}, '${key.account_name}')" title="删除">
                                             <i class="bi bi-trash"></i>
@@ -561,6 +594,43 @@
                 notification.style.animation = 'fadeOut 0.3s ease-out';
                 setTimeout(() => notification.remove(), 300);
             }, 3000);
+        }
+
+        // 编辑风控
+        function openEdit(id, name, leverage, position, dailyLoss) {
+            document.getElementById('editKeyId').value = id;
+            document.getElementById('editAccountName').textContent = name;
+            document.getElementById('editMaxLeverage').value = leverage;
+            document.getElementById('editMaxPosition').value = position;
+            document.getElementById('editMaxDailyLoss').value = dailyLoss;
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEdit() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        async function saveEdit() {
+            const id = parseInt(document.getElementById('editKeyId').value);
+            const leverage = parseInt(document.getElementById('editMaxLeverage').value);
+            const position = parseFloat(document.getElementById('editMaxPosition').value);
+            const dailyLoss = parseFloat(document.getElementById('editMaxDailyLoss').value);
+            try {
+                const r = await Auth.authFetch(`/api/api-keys/update-risk`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key_id: id, max_leverage: leverage, max_position_value: position, max_daily_loss: dailyLoss })
+                }).then(r => r.json());
+                if (r.success) {
+                    showNotification('风控设置已保存', 'success');
+                    closeEdit();
+                    loadApiKeys();
+                } else {
+                    showNotification('保存失败: ' + (r.detail || r.error || '未知错误'), 'error');
+                }
+            } catch(e) {
+                showNotification('保存失败: ' + e.message, 'error');
+            }
         }
 
         // 退出登录

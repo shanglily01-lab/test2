@@ -34,6 +34,14 @@ class DeleteAPIKeyRequest(BaseModel):
     api_key_id: int = Field(..., description='API密钥ID')
 
 
+class UpdateRiskRequest(BaseModel):
+    """更新风控参数"""
+    api_key_id: int
+    max_leverage: int = Field(ge=1, le=125)
+    max_position_value: float = Field(ge=0)
+    max_daily_loss: float = Field(ge=0)
+
+
 # ==================== 接口 ====================
 
 @router.get("/list")
@@ -224,4 +232,36 @@ async def has_api_key(
         }
     except Exception as e:
         logger.error(f"检查API密钥失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/update-risk")
+async def update_risk(request: UpdateRiskRequest, current_user: dict = Depends(get_current_user)):
+    """更新指定API Key的风控参数（杠杆/持仓/日亏损限额）"""
+    import pymysql, os
+    try:
+        conn = pymysql.connect(
+            host=os.getenv('DB_HOST', 'localhost'), port=int(os.getenv('DB_PORT', 3306)),
+            user=os.getenv('DB_USER', 'root'), password=os.getenv('DB_PASSWORD', ''),
+            database=os.getenv('DB_NAME', 'binance-data'), cursorclass=pymysql.cursors.DictCursor
+        )
+        cur = conn.cursor()
+        # 只允许更新自己的key（admin可更新任意）
+        if current_user.get('role') == 'admin':
+            cur.execute("SELECT id FROM user_api_keys WHERE id=%s", (request.api_key_id,))
+        else:
+            cur.execute("SELECT id FROM user_api_keys WHERE id=%s AND user_id=%s",
+                        (request.api_key_id, current_user['user_id']))
+        if not cur.fetchone():
+            raise HTTPException(status_code=403, detail="无权限或密钥不存在")
+        cur.execute("""UPDATE user_api_keys
+            SET max_leverage=%s, max_position_value=%s, max_daily_loss=%s, updated_at=NOW()
+            WHERE id=%s""",
+            (request.max_leverage, request.max_position_value, request.max_daily_loss, request.api_key_id))
+        conn.commit(); cur.close(); conn.close()
+        return {'success': True, 'message': '风控参数已更新'}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新风控参数失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
