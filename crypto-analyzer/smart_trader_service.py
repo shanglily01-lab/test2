@@ -743,7 +743,7 @@ class SmartDecisionBrain:
                     short_threshold_adj = 68               # 偏多：收紧SHORT
                 elif _nb == 'DOWN':
                     long_threshold = 70                    # 偏空：收紧LONG
-                    short_threshold_adj = 60               # 偏空：放宽SHORT
+                    short_threshold_adj = 70               # 偏空：SHORT提高至70（早入场但条件更严）
                 else:
                     long_threshold = 65                    # FLAT（原来逻辑）
                     short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
@@ -3487,11 +3487,14 @@ class SmartTraderService:
                             big4_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"📊 [TRADING-MODE] 固定趋势模式 | Big4: {big4_signal}({big4_strength:.1f})")
 
-                            # 🚫 Big4中性时完全禁止开仓
-                            # Big4中性意味着市场方向不明确，风险太高，完全禁止开仓
+                            # 🚫 Big4中性时原则禁止开仓，但 neutral_bias=DOWN 时允许SHORT（阈值70）
                             if big4_signal == 'NEUTRAL':
-                                logger.warning(f"🚫 [BIG4-NEUTRAL-BLOCK] {symbol} Big4中性市场(强度{big4_strength:.1f}), 禁止开仓")
-                                continue
+                                _nb_exec = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
+                                if new_side == 'SHORT' and _nb_exec == 'DOWN':
+                                    logger.info(f"[BIG4-NEUTRAL-DOWN] {symbol} Big4中性偏空，允许SHORT(阈值70已在scan_all设置)")
+                                else:
+                                    logger.warning(f"🚫 [BIG4-NEUTRAL-BLOCK] {symbol} Big4中性市场(强度{big4_strength:.1f}), 禁止开仓")
+                                    continue
                         else:
                             logger.warning(f"[BIG4-ERROR] {symbol} Big4数据不可用, 跳过开仓")
                             continue
