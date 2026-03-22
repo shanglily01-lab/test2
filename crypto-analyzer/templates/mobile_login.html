@@ -66,12 +66,10 @@ async function login() {
             credentials: 'include'
         }).then(r => r.json());
         if (r.success) {
-            // admin 跳转 settings，其他跳 next
-            if (r.role === 'admin' && nextUrl === '/m/live') {
-                location.href = nextUrl;
-            } else {
-                location.href = nextUrl;
+            if (r.access_token) {
+                localStorage.setItem('auth_token', r.access_token);
             }
+            location.href = nextUrl;
         } else {
             err.textContent = r.error || '登录失败';
             document.getElementById('pwd').value = '';

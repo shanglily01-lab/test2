@@ -727,7 +727,16 @@ async def mobile_login(request: Request):
         payload = f"{user['id']}:{user['role']}"
         sig = _hmac.new(secret, payload.encode(), 'sha256').hexdigest()
         token = f"{payload}:{sig}"
-        resp = JSONResponse({'success': True, 'role': user['role'], 'username': user['username']})
+        # 同时生成 JWT access_token 供实盘API使用
+        from app.auth.auth_service import get_auth_service
+        auth_service = get_auth_service()
+        access_token = auth_service.create_access_token(
+            user_id=user['id'], username=user['username'], role=user['role']
+        )
+        resp = JSONResponse({
+            'success': True, 'role': user['role'],
+            'username': user['username'], 'access_token': access_token
+        })
         resp.set_cookie('mobile_session', token, max_age=86400 * 7, httponly=True, samesite='lax')
         return resp
     except Exception as e:
