@@ -697,3 +697,39 @@ async def set_admin_password(request: Request):
     except Exception as e:
         logger.error(f"设置管理员密码失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/mobile/login")
+async def mobile_login(request: Request):
+    """手机端统一登录：使用 users 表验证，写入 mobile_session cookie"""
+    import bcrypt, hmac as _hmac, os as _os
+    data = await request.json()
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    if not username or not password:
+        return JSONResponse({'success': False, 'error': '用户名和密码不能为空'})
+    try:
+        conn = pymysql.connect(**get_db_config())
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            "SELECT id, username, password_hash, role, status FROM users WHERE username=%s OR email=%s",
+            (username, username)
+        )
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not user or user['status'] != 'active':
+            return JSONResponse({'success': False, 'error': '用户不存在或已禁用'})
+        if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+            return JSONResponse({'success': False, 'error': '密码错误'})
+        # 生成签名 token: hmac(secret, "user_id:role")
+        secret = _os.getenv('SECRET_KEY', 'mobile_secret_2026').encode()
+        payload = f"{user['id']}:{user['role']}"
+        sig = _hmac.new(secret, payload.encode(), 'sha256').hexdigest()
+        token = f"{payload}:{sig}"
+        resp = JSONResponse({'success': True, 'role': user['role'], 'username': user['username']})
+        resp.set_cookie('mobile_session', token, max_age=86400 * 7, httponly=True, samesite='lax')
+        return resp
+    except Exception as e:
+        logger.error(f"mobile登录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

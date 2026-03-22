@@ -1039,6 +1039,24 @@ async def auto_trading_page():
         raise HTTPException(status_code=404, detail="自动合约交易页面未找到")
 
 
+def _parse_mobile_session(request: Request):
+    """解析 mobile_session cookie，返回 (user_id, role) 或 (None, None)"""
+    import hmac as _hmac, os as _os
+    token = request.cookies.get("mobile_session", "")
+    if not token:
+        return None, None
+    parts = token.split(":")
+    if len(parts) != 3:
+        return None, None
+    user_id, role, sig = parts
+    secret = _os.getenv('SECRET_KEY', 'mobile_secret_2026').encode()
+    payload = f"{user_id}:{role}"
+    expected = _hmac.new(secret, payload.encode(), 'sha256').hexdigest()
+    if not _hmac.compare_digest(sig, expected):
+        return None, None
+    return int(user_id), role
+
+
 def _check_admin_cookie(request: Request) -> bool:
     """验证 admin_token cookie 是否有效"""
     import hashlib, pymysql, os
@@ -1095,11 +1113,20 @@ async def mobile_futures_page():
 
 
 @app.get("/m/live")
-async def mobile_live_page():
-    """手机端实盘合约页面"""
+async def mobile_live_page(request: Request):
+    """手机端实盘合约页面（需登录，admin可见所有账号）"""
+    user_id, role = _parse_mobile_session(request)
+    if user_id is None:
+        return RedirectResponse(url="/m/login?next=/m/live", status_code=302)
     p = project_root / "templates" / "mobile_live.html"
-    if p.exists(): return FileResponse(str(p))
-    raise HTTPException(status_code=404, detail="mobile_live.html not found")
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="mobile_live.html not found")
+    html = p.read_text(encoding="utf-8")
+    # 注入用户信息到页面全局变量
+    inject = f'<script>window.__USER_ID__={user_id};window.__USER_ROLE__="{role}";</script>'
+    html = html.replace("</head>", inject + "\n</head>", 1)
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(html)
 
 
 @app.get("/health")
