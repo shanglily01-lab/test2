@@ -505,7 +505,7 @@ class SmartExitOptimizer:
             #        < 7根逆向 → 方向仍合理 → 不干预
             if profit_pct < 0:
                 against_count = await self._count_against_direction_5m(position_id, position_side)
-                reversal_threshold = 11 if position_side == 'LONG' else 9
+                reversal_threshold = 11
                 if against_count >= reversal_threshold:
                     logger.info(
                         f"📊 持仓{position_id} {position_side} 趋势反转: "
