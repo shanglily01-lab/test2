@@ -278,13 +278,7 @@ async function authFetch(url, opts={}) {
 async function loadAccounts() {
     try {
         const r = await authFetch(`${API}/my-accounts`).then(r=>r.json());
-        let accounts = r.data || r.accounts || [];
-        // 非admin只显示自己的账号
-        const uid = window.__USER_ID__;
-        const role = window.__USER_ROLE__;
-        if (role !== 'admin' && uid) {
-            accounts = accounts.filter(a => a.user_id === uid);
-        }
+        const accounts = r.data || r.accounts || [];
         const bar = document.getElementById('accountBtns');
         if(!accounts.length) {
             bar.innerHTML='<span style="color:var(--muted);font-size:12px;">无账号，请在PC端添加</span>';
