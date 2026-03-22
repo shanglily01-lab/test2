@@ -703,8 +703,8 @@ class SmartDecisionBrain:
                 elif _b4_strength >= 55:
                     _crowding_penalty = 8
 
-            big4_bullish = (_b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 50)
-            big4_bearish = (_b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 50)
+            big4_bullish = (_b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 65)
+            big4_bearish = (_b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 65)
 
             # 🔥 动态阈值：三段式设计（牛市/中性/熊市）
             # Big4过滤器关闭时：使用"软调整"模式，仍读取Big4状态，但不硬封（不触发100分死门槛）
