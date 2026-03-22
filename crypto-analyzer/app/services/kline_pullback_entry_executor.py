@@ -500,10 +500,10 @@ class KlinePullbackEntryExecutor:
                 logger.info(f"[同步实盘] {symbol} 不在TOP30列表，跳过实盘同步")
             else:
                 try:
-                    from app.services.api_key_service import get_api_key_service
+                    from app.services.api_key_service import APIKeyService
                     from app.trading.binance_futures_engine import BinanceFuturesEngine
-                    svc = get_api_key_service()
-                    active_keys = svc.get_all_active_api_keys('binance') if svc else []
+                    svc = APIKeyService(self.db_config)
+                    active_keys = svc.get_all_active_api_keys('binance')
                     for ak in active_keys:
                         try:
                             _engine = BinanceFuturesEngine(
