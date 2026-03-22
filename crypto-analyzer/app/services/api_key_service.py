@@ -276,6 +276,49 @@ class APIKeyService:
             logger.error(f"获取用户API密钥列表失败: {e}")
             return []
 
+    def get_all_active_api_keys(self, exchange: str = 'binance') -> List[Dict]:
+        """
+        获取所有用户的全部激活API密钥（含解密后的密钥），用于实盘同步开仓。
+
+        Returns:
+            [{'id', 'user_id', 'account_name', 'api_key', 'api_secret',
+              'max_position_value', 'max_leverage', 'max_daily_loss'}, ...]
+        """
+        try:
+            conn = self._get_connection()
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """SELECT id, user_id, account_name, api_key, api_secret,
+                            max_position_value, max_leverage, max_daily_loss
+                        FROM user_api_keys
+                        WHERE exchange = %s AND status = 'active'
+                        ORDER BY id""",
+                        (exchange,)
+                    )
+                    rows = cursor.fetchall()
+                    result = []
+                    for row in rows:
+                        try:
+                            result.append({
+                                'id': row['id'],
+                                'user_id': row['user_id'],
+                                'account_name': row['account_name'],
+                                'api_key': self._decrypt(row['api_key']),
+                                'api_secret': self._decrypt(row['api_secret']),
+                                'max_position_value': float(row['max_position_value']) if row['max_position_value'] else 100.0,
+                                'max_leverage': int(row['max_leverage']) if row['max_leverage'] else 5,
+                                'max_daily_loss': float(row['max_daily_loss']) if row['max_daily_loss'] else 50.0,
+                            })
+                        except Exception as dec_err:
+                            logger.warning(f"解密API密钥失败(id={row['id']}): {dec_err}")
+                    return result
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.error(f"获取全部激活API密钥失败: {e}")
+            return []
+
     def delete_api_key(self, user_id: int, api_key_id: int) -> Dict:
         """
         删除API密钥

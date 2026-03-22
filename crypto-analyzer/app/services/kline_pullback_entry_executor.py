@@ -479,6 +479,63 @@ class KlinePullbackEntryExecutor:
 
             logger.info(f"✅ {symbol} 一次性开仓完成 | 持仓ID:{position_id} | 价格:${current_price:.4f} | 保证金:{margin}U")
 
+            # ========== 同步实盘开仓 ==========
+            try:
+                conn_live = pymysql.connect(**self.db_config, autocommit=True)
+                cur_live = conn_live.cursor()
+                cur_live.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+                row_live = cur_live.fetchone()
+                cur_live.close(); conn_live.close()
+                live_trading_enabled = row_live and str(row_live[0]).lower() in ('1', 'true', 'yes')
+            except Exception:
+                live_trading_enabled = False
+
+            if live_trading_enabled:
+                try:
+                    from app.services.api_key_service import get_api_key_service
+                    from app.trading.binance_futures_engine import BinanceFuturesEngine
+                    svc = get_api_key_service()
+                    active_keys = svc.get_all_active_api_keys('binance') if svc else []
+                    for ak in active_keys:
+                        try:
+                            _engine = BinanceFuturesEngine(
+                                self.db_config,
+                                api_key=ak['api_key'],
+                                api_secret=ak['api_secret']
+                            )
+                            _bal = _engine.get_account_balance()
+                            if not _bal or not _bal.get('success'):
+                                logger.warning(f"[同步实盘] 账号{ak['account_name']} 获取余额失败，跳过")
+                                continue
+                            _available = float(_bal.get('available', 0))
+                            _max_margin = float(ak['max_position_value'])
+                            _lev = int(ak['max_leverage'])
+                            _margin = min(_max_margin, _available * 0.9)
+                            if _margin < 5:
+                                logger.warning(f"[同步实盘] 账号{ak['account_name']} 可用余额不足(margin={_margin:.2f}U)，跳过")
+                                continue
+                            _qty = Decimal(str(_margin * _lev / current_price))
+                            _result = _engine.open_position(
+                                account_id=ak['id'],
+                                symbol=symbol,
+                                position_side=direction,
+                                quantity=_qty,
+                                leverage=_lev,
+                                stop_loss_price=Decimal(str(stop_loss_price)) if stop_loss_price else None,
+                                take_profit_price=Decimal(str(take_profit_price)) if take_profit_price else None,
+                                source='smart_trader_sync',
+                                paper_position_id=position_id
+                            )
+                            if _result.get('success'):
+                                logger.info(f"[同步实盘] ✅ {symbol} {direction} 账号[{ak['account_name']}] 同步开仓成功 保证金={_margin:.2f}U 杠杆={_lev}x")
+                            else:
+                                logger.error(f"[同步实盘] ❌ {symbol} {direction} 账号[{ak['account_name']}] 失败: {_result.get('error', _result.get('message', ''))}")
+                        except Exception as _ex:
+                            logger.error(f"[同步实盘] ❌ 账号[{ak.get('account_name','')}] 异常: {_ex}")
+                except Exception as sync_ex:
+                    logger.error(f"[同步实盘] 整体异常: {sync_ex}")
+            # ========== 同步实盘开仓结束 ==========
+
             # 启动智能平仓监控
             if self.live_engine.smart_exit_optimizer:
                 try:
