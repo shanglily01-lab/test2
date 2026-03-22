@@ -2862,6 +2862,44 @@ class SmartTraderService:
                 # 由 update_account_stats.py 每5分钟统一计算
 
             cursor.close()
+            conn.close()
+
+            # ========== 同步实盘平仓 ==========
+            try:
+                _c = self._get_connection()
+                _cur = _c.cursor()
+                _cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+                _r = _cur.fetchone()
+                live_enabled = _r and str(_r.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
+                _cur.close(); _c.close()
+            except Exception:
+                live_enabled = False
+
+            if live_enabled and positions:
+                try:
+                    from app.services.api_key_service import get_api_key_service
+                    from app.trading.binance_futures_engine import BinanceFuturesEngine
+                    svc = get_api_key_service()
+                    active_keys = svc.get_all_active_api_keys('binance') if svc else []
+                    for ak in active_keys:
+                        try:
+                            _engine = BinanceFuturesEngine(self.db_config, api_key=ak['api_key'], api_secret=ak['api_secret'])
+                            _res = _engine.close_position_by_symbol(
+                                symbol=symbol,
+                                position_side=side,
+                                close_quantity=None,
+                                reason=f'paper_sync_{reason}'
+                            )
+                            if _res.get('success'):
+                                logger.info(f"[同步实盘平仓] ✅ {symbol} {side} 账号[{ak['account_name']}] 平仓成功")
+                            else:
+                                logger.error(f"[同步实盘平仓] ❌ {symbol} {side} 账号[{ak['account_name']}] 失败: {_res.get('error','')}")
+                        except Exception as _ex:
+                            logger.error(f"[同步实盘平仓] ❌ 账号[{ak.get('account_name','')}] 异常: {_ex}")
+                except Exception as sync_ex:
+                    logger.error(f"[同步实盘平仓] 整体异常: {sync_ex}")
+            # ========== 同步实盘平仓结束 ==========
+
             return True
 
         except Exception as e:
