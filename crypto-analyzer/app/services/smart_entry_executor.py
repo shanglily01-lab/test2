@@ -13,6 +13,9 @@ import json
 import pymysql
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
+
+# 实盘同步锁：每账号一把，防止并发竞态导致超出持仓上限
+_live_sync_locks: Dict[int, asyncio.Lock] = {}
 from decimal import Decimal
 from loguru import logger
 import numpy as np
@@ -408,16 +411,20 @@ class SmartEntryExecutor:
                             if _margin < 5:
                                 logger.warning(f"[同步实盘] 账号{ak['account_name']} 可用余额不足(margin={_margin:.2f}U)，跳过")
                                 continue
-                            # 实盘持仓数量上限（每账号最多5单）
-                            _cnt_c = pymysql.connect(**self.db_config, autocommit=True)
-                            _cnt_cur = _cnt_c.cursor()
-                            _cnt_cur.execute("SELECT COUNT(*) FROM live_futures_positions WHERE account_id=%s AND status='OPEN'", (ak['id'],))
-                            _live_count = (_cnt_cur.fetchone() or [0])[0]
-                            _cnt_cur.close(); _cnt_c.close()
-                            if _live_count >= 5:
-                                logger.info(f"[同步实盘] 账号{ak['account_name']} 已有{_live_count}个实盘持仓，达上限(5)，跳过")
-                                continue
-                            _qty = _D(str(_margin * _lev / entry_price))
+                            # 实盘持仓数量上限（每账号最多5单，加锁防并发竞态）
+                            _ak_id = ak['id']
+                            if _ak_id not in _live_sync_locks:
+                                _live_sync_locks[_ak_id] = asyncio.Lock()
+                            async with _live_sync_locks[_ak_id]:
+                                _cnt_c = pymysql.connect(**self.db_config, autocommit=True)
+                                _cnt_cur = _cnt_c.cursor()
+                                _cnt_cur.execute("SELECT COUNT(*) FROM live_futures_positions WHERE account_id=%s AND status='OPEN'", (_ak_id,))
+                                _live_count = (_cnt_cur.fetchone() or [0])[0]
+                                _cnt_cur.close(); _cnt_c.close()
+                                if _live_count >= 5:
+                                    logger.info(f"[同步实盘] 账号{ak['account_name']} 已有{_live_count}个实盘持仓，达上限(5)，跳过")
+                                    continue
+                                _qty = _D(str(_margin * _lev / entry_price))
                             _result = _engine.open_position(
                                 account_id=ak['id'],
                                 symbol=symbol,
