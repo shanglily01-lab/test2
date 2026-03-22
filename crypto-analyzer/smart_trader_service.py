@@ -3502,6 +3502,10 @@ class SmartTraderService:
                             if big4_signal == 'NEUTRAL':
                                 logger.warning(f"🚫 [BIG4-NEUTRAL-BLOCK] {symbol} Big4中性市场(强度{big4_strength:.1f}), 禁止开仓")
                                 continue
+                            # 🚫 Big4信号强度不足(< 65)时视为中性，禁止开仓
+                            if big4_signal in ('BEARISH', 'STRONG_BEARISH', 'BULLISH', 'STRONG_BULLISH') and big4_strength < 65:
+                                logger.warning(f"🚫 [BIG4-WEAK-BLOCK] {symbol} Big4信号强度不足({big4_strength:.1f}<65), 禁止开仓")
+                                continue
                         else:
                             logger.warning(f"[BIG4-ERROR] {symbol} Big4数据不可用, 跳过开仓")
                             continue
