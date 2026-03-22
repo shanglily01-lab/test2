@@ -884,9 +884,10 @@ class SmartDecisionBrain:
                     logger.warning(f"🚫 {symbol} 拒绝低位做空: position_low在{position_pct:.1f}%位置,容易遇到反弹")
                     return None
 
-                # 🔥 Big4方向过滤：Big4强势时禁止逆势交易
+                # 🔥 Big4方向过滤：Big4强势时禁止逆势交易（仅Big4过滤器开启时生效）
                 # Big4 BULLISH（强度>=40）→ 禁止做空；Big4 BEARISH（强度>=40）→ 禁止做多
-                if big4_result:
+                # 过滤器关闭时跳过，软调整模式下仅靠阈值限制
+                if big4_result and getattr(self, 'big4_filter_enabled', True):
                     _b4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                     _b4_strength = big4_result.get('signal_strength', 0)
                     # 修复：同时处理 STRONG_BULLISH / STRONG_BEARISH
