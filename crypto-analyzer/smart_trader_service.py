@@ -1193,6 +1193,14 @@ class SmartTraderService:
             self.smart_exit_optimizer = None
             logger.info("⚠️ 智能平仓优化器未启用")
 
+        # 初始化BTC动量跟随策略
+        from app.services.btc_momentum_trader import BTCMomentumTrader
+        self.btc_momentum_trader = BTCMomentumTrader(
+            db_config=self.db_config,
+            ws_price_service=self.ws_service
+        )
+        logger.info("✅ BTC动量跟随策略已初始化")
+
         # 初始化价格采样建仓执行器（V1策略：15分钟价格采样找最优点，一次性开仓）
         self.smart_entry_executor = SmartEntryExecutor(
             db_config=self.db_config,
@@ -3376,6 +3384,12 @@ class SmartTraderService:
                     except Exception as e:
                         logger.warning(f"⚠️ [CONFIG-RELOAD] 重新加载Big4配置失败: {e}")
                     last_config_reload = now
+
+                # 0.65. BTC动量跟随策略检测（每轮都跑，内部自带冷却控制）
+                try:
+                    self.btc_momentum_trader.check_and_execute()
+                except Exception as _e:
+                    logger.warning(f"[BTC动量] 检测异常: {_e}")
 
                 # 0.7. 🔒 提前检查交易开关（最高优先级）
                 # 如果U本位交易已关闭，直接跳过本轮所有扫描和开仓逻辑
