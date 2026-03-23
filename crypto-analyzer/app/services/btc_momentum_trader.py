@@ -32,6 +32,7 @@ class BTCMomentumTrader:
         self.ws_service = ws_price_service
         self._btc_history: List[Tuple[datetime, float]] = []  # [(time, price)]
         self._last_trigger_time: Optional[datetime] = None
+        self._preload_btc_history()  # 启动时从DB预填充，避免重启后等待15分钟
 
     def _get_conn(self):
         return pymysql.connect(
@@ -42,6 +43,26 @@ class BTCMomentumTrader:
     # ──────────────────────────────────────────
     # 价格跟踪
     # ──────────────────────────────────────────
+
+    def _preload_btc_history(self):
+        """启动时从kline_data预加载最近90分钟BTC价格，避免重启后等待积累"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT open_time, close_price FROM kline_data "
+                "WHERE symbol='BTC/USDT' AND timeframe='1m' AND exchange='binance_futures' "
+                "AND open_time >= (UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 90 MINUTE)) * 1000) "
+                "ORDER BY open_time ASC"
+            )
+            rows = cur.fetchall()
+            cur.close(); conn.close()
+            for row in rows:
+                ts = datetime.utcfromtimestamp(row['open_time'] / 1000)
+                self._btc_history.append((ts, float(row['close_price'])))
+            logger.info(f"[BTC动量] 预加载 {len(self._btc_history)} 条BTC价格历史（最近90分钟）")
+        except Exception as e:
+            logger.warning(f"[BTC动量] 预加载历史失败: {e}")
 
     def record_btc_price(self, price: float):
         """主循环每分钟调用，记录BTC当前价格"""
