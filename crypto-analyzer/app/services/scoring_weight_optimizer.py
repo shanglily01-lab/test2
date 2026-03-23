@@ -51,22 +51,42 @@ class ScoringWeightOptimizer:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 获取所有已平仓且有signal_components的订单
+            # 获取已平仓订单，关联开仓时刻的Big4状态
+            # 多头只用Big4为BULLISH/NEUTRAL时的单，空头只用BEARISH/NEUTRAL时的单
+            # 避免熊市多头亏损污染多头信号权重（方向正确性由Big4过滤器负责）
             cursor.execute("""
                 SELECT
-                    position_side,
-                    signal_components,
-                    realized_pnl,
-                    CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END as is_win
-                FROM futures_positions
-                WHERE status = 'closed'
-                AND close_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
-                AND signal_components IS NOT NULL
-                AND signal_components != ''
+                    fp.position_side,
+                    fp.signal_components,
+                    fp.realized_pnl,
+                    CASE WHEN fp.realized_pnl > 0 THEN 1 ELSE 0 END as is_win,
+                    COALESCE(
+                        (SELECT b4.overall_signal FROM big4_trend_history b4
+                         WHERE b4.created_at <= fp.open_time
+                         ORDER BY b4.created_at DESC LIMIT 1),
+                        'NEUTRAL'
+                    ) as big4_signal
+                FROM futures_positions fp
+                WHERE fp.status = 'closed'
+                AND fp.close_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
+                AND fp.signal_components IS NOT NULL
+                AND fp.signal_components != ''
             """, (days,))
 
-            positions = cursor.fetchall()
+            all_positions = cursor.fetchall()
             cursor.close()
+
+            # 过滤：只保留Big4方向与交易方向一致/中性的单
+            positions = []
+            for p in all_positions:
+                sig = p.get('big4_signal', 'NEUTRAL')
+                side = p['position_side']
+                if side == 'LONG' and sig in ('BULLISH', 'STRONG_BULLISH', 'NEUTRAL'):
+                    positions.append(p)
+                elif side == 'SHORT' and sig in ('BEARISH', 'STRONG_BEARISH', 'NEUTRAL'):
+                    positions.append(p)
+
+            logger.info(f"原始订单 {len(all_positions)} 个 → Big4方向过滤后 {len(positions)} 个（剔除逆势单）")
 
             if not positions:
                 logger.warning(f"最近{days}天没有包含signal_components的订单")
