@@ -3788,7 +3788,7 @@ class SmartTraderService:
                     # 🔥 防追高/防杀跌: 24H区间位置过滤
                     current_price_for_check = opp.get('current_price') or opp.get('price', 0)
                     if current_price_for_check > 0:
-                        anti_fomo_pass, anti_fomo_reason = self.check_anti_fomo_filter(
+                        anti_fomo_pass, anti_fomo_reason = self.brain.check_anti_fomo_filter(
                             symbol, current_price_for_check, new_side
                         )
                         if not anti_fomo_pass:
