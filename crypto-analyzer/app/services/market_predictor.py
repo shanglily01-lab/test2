@@ -263,7 +263,7 @@ class MarketPredictor:
 
     def _close_open_backtests(self, cursor, now: datetime) -> int:
         """结算所有超过2.5小时的OPEN虚拟单，计算P&L"""
-        cutoff = now - timedelta(hours=2, minutes=30)
+        cutoff = now - timedelta(hours=5, minutes=30)
         cursor.execute(
             "SELECT id, symbol, direction, entry_price FROM prediction_backtest "
             "WHERE status='OPEN' AND entry_time <= %s",
@@ -316,7 +316,7 @@ class MarketPredictor:
 
     def run_all(self, symbols: List[str]) -> int:
         now = datetime.utcnow()
-        valid_until = now + timedelta(hours=4)
+        valid_until = now + timedelta(hours=6)
         saved = 0
         all_results = []
 

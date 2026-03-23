@@ -535,10 +535,10 @@ async def lifespan(app: FastAPI):
 
         schedule.every().day.at("00:00").do(run_daily_review)
 
-        # 市场走势预测（每3小时）
+        # 市场走势预测（每6小时）
         _prediction_symbols = config.get('symbols', [])
         def run_market_prediction():
-            """每3小时对所有交易对做1H+15M技术分析，预测未来3~4小时走势"""
+            """每6小时对所有交易对做1H+15M技术分析，预测未来6小时走势"""
             try:
                 from app.services.market_predictor import MarketPredictor
                 predictor = MarketPredictor(db_config)
@@ -546,7 +546,7 @@ async def lifespan(app: FastAPI):
                 logger.info(f"✅ 市场预测分析完成，共{count}个交易对")
             except Exception as e:
                 logger.error(f"❌ 市场预测分析失败: {e}")
-        schedule.every(3).hours.do(run_market_prediction)
+        schedule.every(6).hours.do(run_market_prediction)
 
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
         # 每个存储过程调用都在独立 OS 子进程中运行；
