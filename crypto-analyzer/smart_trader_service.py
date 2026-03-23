@@ -1860,24 +1860,19 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 系统已禁止{direction_name}")
             return False
 
-        # 🔥 Top 30过滤：仅实盘开启时生效（live_trading_enabled=1 且 top30_filter_enabled=true）
+        # 🔥 Top 30过滤：仅实盘开启时生效，模拟盘无限制
         try:
             conn_t30 = self._get_connection()
             cur_t30 = conn_t30.cursor()
-            cur_t30.execute(
-                "SELECT setting_key, setting_value FROM system_settings "
-                "WHERE setting_key IN ('top30_filter_enabled', 'live_trading_enabled')"
-            )
-            rows_t30 = {r['setting_key']: r['setting_value'] for r in cur_t30.fetchall()}
+            cur_t30.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+            row_t30 = cur_t30.fetchone()
             cur_t30.close()
             conn_t30.close()
-            top30_enabled = str(rows_t30.get('top30_filter_enabled', 'false')).lower() == 'true'
-            live_enabled = str(rows_t30.get('live_trading_enabled', '0')) in ('1', 'true')
-            top30_enabled = top30_enabled and live_enabled
+            live_enabled = row_t30 and str(row_t30.get('setting_value', '0')) in ('1', 'true')
         except Exception:
-            top30_enabled = False
-        if top30_enabled and not self.is_symbol_in_top_performers(symbol):
-            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 不在盈利Top 30交易对中")
+            live_enabled = False
+        if live_enabled and not self.is_symbol_in_top_performers(symbol):
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 实盘模式：不在盈利Top 30交易对中")
             return False
 
         # 🔥 V5.1优化: 移除防追高/防杀跌过滤
