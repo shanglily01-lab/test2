@@ -311,6 +311,129 @@ class MarketPredictor:
         return opened
 
     # ──────────────────────────────────────────
+    # 真实模拟单开仓（接入 futures_positions）
+    # ──────────────────────────────────────────
+
+    def _close_expired_paper_trades(self, cursor, now: datetime) -> int:
+        """平掉持仓超过5.5小时的 PREDICTOR 模拟单，计算实际P&L"""
+        cutoff = now - timedelta(hours=5, minutes=30)
+        cursor.execute(
+            "SELECT id, symbol, position_side, entry_price, margin, leverage "
+            "FROM futures_positions "
+            "WHERE account_id=2 AND status='open' AND source='PREDICTOR' AND open_time <= %s",
+            (cutoff,)
+        )
+        rows = cursor.fetchall()
+        closed = 0
+        for row in rows:
+            exit_price = self._get_current_price(cursor, row['symbol'])
+            if not exit_price:
+                continue
+            entry = float(row['entry_price'])
+            margin = float(row['margin'])
+            lev = int(row['leverage'])
+            if row['position_side'] == 'LONG':
+                pnl = (exit_price - entry) / entry * margin * lev
+            else:
+                pnl = (entry - exit_price) / entry * margin * lev
+            cursor.execute(
+                "UPDATE futures_positions SET status='closed', close_time=NOW(), "
+                "mark_price=%s, realized_pnl=%s, notes='预测器6H到期平仓' WHERE id=%s",
+                (exit_price, round(pnl, 4), row['id'])
+            )
+            logger.info(f"[预测下单] 平仓 {row['symbol']} {row['position_side']} pnl={pnl:+.2f}U")
+            closed += 1
+        return closed
+
+    def _open_real_paper_trades(self, cursor, results: List[Dict], now: datetime,
+                                 max_positions: int = 5) -> int:
+        """
+        取 confidence>=70 的预测，按置信度排序，开真实模拟单到 futures_positions
+        - 最多同时持有 max_positions 个预测单
+        - 模拟盘 400U x5，止损2%，止盈6%
+        - source='PREDICTOR' 标识来源
+        """
+        MARGIN = 400
+        LEVERAGE = 5
+        SL_PCT = 0.02
+        TP_PCT = 0.06
+        ACCOUNT_ID = 2
+
+        # 当前已有多少预测单在OPEN
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM futures_positions "
+            "WHERE account_id=%s AND status='open' AND source='PREDICTOR'",
+            (ACCOUNT_ID,)
+        )
+        current_open = (cursor.fetchone() or {}).get('cnt', 0)
+        slots = max_positions - current_open
+        if slots <= 0:
+            logger.info(f"[预测下单] 已有{current_open}个持仓，达上限({max_positions})，跳过")
+            return 0
+
+        # 已开过的交易对（避免重复开同向仓）
+        cursor.execute(
+            "SELECT symbol, position_side FROM futures_positions "
+            "WHERE account_id=%s AND status='open' AND source='PREDICTOR'",
+            (ACCOUNT_ID,)
+        )
+        existing = {r['symbol']: r['position_side'] for r in cursor.fetchall()}
+
+        # 候选：confidence>=70，非NEUTRAL，按置信度降序
+        candidates = sorted(
+            [r for r in results if r['direction'] != 'NEUTRAL' and r['confidence'] >= 70],
+            key=lambda x: x['confidence'], reverse=True
+        )
+
+        opened = 0
+        for r in candidates:
+            if opened >= slots:
+                break
+            symbol = r['symbol']
+            direction = 'LONG' if r['direction'] == 'BULLISH' else 'SHORT'
+
+            # 已有同向仓：跳过
+            if existing.get(symbol) == direction:
+                continue
+
+            # 获取当前价格
+            entry_price = self._get_current_price(cursor, symbol)
+            if not entry_price:
+                continue
+
+            if direction == 'LONG':
+                sl = round(entry_price * (1 - SL_PCT), 8)
+                tp = round(entry_price * (1 + TP_PCT), 8)
+            else:
+                sl = round(entry_price * (1 + SL_PCT), 8)
+                tp = round(entry_price * (1 - TP_PCT), 8)
+
+            notional = MARGIN * LEVERAGE
+            qty = round(notional / entry_price, 6)
+
+            try:
+                cursor.execute("""
+                    INSERT INTO futures_positions
+                        (account_id, symbol, position_side, leverage, quantity, notional_value,
+                         margin, entry_price, mark_price, stop_loss_price, take_profit_price,
+                         stop_loss_pct, take_profit_pct, status, source, entry_reason,
+                         open_time, unrealized_pnl, unrealized_pnl_pct)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open','PREDICTOR',%s,NOW(),0,0)
+                """, (
+                    ACCOUNT_ID, symbol, direction, LEVERAGE, qty, round(notional, 2),
+                    MARGIN, entry_price, entry_price, sl, tp,
+                    SL_PCT * 100, TP_PCT * 100,
+                    f"预测器 confidence={r['confidence']} {r['direction']}"
+                ))
+                logger.info(f"[预测下单] {symbol} {direction} @ {entry_price:.6g}  "
+                            f"SL={sl:.6g}  TP={tp:.6g}  confidence={r['confidence']}")
+                opened += 1
+            except Exception as e:
+                logger.error(f"[预测下单] {symbol} 开单失败: {e}")
+
+        return opened
+
+    # ──────────────────────────────────────────
     # 批量运行 + 存储
     # ──────────────────────────────────────────
 
@@ -322,6 +445,15 @@ class MarketPredictor:
 
         conn = self._get_conn()
         cursor = conn.cursor()
+
+        # ① 先平掉到期的真实模拟单（source=PREDICTOR，持仓超5.5小时）
+        try:
+            pc = self._close_expired_paper_trades(cursor, now)
+            if pc:
+                conn.commit()
+                logger.info(f"[预测下单] 平仓{pc}个到期模拟单")
+        except Exception as e:
+            logger.error(f"[预测下单] 平仓到期单失败: {e}")
 
         # ① 先结算上一轮到期的虚拟单
         try:
@@ -383,6 +515,14 @@ class MarketPredictor:
                 logger.info(f"[回测] 新开{opened}个虚拟单（100U x5）")
         except Exception as e:
             logger.error(f"[回测] 开虚拟单失败: {e}")
+
+        # ④ 开真实模拟单（confidence>=70，最多5个，带止损2%/止盈6%）
+        try:
+            real_opened = self._open_real_paper_trades(cursor, all_results, now)
+            if real_opened:
+                logger.info(f"[预测下单] 新开{real_opened}个模拟单（400U x5，SL2% TP6%）")
+        except Exception as e:
+            logger.error(f"[预测下单] 开单失败: {e}")
 
         conn.commit()
         cursor.close()
