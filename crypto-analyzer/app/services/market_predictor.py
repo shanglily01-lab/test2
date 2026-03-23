@@ -353,7 +353,7 @@ class MarketPredictor:
         - 模拟盘 400U x5，止损2%，止盈6%
         - source='PREDICTOR' 标识来源
         """
-        MARGIN = 400
+        MARGIN = 100
         LEVERAGE = 5
         SL_PCT = 0.02
         TP_PCT = 0.06
