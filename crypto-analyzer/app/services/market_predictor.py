@@ -248,17 +248,21 @@ class MarketPredictor:
     # ──────────────────────────────────────────
 
     def _get_current_price(self, cursor, symbol: str) -> Optional[float]:
-        """从 kline_data 取最新1M/5M收盘价作为当前价"""
-        for tf in ('1m', '5m', '15m', '1h'):
+        """从 kline_data 取最新收盘价，要求数据在30分钟内才有效"""
+        for tf in ('5m', '15m', '1h'):
             cursor.execute(
-                "SELECT close_price FROM kline_data "
+                "SELECT close_price, open_time FROM kline_data "
                 "WHERE symbol=%s AND timeframe=%s AND exchange='binance_futures' "
                 "ORDER BY open_time DESC LIMIT 1",
                 (symbol, tf)
             )
             row = cursor.fetchone()
             if row:
-                return float(row['close_price'])
+                # 检查数据新鲜度：open_time 距今不超过30分钟
+                from datetime import timezone
+                age_minutes = (datetime.utcnow().timestamp() - row['open_time'] / 1000) / 60
+                if age_minutes <= 30:
+                    return float(row['close_price'])
         return None
 
     def _close_open_backtests(self, cursor, now: datetime) -> int:
