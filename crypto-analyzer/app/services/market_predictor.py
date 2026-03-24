@@ -429,11 +429,72 @@ class MarketPredictor:
                 ))
                 logger.info(f"[预测下单] {symbol} {direction} @ {entry_price:.6g}  "
                             f"SL={sl:.6g}  TP={tp:.6g}  confidence={r['confidence']}")
+                # 获取刚插入的 paper_position_id，用于实盘同步
+                paper_id = cursor.lastrowid
                 opened += 1
+                # 同步实盘
+                self._sync_live(symbol, direction, entry_price, sl, tp,
+                                LEVERAGE, MARGIN, paper_id, r['confidence'])
             except Exception as e:
                 logger.error(f"[预测下单] {symbol} 开单失败: {e}")
 
         return opened
+
+    def _sync_live(self, symbol: str, direction: str, entry_price: float,
+                   sl: float, tp: float, leverage: int, margin: float,
+                   paper_pos_id: int, confidence: int):
+        """同步到实盘账号（调用交易引擎真实下单）"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if not (row and str(row['setting_value']) in ('1', 'true')):
+                return
+        except Exception as e:
+            logger.warning(f"[预测下单] 查询实盘开关失败: {e}")
+            return
+
+        try:
+            from app.services.api_key_service import APIKeyService
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            from decimal import Decimal
+            svc = APIKeyService(self.db_config)
+            active_keys = svc.get_all_active_api_keys('binance')
+        except Exception as e:
+            logger.error(f"[预测下单] 获取实盘账号失败: {e}")
+            return
+
+        for ak in active_keys:
+            try:
+                act_margin = float(ak.get('max_position_value') or margin)
+                act_lev = int(ak.get('max_leverage') or leverage)
+                notional = act_margin * act_lev
+                qty = Decimal(str(round(notional / entry_price, 6)))
+
+                engine = BinanceFuturesEngine(
+                    self.db_config,
+                    api_key=ak['api_key'],
+                    api_secret=ak['api_secret']
+                )
+                result = engine.open_position(
+                    account_id=ak['id'],
+                    symbol=symbol,
+                    position_side=direction,
+                    quantity=qty,
+                    leverage=act_lev,
+                    stop_loss_price=Decimal(str(sl)),
+                    take_profit_price=Decimal(str(tp)),
+                    source='PREDICTOR',
+                    paper_position_id=paper_pos_id
+                )
+                if result.get('success'):
+                    logger.info(f"[预测下单] ✅ 实盘下单成功 {ak['account_name']} {symbol} {direction} confidence={confidence}")
+                else:
+                    logger.error(f"[预测下单] ❌ 实盘下单失败 {ak['account_name']} {symbol}: {result.get('error','')}")
+            except Exception as e:
+                logger.error(f"[预测下单] 实盘下单异常 {ak.get('account_name','')} {symbol}: {e}")
 
     # ──────────────────────────────────────────
     # 批量运行 + 存储
