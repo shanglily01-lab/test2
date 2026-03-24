@@ -259,36 +259,47 @@ class BTCMomentumTrader:
 
     def _sync_live(self, symbol: str, direction: str, entry_price: float,
                    paper_pos_id: int, trigger_info: str):
-        """同步到实盘账号（如果live_trading_enabled）"""
+        """同步到实盘账号（调用交易引擎真实下单）"""
         if not self._is_live_enabled():
             return
-        accounts = self._get_active_live_accounts()
-        for ak in accounts:
+        try:
+            from app.services.api_key_service import APIKeyService
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            svc = APIKeyService(self.db_config)
+            active_keys = svc.get_all_active_api_keys('binance')
+        except Exception as e:
+            logger.error(f"[BTC动量] 获取实盘账号失败: {e}")
+            return
+
+        for ak in active_keys:
             try:
-                margin = float(ak['max_position_value'] or 100)
-                lev = int(ak['max_leverage'] or 5)
+                margin = float(ak.get('max_position_value') or 100)
+                lev = int(ak.get('max_leverage') or 5)
                 notional = margin * lev
-                qty = round(notional / entry_price, 6)
-                if direction == 'LONG':
-                    sl = round(entry_price * (1 - self.STOP_LOSS_PCT), 8)
-                    tp = round(entry_price * (1 + self.TAKE_PROFIT_PCT), 8)
+                qty = Decimal(str(round(notional / entry_price, 6)))
+
+                engine = BinanceFuturesEngine(
+                    self.db_config,
+                    api_key=ak['api_key'],
+                    api_secret=ak['api_secret']
+                )
+                result = engine.open_position(
+                    account_id=ak['id'],
+                    symbol=symbol,
+                    position_side=direction,
+                    quantity=qty,
+                    leverage=lev,
+                    stop_loss_pct=Decimal(str(self.STOP_LOSS_PCT * 100)),
+                    take_profit_pct=Decimal(str(self.TAKE_PROFIT_PCT * 100)),
+                    source='BTC_MOMENTUM',
+                    paper_position_id=paper_pos_id
+                )
+                if result.get('success'):
+                    logger.info(f"[BTC动量] ✅ 实盘下单成功 {ak['account_name']} {symbol} {direction}")
                 else:
-                    sl = round(entry_price * (1 + self.STOP_LOSS_PCT), 8)
-                    tp = round(entry_price * (1 - self.TAKE_PROFIT_PCT), 8)
-                conn = self._get_conn()
-                cur = conn.cursor()
-                cur.execute("""
-                    INSERT INTO live_futures_positions
-                        (account_id, symbol, position_side, leverage, quantity, notional_value,
-                         margin, entry_price, stop_loss_price, take_profit_price,
-                         status, source, paper_position_id, open_time)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'OPEN','BTC_MOMENTUM',%s,NOW())
-                """, (ak['id'], symbol, direction, lev, qty, round(notional, 2),
-                      margin, entry_price, sl, tp, paper_pos_id))
-                cur.close(); conn.close()
-                logger.info(f"[BTC动量] 实盘同步 {ak['account_name']} {symbol} {direction}")
+                    logger.error(f"[BTC动量] ❌ 实盘下单失败 {ak['account_name']} {symbol}: {result.get('error','')}")
             except Exception as e:
-                logger.error(f"[BTC动量] 实盘同步失败 {ak['account_name']} {symbol}: {e}")
+                logger.error(f"[BTC动量] 实盘下单异常 {ak.get('account_name','')} {symbol}: {e}")
 
     # ──────────────────────────────────────────
     # 主执行入口
