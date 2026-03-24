@@ -541,7 +541,8 @@ async def lifespan(app: FastAPI):
             """每6小时对所有交易对做1H+15M技术分析，预测未来6小时走势"""
             try:
                 from app.services.market_predictor import MarketPredictor
-                predictor = MarketPredictor(db_config)
+                from app.services.binance_ws_price import get_ws_price_service
+                predictor = MarketPredictor(db_config, ws_price_service=get_ws_price_service())
                 count = predictor.run_all(_prediction_symbols)
                 logger.info(f"✅ 市场预测分析完成，共{count}个交易对")
             except Exception as e:

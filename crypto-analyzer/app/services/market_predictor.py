@@ -11,8 +11,9 @@ from loguru import logger
 
 
 class MarketPredictor:
-    def __init__(self, db_config: dict):
+    def __init__(self, db_config: dict, ws_price_service=None):
         self.db_config = db_config
+        self.ws_service = ws_price_service
 
     def _get_conn(self):
         return pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
@@ -248,7 +249,13 @@ class MarketPredictor:
     # ──────────────────────────────────────────
 
     def _get_current_price(self, cursor, symbol: str) -> Optional[float]:
-        """从 kline_data 取最新收盘价，要求数据在30分钟内才有效"""
+        """获取当前价格：WebSocket实时价优先，fallback kline_data（30分钟内有效）"""
+        # 优先用 WebSocket 实时价
+        if self.ws_service:
+            p = self.ws_service.get_price(symbol)
+            if p and float(p) > 0:
+                return float(p)
+        # fallback：kline_data，要求数据在30分钟内
         for tf in ('5m', '15m', '1h'):
             cursor.execute(
                 "SELECT close_price, open_time FROM kline_data "
@@ -258,8 +265,6 @@ class MarketPredictor:
             )
             row = cursor.fetchone()
             if row:
-                # 检查数据新鲜度：open_time 距今不超过30分钟
-                from datetime import timezone
                 age_minutes = (datetime.utcnow().timestamp() - row['open_time'] / 1000) / 60
                 if age_minutes <= 30:
                     return float(row['close_price'])
