@@ -296,6 +296,19 @@ class BTCMomentumTrader:
                 )
                 if result.get('success'):
                     logger.info(f"[BTC动量] ✅ 实盘下单成功 {ak['account_name']} {symbol} {direction}")
+                    try:
+                        from app.services.trade_notifier import get_trade_notifier
+                        notifier = get_trade_notifier()
+                        if notifier:
+                            sl = round(entry_price * (1 - self.STOP_LOSS_PCT), 4) if direction == 'LONG' else round(entry_price * (1 + self.STOP_LOSS_PCT), 4)
+                            tp = round(entry_price * (1 + self.TAKE_PROFIT_PCT), 4) if direction == 'LONG' else round(entry_price * (1 - self.TAKE_PROFIT_PCT), 4)
+                            notifier.notify_open_position(
+                                symbol=symbol, direction=direction,
+                                quantity=float(qty), entry_price=entry_price,
+                                leverage=lev, stop_loss_price=sl, take_profit_price=tp,
+                                margin=margin, strategy_name=f'BTC动量[{ak["account_name"]}] {trigger_info}'
+                            )
+                    except Exception: pass
                 else:
                     logger.error(f"[BTC动量] ❌ 实盘下单失败 {ak['account_name']} {symbol}: {result.get('error','')}")
             except Exception as e:

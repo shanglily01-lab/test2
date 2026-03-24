@@ -500,6 +500,18 @@ class MarketPredictor:
                 )
                 if result.get('success'):
                     logger.info(f"[预测下单] ✅ 实盘下单成功 {ak['account_name']} {symbol} {direction} confidence={confidence}")
+                    try:
+                        from app.services.trade_notifier import get_trade_notifier
+                        notifier = get_trade_notifier()
+                        if notifier:
+                            notifier.notify_open_position(
+                                symbol=symbol, direction=direction,
+                                quantity=float(qty), entry_price=entry_price,
+                                leverage=act_lev, stop_loss_price=sl, take_profit_price=tp,
+                                margin=act_margin,
+                                strategy_name=f'预测器[{ak["account_name"]}] confidence={confidence}'
+                            )
+                    except Exception: pass
                 else:
                     logger.error(f"[预测下单] ❌ 实盘下单失败 {ak['account_name']} {symbol}: {result.get('error','')}")
             except Exception as e:
