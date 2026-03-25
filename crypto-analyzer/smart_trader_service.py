@@ -644,6 +644,61 @@ class SmartDecisionBrain:
                 if weight['short'] > 0:
                     signal_components['volume_power_1h_bear'] = weight['short']
 
+            # 11. 24H位置评分（仿币本位短窗口，对当日走势更敏感）
+            high_24h_pos = max(k['high'] for k in klines_1h[-24:])
+            low_24h_pos  = min(k['low']  for k in klines_1h[-24:])
+            if high_24h_pos != low_24h_pos:
+                position_24h_pct = (current - low_24h_pos) / (high_24h_pos - low_24h_pos) * 100
+            else:
+                position_24h_pct = 50.0
+
+            if position_24h_pct < 30:
+                weight = self.scoring_weights.get('position_24h_low', {'long': 12, 'short': 0})
+                if weight['long'] > 0 and net_power_1h > -2:  # 有强空头量能时不抄底
+                    long_score += weight['long']
+                    signal_components['position_24h_low'] = weight['long']
+            elif position_24h_pct > 70:
+                _big4_strong_bull_24h = (big4_result and
+                    big4_result.get('overall_signal') in ('BULLISH', 'STRONG_BULLISH') and
+                    big4_result.get('signal_strength', 0) >= 50)
+                if not _big4_strong_bull_24h:
+                    weight = self.scoring_weights.get('position_24h_high', {'long': 0, 'short': 12})
+                    if weight['short'] > 0:
+                        short_score += weight['short']
+                        signal_components['position_24h_high'] = weight['short']
+
+            # 12. 量能信号（1.2×阈值，仿币本位，更敏感，作为1.5×的补充层）
+            strong_bull_1h_12x = sum(
+                1 for k in klines_1h[-24:]
+                if k['close'] > k['open'] and k['volume'] > avg_volume_1h * 1.2
+            )
+            strong_bear_1h_12x = sum(
+                1 for k in klines_1h[-24:]
+                if k['close'] < k['open'] and k['volume'] > avg_volume_1h * 1.2
+            )
+            net_power_1h_12x = strong_bull_1h_12x - strong_bear_1h_12x
+
+            strong_bull_15m_12x = sum(
+                1 for k in klines_15m[-24:]
+                if k['close'] > k['open'] and k['volume'] > avg_volume_15m * 1.2
+            )
+            strong_bear_15m_12x = sum(
+                1 for k in klines_15m[-24:]
+                if k['close'] < k['open'] and k['volume'] > avg_volume_15m * 1.2
+            )
+            net_power_15m_12x = strong_bull_15m_12x - strong_bear_15m_12x
+
+            if net_power_1h_12x >= 2 and net_power_15m_12x >= 2:
+                weight = self.scoring_weights.get('volume_power_12x_bull', {'long': 15, 'short': 0})
+                if weight['long'] > 0:
+                    long_score += weight['long']
+                    signal_components['volume_power_12x_bull'] = weight['long']
+            elif net_power_1h_12x <= -2 and net_power_15m_12x <= -2:
+                weight = self.scoring_weights.get('volume_power_12x_bear', {'long': 0, 'short': 15})
+                if weight['short'] > 0:
+                    short_score += weight['short']
+                    signal_components['volume_power_12x_bear'] = weight['short']
+
             # 8. 突破追涨信号: 已禁用 (历史数据: 85笔, 28.2%胜率, -$600亏损)
             # 禁用原因: 追高风险大，胜率低，容易买在顶部
 
@@ -776,11 +831,13 @@ class SmartDecisionBrain:
                 # 🔥 修复 (2026-02-11): position_low应该是多头信号, position_high应该是空头信号
                 bullish_signals = {
                     'position_low', 'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
-                    'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull', 'big4_strong_bull_cont'
+                    'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull', 'big4_strong_bull_cont',
+                    'position_24h_low', 'volume_power_12x_bull',
                 }
                 bearish_signals = {
                     'position_high', 'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
-                    'trend_1h_bear', 'momentum_down_3pct', 'consecutive_bear'
+                    'trend_1h_bear', 'momentum_down_3pct', 'consecutive_bear',
+                    'position_24h_high', 'volume_power_12x_bear',
                 }
                 neutral_signals = {'position_mid', 'volatility_high'}  # 中性信号可以在任何方向
 
@@ -1085,13 +1142,15 @@ class SmartDecisionBrain:
         # 定义空头信号（不应该出现在做多信号中）- 已移除1D信号
         bearish_signals = {
             'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
-            'trend_1h_bear', 'momentum_down_3pct', 'consecutive_bear'
+            'trend_1h_bear', 'momentum_down_3pct', 'consecutive_bear',
+            'position_24h_high', 'volume_power_12x_bear',
         }
 
         # 定义多头信号（不应该出现在做空信号中）- 已移除1D和EMA信号
         bullish_signals = {
             'breakout_long', 'volume_power_bull', 'volume_power_1h_bull',
-            'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull'
+            'trend_1h_bull', 'momentum_up_3pct', 'consecutive_bull',
+            'position_24h_low', 'volume_power_12x_bull',
         }
 
         signal_set = set(signal_components.keys())
