@@ -499,11 +499,17 @@ class MarketPredictor:
             cur = conn.cursor()
             cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
             row = cur.fetchone()
-            cur.close(); conn.close()
             if not (row and str(row['setting_value']) in ('1', 'true')):
+                cur.close(); conn.close()
+                return
+            cur.execute("SELECT COUNT(*) as cnt FROM top_performing_symbols WHERE symbol=%s", (symbol,))
+            cnt_row = cur.fetchone()
+            cur.close(); conn.close()
+            if not (cnt_row and cnt_row['cnt'] > 0):
+                logger.debug(f"[预测下单] {symbol} 不在TOP50，跳过实盘同步")
                 return
         except Exception as e:
-            logger.warning(f"[预测下单] 查询实盘开关失败: {e}")
+            logger.warning(f"[预测下单] 查询实盘开关/TOP50失败: {e}")
             return
 
         try:
