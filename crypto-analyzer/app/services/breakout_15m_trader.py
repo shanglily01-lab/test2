@@ -9,6 +9,7 @@
 
 import pymysql
 import pymysql.cursors
+from decimal import Decimal
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 from loguru import logger
@@ -156,8 +157,81 @@ class Breakout15MTrader:
     # 开仓
     # ──────────────────────────────────────────
 
+    def _is_live_enabled(self) -> bool:
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            return row and str(row['setting_value']) in ('1', 'true')
+        except Exception:
+            return False
+
+    def _sync_live(self, symbol: str, direction: str, entry_price: float,
+                   paper_pos_id: int, reason: str):
+        """同步到实盘账号（调用交易引擎真实下单）"""
+        if not self._is_live_enabled():
+            return
+        try:
+            from app.services.api_key_service import APIKeyService
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            svc = APIKeyService(self.db_config)
+            active_keys = svc.get_all_active_api_keys('binance')
+        except Exception as e:
+            logger.error(f"[15M突破] 获取实盘账号失败: {e}")
+            return
+
+        for ak in active_keys:
+            try:
+                margin = float(ak.get('max_position_value') or self.MARGIN)
+                lev = int(ak.get('max_leverage') or self.LEVERAGE)
+                notional = margin * lev
+                qty = Decimal(str(round(notional / entry_price, 6)))
+
+                engine = BinanceFuturesEngine(
+                    self.db_config,
+                    api_key=ak['api_key'],
+                    api_secret=ak['api_secret']
+                )
+                result = engine.open_position(
+                    account_id=ak['id'],
+                    symbol=symbol,
+                    position_side=direction,
+                    quantity=qty,
+                    leverage=lev,
+                    stop_loss_pct=Decimal(str(self.SL_PCT * 100)),
+                    take_profit_pct=Decimal(str(self.TP_PCT * 100)),
+                    source='15M_BREAKOUT',
+                    paper_position_id=paper_pos_id
+                )
+                if result.get('success'):
+                    logger.info(f"[15M突破] 实盘下单成功 {ak['account_name']} {symbol} {direction}")
+                    try:
+                        from app.services.trade_notifier import get_trade_notifier
+                        notifier = get_trade_notifier()
+                        if notifier:
+                            sl = round(entry_price * (1 - self.SL_PCT), 4) if direction == 'LONG' \
+                                else round(entry_price * (1 + self.SL_PCT), 4)
+                            tp = round(entry_price * (1 + self.TP_PCT), 4) if direction == 'LONG' \
+                                else round(entry_price * (1 - self.TP_PCT), 4)
+                            notifier.notify_open_position(
+                                symbol=symbol, direction=direction,
+                                quantity=float(qty), entry_price=entry_price,
+                                leverage=lev, stop_loss_price=sl, take_profit_price=tp,
+                                margin=margin,
+                                strategy_name=f'15M突破[{ak["account_name"]}] {reason}'
+                            )
+                    except Exception:
+                        pass
+                else:
+                    logger.error(f"[15M突破] 实盘下单失败 {ak['account_name']} {symbol}: {result.get('error','')}")
+            except Exception as e:
+                logger.error(f"[15M突破] 实盘下单异常 {ak.get('account_name','')} {symbol}: {e}")
+
     def _open_position(self, symbol: str, direction: str,
-                        entry_price: float, reason: str) -> bool:
+                        entry_price: float, reason: str) -> int:
+        """开模拟盘仓位，返回插入的行 ID（失败返回 0）"""
         try:
             notional = self.MARGIN * self.LEVERAGE
             qty = round(notional / entry_price, 6)
@@ -182,12 +256,13 @@ class Breakout15MTrader:
                 round(notional, 2), self.MARGIN, entry_price, entry_price,
                 sl, tp, self.SL_PCT * 100, self.TP_PCT * 100, reason
             ))
+            new_id = cur.lastrowid
             cur.close(); conn.close()
             logger.info(f"[15M突破] 开仓 {symbol} {direction} @ {entry_price:.6g}  SL={sl:.6g}  TP={tp:.6g}")
-            return True
+            return new_id or 0
         except Exception as e:
             logger.error(f"[15M突破] 开仓失败 {symbol}: {e}")
-            return False
+            return 0
 
     # ──────────────────────────────────────────
     # 主入口
@@ -229,8 +304,10 @@ class Breakout15MTrader:
                     logger.warning(f"[15M突破] {symbol} 取不到价格，跳过")
                     continue
                 reason = f"15M突破 {direction} RSI拐头+量能放大"
-                if self._open_position(symbol, direction, entry_price, reason):
+                paper_id = self._open_position(symbol, direction, entry_price, reason)
+                if paper_id:
                     opened += 1
+                    self._sync_live(symbol, direction, entry_price, paper_id, reason)
             except Exception as e:
                 logger.error(f"[15M突破] {symbol} 处理异常: {e}")
 
