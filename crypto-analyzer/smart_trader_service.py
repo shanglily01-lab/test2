@@ -2937,8 +2937,30 @@ class SmartTraderService:
                                 close_quantity=None,
                                 reason=f'paper_sync_{reason}'
                             )
-                            if _res.get('success'):
-                                logger.info(f"[同步实盘平仓] ✅ {symbol} {side} 账号[{ak['account_name']}] 平仓成功")
+                            not_found = '未找到' in str(_res.get('error', ''))
+                            if _res.get('success') or not_found:
+                                if _res.get('success'):
+                                    logger.info(f"[同步实盘平仓] ✅ {symbol} {side} 账号[{ak['account_name']}] 平仓成功")
+                                else:
+                                    logger.warning(f"[同步实盘平仓] {symbol} {side} 账号[{ak['account_name']}] 交易所无此仓位，仅清理DB记录")
+                                # 无论成功还是找不到，都更新 live_futures_positions
+                                try:
+                                    _lc = self._get_connection()
+                                    _lcur = _lc.cursor()
+                                    close_p = _res.get('close_price', current_price)
+                                    live_pnl = _res.get('realized_pnl', 0)
+                                    _lcur.execute("""
+                                        UPDATE live_futures_positions
+                                        SET status='CLOSED', close_time=NOW(),
+                                            realized_pnl=%s, mark_price=%s,
+                                            notes=CONCAT(IFNULL(notes,''), '|paper_sync_close:', %s)
+                                        WHERE account_id=%s AND symbol=%s
+                                          AND position_side=%s AND status='OPEN'
+                                    """, (live_pnl, close_p, reason, ak['id'], symbol, side))
+                                    _lc.commit()
+                                    _lcur.close(); _lc.close()
+                                except Exception as _dbe:
+                                    logger.error(f"[同步实盘平仓] 更新live_futures_positions失败: {_dbe}")
                                 try:
                                     self.telegram_notifier.notify_close_position(
                                         symbol=symbol, direction=side,

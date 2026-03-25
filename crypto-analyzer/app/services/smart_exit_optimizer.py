@@ -866,6 +866,7 @@ class SmartExitOptimizer:
             conn = self._get_pool_connection()
             cursor = conn.cursor()
 
+            now = datetime.now()
             cursor.execute("""
                 UPDATE futures_positions
                 SET
@@ -873,11 +874,15 @@ class SmartExitOptimizer:
                     close_time = %s,
                     notes = CONCAT(IFNULL(notes, ''), '|close_reason:', %s)
                 WHERE id = %s
-            """, (
-                datetime.now(),
-                close_reason,
-                position_id
-            ))
+            """, (now, close_reason, position_id))
+
+            # 同步更新关联的实盘记录（paper_position_id 关联）
+            cursor.execute("""
+                UPDATE live_futures_positions
+                SET status='CLOSED', close_time=%s,
+                    notes=CONCAT(IFNULL(notes,''), '|paper_closed:', %s)
+                WHERE paper_position_id=%s AND status='OPEN'
+            """, (now, close_reason, position_id))
 
             conn.commit()
 
