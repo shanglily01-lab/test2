@@ -4,7 +4,7 @@
 15M背离突破策略
 - 震荡市中，当15M出现价格突破+RSI拐头+成交量放大时，提前入场
 - 只跑模拟盘（account_id=2），不同步实盘
-- 止损1%，止盈3%，每交易对4小时冷却，最多同时10单
+- 止损2%，止盈5%，每交易对4小时冷却，最多同时10单
 """
 
 import pymysql
@@ -18,8 +18,8 @@ from loguru import logger
 class Breakout15MTrader:
     MARGIN = 100
     LEVERAGE = 5
-    SL_PCT = 0.01       # 1%
-    TP_PCT = 0.03       # 3%
+    SL_PCT = 0.02       # 2%
+    TP_PCT = 0.05       # 5%
     ACCOUNT_ID = 2
     MAX_POSITIONS = 10
     COOLDOWN_HOURS = 4
