@@ -9,6 +9,21 @@ import re
 import pymysql
 import pymysql.cursors
 
+# 加载 .env 文件
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+except ImportError:
+    # 没有 python-dotenv，手动解析
+    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    if os.path.exists(env_path):
+        with open(env_path) as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith('#') and '=' in _line:
+                    _k, _v = _line.split('=', 1)
+                    os.environ.setdefault(_k.strip(), _v.strip())
+
 SYMBOLS_TO_BAN = ["AIN/USDT", "FET/USDT", "ARIA/USDT", "FHE/USDT", "ALLO/USDT"]
 REASON = "手动加入黑名单3级，永久禁止交易"
 
